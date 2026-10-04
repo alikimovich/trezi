@@ -8,6 +8,8 @@
  * header), so a recognized error waits a few lines for its file.
  */
 
+import { projectRelative } from './project-path'
+
 export interface DevServerError {
   /** As the dev server printed it (absolute, `./`-relative or root-relative `/src/…`). */
   file: string
@@ -62,15 +64,8 @@ export class DevErrorReader {
   }
 }
 
-/** `file` (as a dev server printed it) relative to `root`, without a leading `./` or `/`. */
-export function projectPath(file: string, root: string): string {
-  const base = root.endsWith('/') ? root : `${root}/`
-  const relative = file.startsWith(base) ? file.slice(base.length) : file
-  return relative.replace(/^\.\//, '').replace(/^\/+/, '')
-}
-
 /** The landed file (root-relative) a dev-server error names, if any. */
 export function touchedFile(error: DevServerError, root: string, files: string[]): string | null {
-  const named = projectPath(error.file, root)
+  const named = projectRelative(error.file, root, { served: true })
   return files.find(file => named === file || named.endsWith(`/${file}`) || file.endsWith(`/${named}`)) ?? null
 }

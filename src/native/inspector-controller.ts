@@ -137,11 +137,11 @@ export class NativeInspectorController {
       if (action.action === 'owner' && this.element?.componentSource) { await this.select({ ...this.element, source: this.element.componentSource, componentSource: null }); this.state.tab = 'props'; this.build(); this.publish(); return }
       if (action.action === 'setup') { await this.setup(); return }
       if (action.action === 'controls' || action.action === 'animation') {
-        if (this.element) await this.agent(root, (action.action === 'animation' ? animationControlsPrompt : controlsPrompt)(this.element, this.inspection, action.value, this.provider()), true)
+        if (this.element) await this.agent(root, (action.action === 'animation' ? animationControlsPrompt : controlsPrompt)(this.element, root, this.inspection, action.value, this.provider()), true)
         return
       }
       if (action.action === 'replay-style') { await this.send('styles:replay', { prop: 'opacity', from: '0.5', to: this.styles?.values.opacity || '1' }); return }
-      if (action.action.startsWith('regenerate:')) { const panel = this.controls.find(p => p.manifest.id === action.action.slice(11)); if (panel && this.element) await this.agent(root, controlsPrompt(this.element, this.inspection, action.value, this.provider(), { json: JSON.stringify(panel.manifest), brokenIds: panel.params.filter(p => !p.valid).map(p => p.id) }), true); return }
+      if (action.action.startsWith('regenerate:')) { const panel = this.controls.find(p => p.manifest.id === action.action.slice(11)); if (panel && this.element) await this.agent(root, controlsPrompt(this.element, root, this.inspection, action.value, this.provider(), { json: JSON.stringify(panel.manifest), brokenIds: panel.params.filter(p => !p.valid).map(p => p.id) }), true); return }
       if (action.action.startsWith('replay:')) { const panel = this.controls.find(p => p.manifest.id === action.action.slice(7)); if (panel) await this.send('preview:animation-replay', panel.manifest.component); return }
       if (action.action.startsWith('remove:')) { await this.invoke('controls:remove', root, action.action.slice(7)); await this.refresh(); return }
       const binding = this.bindings.get(action.field ?? '')

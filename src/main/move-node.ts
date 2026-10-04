@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises'
 import type { MoveNodeRequest, MoveNodeResult } from '../shared/api'
 import { type AstNode, ancestorChain, findContainer } from './ast-walk'
+import { toAgent } from './move-node-agent'
 import { applyMoveNodeHtml } from './move-node-html'
 import { moveSiblingWithinParent } from './move-node-splice'
 import { applyMoveNodeSvelte } from './move-node-svelte'
@@ -29,14 +30,6 @@ import {
  * target's own leading whitespace is already the right template for the
  * moved node's new position.
  */
-
-function toAgent(req: MoveNodeRequest, reason: string): MoveNodeResult {
-  return {
-    applied: false,
-    needsAgent: true,
-    agentPrompt: `Move the element at ${req.dragged.source} to be ${req.position} the element at ${req.target.source}. ${reason}`
-  }
-}
 
 function isValidRequest(req: MoveNodeRequest): boolean {
   return (
@@ -131,6 +124,7 @@ async function applyMoveNodeReact(
   const targetOpening = locateJsxOpening(ast, targetLoc.line, targetLoc.column)
   if (!draggedOpening || !targetOpening) {
     return toAgent(
+      root,
       req,
       'Could not find one of these elements in the current source — it may have moved.'
     )
@@ -141,11 +135,16 @@ async function applyMoveNodeReact(
   const draggedEl = fullElement(elements, draggedOpening.opening)
   const targetEl = fullElement(elements, targetOpening.opening)
   if (!draggedEl || !targetEl) {
-    return toAgent(req, 'Could not resolve the full element (a Fragment or an unusual JSX shape).')
+    return toAgent(
+      root,
+      req,
+      'Could not resolve the full element (a Fragment or an unusual JSX shape).'
+    )
   }
 
   if (req.position === 'inside') {
     return toAgent(
+      root,
       req,
       'Moving an element into a different container needs your judgment on scope and structure.'
     )
@@ -155,6 +154,7 @@ async function applyMoveNodeReact(
   const targetContainer = findJsxContainer(ast, targetEl)
   if (!draggedContainer || !targetContainer || draggedContainer.parent !== targetContainer.parent) {
     return toAgent(
+      root,
       req,
       'These elements are not direct siblings — moving across containers needs your judgment.'
     )
@@ -164,6 +164,7 @@ async function applyMoveNodeReact(
   const targetChain = ancestorChain(ast, targetEl) ?? []
   if (isTemplated(draggedChain) || isTemplated(targetChain)) {
     return toAgent(
+      root,
       req,
       'One of these is rendered from a loop or a conditional in the code, not a fixed position — describe the intended change to the underlying data/condition instead.'
     )
@@ -178,7 +179,7 @@ async function applyMoveNodeReact(
     isWhitespaceText
   )
   if (next == null) {
-    return toAgent(req, 'Could not compute a safe reorder for these two elements.')
+    return toAgent(root, req, 'Could not compute a safe reorder for these two elements.')
   }
 
   const res = await commitEdit(root, file, code, next, `move:${req.sessionId}`)
@@ -195,6 +196,7 @@ export async function applyMoveNode(root: string, req: MoveNodeRequest): Promise
   // I/O, and it's the case the Layers panel's own `dupStamp` hint anticipates.
   if (req.dragged.source === req.target.source) {
     return toAgent(
+      root,
       req,
       "These render from the same place in the code — describe how you'd like the underlying list reordered."
     )
@@ -206,7 +208,7 @@ export async function applyMoveNode(root: string, req: MoveNodeRequest): Promise
     return { applied: false, error: 'Could not resolve the source location.' }
   }
   if (draggedLoc.file !== targetLoc.file) {
-    return toAgent(req, 'These elements are in different files — reorder them across files.')
+    return toAgent(root, req, 'These elements are in different files — reorder them across files.')
   }
 
   if (draggedLoc.file.endsWith('.svelte')) {

@@ -5,6 +5,7 @@ import type { NativeContextController } from './context-controller'
 import { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { describeSelectionForPrompt, oneLine } from '../shared/selection-context'
+import { projectRelative } from '../shared/project-path'
 import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
 import { editingOwner } from '../main/editing-owner'
@@ -53,7 +54,7 @@ export function installNativeInspector(host: NativeBridge, workspace: NativeWork
       else if (value === 'code' && controller.element?.source) openSource(controller.element.source)
       else if (value === 'delete' && controller.element) void chat.command({ type: 'submit', chat: entry.activeSessionKey, text: describeSelectionForPrompt(controller.element, entry.root) + 'Delete the selected element(s) from the source. Remove wrappers, imports, and styles that exist only for them.' }).catch(report)
     } else if (channel === 'preview:text-edit') {
-      void workspace.services.invoke('text:apply', entry.root, value).then(result => { if (!result.applied) return visualEdit(entry.root, result.agentPrompt ?? `In ${value.source}, change only the selected element's text to ${JSON.stringify(value.text)}.`) }).catch(report)
+      void workspace.services.invoke('text:apply', entry.root, value).then(result => { if (!result.applied) return visualEdit(entry.root, result.agentPrompt ?? `In ${projectRelative(value.source, entry.root)}, change only the selected element's text to ${JSON.stringify(value.text)}.`) }).catch(report)
     } else if (channel === 'preview:comment') {
       if (value.kind === 'annotate') void workspace.services.invoke('annotations:add', entry.root, { source: value.el.source, selector: value.el.selector, tag: value.el.tag, text: value.text }).catch(report)
       else {

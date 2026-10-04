@@ -1,5 +1,6 @@
 import type { SelectedElement } from './api'
 import type { NativeChatMessage } from './native-chat'
+import { projectRelative } from './project-path'
 
 // A picked element's fields come from the (only semi-trusted) previewed page.
 // Collapse to a single line (no control chars / newlines, so an injected value
@@ -13,22 +14,12 @@ export const oneLine = (s: string, max: number): string =>
 
 const SOURCE_RE = /^[\w./@-]+:\d+(:\d+)?$/
 
-/**
- * A source ref relative to the project root (LKM-151): an absolute path into the live
- * checkout would send a worktree chat's edits straight to the live tree.
- */
-export const projectRelativeSource = (source: string, root?: string | null): string => {
-  if (!root || !source.startsWith('/')) return source
-  const base = root.endsWith('/') ? root : `${root}/`
-  return source.startsWith(base) ? source.slice(base.length) : source
-}
-
 /** Build the chat prompt prefix that anchors the agent to a picked element. */
 export const describeSelectionForPrompt = (el: SelectedElement, root?: string | null): string => {
   const id = el.id ? oneLine(el.id, 64) : ''
   const cls = el.classes[0] ? oneLine(el.classes[0], 64) : ''
   const ident = id ? `#${id}` : cls ? `.${cls}` : ''
-  const source = el.source && SOURCE_RE.test(el.source) ? projectRelativeSource(el.source, root) : null
+  const source = el.source && SOURCE_RE.test(el.source) ? projectRelative(el.source, root) : null
   const where = source ? ` in ${source}` : ` (selector: ${oneLine(el.selector, 200)})`
   const text = el.text ? ` with text “${oneLine(el.text, 40)}”` : ''
   return `In the preview I selected the <${oneLine(el.tag, 32)}${ident}> element${where}${text}. `

@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises'
 import type { MoveNodeRequest, MoveNodeResult } from '../shared/api'
 import { type AstNode, ancestorChain, findContainer } from './ast-walk'
+import { toAgent } from './move-node-agent'
 import { moveSiblingWithinParent } from './move-node-splice'
 import { commitEdit, type ResolvedSource } from './props'
 import { findElement, parseSvelte } from './props-svelte'
@@ -14,14 +15,6 @@ import { findElement, parseSvelte } from './props-svelte'
  * no full-span lookup step here — only the parent/sibling and containment
  * primitives are new, and both come from the shared `ast-walk.ts`.
  */
-
-function toAgent(req: MoveNodeRequest, reason: string): MoveNodeResult {
-  return {
-    applied: false,
-    needsAgent: true,
-    agentPrompt: `Move the element at ${req.dragged.source} to be ${req.position} the element at ${req.target.source}. ${reason}`
-  }
-}
 
 /** An element's children live in its OWN `.fragment.nodes` array (Svelte 5's
  *  "modern" ast); the top-level markup hangs off the parsed component's
@@ -64,12 +57,13 @@ export async function applyMoveNodeSvelte(
   }
 
   const ast = await parseSvelte(code)
-  if (!ast) return toAgent(req, 'Could not parse the component.')
+  if (!ast) return toAgent(root, req, 'Could not parse the component.')
 
   const draggedEl = findElement(ast, code, draggedLoc.line, draggedLoc.column) as AstNode | null
   const targetEl = findElement(ast, code, targetLoc.line, targetLoc.column) as AstNode | null
   if (!draggedEl || !targetEl) {
     return toAgent(
+      root,
       req,
       'Could not find one of these elements in the current source — it may have moved.'
     )
@@ -77,6 +71,7 @@ export async function applyMoveNodeSvelte(
 
   if (req.position === 'inside') {
     return toAgent(
+      root,
       req,
       'Moving an element into a different container needs your judgment on scope and structure.'
     )
@@ -86,6 +81,7 @@ export async function applyMoveNodeSvelte(
   const targetContainer = findContainer(ast, targetEl, svelteChildrenOf)
   if (!draggedContainer || !targetContainer || draggedContainer.parent !== targetContainer.parent) {
     return toAgent(
+      root,
       req,
       'These elements are not direct siblings — moving across containers needs your judgment.'
     )
@@ -95,6 +91,7 @@ export async function applyMoveNodeSvelte(
   const targetChain = ancestorChain(ast, targetEl) ?? []
   if (isTemplated(draggedChain) || isTemplated(targetChain)) {
     return toAgent(
+      root,
       req,
       'One of these is rendered from an {#each}/{#if} block, not a fixed position — describe the intended change to the underlying data/condition instead.'
     )
@@ -109,7 +106,7 @@ export async function applyMoveNodeSvelte(
     isWhitespaceText
   )
   if (next == null) {
-    return toAgent(req, 'Could not compute a safe reorder for these two elements.')
+    return toAgent(root, req, 'Could not compute a safe reorder for these two elements.')
   }
 
   const res = await commitEdit(root, file, code, next, `move:${req.sessionId}`)
