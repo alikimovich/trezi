@@ -123,7 +123,36 @@ element's absolute live path. A bypass-permission background agent edited that p
 directly. The prompt now gives project-relative sources. A Claude `PreToolUse` hook
 (`src/main/live-write-guard.ts`) denies Edit/Write/MultiEdit/NotebookEdit aimed inside
 the live checkout from a worktree chat, and names the worktree path to use instead.
-Shell commands and other providers are not covered by the hook.
+Shell commands and Codex are covered too (LKM-156, below).
+
+### Bash and Codex writes to the live checkout (LKM-156)
+
+- **Claude Bash.** The same `PreToolUse` hook denies any `Bash` command that names the
+  live root while the chat runs in a worktree (`liveCheckoutCommand`). The denial names
+  the worktree path of the first live path in the command. The guard matches the root
+  as given, resolved (`/private/var/…`), shell-escaped and as `~/`, `$HOME/` or
+  `${HOME}/`; siblings such as `app-other` and the worktree's own paths do not match.
+- **Reads are denied too.** A shell command cannot be classified as a read or a write
+  reliably: `sed -i`, redirections, `tee`, `cp`/`mv` targets, `find -exec`, `xargs`,
+  formatters, `git -C` and `cd … &&` all write through ordinary-looking commands. The
+  worktree holds the same files, so the agent loses nothing by using it. A command
+  that reaches the live tree without spelling it (a relative `../..` walk, a variable
+  built at runtime) is not caught; the prompt and the worktree cwd are the defense there.
+- **Codex and Responses connections.** Both run on the Codex harness, which has no
+  pre-tool hook, so the sandbox keeps them out (`src/main/backends/codex-sandbox.ts`):
+  `workspace-write` with the worktree as the working directory and `approvalPolicy:
+  'never'`, so a `require_escalated` request is refused. `test/live-write-guard.mjs`
+  drives the real CLI against a local fake Responses endpoint (no provider call) and
+  shows that `>`, `>>`, `sed -i`, `cp`, `mv`, `tee`, a write into the live `.git` and
+  an escalation all fail while the worktree stays writable. It prints SKIP where no
+  local port or nested sandbox is available.
+- **What the sandbox otherwise allows.** `workspace-write` also keeps `/tmp`, `$TMPDIR`
+  and the `writable_roots` of the user's `~/.codex/config.toml` writable. A worktree
+  session therefore overrides `writable_roots` to none and excludes `/tmp` or `$TMPDIR`
+  when it overlaps the live tree (only a project kept in a temp folder). Without the
+  override a live tree under `/tmp` was writable in the probe; the test's own
+  `config.toml` lists the live root as a writable root, and it stays read-only.
+- **Non-Git projects** run in the live tree itself: no hook denial, no sandbox override.
 
 `src/shared/dev-error.ts` reads the dev server's log lines and spots Vite
 (esbuild/Babel/Rolldown `PARSE_ERROR`), Next.js and tsc-style errors. If the error

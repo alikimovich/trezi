@@ -60,6 +60,7 @@ const UNIT = [
   "native-settings-evidence",
   "native-chat-controller",
   "stop-recovery-ui",
+  "live-write-guard",
   "project-path",
   "network-volume-note",
   "native-composer-layout",

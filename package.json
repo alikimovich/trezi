@@ -84,6 +84,7 @@
     "test:codex-retry": "bun test/codex-retry-cause.mjs",
     "test:codex-stream": "bun test/codex-stream.mjs",
     "test:codex-model": "bun test/codex-model.mjs",
+    "test:live-write-guard": "bun test/live-write-guard.mjs",
     "test:interrupt": "bun test/interrupt-escalation.mjs",
     "test:chat-title": "bun test/chat-title.mjs",
     "test:chat-settings": "bun test/chat-settings.mjs",

@@ -1104,6 +1104,7 @@ async function startSession(
       ...(ctx?.resumeSessionId ? { resume: ctx.resumeSessionId } : {}),
       // LKM-151: a worktree chat never edits the live checkout by absolute path, in any
       // permission mode (hooks run before bypass/auto approvals; canUseTool does not).
+      // LKM-156: nor names it in a Bash command.
       hooks: {
         PreToolUse: [{
           hooks: [async input => {

@@ -36,6 +36,7 @@ import {
   unsupportedCodexModel
 } from './codex-model'
 import { createRetryCause } from './codex-retry'
+import { codexSandbox } from './codex-sandbox'
 import { createItemTracker, codexItemWarning } from './codex-stream'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
@@ -308,11 +309,10 @@ async function startSession(
     await verifyTreziMcp(mcpConfig)
     // The seat skips a model this login already rejected (`codex-model.ts`).
     const model = conn ? options.model : await seatModel(options.model)
+    // The worktree is the only writable project tree (LKM-156, `codex-sandbox.ts`).
+    const sandbox = codexSandbox(root, ctx?.liveRoot ?? root)
     threadOptions = {
-      workingDirectory: root,
-      skipGitRepoCheck: true,
-      sandboxMode: 'workspace-write',
-      approvalPolicy: 'never',
+      ...sandbox.thread,
       ...(model ? { model } : {}),
       ...(isEffort(options.effort) ? { modelReasoningEffort: options.effort } : {})
     }
@@ -324,7 +324,7 @@ async function startSession(
       const codex = new Codex({
         ...codexPathOverride(),
         ...codexOptions,
-        config: isolatedCodexConfig({ ...codexOptions.config, ...mcpConfig })
+        config: isolatedCodexConfig({ ...codexOptions.config, ...mcpConfig, ...sandbox.config })
       })
       return id ? codex.resumeThread(id, threadOptions) : codex.startThread(threadOptions)
     }
