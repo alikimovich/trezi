@@ -1,5 +1,13 @@
 import type { PropInspection, SelectedElement } from './api'
+import { projectRelative } from './project-path'
 import { describeSelectionForPrompt, oneLine } from './selection-context'
+
+const ownerLine = (element: SelectedElement, root: string | null): string[] =>
+  element.componentSource && element.componentSource !== element.source
+    ? [
+        `Its owning component instance is at ${oneLine(projectRelative(element.componentSource, root), 200)}.`
+      ]
+    : []
 
 /**
  * The "Surface controls with AI" trigger prompt (Custom Controls, v10) — a real
@@ -8,19 +16,21 @@ import { describeSelectionForPrompt, oneLine } from './selection-context'
  * `define_controls` tool (whose schema documents the manifest shape); the other
  * backends get the props-based fallback the Props tab can pick up. Element-
  * derived fields are page-sourced (semi-trusted) → collapsed through oneLine,
- * same as every other selection-seeded prompt.
+ * same as every other selection-seeded prompt. Sources are relative to `root`,
+ * so a worktree chat edits its own checkout (LKM-155).
  */
 export function controlsPrompt(
   element: SelectedElement,
+  root: string | null,
   inspection: PropInspection | null,
   hint: string | undefined,
   provider: string,
   oldManifest?: { json: string; brokenIds: string[] }
 ): string {
-  const lines: string[] = [describeSelectionForPrompt(element).trim()]
-  if (element.componentSource && element.componentSource !== element.source) {
-    lines.push(`Its owning component instance is at ${oneLine(element.componentSource, 200)}.`)
-  }
+  const lines: string[] = [
+    describeSelectionForPrompt(element, root).trim(),
+    ...ownerLine(element, root)
+  ]
   if (inspection?.component) {
     lines.push(`The inspected component is \`${oneLine(inspection.component, 64)}\`.`)
   }
@@ -62,14 +72,16 @@ export function controlsPrompt(
  */
 export function animationControlsPrompt(
   element: SelectedElement,
+  root: string | null,
   inspection: PropInspection | null,
   hint: string | undefined,
   _provider: string
 ): string {
-  const lines: string[] = ['/animation-controls', describeSelectionForPrompt(element).trim()]
-  if (element.componentSource && element.componentSource !== element.source) {
-    lines.push(`Its owning component instance is at ${oneLine(element.componentSource, 200)}.`)
-  }
+  const lines: string[] = [
+    '/animation-controls',
+    describeSelectionForPrompt(element, root).trim(),
+    ...ownerLine(element, root)
+  ]
   if (inspection?.component) {
     lines.push(`The inspected component is \`${oneLine(inspection.component, 64)}\`.`)
   }

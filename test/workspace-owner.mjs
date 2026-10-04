@@ -194,8 +194,12 @@ try {
     const sourceSetup = { state: 'failed', reason: 'the dev server reported: @babel/core is not installed', at: 1759400000000 }
     const remembered = await ws.op('update', { projects: [{ key: alpha, fields: { sourceSetup } }] }, after.revision)
     assert.deepEqual(remembered.snapshot.projects.find(p => p.key === alpha).sourceSetup, sourceSetup)
+    // LKM-157: a connected project whose restarted preview lost its stamps.
+    const lost = await ws.op('update', { projects: [{ key: alpha, fields: { sourceSetup: { state: 'unstamped', at: 1759500000000 } } }] }, remembered.snapshot.revision)
+    assert.deepEqual(lost.snapshot.projects.find(p => p.key === alpha).sourceSetup, { state: 'unstamped', at: 1759500000000 })
+    const restored = await ws.op('update', { projects: [{ key: alpha, fields: { sourceSetup } }] }, lost.snapshot.revision)
     const before = readFileSync(file(dir))
-    const good = remembered.snapshot.revision
+    const good = restored.snapshot.revision
     const setupField = value => ws.frame('update', { projects: [{ key: alpha, fields: { sourceSetup: value } }] }, good)
     for (const bad of [
       setupField('declined'), setupField({ state: 'pending', at: 1 }), setupField({ state: 'done' }), setupField({ state: 'done', at: -1 }),

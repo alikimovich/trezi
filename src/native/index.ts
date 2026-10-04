@@ -306,6 +306,8 @@ async function main() {
   const contextController = new NativeContextController(workspaceController, chatController, () => ({ projectUi: preferences.get('trezi:project-ui:v1') === 'true', projectUiEngine: preferences.get('trezi:project-ui-engine:v1') === 'jev' ? 'jev' : 'agent' }), (channel, ...args) => dispatchIPC('main', { type: 'send', channel, args }))
   // LKM-153: a `[trezi-source]` warning is the reason a verified setup found no stamps.
   runtimeOwner.onLog((root, line) => contextController.devServerLog(root, line))
+  // LKM-157: a connected project whose restarted preview stays unstamped is offered Reconnect.
+  workspaceController.restarted = root => contextController.restarted(root)
   const visualEdit = async (root: string, prompt: string) => {
     const entry = workspaceController.state.projects.find(p => p.root === root)
     if (!entry || !prompt.trim()) return

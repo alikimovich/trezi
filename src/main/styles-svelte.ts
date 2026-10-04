@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises'
 import type { StyleEdit, StyleEditResult } from '../shared/api'
+import { projectRelative } from '../shared/project-path'
 import { mergeStyleString } from './inline-style'
 import { commitEdit, type ResolvedSource } from './props'
 import { findElement } from './props-svelte'
@@ -94,7 +95,7 @@ const hasTransitionShorthand = (styleValue: string): boolean =>
  * neither S1 nor S2 can reach — without saying so, the agent hunts for a class
  * or style attribute that isn't there.
  */
-const styleAgentPrompt = (edit: StyleEdit, token: ResolvedTokenRef | null): string => {
+export const styleAgentPrompt = (edit: StyleEdit, root: string, token: ResolvedTokenRef | null): string => {
   const what = token
     ? `to the design token \`${token.name}\` (\`${token.ref}\`, currently \`${edit.value}\`), ` +
       'using the token reference rather than the literal value,'
@@ -107,7 +108,7 @@ const styleAgentPrompt = (edit: StyleEdit, token: ResolvedTokenRef | null): stri
       'idiom, converting the target value if needed.'
     : ''
   return (
-    `Set the CSS property \`${edit.prop}\` ${what} on the element at ${edit.source}.${unit} ` +
+    `Set the CSS property \`${edit.prop}\` ${what} on the element at ${projectRelative(edit.source, root)}.${unit} ` +
     "Its styles may live in this component's own `<style>` block or a global " +
     'stylesheet rather than a class or style attribute — edit whichever the ' +
     'project already uses, and do NOT add an inline `style` attribute where ' +
@@ -129,7 +130,7 @@ export async function applyStyleEditSvelte(
   const toAgent = (): StyleEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: styleAgentPrompt(edit, token)
+    agentPrompt: styleAgentPrompt(edit, root, token)
   })
   let code: string
   try {

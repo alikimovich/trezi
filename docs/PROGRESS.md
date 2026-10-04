@@ -14,6 +14,29 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - The real Codex CLI, given the adapter's thread options and config and a fake endpoint that returns `exec_command` calls, cannot write the live tree or its `.git` with any of those commands (a real `git worktree`, user config listing the live root as writable). A `require_escalated` call is refused, the worktree stays writable, and a non-worktree session still writes its own tree.
   - It prints SKIP without a local port or nested sandbox (the worker sandbox); the manager's quick tier ran it in full.
 - **Not done.** Gemini (experimental, off by default) is not covered.
+## 2026-10-04 — LKM-157: re-offer Connect to Trezi when a connected project loses its stamps
+
+- **Problem (review M3, follow-up F3).** `offer` returned false once `sourceSetup.state === 'done'`, so a project whose wiring was later removed, or whose dev server stopped stamping, never showed the card again.
+- **Trigger.** `NativeWorkspaceController.restarted` hears every dev-server restart of the active project (the `restart` command, which environment refreshes and recovery also use). For a `done` project, `NativeContextController.restarted` records the time. Readiness samples from a page that started before it are ignored. If the restarted page shows 0 stamps for a full `verifyGraceMs` while the project stays active, the state moves to `unstamped` and the card offers **Reconnect** with the title "Source links stopped working".
+- **Why only after a restart.** A page that legitimately has no elements must not raise the card, so a 0-stamp sample without a restart is never judged. Any stamped sample cancels the check. A landed setup turn's restart is excluded: its own verification owns that restart.
+- **State.** `unstamped` is a fourth `SourceSetupState` value, validated by `METADATA_FIELDS` and `WorkspaceFile.swift`. It survives relaunch, where the Reconnect card shows again on an unstamped page. Stamps returning record `done` and hide the card. They also clear an in-session Not now, because losing stamps later is a new question. Not now on the re-offer records `declined`, as on the first-run card.
+- **Tests.** `test/native-context.mjs` covers no offer on an unstamped page without a restart, loss after restart plus grace, a stale pre-restart sample, stamps returning, a stamped sample within the grace period, the landed-turn exclusion, the loss across relaunch, and Not now across relaunch. `test/workspace-owner.mjs` round-trips `unstamped` through the Swift owner.
+## 2026-10-04 — LKM-155: project-relative sources in every agent prompt (review F1)
+
+- **Why.** LKM-151 fixed only the selection prompt. The other prompt builders still interpolated the raw stamp source, so an absolute stamp sent a worktree chat to the live checkout (review H2). Root stripping was also duplicated in two places (L4).
+- **Helper.** `projectRelative(path, root, { served })` in `src/shared/project-path.ts`:
+  - keeps `:line[:col]`, ignores trailing separators on the root and returns a path outside the root unchanged;
+  - compares Windows-style roots case-insensitively with `\` read as `/`, while a POSIX root keeps a backslash in a file name;
+  - `served` also drops a leading `./` or `/`, as the former `projectPath` did for dev-server file names.
+  - It replaces `projectRelativeSource` (`src/shared/selection-context.ts`) and `projectPath` (`src/shared/dev-error.ts`).
+- **Prompts.** These now take the project root and name sources relative to it:
+  - `controlsPrompt`/`animationControlsPrompt` (selection and owning-component source);
+  - `agentPromptFor`/`textAgentPrompt` (`src/main/props.ts`, also used by the Svelte engine);
+  - `styleAgentPrompt` (`src/main/styles.ts`, `src/main/styles-svelte.ts`);
+  - the Layers move fallback, now one `toAgent` in `src/main/move-node-agent.ts` instead of three copies;
+  - the inspector's inline-text fallback in `src/native/inspector-runtime.ts`.
+  - `resolveSource` still rejects absolute stamps for direct edits. Nothing changed except the paths in prompts.
+- **Tests.** `test/project-path.mjs` (unit) covers the helper cases. It also builds every prompt from absolute stamps under a temporary live root, through the builders and through the apply paths that fall back to the agent, and asserts that none contains the root. `test/stop-recovery-ui.mjs` uses the shared helper.
 ## 2026-10-04 — LKM-160: split Host.swift into menu and test-broker extensions (review F6)
 
 - **Why.** `src/native/Host.swift` was 618 lines (guideline about 500) and mixed the menu bar with the test broker (`docs/REVIEW-2026-10.md` M5, L7).

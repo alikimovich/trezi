@@ -4,7 +4,8 @@
 // reverts byte-exact, keeps, finishes) is test/stop-recovery.mjs.
 import assert from 'node:assert/strict'
 import { liveCheckoutEdit } from '../src/main/live-write-guard.ts'
-import { DevErrorReader, projectPath, touchedFile } from '../src/shared/dev-error.ts'
+import { DevErrorReader, touchedFile } from '../src/shared/dev-error.ts'
+import { projectRelative } from '../src/shared/project-path.ts'
 import { describeSelectionForPrompt } from '../src/shared/selection-context.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 
@@ -46,8 +47,8 @@ assert.equal(read(['Failed to compile.', '', './src/app/page.tsx:10:5'])[0].file
 assert.deepEqual(read(['12:01:00 PM [vite] (client) hmr update /src/a.tsx']), [{ recovered: '/src/a.tsx' }])
 assert.equal(read(['[vite] Internal server error: x', '  at node_modules/vite/dist/index.js:1:1'])[0], undefined)
 assert.equal(read(['ERROR: something', ...Array(8).fill('noise'), 'src/late.ts'])[0], undefined, 'a file too late is not blamed')
-assert.equal(projectPath(`${live}/src/a.tsx`, live), 'src/a.tsx')
-assert.equal(projectPath('/src/a.tsx', live), 'src/a.tsx')
+assert.equal(projectRelative(`${live}/src/a.tsx`, live, { served: true }), 'src/a.tsx')
+assert.equal(projectRelative('/src/a.tsx', live, { served: true }), 'src/a.tsx')
 assert.equal(touchedFile({ file: './src/a.tsx', message: '' }, live, ['src/b.tsx', 'src/a.tsx']), 'src/a.tsx')
 assert.equal(touchedFile({ file: 'src/c.tsx', message: '' }, live, ['src/a.tsx']), null)
 

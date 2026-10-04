@@ -546,10 +546,10 @@ export async function applySvelteEdit(
     return { applied: false, error: 'Could not read the source file.' }
   }
   const ast = await parseSvelte(code)
-  if (!ast) return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+  if (!ast) return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   const el = findElement(ast, code, loc.line, loc.column)
   if (!el || typeof el.name !== 'string' || typeof el.start !== 'number') {
-    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   }
 
   // Option D: editing a prop surfaced from a host element inside a component
@@ -579,7 +579,7 @@ export async function applySvelteEdit(
     // Insert right after the tag name (`<Button` → after "Button").
     const insertAt = el.start + 1 + el.name.length
     if (code.slice(el.start + 1, insertAt) !== el.name) {
-      return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+      return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
     }
     next = code.slice(0, insertAt) + ' ' + attrText + code.slice(insertAt)
   }
@@ -635,7 +635,7 @@ export async function applySvelteTextEdit(
   const fallback = (): PropEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: textAgentPrompt(edit.source, edit.text)
+    agentPrompt: textAgentPrompt(edit.source, edit.text, root)
   })
   let code: string
   try {
