@@ -6,6 +6,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## Typed island override wire format (LKM-161, review follow-up F8)
 
 - [x] `IslandOverrideMessage` lives in `src/shared/preview-channels.ts`; `islandPreviewPort` sends it and the preview narrows to it; `test/types/island-override-wire.ts` rejects malformed messages at compile time.
+## Split Host.swift menus and test broker (LKM-160, review F6)
+
+- [x] Menu bar (Trezi, File with Open Recent, Edit, Actions, Develop, Window → Activity ⌘L with its badge) in `src/native/HostMenus.swift`; test-broker inspect/perform/verification/capture commands (incl. `activityInspect`, `activityMenu`, `settingsMenu`) in `src/native/HostInspect.swift`. `Host.swift` 618 → 325 lines; no behaviour change.
+- [x] Both files in the `scripts/build-native.mjs` host list; `docs/SWIFT-BACKEND-EVENTS.md` Host/Activity anchors point at the current lines (removed cases marked with the ticket that removed them).
 
 ## Review of recent changes and commit audit (LKM-154)
 
