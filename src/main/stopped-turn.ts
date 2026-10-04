@@ -1,9 +1,4 @@
-import { type IsolatedChat, stoppedTurnSeam as seam } from './chat-isolation'
-import { completeTurn } from './chat-worktrees'
-import { recordEdit } from './edit-history'
-import { commitLiveTurn } from './live-commit'
-import { enqueueRepoWrite } from './repo-write-queue'
-import { retireWorktreeBranch } from './worktrees'
+import { landStoppedTurn, markStoppedReverted, stoppedHold } from './parked-chat'
 
 /**
  * LKM-151: what the user can do with a stopped (or failed) turn. Such a turn never
@@ -28,65 +23,31 @@ export interface StoppedTurnResult {
   error?: string
 }
 
-const held = (st: IsolatedChat | undefined): st is IsolatedChat => !!st && st.parked && st.interrupted
+const nothingHeld: StoppedTurnResult = { ok: false, files: [], error: 'Nothing from a stopped turn is on hold.' }
 
 /** Revert the stopped turn. The live checkout is untouched; nothing is written now. */
 export function revertStoppedTurn(sessionKey: string): StoppedTurnResult {
-  const st = seam.state(sessionKey)
-  if (!held(st) || st.reverted) return { ok: false, files: [], error: 'Nothing from a stopped turn is on hold.' }
-  st.reverted = true
-  seam.dropRecord(st)
-  seam.emit(sessionKey, 'isolated', st.wt.branch, st.parkedFiles, undefined, undefined, 'reverted')
-  return { ok: true, files: st.parkedFiles }
+  const hold = stoppedHold(sessionKey)
+  if (!hold || hold.reverted) return { ...nothingHeld }
+  markStoppedReverted(sessionKey, true)
+  return { ok: true, files: hold.files }
 }
 
 /** Undo a revert that has not been settled by a new turn yet. */
 export function undoStoppedRevert(sessionKey: string): StoppedTurnResult {
-  const st = seam.state(sessionKey)
-  if (!held(st) || !st.reverted) return { ok: false, files: [], error: 'The stopped turn can no longer be restored.' }
-  st.reverted = false
-  seam.holdRecord(st, st.parkedFiles)
-  seam.emit(sessionKey, 'parked', st.wt.branch, st.parkedFiles, undefined, undefined, 'interrupted')
-  return { ok: true, files: st.parkedFiles }
+  const hold = stoppedHold(sessionKey)
+  if (!hold?.reverted) return { ok: false, files: [], error: 'The stopped turn can no longer be restored.' }
+  markStoppedReverted(sessionKey, false)
+  return { ok: true, files: hold.files }
 }
 
 /** Land the stopped turn's partial work on the live checkout. */
 export async function keepStoppedTurn(sessionKey: string): Promise<StoppedTurnResult> {
-  const st = seam.state(sessionKey)
-  if (!held(st) || st.reverted) return { ok: false, files: [], error: 'Nothing from a stopped turn is on hold.' }
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async (): Promise<StoppedTurnResult> => {
-      if (!held(st) || st.reverted) return { ok: false, files: [], error: 'Nothing from a stopped turn is on hold.' }
-      const turnNo = ++st.turnNo
-      const title = 'Keep partial changes from a stopped turn'
-      const outcome = await completeTurn(st.liveRoot, st.wt, title, { land: true })
-      if (outcome.outcome === 'parked') {
-        st.interrupted = false
-        st.parkedFiles = outcome.files
-        seam.holdRecord(st, outcome.files)
-        seam.emit(sessionKey, 'parked', st.wt.branch, outcome.files)
-        return { ok: true, files: outcome.files, conflict: true }
-      }
-      const group = outcome.outcome === 'merged' ? `chat:${st.wt.id}:${turnNo}` : undefined
-      if (group) {
-        for (const e of outcome.edits) recordEdit(st.liveRoot, e.file, e.before, e.after, undefined, group)
-        await commitLiveTurn(st.liveRoot, outcome.files, { title, body: `Trezi turn ${turnNo} (${st.wt.branch}).` })
-      }
-      if (outcome.newBase) st.wt.baseSha = outcome.newBase
-      st.parked = false
-      st.interrupted = false
-      st.parkedFiles = []
-      st.resolvingFiles = null
-      seam.dropRecord(st)
-      await retireWorktreeBranch(st.wt)
-      if (group) seam.emit(sessionKey, 'merged', st.wt.branch, outcome.files, group, !st.record?.prUrl)
-      else seam.emit(sessionKey, 'isolated', st.wt.branch)
-      return { ok: true, files: outcome.files, ...(group ? { group } : {}) }
-    })
-  )
-  st.chain = task.catch(() => {})
+  const hold = stoppedHold(sessionKey)
+  if (!hold || hold.reverted) return { ...nothingHeld }
   try {
-    return await task
+    const landed = await landStoppedTurn(sessionKey, 'Keep partial changes from a stopped turn')
+    return landed ? { ok: true, ...landed } : { ...nothingHeld }
   } catch (error) {
     return { ok: false, files: [], error: error instanceof Error ? error.message : String(error) }
   }

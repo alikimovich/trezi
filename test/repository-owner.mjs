@@ -86,7 +86,7 @@ try {
     // The Git suites' own assertions, through the Swift owner. (setup-next installs the
     // Swift owners itself: test/helpers/with-service-owners.mjs.)
     // Chat worktrees also need the editing owner, so these run on the editing fixture.
-    const suites = ['chat-worktrees', 'resolve-conflicts', 'worktrees', 'live-commit', 'git', 'chat-recovery', 'auto-reconciliation', 'chat-workspace-cleanup', 'stop-recovery', 'setup-worktree']
+    const suites = ['chat-worktrees', 'resolve-conflicts', 'worktrees', 'live-commit', 'git', 'chat-recovery', 'auto-reconciliation', 'chat-workspace-cleanup', 'stop-recovery', 'chat-landing', 'setup-worktree']
     const results = await Promise.all(suites.map(suite => new Promise(resolve => {
       const child = spawn('bun', ['--preload', './test/helpers/repository-owner-preload.mjs', `test/${suite}.mjs`], {
         cwd: root, env: { ...process.env, REPOSITORY_FIXTURE: suiteFixture, REPOSITORY_PROFILE: profile(`parity-${suite}`) }, stdio: ['ignore', 'pipe', 'pipe']

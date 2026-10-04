@@ -126,7 +126,10 @@ src/main/
                   list_recommended_skills (pure) and install_skills (side-effecting) agent tools
   git.ts, worktrees.ts, chat-worktrees.ts, chat-isolation.ts
                   git/worktree primitives; worktrees: per-chat isolation + sync/merge/recovery;
-                  chat-worktrees: turn-scoped ops (sync, commit, apply); chat-isolation: lifecycle.
+                  chat-worktrees: turn-scoped ops (sync, commit, apply); chat-isolation: lifecycle,
+                  with chat-state (per-chat state, chain), chat-park (park records, clearPark,
+                  crash recovery), chat-landing (landTurn), parked-chat (Apply/Discard/Resolve,
+                  the stopped-turn hold) and chat-helpers (setup helper sync).
                   Their mutating functions dispatch to the Swift repository owner
                   (repository-owner.ts; without the service they throw);
                   repo-write-queue.ts likewise

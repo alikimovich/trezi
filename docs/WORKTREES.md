@@ -179,7 +179,9 @@ visible there until landing. Isolation currently applies only when the opened fo
 the Git repository root; non-Git folders and Git subdirectories use the live path and do
 not receive this concurrency guarantee.
 
-Implementation: `src/main/repo-write-queue.ts`, `src/main/chat-isolation.ts`,
+Implementation: `src/main/repo-write-queue.ts`, `src/main/chat-isolation.ts` (with
+`src/main/chat-state.ts`, `src/main/chat-park.ts`, `src/main/chat-landing.ts`,
+`src/main/parked-chat.ts`, `src/main/stopped-turn.ts`),
 `src/main/chat-worktrees.ts`, `src/main/worktrees.ts`, `src/main/live-commit.ts`.
 Regression coverage: `test/chat-worktrees.mjs`, `test/live-commit.mjs`,
 `test/chat-isolation.mjs`, `test/turn-terminal.mjs`.
@@ -212,7 +214,7 @@ uncommitted work is never removed. Its work goes to an `idle-<id>` recovery ref
   old-name folder, is never one of them.
 
 Implementation: `src/main/chat-workspaces.ts`, `src/main/chat-isolation.ts`
-(`reclaimIdleWorkspace`, the recreate in `beforeTurn`),
+(`reclaimIdleWorkspace`, the recreate in `beforeTurn`; `recreateWorkspace` in `src/main/chat-state.ts`),
 `src/service/RepositoryCleanup.swift`. Coverage: `test/chat-workspace-cleanup.mjs`
 (through the Swift owner) and `test/native-settings.mjs` (the Settings rows).
 
@@ -276,7 +278,7 @@ so a Connect to Trezi started in a chat with a stopped turn reached the agent wi
 `.trezi/trezi-source.cjs` and the setup stopped. The copy is safe while parked
 because `.trezi/` never enters a snapshot, landing or clean. Set up also copies the
 helpers itself before the setup turn (`syncChatHelpers` in
-`src/main/chat-isolation.ts`, on the chat's repository queue, recreating an
+`src/main/chat-helpers.ts`, on the chat's repository queue, recreating an
 idle-removed worktree first) and checks every hash against the live write. A
 mismatch fails setup with that reason instead of reaching the agent. We chose this
 over pointing the agent at the live `.trezi/` by absolute path, because the config's
