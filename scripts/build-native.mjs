@@ -112,6 +112,8 @@ const result = Bun.spawnSync(
     join(root, 'src/native/ServiceClient.swift'),
     join(root, 'src/native/HostService.swift'),
     join(root, 'src/native/HostLaunch.swift'),
+    join(root, 'src/native/HostMenus.swift'),
+    join(root, 'src/native/HostInspect.swift'),
     join(root, 'src/native/SecuritySession.swift'),
     join(root, 'src/native/Shell.swift'),
     join(root, 'src/native/ProjectCell.swift'),

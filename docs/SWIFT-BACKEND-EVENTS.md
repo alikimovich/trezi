@@ -97,88 +97,88 @@ Task IDs and future-owner meanings are defined in the [15-step roadmap](SWIFT-BA
 | [src/native/index.ts:406](../src/native/index.ts#L406) | host.on('closed', async () => { | S02 | Swift service supervisor / XPC boundary |
 | [src/native/index.ts:411](../src/native/index.ts#L411) | host.on('host-error', async (error) => { | S02 | Swift service supervisor / XPC boundary |
 | [src/native/index.ts:416](../src/native/index.ts#L416) | host.once('ready', async () => { | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Activity.swift:42](../src/native/Activity.swift#L42) | @objc func clearLog() { emit(["event":"activity-action", "action":"clear"]) } | S13 | AppKit presentation; Swift application services; repository/source commit authority |
-| [src/native/Activity.swift:44](../src/native/Activity.swift#L44) | func windowWillClose(_ notification: Notification) { emit(["event":"activity-action", "action":"hide"]) } | S13 | AppKit presentation; Swift application services; repository/source commit authority |
+| [src/native/Activity.swift:60](../src/native/Activity.swift#L60) | @objc func clearLog() { emit(["event":"activity-action", "action":"clear"]) } | S13 | AppKit presentation; Swift application services; repository/source commit authority |
+| [src/native/Activity.swift:63](../src/native/Activity.swift#L63) | func windowWillClose(_ notification: Notification) { emit(["event":"activity-action", "action":"hide"]) } | S13 | AppKit presentation; Swift application services; repository/source commit authority |
 | [src/native/EditingInspector.swift:17](../src/native/EditingInspector.swift#L17) | var message: [String: Any] = ["event":channel, "root":state.root, "generation":state.generation, "action":action] | S12 | AppKit presentation; Swift editing/preview coordinators; AppKit and isolated DOM JS |
-| [src/native/Host.swift:86](../src/native/Host.swift#L86) | emit(["event":"url", "view":id, "url":view.url?.absoluteString ?? ""]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:123](../src/native/Host.swift#L123) | emit(["event":"ready"]) | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:163](../src/native/Host.swift#L163) | emit(["event":"menu", "action":action]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:165](../src/native/Host.swift#L165) | @objc func recentAction(_ item: NSMenuItem) { emit(["event":"recent", "root":item.representedObject as? String ?? ""]) } | S04 | AppKit projection; Swift workspace coordinator |
-| [src/native/Host.swift:167](../src/native/Host.swift#L167) | if let error = error { emit(["event":"reply", "id":id, "error":error]) } | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:168](../src/native/Host.swift#L168) | else { emit(["event":"reply", "id":id, "value":value]) } | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:175](../src/native/Host.swift#L175) | case "preferences": | S03 | AppKit projection; Swift persistence service |
-| [src/native/Host.swift:177](../src/native/Host.swift#L177) | case "webViews": reply(id, views.keys.sorted()) | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:178](../src/native/Host.swift#L178) | case "previewInspector": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:181](../src/native/Host.swift#L181) | case "chatState": | S11 | AppKit projection; Swift conversation coordinator |
-| [src/native/Host.swift:185](../src/native/Host.swift#L185) | case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:]) | S03 | AppKit projection; Swift persistence service |
-| [src/native/Host.swift:186](../src/native/Host.swift#L186) | case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout() | S03 | AppKit projection; Swift persistence service |
-| [src/native/Host.swift:187](../src/native/Host.swift#L187) | case "layoutInspect": reply(id, nativeLayout.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:188](../src/native/Host.swift#L188) | case "contentState": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:191](../src/native/Host.swift#L191) | case "contentInspect": reply(id, contentWindows.map { key, controller in ["id":key, "visible":controller.window.isVisible, "generation":controller.editor.model.state?.generation ?? 0, "fields":controller.editor.model.state?.fields.count ?? 0] as [String: Any] }) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:192](../src/native/Host.swift#L192) | case "captureContent": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:195](../src/native/Host.swift#L195) | case "inspectorState": editingInspector.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout() | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:196](../src/native/Host.swift#L196) | case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0]) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:197](../src/native/Host.swift#L197) | case "inspectorPerform": guard ephemeral else { return }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"inspector-action"]) { _, new in new }); reply(id) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:198](../src/native/Host.swift#L198) | case "layersState": layers.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout() | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:199](../src/native/Host.swift#L199) | case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count]) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:200](../src/native/Host.swift#L200) | case "sourceActive": | S08 | AppKit broker; Swift source service |
-| [src/native/Host.swift:204](../src/native/Host.swift#L204) | case "sourceState": | S08 | AppKit broker; Swift source service |
-| [src/native/Host.swift:235](../src/native/Host.swift#L235) | case "sourceInspect": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:238](../src/native/Host.swift#L238) | case "sourceResize": | S08 | AppKit broker; Swift source service |
-| [src/native/Host.swift:241](../src/native/Host.swift#L241) | case "captureSource": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:244](../src/native/Host.swift#L244) | case "sourcePerform": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:245](../src/native/Host.swift#L245) | guard ephemeral else { return }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"source-action"]) { _, new in new }); reply(id) | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:246](../src/native/Host.swift#L246) | case "activityState": activity.update(c) | S11 | AppKit projection; Swift conversation coordinator |
-| [src/native/Host.swift:247](../src/native/Host.swift#L247) | case "activityInspect": reply(id, ["visible":activity.window?.isVisible ?? false, "count":activity.count]) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:248](../src/native/Host.swift#L248) | case "sheetState": sheets.update(c["state"] as? [String: Any] ?? [:]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:249](../src/native/Host.swift#L249) | case "sheetClose": sheets.close(c["id"] as? String ?? "") | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:250](../src/native/Host.swift#L250) | case "sheetInspect": reply(id, sheets.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:251](../src/native/Host.swift#L251) | case "captureSheet": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:257](../src/native/Host.swift#L257) | case "sheetPerform": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:263](../src/native/Host.swift#L263) | case "welcomeInspect": reply(id, welcome.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:264](../src/native/Host.swift#L264) | case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider]) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:265](../src/native/Host.swift#L265) | case "dividerPerform": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:270](../src/native/Host.swift#L270) | case "islandPerform": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:274](../src/native/Host.swift#L274) | case "chatInspect": reply(id, chat.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:275](../src/native/Host.swift#L275) | case "chatPerform": chat.model.action(c["action"] as? String ?? "", id: c["card"] as? String, value: c["value"] as? String, answers: c["answers"] as? [String: String]); reply(id) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:276](../src/native/Host.swift#L276) | case "composerState": composer.update(c["state"] as? [String: Any] ?? [:]) | S11 | AppKit projection; Swift conversation coordinator |
-| [src/native/Host.swift:277](../src/native/Host.swift#L277) | case "composerInspect": reply(id, composer.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:278](../src/native/Host.swift#L278) | case "composerIMECheck": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:286](../src/native/Host.swift#L286) | case "composerPasteCheck": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:289](../src/native/Host.swift#L289) | case "composerPerform": composer.perform(c); reply(id) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:290](../src/native/Host.swift#L290) | case "composerFocus": window.makeFirstResponder(composer.text) | S11 | AppKit projection; Swift conversation coordinator |
-| [src/native/Host.swift:291](../src/native/Host.swift#L291) | case "captureComposer": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:297](../src/native/Host.swift#L297) | case "shellState": | S04 | AppKit projection; Swift workspace coordinator |
-| [src/native/Host.swift:301](../src/native/Host.swift#L301) | case "shellInspect": reply(id, shell.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:302](../src/native/Host.swift#L302) | case "previewSurfaceInspect": reply(id, previewSurface.inspect()) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:303](../src/native/Host.swift#L303) | case "shellPerform": reply(id, shell.perform(c["action"] as? String ?? "", id: c["row"] as? String)) | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:304](../src/native/Host.swift#L304) | case "captureFeedback": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:314](../src/native/Host.swift#L314) | case "captureShell", "captureShellImage": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:321](../src/native/Host.swift#L321) | case "captureSidebar": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:335](../src/native/Host.swift#L335) | case "recents": | S04 | AppKit projection; Swift workspace coordinator |
-| [src/native/Host.swift:341](../src/native/Host.swift#L341) | case "load": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:345](../src/native/Host.swift#L345) | case "reload": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:348](../src/native/Host.swift#L348) | case "bounds": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:354](../src/native/Host.swift#L354) | case "visible": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:357](../src/native/Host.swift#L357) | case "radius": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:362](../src/native/Host.swift#L362) | case "deliver": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:365](../src/native/Host.swift#L365) | case "evaluate": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:375](../src/native/Host.swift#L375) | case "previewInput": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:391](../src/native/Host.swift#L391) | case "capture": | S12 | AppKit test broker only; no helper capability |
-| [src/native/Host.swift:399](../src/native/Host.swift#L399) | case "pick", "pickNew": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:407](../src/native/Host.swift#L407) | case "trash": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:410](../src/native/Host.swift#L410) | case "fullscreen": reply(id, window.styleMask.contains(.fullScreen)) | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:411](../src/native/Host.swift#L411) | case "nativeEdit": NSApp.sendAction(Selector((c["action"] as? String ?? "undo") + ":"), to: nil, from: nil) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:412](../src/native/Host.swift#L412) | case "mediaReply": | S08 | AppKit broker; Swift source service (retired, LKM-101: unreachable scheme route removed) |
-| [src/native/Host.swift:417](../src/native/Host.swift#L417) | case "quit": terminateHost() | S02 | Swift service supervisor / XPC boundary |
-| [src/native/Host.swift:425](../src/native/Host.swift#L425) | emit(["event":"ipc", "view":name, "message":body]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:429](../src/native/Host.swift#L429) | emit(["event":"loaded", "view":name, "url":webView.url?.absoluteString ?? ""]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:433](../src/native/Host.swift#L433) | emit(["event":"load-error", "view":views.first(where: { $0.value === webView })?.key ?? "", "message":error.localizedDescription]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:439](../src/native/Host.swift#L439) | else { emit(["event":"load-error", "view":"preview", "message":"The preview stopped repeatedly. Use Run to restart it, or inspect the activity log."]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:451](../src/native/Host.swift#L451) | if action.navigationType == .linkActivated && ["https", "http"].contains(url.scheme ?? "") { emit(["event":"external", "url":url.absoluteString]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:462](../src/native/Host.swift#L462) | emit(["event":"media", "task":key, "url":urlSchemeTask.request.url!.absoluteString, "headers":urlSchemeTask.request.allHTTPHeaderFields ?? [:]]) | S08 | AppKit broker; Swift source service (retired, LKM-101: unreachable scheme route removed) |
-| [src/native/Host.swift:465](../src/native/Host.swift#L465) | func windowDidEnterFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":true]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
-| [src/native/Host.swift:466](../src/native/Host.swift#L466) | func windowDidExitFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":false]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:79](../src/native/Host.swift#L79) | emit(["event":"url", "view":id, "url":view.url?.absoluteString ?? ""]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:120](../src/native/Host.swift#L120) | emit(["event":"ready"]) | S02 | Swift service supervisor / XPC boundary |
+| [src/native/HostMenus.swift:59](../src/native/HostMenus.swift#L59) | emit(["event":"menu", "action":action]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/HostMenus.swift:61](../src/native/HostMenus.swift#L61) | @objc func recentAction(_ item: NSMenuItem) { emit(["event":"recent", "root":item.representedObject as? String ?? ""]) } | S04 | AppKit projection; Swift workspace coordinator |
+| [src/native/Host.swift:125](../src/native/Host.swift#L125) | if let error = error { emit(["event":"reply", "id":id, "error":error]) } | S02 | Swift service supervisor / XPC boundary |
+| [src/native/Host.swift:126](../src/native/Host.swift#L126) | else { emit(["event":"reply", "id":id, "value":value]) } | S02 | Swift service supervisor / XPC boundary |
+| [src/native/Host.swift:140](../src/native/Host.swift#L140) | case "preferences": | S03 | AppKit projection; Swift persistence service |
+| [src/native/Host.swift:142](../src/native/Host.swift#L142) | case "webViews": reply(id, views.keys.sorted()) | S02 | Swift service supervisor / XPC boundary |
+| [src/native/HostInspect.swift:8](../src/native/HostInspect.swift#L8) | case "previewInspector": | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:144](../src/native/Host.swift#L144) | case "chatState": | S11 | AppKit projection; Swift conversation coordinator |
+| [src/native/Host.swift:148](../src/native/Host.swift#L148) | case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:]) | S03 | AppKit projection; Swift persistence service |
+| [src/native/Host.swift:149](../src/native/Host.swift#L149) | case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout() | S03 | AppKit projection; Swift persistence service |
+| [src/native/HostInspect.swift:11](../src/native/HostInspect.swift#L11) | case "layoutInspect": reply(id, nativeLayout.inspect()) | S12 | AppKit test broker only; no helper capability |
+| src/native/Host.swift (removed in LKM-114) | case "contentState": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| src/native/Host.swift (removed in LKM-114) | case "contentInspect": reply(id, contentWindows.map { key, controller in ["id":key, "visible":controller.window.isVisible, "generation":controller.editor.model.state?.generation ?? 0, "fields":controller.editor.model.state?.fields.count ?? 0] as [String: Any] }) | S12 | AppKit test broker only; no helper capability |
+| src/native/Host.swift (removed in LKM-114) | case "captureContent": | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:150](../src/native/Host.swift#L150) | case "inspectorState": editingInspector.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout() | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:12](../src/native/HostInspect.swift#L12) | case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0]) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:13](../src/native/HostInspect.swift#L13) | case "inspectorPerform": guard ephemeral else { return true }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"inspector-action"]) { _, new in new }); reply(id) | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:151](../src/native/Host.swift#L151) | case "layersState": layers.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout() | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/HostInspect.swift:18](../src/native/HostInspect.swift#L18) | case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count]) | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:152](../src/native/Host.swift#L152) | case "sourceActive": | S08 | AppKit broker; Swift source service |
+| [src/native/Host.swift:156](../src/native/Host.swift#L156) | case "sourceState": | S08 | AppKit broker; Swift source service |
+| [src/native/HostInspect.swift:19](../src/native/HostInspect.swift#L19) | case "sourceInspect": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:22](../src/native/HostInspect.swift#L22) | case "sourceResize": | S08 | AppKit broker; Swift source service |
+| [src/native/HostInspect.swift:25](../src/native/HostInspect.swift#L25) | case "captureSource": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:28](../src/native/HostInspect.swift#L28) | case "sourcePerform": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:29](../src/native/HostInspect.swift#L29) | guard ephemeral else { return true }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"source-action"]) { _, new in new }); reply(id) | S02 | Swift service supervisor / XPC boundary |
+| [src/native/Host.swift:187](../src/native/Host.swift#L187) | case "activityState": activity.update(c) | S11 | AppKit projection; Swift conversation coordinator |
+| [src/native/HostInspect.swift:35](../src/native/HostInspect.swift#L35) | case "activityInspect": reply(id, ["visible":activity.window?.isVisible ?? false, "key":activity.window?.isKeyWindow ?? false, "count":activity.count, "text":String(activity.text.string.suffix(20000))].merging(activityIndicator.inspect()) { _, new in new }) | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:189](../src/native/Host.swift#L189) | case "sheetState": sheets.update(c["state"] as? [String: Any] ?? [:]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:190](../src/native/Host.swift#L190) | case "sheetClose": sheets.close(c["id"] as? String ?? "") | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/HostInspect.swift:40](../src/native/HostInspect.swift#L40) | case "sheetInspect": reply(id, sheets.inspect()) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:58](../src/native/HostInspect.swift#L58) | case "captureSheet": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:64](../src/native/HostInspect.swift#L64) | case "sheetPerform": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:70](../src/native/HostInspect.swift#L70) | case "welcomeInspect": reply(id, welcome.inspect()) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:71](../src/native/HostInspect.swift#L71) | case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider]) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:72](../src/native/HostInspect.swift#L72) | case "dividerPerform": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:77](../src/native/HostInspect.swift#L77) | case "islandPerform": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:123](../src/native/HostInspect.swift#L123) | case "chatInspect": reply(id, chat.inspect()) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:124](../src/native/HostInspect.swift#L124) | case "chatPerform": chat.model.action(c["action"] as? String ?? "", id: c["card"] as? String, value: c["value"] as? String, answers: c["answers"] as? [String: String]); reply(id) | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:191](../src/native/Host.swift#L191) | case "composerState": composer.update(c["state"] as? [String: Any] ?? [:]) | S11 | AppKit projection; Swift conversation coordinator |
+| [src/native/HostInspect.swift:137](../src/native/HostInspect.swift#L137) | case "composerInspect": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:145](../src/native/HostInspect.swift#L145) | case "composerIMECheck": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:153](../src/native/HostInspect.swift#L153) | case "composerPasteCheck": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:156](../src/native/HostInspect.swift#L156) | case "composerPerform": composer.perform(c); reply(id) | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:192](../src/native/Host.swift#L192) | case "composerFocus": window.makeFirstResponder(composer.text) | S11 | AppKit projection; Swift conversation coordinator |
+| [src/native/HostInspect.swift:157](../src/native/HostInspect.swift#L157) | case "captureComposer": | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:193](../src/native/Host.swift#L193) | case "shellState": | S04 | AppKit projection; Swift workspace coordinator |
+| [src/native/HostInspect.swift:163](../src/native/HostInspect.swift#L163) | case "shellInspect": reply(id, shell.inspect().merging(shell.gateInspect()) { _, new in new }) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:189](../src/native/HostInspect.swift#L189) | case "previewSurfaceInspect": reply(id, previewSurface.inspect()) | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:190](../src/native/HostInspect.swift#L190) | case "shellPerform": reply(id, shell.perform(c["action"] as? String ?? "", id: c["row"] as? String)) | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:197](../src/native/Host.swift#L197) | case "captureFeedback": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:191](../src/native/HostInspect.swift#L191) | case "captureShell", "captureShellImage": | S12 | AppKit test broker only; no helper capability |
+| [src/native/HostInspect.swift:198](../src/native/HostInspect.swift#L198) | case "captureSidebar": | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:207](../src/native/Host.swift#L207) | case "recents": updateRecents(c["recents"] as? [[String: String]] ?? []) | S04 | AppKit projection; Swift workspace coordinator |
+| [src/native/Host.swift:208](../src/native/Host.swift#L208) | case "load": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:212](../src/native/Host.swift#L212) | case "reload": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:215](../src/native/Host.swift#L215) | case "bounds": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:221](../src/native/Host.swift#L221) | case "visible": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:224](../src/native/Host.swift#L224) | case "radius": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:229](../src/native/Host.swift#L229) | case "deliver": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:232](../src/native/Host.swift#L232) | case "evaluate": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/HostInspect.swift:212](../src/native/HostInspect.swift#L212) | case "previewInput": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:243](../src/native/Host.swift#L243) | case "capture": | S12 | AppKit test broker only; no helper capability |
+| [src/native/Host.swift:252](../src/native/Host.swift#L252) | case "pick", "pickNew": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| src/native/Host.swift (removed in LKM-111) | case "trash": | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:260](../src/native/Host.swift#L260) | case "fullscreen": reply(id, window.styleMask.contains(.fullScreen)) | S02 | Swift service supervisor / XPC boundary |
+| [src/native/Host.swift:261](../src/native/Host.swift#L261) | case "nativeEdit": NSApp.sendAction(Selector((c["action"] as? String ?? "undo") + ":"), to: nil, from: nil) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| src/native/Host.swift (removed in LKM-101) | case "mediaReply": | S08 | AppKit broker; Swift source service (retired, LKM-101: unreachable scheme route removed) |
+| [src/native/Host.swift:262](../src/native/Host.swift#L262) | case "quit": | S02 | Swift service supervisor / XPC boundary |
+| [src/native/Host.swift:272](../src/native/Host.swift#L272) | emit(["event":"ipc", "view":name, "message":body]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:276](../src/native/Host.swift#L276) | emit(["event":"loaded", "view":name, "url":webView.url?.absoluteString ?? ""]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:280](../src/native/Host.swift#L280) | emit(["event":"load-error", "view":views.first(where: { $0.value === webView })?.key ?? "", "message":error.localizedDescription]) | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:286](../src/native/Host.swift#L286) | else { emit(["event":"load-error", "view":"preview", "message":"The preview stopped repeatedly. Use Run to restart it, or inspect the activity log."]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:298](../src/native/Host.swift#L298) | if action.navigationType == .linkActivated && ["https", "http"].contains(url.scheme ?? "") { emit(["event":"external", "url":url.absoluteString]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| src/native/Host.swift (removed in LKM-101) | emit(["event":"media", "task":key, "url":urlSchemeTask.request.url!.absoluteString, "headers":urlSchemeTask.request.allHTTPHeaderFields ?? [:]]) | S08 | AppKit broker; Swift source service (retired, LKM-101: unreachable scheme route removed) |
+| [src/native/Host.swift:307](../src/native/Host.swift#L307) | func windowDidEnterFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":true]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
+| [src/native/Host.swift:308](../src/native/Host.swift#L308) | func windowDidExitFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":false]) } | S12 | AppKit UI/WebKit broker; Swift domain coordinators |
 | [src/native/ChatIsland.swift:39](../src/native/ChatIsland.swift#L39) | emit(["event":"island-action", "chat":chat, "id":island.id, "revision":island.revision, | S12 | AppKit presentation; Swift editing/preview coordinators; AppKit and isolated DOM JS |
 | [src/native/ChatIsland.swift:86](../src/native/ChatIsland.swift#L86) | case "toggle": | S12 | AppKit presentation; Swift editing/preview coordinators; AppKit and isolated DOM JS |
 | [src/native/ChatIsland.swift:88](../src/native/ChatIsland.swift#L88) | case "select": | S12 | AppKit presentation; Swift editing/preview coordinators; AppKit and isolated DOM JS |
