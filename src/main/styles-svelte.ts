@@ -108,7 +108,7 @@ export const styleAgentPrompt = (edit: StyleEdit, root: string, token: ResolvedT
       'idiom, converting the target value if needed.'
     : ''
   return (
-    `Set the CSS property \`${edit.prop}\` ${what} on the element at ${projectRelative(edit.source, root)}.${unit}` +
+    `Set the CSS property \`${edit.prop}\` ${what} on the element at ${projectRelative(edit.source, root)}.${unit} ` +
     "Its styles may live in this component's own `<style>` block or a global " +
     'stylesheet rather than a class or style attribute — edit whichever the ' +
     'project already uses, and do NOT add an inline `style` attribute where ' +

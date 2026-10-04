@@ -187,7 +187,7 @@ try {
   assert.match(prompts.style, /^In src\/Button\.tsx:12:4, set the css property `color`/)
   assert.match(prompts['svelte props'], /^In Broken\.svelte:1:0, /)
   assert.match(prompts['svelte text'], /^In Broken\.svelte:1:0, /)
-  assert.match(prompts['svelte style'], /on the element at Broken\.svelte:1:0\./)
+  assert.match(prompts['svelte style'], /on the element at Broken\.svelte:1:0\. Its styles/)
   assert.match(
     prompts.move,
     /^Move the element at src\/Button\.tsx:12:4 to be before the element at src\/App\.tsx:30:6\./
