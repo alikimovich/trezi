@@ -8,6 +8,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] One helper, `projectRelative` (`src/shared/project-path.ts`), replaces `projectRelativeSource` (selection-context) and `projectPath` (dev-error, now `{ served: true }`).
 - [x] Controls/animation, props, text, style, Svelte props/text/style, move and the inspector's text fallback prompts name stamp sources relative to the project root; the three movers share `src/main/move-node-agent.ts`.
 - [x] `test/project-path.mjs` (unit): helper cases plus every prompt from absolute stamps under a fake live root.
+## Typed island override wire format (LKM-161, review follow-up F8)
+
+- [x] `IslandOverrideMessage` lives in `src/shared/preview-channels.ts`; `islandPreviewPort` sends it and the preview narrows to it; `test/types/island-override-wire.ts` rejects malformed messages at compile time.
 ## Split Host.swift menus and test broker (LKM-160, review F6)
 
 - [x] Menu bar (Trezi, File with Open Recent, Edit, Actions, Develop, Window → Activity ⌘L with its badge) in `src/native/HostMenus.swift`; test-broker inspect/perform/verification/capture commands (incl. `activityInspect`, `activityMenu`, `settingsMenu`) in `src/native/HostInspect.swift`. `Host.swift` 618 → 325 lines; no behaviour change.

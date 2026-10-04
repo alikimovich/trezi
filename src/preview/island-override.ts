@@ -15,17 +15,13 @@
  * "settled": the new elements (showing the start or the written value) are found again and
  * held until their own style shows the written value.
  */
+import type { IslandOverrideMessage } from '../shared/preview-channels'
+
 const PROP = 'box-shadow'
 const MAX_TARGETS = 64
 interface Target { el: HTMLElement; original: string; priority: string; shown: string | null }
 interface Override { targets: Target[]; css: string; from: string }
 const overrides = new Map<string, Override>()
-
-export type IslandOverrideMessage =
-  | { op: 'apply'; key: string; from: string; css: string }
-  | { op: 'settle'; key: string; css: string }
-  | { op: 'clear'; key: string }
-  | { op: 'clearAll' }
 
 /** A computed box-shadow without fully transparent empty layers (Tailwind's ring slots). */
 export function shadowLayers(value: string): string {
@@ -182,22 +178,34 @@ function watch() {
 }
 
 const text = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max
+const shadow = (value: unknown): value is string => text(value, 8192) && !/[<>{};]/.test(value)
 
 /** One validated message from Bun; the answer goes back on the reply channel. */
 export function islandOverride(message: unknown): number | boolean | null {
-  const value = handle(message)
+  const parsed = parse(message)
+  const value = parsed ? handle(parsed) : null
   watch()
   return value
 }
 
-function handle(message: unknown): number | boolean | null {
+/** The message as the wire format, or null when any field is missing or unsafe. */
+function parse(message: unknown): IslandOverrideMessage | null {
   const m = message as Partial<Record<'op' | 'key' | 'from' | 'css', unknown>> | null
   if (!m) return null
-  if (m.op === 'clearAll') return clearAll()
+  if (m.op === 'clearAll') return { op: 'clearAll' }
   if (!text(m.key, 200)) return null
-  if (m.op === 'clear') return clear(m.key)
-  if (!text(m.css, 8192) || /[<>{};]/.test(m.css)) return null
-  if (m.op === 'settle') return settle(m.key, m.css)
-  if (m.op === 'apply' && text(m.from, 8192) && !/[<>{};]/.test(m.from)) return apply(m.key, m.from, m.css)
+  if (m.op === 'clear') return { op: 'clear', key: m.key }
+  if (!shadow(m.css)) return null
+  if (m.op === 'settle') return { op: 'settle', key: m.key, css: m.css }
+  if (m.op === 'apply' && shadow(m.from)) return { op: 'apply', key: m.key, from: m.from, css: m.css }
   return null
+}
+
+function handle(message: IslandOverrideMessage): number | boolean {
+  switch (message.op) {
+    case 'apply': return apply(message.key, message.from, message.css)
+    case 'settle': return settle(message.key, message.css)
+    case 'clear': return clear(message.key)
+    case 'clearAll': return clearAll()
+  }
 }

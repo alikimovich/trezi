@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.node.json",
   "compilerOptions": { "composite": false, "lib": ["ES2022", "DOM", "DOM.Iterable"] },
-  "include": ["src/native/**/*.ts", "src/main/**/*", "src/shared/**/*"]
+  "include": ["src/native/**/*.ts", "src/main/**/*", "src/shared/**/*", "test/types/**/*.ts"]
 }
