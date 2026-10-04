@@ -2,6 +2,7 @@ import { renderJsxAttribute } from './jsx-attribute-literals'
 import { ipcMain } from '../native/platform'
 import { readFile } from 'fs/promises'
 import type { PropEditResult, StyleEdit, StyleEditResult } from '../shared/api'
+import { projectRelative } from '../shared/project-path'
 import { STYLE_PROPS as STYLE_PROP_LIST } from '../shared/style-props'
 import { classNameStringNode, commitEdit, findElementAtLine, resolveSource } from './props'
 import { type ResolvedTokenRef, resolveTokenRef, tokenClassRewrite } from './style-tokens'
@@ -72,6 +73,7 @@ export function isSafeStyleValue(value: string, maxLength = 200): boolean {
  */
 export function styleAgentPrompt(
   edit: StyleEdit,
+  root: string,
   element?: string,
   token?: ResolvedTokenRef | null
 ): string {
@@ -89,7 +91,7 @@ export function styleAgentPrompt(
         'idiom, converting the target value if needed.'
       : ''
   return (
-    `In ${edit.source}, set the css property \`${edit.prop}\` of the ${el} to ${what}.${unit} ` +
+    `In ${projectRelative(edit.source, root)}, set the css property \`${edit.prop}\` of the ${el} to ${what}.${unit} ` +
     'Style it the way this project already styles things — a stylesheet, CSS module, ' +
     'styled-component or utility class — and do NOT add an inline `style` prop unless ' +
     'the element already has one.'
@@ -160,7 +162,7 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
   const toAgent = (): StyleEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: styleAgentPrompt(edit, found?.name, token)
+    agentPrompt: styleAgentPrompt(edit, root, found?.name, token)
   })
   if (!found) return toAgent() // stale stamp — the agent can still find it
   // An element-level spread could carry className/style at runtime — the final

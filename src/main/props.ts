@@ -12,6 +12,7 @@ import type {
   SourceView,
   SourceWriteResult
 } from '../shared/api'
+import { projectRelative } from '../shared/project-path'
 import {
   applySvelteEdit,
   applySvelteTextEdit,
@@ -661,7 +662,7 @@ export async function applyPropEdit(root: string, edit: PropEdit): Promise<PropE
   }
   // 'other' values can't be expressed as a literal here — that's the agent's job.
   if (edit.kind === 'other') {
-    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   }
   const loc = resolveSource(root, edit.source)
   if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
@@ -674,7 +675,7 @@ export async function applyPropEdit(root: string, edit: PropEdit): Promise<PropE
   }
   const found = await findElementAtLine(code, loc.line, loc.column)
   if (!found) {
-    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   }
   const attrText = renderAttr(edit.name, edit.kind, edit.value)
   const existing = readAttributes(found.opening).find((a) => a.name === edit.name)
@@ -720,13 +721,15 @@ export async function removeProp(root: string, source: string, name: string): Pr
   return commitEdit(root, loc.file, code, next, `${source}:${name}`)
 }
 
-export function agentPromptFor(edit: PropEdit): string {
+// Agent prompts name the source relative to `root`, so a worktree chat edits its own
+// checkout rather than the live tree (LKM-155).
+export function agentPromptFor(edit: PropEdit, root: string): string {
   const val = typeof edit.value === 'string' ? `"${edit.value}"` : String(edit.value)
-  return `In ${edit.source}, set the \`${edit.name}\` prop of the selected element to ${val}.`
+  return `In ${projectRelative(edit.source, root)}, set the \`${edit.name}\` prop of the selected element to ${val}.`
 }
 
-export function textAgentPrompt(source: string, text: string): string {
-  return `In ${source}, change only the selected element's rendered text to “${text.slice(0, 200)}”. Make the smallest source edit needed. Do not update matching copy elsewhere unless this exact element is driven by a shared value that must change.`
+export function textAgentPrompt(source: string, text: string, root: string): string {
+  return `In ${projectRelative(source, root)}, change only the selected element's rendered text to “${text.slice(0, 200)}”. Make the smallest source edit needed. Do not update matching copy elsewhere unless this exact element is driven by a shared value that must change.`
 }
 
 /**
@@ -762,7 +765,7 @@ export async function applyTextEdit(
       return {
         applied: false,
         needsAgent: true,
-        agentPrompt: textAgentPrompt(edit.source, newText)
+        agentPrompt: textAgentPrompt(edit.source, newText, root)
       }
     }
     return commitEdit(root, loc.file, html, next, `${edit.source}:text`)
@@ -776,7 +779,7 @@ export async function applyTextEdit(
   const agentFallback = (): PropEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: textAgentPrompt(edit.source, newText)
+    agentPrompt: textAgentPrompt(edit.source, newText, root)
   })
   if (!/\.[cm]?[jt]sx?$/i.test(loc.file)) return agentFallback()
   let found: Awaited<ReturnType<typeof findElementAtLine>>

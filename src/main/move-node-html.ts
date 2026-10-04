@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises'
 import type { MoveNodeRequest, MoveNodeResult } from '../shared/api'
+import { toAgent } from './move-node-agent'
 import { moveSiblingWithinParent, type Span } from './move-node-splice'
 import { commitEdit, type ResolvedSource } from './props'
 
@@ -35,14 +36,6 @@ interface P5Node {
   value?: string
   childNodes?: P5Node[]
   sourceCodeLocation?: { startOffset: number; endOffset: number; startTag?: P5Loc } | null
-}
-
-function toAgent(req: MoveNodeRequest, reason: string): MoveNodeResult {
-  return {
-    applied: false,
-    needsAgent: true,
-    agentPrompt: `Move the element at ${req.dragged.source} to be ${req.position} the element at ${req.target.source}. ${reason}`
-  }
 }
 
 /** The element whose OWN start tag sits at `line:col` (mirrors `spliceHtmlText`'s match). */
@@ -118,7 +111,7 @@ export async function applyMoveNodeHtml(
   targetLoc: ResolvedSource
 ): Promise<MoveNodeResult> {
   if (draggedLoc.column == null || targetLoc.column == null) {
-    return toAgent(req, 'Could not resolve the exact source position.')
+    return toAgent(root, req, 'Could not resolve the exact source position.')
   }
   let html: string
   try {
@@ -132,13 +125,14 @@ export async function applyMoveNodeHtml(
     const { parse } = await loadParse5()
     doc = parse(html, { sourceCodeLocationInfo: true }) as unknown as P5Node
   } catch {
-    return toAgent(req, 'Could not parse the HTML.')
+    return toAgent(root, req, 'Could not parse the HTML.')
   }
 
   const draggedEl = findByLoc(doc, draggedLoc.line, draggedLoc.column)
   const targetEl = findByLoc(doc, targetLoc.line, targetLoc.column)
   if (!draggedEl || !targetEl) {
     return toAgent(
+      root,
       req,
       'Could not find one of these elements in the current source — it may have moved.'
     )
@@ -146,6 +140,7 @@ export async function applyMoveNodeHtml(
 
   if (req.position === 'inside') {
     return toAgent(
+      root,
       req,
       'Moving an element into a different container needs your judgment on scope and structure.'
     )
@@ -155,6 +150,7 @@ export async function applyMoveNodeHtml(
   const targetParent = findParent(doc, targetEl)
   if (!draggedParent || !targetParent || draggedParent !== targetParent) {
     return toAgent(
+      root,
       req,
       'These elements are not direct siblings — moving across containers needs your judgment.'
     )
@@ -168,7 +164,7 @@ export async function applyMoveNodeHtml(
     req.position
   )
   if (next == null) {
-    return toAgent(req, 'Could not compute a safe reorder for these two elements.')
+    return toAgent(root, req, 'Could not compute a safe reorder for these two elements.')
   }
 
   const res = await commitEdit(root, file, html, next, `move:${req.sessionId}`)
