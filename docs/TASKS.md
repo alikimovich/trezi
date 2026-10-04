@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Split Host.swift menus and test broker (LKM-160, review F6)
+
+- [x] Menu bar (Trezi, File with Open Recent, Edit, Actions, Develop, Window → Activity ⌘L with its badge) in `src/native/HostMenus.swift`; test-broker inspect/perform/verification/capture commands (incl. `activityInspect`, `activityMenu`, `settingsMenu`) in `src/native/HostInspect.swift`. `Host.swift` 618 → 325 lines; no behaviour change.
+- [x] Both files in the `scripts/build-native.mjs` host list; `docs/SWIFT-BACKEND-EVENTS.md` Host/Activity anchors point at the current lines (removed cases marked with the ticket that removed them).
+
 ## Review of recent changes and commit audit (LKM-154)
 
 - [x] Review report with findings by severity and a commit audit of `ee301e2..515779b` (`docs/REVIEW-2026-10.md`); no history rewritten, no reverts.

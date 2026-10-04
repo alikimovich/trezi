@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-160: split Host.swift into menu and test-broker extensions (review F6)
+
+- **Why.** `src/native/Host.swift` was 618 lines (guideline about 500) and mixed the menu bar with the test broker (`docs/REVIEW-2026-10.md` M5, L7).
+- **Split.** Refactor only; the command set and every handler body are unchanged.
+  - `src/native/HostMenus.swift`: `installMenus` (Trezi, File, Edit, Actions, Develop, Window with Activity ⌘L and the unread badge item), `showAbout`, `menuAction`, `recentAction`, and `updateRecents` (the former inline `recents` case).
+  - `src/native/HostInspect.swift`: `testBroker(_:id:)` holds the inspect, perform, verification and capture cases (incl. `activityInspect`, `activityMenu`, `settingsMenu`, `revealChatIsland`, `previewInput`). `command`'s `default:` calls it and only replies "Unsupported native host command" when it returns false. Early `return`s became `return true`, so the no-reply guards behave as before.
+  - Product commands stay in `Host.swift`, including `captureFeedback`, `capture`, `previewViewport` and `securitySession` (`test/service-session.mjs` matches that line).
+  - `Host.swift` is 325 lines. The two files are in the `scripts/build-native.mjs` host list. `typecheck:native` is TypeScript only and has no Swift list.
+- **Docs.** All Host/Activity rows in `docs/SWIFT-BACKEND-EVENTS.md` point at the current file and line (checked row by row against the source). Rows for cases removed earlier (`contentState`/`contentInspect`/`captureContent` in LKM-114, `trash` in LKM-111, `mediaReply` and the `media` event in LKM-101) no longer link to a line and name the ticket that removed them. The dated anchor in `docs/SWIFT-BACKEND-AUDIT.md` is a snapshot and was left as it is.
+
 ## 2026-10-04 — LKM-154: review of LKM-140/144/151/152/153 and commit audit
 
 - **Report.** `docs/REVIEW-2026-10.md` contains findings by severity, an audit table for all 29 commits in `ee301e2..515779b`, and follow-ups F1–F8.
