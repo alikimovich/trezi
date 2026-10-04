@@ -169,4 +169,53 @@ assert.equal(chat.get('a').context.spawns[0].activity, 'Editing border styles')
   for (const bad of ['declined', { state: 'pending', at: 1 }, { state: 'done' }, { state: 'done', at: -1 }, { state: 'done', at: 1.5 },
     { state: 'failed', reason: 3, at: 1 }, { state: 'done', at: 1, extra: true }]) assert.equal(METADATA_FIELDS.sourceSetup(bad), false, JSON.stringify(bad))
   console.log('Native context: Connect to Trezi remembers Not now, failures with Retry and stamped projects')
+
+  // LKM-157: a connected project whose restarted preview stays unstamped is offered Reconnect.
+  entry = { key: 'f', root: '/f', activeSessionKey: 'f', sourceSetup: { state: 'done', at: 1 } }; run = open(entry)
+  await run.context.activate(entry); run.context.readiness({ stamps: 0 })
+  await settle()
+  assert.equal(run.card(), undefined, 'a page without elements is not judged without a restart')
+  assert.equal(entry.sourceSetup.state, 'done')
+  const lose = async () => {
+    run.context.restarted('/f')
+    run.context.readiness({ stamps: 7, documentStartedAt: Date.now() - 60_000 })
+    run.context.readiness({ stamps: 0, documentStartedAt: Date.now() + 1000 })
+    assert.equal(run.card(), undefined, 'one zero sample after a restart is not yet a loss')
+    await settle()
+  }
+  await lose()
+  assert.equal(run.card().title, 'Source links stopped working')
+  assert.equal(run.card().detail, undefined)
+  assert.deepEqual(run.card().actions.map(a => a.label), ['Not now', 'Reconnect'])
+  assert.equal(entry.sourceSetup.state, 'unstamped')
+  assert.ok(METADATA_FIELDS.sourceSetup(entry.sourceSetup))
+
+  // Stamps returning hide the offer and record done again.
+  run.context.readiness({ stamps: 5, documentStartedAt: Date.now() + 1000 })
+  assert.equal(run.card(), undefined); assert.equal(entry.sourceSetup.state, 'done')
+  // Never while stamps are present: a stamped sample within the grace period cancels the check.
+  run.context.restarted('/f')
+  run.context.readiness({ stamps: 0, documentStartedAt: Date.now() + 1000 })
+  run.context.readiness({ stamps: 4, documentStartedAt: Date.now() + 1000 })
+  await settle()
+  assert.equal(run.card(), undefined); assert.equal(entry.sourceSetup.state, 'done')
+  // A setup turn landing owns its own check: the restart it causes is not judged twice.
+  await run.context.effect({ type: 'setup', chat: 'f', phase: 'landed' })
+  run.context.readiness({ stamps: 2, documentStartedAt: Date.now() + 1000 })
+  assert.equal(entry.sourceSetup.state, 'done')
+
+  // The loss survives a relaunch; Not now on the re-offer is remembered like declined.
+  await lose()
+  entry = relaunch(entry); run = open(entry)
+  await run.context.activate(entry); run.context.readiness({ stamps: 0 })
+  assert.equal(run.card().title, 'Source links stopped working', 'the loss survives a relaunch')
+  await run.context.effect({ type: 'setup', chat: 'f', phase: 'dismissed' })
+  assert.equal(run.card(), undefined); assert.equal(entry.sourceSetup.state, 'declined')
+  entry = relaunch(entry); run = open(entry)
+  await run.context.activate(entry); run.context.readiness({ stamps: 0 })
+  run.context.restarted('/f'); run.context.readiness({ stamps: 0, documentStartedAt: Date.now() + 1000 })
+  await settle()
+  assert.equal(run.card(), undefined, 'Not now on the re-offer survives a relaunch')
+  assert.equal(entry.sourceSetup.state, 'declined')
+  console.log('Native context: a connected project that loses its stamps after a restart is offered Reconnect')
 }

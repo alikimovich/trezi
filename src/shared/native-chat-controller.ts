@@ -9,7 +9,8 @@ export interface NativeChatContext {
   selection: { label: string; prompt: string; bubble: NonNullable<NativeChatMessage['selection']> } | null
   turn: AgentTurnOptions
   /** `failed`: the last Set up failed; `status` holds its reason and the card offers a retry. */
-  setup: { needed: boolean; dismissed: boolean; status: string | null; failed?: boolean }
+  /** `lost` (LKM-157): a connected project stopped stamping, so the card offers Reconnect. */
+  setup: { needed: boolean; dismissed: boolean; status: string | null; failed?: boolean; lost?: boolean }
   tokens: { needed: boolean; dismissed: boolean }
   notes: { id: string; text: string }[]
   spawns: { id: string; label: string; status: string; activity?: string }[]

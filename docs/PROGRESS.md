@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-157: re-offer Connect to Trezi when a connected project loses its stamps
+
+- **Problem (review M3, follow-up F3).** `offer` returned false once `sourceSetup.state === 'done'`, so a project whose wiring was later removed, or whose dev server stopped stamping, never showed the card again.
+- **Trigger.** `NativeWorkspaceController.restarted` hears every dev-server restart of the active project (the `restart` command, which environment refreshes and recovery also use). For a `done` project, `NativeContextController.restarted` records the time. Readiness samples from a page that started before it are ignored. If the restarted page shows 0 stamps for a full `verifyGraceMs` while the project stays active, the state moves to `unstamped` and the card offers **Reconnect** with the title "Source links stopped working".
+- **Why only after a restart.** A page that legitimately has no elements must not raise the card, so a 0-stamp sample without a restart is never judged. Any stamped sample cancels the check. A landed setup turn's restart is excluded: its own verification owns that restart.
+- **State.** `unstamped` is a fourth `SourceSetupState` value, validated by `METADATA_FIELDS` and `WorkspaceFile.swift`. It survives relaunch, where the Reconnect card shows again on an unstamped page. Stamps returning record `done` and hide the card. They also clear an in-session Not now, because losing stamps later is a new question. Not now on the re-offer records `declined`, as on the first-run card.
+- **Tests.** `test/native-context.mjs` covers no offer on an unstamped page without a restart, loss after restart plus grace, a stale pre-restart sample, stamps returning, a stamped sample within the grace period, the landed-turn exclusion, the loss across relaunch, and Not now across relaunch. `test/workspace-owner.mjs` round-trips `unstamped` through the Swift owner.
+
 ## 2026-10-04 — LKM-154: review of LKM-140/144/151/152/153 and commit audit
 
 - **Report.** `docs/REVIEW-2026-10.md` contains findings by severity, an audit table for all 29 commits in `ee301e2..515779b`, and follow-ups F1–F8.

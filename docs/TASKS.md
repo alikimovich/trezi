@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review report with findings by severity and a commit audit of `ee301e2..515779b` (`docs/REVIEW-2026-10.md`); no history rewritten, no reverts.
 - [x] Safe cleanups: unused `unread`/`unreadLevel` in `src/native/Activity.swift`, unused `readFile` import in `src/main/backends/claude.ts`; `test/setup-vite.mjs` no longer depends on Bun's global install cache.
 - [ ] Follow-ups F1–F8 in `docs/REVIEW-2026-10.md`. Relative sources in every prompt, Bash/non-Claude live-write guard, re-offer setup after `done`, lint baseline, split `chat-isolation.ts` and `Host.swift`, commit subjects, typed island-override messages.
+- [x] F3 (LKM-157): a `done` project whose restarted preview stays unstamped for `verifyGraceMs` becomes `unstamped` and offers Reconnect; stamps return it to `done`; Not now is remembered.
 
 ## Activity opens only when attention is needed (LKM-152)
 

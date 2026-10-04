@@ -1229,7 +1229,8 @@ export interface ViteSetupInfo {
 
 /** What the project remembers about Connect to Trezi (LKM-153), kept in its workspace entry. */
 export interface SourceSetupState {
-  state: 'done' | 'declined' | 'failed'
+  /** `unstamped` (LKM-157): was `done`, but a restarted preview stayed without stamps. */
+  state: 'done' | 'declined' | 'failed' | 'unstamped'
   /** The exact failure, shown with a retry. */
   reason?: string
   at: number

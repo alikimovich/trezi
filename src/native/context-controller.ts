@@ -18,6 +18,9 @@ interface ProjectContext {
   verifyFailure?: ReturnType<typeof setTimeout>
   /** Why the landed setup turn may not have wired anything (it changed no file). */
   verifyHint?: string
+  /** LKM-157: when a connected project's dev server restarted; its next page must show stamps. */
+  restartedAt?: number
+  lostCheck?: ReturnType<typeof setTimeout>
   loading?: Promise<void>
 }
 export class NativeContextController {
@@ -57,6 +60,7 @@ export class NativeContextController {
     const state = this.project(root), read = ++state.notesRead
     const saved = this.remembered(root)
     if (saved?.state === 'declined') state.setup.dismissed = true
+    if (saved?.state === 'unstamped') state.setup.lost = true
     if (saved?.state === 'failed' && !state.setup.failed) this.showFailure(state, saved.reason)
     const results = await Promise.allSettled([this.invoke('setup:detect', root), this.invoke('tokens:detect', root), this.invoke('annotations:list', root)])
     if (this.projects.get(root) !== state) return
@@ -87,6 +91,29 @@ export class NativeContextController {
     this.showFailure(state, reason)
     this.remember(root, 'failed', reason)
   }
+  /** LKM-157: a connected project's dev server restarted. If its restarted page shows no
+   *  stamp for a full `verifyGraceMs`, the wiring was lost and Reconnect is offered. A page
+   *  without elements is never judged without a restart; a landed setup has its own check. */
+  restarted(root: string) {
+    const state = this.project(root)
+    if (state.verifyingAfter || this.remembered(root)?.state !== 'done') return
+    clearTimeout(state.lostCheck); state.lostCheck = undefined
+    state.restartedAt = Date.now()
+  }
+  private checkLost(root: string, state: ProjectContext) {
+    if (!state.restartedAt || state.verifyingAfter || state.lostCheck) return
+    state.lostCheck = setTimeout(() => {
+      state.lostCheck = undefined
+      if (!state.restartedAt || (state.stamps ?? 0) > 0) return
+      state.restartedAt = undefined
+      // Only a page watched for the whole grace period is proof.
+      if (this.workspace.active?.root !== root || this.remembered(root)?.state !== 'done') return
+      state.setup.lost = true; state.setup.failed = false; state.setup.status = null
+      this.remember(root, 'unstamped')
+      if (this.offer(root, state)) state.setup.needed = true
+      this.changed(root)
+    }, this.verifyGraceMs)
+  }
   /** A dev-server line from Trezi's Vite plugin (`[trezi-source] …`) names why nothing got stamped. */
   devServerLog(root: string, output: string) {
     const line = output.split('\n').reverse().find(text => text.includes('[trezi-source]'))
@@ -107,11 +134,15 @@ export class NativeContextController {
     const root = this.workspace.active?.root
     if (!root) return
     const state = this.project(root)
-    if (state.verifyingAfter && info.documentStartedAt !== undefined && info.documentStartedAt < state.verifyingAfter) return
+    // A page from before the restart proves nothing about the restarted dev server.
+    const after = state.verifyingAfter ?? state.restartedAt
+    if (after && info.documentStartedAt !== undefined && info.documentStartedAt < after) return
     state.stamps = info.stamps
     if (info.stamps > 0) {
-      // Stamps in the preview are the proof, whatever was remembered before.
-      state.setup.needed = false; state.setup.failed = false
+      // Stamps in the preview are the proof, whatever was remembered before. A later loss
+      // of them is a new question, so an earlier Not now does not hide Reconnect.
+      state.setup.needed = false; state.setup.failed = false; state.setup.lost = false; state.setup.dismissed = false
+      state.restartedAt = undefined; clearTimeout(state.lostCheck); state.lostCheck = undefined
       state.setup.status = state.verifyingAfter ? `Setup verified — ${info.stamps} element(s) now mapped to source.` : null
       state.verifyingAfter = undefined
       this.remember(root, 'done')
@@ -129,6 +160,7 @@ export class NativeContextController {
         if (this.offer(root, state)) state.setup.needed = true
         this.changed(root)
       }, this.verifyGraceMs)
+      this.checkLost(root, state)
       if (this.offer(root, state)) state.setup.needed = true
     }
     this.changed(root)
@@ -147,6 +179,7 @@ export class NativeContextController {
       if (effect.phase === 'landed') {
         state.verifyingAfter = Date.now(); state.verifyHint = effect.status; this.treziLog.delete(root)
         clearTimeout(state.verifyFailure); state.verifyFailure = undefined
+        state.restartedAt = undefined; clearTimeout(state.lostCheck); state.lostCheck = undefined
         state.setup.failed = false; state.setup.status = 'Setup landed. Restarting the preview to check for stamps…'
         const entry = this.workspace.state.projects.find(p => p.root === root)
         if (entry && this.workspace.active?.key === entry.key) await this.workspace.command({ type: 'restart', key: entry.key })
