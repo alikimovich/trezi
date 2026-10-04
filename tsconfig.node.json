@@ -5,5 +5,5 @@
     "strict": true, "skipLibCheck": true, "noEmit": true,
     "esModuleInterop": true, "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/native/**/*.ts", "src/main/**/*", "src/shared/**/*"]
+  "include": ["src/native/**/*.ts", "src/main/**/*", "src/shared/**/*", "test/types/**/*.ts"]
 }

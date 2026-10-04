@@ -58,5 +58,17 @@ export const PREVIEW_MOVE_NODE = 'trezi:preview:move-node' // → main (MoveNode
 export const ANIMATION_REPLAY = 'trezi:preview:animation-replay' // → preload (component name)
 
 // ── Chat island gestures (LKM-140) ─────────────────────────────────────────
-export const ISLAND_OVERRIDE = 'trezi:preview:island-override' // → preload ({id, op, key, from?, css?})
+export const ISLAND_OVERRIDE = 'trezi:preview:island-override' // → preload (IslandOverrideRequest)
 export const ISLAND_OVERRIDE_REPLY = 'trezi:preview:island-override-reply' // → main ({id, value})
+
+/**
+ * The wire format of an ISLAND_OVERRIDE request, one per op of `src/preview/island-override.ts`.
+ * The preview still validates every field: the page shares its process and is untrusted.
+ */
+export type IslandOverrideMessage =
+  | { op: 'apply'; key: string; from: string; css: string }
+  | { op: 'settle'; key: string; css: string }
+  | { op: 'clear'; key: string }
+  | { op: 'clearAll' }
+/** A message as sent: the id is echoed on ISLAND_OVERRIDE_REPLY. */
+export type IslandOverrideRequest = IslandOverrideMessage & { id: number }

@@ -3,6 +3,10 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Typed island override wire format (LKM-161, review follow-up F8)
+
+- [x] `IslandOverrideMessage` lives in `src/shared/preview-channels.ts`; `islandPreviewPort` sends it and the preview narrows to it; `test/types/island-override-wire.ts` rejects malformed messages at compile time.
+
 ## Review of recent changes and commit audit (LKM-154)
 
 - [x] Review report with findings by severity and a commit audit of `ee301e2..515779b` (`docs/REVIEW-2026-10.md`); no history rewritten, no reverts.

@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-161: typed island override wire format (F8)
+
+- **Type.** `IslandOverrideMessage` moved from `src/preview/island-override.ts` to `src/shared/preview-channels.ts`, next to the `ISLAND_OVERRIDE` channel. `IslandOverrideRequest` adds the reply `id`. It stays the written description of the wire format.
+- **Sender.** `islandPreviewPort`'s `ask` (`src/native/island-preview.ts`) takes the union instead of `Record<string, string>`, so a wrong op or a missing field no longer compiles.
+- **Receiver.** The preview's `parse` turns the untrusted payload into an `IslandOverrideMessage` with the same checks as before (key ≤ 200, css/from ≤ 8192 without `<>{};`). `handle` switches on `op` exhaustively. No behaviour change: `test/island-override.mjs` and `test/island-flicker.mjs` pass unchanged. The type import is erased, so the transpiled module the framework harness injects has no import.
+- **Type-level test.** `test/types/island-override-wire.ts` holds well-formed messages and `@ts-expect-error` cases (missing `from`/`css`/`key`, unknown op, non-string css, request without id). `tsconfig.node.json` and `tsconfig.native.json` now include `test/types/`, so `typecheck` and `typecheck:native` fail if a malformed message ever compiles.
+
 ## 2026-10-04 — LKM-154: review of LKM-140/144/151/152/153 and commit audit
 
 - **Report.** `docs/REVIEW-2026-10.md` contains findings by severity, an audit table for all 29 commits in `ee301e2..515779b`, and follow-ups F1–F8.
