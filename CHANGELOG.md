@@ -22,6 +22,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Shadow Light drags on the iPhone Frame Shadow island no longer flicker in the live preview while the source is written once at the end of the gesture (LKM-140).
 - Stop never leaves a broken project: a stopped turn's edits are held, not applied, with one-click Revert (undoable), Keep or Ask agent to finish; a dev-server error in a file the last turn touched offers Revert last turn and Fix with agent; a paused queue says whether it will send and has Send now (LKM-151).
 - Connect to Trezi works from any chat, including one with a stopped turn, and stamps React on Vite 7 and Vite 8 through a Trezi Vite plugin; Not now, a connected project and a failed setup (with its exact reason and Retry) are remembered across relaunch, and the card disappears once the preview has stamps (LKM-153).
+- A chat running in its own worktree can no longer write the live project from a shell command (Claude) or from Codex and Responses connections; the agent is pointed at its worktree copy instead (LKM-156).
 
 ### Changed
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.

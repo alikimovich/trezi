@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-156: guard Bash and Codex against writes to the live checkout (F2)
+
+- **Claude Bash.** `liveCheckoutEdit` now also handles `Bash` through `liveCheckoutCommand` (`src/main/live-write-guard.ts`), so the existing `PreToolUse` hook covers it in every permission mode. A worktree chat's command that names the live root is denied, and the denial names the worktree path of the first live path in it.
+  - The root is matched as given, resolved, shell-escaped and as `~/`, `$HOME/` or `${HOME}/`. Siblings (`app-other`, `app2`), longer paths that only contain the string and the worktree's own paths do not match.
+  - Reads are denied too. Telling reads from writes in a shell command is unreliable (`sed -i`, redirections, `tee`, `find -exec`, `xargs`, formatters, `git -C`, `cd … &&`), and the worktree holds the same files. A command that reaches the live tree without spelling it (`../..`, a runtime variable) is not caught.
+- **Codex and Responses connections.** Both run on the Codex harness, which has no pre-tool hook. `codexSandbox` (`src/main/backends/codex-sandbox.ts`) keeps the existing `workspace-write` sandbox with the worktree as cwd and `approvalPolicy: 'never'`. In a worktree session it also overrides the user's `writable_roots` to none and excludes `/tmp`/`$TMPDIR` when they overlap the live tree.
+  - Probed first: Codex's `sandbox` debug command now takes permission profiles and does not mirror `exec --sandbox`, so the test drives `codex exec` itself against a local fake Responses endpoint. Without the override, a live tree under `/tmp` was writable.
+- **Tests.** `test/live-write-guard.mjs` (unit):
+  - `sed -i`, `>`, `>>`, `cp`, `mv`, `tee` and a formatter onto the live root are denied with the worktree path; the same commands on worktree and relative paths are allowed, and a non-worktree project is unchanged.
+  - The real Codex CLI, given the adapter's thread options and config and a fake endpoint that returns `exec_command` calls, cannot write the live tree or its `.git` with any of those commands (a real `git worktree`, user config listing the live root as writable). A `require_escalated` call is refused, the worktree stays writable, and a non-worktree session still writes its own tree.
+  - It prints SKIP without a local port or nested sandbox (the worker sandbox); the manager's quick tier ran it in full.
+- **Not done.** Gemini (experimental, off by default) is not covered.
+
 ## 2026-10-04 — LKM-154: review of LKM-140/144/151/152/153 and commit audit
 
 - **Report.** `docs/REVIEW-2026-10.md` contains findings by severity, an audit table for all 29 commits in `ee301e2..515779b`, and follow-ups F1–F8.

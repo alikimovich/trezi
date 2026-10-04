@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Bash and Codex writes to the live checkout (LKM-156, F2)
+
+- [x] Claude `PreToolUse` hook denies Bash commands that name the live root from a worktree chat, with the worktree path (`src/main/live-write-guard.ts`); reads included, documented in `docs/WORKTREES.md`.
+- [x] Codex and Responses connections: worktree-only `workspace-write` sandbox, user `writable_roots` dropped, temp roots excluded when they overlap the live tree (`src/main/backends/codex-sandbox.ts`), proven against the real CLI in `test/live-write-guard.mjs`.
+
 ## Review of recent changes and commit audit (LKM-154)
 
 - [x] Review report with findings by severity and a commit audit of `ee301e2..515779b` (`docs/REVIEW-2026-10.md`); no history rewritten, no reverts.
