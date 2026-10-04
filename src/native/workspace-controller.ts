@@ -61,6 +61,8 @@ export class NativeWorkspaceController {
   }
   /** Hears a project open that failed with no automatic recovery (the Activity log). */
   openFailed?: (name: string, message: string) => void
+  /** Hears the active project's dev server being restarted (LKM-157 re-checks its stamps). */
+  restarted?: (root: string) => void
   /** Rendered only: a failing store must not be retried by its own error report. */
   reportError(error: unknown) { this.state.error = String(error); this.publish() }
   get active() { return this.state.projects.find(p => p.key === this.state.activeKey) ?? null }
@@ -174,6 +176,7 @@ export class NativeWorkspaceController {
         await this.services.invoke('preview:load', entry.url)
         return
       }
+      this.restarted?.(entry.root)
       await this.serialize(entry.key, async () => {
         await this.services.invoke(entry.previewKind === 'simulator' ? 'simulator:stop' : 'devserver:stop', entry.root)
       })

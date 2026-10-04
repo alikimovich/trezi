@@ -205,12 +205,12 @@ enum WorkspaceOperation {
         case "activeSessionKey": return text(D.maxText)
         case "chatSettings": return object()
         case "sourceSetup":
-            // Connect to Trezi outcome (LKM-153): `{state, at, reason?}`, nothing else.
+            // Connect to Trezi outcome (LKM-153, `unstamped` LKM-157): `{state, at, reason?}`, nothing else.
             guard case .object(let fields) = value, Set(fields.map { $0.0.string }).count == fields.count else { return false }
             var state = false, at = false
             for (key, field) in fields {
                 switch (key.string, field) {
-                case ("state", .string(let text)): state = ["done", "declined", "failed"].contains(text.string)
+                case ("state", .string(let text)): state = ["done", "declined", "failed", "unstamped"].contains(text.string)
                 case ("at", .number(let number)): at = number >= 0 && number <= 9_007_199_254_740_991 && number.rounded() == number
                 case ("reason", .string(let text)): if text.count > D.maxText { return false }
                 default: return false
