@@ -12,6 +12,8 @@ src/
   native/         Swift/AppKit/SwiftUI UI + Bun controllers
     index.ts        Bun entrypoint: service registration, project lifecycle and host bridge
     Host.swift      AppKit application lifecycle and JSON host protocol
+    HostMenus.swift / HostInspect.swift   the host's menu bar (Window → Activity ⌘L)
+                    and its test-broker inspect/perform/capture commands
     ServiceClient.swift / HostService.swift   the host's versioned XPC connection to
                     the Swift service (handshake, reattach, bounded outbox) and its
                     AppKit quit/restart/exit-status integration
