@@ -102,7 +102,9 @@ try {
   assert.match(warnings.at(-1), /^\[trezi-source\] could not map src\/Broken\.jsx: /)
 
   // Why a project has no stamps, in the dev server log the card quotes.
-  const bare = await plugin(project({ type: 'module', devDependencies: { vite: '^8.0.0' } }))
+  // Vite is installed, so a node_modules folder exists: without one, Bun auto-installs
+  // @babel/core from its global cache and the result depends on that cache (LKM-154).
+  const bare = await plugin(project({ type: 'module', devDependencies: { vite: '^8.0.0' } }, { vite: '8.0.0' }))
   assert.deepEqual(bare.warnings, ['[trezi-source] @babel/core is not installed, so elements are not mapped to source. Add it to devDependencies.'])
   assert.equal(bare.instance.transform('export const a = <div />', join(dir, 'x.jsx')), null)
   process.env.NODE_ENV = 'production'

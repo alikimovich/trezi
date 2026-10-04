@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Review of recent changes and commit audit (LKM-154)
+
+- [x] Review report with findings by severity and a commit audit of `ee301e2..515779b` (`docs/REVIEW-2026-10.md`); no history rewritten, no reverts.
+- [x] Safe cleanups: unused `unread`/`unreadLevel` in `src/native/Activity.swift`, unused `readFile` import in `src/main/backends/claude.ts`; `test/setup-vite.mjs` no longer depends on Bun's global install cache.
+- [ ] Follow-ups F1–F8 in `docs/REVIEW-2026-10.md`. Relative sources in every prompt, Bash/non-Claude live-write guard, re-offer setup after `done`, lint baseline, split `chat-isolation.ts` and `Host.swift`, commit subjects, typed island-override messages.
+
 ## Activity opens only when attention is needed (LKM-152)
 
 - [x] Every Activity line has a severity (info, warning, needs-action); only needs-action opens the window, once per event kind per session (`src/native/activity-controller.ts`). Needs-action: failed project open, dev-server crash loop (`NativePreviewSupervisor` gave up), damaged repository/source journals.
