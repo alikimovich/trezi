@@ -1,20 +1,17 @@
 import { previewEvidence } from './preview-evidence'
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
-import { promisify } from 'node:util'
-import type { NativeView } from '../native/platform'
-import type { AgentEvent, SessionRecord, SessionTranscriptEntry } from '../shared/api'
+import { basename } from 'node:path'
+import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
+import { landTurn } from './chat-landing'
+import { clearPark, gitOut, upsertParkRecord } from './chat-park'
+import { type ChatState, chatDeps, emitIsolation, onChain, recreateWorkspace, states } from './chat-state'
 import {
-  applyParked,
   completeTurn,
   canReconcileText,
   conflictMarkerFiles,
   createChatWorktree,
   discardParked,
-  type ResolvePrep,
   stageResolve,
   syncFromLive
 } from './chat-worktrees'
@@ -23,24 +20,18 @@ import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
 import { enqueueRepoWrite } from './repo-write-queue'
-import type { SessionStore } from './sessions-store'
 import type { TurnTerminalOutcome } from './turn-terminal'
-import {
-  branchPatch,
-  deleteBranch,
-  reclaimWorktree,
-  removeWorktree,
-  retireWorktreeBranch,
-  type Worktree
-} from './worktrees'
+import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
-const execFileP = promisify(execFile)
-const gitOut = async (cwd: string, args: string[]): Promise<string> =>
-  (
-    (await execFileP('git', args, { cwd, timeout: 15000, maxBuffer: 16 * 1024 * 1024 })) as {
-      stdout: string
-    }
-  ).stdout
+export { initChatIsolation } from './chat-state'
+export { handleReclaimed, hasParkRecord } from './chat-park'
+export {
+  applyParkedBranch,
+  discardParkedBranch,
+  discardParkedChat,
+  resolveParkedChat,
+  showParkedChat
+} from './parked-chat'
 
 /**
  * Per-CHAT git-worktree isolation glue (v9). Generalizes the comment-spawn
@@ -58,85 +49,14 @@ const gitOut = async (cwd: string, args: string[]): Promise<string> =>
  * is passed in here. Non-repo / subdir / non-git projects get no worktree and every
  * hook no-ops (the chat runs on the live root exactly as before).
  *
+ * This module owns a chat's lifecycle. Its state is in `chat-state.ts`, park records
+ * and crash recovery in `chat-park.ts`, the landing step in `chat-landing.ts`, the
+ * parked-chat actions in `parked-chat.ts` and the setup helper sync in `chat-helpers.ts`.
+ *
  * Serialization has two levels: each chat has a promise `chain`, and every live-tree
  * snapshot/landing also passes through a repository-scoped queue. The first orders a
  * chat's own turns; the second protects the one shared live index/HEAD from other chats.
  */
-
-/** In-memory state for one isolated chat, keyed by its `sessionKey` (= emitKey). */
-interface ChatState {
-  wt: Worktree
-  liveRoot: string
-  /** A turn's merge refused (mid-turn drift): work stays on the branch for review. */
-  parked: boolean
-  /** The persisted park `SessionRecord` id while parked, else null. */
-  parkRecordId: string | null
-  /** Files in the cumulative batch that Trezi could not safely land. */
-  parkedFiles: string[]
-  /** Marker-bearing files after `stageResolve`; retained so preparing twice is
-   *  idempotent instead of erasing the only recovery diff on the second call. */
-  resolvingFiles: string[] | null
-  /** The park came from a stopped/failed turn, not live drift (LKM-151). */
-  interrupted: boolean
-  /** The user reverted the stopped turn: the live tree never had it, and the held work
-   *  is discarded at the next turn start (or release) unless they undo first. */
-  reverted: boolean
-  turnNo: number
-  /** Per-chat serialization chain (sync + merge queue). */
-  chain: Promise<unknown>
-  /** The live session's history record (adopted right after startSession). Held by
-   *  reference so a later `agent:tag-session` prUrl mutation is seen live — a chat
-   *  whose work was pushed & merged (prUrl set) marks its turns non-revertable. */
-  record?: SessionRecord
-  /** When the chat last started or finished a turn (idle cleanup, LKM-136). */
-  lastUsed: number
-  /** Idle cleanup removed the checkout; the next turn recreates it at the same path. */
-  reclaimed: boolean
-}
-
-interface Deps {
-  worktreesDir: () => string
-  store: () => SessionStore
-  getWindow: () => NativeView | null
-}
-
-let deps: Deps | null = null
-const states = new Map<string, ChatState>()
-
-/** Wire the module's Electron/store/window seam. Called once at IPC registration. */
-export function initChatIsolation(d: Deps): void {
-  deps = d
-  states.clear()
-}
-
-/** Emit an isolation event on the same webContents path other agent:* events use,
- *  tagged with the chat's `sessionKey` (= emitKey) so the renderer routes it to the
- *  right chat. Sent via the window (not `session.emit`) so a final merge after the
- *  session is disposed still reaches the renderer. */
-function emitIsolation(
-  sessionKey: string,
-  state: 'isolated' | 'merged' | 'parked',
-  branch?: string,
-  files?: string[],
-  group?: string,
-  revertable?: boolean,
-  reason?: 'interrupted' | 'reverted'
-): void {
-  // Guard a destroyed webContents: this fires from async turn lifecycle hooks,
-  // which can land after the renderer process is killed (OS display sleep).
-  const wc = deps?.getWindow()?.webContents
-  if (wc && !wc.isDestroyed())
-    wc.send('agent:event', {
-      type: 'isolation',
-      state,
-      ...(branch ? { branch } : {}),
-      ...(files && files.length ? { files } : {}),
-      ...(group ? { group } : {}),
-      ...(revertable !== undefined ? { revertable } : {}),
-      ...(reason ? { reason } : {}),
-      projectKey: sessionKey
-    } satisfies AgentEvent)
-}
 
 /**
  * The cwd a chat's session should run in: its private worktree when `liveRoot` is a
@@ -153,6 +73,7 @@ export async function isolatedCwd(liveRoot: string, sessionKey: string): Promise
     if (existing.reclaimed) await recreateReclaimed(existing)
     return existing.wt.path
   }
+  const deps = chatDeps()
   if (!deps) return liveRoot
   if (!(await isRepoRoot(liveRoot))) return liveRoot
   try {
@@ -201,22 +122,10 @@ export function adoptSession(sessionKey: string, record: SessionRecord, liveRoot
   if (st) st.record = record
 }
 
-/** Recreate a checkout idle cleanup removed, at the same path and id. Call inside the
- *  repository lease (`enqueueRepoWrite`) on the chat's chain; a no-op otherwise. */
-async function recreateWorkspace(st: ChatState): Promise<void> {
-  if (!st.reclaimed) return
-  const created = await createChatWorktree(st.liveRoot, st.wt.id, dirname(st.wt.path))
-  await retireWorktreeBranch(created)
-  st.wt = created
-  st.reclaimed = false
-}
-
 /** `recreateWorkspace` queued behind the chat's in-flight work, like a turn start. */
 function recreateReclaimed(st: ChatState): Promise<void> {
   st.lastUsed = Date.now()
-  const task = st.chain.then(() => enqueueRepoWrite(st.liveRoot, () => recreateWorkspace(st)))
-  st.chain = task.catch(() => {})
-  return task
+  return onChain(st, () => recreateWorkspace(st))
 }
 
 /**
@@ -230,52 +139,24 @@ export async function beforeTurn(sessionKey: string, _text: string): Promise<voi
   const st = states.get(sessionKey)
   if (!st) return
   st.lastUsed = Date.now()
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
-      await recreateWorkspace(st)
-      await settleReverted(st)
-      // Helpers live under excluded `.trezi/` paths, so a parked chat gets them too
-      // without looking changed (LKM-153: a stopped chat ran setup without them).
-      if (st.parked) return editingOwner().syncSetupHelpers(st.liveRoot, st.wt.path)
-      await syncFromLive(st.liveRoot, st.wt)
-    })
-  )
-  st.chain = task.catch(() => {})
-  await task
-}
-
-/**
- * Copy the live setup helpers into a chat's checkout now, parked or not (LKM-153).
- * Connect to Trezi runs its agent there and agents may not write `.trezi/`, so Trezi
- * puts them in place itself. Answers the checkout, or null for a chat of another
- * project or one that runs in the live tree.
- */
-export async function syncChatHelpers(sessionKey: string, liveRoot: string): Promise<string | null> {
-  const st = states.get(sessionKey)
-  if (!st || st.liveRoot !== liveRoot) return null
-  st.lastUsed = Date.now()
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
-      await recreateWorkspace(st)
-      await editingOwner().syncSetupHelpers(st.liveRoot, st.wt.path)
-      return st.wt.path
-    })
-  )
-  st.chain = task.catch(() => {})
-  return task
+  await onChain(st, async () => {
+    await recreateWorkspace(st)
+    await settleReverted(st)
+    // Helpers live under excluded `.trezi/` paths, so a parked chat gets them too
+    // without looking changed (LKM-153: a stopped chat ran setup without them).
+    if (st.parked) return editingOwner().syncSetupHelpers(st.liveRoot, st.wt.path)
+    await syncFromLive(st.liveRoot, st.wt)
+  })
 }
 
 /** Drop a reverted stopped turn's held work for good (inside the repository lease).
- *  The owner keeps a recovery ref of what it discards. */
+ *  The owner keeps a recovery ref of what it discards. Its park record already went
+ *  when the user reverted, so `clearPark` drops nothing more. */
 async function settleReverted(st: ChatState): Promise<void> {
   if (!st.reverted) return
   await discardParked(st.wt)
   await retireWorktreeBranch(st.wt)
-  st.parked = false
-  st.interrupted = false
-  st.reverted = false
-  st.parkedFiles = []
-  st.resolvingFiles = null
+  clearPark(st)
 }
 
 /** The tail of a transcript from its LAST user message on — the "last turn" a park
@@ -288,11 +169,10 @@ function lastTurn(transcript: SessionTranscriptEntry[]): SessionTranscriptEntry[
 /**
  * Turn-end hook (fired on `done` AND `error` to salvage interrupted work): commit the
  * turn, merge it onto the live tree, and advance the fork point. Queued on the chat's
- * chain (never awaited by the caller). On `merged`, records the edits as one undo group
- * `chat:<id>:<turnNo>`, commits the merged files on the live checkout (so the turn is
- * one revertable commit in the user's own history), advances `baseSha`, and unparks. On
- * `parked`, upserts the park record (with the last turn's transcript) for the review UI.
- * `noop` emits a successful landing acknowledgement without creating a commit.
+ * chain (never awaited by the caller). On `merged`, lands it (`landTurn`: one undo group
+ * `chat:<id>:<turnNo>`, one revertable commit on the live checkout, advanced `baseSha`,
+ * unparked). On `parked`, upserts the park record (with the last turn's transcript) for
+ * the review UI. `noop` emits a successful landing acknowledgement without a commit.
  * With reconciliation enabled, stage text drift privately and return marker-bearing
  * files for one provider continuation; clean three-way results land in this queue.
  */
@@ -334,25 +214,7 @@ export function afterTurn(
           }
         }
         if (outcome.outcome === 'merged') {
-          const group = `chat:${st.wt.id}:${turnNo}`
-          for (const e of outcome.edits) {
-            recordEdit(st.liveRoot, e.file, e.before, e.after, undefined, group)
-          }
-          if (outcome.newBase) st.wt.baseSha = outcome.newBase
-          await commitLiveTurn(st.liveRoot, outcome.files, {
-            title: message,
-            body: `Trezi turn ${turnNo} (${st.wt.branch}).`
-          })
-          if (st.parked) {
-            st.parked = false
-            dropParkRecord(st)
-          }
-          st.interrupted = false
-          st.parkedFiles = []
-          st.resolvingFiles = null
-          await retireWorktreeBranch(st.wt)
-          // Not revertable once this chat's work has been pushed & merged via a PR.
-          emitIsolation(sessionKey, 'merged', st.wt.branch, outcome.files, group, !st.record?.prUrl)
+          await landTurn(sessionKey, st, outcome, turnNo, message)
         } else if (outcome.outcome === 'parked') {
           // A stopped or failed turn holds its work (LKM-151); a drift park stays a
           // conflict even when a later turn on top of it is stopped.
@@ -365,11 +227,7 @@ export function afterTurn(
           if (!reconcileFiles)
             emitIsolation(sessionKey, 'parked', st.wt.branch, outcome.files, undefined, undefined, st.interrupted ? 'interrupted' : undefined)
         } else if (outcome.newBase) {
-          st.parked = false
-          st.interrupted = false
-          st.parkedFiles = []
-          st.resolvingFiles = null
-          dropParkRecord(st)
+          clearPark(st)
           st.wt.baseSha = outcome.newBase
           await retireWorktreeBranch(st.wt)
           // Setup may only restore an excluded helper; config can already be wired.
@@ -382,317 +240,6 @@ export function afterTurn(
     .catch(() => null)
   st.chain = task
   return task
-}
-
-/** Restore the fallback after an automatic attempt was cancelled or unavailable. */
-export function showParkedChat(sessionKey: string): void {
-  const st = states.get(sessionKey)
-  if (st?.parked && !st.reverted)
-    emitIsolation(sessionKey, 'parked', st.wt.branch, st.parkedFiles, undefined, undefined, st.interrupted ? 'interrupted' : undefined)
-}
-
-/** The seam `stopped-turn.ts` (LKM-151) uses for a stopped turn's held work. */
-export const stoppedTurnSeam = {
-  state: (sessionKey: string) => states.get(sessionKey),
-  emit: emitIsolation,
-  holdRecord: (st: ChatState, files: string[]) => upsertParkRecord(st, files),
-  dropRecord: (st: ChatState) => dropParkRecord(st)
-}
-export type IsolatedChat = ChatState
-
-/**
- * Persist (or refresh) a park `SessionRecord` keyed `chatpark-<wtId>` under its OWNING
- * repo (`repoRoot`, which for crash recovery may differ from the project being opened).
- * Reuses an existing record's `startedAt`/`title` — and its `filesTouched`/`transcript`
- * when the caller has none — so successive parked turns update ONE record. Deliberately
- * carries NO `sdkSessionId` (that would light up Resume on a still-live chat). Returns
- * the record id, or null if history is unavailable. Shared by live-chat parks and
- * crash-recovery records.
- */
-function saveParkRecord(opts: {
-  wtId: string
-  repoRoot: string
-  branch: string
-  files: string[]
-  transcript?: SessionTranscriptEntry[]
-  title: string
-}): string | null {
-  if (!deps) return null
-  const id = `chatpark-${opts.wtId}`
-  try {
-    const store = deps.store()
-    const existing = store.get(id)
-    const rec: SessionRecord = {
-      id,
-      projectKey: projectKey(opts.repoRoot),
-      projectRoot: opts.repoRoot,
-      projectName: basename(opts.repoRoot) || opts.repoRoot,
-      startedAt: existing?.startedAt ?? Date.now(),
-      endedAt: Date.now(),
-      branch: opts.branch,
-      filesTouched: opts.files.length ? opts.files : (existing?.filesTouched ?? []),
-      transcript: opts.transcript?.length ? opts.transcript : (existing?.transcript ?? []),
-      kind: 'comment',
-      title: existing?.title ?? opts.title
-    }
-    store.save(rec)
-    return id
-  } catch {
-    return null // history is non-critical
-  }
-}
-
-/** Persist (or refresh) the park record a live PARKED chat surfaces in the sidebar,
- *  carrying the last turn's transcript into the review UI. */
-function upsertParkRecord(
-  st: ChatState,
-  files: string[],
-  transcript: SessionTranscriptEntry[] = []
-): void {
-  const id = saveParkRecord({
-    wtId: st.wt.id,
-    repoRoot: st.liveRoot,
-    branch: st.wt.branch,
-    files,
-    transcript,
-    title: 'Unmerged chat changes'
-  })
-  if (id) st.parkRecordId = id
-}
-
-/** Persist a recovery park record for a chat worktree reclaimed after a crash (the
- *  chat is no longer live). `filesTouched` is read from the branch's cumulative diff. */
-async function recoveryParkRecord(repoRoot: string, wtId: string, branch: string): Promise<void> {
-  const files = await gitOut(repoRoot, ['diff', '--name-only', `${branch}^..${branch}`])
-    .then((o) =>
-      o
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    )
-    .catch(() => [] as string[])
-  saveParkRecord({ wtId, repoRoot, branch, files, title: 'Recovered chat changes' })
-}
-
-/** Drop a chat's park record once its work merges (or on discard). */
-function dropParkRecord(st: ChatState): void {
-  if (!deps || !st.parkRecordId) return
-  try {
-    deps.store().remove(st.parkRecordId)
-  } catch {
-    /* history is non-critical */
-  }
-  st.parkRecordId = null
-}
-
-/** The LIVE chat (if any) whose worktree is on `branch` in `root` — the seam that lets
- *  `agent:spawn-apply`/`agent:spawn-discard` route a parked LIVE chat's branch through
- *  the isolation path (advance base + unpark) instead of the stock spawn path, while a
- *  crash-recovered (dead) chat's branch falls through to that stock path unchanged. */
-function findByBranch(root: string, branch: string): [string, ChatState] | undefined {
-  const pk = projectKey(root)
-  for (const [key, st] of states) {
-    if (st.wt.branch === branch && projectKey(st.liveRoot) === pk) return [key, st]
-  }
-  return undefined
-}
-
-/**
- * `agent:spawn-apply` delegation: if `branch` belongs to a live parked chat, 3-way
- * apply its cumulative diff onto the live tree (serialized on the chat's chain); on a
- * clean apply advance the fork point, unpark, and drop the park record. Returns
- * `{ handled: false }` when no live chat owns the branch, so the caller falls through
- * to the stock spawn-branch apply.
- */
-export async function applyParkedBranch(
-  root: string,
-  branch: string
-): Promise<{ handled: boolean; ok?: boolean; conflict?: boolean; error?: string }> {
-  const found = findByBranch(root, branch)
-  if (!found) return { handled: false }
-  const [key, st] = found
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, () => applyParked(st.liveRoot, st.wt))
-  )
-  st.chain = task.catch(() => {})
-  try {
-    const res = await task
-    if (res.ok) {
-      if (res.newBase) st.wt.baseSha = res.newBase
-      // A 3-way apply onto a dirty tree can leave conflict markers, so unlike the
-      // turn path this commits whatever landed — keeping the apply revertable in one
-      // step, markers and all, instead of tangling it with the user's other WIP.
-      await commitLiveTurn(st.liveRoot, res.files, {
-        title: `Apply ${st.wt.branch} changes`,
-        body: 'Trezi parked-chat apply.'
-      })
-      st.parked = false
-      st.interrupted = false
-      st.reverted = false
-      st.parkedFiles = []
-      st.resolvingFiles = null
-      dropParkRecord(st)
-      await retireWorktreeBranch(st.wt)
-      emitIsolation(key, 'merged', st.wt.branch, res.files)
-    }
-    return { handled: true, ok: res.ok, conflict: res.conflict, error: res.error }
-  } catch (e) {
-    return {
-      handled: true,
-      ok: false,
-      conflict: false,
-      error: e instanceof Error ? e.message : String(e)
-    }
-  }
-}
-
-/**
- * `agent:spawn-discard` delegation: if `branch` belongs to a live parked chat, reset
- * its worktree back to the fork point (KEEPING the branch — it's still checked out by
- * the live worktree, so a `git branch -D` would fail), unpark, and drop the record.
- * Returns `{ handled: false }` when no live chat owns the branch (falls through to the
- * stock `deleteBranch`).
- */
-export async function discardParkedBranch(
-  root: string,
-  branch: string
-): Promise<{ handled: boolean }> {
-  const found = findByBranch(root, branch)
-  if (!found) return { handled: false }
-  const [key, st] = found
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
-      await discardParked(st.wt)
-      await retireWorktreeBranch(st.wt)
-    })
-  )
-  st.chain = task.catch(() => {})
-  await task.catch(() => {})
-  st.parked = false
-  st.interrupted = false
-  st.reverted = false
-  st.parkedFiles = []
-  st.resolvingFiles = null
-  dropParkRecord(st)
-  emitIsolation(key, 'isolated', st.wt.branch)
-  return { handled: true }
-}
-
-/**
- * "Resolve it" backend for a live PARKED chat (the in-chat conflict card). Stage the
- * worktree so it holds BOTH the user's live edits and the chat's own changes 3-way
- * merged (see `stageResolve`), then:
- *  - clean (no textual overlap) → commit + merge back onto the live tree right here and
- *    unpark; the caller runs NO agent turn. Returns `conflicted: []`.
- *  - overlapping → leave the marker-bearing worktree in place (still parked) and return
- *    the conflicted files; the caller fires ONE agent turn to reconcile them, whose
- *    normal `afterTurn` commits + merges + unparks.
- * Serialized on the chat's chain. `{ ok: false }` if the chat isn't parked.
- */
-export async function resolveParkedChat(
-  sessionKey: string
-): Promise<{ ok: boolean; conflicted: string[]; error?: string }> {
-  const st = states.get(sessionKey)
-  if (!st) return { ok: false, conflicted: [], error: 'no-chat' }
-  if (!st.parked) return { ok: false, conflicted: [], error: 'not-parked' }
-  if (st.resolvingFiles) return { ok: true, conflicted: st.resolvingFiles }
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, () => stageResolve(st.liveRoot, st.wt))
-  )
-  st.chain = task.catch(() => {})
-  let prep: ResolvePrep
-  try {
-    prep = await task
-  } catch (e) {
-    return { ok: false, conflicted: [], error: e instanceof Error ? e.message : String(e) }
-  }
-  if (!prep.clean) {
-    st.resolvingFiles = prep.conflicted
-    return { ok: true, conflicted: prep.conflicted }
-  }
-  // No overlap — the sides merged automatically. Commit + merge onto live and unpark now.
-  // completeTurn's autoApplyWorktree still refuses a binary file (even one stageResolve
-  // just resolved by policy) — the applyParked fallback below is what actually lands it.
-  const merge = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
-      const outcome = await completeTurn(st.liveRoot, st.wt, 'Resolve chat/live merge')
-      if (outcome.outcome === 'merged') {
-        const group = `chat:${st.wt.id}:resolve`
-        for (const e of outcome.edits) {
-          recordEdit(st.liveRoot, e.file, e.before, e.after, undefined, group)
-        }
-        if (outcome.newBase) st.wt.baseSha = outcome.newBase
-        await commitLiveTurn(st.liveRoot, outcome.files, {
-          title: 'Resolve chat/live merge',
-          body: `Trezi conflict resolution (${st.wt.branch}).`
-        })
-        st.parked = false
-        st.interrupted = false
-        st.reverted = false
-        st.parkedFiles = []
-        st.resolvingFiles = null
-        dropParkRecord(st)
-        await retireWorktreeBranch(st.wt)
-        emitIsolation(sessionKey, 'merged', st.wt.branch, outcome.files, group, !st.record?.prUrl)
-        return
-      }
-      if (outcome.outcome === 'noop') {
-        // Staging showed the live tree already CONTAINS the chat's work (or the
-        // chat's diff vanished against it) — there is nothing left to merge.
-        // Leaving the chat parked here made "Resolve it" a silent infinite loop:
-        // ok:true + still-parked re-renders the same card. Unpark.
-        st.parked = false
-        st.interrupted = false
-        st.reverted = false
-        st.parkedFiles = []
-        st.resolvingFiles = null
-        dropParkRecord(st)
-        if (outcome.newBase) st.wt.baseSha = outcome.newBase
-        await retireWorktreeBranch(st.wt)
-        emitIsolation(sessionKey, 'isolated', st.wt.branch)
-        return
-      }
-      // 'parked' again — autoApplyWorktree refused the batch (it only writes text
-      // files that still match the snapshot; a DELETED or binary file in the
-      // chat's diff refuses forever, so retrying can never converge). The user
-      // explicitly asked to resolve, so fall back to the explicit-apply
-      // machinery (the review modal's Apply): a 3-way `git apply` handles
-      // deletions/binary/modes. No per-file undo entries for this path — same
-      // trade-off as the modal's Apply.
-      const res = await applyParked(st.liveRoot, st.wt)
-      if (res.ok) {
-        if (res.newBase) st.wt.baseSha = res.newBase
-        st.parked = false
-        st.interrupted = false
-        st.reverted = false
-        st.parkedFiles = []
-        st.resolvingFiles = null
-        dropParkRecord(st)
-        await retireWorktreeBranch(st.wt)
-        emitIsolation(sessionKey, 'merged', st.wt.branch, res.files)
-        return
-      }
-      // `res.error` is bounded by the owner and names the path and Git's reason.
-      throw new Error(`the merged result couldn't be written onto the project${res.error ? ` (${res.error})` : ''}`)
-    })
-  )
-  st.chain = merge.catch(() => {})
-  try {
-    await merge
-  } catch (e) {
-    return { ok: false, conflicted: [], error: e instanceof Error ? e.message : String(e) }
-  }
-  return { ok: true, conflicted: [] }
-}
-
-/** "Discard changes" backend for a live PARKED chat: drop the chat's unmerged work
- *  (reset its worktree to the fork point) and unpark. Thin wrapper over
- *  `discardParkedBranch` keyed by `sessionKey` so the renderer needn't know the branch. */
-export async function discardParkedChat(sessionKey: string): Promise<{ ok: boolean }> {
-  const st = states.get(sessionKey)
-  if (!st) return { ok: false }
-  const res = await discardParkedBranch(st.liveRoot, st.wt.branch)
-  return { ok: res.handled }
 }
 
 /** Ids of every live chat worktree across ALL open projects — the `pruneOrphans`
@@ -724,98 +271,13 @@ export async function reclaimIdleWorkspace(
     !!st && states.get(sessionKey) === st && !st.reclaimed && !st.parked && !st.resolvingFiles &&
     st.lastUsed <= idleBefore && !busy(sessionKey)
   if (!st || !eligible()) return 'skipped'
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
-      if (!eligible()) return 'skipped' as const
-      const result = await reclaimWorktree(st.liveRoot, st.wt)
-      if (!result.removed) return result.dirty ? ('kept-dirty' as const) : ('skipped' as const)
-      st.reclaimed = true
-      return 'removed' as const
-    })
-  )
-  st.chain = task.catch(() => {})
-  return task.catch(() => 'skipped' as const)
-}
-
-/**
- * Does a persisted `chatpark-<id>` record exist for this worktree id? Passed to
- * `pruneOrphans` so its recovery fold only fires on branches that were actually PARKED
- * (tip = cumulative parked squash). A branch whose tip is instead a previously-MERGED
- * turn (baseSha having advanced to it) has NO park record, so it isn't folded — folding
- * there would splice already-live content into the recovery commit, making the record's
- * Apply re-apply merged changes and surface spurious 3-way conflicts.
- */
-export function hasParkRecord(wtId: string): boolean {
-  if (!deps) return false
-  try {
-    return !!deps.store().get(`chatpark-${wtId}`)
-  } catch {
-    return false
-  }
-}
-
-/** Is every file a branch changed already identical in the live tree? True means the
- *  turn was merged before the crash (safe to drop the leftover branch); false means it
- *  holds genuinely unmerged work that must be recovered, not deleted. */
-async function branchAlreadyLive(repoRoot: string, branch: string): Promise<boolean> {
-  const patch = await branchPatch(repoRoot, branch)
-  if (!patch.trim()) return true // no pending diff — nothing to lose
-  let names: string[]
-  try {
-    names = (await gitOut(repoRoot, ['diff', '--name-only', `${branch}^..${branch}`]))
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  } catch {
-    return false
-  }
-  for (const rel of names) {
-    let want: string
-    try {
-      want = await gitOut(repoRoot, ['show', `${branch}:${rel}`])
-    } catch {
-      return false // deleted/renamed by the turn — treat as unmerged
-    }
-    let live = ''
-    try {
-      live = await readFile(join(repoRoot, rel), 'utf8')
-    } catch {
-      live = '' // not on disk — unmerged new file
-    }
-    if (live !== want) return false
-  }
-  return true
-}
-
-/**
- * Crash recovery for chat worktrees reclaimed by `pruneOrphans` (called from
- * `agent:open-project`). For each reclaimed `trezi/chat-*` or legacy `praxis/chat-*`
- * orphan, keyed to its OWN repo
- * (which may differ from the project being opened — the worktrees dir is shared):
- *  - dirty → a crashed-mid-turn chat: surface its work via a recovery park record.
- *  - clean + already recorded → a persisted park: keep its record + branch untouched.
- *  - clean + unrecorded → usually a merged chat's leftover branch (delete it), BUT a
- *    crash between commit and merge leaves a clean branch holding a real unmerged turn;
- *    only delete when its diff is already live, else recover it (never eat the work).
- * Comment-spawn orphans are ignored here (their pre-existing prune behavior stands).
- */
-export async function handleReclaimed(
-  reclaimed: Array<{ id: string; dirty: boolean; branch: string | null; repoRoot: string | null }>
-): Promise<void> {
-  if (!deps) return
-  for (const r of reclaimed) {
-    if (!r.branch || !/^(trezi|praxis)\/chat-/.test(r.branch) || !r.repoRoot) continue
-    if (r.dirty) {
-      await recoveryParkRecord(r.repoRoot, r.id, r.branch)
-      continue
-    }
-    if (deps.store().get(`chatpark-${r.id}`)) continue // a persisted park — leave it
-    if (await branchAlreadyLive(r.repoRoot, r.branch)) {
-      await deleteBranch(r.repoRoot, r.branch, 'integrated')
-    } else {
-      await recoveryParkRecord(r.repoRoot, r.id, r.branch)
-    }
-  }
+  return onChain(st, async () => {
+    if (!eligible()) return 'skipped' as const
+    const result = await reclaimWorktree(st.liveRoot, st.wt)
+    if (!result.removed) return result.dirty ? ('kept-dirty' as const) : ('skipped' as const)
+    st.reclaimed = true
+    return 'removed' as const
+  }).catch(() => 'skipped' as const)
 }
 
 /**
@@ -841,6 +303,8 @@ export async function releaseChat(
         const outcome = await completeTurn(st.liveRoot, st.wt, 'trezi chat changes', {
           land: pendingTerminal === 'success'
         })
+        // Not `landTurn`: the chat is gone, so there is no park to leave, no branch
+        // to retire (the checkout is removed below) and nobody to tell.
         if (outcome.outcome === 'merged') {
           for (const e of outcome.edits) {
             recordEdit(

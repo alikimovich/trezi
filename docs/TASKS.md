@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
+
+- [x] `clearPark` (`src/main/chat-park.ts`) at all 9 unpark sites; no other `parked = false`.
+- [x] `landTurn` (`src/main/chat-landing.ts`) is the landing for `afterTurn`, Keep and a clean Resolve, covered by `test/chat-landing.mjs`.
+- [x] Park records, helper sync, parked-chat actions and state in their own modules; `setup.ts` imports `chat-helpers.ts`; `stopped-turn.ts` uses `stoppedHold`/`markStoppedReverted`/`landStoppedTurn` instead of `ChatState`; `chat-isolation.ts` is 417 lines.
 ## Bash and Codex writes to the live checkout (LKM-156, F2)
 
 - [x] Claude `PreToolUse` hook denies Bash commands that name the live root from a worktree chat, with the worktree path (`src/main/live-write-guard.ts`); reads included, documented in `docs/WORKTREES.md`.

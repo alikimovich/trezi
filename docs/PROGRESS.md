@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-159: split chat-isolation.ts, one unpark and one landing (F5)
+
+- **Why.** Review M1, M2 and L6 (`docs/REVIEW-2026-10.md`): `src/main/chat-isolation.ts` was 953 lines, the unpark reset was copied at 9 sites with small differences, `keepStoppedTurn` copied the merged branch of `afterTurn`, and `stoppedTurnSeam` exported the mutable `ChatState` as `IsolatedChat`.
+- **Split.** `chat-isolation.ts` (417 lines) keeps the lifecycle (open, turn start/end, idle cleanup, release, status) and re-exports what callers and tests already import from it.
+  - `chat-state.ts`: `ChatState`, the injected seam, `emitIsolation`, `recreateWorkspace` and `onChain` (the chat's chain plus the repository lease, the former inline pattern).
+  - `chat-park.ts`: park records, `clearPark` and crash recovery (`handleReclaimed`, `hasParkRecord`). It now carries the `praxis/chat-*` shim, so `docs/agent-guide/legacy-names.md` and the census row in `docs/SWIFT-BACKEND-RETIREMENT.md` name it.
+  - `chat-landing.ts`: `landTurn`. `parked-chat.ts`: Apply, Discard, Resolve it and the stopped-turn hold. `chat-helpers.ts`: `syncChatHelpers`, which `setup.ts` now imports instead of chat-isolation.
+- **clearPark.** The only `parked = false`. It resets `interrupted`, `reverted`, `parkedFiles` and `resolvingFiles` and drops the park record.
+  - `settleReverted` drops no record: Revert already dropped it (commented).
+  - `afterTurn`'s merged and no-op branches and Keep did not reset `reverted`. It was already false there (cleared at turn start, checked inside Keep's lease), unless the user clicked Revert while that landing was running. Then the chat stayed `reverted` after its work had landed and the next turn start discarded an empty hold. It is now cleared with the rest.
+  - `afterTurn`'s merged branch dropped the record only when parked. A record exists only while parked, so the unconditional drop is the same.
+  - `discardParkedBranch` still unparks when the reset fails (commented).
+- **landTurn.** The undo group `chat:<id>:<turn>`, the advanced fork point, the live commit, `clearPark`, retiring the branch and the `merged` event (not revertable after a PR). `afterTurn`, Keep and a clean "Resolve it" (`turn = 'resolve'`, conflict-resolution body) use it. Keep advanced the fork point after the commit, now before. `commitLiveTurn` never throws and does not read it. `releaseChat` keeps its own final landing: the chat is gone, so there is nothing to unpark, retire or tell (commented).
+- **Stopped turns.** `stopped-turn.ts` keeps its results and messages and uses `stoppedHold`, `markStoppedReverted` and `landStoppedTurn` from `parked-chat.ts`. `IsolatedChat` and `stoppedTurnSeam` are gone.
+- **Tests.** `test/chat-landing.mjs` (in `test/repository-owner.mjs`'s suites) lands a finished turn and a kept stopped turn and checks the same event, undo group, commit subject/body, clean tree, unpark and Revert. It also checks that work pushed through a PR is not revertable on either path, and that no `src/main` file but `chat-park.ts` sets `parked = false`. The existing suites are unchanged.
+
 ## 2026-10-04 — LKM-156: guard Bash and Codex against writes to the live checkout (F2)
 
 - **Claude Bash.** `liveCheckoutEdit` now also handles `Bash` through `liveCheckoutCommand` (`src/main/live-write-guard.ts`), so the existing `PreToolUse` hook covers it in every permission mode. A worktree chat's command that names the live root is denied, and the denial names the worktree path of the first live path in it.

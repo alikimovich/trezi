@@ -7,7 +7,7 @@ import { createHash } from 'crypto'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import type { Frontend, SetupResult, SetupStrategy } from '../shared/api'
-import { syncChatHelpers } from './chat-isolation'
+import { syncChatHelpers } from './chat-helpers'
 import { workflowOwner, type HelperFile } from './workflow-owner'
 
 /**
