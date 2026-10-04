@@ -3,7 +3,6 @@ import { previewToolShapes as previewShapes, previewToolText as PREVIEW_TOOL_TEX
 import { runTreziTool, sessionTool } from '../session-tools'
 import type { PreviewObserver } from '../preview-observation-tools'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { NativeView } from '../../native/platform'

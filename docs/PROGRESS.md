@@ -2,6 +2,27 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-154: review of LKM-140/144/151/152/153 and commit audit
+
+- **Report.** `docs/REVIEW-2026-10.md` contains findings by severity, an audit table for all 29 commits in `ee301e2..515779b`, and follow-ups F1–F8.
+- **Audit result.**
+  - No commit is a no-op, reverted later, an artifact or a duplicate that could be removed without rewriting history.
+  - The LKM-140 iterations that later commits partly superseded still own live lines (`git blame`).
+  - Each candidate merge has the same tree as its second parent, and `--remerge-diff` shows no hand edits. The two conflicted sync merges (`f27a60f`, `de633fe`) were resolved correctly.
+  - The only candidate for removal is the two diagnostic keys `84e436a` added to `chatAcceptance`. The report recommends keeping them. Nothing was reverted and no SHA changed.
+- **Cleanups.**
+  - Removed the unused `unread`/`unreadLevel` from `NativeActivity` (`src/native/Activity.swift`). The unread state lives in `ActivityIndicator` and the controller.
+  - Removed the unused `readFile` import from `src/main/backends/claude.ts`.
+- **Test fix.** In `test/setup-vite.mjs`, the bare-project case had no `node_modules`. Bun therefore auto-installed `@babel/core` from its global cache when the plugin required it. The warning then depended on that cache, and quick verification failed on a broken cache entry. The fixture now has Vite installed, as a real Vite project would.
+- **Not done (follow-ups in the report):**
+  - relative sources in every agent prompt;
+  - Bash and non-Claude live-write guards;
+  - re-offering setup after `done`;
+  - the lint baseline (546 → 576 Biome errors over the range, mostly format and import order in new files);
+  - splitting `chat-isolation.ts` (953 lines) and `Host.swift` (618 lines);
+  - commit subjects for worker iterations;
+  - typing the island-override wire format.
+
 ## 2026-10-02 — LKM-153: Connect to Trezi from chat worktrees, Vite 8 stamping, remembered state
 
 - **Root cause.** The swiftly-demos chat had a stopped (parked) turn. `beforeTurn` returned early for a parked chat, so it skipped the helper sync too. The setup agent found no `.trezi/trezi-source.cjs` in its worktree and stopped. The card then fell back to "no elements got stamped". The project is also React on Vite 8, where `react({ babel })` cannot stamp at all.

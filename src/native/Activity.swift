@@ -57,9 +57,6 @@ final class NativeActivity: NSObject, NSWindowDelegate {
         if state["focus"] as? Bool == true { window?.makeKeyAndOrderFront(nil) }
         else if state["raise"] as? Bool == true || window?.isVisible != true { window?.orderFront(nil) }
     }
-    /// Unread warnings and needs-action lines while the window was hidden (LKM-152).
-    var unread = 0
-    var unreadLevel = "info"
     @objc func clearLog() { emit(["event":"activity-action", "action":"clear"]) }
     @objc func showRecovery() { emit(["event":"activity-action", "action":"recovery"]) }
     @objc func copyLog() { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(fullText, forType: .string) }
