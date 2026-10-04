@@ -120,63 +120,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
           emit(["event":"ready"])
         }
     }
-    func installMenus() {
-        let menu = NSMenu()
-        func submenu(_ title: String) -> NSMenu {
-            let item = NSMenuItem(); item.title = title; let sub = NSMenu(title: title); item.submenu = sub; menu.addItem(item); return sub
-        }
-        let appMenu = submenu("Trezi")
-        let about = NSMenuItem(title: "About Trezi", action: #selector(showAbout(_:)), keyEquivalent: ""); about.target = self; appMenu.addItem(about)
-        appMenu.addItem(.separator())
-        let settings = NSMenuItem(title: "Settings…", action: #selector(menuAction(_:)), keyEquivalent: ","); settings.representedObject = "settings"; settings.target = self; appMenu.addItem(settings)
-        appMenu.addItem(withTitle: "Quit Trezi", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        let file = submenu("File")
-        for (label, key, action) in [("New Project…", "n", "new-project"), ("Open Project…", "o", "open-project")] {
-            let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; file.addItem(item)
-        }
-        let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: ""); recent.submenu = recentMenu; file.addItem(recent)
-        file.addItem(.separator())
-        file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        let edit = submenu("Edit")
-        let undo = NSMenuItem(title: "Undo", action: #selector(menuAction(_:)), keyEquivalent: "z"); undo.target = self; undo.representedObject = "undo"; edit.addItem(undo)
-        let redo = NSMenuItem(title: "Redo", action: #selector(menuAction(_:)), keyEquivalent: "z"); redo.target = self; redo.representedObject = "redo"; redo.keyEquivalentModifierMask = [.command, .shift]; edit.addItem(redo)
-        for (label, key, selector) in [("Cut", "x", "cut:"), ("Copy", "c", "copy:"), ("Paste", "v", "paste:"), ("Select All", "a", "selectAll:")] {
-            edit.addItem(withTitle: label, action: Selector(selector), keyEquivalent: key)
-        }
-        let find = NSMenuItem(title: "Find…", action: #selector(NSTextView.performFindPanelAction(_:)), keyEquivalent: "f"); find.tag = NSTextFinder.Action.showFindInterface.rawValue; edit.addItem(find)
-        let actions = submenu("Actions")
-        for (label, key, action) in [("Reload Preview", "r", "reload"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
-            let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; actions.addItem(item)
-        }
-        let develop = submenu("Develop")
-        for (title, key, action) in [("Show Preview Web Inspector", "i", "show"), ("Show Preview JavaScript Console", "c", "showConsole")] {
-            let item = NSMenuItem(title: title, action: #selector(showPreviewInspector(_:)), keyEquivalent: key)
-            item.target = self; item.representedObject = action; item.keyEquivalentModifierMask = [.command, .option]; develop.addItem(item)
-        }
-        // LKM-152: Window → Activity (Command-L) shows the Activity window; it carries the unread badge.
-        let windows = submenu("Window")
-        windows.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windows.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
-        windows.addItem(.separator())
-        let activityItem = NSMenuItem(title: "Activity", action: #selector(menuAction(_:)), keyEquivalent: "l"); activityItem.target = self; activityItem.representedObject = "activity"; windows.addItem(activityItem)
-        activityIndicator.menuItem = activityItem
-        NSApp.windowsMenu = windows
-        NSApp.mainMenu = menu
-    }
-    /// The standard panel reads "Version 0.1.0 (build N, <short sha>)" from the Info.plist the build stamps (LKM-143).
-    @objc func showAbout(_ sender: Any?) {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let build = info["CFBundleVersion"] as? String ?? "", commit = info["TreziCommit"] as? String ?? ""
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: commit.isEmpty ? build : "build \(build), \(commit)"])
-    }
-    @objc func menuAction(_ item: NSMenuItem) {
-        let action = item.representedObject as? String ?? ""
-        if ["undo", "redo"].contains(action), let text = NSApp.keyWindow?.firstResponder as? NSTextView {
-            if action == "undo" { text.undoManager?.undo() } else { text.undoManager?.redo() }; return
-        }
-        emit(["event":"menu", "action":action])
-    }
-    @objc func recentAction(_ item: NSMenuItem) { emit(["event":"recent", "root":item.representedObject as? String ?? ""]) }
+    // Menus: `HostMenus.swift`. Test-broker commands: `HostInspect.swift` (LKM-160).
     func reply(_ id: Int, _ value: Any = NSNull(), error: String? = nil) {
         if let error = error { emit(["event":"reply", "id":id, "error":error]) }
         else { emit(["event":"reply", "id":id, "value":value]) }
@@ -197,25 +141,14 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             preferences = c["values"] as? [String: Any] ?? [:]
         case "webViews": reply(id, views.keys.sorted())
         case "securitySession": reply(id, SecuritySessionProbe.report())
-        case "previewInspector":
-            if let action = c["action"] as? String { reply(id, PreviewInspector.perform(action, on: views["preview"])) }
-            else { reply(id, previewInspectorReport()) }
         case "chatState":
             let state = c["state"] as? [String: Any] ?? [:]
             nativeLayout.chatState = state
             chat.update(nativeLayout.nativeChatState(), composer: composer); nativeLayout.layout()
         case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:])
         case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout()
-        case "layoutInspect": reply(id, nativeLayout.inspect())
         case "inspectorState": editingInspector.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout()
-        case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0])
-        case "inspectorPerform": guard ephemeral else { return }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"inspector-action"]) { _, new in new }); reply(id)
-        case "inspectorIsland":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await captureInspectorIsland()) } catch { reply(id, error: error.localizedDescription) } } }
-            else { reply(id, verifyInspectorIsland(c)) }
         case "layersState": layers.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout()
-        case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count])
         case "sourceActive":
             sourceRoot = c["root"] as? String ?? ""
             for (root, editor) in sourceEditors where editor.state["popped"] as? Bool != true { editor.isHidden = root != sourceRoot || editor.state["visible"] as? Bool != true }
@@ -251,188 +184,16 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                 editor.isHidden = root != sourceRoot || state["visible"] as? Bool != true
             }
             nativeLayout.layout()
-        case "sourceInspect":
-            let editor = sourceEditors[c["root"] as? String ?? sourceRoot]
-            reply(id, ["native":true, "visible":editor?.state["visible"] as? Bool ?? false, "source":editor?.source ?? "", "text":editor?.code.string ?? "", "popped":editor?.popout?.isVisible ?? false, "dirty":editor?.state["dirty"] as? Bool ?? false, "error":editor?.state["error"] as? String ?? "", "width":editor?.bounds.width ?? 0, "height":editor?.bounds.height ?? 0, "viewportHeight":editor?.scroll.contentSize.height ?? 0, "minHeight":editor?.popout?.contentMinSize.height ?? 0, "maxHeight":editor?.popout?.contentMaxSize.height ?? 0])
-        case "sourceResize":
-            guard ephemeral, let panel = sourceEditors[c["root"] as? String ?? sourceRoot]?.popout else { return }
-            panel.setContentSize(NSSize(width: c["width"] as? Double ?? 1000, height: c["height"] as? Double ?? 700)); reply(id)
-        case "captureSource":
-            guard let editor = sourceEditors[c["root"] as? String ?? sourceRoot], let bitmap = editor.bitmapImageRepForCachingDisplay(in: editor.bounds) else { reply(id, error: "No source editor"); return }
-            editor.cacheDisplay(in: editor.bounds, to: bitmap); reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
-        case "sourcePerform":
-            guard ephemeral else { return }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"source-action"]) { _, new in new }); reply(id)
-        case "sourceVerification":
-            guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return }
-            if c["prepare"] as? Bool == true { reply(id, editor.prepareForeground()) }
-            else if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await editor.captureToolbar()) } catch { reply(id, error: error.localizedDescription) } } }
-            else { reply(id, editor.verifyShortcut(c["key"] as? String ?? "", focus: c["focus"] as? String ?? "code").merging(["toolbar": editor.inspectToolbar()]) { _, new in new }) }
         case "activityState": activity.update(c)
         case "activityUnread": activityIndicator.update(count: c["count"] as? Int ?? 0, level: c["level"] as? String ?? "info")
-        case "activityInspect": reply(id, ["visible":activity.window?.isVisible ?? false, "key":activity.window?.isKeyWindow ?? false, "count":activity.count, "text":String(activity.text.string.suffix(20000))].merging(activityIndicator.inspect()) { _, new in new })
-        case "activityMenu":
-            // Pipe test: Command-L through the main menu's key equivalents, as the keyboard sends it.
-            guard ephemeral, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37) else { reply(id, error: "Test profile required"); return }
-            reply(id, ["handled":NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false])
         case "sheetState": sheets.update(c["state"] as? [String: Any] ?? [:])
         case "sheetClose": sheets.close(c["id"] as? String ?? "")
-        case "sheetInspect": reply(id, sheets.inspect())
-        case "settingsVerification":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            do { reply(id, try sheets.verifySettings(c)) }
-            catch { reply(id, error: error.localizedDescription) }
-        case "settingsMenu":
-            // Trezi → Settings… as the menu bar has it; `perform` chooses it like a click or Command-, would.
-            guard ephemeral, let app = NSApp.mainMenu?.items.first?.submenu, let index = app.items.firstIndex(where: { $0.representedObject as? String == "settings" }) else { reply(id, error: "Settings menu item unavailable"); return }
-            let item = app.items[index]
-            if c["perform"] as? Bool == true { app.performActionForItem(at: index) }
-            reply(id, ["menu":app.title, "title":item.title, "key":item.keyEquivalent, "command":item.keyEquivalentModifierMask == .command, "enabled":item.isEnabled])
-        case "captureVisibleSettings":
-            guard ephemeral, let panel = sheets.panel, let content = panel.contentView,
-                  sheets.model.state?.title == "Settings" else { reply(id, error: "Test Settings window required"); return }
-            Task { @MainActor in
-                do { reply(id, try await captureVisibleRegion(window: panel, view: content, region: content.bounds)) }
-                catch { reply(id, error: error.localizedDescription) }
-            }
-        case "captureSheet":
-            guard let content = sheets.panel?.contentView?.superview else { reply(id, error: "No native sheet"); return }
-            content.layoutSubtreeIfNeeded(); content.displayIfNeeded()
-            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { reply(id, error: "No native sheet"); return }
-            content.cacheDisplay(in: content.bounds, to: bitmap)
-            reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
-        case "sheetPerform":
-            guard ephemeral else { reply(id, false); return }
-            if let values = c["values"] as? [String: String] { sheets.model.values.merge(values) { _, new in new } }
-            if c["action"] as? String == "closeWindow" { sheets.panel?.performClose(nil) }
-            else { sheets.model.perform(c["action"] as? String ?? "") }
-            reply(id, true)
-        case "welcomeInspect": reply(id, welcome.inspect())
-        case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])
-        case "dividerPerform":
-            guard ephemeral else { reply(id, false); return }
-            chatDivider.begin(at: .zero)
-            chatDivider.drag(to: NSPoint(x: (c["delta"] as? Double ?? 0), y: 0)); chatDivider.end()
-            reply(id, true)
-        case "islandPerform":
-            if let island = chat.model.snapshot?.messages.flatMap({ $0.segments.compactMap { $0.island } }).first(where: { $0.id == c["island"] as? String }) {
-                chat.model.islandAction(island, action: c["action"] as? String ?? "", values: c["values"] as? [String: Any] ?? [:], gesture: c["gesture"] as? String, ended: c["ended"] as? Bool ?? false); reply(id)
-            } else { reply(id, error: "Island not found") }
-        case "revealChatIsland":
-            guard ephemeral, let target = c["island"] as? String,
-                  let message = chat.model.snapshot?.messages.first(where: { $0.segments.contains { $0.island?.id == target } }) else {
-                reply(id, error: "Test island unavailable"); return
-            }
-            let bottom = c["bottom"] as? Bool ?? false
-            // Publish the request synchronously so overlapping requests take
-            // revisions in arrival order; only the settlement wait is async.
-            NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
-            chat.model.revealIsland = target; chat.model.revealMessage = message.id; chat.model.revealBottom = bottom
-            chat.model.revealRevision += 1
-            let request = chat.model.revealRequest
-            Task { @MainActor in
-                var lastFrame: CGRect?
-                for _ in 0..<100 {
-                    try? await Task.sleep(nanoseconds: 20_000_000)
-                    lastFrame = chat.model.islandPositions[request.position]
-                    // Resolve against this request's own revision and anchor;
-                    // a newer request's applied state never acknowledges it.
-                    switch islandRevealState(request, currentRevision: chat.model.revealRevision, appliedRevision: chat.model.revealAppliedRevision,
-                                             positions: chat.model.islandPositions, readingHeight: max(1, chat.bounds.height - chat.model.bottomInset)) {
-                    case .pending: continue
-                    case .settled(let frame):
-                        reply(id, ["message":message.id, "revision":request.revision, "position":NSStringFromRect(frame)]); return
-                    case .superseded(let newer):
-                        reply(id, error: "Island reveal superseded; revision=\(request.revision), newer=\(newer)"); return
-                    }
-                }
-                reply(id, error: "Island reveal did not settle at \(bottom ? "bottom" : "top"); revision=\(request.revision), applied=\(chat.model.revealAppliedRevision), attempts=\(chat.model.revealAttempt), frame=\(lastFrame.map { NSStringFromRect($0) } ?? "missing")")
-            }
-        case "captureVisibleChat":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            Task { @MainActor in
-                do { reply(id, try await captureVisibleChat(window: window, chat: chat)) }
-                catch { reply(id, error: error.localizedDescription) }
-            }
-        case "chatAcceptance":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            Task { @MainActor in
-                do { reply(id, try await chatAcceptance(c)) }
-                catch { reply(id, error: error.localizedDescription) }
-            }
-        case "chatInspect": reply(id, chat.inspect())
-        case "chatPerform": chat.model.action(c["action"] as? String ?? "", id: c["card"] as? String, value: c["value"] as? String, answers: c["answers"] as? [String: String]); reply(id)
-        case "composerVerification":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            reply(id, composer.verifyInteraction(c))
-        case "captureVisibleComposer":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            Task { @MainActor in
-                do {
-                    // Include surrounding chat pixels to expose any external fade.
-                    let region = composer.bounds.insetBy(dx: -8, dy: -12)
-                    reply(id, try await captureVisibleRegion(window: window, view: composer, region: region))
-                } catch { reply(id, error: error.localizedDescription) }
-            }
         case "composerState": composer.update(c["state"] as? [String: Any] ?? [:])
-        case "composerInspect":
-            var inspected = composer.inspect()
-            // Send lives in the shared controls row, not directly in the form bubble.
-            inspected["sendInsideForm"] = composer.sendButton.isDescendant(of: composer.content)
-            let clip = composer.scroll.contentSize
-            inspected["inputWidth"] = Double(clip.width); inspected["textMinimumHeight"] = Double(composer.text.minSize.height)
-            inspected["scrollerStyle"] = composer.scroll.scrollerStyle.rawValue
-            reply(id, inspected)
-        case "composerIMECheck":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            let old = composer.text.string
-            composer.text.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
-            let marked = composer.text.hasMarkedText()
-            let swallowed = composer.textView(composer.text, doCommandBy: NSSelectorFromString("insertNewline:"))
-            composer.text.unmarkText(); composer.text.string = old
-            reply(id, ["marked":marked, "swallowed":swallowed])
-        case "composerPasteCheck":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            reply(id, composer.checkPaste(c))
-        case "composerPerform": composer.perform(c); reply(id)
         case "composerFocus": window.makeFirstResponder(composer.text)
-        case "captureComposer":
-            composer.layoutSubtreeIfNeeded()
-            let target: NSView = c["contentOnly"] as? Bool == true ? composer.content : composer
-            guard let bitmap = target.bitmapImageRepForCachingDisplay(in: target.bounds) else { reply(id, error: "Composer capture unavailable"); return }
-            target.cacheDisplay(in: target.bounds, to: bitmap)
-            reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
         case "shellState":
             let state = c["state"] as? [String: Any] ?? [:]
             shell.update(state); previewStatus.update(state); nativeLayout.update(state)
             if let home = state["homeState"] as? [String: Any] { welcome.update(home) }
-        case "shellInspect": reply(id, shell.inspect().merging(shell.gateInspect()) { _, new in new })
-        case "sidebarVerification":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            SidebarMenuMonitor.shared.install()
-            reply(id, shell.verifySidebar(c))
-        case "sidebarFocus":
-            guard ephemeral else { reply(id, error: "Test profile required"); return }
-            SidebarMenuMonitor.shared.install()
-            if c["cleanup"] as? Bool == true {
-                sidebarFocusCleanup(main: window, cells: shell.projectCells, dismissAuxiliary: {
-                    if self.sheets.panel?.isVisible == true { self.sheets.model.perform("cancel") }
-                })
-            }
-            reply(id, sidebarFocusReport(main: window, auxiliary: sheets.panel))
-        case "captureVisibleSidebar":
-            guard ephemeral, !shell.sidebarItem.isCollapsed else { reply(id, error: "Visible test sidebar required"); return }
-            Task { @MainActor in
-                do { reply(id, try await captureVisibleRegion(window: window, view: shell.sidebar.view, region: shell.sidebar.view.bounds)) }
-                catch { reply(id, error: error.localizedDescription) }
-            }
-        case "captureVisibleWindow":
-            guard ephemeral, let content = window.contentView else { reply(id, error: "Test profile required"); return }
-            Task { @MainActor in
-                do { reply(id, try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)) }
-                catch { reply(id, error: error.localizedDescription) }
-            }
-        case "previewSurfaceInspect": reply(id, previewSurface.inspect())
-        case "shellPerform": reply(id, shell.perform(c["action"] as? String ?? "", id: c["row"] as? String))
         case "captureFeedback":
             let content = window.contentView?.superview ?? shell.split.view
             guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { reply(id, NSNull()); return }
@@ -443,33 +204,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             scaled.lockFocus(); image.draw(in: NSRect(origin: .zero, size: size)); scaled.unlockFocus()
             if let tiff = scaled.tiffRepresentation, let result = NSBitmapImageRep(data: tiff)?.representation(using: .jpeg, properties: [.compressionFactor:0.6]) { reply(id, "data:image/jpeg;base64," + result.base64EncodedString()) }
             else { reply(id, NSNull()) }
-        case "captureShell", "captureShellImage":
-            let content = window.contentView?.superview ?? shell.split.view
-            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { reply(id, error: "Shell capture unavailable"); return }
-            content.cacheDisplay(in: content.bounds, to: bitmap)
-            if c["method"] as? String == "captureShellImage" {
-                reply(id, ["png":bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "", "jpeg":bitmap.representation(using: .jpeg, properties: [.compressionFactor:0.65])?.base64EncodedString() ?? "", "width":bitmap.pixelsWide, "height":bitmap.pixelsHigh])
-            } else { reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "") }
-        case "captureSidebar":
-            shell.split.view.layoutSubtreeIfNeeded()
-            let content = shell.sidebar.view
-            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { reply(id, error: "Sidebar capture unavailable"); return }
-            content.cacheDisplay(in: content.bounds, to: bitmap)
-            // Source-list materials are transparent when cached offscreen. Render
-            // the cached native cells over the system background for readable QA.
-            let image = NSImage(size: content.bounds.size); image.lockFocus()
-            NSColor.windowBackgroundColor.setFill(); NSRect(origin: .zero, size: content.bounds.size).fill()
-            let cells = NSImage(size: content.bounds.size); cells.addRepresentation(bitmap)
-            cells.draw(in: NSRect(origin: .zero, size: content.bounds.size), from: .zero, operation: .sourceOver, fraction: 1)
-            image.unlockFocus()
-            let png = image.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) }
-            reply(id, png?.base64EncodedString() ?? "")
-        case "recents":
-            recentMenu.removeAllItems()
-            for entry in (c["recents"] as? [[String: String]] ?? []).prefix(8) {
-                guard let root = entry["root"], let title = entry["name"] else { continue }
-                let item = NSMenuItem(title: title, action: #selector(recentAction(_:)), keyEquivalent: ""); item.representedObject = root; item.target = self; recentMenu.addItem(item)
-            }
+        case "recents": updateRecents(c["recents"] as? [[String: String]] ?? [])
         case "load":
             guard let raw = c["url"] as? String, let url = URL(string: raw), let view = view else { return }
             targets[name] = url
@@ -504,34 +239,6 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                 case .failure(let error): self.reply(id, error: (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription)
                 }
             }
-        case "previewInput":
-            guard ephemeral, let preview = views["preview"] else { reply(id, error: "Test preview unavailable"); return }
-            if c["prepare"] as? Bool == true {
-                // Native input fixtures must regain the main window after auxiliary windows.
-                // Keep the existing WebKit responder during contentEditable gestures.
-                NSApp.activate(ignoringOtherApps: true)
-                window.makeKeyAndOrderFront(nil)
-                window.contentView?.layoutSubtreeIfNeeded()
-                let focused = c["preserveResponder"] as? Bool == true
-                    ? window.firstResponder != nil : window.makeFirstResponder(preview)
-                reply(id, ["active": NSApp.isActive, "key": window.isKeyWindow,
-                           "focused": focused, "visible": preview.window === window && !preview.isHidden])
-                return
-            }
-            if let key = c["key"] as? String {
-                let code: UInt16 = key == "ArrowRight" ? 124 : key == "Escape" ? 53 : key == "Enter" ? 36 : 0
-                let chars = key == "ArrowRight" ? "\u{F703}" : key == "Escape" ? "\u{1B}" : key == "Enter" ? "\r" : key
-                for type in [NSEvent.EventType.keyDown, .keyUp] {
-                    if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code) { window.sendEvent(event) }
-                }
-            } else {
-                let y = c["y"] as? Double ?? 20
-                let point = preview.convert(NSPoint(x: c["x"] as? Double ?? 20, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
-                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                    if let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: c["clicks"] as? Int ?? 1, pressure: 1) { window.sendEvent(event) }
-                }
-            }
-            reply(id)
         case "previewViewport": reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"]))
         case "capture":
             if c["rect"] != nil && PreviewAgent.snapshot(for: c, view: view) == nil { reply(id, error: "The element is outside the visible preview"); return }
@@ -555,7 +262,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "quit":
             if let status = c["status"] as? Int, status != 0 { exitStatus = 1 }
             terminateHost()
-        default: reply(id, error: "Unsupported native host command")
+        default: if !testBroker(c, id: id) { reply(id, error: "Unsupported native host command") }
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {

@@ -7,6 +7,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Claude `PreToolUse` hook denies Bash commands that name the live root from a worktree chat, with the worktree path (`src/main/live-write-guard.ts`); reads included, documented in `docs/WORKTREES.md`.
 - [x] Codex and Responses connections: worktree-only `workspace-write` sandbox, user `writable_roots` dropped, temp roots excluded when they overlap the live tree (`src/main/backends/codex-sandbox.ts`), proven against the real CLI in `test/live-write-guard.mjs`.
+## Split Host.swift menus and test broker (LKM-160, review F6)
+
+- [x] Menu bar (Trezi, File with Open Recent, Edit, Actions, Develop, Window → Activity ⌘L with its badge) in `src/native/HostMenus.swift`; test-broker inspect/perform/verification/capture commands (incl. `activityInspect`, `activityMenu`, `settingsMenu`) in `src/native/HostInspect.swift`. `Host.swift` 618 → 325 lines; no behaviour change.
+- [x] Both files in the `scripts/build-native.mjs` host list; `docs/SWIFT-BACKEND-EVENTS.md` Host/Activity anchors point at the current lines (removed cases marked with the ticket that removed them).
 
 ## Review of recent changes and commit audit (LKM-154)
 
