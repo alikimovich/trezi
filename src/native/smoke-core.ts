@@ -268,7 +268,7 @@ export async function runNativeCoreSmoke(host: NativeBridge, fixture: string, ro
       try { await wait(()=>readFileSync(join(fixture,'native-style.tsx'),'utf8').includes('0.8'),'native style source edit') } catch (error) { console.error('Native inspector failure', { expected: inspector, actual: await host.request('inspectorInspect') }); throw error }
       await host.request('inspectorPerform',{action:{root:fixture,generation:inspector.generation,action:'close'}})
       await inspect('inspectorInspect',s=>!s.visible)
-      await checkInspectorIsland(host,artifacts,()=>serviceEvents.emit('event','preview:toolbar-action','props'),()=>preference('trezi:native-panel-sizes'))
+      await checkInspectorIsland(host,artifacts,()=>serviceEvents.emit('event','preview:toolbar-action','props'),()=>preference('trezi:native-panel-sizes'),{evaluate:page,source:()=>readFileSync(join(fixture,'native-style.tsx'),'utf8'),selectMode:on=>invoke('preview:set-select-mode',on)})
     }, cleanup: async () => {
       const state = await host.request('inspectorInspect')
       if (state.visible) await host.request('inspectorPerform',{action:{root:fixture,generation:state.generation,action:'close'}})

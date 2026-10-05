@@ -42,13 +42,84 @@ function checkOpen(state: Island, label: string) {
   assert.equal(state.hits.edge, 'divider', `${label}: the left edge resizes`)
 }
 
+/** The preview page, its selection's source file and select mode, for the pointer check. */
+export type IslandPage = {
+  evaluate: (code: string) => Promise<unknown>
+  source: () => string
+  selectMode: (on: boolean) => Promise<unknown>
+}
+
+/** LKM-162: the island's fields, slider and tabs are the window's hit views; padding-top
+ *  typed into its real field edits the element; and moves, a click and a wheel inside it
+ *  never reach the page, even in select mode with the page first responder, while a move
+ *  beside it does. */
+async function checkPointer(
+  island: (params?: Record<string, unknown>) => Promise<Island>,
+  page: IslandPage,
+  evidence: Record<string, unknown>
+) {
+  const targets = await waitFor(async () => {
+    const state = await island({ pointer: true })
+    return state.tab === 'styles' && state.controls?.field?.found && state
+  }, 'Styles tab with the padding-top field')
+  evidence.pointerTargets = targets
+  for (const name of ['field', 'slider', 'tabs']) {
+    const control = targets.controls[name]
+    assert.ok(control.found, `pointer: the island has its ${name}`)
+    assert.ok(
+      control.insideIsland && control.target === 'inspector' && control.control,
+      `pointer: the ${name}'s center hits the ${name} inside the island ${JSON.stringify(control)}`
+    )
+  }
+  // Before select mode: turning it off drops the page's selection, which a Styles edit previews on.
+  const edit = await island({ pointer: true, step: 'edit', value: '12' })
+  evidence.pointerEdit = edit
+  assert.ok(edit.focused, `pointer: a click focuses padding-top ${JSON.stringify(edit)}`)
+  await waitFor(
+    () => /padding(Top|-top)["']?\s*:\s*["']?12/.test(page.source()),
+    'padding-top 12 in the source'
+  )
+  await waitFor(
+    async () =>
+      (await page.evaluate(
+        `getComputedStyle(document.querySelector('#native-title')).paddingTop`
+      )) === '12px',
+    'padding-top 12px on the element'
+  )
+  await page.selectMode(true)
+  try {
+    const moves = await island({ pointer: true, step: 'moves' })
+    evidence.pointerMoves = moves
+    assert.ok(
+      moves.gates >= 1,
+      `pointer: WebKit's tracking areas are gated ${JSON.stringify(moves)}`
+    )
+    for (const kind of ['move', 'enter', 'down', 'wheel'])
+      assert.equal(
+        moves.inside[kind] ?? 0,
+        0,
+        `pointer: no ${kind} inside the island reaches the page`
+      )
+    // A real pointer's moves come through WebKit's tracking areas; AppKit does not hand
+    // posted moves to the first responder here, so besideWindow is evidence only.
+    assert.ok(
+      (moves.besideTracking.move ?? 0) >= 1 && (moves.besideTracking.enter ?? 0) >= 1,
+      `pointer: a move beside the island still reaches the page ${JSON.stringify(moves)}`
+    )
+    assert.equal(moves.picks, 0, 'pointer: no element-picked message from the island')
+  } finally {
+    await page.selectMode(false)
+  }
+}
+
 /** LKM-122: the inspector floats over the preview's right edge; the preview keeps its
  *  width open and closed, at the default and minimum window sizes. */
 export async function checkInspectorIsland(
   host: NativeBridge,
   artifacts: string,
   toggle: () => void,
-  saved: () => string | null
+  saved: () => string | null,
+  page: IslandPage
 ) {
   const island = (params: Record<string, unknown> = {}): Promise<Island> =>
     host.request('inspectorIsland', params)
@@ -91,6 +162,11 @@ export async function checkInspectorIsland(
       const open = await island()
       evidence[`${name}-open-state`] = open
       checkOpen(open, name)
+      if (name === 'default') {
+        // Posted pointer events and the field editor need the key, frontmost window.
+        if (foreground) await checkPointer(island, page, evidence)
+        else console.log('SKIP inspector island pointer ownership: TREZI_NATIVE_BACKGROUND_TEST')
+      }
       await capture(`inspector-island-${name}-open`, open)
       await setOpen(false)
       const closed = await island()
@@ -164,6 +240,6 @@ export async function checkInspectorIsland(
     writeFileSync(join(artifacts, 'inspector-island.json'), JSON.stringify(evidence, null, 2))
   }
   console.log(
-    'Native inspector island: preview width unchanged open/closed at default and minimum widths, 220–500 saved resize, toolbar clearance, pointer targets and scrolling pass.'
+    `Native inspector island: preview width unchanged open/closed at default and minimum widths, 220–500 saved resize, toolbar clearance, pointer targets${foreground ? ', pointer ownership, padding-top edit' : ''} and scrolling pass.`
   )
 }

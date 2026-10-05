@@ -2,6 +2,28 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-162: editing inspector island owns the pointer and renders opaque
+
+- **Symptom.** With an element selected, the island's fields, slider and tabs ignored input; the page under it kept hovering and selecting, and the page showed through the controls.
+- **Causes (probed in an offscreen AppKit harness).** The static hit-test was already right (`hits.inside === 'inspector'`), so that check could not catch this bug.
+  - A click AppKit left unhandled on a view floating over the page (glass, padding, labels) still reached the `WKWebView` beneath.
+  - WebKit's own tracking areas (owned by `WKMouseTrackingObserver`, `mouseMoved` | `enteredExited` | `inVisibleRect`) deliver every move in the web view's visible rect and ignore sibling overlays. The window also sends every `mouseMoved` to the page while it is first responder.
+- **Fix.**
+  - `NativeEditingInspector` hit-tests its whole frame to itself where no control does, and swallows mouse-downs and scrolls.
+  - `PreviewWebView` (`src/native/PreviewPointer.swift`) replaces each WebKit tracking area with one owned by `PreviewPointerGate`. The gate forwards a move, enter or cursor update only when the window's hit view at that point is the page, and gates the first-responder moves, clicks and scrolls the same way.
+  - When the pointer leaves the page for a native view, one synthesized exit outside the page clears its hover box (preload's `mouseout` with no `relatedTarget`) and the cursor resets to the arrow.
+  - `_setIgnoresNonWheelEvents:` was rejected because it would also cut keys.
+- **Ghosting.** The island's controls sit on an opaque `windowBackgroundColor` rounded surface; the Liquid Glass stays as the edge.
+- **Tests.** `checkPointer` in `src/native/smoke-inspector-island.ts` runs in the foreground only (it needs the key window); `TREZI_NATIVE_BACKGROUND_TEST` logs a SKIP. It:
+  - switches to Styles and hit-tests the padding-top field, its slider and the tabs to the controls inside the island;
+  - in select mode with the page first responder, posts moves, a padding click and a wheel inside the island and feeds the gated tracking areas the same moves. No move, enter, down or wheel reaches WebKit and no `element-picked` is sent, while tracking-area moves beside the island do reach it. In the real app AppKit did not route posted moves to the first responder even with `acceptsMouseMovedEvents`, so that path is recorded (`besideWindow`) but not asserted;
+  - before that, clicks padding-top (the click must focus its field editor), types 12, submits, and waits for the source and the element's computed `padding-top`. It runs first because turning select mode off (preload `setActive(false)`) drops the page's selection, which a Styles preview targets.
+- **Native runs (worker).** Three runs of chat, composer, core, islands, settings, shadow-light and sidebar, each stopping at the first failing new assertion:
+  - Run 1: the posted move beside the island never reached the page.
+  - Run 2: the cause was the window path. Even with `acceptsMouseMovedEvents`, AppKit did not hand posted moves to the first responder (`besideWindow: {}`), while the tracking-area path worked both ways (`besideTracking: {enter 4, move 4}`, inside `{exit 1}`).
+  - Run 3: the hit targets, moves, clicks, wheel and `picks: 0` passed, and the click focused padding-top and wrote `paddingTop: "12px"` to the source. The computed style never read 12px, because the moves check had already turned select mode off and on, clearing the page's selection.
+  - The reorder above is not yet re-run natively.
+
 ## 2026-10-04 — LKM-159: split chat-isolation.ts, one unpark and one landing (F5)
 
 - **Why.** Review M1, M2 and L6 (`docs/REVIEW-2026-10.md`): `src/main/chat-isolation.ts` was 953 lines, the unpark reset was copied at 9 sites with small differences, `keepStoppedTurn` copied the merged branch of `afterTurn`, and `stoppedTurnSeam` exported the mutable `ChatState` as `IsolatedChat`.

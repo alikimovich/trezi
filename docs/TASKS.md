@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Editing inspector island click-through and ghosting (LKM-162)
+
+- [x] The island's frame takes the pointer (`NativeEditingInspector` hit-test fallback, swallowed clicks and scrolls) and `PreviewWebView` (`src/native/PreviewPointer.swift`) gates WebKit's tracking areas, first-responder moves and clicks by the window's hit view.
+- [x] Opaque island surface under the controls; native smoke (`checkPointer` in `src/native/smoke-inspector-island.ts`) hit-tests field, slider and tabs, counts what reaches the page, and edits padding-top through the real field.
+
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
 - [x] `clearPark` (`src/main/chat-park.ts`) at all 9 unpark sites; no other `parked = false`.
