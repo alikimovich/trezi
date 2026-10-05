@@ -330,6 +330,50 @@ try {
   ok(installedVersion(fakeRoot, '@openai/codex') === '0.160.1', 'reads node_modules directly')
   ok(installedVersion(fakeRoot, '@openai/codex-sdk') === null, 'a missing package is null')
 
+  // The bump this ticket ships: the checkout's SDKs are past the ones whose CLI mapped
+  // 'opus'/'sonnet' to old models, so lists cached under those are dropped on update.
+  const repo = new URL('..', import.meta.url).pathname
+  const atLeast = (version, min) => {
+    const [a, b] = [version, min].map((v) => (v ?? '0').split('.').map(Number))
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]
+    return true
+  }
+  for (const [pkg, min] of [
+    ['@anthropic-ai/claude-agent-sdk', '0.3.289'],
+    ['@openai/codex-sdk', '0.160.1'],
+    ['@openai/codex', '0.160.1']
+  ])
+    ok(atLeast(installedVersion(repo, pkg), min), `${pkg} is at least ${min}`)
+  const oldSdks = {
+    '@anthropic-ai/claude-agent-sdk': '0.3.186',
+    '@openai/codex-sdk': '0.154.0',
+    '@openai/codex': '0.154.0'
+  }
+  const upgradeDir = join(base, 'upgrade')
+  mkdirSync(upgradeDir, { recursive: true })
+  const oldEntry = (backend, models) => ({
+    at: clock,
+    models,
+    harness: harnessStamp(backend, (pkg) => oldSdks[pkg])
+  })
+  writeFileSync(
+    join(upgradeDir, 'model-catalog.json'),
+    JSON.stringify({
+      version: 1,
+      entries: { claude: oldEntry('claude', claude), codex: oldEntry('codex', codex) }
+    })
+  )
+  const upgraded = createModelCatalog({
+    baseDir: upgradeDir,
+    now: () => clock,
+    harness: (backend) => harnessStamp(backend, (pkg) => installedVersion(repo, pkg)),
+    persist: () => true
+  })
+  for (const backend of ['claude', 'codex']) {
+    ok(upgraded.get(backend) === null, `${backend}: a list cached by the old SDK is dropped`)
+    ok(upgraded.isStale(backend) === true, `${backend}: and rediscovered at once`)
+  }
+
   let installed = { claude: 'sdk@1', codex: 'codex@1' }
   const persisted = []
   const stampedDir = join(base, 'stamped')

@@ -123,12 +123,12 @@
     "test:preview-agent-tools": "bun test/preview-agent-tools.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.186",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.289",
     "@babel/parser": "^8.0.0",
     "@json-render/codegen": "0.21.0",
     "@json-render/core": "0.21.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/codex-sdk": "^0.154.0",
+    "@openai/codex-sdk": "^0.160.1",
     "apca-w3": "^0.1.9",
     "colorparsley": "^0.1.8",
     "parse5": "^7.2.1",

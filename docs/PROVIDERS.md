@@ -119,7 +119,7 @@ pending instead of bypassing Trezi's landing lifecycle or claiming success.
 
 ## Skills menu and Codex runtime
 
-Trezi bundles Codex SDK/CLI 0.154.0 or newer; updating the global `codex` binary
+Trezi bundles Codex SDK/CLI 0.160.1 or newer; updating the global `codex` binary
 alone does not update the runtime used by Trezi. Run `bun install` and rebuild
 after pulling a dependency update.
 
