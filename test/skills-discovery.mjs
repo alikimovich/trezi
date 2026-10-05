@@ -5,10 +5,10 @@
  * Run via: bun run test:skills
  */
 import assert from 'node:assert'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseSkillMeta, discoverProjectSkills, mergeSlashCommands } from '../src/main/skills.ts'
+import { discoverProjectSkills, mergeSlashCommands, parseSkillMeta } from '../src/main/skills.ts'
 import { rankSlashMatches } from '../src/shared/slash-menu.ts'
 
 // --- parseSkillMeta ---------------------------------------------------------

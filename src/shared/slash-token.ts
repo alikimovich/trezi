@@ -17,7 +17,7 @@
  */
 export function parseSlashToken(
   input: string,
-  caret: number,
+  caret: number
 ): { query: string; start: number } | null {
   const before = input.slice(0, caret)
   const m = before.match(/(?:^|\s)\/(\S*)$/)

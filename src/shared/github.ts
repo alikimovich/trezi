@@ -93,7 +93,8 @@ export async function planGitHubConnection(
   isAncestor: (base: string, branch: string) => Promise<boolean>
 ): Promise<ConnectPlan> {
   const base = /^(trezi|praxis)\//.test(current)
-    ? current.replace(/^(trezi|praxis)\//, '') || 'main' : current
-  const ancestor = base !== current && await isAncestor(base, current)
+    ? current.replace(/^(trezi|praxis)\//, '') || 'main'
+    : current
+  const ancestor = base !== current && (await isAncestor(base, current))
   return resolveConnectPlan(current, ancestor)
 }

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { generatePublishDescription, parsePublishDescription } from '../src/main/publish-description.ts'
+import {
+  generatePublishDescription,
+  parsePublishDescription
+} from '../src/main/publish-description.ts'
 
 const root = mkdtempSync(join(tmpdir(), 'trezi-pr-test-'))
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
@@ -34,13 +37,20 @@ try {
   assert.ok(prompt.includes('+export const reconciled = true'))
   assert.ok(!prompt.includes('PRIVATE CHAT PROMPT'))
   assert.ok(!prompt.includes('PRIVATE UNPUBLISHED EDIT'))
-  await assert.rejects(generatePublishDescription(root, 'main', 'feature', async () => {
-    throw new Error('offline')
-  }), /Could not generate.*Luna/)
+  await assert.rejects(
+    generatePublishDescription(root, 'main', 'feature', async () => {
+      throw new Error('offline')
+    }),
+    /Could not generate.*Luna/
+  )
   assert.throws(() => parsePublishDescription('{"title":"x","body":""}'))
-  assert.throws(() => parsePublishDescription(JSON.stringify({ title: 'x', body: 'word '.repeat(121) })))
+  assert.throws(() =>
+    parsePublishDescription(JSON.stringify({ title: 'x', body: 'word '.repeat(121) }))
+  )
   assert.throws(() => parsePublishDescription('not json'))
-  console.log('PUBLISH-DESCRIPTION OK — committed diff, reconciled changes, no chat, bounded output and explicit failure')
+  console.log(
+    'PUBLISH-DESCRIPTION OK — committed diff, reconciled changes, no chat, bounded output and explicit failure'
+  )
 } finally {
   rmSync(root, { recursive: true, force: true })
 }

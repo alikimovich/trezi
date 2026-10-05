@@ -106,13 +106,15 @@ export async function interruptWithOwner(opts: {
   } catch {
     g = undefined
   }
-  const answered = (g ?? Promise.resolve()).then(
-    () => undefined,
-    () => undefined
-  ).then(() => {
-    settled = true
-    if (!escalated) void opts.settled().catch(() => {})
-  })
+  const answered = (g ?? Promise.resolve())
+    .then(
+      () => undefined,
+      () => undefined
+    )
+    .then(() => {
+      settled = true
+      if (!escalated) void opts.settled().catch(() => {})
+    })
   let answer: { escalate: boolean }
   try {
     answer = await decision

@@ -1,11 +1,11 @@
-import { provisionDependencies } from './worktree-dependencies'
-import { editingOwner } from './editing-owner'
 import { execFile } from 'child_process'
-import { readdir } from 'fs/promises'
 import { randomUUID } from 'crypto'
+import { readdir } from 'fs/promises'
 import { promisify } from 'util'
+import { editingOwner } from './editing-owner'
 import { normalizeBranchName } from './git'
 import { type RemoveIntent, repositoryOwner } from './repository-owner'
+import { provisionDependencies } from './worktree-dependencies'
 
 /**
  * Git-worktree management for F1 (comment → parallel agent session). Each spawned
@@ -42,8 +42,15 @@ export function excludedWorktreePath(raw: string): boolean {
   return name.startsWith('.env.') && !SAFE_ENV_TEMPLATES.has(name)
 }
 
-const git = (cwd: string, args: string[], timeout = 15000): Promise<{ stdout: string; stderr: string }> =>
-  execFileP('git', args, { cwd, timeout, maxBuffer: 16 * 1024 * 1024 }) as Promise<{ stdout: string; stderr: string }>
+const git = (
+  cwd: string,
+  args: string[],
+  timeout = 15000
+): Promise<{ stdout: string; stderr: string }> =>
+  execFileP('git', args, { cwd, timeout, maxBuffer: 16 * 1024 * 1024 }) as Promise<{
+    stdout: string
+    stderr: string
+  }>
 
 export interface Worktree {
   /** Short unique id; also the worktree directory name and the branch suffix. */
@@ -74,7 +81,11 @@ export async function createWorktree(
   const id = opts.id ?? randomUUID().slice(0, 8)
   const branch = normalizeBranchName((opts.branchName ?? ((i) => `comment-${i}`))(id))
   // Never a link to the live node_modules: an install in the chat would change it (LKM-146).
-  const wt = await owner.createWorktree(repoRoot, worktreesDir, { id, branch, linkNodeModules: false })
+  const wt = await owner.createWorktree(repoRoot, worktreesDir, {
+    id,
+    branch,
+    linkNodeModules: false
+  })
   try {
     await editingOwner().syncSetupHelpers(repoRoot, wt.path)
     await provisionDependencies(repoRoot, wt.path)
@@ -91,7 +102,10 @@ export async function createWorktree(
  * durable branch. Returns whether anything was committed (an empty diff → no commit)
  * and the authoritative list of files it touched (from git, not a tool heuristic).
  */
-export function commitWorktree(wt: Worktree, message: string): Promise<{ committed: boolean; files: string[] }> {
+export function commitWorktree(
+  wt: Worktree,
+  message: string
+): Promise<{ committed: boolean; files: string[] }> {
   return repositoryOwner().commitWorktree(wt, message)
 }
 
@@ -103,9 +117,8 @@ export function commitWorktree(wt: Worktree, message: string): Promise<{ committ
  */
 export async function branchPatch(repoRoot: string, branch: string): Promise<string> {
   try {
-    return (
-      await git(repoRoot, ['diff', '--full-index', '--binary', `${branch}^..${branch}`])
-    ).stdout
+    return (await git(repoRoot, ['diff', '--full-index', '--binary', `${branch}^..${branch}`]))
+      .stdout
   } catch {
     return ''
   }
@@ -144,9 +157,22 @@ export async function pruneIntegratedChatBranches(
   isProtected: (id: string) => boolean = () => false
 ): Promise<ChatBranchPruneResult> {
   // The ids are read here only to evaluate `isProtected`; the service decides and deletes.
-  const refs = await git(repoRoot, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/trezi/chat-*', 'refs/heads/praxis/chat-*'])
-    .then(({ stdout }) => stdout.split('\n').map((line) => line.trim()).filter(Boolean), () => [] as string[])
-  const protectedIds = refs.map((branch) => branch.replace(/^(trezi|praxis)\/chat-/, '')).filter((id) => id && isProtected(id))
+  const refs = await git(repoRoot, [
+    'for-each-ref',
+    '--format=%(refname:short)',
+    'refs/heads/trezi/chat-*',
+    'refs/heads/praxis/chat-*'
+  ]).then(
+    ({ stdout }) =>
+      stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+    () => [] as string[]
+  )
+  const protectedIds = refs
+    .map((branch) => branch.replace(/^(trezi|praxis)\/chat-/, ''))
+    .filter((id) => id && isProtected(id))
   try {
     return await repositoryOwner().pruneBranches(repoRoot, protectedIds)
   } catch {
@@ -229,7 +255,11 @@ export async function removeWorktree(
   opts: { keepBranch?: boolean; intent?: RemoveIntent } = {}
 ): Promise<void> {
   try {
-    await repositoryOwner().removeWorktree({ ...wt, repoRoot }, !!opts.keepBranch, opts.intent ?? (opts.keepBranch ? 'release' : 'abandon'))
+    await repositoryOwner().removeWorktree(
+      { ...wt, repoRoot },
+      !!opts.keepBranch,
+      opts.intent ?? (opts.keepBranch ? 'release' : 'abandon')
+    )
   } catch {
     /* never throws */
   }
@@ -279,7 +309,12 @@ export async function pruneOrphans(
 ): Promise<Array<{ id: string; dirty: boolean; branch: string | null; repoRoot: string | null }>> {
   const ids = await readdir(worktreesDir).catch(() => [] as string[])
   try {
-    return await repositoryOwner().pruneOrphans(repoRoot, worktreesDir, [...skip], ids.filter((id) => !skip.has(id) && isParked(id)))
+    return await repositoryOwner().pruneOrphans(
+      repoRoot,
+      worktreesDir,
+      [...skip],
+      ids.filter((id) => !skip.has(id) && isParked(id))
+    )
   } catch {
     return []
   }

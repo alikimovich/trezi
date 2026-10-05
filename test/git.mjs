@@ -41,7 +41,12 @@ g('commit', '-m', 'init')
 assert.equal(await getCurrentBranch(dir), 'main')
 
 // ensureBranch from main → creates trezi/main and checks it out
-assert.deepEqual(await ensureBranch(dir), { isRepo: true, branch: 'trezi/main', created: true, files: [] })
+assert.deepEqual(await ensureBranch(dir), {
+  isRepo: true,
+  branch: 'trezi/main',
+  created: true,
+  files: []
+})
 assert.equal(await getCurrentBranch(dir), 'trezi/main')
 
 // ensureBranch when already on a trezi/* branch → keep it, don't recreate
@@ -73,7 +78,8 @@ assert.deepEqual(await switchBranch(dir, 'trezi/main'), {
 // Switching environments reports manifests in either direction, including deletion.
 g('checkout', 'trezi/feature-y')
 writeFileSync(join(dir, 'package.json'), '{"scripts":{"dev":"vite"}}')
-g('add', '.'); g('commit', '-m', 'framework branch')
+g('add', '.')
+g('commit', '-m', 'framework branch')
 assert.deepEqual((await checkoutBranch(dir, 'main')).files, ['package.json'])
 assert.deepEqual((await switchBranch(dir, 'feature-y')).files, ['package.json'])
 const failed = await checkoutBranch(dir, 'missing-branch')

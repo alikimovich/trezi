@@ -161,7 +161,9 @@ export function resolveClaudeCli(
     const path = candidates.bundled !== undefined ? candidates.bundled : bundledClaude()
     const paths = candidates.installed ?? installedClaudes(process.env, path)
     const [auth, installed] = await Promise.all([
-      path ? claudeAuthStatus(path) : Promise.resolve<ClaudeAuth>({ loggedIn: null, error: 'not found' }),
+      path
+        ? claudeAuthStatus(path)
+        : Promise.resolve<ClaudeAuth>({ loggedIn: null, error: 'not found' }),
       Promise.all(paths.map(async (p) => ({ path: p, auth: await claudeAuthStatus(p) })))
     ])
     const bundled = { path, auth }
@@ -225,7 +227,12 @@ interface ToolRun {
 }
 
 /** Runs a tool with a deadline; `capture` false discards its output. Never gets the seat token. */
-function runTool(path: string, args: string[], capture: boolean, timeout = PROBE_TIMEOUT): Promise<ToolRun> {
+function runTool(
+  path: string,
+  args: string[],
+  capture: boolean,
+  timeout = PROBE_TIMEOUT
+): Promise<ToolRun> {
   return new Promise((resolve) => {
     let out = ''
     let settled = false
@@ -298,7 +305,10 @@ export async function probeKeychain(
 
 /** The credentials file through this helper's HOME (or CLAUDE_CONFIG_DIR): metadata only, never content. */
 export function probeCredentials(env: NodeJS.ProcessEnv = process.env): CredentialsProbe {
-  const path = join(env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), '.claude'), '.credentials.json')
+  const path = join(
+    env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), '.claude'),
+    '.credentials.json'
+  )
   try {
     const stat = statSync(path)
     let readable = true

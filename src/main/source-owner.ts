@@ -13,7 +13,8 @@ import type { FileOpResult } from '../shared/api'
  */
 
 /** SHA-256 hex of the exact bytes (a string is hashed as UTF-8, as it is written). */
-export const contentHash = (content: string | Uint8Array): string => createHash('sha256').update(content).digest('hex')
+export const contentHash = (content: string | Uint8Array): string =>
+  createHash('sha256').update(content).digest('hex')
 
 /** A parser's edit proposal. `expectedHash` is `contentHash` of the text it parsed. */
 export interface SourceProposal {
@@ -70,9 +71,17 @@ export interface SourceRecovery {
 
 export interface SourceOwner {
   read(root: string, path: string): Promise<SourceRead>
-  commit(root: string, edits: SourceProposal[], options?: { key?: string; group?: string; gesture?: boolean }): Promise<SourceCommit>
+  commit(
+    root: string,
+    edits: SourceProposal[],
+    options?: { key?: string; group?: string; gesture?: boolean }
+  ): Promise<SourceCommit>
   /** Edits another owner already wrote (a landed chat turn), for Undo/revert. */
-  record(root: string, edits: Array<{ path: string; before: string; after: string }>, options?: { key?: string; group?: string }): Promise<void>
+  record(
+    root: string,
+    edits: Array<{ path: string; before: string; after: string }>,
+    options?: { key?: string; group?: string }
+  ): Promise<void>
   undo(root: string): Promise<UndoResult>
   redo(root: string): Promise<UndoResult>
   revert(root: string, group: string): Promise<UndoResult>

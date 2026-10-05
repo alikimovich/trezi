@@ -33,7 +33,14 @@ if (process.platform !== 'darwin') {
       '-module-cache-path',
       cache,
       'test/fixtures/settings-layout/main.swift',
-      ...['Sheets', 'SheetSections', 'SheetSidebar', 'SheetVerification', 'SourceList', 'SidebarIcon'].map((name) => `src/native/${name}.swift`),
+      ...[
+        'Sheets',
+        'SheetSections',
+        'SheetSidebar',
+        'SheetVerification',
+        'SourceList',
+        'SidebarIcon'
+      ].map((name) => `src/native/${name}.swift`),
       '-o',
       binary
     ])

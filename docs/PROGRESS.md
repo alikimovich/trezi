@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-04 — LKM-158: clean Biome lint baseline, lint in quick verification (F4)
+
+- **Why.** Review L8 (`docs/REVIEW-2026-10.md`): `biome check src test` reported 579 errors, mostly format and import order, so `bun run lint` failed repo-wide and new lint debt went unnoticed.
+- **Mechanical pass.** `bunx biome check --write --linter-enabled=false src test`: formatter and organizeImports only, no lint fixes, 359 files. It ran after the `test/fixtures/**` override below, so fixtures were not touched.
+- **Hand fixes (no behaviour change).** The 20 remaining errors:
+  - `forEach` callbacks that returned a value became `for … of` loops (`src/main/agent.ts`, `props.ts`, `props-svelte.ts`, `test/native-context.mjs`, `test/run.mjs`).
+  - Assignments in expressions were split out (`backends/claude.ts`, `backends/gemini.ts`, `src/native/chat-state.ts`, `display-paths.ts`, `smoke-composer.ts`).
+  - `tokens.ts` types `entries` as `Dirent[]`.
+  - `test/native-smoke-groups.mjs` read smoke-core's checks with a one-line `{ name: …, dependsOn: … }` regex; it now matches the formatted multi-line literal and still finds the same 23 checks. `scripts/build-native.mjs` reads `FRAME_DATA_URI` from `src/shared/iphone-frame.ts`, whose string the formatter moved to the next line; its regex now allows that.
+  - `biome-ignore` with a reason: the deliberate control characters in `devserver-net.ts` (ANSI) and `src/shared/preview-navigation.ts`, and `useRunnerEnv`, which is not a React hook, in `test/rename-compat.mjs` and `test/repository-owner.mjs`.
+- **Overrides in `biome.json`.**
+  - `test/fixtures/**`: no formatter, no assist (import sorting), no `a11y`, no `noUnusedVariables`. Fixtures stand in for user apps; tests depend on their bytes and line numbers (source stamps, golden JSON), and the island reads the unused `SHADOW_*` constants in `island-flicker-vite/src/phone.js` and `next-app/app/shadow-flicker/ShadowPhone.tsx` from source. The other lint rules still apply there.
+  - `src/native/assets/**`: no `a11y`. The cat SVGs are image assets, not DOM, and stay byte-identical.
+  - Nothing else in `src` or `test` is generated; `src/shared/service-contract/schema.json` is hand-written and only parsed.
+- **Gate.** `test/lint.mjs` (unit tier, so the manager's quick verification) runs `bun run lint` on the checkout. In a disposable repo with this `biome.json` and lint script it also checks that a lint error and unformatted code fail, and that an unused `SHADOW_*` constant in a fixture passes. A temporary `src/shared` file with an assignment in a condition made `node test/run.mjs unit --filter=lint` fail. Warnings (mostly `noExplicitAny`, `noNonNullAssertion`) and infos remain and do not fail.
+
 ## 2026-10-04 — LKM-159: split chat-isolation.ts, one unpark and one landing (F5)
 
 - **Why.** Review M1, M2 and L6 (`docs/REVIEW-2026-10.md`): `src/main/chat-isolation.ts` was 953 lines, the unpark reset was copied at 9 sites with small differences, `keepStoppedTurn` copied the merged branch of `afterTurn`, and `stoppedTurnSeam` exported the mutable `ChatState` as `IsolatedChat`.

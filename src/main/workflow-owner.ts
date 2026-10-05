@@ -1,11 +1,11 @@
 import type {
   Diagnosis,
   FeedbackResult,
+  GithubConnectOptions,
+  GithubConnectResult,
   GitRemoteAction,
   GitRemoteResult,
   GitRemoteStatus,
-  GithubConnectOptions,
-  GithubConnectResult,
   PublishResult,
   UpdateStatus
 } from '../shared/api'
@@ -32,10 +32,26 @@ import type { InstallInput, InstallResult } from './skills-install'
 /** Bun's description helper: a PR title and body for the pushed range. */
 export type Describe = (base: string, head: string) => Promise<PublishMessage>
 
-export interface HelperFile { path: string; content: string }
-export type HelperWrite = { ok: true; written: boolean; helpers: Array<{ path: string; sha256: string }> } | { ok: false; error: string }
-export interface CreatedProject { ok: boolean; root?: string; error?: string; warning?: string }
-export interface WorkflowStepSummary { name: string; state: string; receipt: Record<string, unknown>; message?: string; at: string }
+export interface HelperFile {
+  path: string
+  content: string
+}
+export type HelperWrite =
+  | { ok: true; written: boolean; helpers: Array<{ path: string; sha256: string }> }
+  | { ok: false; error: string }
+export interface CreatedProject {
+  ok: boolean
+  root?: string
+  error?: string
+  warning?: string
+}
+export interface WorkflowStepSummary {
+  name: string
+  state: string
+  receipt: Record<string, unknown>
+  message?: string
+  at: string
+}
 export interface WorkflowSummary {
   id: string
   kind: string
@@ -50,17 +66,37 @@ export interface WorkflowSummary {
   /** The last lines of a running step's output. */
   progress?: string
 }
-export type WorkflowKind = 'publish' | 'handoff' | 'branchPr' | 'connect' | 'remoteUpdate' | 'setup' | 'uninstall' | 'createProject' | 'update' | 'feedback' | 'skills'
+export type WorkflowKind =
+  | 'publish'
+  | 'handoff'
+  | 'branchPr'
+  | 'connect'
+  | 'remoteUpdate'
+  | 'setup'
+  | 'uninstall'
+  | 'createProject'
+  | 'update'
+  | 'feedback'
+  | 'skills'
 
 export class WorkflowError extends Error {
-  constructor(readonly code: string, message: string) { super(message) }
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
+    super(message)
+  }
 }
 
 export interface WorkflowOwner {
   readonly kind: 'swift'
   publish(root: string, mode: 'merge' | 'pr', describe: Describe): Promise<PublishResult>
   handoff(root: string, title: string, notes: number, describe: Describe): Promise<PublishResult>
-  branchPr(root: string, branch: string, describe: Describe): Promise<{ ok: boolean; prUrl?: string; error?: string }>
+  branchPr(
+    root: string,
+    branch: string,
+    describe: Describe
+  ): Promise<{ ok: boolean; prUrl?: string; error?: string }>
   connect(root: string, options: GithubConnectOptions): Promise<GithubConnectResult>
   remoteStatus(root: string, fetch: boolean): Promise<GitRemoteStatus>
   remoteUpdate(root: string, action: GitRemoteAction, busy: boolean): Promise<GitRemoteResult>
@@ -68,7 +104,11 @@ export interface WorkflowOwner {
   writeHelpers(root: string, files: HelperFile[]): Promise<HelperWrite>
   removeHelpers(root: string): Promise<{ ok: boolean; files?: string[]; error?: string }>
   /** Starter files (relative path → content) and the package manager to install with. */
-  createProject(root: string, files: Record<string, string>, install: 'bun' | 'npm' | null): Promise<CreatedProject>
+  createProject(
+    root: string,
+    files: Record<string, string>,
+    install: 'bun' | 'npm' | null
+  ): Promise<CreatedProject>
   /** Whether Trezi's own checkout trails its upstream (fetches; `idle` on any soft failure). */
   updateCheck(root: string): Promise<UpdateStatus>
   /** Trezi's own update: pull (fast-forward), install, build. Restart stays the caller's. */

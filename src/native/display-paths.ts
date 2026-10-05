@@ -23,19 +23,27 @@ function profileRoots(): string[] {
   const found = new Set<string>()
   const add = (path: string) => {
     found.add(path)
-    try { found.add(realpathSync(path)) } catch {}
+    try {
+      found.add(realpathSync(path))
+    } catch {}
   }
   if (profile) add(profile)
-  for (const support of new Set([profile && dirname(profile), join(homedir(), 'Library/Application Support')]))
+  for (const support of new Set([
+    profile && dirname(profile),
+    join(homedir(), 'Library/Application Support')
+  ]))
     if (support) for (const name of PROFILE_NAMES) add(join(support, name))
-  return (profiles = [...found])
+  profiles = [...found]
+  return profiles
 }
 
 /** A project the user has open, so its paths show relative to it. */
 export function rememberProject(root: string) {
   if (!root?.startsWith('/') || projects.has(root)) return
   projects.add(root)
-  try { projects.add(realpathSync(root)) } catch {}
+  try {
+    projects.add(realpathSync(root))
+  } catch {}
 }
 
 export function displayContext(extra: string[] = []): PathContext {
@@ -44,4 +52,5 @@ export function displayContext(extra: string[] = []): PathContext {
 }
 
 /** The collapsed form of `text` for a UI surface; callers keep `text` for Copy and tooltips. */
-export const displayText = (text: string, extra: string[] = []) => shortPaths(text, displayContext(extra))
+export const displayText = (text: string, extra: string[] = []) =>
+  shortPaths(text, displayContext(extra))

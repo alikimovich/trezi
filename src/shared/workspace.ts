@@ -1,5 +1,6 @@
 import type { Framework, PreviewKind, SourceSetupState } from './api'
 import type { ChatAgentSettings } from './chat-settings'
+
 type Viewport = 'desktop' | 'mobile'
 
 export interface LaunchSpec {
@@ -57,4 +58,3 @@ export interface ProjectEntry {
   /** Connect to Trezi outcome (LKM-153): stamps seen, "Not now", or the failure. */
   sourceSetup?: SourceSetupState
 }
-

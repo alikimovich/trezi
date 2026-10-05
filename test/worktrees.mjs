@@ -16,20 +16,21 @@
  *
  * Run with: bun test/repository-owner.mjs
  */
-import {
-  createWorktree,
-  commitWorktree,
-  applyBranchToWorkingTree,
-  autoApplyWorktree,
-  removeWorktree,
-  branchPatch,
-  pruneOrphans,
-  pruneIntegratedChatBranches
-} from '../src/main/worktrees.ts'
+
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  applyBranchToWorkingTree,
+  autoApplyWorktree,
+  branchPatch,
+  commitWorktree,
+  createWorktree,
+  pruneIntegratedChatBranches,
+  pruneOrphans,
+  removeWorktree
+} from '../src/main/worktrees.ts'
 
 const base = mkdtempSync(join(tmpdir(), 'trezi-wt-'))
 const repo = join(base, 'repo')
@@ -101,7 +102,10 @@ try {
     createWorktree(repo, worktreesDir, {}),
     createWorktree(repo, worktreesDir, {})
   ])
-  ok(w1.id !== w2.id && w1.path !== w2.path && w1.branch !== w2.branch, 'concurrent creates distinct')
+  ok(
+    w1.id !== w2.id && w1.path !== w2.path && w1.branch !== w2.branch,
+    'concurrent creates distinct'
+  )
   // Edit each independently — no cross-write.
   writeFileSync(join(w1.path, 'App.tsx'), 'one\n')
   writeFileSync(join(w2.path, 'App.tsx'), 'two\n')
@@ -153,7 +157,17 @@ try {
   writeFileSync(join(wtC.path, 'Committed.tsx'), 'export const C = () => null\n')
   // The spawned agent commits its own change (nothing forbids it) …
   g(wtC.path, '-c', 'user.name=A', '-c', 'user.email=a@l', 'add', '-A')
-  g(wtC.path, '-c', 'user.name=A', '-c', 'user.email=a@l', 'commit', '-q', '-m', 'agent self-commit')
+  g(
+    wtC.path,
+    '-c',
+    'user.name=A',
+    '-c',
+    'user.email=a@l',
+    'commit',
+    '-q',
+    '-m',
+    'agent self-commit'
+  )
   // … then leaves further uncommitted WIP on top.
   writeFileSync(join(wtC.path, 'Extra.tsx'), 'export const E = () => null\n')
   const c = await commitWorktree(wtC, 'self-commit run')
@@ -189,16 +203,28 @@ try {
   // {id, dirty, branch, repoRoot} shape: dirty true for the orphan with uncommitted
   // changes, false for the untouched one — checked via `status --porcelain`, not commit
   // success/failure. branch + owning repoRoot are captured BEFORE the checkout is gone.
-  ok(reclaimedOrphan?.dirty === true, `dirty orphan reports dirty:true: ${JSON.stringify(reclaimedOrphan)}`)
-  ok(reclaimedOrphan?.branch === orphan.branch, `reclaimed reports the branch: ${JSON.stringify(reclaimedOrphan)}`)
+  ok(
+    reclaimedOrphan?.dirty === true,
+    `dirty orphan reports dirty:true: ${JSON.stringify(reclaimedOrphan)}`
+  )
+  ok(
+    reclaimedOrphan?.branch === orphan.branch,
+    `reclaimed reports the branch: ${JSON.stringify(reclaimedOrphan)}`
+  )
   ok(
     !!reclaimedOrphan?.repoRoot && existsSync(join(reclaimedOrphan.repoRoot, '.git')),
     `reclaimed reports the owning repoRoot: ${JSON.stringify(reclaimedOrphan)}`
   )
   ok(!!reclaimedClean, `pruneOrphans also reclaimed the clean orphan: ${JSON.stringify(reclaimed)}`)
-  ok(reclaimedClean?.dirty === false, `clean orphan reports dirty:false: ${JSON.stringify(reclaimedClean)}`)
+  ok(
+    reclaimedClean?.dirty === false,
+    `clean orphan reports dirty:false: ${JSON.stringify(reclaimedClean)}`
+  )
   // The orphan's dirty work was committed to its branch before removal (not lost).
-  ok(g(repo, 'show', `${orphan.branch}:Scratch.tsx`).includes('leftover'), 'orphan work recovered to its branch')
+  ok(
+    g(repo, 'show', `${orphan.branch}:Scratch.tsx`).includes('leftover'),
+    'orphan work recovered to its branch'
+  )
   await removeWorktree(repo, live, {})
 
   // --- W2: a PARKED chat orphan (tip = cumulative trezi squash, a `chatpark-<id>` record
@@ -214,13 +240,25 @@ try {
   writeFileSync(join(chatWt.path, 'Parked.tsx'), 'export const P = () => null\n// turn two\n')
   const chatReclaim = await pruneOrphans(repo, worktreesDir, new Set(), (id) => id === chatWt.id)
   const rc = chatReclaim.find((r) => r.id === chatWt.id)
-  ok(rc?.dirty === true && rc?.branch === chatWt.branch, `chat orphan reclaimed: ${JSON.stringify(rc)}`)
+  ok(
+    rc?.dirty === true && rc?.branch === chatWt.branch,
+    `chat orphan reclaimed: ${JSON.stringify(rc)}`
+  )
   // Folded → exactly ONE commit off base, carrying BOTH the parked turn and turn two.
-  const chatRevs = g(repo, 'rev-list', `${chatWt.baseSha}..${chatWt.branch}`).trim().split('\n').filter(Boolean)
+  const chatRevs = g(repo, 'rev-list', `${chatWt.baseSha}..${chatWt.branch}`)
+    .trim()
+    .split('\n')
+    .filter(Boolean)
   ok(chatRevs.length === 1, `parked squash + recovery folded into one commit: ${chatRevs.length}`)
-  ok(g(repo, 'show', `${chatWt.branch}:Parked.tsx`).includes('turn two'), 'the crashed turn-two WIP was recovered')
+  ok(
+    g(repo, 'show', `${chatWt.branch}:Parked.tsx`).includes('turn two'),
+    'the crashed turn-two WIP was recovered'
+  )
   const chatBp = await branchPatch(repo, chatWt.branch)
-  ok(/Parked\.tsx/.test(chatBp) && /turn two/.test(chatBp), 'branchPatch still carries the full parked diff')
+  ok(
+    /Parked\.tsx/.test(chatBp) && /turn two/.test(chatBp),
+    'branchPatch still carries the full parked diff'
+  )
   await removeWorktree(repo, chatWt, { keepBranch: false })
 
   // --- W2 regression: a chat orphan whose tip is a previously-MERGED turn (baseSha has
@@ -241,15 +279,27 @@ try {
   // No `chatpark-<id>` record for this worktree → predicate returns false → no fold.
   const mergedReclaim = await pruneOrphans(repo, worktreesDir, new Set(), () => false)
   const mrc = mergedReclaim.find((r) => r.id === mergedWt.id)
-  ok(mrc?.dirty === true && mrc?.branch === mergedWt.branch, `merged-tip orphan reclaimed: ${JSON.stringify(mrc)}`)
+  ok(
+    mrc?.dirty === true && mrc?.branch === mergedWt.branch,
+    `merged-tip orphan reclaimed: ${JSON.stringify(mrc)}`
+  )
   // NOT folded → recovery commit sits ON TOP of the merged tip (base..branch = 2 commits).
-  const mergedRevs = g(repo, 'rev-list', `${mergedTip}~1..${mergedWt.branch}`).trim().split('\n').filter(Boolean)
-  ok(mergedRevs.length === 2, `merged tip preserved + recovery on top (not folded): ${mergedRevs.length}`)
+  const mergedRevs = g(repo, 'rev-list', `${mergedTip}~1..${mergedWt.branch}`)
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  ok(
+    mergedRevs.length === 2,
+    `merged tip preserved + recovery on top (not folded): ${mergedRevs.length}`
+  )
   // The merged tip's parent IS the merged commit — so branchPatch (branch^..branch) carries
   // ONLY the crash WIP, NOT the already-live Merged.tsx (which would cause re-apply conflicts).
   const mergedBp = await branchPatch(repo, mergedWt.branch)
   ok(/Crash\.tsx/.test(mergedBp), 'branchPatch carries the genuinely-unmerged crash WIP')
-  ok(!/Merged\.tsx/.test(mergedBp), 'branchPatch does NOT re-include the already-merged (live) content')
+  ok(
+    !/Merged\.tsx/.test(mergedBp),
+    'branchPatch does NOT re-include the already-merged (live) content'
+  )
   await removeWorktree(repo, mergedWt, { keepBranch: false })
 
   // --- Branch-only cleanup: a successful chat turn is usually NOT an ancestor of
@@ -344,9 +394,14 @@ try {
   const c2 = await commitWorktree(wt2, 'edit readme')
   const auto = await autoApplyWorktree(repo2, wt2, c2.files)
   ok(auto.applied, `autoApply should apply onto an unchanged live tree: ${JSON.stringify(auto)}`)
-  ok(readFileSync(join(repo2, 'README.md'), 'utf8') === 'hello TREZI\n', 'autoApply wrote the live file')
   ok(
-    auto.edits.length === 1 && auto.edits[0].before === 'hello world\n' && auto.edits[0].after === 'hello TREZI\n',
+    readFileSync(join(repo2, 'README.md'), 'utf8') === 'hello TREZI\n',
+    'autoApply wrote the live file'
+  )
+  ok(
+    auto.edits.length === 1 &&
+      auto.edits[0].before === 'hello world\n' &&
+      auto.edits[0].after === 'hello TREZI\n',
     `autoApply returns before/after for the undo history: ${JSON.stringify(auto.edits)}`
   )
 

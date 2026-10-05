@@ -224,7 +224,10 @@ export function treziRules(opts?: {
     )
   }
 
-  lines.push(...(previewObservation ? previewVerification : agentBrowserVerification), ...noDevTools)
+  lines.push(
+    ...(previewObservation ? previewVerification : agentBrowserVerification),
+    ...noDevTools
+  )
 
   return lines.join('\n')
 }

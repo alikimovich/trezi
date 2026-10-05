@@ -9,17 +9,19 @@ export const chatIslandGuidance = [
   'Trace derived values and captured state: edits must recompute generated curves and reach running effects, including canvas loops and closures. An unused constant or a parameter behind a stale precomputed curve is not a working control.',
   'For transient effects provide a repeatable trigger. Enable Replay only after wiring trezi:animation-replay with the component name as event detail; restart only that effect and clean up listeners on unmount/HMR. Preserve unrelated state and reduced-motion behavior.',
   'Verify a representative adjustment per independent effect changes the actual preview, then Undo restores it and source values survive reload. Worktree edits are not visible until landing; if verification cannot run yet, report it as pending rather than claiming controls work.',
-  'Gestures use throttled source writes and project HMR, not a runtime preview adapter; only a shadow block previews its derived box-shadow on the element while dragging and writes on release. Color is validated text; springs are groups. Nested folders, image pickers, saved comparisons, timelines and spring-mode switching are not supported. Use supported fields or explain the required follow-up; keep controls native inside chat.',
+  'Gestures use throttled source writes and project HMR, not a runtime preview adapter; only a shadow block previews its derived box-shadow on the element while dragging and writes on release. Color is validated text; springs are groups. Nested folders, image pickers, saved comparisons, timelines and spring-mode switching are not supported. Use supported fields or explain the required follow-up; keep controls native inside chat.'
 ].join('\n')
 
 export const chatIslandControlPurposes = {
-  number: 'Scalar magnitude: radius, spacing, duration, opacity or smoothing; specify units/range/step.',
+  number:
+    'Scalar magnitude: radius, spacing, duration, opacity or smoothing; specify units/range/step.',
   toggle: 'Existing binary behavior, such as enabling a trail.',
   select: 'Existing discrete alternatives, such as shape or layout.',
   text: 'Editable strings and labels.',
   color: 'Color literal, currently edited as validated text.',
   bezier: 'Actual cubic-Bezier timing curve, with related duration/delay in its group.',
   group: 'Related controls; springs use the actual engine’s parameters together.',
-  shadow: 'Shadow Light: seven inputs plus a derived CSS or Tailwind literal output, kept together.',
-  point: 'Two related bounded numbers edited together, such as light x/y.',
+  shadow:
+    'Shadow Light: seven inputs plus a derived CSS or Tailwind literal output, kept together.',
+  point: 'Two related bounded numbers edited together, such as light x/y.'
 }

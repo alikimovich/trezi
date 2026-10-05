@@ -8,16 +8,24 @@ import type { PublishMessage } from '../shared/publish-message'
 const exec = promisify(execFile)
 const MAX_DIFF = 100_000
 const schema = {
-  type: 'object', additionalProperties: false, required: ['title', 'body'],
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'body'],
   properties: { title: { type: 'string' }, body: { type: 'string' } }
 }
 
 export function parsePublishDescription(text: string): PublishMessage {
   const value = JSON.parse(text)
-  if (typeof value.title !== 'string' || typeof value.body !== 'string' ||
-      !value.title.trim() || !value.body.trim() || value.title.trim().length > 72 ||
-      /[\r\n]/.test(value.title.trim()) || value.body.trim().length > 1200 ||
-      value.body.trim().split(/\s+/).length > 120) {
+  if (
+    typeof value.title !== 'string' ||
+    typeof value.body !== 'string' ||
+    !value.title.trim() ||
+    !value.body.trim() ||
+    value.title.trim().length > 72 ||
+    /[\r\n]/.test(value.title.trim()) ||
+    value.body.trim().length > 1200 ||
+    value.body.trim().split(/\s+/).length > 120
+  ) {
     throw new Error('The model returned an invalid or overly long PR description.')
   }
   return { title: value.title.trim(), body: value.body.trim() }
@@ -29,19 +37,25 @@ async function summarize(prompt: string): Promise<string> {
   try {
     const thread = new Codex({
       config: {
-        model_provider: 'openai', project_doc_max_bytes: 0,
+        model_provider: 'openai',
+        project_doc_max_bytes: 0,
         features: { shell_tool: false },
         developer_instructions: 'Summarize only the supplied diff. Do not use tools.'
       },
       configOverrides: ['mcp_servers={}', 'skills.config=[]']
     }).startThread({
-      model: 'gpt-5.6-luna', modelReasoningEffort: 'low',
-      workingDirectory: cwd, skipGitRepoCheck: true,
-      sandboxMode: 'read-only', approvalPolicy: 'never',
-      networkAccessEnabled: false, webSearchMode: 'disabled'
+      model: 'gpt-5.6-luna',
+      modelReasoningEffort: 'low',
+      workingDirectory: cwd,
+      skipGitRepoCheck: true,
+      sandboxMode: 'read-only',
+      approvalPolicy: 'never',
+      networkAccessEnabled: false,
+      webSearchMode: 'disabled'
     })
     const result = await thread.run(prompt, {
-      outputSchema: schema, signal: AbortSignal.timeout(60_000)
+      outputSchema: schema,
+      signal: AbortSignal.timeout(60_000)
     })
     return result.finalResponse
   } finally {
@@ -60,8 +74,9 @@ export async function generatePublishDescription(
     (await exec('git', args, { cwd: root, maxBuffer: 20 * 1024 * 1024 })).stdout.trim()
   try {
     const headSha = await git(['rev-parse', '--verify', `${head}^{commit}`])
-    const baseSha = await git(['rev-parse', '--verify', `origin/${base}^{commit}`])
-      .catch(() => git(['rev-parse', '--verify', `${base}^{commit}`]))
+    const baseSha = await git(['rev-parse', '--verify', `origin/${base}^{commit}`]).catch(() =>
+      git(['rev-parse', '--verify', `${base}^{commit}`])
+    )
     const range = `${baseSha}...${headSha}`
     const stat = await git(['diff', '--no-ext-diff', '--stat', range])
     const patch = await git(['diff', '--no-ext-diff', '--no-textconv', '--unified=3', range])
@@ -76,6 +91,8 @@ Diff overview:\n${stat.slice(0, 12000)}
 Code diff:\n${patch.slice(0, MAX_DIFF)}${patch.length > MAX_DIFF ? '\n[Patch truncated]' : ''}`
     return parsePublishDescription(await generate(prompt))
   } catch (error) {
-    throw new Error(`Could not generate the PR description with Luna. Check Codex sign-in and retry Publish. ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(
+      `Could not generate the PR description with Luna. Check Codex sign-in and retry Publish. ${error instanceof Error ? error.message : String(error)}`
+    )
   }
 }

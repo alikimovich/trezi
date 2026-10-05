@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { savedJevKey } from '../src/main/jev-credentials.ts'
 /**
  * ProviderStore unit test (pure — no Electron). Bun only READS the v10 store for
  * user-added model endpoints since LKM-111: the Swift provider owner is the only
@@ -15,6 +14,7 @@ import { savedJevKey } from '../src/main/jev-credentials.ts'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { savedJevKey } from '../src/main/jev-credentials.ts'
 import {
   createProviderStore,
   modelsUrl,
@@ -56,7 +56,13 @@ try {
     stored({ secret: 'djEwAAAA-sk-secret-blob' }),
     stored({ id: 'local', label: 'Local', preset: 'custom', baseUrl: 'http://127.0.0.1:1234/v1' })
   ])
-  ok(store.list().map((c) => c.id).join() === 'gw,local', 'list reads the owner file in order')
+  ok(
+    store
+      .list()
+      .map((c) => c.id)
+      .join() === 'gw,local',
+    'list reads the owner file in order'
+  )
   ok(store.get('gw')?.hasKey === true, 'a stored key blob reads as hasKey')
   ok(store.get('local')?.hasKey === false, 'no blob reads as keyless')
   ok(store.get('../gw') === null, 'get of an unsafe id is null, not a lookup')
@@ -70,16 +76,25 @@ try {
   // --- savedJevKey over a store --------------------------------------------
   const gateway = store.get('gw')
   const secrets = { gw: 'sk-secret-1', gw2: 'other-key', custom: 'custom-key' }
-  const over = (connections) => ({ list: () => connections, secretFor: (id) => secrets[id] ?? null })
+  const over = (connections) => ({
+    list: () => connections,
+    secretFor: (id) => secrets[id] ?? null
+  })
   assert.equal(savedJevKey(over([gateway])), 'sk-secret-1')
   const pair = over([gateway, { ...gateway, id: 'gw2' }])
   assert.throws(() => savedJevKey(pair), /multiple/)
   assert.equal(savedJevKey(pair, 'gw2'), 'other-key')
   assert.equal(savedJevKey(pair, 'gw'), 'sk-secret-1')
-  const custom = { ...gateway, id: 'custom', preset: 'custom', baseUrl: 'https://custom.example/v1' }
+  const custom = {
+    ...gateway,
+    id: 'custom',
+    preset: 'custom',
+    baseUrl: 'https://custom.example/v1'
+  }
   assert.equal(savedJevKey(over([gateway, custom]), 'custom'), 'sk-secret-1')
   const fakeStore = (connection, secret = 'must-not-leak') => ({
-    list: () => [connection], secretFor: () => secret
+    list: () => [connection],
+    secretFor: () => secret
   })
   for (const connection of [
     { ...gateway, baseUrl: 'https://other.example/v1' },
@@ -88,7 +103,8 @@ try {
     { ...gateway, baseUrl: 'https://user:pass@ai-gateway.vercel.sh/v1' },
     { ...gateway, preset: 'custom' },
     { ...gateway, hasKey: false }
-  ]) assert.equal(savedJevKey(fakeStore(connection)), undefined)
+  ])
+    assert.equal(savedJevKey(fakeStore(connection)), undefined)
   assert.throws(() => savedJevKey(fakeStore(gateway, null)), /Reconnect/)
 
   // --- corrupt file degrades to empty --------------------------------------
@@ -98,7 +114,11 @@ try {
   // A file whose shape is wrong (valid JSON, no connections array) is corrupt too.
   writeFileSync(file, '{"version":1}', 'utf8')
   ok(store.list().length === 0, 'wrong-shape store is empty')
-  writeFileSync(file, JSON.stringify({ version: 1, connections: [stored()], pad: 'x'.repeat(600 * 1024) }), 'utf8')
+  writeFileSync(
+    file,
+    JSON.stringify({ version: 1, connections: [stored()], pad: 'x'.repeat(600 * 1024) }),
+    'utf8'
+  )
   ok(store.list().length === 0, 'an oversized file reads as corrupt')
   // A single junk ENTRY must not hide its healthy neighbours.
   writeStore([

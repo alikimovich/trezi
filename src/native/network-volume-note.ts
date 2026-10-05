@@ -19,7 +19,10 @@ export const runsClaudeCli = (settings: Pick<ChatAgentSettings, 'provider' | 'co
   !settings.connectionId && settings.provider !== 'codex' && settings.provider !== 'gemini'
 
 /** The note for this turn, once per profile; marks it shown. */
-export function networkVolumeNote(preferences: Pick<NativePreferences, 'get' | 'set'>, report: (error: unknown) => void = () => {}) {
+export function networkVolumeNote(
+  preferences: Pick<NativePreferences, 'get' | 'set'>,
+  report: (error: unknown) => void = () => {}
+) {
   return (settings: Pick<ChatAgentSettings, 'provider' | 'connectionId'>): string | undefined => {
     if (!runsClaudeCli(settings) || preferences.get(NETWORK_VOLUME_NOTE_KEY)) return undefined
     void preferences.set(NETWORK_VOLUME_NOTE_KEY, 'shown').catch(report)

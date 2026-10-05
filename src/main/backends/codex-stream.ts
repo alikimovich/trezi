@@ -52,7 +52,8 @@ export function createItemTracker(): ItemTracker {
 /** Routine SDK context-budget advice is not a chat activity or a turn failure. */
 export function codexItemWarning(message: string): string | null {
   const text = message.trim()
-  if (text.startsWith('Skill descriptions were shortened to fit the skills context budget.')) return null
+  if (text.startsWith('Skill descriptions were shortened to fit the skills context budget.'))
+    return null
   // The disclosure label can elide visually; its expanded detail must stay intact.
   return text ? `⚠ ${text}` : null
 }

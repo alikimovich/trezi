@@ -1,12 +1,14 @@
 // Namespace import (not `{ ipcMain }`) so this module — and `style-tokens.ts`,
 // which imports `detectTokens` from here for its OWN pure re-validation logic
 // — can be loaded under plain bun for unit testing (see test/style-tokens.mjs).
-import * as platform from '../native/platform'
-import { readFile, readdir } from 'fs/promises'
+
+import type { Dirent } from 'fs'
+import { readdir, readFile } from 'fs/promises'
 import { join } from 'path'
+import * as platform from '../native/platform'
 import type { Token, TokenGroup, TokenScaffoldResult, TokenSet } from '../shared/api'
-import type { RpcHandlerRegistry } from './rpc-router'
 import { editingOwner } from './editing-owner'
+import type { RpcHandlerRegistry } from './rpc-router'
 
 /**
  * Design-token detection (the differentiator's last piece). A repo can expose
@@ -162,7 +164,10 @@ async function fromTailwind(root: string): Promise<TokenSet | null> {
   if (code == null) return null
   try {
     const { parse } = await loadBabel()
-    const ast = parse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] }) as unknown as Node
+    const ast = parse(code, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript']
+    }) as unknown as Node
     // Scope to the config's own `theme` (not any nested `theme:` in a plugin/preset).
     const config = findConfigObject(ast)
     const theme = config && objectProp(config, 'theme')
@@ -204,7 +209,7 @@ const MAX_TOKENS = 400
 
 async function findCssFiles(root: string, depth: number, acc: string[]): Promise<void> {
   if (depth > MAX_DEPTH || acc.length >= MAX_FILES) return
-  let entries
+  let entries: Dirent[]
   try {
     entries = await readdir(root, { withFileTypes: true })
   } catch {
@@ -310,9 +315,18 @@ async function scaffoldManifest(root: string): Promise<TokenScaffoldResult> {
     if (current.source !== 'none') {
       return { ok: true, written: false, set: current }
     }
-    const result = await editingOwner().sidecar(root, 'tokens.json', null, JSON.stringify(STARTER_MANIFEST, null, 2) + '\n')
+    const result = await editingOwner().sidecar(
+      root,
+      'tokens.json',
+      null,
+      JSON.stringify(STARTER_MANIFEST, null, 2) + '\n'
+    )
     if (!result.ok) {
-      return { ok: false, written: false, error: '.trezi/tokens.json already exists; it was left untouched.' }
+      return {
+        ok: false,
+        written: false,
+        error: '.trezi/tokens.json already exists; it was left untouched.'
+      }
     }
     return { ok: true, written: true, set: await detectTokens(root) }
   } catch (err) {

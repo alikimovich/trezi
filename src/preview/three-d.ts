@@ -1,4 +1,4 @@
-import { sourceStamp, sourceSelector } from './source-stamp'
+import { sourceSelector, sourceStamp } from './source-stamp'
 import { captureSurfaces, type Surface } from './three-d-paint'
 import { THREE_D_CSS } from './three-d-styles'
 
@@ -7,11 +7,7 @@ import { THREE_D_CSS } from './three-d-styles'
 function identity(el: Element, scope: ParentNode): () => Element | null {
   const tag = el.localName
   const stamp = sourceStamp(el)
-  const selector = el.id
-    ? `#${CSS.escape(el.id)}`
-    : stamp
-      ? sourceSelector(stamp)
-      : null
+  const selector = el.id ? `#${CSS.escape(el.id)}` : stamp ? sourceSelector(stamp) : null
   const unique = selector && scope.querySelectorAll(selector).length === 1
   return () => {
     if (el.isConnected) return el

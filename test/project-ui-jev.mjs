@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { z } from 'zod'
-import { setProjectUiEnabled, cancelProjectUi, projectUiEnabled } from '../src/main/project-ui.ts'
+import { cancelProjectUi, projectUiEnabled, setProjectUiEnabled } from '../src/main/project-ui.ts'
 import { composeProjectUiWithJev } from '../src/main/project-ui-jev.ts'
+
 const project = {
   components: [
     {
@@ -124,9 +125,7 @@ await assert.rejects(
   /abort/i
 )
 assert.equal(calls, 1)
-console.log(
-  'PROJECT-UI-JEV OK — real composer, validated candidates, unavailable, cancellation'
-)
+console.log('PROJECT-UI-JEV OK — real composer, validated candidates, unavailable, cancellation')
 
 setProjectUiEnabled('jev-cancel-test', true, 'jev')
 cancelProjectUi('jev-cancel-test')

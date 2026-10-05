@@ -63,8 +63,7 @@ assert(colorClassFamily('text-[#abc]') == null, 'arbitrary value skipped')
 
 // --- swap picks the single color utility, preserving the rest ---
 assert(
-  swapTailwindClass('text-gray-500 text-center', 'color', 'primary') ===
-    'text-primary text-center',
+  swapTailwindClass('text-gray-500 text-center', 'color', 'primary') === 'text-primary text-center',
   'swap changes only the color, leaving text-center intact'
 )
 // The regression: `bg-red-500 shadow-lg` is exactly ONE color now (was 2 → refused).

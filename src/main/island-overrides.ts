@@ -40,13 +40,21 @@ interface Gesture {
   idle?: ReturnType<typeof setTimeout>
 }
 export type OverrideEvent =
-  | { type: 'show' | 'write' | 'written' | 'removed' | 'timeout' | 'cleared'; key: string; css?: string; values?: Record<string, IslandValue> }
+  | {
+      type: 'show' | 'write' | 'written' | 'removed' | 'timeout' | 'cleared'
+      key: string
+      css?: string
+      values?: Record<string, IslandValue>
+    }
   | { type: 'live'; key: string }
 
 export class IslandOverrides {
   private readonly gestures = new Map<string, Gesture>()
-  constructor(readonly port: IslandPreviewPort, readonly timing = { idle: 600, poll: 50, timeout: 8000 },
-    readonly log: (event: OverrideEvent) => void = () => {}) {}
+  constructor(
+    readonly port: IslandPreviewPort,
+    readonly timing = { idle: 600, poll: 50, timeout: 8000 },
+    readonly log: (event: OverrideEvent) => void = () => {}
+  ) {}
 
   /**
    * One frame of a gesture. null: the preview shows it and the source write is deferred.
@@ -58,12 +66,21 @@ export class IslandOverrides {
     if (!g || g.id !== f.gesture) {
       if (g?.idle) clearTimeout(g.idle)
       // The previous gesture's override, if still held, is taken over by this one.
-      g = { id: f.gesture, mode: 'finding', values: {}, css: '', frames: 0, chain: g?.chain ?? Promise.resolve() }
+      g = {
+        id: f.gesture,
+        mode: 'finding',
+        values: {},
+        css: '',
+        frames: 0,
+        chain: g?.chain ?? Promise.resolve()
+      }
       this.gestures.set(f.key, g)
     }
     const values = { ...g.values, ...f.values }
     if (g.mode !== 'live') {
-      try { g.css = f.css(values) } catch (error) {
+      try {
+        g.css = f.css(values)
+      } catch (error) {
         if (g.mode === 'shown') throw error
         g.mode = 'live'
       }
@@ -71,15 +88,20 @@ export class IslandOverrides {
     g.values = values
     if (g.mode === 'live') return this.live(f, g)
     const frame = ++g.frames
-    if (g.idle) { clearTimeout(g.idle); g.idle = undefined }
+    if (g.idle) {
+      clearTimeout(g.idle)
+      g.idle = undefined
+    }
     const gesture = g
     const step = g.chain.then(async () => {
       // A newer frame of this gesture shows a later value.
       if (this.gestures.get(f.key) !== gesture || frame !== gesture.frames) return
       const css = gesture.css
       const shown = await this.port.apply(f.key, f.from(), css).catch(() => 0)
-      if (shown > 0) { gesture.mode = 'shown'; this.log({ type: 'show', key: f.key, css }) }
-      else {
+      if (shown > 0) {
+        gesture.mode = 'shown'
+        this.log({ type: 'show', key: f.key, css })
+      } else {
         if (gesture.mode === 'shown') void this.port.clear(f.key).catch(() => {})
         gesture.mode = 'live'
       }
@@ -89,11 +111,14 @@ export class IslandOverrides {
     // The step above may have found no element showing the shadow.
     if ((gesture.mode as Gesture['mode']) === 'live') return this.live(f, g)
     if (f.ended) await this.flush(f, g)
-    else if (this.gestures.get(f.key) === g) g.idle = setTimeout(() => void this.flush(f, g).catch(() => {}), this.timing.idle)
+    else if (this.gestures.get(f.key) === g)
+      g.idle = setTimeout(() => void this.flush(f, g).catch(() => {}), this.timing.idle)
     return null
   }
   /** A gesture of this key holds frames (shown or waiting to be written). */
-  holds(key: string) { return this.gestures.has(key) }
+  holds(key: string) {
+    return this.gestures.has(key)
+  }
   /** Undo, Reset, Reload or a closed chat: show the source again now. */
   async clear(key: string) {
     const g = this.gestures.get(key)
@@ -111,14 +136,26 @@ export class IslandOverrides {
     return { ...g.values }
   }
   private async flush(f: GestureFrame, g: Gesture) {
-    if (g.idle) { clearTimeout(g.idle); g.idle = undefined }
+    if (g.idle) {
+      clearTimeout(g.idle)
+      g.idle = undefined
+    }
     if (this.gestures.get(f.key) !== g) return
-    const css = g.css, values = { ...g.values }
+    const css = g.css,
+      values = { ...g.values }
     this.log({ type: 'write', key: f.key, css, values })
     let outcome: 'written' | 'conflict'
-    try { outcome = await f.write(values) } catch (error) { await this.drop(f.key, g); throw error }
+    try {
+      outcome = await f.write(values)
+    } catch (error) {
+      await this.drop(f.key, g)
+      throw error
+    }
     // A bound value changed outside the island: the controls and the preview show the source.
-    if (outcome === 'conflict') { await this.drop(f.key, g); return }
+    if (outcome === 'conflict') {
+      await this.drop(f.key, g)
+      return
+    }
     this.log({ type: 'written', key: f.key, css })
     void this.settle(f.key, g, css, f.ended)
   }
@@ -127,7 +164,11 @@ export class IslandOverrides {
     const deadline = Date.now() + this.timing.timeout
     const current = () => this.gestures.get(key) === g && g.css === css
     while (current()) {
-      if (Date.now() > deadline) { this.log({ type: 'timeout', key, css }); await this.drop(key, g); return }
+      if (Date.now() > deadline) {
+        this.log({ type: 'timeout', key, css })
+        await this.drop(key, g)
+        return
+      }
       const done = await this.port.settle(key, css).catch(() => null)
       // A newer frame or gesture holds the override now; its own write settles it.
       if (!current()) return
@@ -137,7 +178,7 @@ export class IslandOverrides {
         else g.mode = 'finding'
         return
       }
-      await new Promise(resolve => setTimeout(resolve, this.timing.poll))
+      await new Promise((resolve) => setTimeout(resolve, this.timing.poll))
     }
   }
   private async drop(key: string, g: Gesture) {

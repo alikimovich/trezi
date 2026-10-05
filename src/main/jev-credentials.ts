@@ -3,7 +3,10 @@ import type { ProviderConnection } from '../shared/api'
 export class MissingJevCredentialError extends Error {}
 
 /** The saved Vercel AI Gateway connection Jev may use. Never a custom endpoint's. */
-export function jevConnection(connections: ProviderConnection[], connectionId?: string): ProviderConnection | undefined {
+export function jevConnection(
+  connections: ProviderConnection[],
+  connectionId?: string
+): ProviderConnection | undefined {
   const gateways = connections.filter((connection) => {
     try {
       const url = new URL(connection.baseUrl)

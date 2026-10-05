@@ -1,4 +1,3 @@
-import { observePreview } from './preview-evidence'
 /**
  * Every ipcMain handler that talks to (or about) the native preview: its
  * geometry, its lifecycle, the select/comment/annotate relays, the floating
@@ -14,7 +13,12 @@ import { observePreview } from './preview-evidence'
  * against the preview's own webContents before it's believed, and every message
  * that drives the preview is checked to have come from the trusted native service target (never from the preview itself).
  */
-import { ipcMain, type NativeView, type NativeWebContents, type NativeIpcEvent } from '../native/platform'
+import {
+  ipcMain,
+  type NativeIpcEvent,
+  type NativeView,
+  type NativeWebContents
+} from '../native/platform'
 import type { MoveNodeRequest, SelectedElement, StyleReadResult } from '../shared/api'
 import {
   ANIMATION_REPLAY,
@@ -47,6 +51,7 @@ import {
   STYLES_REPLAY
 } from '../shared/preview-channels'
 import { applyMoveNode } from './move-node'
+import { observePreview } from './preview-evidence'
 import { registerPreviewSource } from './preview-state'
 
 /**
@@ -145,8 +150,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     previewWc()?.send(channel, ...args)
   }
   /** Did this really come from the previewed page, and not some other view? */
-  const fromPreview = (e: NativeIpcEvent): boolean =>
-    e.sender === previewWc()
+  const fromPreview = (e: NativeIpcEvent): boolean => e.sender === previewWc()
 
   // Let the in-process agent tools (backends/claude.ts) observe the user's live
   // preview without importing this module (would be a cycle). getUrl reports the
@@ -166,7 +170,8 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   })
   function openPreview(): NativeWebContents {
     const wc = previewWc()
-    if (!wc || wc.isDestroyed() || !/^https?:/.test(wc.getURL())) throw new Error('No project preview is open.')
+    if (!wc || wc.isDestroyed() || !/^https?:/.test(wc.getURL()))
+      throw new Error('No project preview is open.')
     return wc
   }
 
@@ -332,11 +337,14 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   })
 
   // Readiness probe (stamp count) → renderer, to drive the setup offer.
-  ipcMain.on(PREVIEW_READINESS, (e, info: { stamps: number; url?: string; documentStartedAt?: number }) => {
-    if (!fromPreview(e)) return
-    observePreview({ ...info, url: e.sender.getURL() })
-    sendToMain('preview:readiness', info)
-  })
+  ipcMain.on(
+    PREVIEW_READINESS,
+    (e, info: { stamps: number; url?: string; documentStartedAt?: number }) => {
+      if (!fromPreview(e)) return
+      observePreview({ ...info, url: e.sender.getURL() })
+      sendToMain('preview:readiness', info)
+    }
+  )
 
   // Inline text edit committed in the preview → renderer (which applies it).
   ipcMain.on(PREVIEW_TEXT_EDIT, (e, edit: { source: string; text: string }) => {

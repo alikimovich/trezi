@@ -34,7 +34,7 @@ export const steps = [shadowLight(initial).css, ...path.map(([x, y]) => derived(
 
 function shadowConstants(initialValues = initial) {
   return (
-    keys.map(key => `const SHADOW_${key} = ${JSON.stringify(initialValues[key])};`).join('\n') +
+    keys.map((key) => `const SHADOW_${key} = ${JSON.stringify(initialValues[key])};`).join('\n') +
     `\nconst SHADOW_CSS = ${JSON.stringify(shadowLight(initialValues).css)};\n`
   )
 }
@@ -78,9 +78,7 @@ export function buildRequest() {
           id: key,
           label: key,
           kind: i === 6 ? 'color' : 'number',
-          ...(i < 6
-            ? { min: bounds[i][0], max: bounds[i][1], step: i === 4 ? 1 : 0.01 }
-            : {}),
+          ...(i < 6 ? { min: bounds[i][0], max: bounds[i][1], step: i === 4 ? 1 : 0.01 } : {}),
           apply: { strategy: 'literal', anchor: `const SHADOW_${key} = ` }
         })),
         {
@@ -91,7 +89,9 @@ export function buildRequest() {
         }
       ]
     },
-    blocks: [{ id: 'shadow', title: 'Shadow', kind: 'shadow', output: 'css', params: [...keys, 'output'] }]
+    blocks: [
+      { id: 'shadow', title: 'Shadow', kind: 'shadow', output: 'css', params: [...keys, 'output'] }
+    ]
   }
 }
 
@@ -123,7 +123,9 @@ export function departures(frames, computedSteps) {
 // The harness evaluates in the page world, where the production isolated-world module is not
 // reachable; it injects that same module (transpiled, never a hand-kept copy) instead.
 const OVERRIDE_MODULE = new Bun.Transpiler({ loader: 'ts' })
-  .transformSync(readFileSync(new URL('../../src/preview/island-override.ts', import.meta.url), 'utf8'))
+  .transformSync(
+    readFileSync(new URL('../../src/preview/island-override.ts', import.meta.url), 'utf8')
+  )
   .replace(/^export /gm, '')
 const OVERRIDE_BOOT = `(() => {
   if (window.__treziIslandOverride) return true;
@@ -206,7 +208,11 @@ function readShadow(page, css, selector = SELECTOR) {
 }
 
 /** Wait until the preview card's computed shadow matches the island's derived CSS (post-HMR). */
-export async function waitForShadow(page, css, { selector = SELECTOR, timeoutMs = 20000, label = 'preview' } = {}) {
+export async function waitForShadow(
+  page,
+  css,
+  { selector = SELECTOR, timeoutMs = 20000, label = 'preview' } = {}
+) {
   const deadline = Date.now() + timeoutMs
   let last = null
   for (;;) {
@@ -217,8 +223,10 @@ export async function waitForShadow(page, css, { selector = SELECTOR, timeoutMs 
       last = { error: String(error?.message ?? error) }
     }
     if (Date.now() > deadline)
-      throw new Error(`${label}: preview shadow did not match the island source within ${timeoutMs} ms; ` +
-        `observed ${JSON.stringify(last)}, expected computed(${JSON.stringify(css)})`)
+      throw new Error(
+        `${label}: preview shadow did not match the island source within ${timeoutMs} ms; ` +
+          `observed ${JSON.stringify(last)}, expected computed(${JSON.stringify(css)})`
+      )
     await Bun.sleep(100)
   }
 }
@@ -236,8 +244,10 @@ async function waitServed(served, css, label, timeoutMs = 60000) {
       last = String(error?.message ?? error)
     }
     if (Date.now() > deadline)
-      throw new Error(`${label}: the dev server did not serve the island source within ${timeoutMs} ms; ` +
-        `expected ${JSON.stringify(css)}, observed ${JSON.stringify(last)}`)
+      throw new Error(
+        `${label}: the dev server did not serve the island source within ${timeoutMs} ms; ` +
+          `expected ${JSON.stringify(css)}, observed ${JSON.stringify(last)}`
+      )
     await Bun.sleep(100)
   }
 }
@@ -267,10 +277,14 @@ export async function waitForGestureSettled(page, css, { selector = SELECTOR, ke
     } catch {}
     await Bun.sleep(50)
   }
-  const observed = await readShadow(page, css, selector).catch(error => ({ error: String(error?.message ?? error) }))
+  const observed = await readShadow(page, css, selector).catch((error) => ({
+    error: String(error?.message ?? error)
+  }))
   const holding = await page('!!window.__treziIslandOverride?.holding?.()').catch(() => null)
-  throw new Error(`Preview override did not settle after the gesture; holding ${holding}, ` +
-    `observed ${JSON.stringify(observed)}, expected computed(${JSON.stringify(css)})`)
+  throw new Error(
+    `Preview override did not settle after the gesture; holding ${holding}, ` +
+      `observed ${JSON.stringify(observed)}, expected computed(${JSON.stringify(css)})`
+  )
 }
 
 /** Island writes go through the repository queue; reset the fixture source the same way. */
@@ -305,7 +319,10 @@ export async function openOnSource(page, open, served, css, label) {
     await waitServed(served, css, label)
     await open()
     try {
-      return await waitForShadow(page, css, { timeoutMs: 5000, label: `${label} (load ${attempt})` })
+      return await waitForShadow(page, css, {
+        timeoutMs: 5000,
+        label: `${label} (load ${attempt})`
+      })
     } catch (error) {
       if (Date.now() > deadline) throw error
     }
@@ -318,7 +335,11 @@ export async function resetPreviewSource(page, root, sourceFile, format, open, s
   const { code } = islandSource(initial, format)
   await writeSourceFile(root, sourceFile, code)
   await openOnSource(page, open, served, steps[0], 'reset')
-  assert.equal(await readFile(`${root}/${sourceFile}`, 'utf8'), code, 'reset: no island write lands after the reset')
+  assert.equal(
+    await readFile(`${root}/${sourceFile}`, 'utf8'),
+    code,
+    'reset: no island write lands after the reset'
+  )
 }
 
 export async function installSampler(page, { fresh = false, selector = SELECTOR } = {}) {
@@ -366,7 +387,7 @@ export function makePreviewPort(page) {
       )
       return typeof done === 'boolean' ? done : null
     },
-    clear: async key => {
+    clear: async (key) => {
       await boot()
       return page(`window.__treziIslandOverride.clear(${JSON.stringify(key)})`)
     }
@@ -438,7 +459,9 @@ export async function runDrag({
     const last = index === path.length - 1
     if (withOverrides && last) {
       await waitForGestureSettled(page, steps[path.length], { key: `${chat}\n${island}` })
-      await page(`(() => { if (typeof window.__treziFlickerStop === 'function') window.__treziFlickerStop(); })()`)
+      await page(
+        `(() => { if (typeof window.__treziFlickerStop === 'function') window.__treziFlickerStop(); })()`
+      )
       await Bun.sleep(50)
     } else {
       await Bun.sleep(waitMs)
@@ -477,7 +500,8 @@ export async function setupIsland(chat, root, sourceFile, component, overrides, 
   request.manifest.file = sourceFile
   request.manifest.component = component
   // Rewriting identical text after a reset would only start a spurious HMR update mid-drag.
-  if ((await readFile(`${root}/${sourceFile}`, 'utf8').catch(() => null)) !== code) await writeSourceFile(root, sourceFile, code)
+  if ((await readFile(`${root}/${sourceFile}`, 'utf8').catch(() => null)) !== code)
+    await writeSourceFile(root, sourceFile, code)
   const islands = new ChatIslands(() => {}, undefined, overrides ? { overrides } : {})
   islands.register(chat, root, `${chat}-record`, () => 1)
   const made = await islands.tool(chat, root, request)
@@ -510,10 +534,19 @@ export async function measureFramework({
     label === 'next' ? 'tsx' : 'js'
   )
   try {
-    await openOnSource(page, waitForCard, served, steps[0], `${label}-${withOverrides ? 'after' : 'before'} start`)
-    const record = islands.sessions.get(chat)?.records.find(r => r.id === island)
+    await openOnSource(
+      page,
+      waitForCard,
+      served,
+      steps[0],
+      `${label}-${withOverrides ? 'after' : 'before'} start`
+    )
+    const record = islands.sessions.get(chat)?.records.find((r) => r.id === island)
     assert.equal(record?.status, 'ready', `${label}: island record ready before drag`)
-    assert.ok(record?.blocks.some(b => b.kind === 'shadow'), `${label}: shadow block present`)
+    assert.ok(
+      record?.blocks.some((b) => b.kind === 'shadow'),
+      `${label}: shadow block present`
+    )
     const counts = await runDrag({
       page,
       islands,

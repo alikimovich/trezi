@@ -18,9 +18,12 @@ export interface DevServerError {
 
 // biome-ignore lint/complexity/useRegexLiterals: a literal would trip noControlCharactersInRegex
 const ANSI = new RegExp('\\u001B\\[[0-9;?]*[A-Za-z]', 'g')
-const ERROR = /\b(Internal server error|Pre-transform error|PARSE_ERROR|Transform failed|Failed to compile|Parsing ecmascript source code failed|SyntaxError|Unexpected token|Unterminated|Expected corresponding JSX closing tag|Unexpected closing|ERROR:|error TS\d+)/i
-const RECOVERED = /\b(hmr update|page reload|Compiled successfully|compiled client and server successfully|✓ Compiled)\b/i
-const FILE = /((?:[A-Za-z]:)?(?:\.{0,2}\/)?(?:[\w@.+-]+\/)*[\w@.+-]+\.(?:tsx|ts|jsx|js|mjs|cjs|mts|cts|vue|svelte|astro|css|scss|sass|less|mdx|md|html))(?=[:\s()[\]'"`,]|$)/
+const ERROR =
+  /\b(Internal server error|Pre-transform error|PARSE_ERROR|Transform failed|Failed to compile|Parsing ecmascript source code failed|SyntaxError|Unexpected token|Unterminated|Expected corresponding JSX closing tag|Unexpected closing|ERROR:|error TS\d+)/i
+const RECOVERED =
+  /\b(hmr update|page reload|Compiled successfully|compiled client and server successfully|✓ Compiled)\b/i
+const FILE =
+  /((?:[A-Za-z]:)?(?:\.{0,2}\/)?(?:[\w@.+-]+\/)*[\w@.+-]+\.(?:tsx|ts|jsx|js|mjs|cjs|mts|cts|vue|svelte|astro|css|scss|sass|less|mdx|md|html))(?=[:\s()[\]'"`,]|$)/
 const WAIT = 8
 
 const clean = (line: string): string => line.replace(ANSI, '').replace(/\s+$/, '')
@@ -29,7 +32,8 @@ const clean = (line: string): string => line.replace(ANSI, '').replace(/\s+$/, '
 export function sourceFileIn(line: string): string | null {
   for (const match of clean(line).matchAll(new RegExp(FILE.source, 'g'))) {
     const file = match[1]
-    if (!/(^|\/)node_modules\//.test(file) && !/^https?:/.test(file) && !/^\d/.test(file)) return file
+    if (!/(^|\/)node_modules\//.test(file) && !/^https?:/.test(file) && !/^\d/.test(file))
+      return file
   }
   return null
 }
@@ -46,9 +50,15 @@ export class DevErrorReader {
       return { recovered: sourceFileIn(line) }
     }
     if (ERROR.test(line)) {
-      const message = line.replace(/^.*?\[vite\]\s*/, '').replace(/^[⨯✘×x]\s+/, '').slice(0, 400)
+      const message = line
+        .replace(/^.*?\[vite\]\s*/, '')
+        .replace(/^[⨯✘×x]\s+/, '')
+        .slice(0, 400)
       const file = sourceFileIn(line)
-      if (file) { this.pending = null; return { file, message } }
+      if (file) {
+        this.pending = null
+        return { file, message }
+      }
       if (!this.pending) this.pending = { message, waited: 0 }
       return null
     }
@@ -67,5 +77,9 @@ export class DevErrorReader {
 /** The landed file (root-relative) a dev-server error names, if any. */
 export function touchedFile(error: DevServerError, root: string, files: string[]): string | null {
   const named = projectRelative(error.file, root, { served: true })
-  return files.find(file => named === file || named.endsWith(`/${file}`) || file.endsWith(`/${named}`)) ?? null
+  return (
+    files.find(
+      (file) => named === file || named.endsWith(`/${file}`) || file.endsWith(`/${named}`)
+    ) ?? null
+  )
 }

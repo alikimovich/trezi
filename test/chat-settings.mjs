@@ -97,7 +97,9 @@ const eq = (actual, expected, msg) =>
 // ── Per-chat lookup falls back to the defaults ──────────────────────────────
 {
   eq(chatAgentSettingsFor({}, 'k').permissionMode, 'auto', 'a chat with no stored settings is Auto')
-  const entry = { chatSettings: { k: { ...defaultChatAgentSettings(), permissionMode: 'default' } } }
+  const entry = {
+    chatSettings: { k: { ...defaultChatAgentSettings(), permissionMode: 'default' } }
+  }
   eq(chatAgentSettingsFor(entry, 'k').permissionMode, 'default', "a stored chat's mode wins")
   eq(chatAgentSettingsFor(entry, 'other').permissionMode, 'auto', 'another chat is unaffected')
   const preferred = { ...defaultChatAgentSettings(), provider: 'codex', model: 'gpt' }
@@ -112,8 +114,11 @@ const eq = (actual, expected, msg) =>
 // A last-used Gateway choice must not supply those fields to an existing chat.
 {
   const gateway = {
-    ...defaultChatAgentSettings(), provider: 'codex', model: 'conn:gateway:deepseek',
-    modelId: 'deepseek', connectionId: 'gateway'
+    ...defaultChatAgentSettings(),
+    provider: 'codex',
+    model: 'conn:gateway:deepseek',
+    modelId: 'deepseek',
+    connectionId: 'gateway'
   }
   for (const options of [
     { provider: 'codex', model: 'gpt-6-astra' },
@@ -125,13 +130,22 @@ const eq = (actual, expected, msg) =>
     eq(restored.connectionId, undefined, 'existing chat never inherits the last-used connection')
     eq(restored.modelId, undefined, 'existing chat never inherits the last-used model ID')
     eq(restored.model, stored.model, 'existing chat retains its own model')
-    eq(JSON.stringify(agentOptionsFor(restored)), JSON.stringify(agentOptionsFor(stored)),
-      'restored composer sends exactly this chat’s original options')
+    eq(
+      JSON.stringify(agentOptionsFor(restored)),
+      JSON.stringify(agentOptionsFor(stored)),
+      'restored composer sends exactly this chat’s original options'
+    )
   }
-  eq(chatAgentSettingsFor({}, 'new', gateway).connectionId, 'gateway',
-    'a new chat still inherits the preferred connection')
-  eq(chatAgentSettingsFor({ chatSettings: { gateway } }, 'gateway').modelId, 'deepseek',
-    'a Gateway chat retains its own model ID')
+  eq(
+    chatAgentSettingsFor({}, 'new', gateway).connectionId,
+    'gateway',
+    'a new chat still inherits the preferred connection'
+  )
+  eq(
+    chatAgentSettingsFor({ chatSettings: { gateway } }, 'gateway').modelId,
+    'deepseek',
+    'a Gateway chat retains its own model ID'
+  )
 }
 
 // ── Resume is Claude-only ───────────────────────────────────────────────────

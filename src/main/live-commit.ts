@@ -72,5 +72,7 @@ export async function commitLiveTurn(
   const paths = committableFiles(files)
   if (!paths.length) return { committed: false, files: [] }
   // A pathspec commit in the repository's lane; the service re-checks the paths.
-  return repositoryOwner().commitLive(root, paths, commitTitle(message.title), message.body).catch(() => ({ committed: false, files: [] }))
+  return repositoryOwner()
+    .commitLive(root, paths, commitTitle(message.title), message.body)
+    .catch(() => ({ committed: false, files: [] }))
 }

@@ -12,8 +12,15 @@ const profile = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-provider-profile-
 export const providerFixture = await startProviderFixture(compileProviderFixture(), profile)
 setProviderOwner(providerFixture.owner())
 providerFixture.child.unref()
-for (const stream of [providerFixture.child.stdin, providerFixture.child.stdout, providerFixture.child.stderr]) stream.unref?.()
+for (const stream of [
+  providerFixture.child.stdin,
+  providerFixture.child.stdout,
+  providerFixture.child.stderr
+])
+  stream.unref?.()
 process.on('exit', () => {
-  try { providerFixture.child.kill('SIGKILL') } catch {}
+  try {
+    providerFixture.child.kill('SIGKILL')
+  } catch {}
   rmSync(profile, { recursive: true, force: true })
 })

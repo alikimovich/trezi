@@ -1,8 +1,7 @@
-import { typescriptProps } from './props-typescript'
-import { ipcMain } from '../native/platform'
-import { readFile, stat } from 'fs/promises'
 import { existsSync, readFileSync, statSync } from 'fs'
+import { readFile, stat } from 'fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from 'path'
+import { ipcMain } from '../native/platform'
 import type {
   PropEdit,
   PropEditResult,
@@ -13,16 +12,17 @@ import type {
   SourceWriteResult
 } from '../shared/api'
 import { projectRelative } from '../shared/project-path'
+import { canRevertGroup, editAvailability, redo, revertGroup, undo } from './edit-history'
+import { spliceHtmlText } from './html-source'
+import { looksBinary, mediaTypeFor } from './media-types'
+import { platformOwner } from './platform-owner'
 import {
   applySvelteEdit,
   applySvelteTextEdit,
   inspectSvelteProps,
   removeSvelteProp
 } from './props-svelte'
-import { looksBinary, mediaTypeFor } from './media-types'
-import { platformOwner } from './platform-owner'
-import { spliceHtmlText } from './html-source'
-import { undo, redo, editAvailability, revertGroup, canRevertGroup } from './edit-history'
+import { typescriptProps } from './props-typescript'
 import { proposeEdit } from './source-commit'
 import { contentHash, sourceOwner } from './source-owner'
 
@@ -146,7 +146,7 @@ export function collectNodes(node: unknown, type: string, out: BabelNode[]): voi
   for (const key of Object.keys(n)) {
     if (key === 'loc' || key === 'leadingComments' || key === 'trailingComments') continue
     const v = (n as Record<string, unknown>)[key]
-    if (Array.isArray(v)) v.forEach((c) => collectNodes(c, type, out))
+    if (Array.isArray(v)) for (const c of v) collectNodes(c, type, out)
     else if (v && typeof v === 'object') collectNodes(v, type, out)
   }
 }
@@ -629,7 +629,8 @@ async function inspectProps(
     }
   }
 
-  if (isComponent && schema.length === 0) schema = typescriptProps(root, loc.file, loc.line, loc.column ?? 0)
+  if (isComponent && schema.length === 0)
+    schema = typescriptProps(root, loc.file, loc.line, loc.column ?? 0)
 
   const fields = mergeFields(schema, current)
 
@@ -698,7 +699,11 @@ export async function applyPropEdit(root: string, edit: PropEdit): Promise<PropE
  * attribute, including expression-valued ones. Reversible via the F3b edit history;
  * an already-absent prop is a successful no-op. (v8 F2)
  */
-export async function removeProp(root: string, source: string, name: string): Promise<PropEditResult> {
+export async function removeProp(
+  root: string,
+  source: string,
+  name: string
+): Promise<PropEditResult> {
   if (!isValidAttrName(name)) return { applied: false, error: 'Invalid prop name.' }
   const loc = resolveSource(root, source)
   if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
@@ -884,7 +889,8 @@ export async function readSourceView(root: string, source: string): Promise<Sour
   try {
     // The owner authorizes the path (symlinks included) and issues the baseline hash.
     const read = await sourceOwner().read(root, loc.file)
-    if (read.binary || read.content === undefined) return { file: rel, code: '', line: loc.line, binary: true, bytes: read.size }
+    if (read.binary || read.content === undefined)
+      return { file: rel, code: '', line: loc.line, binary: true, bytes: read.size }
     code = read.content
     hash = read.hash
   } catch {
@@ -942,7 +948,10 @@ async function writeSourceFile(
   // The drawer shows these as a preview/placeholder rather than text, so a save
   // could only ever be a utf8 round-trip that corrupts them.
   if (mediaTypeFor(loc.file)) return { ok: false, error: 'This file is not editable as text.' }
-  const expected = typeof baseHash === 'string' && /^[0-9a-f]{64}$/.test(baseHash) ? baseHash : contentHash(baseline)
+  const expected =
+    typeof baseHash === 'string' && /^[0-9a-f]{64}$/.test(baseHash)
+      ? baseHash
+      : contentHash(baseline)
   try {
     const owner = sourceOwner()
     const current = await owner.read(root, loc.file)
@@ -951,10 +960,15 @@ async function writeSourceFile(
     }
     if (current.hash !== expected) return { ok: false, conflict: true }
     if (current.content === content) return { ok: true, hash: expected }
-    const result = await owner.commit(root, [{ path: loc.file, expectedHash: expected, content }], { key: `${source}:drawer` })
+    const result = await owner.commit(root, [{ path: loc.file, expectedHash: expected, content }], {
+      key: `${source}:drawer`
+    })
     return result.ok ? { ok: true, hash: result.hashes[0] } : { ok: false, conflict: true }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Could not write the source file.' }
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not write the source file.'
+    }
   }
 }
 
@@ -1098,10 +1112,14 @@ export function registerPropsIpc(): void {
   )
   // S08: unsaved editor drafts survive a restart in the source owner.
   ipcMain.handle('source:drafts', (_e, root: string) => sourceOwner().drafts(root))
-  ipcMain.handle('source:save-draft', (_e, root: string, file: string, base: string, text: string) =>
-    sourceOwner().saveDraft(root, file, base, text)
+  ipcMain.handle(
+    'source:save-draft',
+    (_e, root: string, file: string, base: string, text: string) =>
+      sourceOwner().saveDraft(root, file, base, text)
   )
-  ipcMain.handle('source:clear-draft', (_e, root: string, file: string) => sourceOwner().clearDraft(root, file))
+  ipcMain.handle('source:clear-draft', (_e, root: string, file: string) =>
+    sourceOwner().clearDraft(root, file)
+  )
   // v8 F3b: undo/redo over ALL trezi source edits (props, text, token swaps),
   // scoped to the active project root (the rail keeps several projects open).
   ipcMain.handle('edit:undo', (_e, root: string) => undo(root))

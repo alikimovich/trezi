@@ -12,12 +12,22 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serviceWorkflows } from '../../src/native/workflow-service.ts'
 import { skipUnlessDarwin } from './darwin.mjs'
-import { SOURCES as SOURCE_SOURCES } from './source-fixture.mjs'
 import { startRepositoryFixture } from './repository-fixture.mjs'
+import { SOURCES as SOURCE_SOURCES } from './source-fixture.mjs'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
-export const SOURCES = [...SOURCE_SOURCES,
-  ...['WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools'].map(name => `src/service/${name}.swift`)]
+export const SOURCES = [
+  ...SOURCE_SOURCES,
+  ...[
+    'WorkflowJournal',
+    'WorkflowContext',
+    'WorkflowOwner',
+    'WorkflowPublish',
+    'WorkflowRemote',
+    'WorkflowSetup',
+    'WorkflowTools'
+  ].map((name) => `src/service/${name}.swift`)
+]
 
 /** Compiles the fixture once per source hash and compiler version; returns the binary path. */
 export function compileWorkflowFixture() {
@@ -32,9 +42,16 @@ export function compileWorkflowFixture() {
   const cached = join(cache, `fixture-${key.digest('hex').slice(0, 24)}`)
   if (!existsSync(cached)) {
     const building = `${cached}.${process.pid}.tmp`
-    const result = spawnSync('xcrun', ['swiftc', '-module-cache-path', join(cache, 'module-cache'), ...files, '-o', building],
-      { cwd: root, encoding: 'utf8', timeout: 400_000 })
-    assert.equal(result.status, 0, `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`)
+    const result = spawnSync(
+      'xcrun',
+      ['swiftc', '-module-cache-path', join(cache, 'module-cache'), ...files, '-o', building],
+      { cwd: root, encoding: 'utf8', timeout: 400_000 }
+    )
+    assert.equal(
+      result.status,
+      0,
+      `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
+    )
     renameSync(building, cached)
   }
   return cached
@@ -43,8 +60,14 @@ export function compileWorkflowFixture() {
 /** `gh`, `bun` and `npm` stand-ins in `dir` (absolute shebang: the Bun running the test). */
 export function installFakes(dir) {
   mkdirSync(dir, { recursive: true })
-  const script = name => `#!${process.execPath}\n${readFileSync(join(root, 'test/fixtures/workflow-owner', name), 'utf8')}`
-  for (const [name, source] of [['gh', 'fake-gh.mjs'], ['bun', 'fake-pm.mjs'], ['npm', 'fake-pm.mjs'], ['npx', 'fake-pm.mjs']]) {
+  const script = (name) =>
+    `#!${process.execPath}\n${readFileSync(join(root, 'test/fixtures/workflow-owner', name), 'utf8')}`
+  for (const [name, source] of [
+    ['gh', 'fake-gh.mjs'],
+    ['bun', 'fake-pm.mjs'],
+    ['npm', 'fake-pm.mjs'],
+    ['npx', 'fake-pm.mjs']
+  ]) {
     writeFileSync(join(dir, name), script(source))
     chmodSync(join(dir, name), 0o755)
   }
@@ -60,13 +83,29 @@ export async function startWorkflowFixture(binary, profile, env = {}) {
   /** One raw workflow frame; resolves with the reply's result. */
   fixture.workflowFrame = (method, body, request = {}) => {
     const id = 700_000 + ++raw
-    return new Promise(resolve => {
-      const listener = message => { if (message.service === 'workflow' && message.id === id) { fixture.link.off('service-reply', listener); resolve(message.reply.result) } }
+    return new Promise((resolve) => {
+      const listener = (message) => {
+        if (message.service === 'workflow' && message.id === id) {
+          fixture.link.off('service-reply', listener)
+          resolve(message.reply.result)
+        }
+      }
       fixture.link.on('service-reply', listener)
-      fixture.link.sendService({ service: 'workflow', id, request: {
-        connection: crypto.randomUUID(), requestID: crypto.randomUUID(), operationID: crypto.randomUUID(), scope: {},
-        mode: ['workflows', 'diagnosis'].includes(method) ? 'read' : 'mutation', service: 'workflow', method, body, ...request
-      } })
+      fixture.link.sendService({
+        service: 'workflow',
+        id,
+        request: {
+          connection: crypto.randomUUID(),
+          requestID: crypto.randomUUID(),
+          operationID: crypto.randomUUID(),
+          scope: {},
+          mode: ['workflows', 'diagnosis'].includes(method) ? 'read' : 'mutation',
+          service: 'workflow',
+          method,
+          body,
+          ...request
+        }
+      })
     })
   }
   return fixture

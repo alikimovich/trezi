@@ -20,8 +20,9 @@ export class TurnBoundaries {
       this.started.set(key, event.turn)
       out.push({ kind: 'begin', turn: event.turn })
     }
-    if (event.type === 'done' && event.landingPending) { if (event.turn) this.landing.set(key, event.turn) }
-    else if (event.type === 'done') out.push({ kind: 'landed', turn: event.turn ?? null })
+    if (event.type === 'done' && event.landingPending) {
+      if (event.turn) this.landing.set(key, event.turn)
+    } else if (event.type === 'done') out.push({ kind: 'landed', turn: event.turn ?? null })
     else if (event.type === 'error') out.push({ kind: 'failed', turn: event.turn ?? null })
     else if (event.type === 'isolation' && (event.state === 'merged' || event.state === 'parked')) {
       const turn = this.landing.get(key) ?? null
@@ -31,5 +32,8 @@ export class TurnBoundaries {
     return out
   }
 
-  forget(key: string) { this.landing.delete(key); this.started.delete(key) }
+  forget(key: string) {
+    this.landing.delete(key)
+    this.started.delete(key)
+  }
 }

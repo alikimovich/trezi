@@ -161,7 +161,10 @@ try {
     'a chat remove leaves the live dependency in place'
   )
   const t3 = await completeTurn(repo1, wt, 'add a dependency')
-  ok(t3.outcome === 'merged' && t3.files.join() === 'package.json', `only the manifest lands: ${JSON.stringify(t3)}`)
+  ok(
+    t3.outcome === 'merged' && t3.files.join() === 'package.json',
+    `only the manifest lands: ${JSON.stringify(t3)}`
+  )
   ok(liveDeps() === liveBefore, 'landing moves no node_modules files (the preview installs live)')
   wt.baseSha = t3.newBase
   // The next turn finds manifests its marker does not cover: it reinstalls into its own folder.

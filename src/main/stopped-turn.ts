@@ -23,7 +23,11 @@ export interface StoppedTurnResult {
   error?: string
 }
 
-const nothingHeld: StoppedTurnResult = { ok: false, files: [], error: 'Nothing from a stopped turn is on hold.' }
+const nothingHeld: StoppedTurnResult = {
+  ok: false,
+  files: [],
+  error: 'Nothing from a stopped turn is on hold.'
+}
 
 /** Revert the stopped turn. The live checkout is untouched; nothing is written now. */
 export function revertStoppedTurn(sessionKey: string): StoppedTurnResult {
@@ -36,7 +40,8 @@ export function revertStoppedTurn(sessionKey: string): StoppedTurnResult {
 /** Undo a revert that has not been settled by a new turn yet. */
 export function undoStoppedRevert(sessionKey: string): StoppedTurnResult {
   const hold = stoppedHold(sessionKey)
-  if (!hold?.reverted) return { ok: false, files: [], error: 'The stopped turn can no longer be restored.' }
+  if (!hold?.reverted)
+    return { ok: false, files: [], error: 'The stopped turn can no longer be restored.' }
   markStoppedReverted(sessionKey, false)
   return { ok: true, files: hold.files }
 }

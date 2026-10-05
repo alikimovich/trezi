@@ -9,12 +9,20 @@ import { setRepositoryOwner } from '../../src/main/repository-owner.ts'
 import { compileRepositoryFixture, startRepositoryFixture } from './repository-fixture.mjs'
 
 const profile = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-repository-profile-')))
-export const repositoryFixture = await startRepositoryFixture(compileRepositoryFixture(), profile,
-  { REPOSITORY_WORKTREES_ROOT: realpathSync(tmpdir()) })
+export const repositoryFixture = await startRepositoryFixture(compileRepositoryFixture(), profile, {
+  REPOSITORY_WORKTREES_ROOT: realpathSync(tmpdir())
+})
 setRepositoryOwner(repositoryFixture.owner())
 repositoryFixture.child.unref()
-for (const stream of [repositoryFixture.child.stdin, repositoryFixture.child.stdout, repositoryFixture.child.stderr]) stream.unref?.()
+for (const stream of [
+  repositoryFixture.child.stdin,
+  repositoryFixture.child.stdout,
+  repositoryFixture.child.stderr
+])
+  stream.unref?.()
 process.on('exit', () => {
-  try { repositoryFixture.child.kill('SIGKILL') } catch {}
+  try {
+    repositoryFixture.child.kill('SIGKILL')
+  } catch {}
   rmSync(profile, { recursive: true, force: true })
 })

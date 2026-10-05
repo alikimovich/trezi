@@ -33,7 +33,8 @@ export class TurnTracker {
   attribute(event: AgentEvent): Attribution | null {
     const head = this.runs[0]
     if (!head) return null
-    if (event.type !== 'done' && event.type !== 'error') return { turn: head.turn, run: head.run, first: false }
+    if (event.type !== 'done' && event.type !== 'error')
+      return { turn: head.turn, run: head.run, first: false }
     const first = !head.ended
     head.ended = true
     // `done` ends the send; an `error` is followed by its `done` (or by nothing).
