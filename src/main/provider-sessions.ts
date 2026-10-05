@@ -3,9 +3,9 @@ import type { NativeView } from '../native/platform'
 import type { AgentOptions } from '../shared/api'
 import { interruptWithOwner } from './backends/interrupt'
 import type { ModelProvider, ProviderSession, SpawnContext } from './backends/types'
+import { noteCodexFallback, supportedSeatOptions } from './codex-seat'
 import { providerOwner } from './provider-owner'
 import { INTERRUPT_GRACE_MS } from './provider-policy'
-import { noteCodexFallback, supportedSeatOptions } from './codex-seat'
 
 const ignore = (): void => {}
 

@@ -47,7 +47,9 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id']
 /** Always exercise the live minimum plus the normal and wider window widths. */
 export function settingsVerificationWidths(minimumWidth: number): number[] {
   assert.ok(
-    Number.isFinite(minimumWidth) && minimumWidth > 0 && minimumWidth <= SETTINGS_DEFAULT_SIZE.width,
+    Number.isFinite(minimumWidth) &&
+      minimumWidth > 0 &&
+      minimumWidth <= SETTINGS_DEFAULT_SIZE.width,
     `Settings minimum must be valid and no wider than its normal ${SETTINGS_DEFAULT_SIZE.width}-point window`
   )
   return [...new Set([minimumWidth, SETTINGS_DEFAULT_SIZE.width, 960])]
@@ -55,7 +57,11 @@ export function settingsVerificationWidths(minimumWidth: number): number[] {
 
 /** The source list shows every section, with the requested one selected, shown and titled. */
 function assertSidebar(evidence: SettingsEvidence, section: SettingsSection) {
-  assert.deepEqual(evidence.sections, SETTINGS_SECTIONS.map((s) => ({ ...s })), 'Settings sidebar sections and symbols')
+  assert.deepEqual(
+    evidence.sections,
+    SETTINGS_SECTIONS.map((s) => ({ ...s })),
+    'Settings sidebar sections and symbols'
+  )
   assert.equal(evidence.sidebarRows, SETTINGS_SECTIONS.length, 'Rendered source-list rows')
   assert.equal(evidence.section, section, 'Selected Settings section')
   assert.equal(
@@ -80,7 +86,11 @@ function assertSidebar(evidence: SettingsEvidence, section: SettingsSection) {
 /** Both sidebars come from the same source-list setup: equal configuration and row geometry. */
 export function assertSidebarParity(settings: SourceListEvidence, projects: SourceListEvidence) {
   assert.ok(settings.row && projects.row, 'Both sidebars report a rendered row')
-  assert.deepEqual(settings, projects, 'Settings and projects sidebars share the source-list configuration')
+  assert.deepEqual(
+    settings,
+    projects,
+    'Settings and projects sidebars share the source-list configuration'
+  )
 }
 
 function assertUsable(evidence: SettingsEvidence, width: number) {
@@ -110,7 +120,11 @@ export function assertSectionEvidence(
       ['activityAutoOpen', 'agentFileAccess', 'claudePlugins', 'default', 'workspaceIdle'],
       'General shows the default model, Claude plugins, agent file access, workspace cleanup and Activity pickers'
     )
-  else assert.ok(ids.every((id) => id === 'connection'), 'AI Providers shows only its provider picker')
+  else
+    assert.ok(
+      ids.every((id) => id === 'connection'),
+      'AI Providers shows only its provider picker'
+    )
   const lines = evidence.text.map(words)
   for (const required of [
     ...SETTINGS_SECTIONS.map((s) => s.label),

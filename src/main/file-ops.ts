@@ -13,11 +13,13 @@ import { sourceOwner } from './source-owner'
  */
 
 /** Create an empty file at `path` (repo-relative); missing parents are created. */
-export const createProjectFile = (root: string, path: string): Promise<FileOpResult> => sourceOwner().createFile(root, path)
+export const createProjectFile = (root: string, path: string): Promise<FileOpResult> =>
+  sourceOwner().createFile(root, path)
 
 /** Rename (or move) a file; refuses to overwrite unless only the letter case differs. */
 export const renameProjectFile = (root: string, from: string, to: string): Promise<FileOpResult> =>
   sourceOwner().renameFile(root, from, to)
 
 /** Move a file to the Trash. */
-export const deleteProjectFile = (root: string, path: string): Promise<FileOpResult> => sourceOwner().deleteFile(root, path)
+export const deleteProjectFile = (root: string, path: string): Promise<FileOpResult> =>
+  sourceOwner().deleteFile(root, path)

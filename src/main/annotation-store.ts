@@ -2,8 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Annotation, AnnotationInput } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
-import { editingOwner } from './editing-owner'
 import type { SidecarCommit } from './editing-owner'
+import { editingOwner } from './editing-owner'
 import { contentHash } from './source-owner'
 
 /**
@@ -36,7 +36,10 @@ export interface AnnotationStore {
 
 const file = (root: string): string => join(root, '.trezi', 'annotations.json')
 const isNote = (value: unknown): value is Annotation =>
-  !!value && typeof value === 'object' && typeof (value as Annotation).id === 'string' && typeof (value as Annotation).text === 'string'
+  !!value &&
+  typeof value === 'object' &&
+  typeof (value as Annotation).id === 'string' &&
+  typeof (value as Annotation).text === 'string'
 
 type Commit = (root: string, expectedHash: string | null, content: string) => Promise<SidecarCommit>
 
@@ -48,8 +51,12 @@ export function createAnnotationStore(
 ): AnnotationStore {
   let counter = 0
   const now = options.now ?? (() => new Date())
-  const newId = options.newId ?? ((): string => `a${Date.now().toString(36)}${(counter++).toString(36)}`)
-  const commit: Commit = options.commit ?? ((root, expectedHash, content) => editingOwner().sidecar(root, 'annotations.json', expectedHash, content))
+  const newId =
+    options.newId ?? ((): string => `a${Date.now().toString(36)}${(counter++).toString(36)}`)
+  const commit: Commit =
+    options.commit ??
+    ((root, expectedHash, content) =>
+      editingOwner().sidecar(root, 'annotations.json', expectedHash, content))
 
   /**
    * Every entry exactly as stored, so a write never drops what it does not
@@ -85,7 +92,10 @@ export function createAnnotationStore(
    * atomically). `change` returns null when nothing changes, so nothing is written.
    * A file edited in between is read again, never overwritten.
    */
-  const update = async (root: string, change: (list: unknown[]) => unknown[] | null): Promise<unknown[]> => {
+  const update = async (
+    root: string,
+    change: (list: unknown[]) => unknown[] | null
+  ): Promise<unknown[]> => {
     for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
       const { list, hash } = await read(root)
       const next = change(list)
@@ -93,7 +103,10 @@ export function createAnnotationStore(
       const result = await commit(root, hash, `${JSON.stringify(next, null, 2)}\n`)
       if (result.ok) return next
     }
-    throw new AnnotationStoreError('conflict', '.trezi/annotations.json kept changing while saving; nothing was written. Try again.')
+    throw new AnnotationStoreError(
+      'conflict',
+      '.trezi/annotations.json kept changing while saving; nothing was written. Try again.'
+    )
   }
 
   // Two IPC calls can interleave at their awaits. Serialize each project's
@@ -126,14 +139,16 @@ export function createAnnotationStore(
           text: text.slice(0, MAX_ANNOTATION_TEXT),
           createdAt: now().toISOString()
         }
-        return notes(await update(root, list => [...list, annotation]))
+        return notes(await update(root, (list) => [...list, annotation]))
       }),
     remove: (root, id) =>
       serialize(root, async () =>
-        notes(await update(root, list => {
-          const next = list.filter((entry) => !(isNote(entry) && entry.id === id))
-          return next.length === list.length ? null : next
-        }))
+        notes(
+          await update(root, (list) => {
+            const next = list.filter((entry) => !(isNote(entry) && entry.id === id))
+            return next.length === list.length ? null : next
+          })
+        )
       )
   }
 }

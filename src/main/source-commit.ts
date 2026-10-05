@@ -1,7 +1,8 @@
 import type { PropEditResult } from '../shared/api'
 import { contentHash, sourceOwner } from './source-owner'
 
-export const STALE_PROPOSAL = 'The file changed since it was read, so nothing was written. Try the edit again.'
+export const STALE_PROPOSAL =
+  'The file changed since it was read, so nothing was written. Try the edit again.'
 
 /**
  * Commit ONE parser proposal: `before` is the exact text the parser read and computed
@@ -26,9 +27,16 @@ export async function proposeEdit(
 ): Promise<PropEditResult> {
   if (after === before) return { applied: true }
   try {
-    const result = await sourceOwner().commit(root, [{ path: file, expectedHash: contentHash(before), content: after }], { key, group, gesture })
+    const result = await sourceOwner().commit(
+      root,
+      [{ path: file, expectedHash: contentHash(before), content: after }],
+      { key, group, gesture }
+    )
     return result.ok ? { applied: true } : { applied: false, error: STALE_PROPOSAL }
   } catch (error) {
-    return { applied: false, error: error instanceof Error ? error.message : 'Could not write the source file.' }
+    return {
+      applied: false,
+      error: error instanceof Error ? error.message : 'Could not write the source file.'
+    }
   }
 }

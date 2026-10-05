@@ -1,6 +1,6 @@
-import { sourceStamp, sourceSelector } from './source-stamp'
 import type { MoveNodeRequest } from '../shared/api'
 import { type SiblingSlot, siblingSlot } from './sibling-drop'
+import { sourceSelector, sourceStamp } from './source-stamp'
 
 /** Native-preview input only. No DOM reparenting: source edits own persistence. */
 export function installDragReorder(options: {

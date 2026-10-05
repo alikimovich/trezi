@@ -28,5 +28,22 @@
     "rules": {
       "recommended": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["test/fixtures/**"],
+      "formatter": { "enabled": false },
+      "assist": { "enabled": false },
+      "linter": {
+        "rules": {
+          "a11y": "off",
+          "correctness": { "noUnusedVariables": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["src/native/assets/**"],
+      "linter": { "rules": { "a11y": "off" } }
+    }
+  ]
 }

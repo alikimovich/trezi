@@ -1,4 +1,9 @@
-import type { AgentOptions, PermissionMode, SessionRecord, SessionTranscriptEntry } from '../shared/api'
+import type {
+  AgentOptions,
+  PermissionMode,
+  SessionRecord,
+  SessionTranscriptEntry
+} from '../shared/api'
 
 /**
  * The conversation owner seam (S11). Under the Swift launch the service's
@@ -44,10 +49,18 @@ export interface ConversationRecovery {
   copy?: string
 }
 
-export interface Released { id: string; kind: ApprovalKind }
+export interface Released {
+  id: string
+  kind: ApprovalKind
+}
 
 export class ConversationError extends Error {
-  constructor(readonly code: string, message: string) { super(message) }
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
+    super(message)
+  }
 }
 
 export interface ConversationOwner {
@@ -58,24 +71,49 @@ export interface ConversationOwner {
   remove(id: string): Promise<void>
   rename(id: string, title: string): Promise<{ ok: boolean; title?: string; error?: string }>
   // Live chats.
-  open(chat: string, project: string, record: SessionRecord, options: AgentOptions, active: boolean): Promise<void>
+  open(
+    chat: string,
+    project: string,
+    record: SessionRecord,
+    options: AgentOptions,
+    active: boolean
+  ): Promise<void>
   activate(chat: string): Promise<void>
   checkpoint(chat: string, record: SessionRecord): Promise<boolean>
-  close(chat: string, persist: Persist, record: SessionRecord): Promise<{ saved: boolean; release: Released[] }>
+  close(
+    chat: string,
+    persist: Persist,
+    record: SessionRecord
+  ): Promise<{ saved: boolean; release: Released[] }>
   configure(chat: string, options: AgentOptions): Promise<void>
   /** A new provider session for the chat. `model` waits for the turn (busy otherwise). */
-  handoff(chat: string, options: AgentOptions, record: SessionRecord, reason: 'model' | 'restart'): Promise<void>
+  handoff(
+    chat: string,
+    options: AgentOptions,
+    record: SessionRecord,
+    reason: 'model' | 'restart'
+  ): Promise<void>
   // Turns.
   begin(chat: string, turn: string): Promise<void>
   /** The user entry reached the provider; `handoff` asks for the recorded history once. */
   send(chat: string, turn: string, entry: SessionTranscriptEntry): Promise<{ handoff: boolean }>
   abort(chat: string, turn: string): Promise<boolean>
   cancel(chat: string): Promise<{ phase: TurnPhase; turn: string | null }>
-  terminal(chat: string, turn: string, run: number, kind: 'done' | 'error', record: SessionRecord): Promise<TerminalClaim>
+  terminal(
+    chat: string,
+    turn: string,
+    run: number,
+    kind: 'done' | 'error',
+    record: SessionRecord
+  ): Promise<TerminalClaim>
   continueTurn(chat: string, turn: string, run: number): Promise<boolean>
   landed(chat: string, turn: string, at: number): Promise<{ landed: boolean; completedAt?: number }>
   /** `user` renames always win; a `generated` title only names an untitled chat ('' ends titling). */
-  title(chat: string, title: string, source: 'user' | 'generated'): Promise<{ ok: boolean; title?: string; error?: string }>
+  title(
+    chat: string,
+    title: string,
+    source: 'user' | 'generated'
+  ): Promise<{ ok: boolean; title?: string; error?: string }>
   // Approvals (permission cards and agent questions).
   register(chat: string, id: string, kind: ApprovalKind, tool: string): Promise<void>
   /** The chat holding this approval, or null when it is unknown or already settled. */

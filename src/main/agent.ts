@@ -1,16 +1,11 @@
-import { nativeSessionPath } from '../native/profile-path'
-import { generatePublishDescription } from './publish-description'
-import { workflowOwner } from './workflow-owner'
-import { chatIslandContext } from './chat-islands'
-import { setProjectUiEnabled, projectUiInstructions, cancelProjectUi } from './project-ui'
-import type { AgentTurnOptions } from '../shared/api'
-import { conflictResolutionPrompt, ReconciliationCoordinator } from './conflict-resolution'
 import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { app, type NativeView, ipcMain as nativeIpcMain } from '../native/platform'
+import { nativeSessionPath } from '../native/profile-path'
 import type {
   AgentEvent,
   AgentOptions,
+  AgentTurnOptions,
   BackgroundSpawnOrigin,
   ImageAttachment,
   LiveProjectSnapshot,
@@ -20,17 +15,16 @@ import type {
   SessionTranscriptEntry,
   WorkspaceSnapshot
 } from '../shared/api'
-import { projectKey } from '../shared/projectKey'
 import { backgroundAgentOptions } from '../shared/background-model'
-import { platformOwner } from './platform-owner'
+import { projectKey } from '../shared/projectKey'
 import { type ProviderSession, pickProvider } from './backends'
 import { handoffPrompt } from './backends/conversation-handoff'
 import { seedFromRecord } from './backends/record'
 import type { SpawnContext } from './backends/types'
+import { chatIslandContext } from './chat-islands'
 import {
   adoptSession,
   afterTurn,
-  showParkedChat,
   applyParkedBranch,
   beforeTurn,
   discardParkedBranch,
@@ -43,14 +37,27 @@ import {
   isolationSnapshot,
   liveChatWorktreeIds,
   releaseChat,
-  resolveParkedChat
+  resolveParkedChat,
+  showParkedChat
 } from './chat-isolation'
-import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
-import { cleanUpWorkspacesNow, initChatWorkspaces, legacyWorkspaceDirs, workspaceUsage } from './chat-workspaces'
+import { TurnTracker } from './chat-turns'
+import {
+  cleanUpWorkspacesNow,
+  initChatWorkspaces,
+  legacyWorkspaceDirs,
+  workspaceUsage
+} from './chat-workspaces'
+import { conflictResolutionPrompt, ReconciliationCoordinator } from './conflict-resolution'
+import {
+  ConversationError,
+  type ConversationOwner,
+  type Persist,
+  swiftConversationOwner
+} from './conversation-owner'
 import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
-import { enqueueRepoWrite } from './repo-write-queue'
+import { platformOwner } from './platform-owner'
 import {
   createProjectMemoryInjection,
   createProjectMemoryUpdateQueue,
@@ -58,13 +65,16 @@ import {
   type ProjectMemoryStore,
   type ProjectMemoryUpdateQueue
 } from './project-memory'
-import { registerProviderIpc } from './providers'
-import type { RpcHandlerRegistry } from './rpc-router'
-import { createSessionStore, type SessionStore } from './sessions-store'
-import { ConversationError, type ConversationOwner, type Persist, swiftConversationOwner } from './conversation-owner'
-import { TurnTracker } from './chat-turns'
+import { cancelProjectUi, projectUiInstructions, setProjectUiEnabled } from './project-ui'
 import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
+import { registerProviderIpc } from './providers'
+import { generatePublishDescription } from './publish-description'
+import { enqueueRepoWrite } from './repo-write-queue'
+import type { RpcHandlerRegistry } from './rpc-router'
+import { createSessionStore, type SessionStore } from './sessions-store'
+import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
+import { workflowOwner } from './workflow-owner'
 import {
   applyBranchToWorkingTree,
   autoApplyWorktree,
@@ -98,16 +108,27 @@ const store = (): SessionStore => (_store ??= createSessionStore(dataDir()))
 // there; this module performs the effects.
 function conversation(): ConversationOwner {
   const swift = swiftConversationOwner()
-  if (!swift) throw new ConversationError('unavailable', 'Trezi’s service is not running, so chats cannot start.')
+  if (!swift)
+    throw new ConversationError(
+      'unavailable',
+      'Trezi’s service is not running, so chats cannot start.'
+    )
   return swift
 }
 // The memory owner: the Swift service, set by the native entry point (LKM-111 removed
 // the Bun writer). `dataDir()` is resolved first: it creates the session store's
 // alias before the service is asked to write in it.
 const noMemoryOwner = async (): Promise<never> => {
-  throw new ProjectMemoryError('unavailable', 'Trezi’s service is not running, so project memory is unavailable.')
+  throw new ProjectMemoryError(
+    'unavailable',
+    'Trezi’s service is not running, so project memory is unavailable.'
+  )
 }
-let memoryOwner: (dir: string) => ProjectMemoryStore = () => ({ get: noMemoryOwner, save: noMemoryOwner, propose: noMemoryOwner })
+let memoryOwner: (dir: string) => ProjectMemoryStore = () => ({
+  get: noMemoryOwner,
+  save: noMemoryOwner,
+  propose: noMemoryOwner
+})
 export function setProjectMemoryOwner(owner: (dir: string) => ProjectMemoryStore): void {
   memoryOwner = owner
   _memoryStore = null
@@ -125,7 +146,10 @@ const contextWithMemory = async (
   root: string,
   sessionKey: string | null,
   ctx: SpawnContext
-): Promise<SpawnContext> => ({ ...ctx, projectMemory: await memoryInjection.context(root, sessionKey) })
+): Promise<SpawnContext> => ({
+  ...ctx,
+  projectMemory: await memoryInjection.context(root, sessionKey)
+})
 
 /**
  * Agent sessions — one persistent multi-turn session per open project (keyed by
@@ -210,7 +234,10 @@ function scheduleCheckpoint(sessionKey: string): void {
   const timer = setTimeout(() => {
     checkpointTimers.delete(sessionKey)
     const s = sessions.get(sessionKey)
-    if (s) void conversation().checkpoint(sessionKey, s.record).catch(() => {})
+    if (s)
+      void conversation()
+        .checkpoint(sessionKey, s.record)
+        .catch(() => {})
   }, 1000)
   timer.unref?.()
   checkpointTimers.set(sessionKey, timer)
@@ -238,7 +265,9 @@ async function maybeGenerateTitle(sessionKey: string): Promise<void> {
     /* best-effort — the rail keeps the first-message heuristic */
   } finally {
     // A name chosen meanwhile (a rename) wins; an empty answer just ends titling.
-    const result = await conversation().title(sessionKey, title ?? '', 'generated').catch(() => ({ ok: false, title: undefined }))
+    const result = await conversation()
+      .title(sessionKey, title ?? '', 'generated')
+      .catch(() => ({ ok: false, title: undefined }))
     const live = sessions.get(sessionKey)
     if (result.ok && result.title && live && live === session) {
       live.record.title = result.title
@@ -282,8 +311,14 @@ function evaluateProjectMemory(sessionKey: string): void {
 const interactiveEvents =
   (sessionKey: string, tracker: TurnTracker) =>
   (e: AgentEvent): void => {
-    if (e.type === 'permission-request') void conversation().register(sessionKey, e.request.id, 'permission', e.request.toolName).catch(() => {})
-    else if (e.type === 'question-request') void conversation().register(sessionKey, e.request.id, 'question', '').catch(() => {})
+    if (e.type === 'permission-request')
+      void conversation()
+        .register(sessionKey, e.request.id, 'permission', e.request.toolName)
+        .catch(() => {})
+    else if (e.type === 'question-request')
+      void conversation()
+        .register(sessionKey, e.request.id, 'question', '')
+        .catch(() => {})
     const at = e.turn ? null : tracker.attribute(e)
     if (at) e.turn = at.turn
     if (e.type === 'status') scheduleCheckpoint(sessionKey)
@@ -308,7 +343,13 @@ const interactiveEvents =
       .then((claim) => {
         if (!claim.claimed) return
         const last = [...record.transcript].reverse().find((t) => t.role === 'user')?.text
-        void reconciliation.finish(sessionKey, firstLine(last ?? 'trezi chat edit'), claim.outcome, at.turn, at.run)
+        void reconciliation.finish(
+          sessionKey,
+          firstLine(last ?? 'trezi chat edit'),
+          claim.outcome,
+          at.turn,
+          at.run
+        )
         if (claim.title) void maybeGenerateTitle(sessionKey)
         if (claim.memory) evaluateProjectMemory(sessionKey)
       })
@@ -398,10 +439,14 @@ async function closeChat(sessionKey: string, s: ProviderSession, persist: Persis
   handoffHistory.delete(sessionKey)
   try {
     s.finalize()
-    if (persist !== 'none' && s.record.transcript.some((t) => t.role === 'user')) s.record.endedAt = Date.now()
+    if (persist !== 'none' && s.record.transcript.some((t) => t.role === 'user'))
+      s.record.endedAt = Date.now()
     await conversation().close(sessionKey, persist, s.record)
   } catch (error) {
-    console.error('Trezi could not save a closed chat:', error instanceof Error ? error.message : error)
+    console.error(
+      'Trezi could not save a closed chat:',
+      error instanceof Error ? error.message : error
+    )
   }
 }
 
@@ -446,9 +491,9 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
     try {
       closeSession(session) // finalize + persist the record (removed below if we auto-apply)
       // The agent's closing message → a chat notification the user can reply to.
-      const summary = spawn.error ?? [...session.record.transcript]
-        .reverse()
-        .find((t) => t.role === 'assistant')?.text
+      const summary =
+        spawn.error ??
+        [...session.record.transcript].reverse().find((t) => t.role === 'assistant')?.text
       const { committed, files } = await commitWorktree(wt, firstLine(text))
       let auto: { applied: boolean; edits: { file: string; before: string; after: string }[] } = {
         applied: false,
@@ -496,7 +541,10 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           session.record.endedAt = session.record.endedAt ?? Date.now()
           store().save(session.record)
         }
-        await removeWorktree(parentRoot, wt, { keepBranch: committed, intent: committed ? 'release' : 'abandon' })
+        await removeWorktree(parentRoot, wt, {
+          keepBranch: committed,
+          intent: committed ? 'release' : 'abandon'
+        })
         safeSend(getWindow_, 'agent:event', {
           type: 'spawn-finished',
           projectKey: parentSessionKey,
@@ -504,7 +552,13 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           branch: committed ? wt.branch : null,
           origin,
           ...(summary ? { summary } : {}),
-          outcome: spawn.cancelled ? 'cancelled' : status === 'error' ? 'failed' : committed ? 'review' : 'no-change',
+          outcome: spawn.cancelled
+            ? 'cancelled'
+            : status === 'error'
+              ? 'failed'
+              : committed
+                ? 'review'
+                : 'no-change',
           files: committed ? files.map((f) => basename(f)) : []
         } satisfies AgentEvent)
       }
@@ -512,9 +566,14 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
       // Keep the checkout for recovery, but always retire the running card.
       console.error('Background agent finalization failed:', error)
       safeSend(getWindow_, 'agent:event', {
-        type: 'spawn-finished', projectKey: parentSessionKey, sessionId: id,
-        branch: wt.branch, origin, outcome: 'failed',
-        summary: 'Could not finish saving the background edit. Its worktree has been kept for recovery.'
+        type: 'spawn-finished',
+        projectKey: parentSessionKey,
+        sessionId: id,
+        branch: wt.branch,
+        origin,
+        outcome: 'failed',
+        summary:
+          'Could not finish saving the background edit. Its worktree has been kept for recovery.'
       } satisfies AgentEvent)
     }
   })
@@ -553,7 +612,9 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
   const releaseSlot = () => startingSpawns.delete(q.id)
   let wt: Worktree
   try {
-    wt = await enqueueRepoWrite(q.root, () => createWorktree(q.root, worktreesDir(), { label: q.text, id: q.id }))
+    wt = await enqueueRepoWrite(q.root, () =>
+      createWorktree(q.root, worktreesDir(), { label: q.text, id: q.id })
+    )
   } catch {
     releaseSlot()
     safeSend(getWindow_, 'agent:event', {
@@ -561,7 +622,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       projectKey: q.parentSessionKey,
       sessionId: q.id,
       branch: null,
-      origin: q.origin, outcome: 'failed'
+      origin: q.origin,
+      outcome: 'failed'
     } satisfies AgentEvent)
     void admitNext(q.id)
     return null
@@ -621,7 +683,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       projectKey: q.parentSessionKey,
       sessionId: q.id,
       branch: null,
-      origin: q.origin, outcome: 'failed'
+      origin: q.origin,
+      outcome: 'failed'
     } satisfies AgentEvent)
     void admitNext(q.id)
     return null
@@ -631,12 +694,17 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
 /** A spawn's slot freed: start what the owner admits next, in its queue order. Each
  *  dequeued spawn emits `spawn-started` so the rail flips its row from queued → running. */
 async function admitNext(id: string): Promise<void> {
-  const next = await conversation().spawnDone(id).catch(() => [] as string[])
+  const next = await conversation()
+    .spawnDone(id)
+    .catch(() => [] as string[])
   for (const nextId of next) {
     const q = queuedSpawns.get(nextId)
     queuedSpawns.delete(nextId)
     // Cancelled here while the owner admitted it: give its slot straight back.
-    if (!q) { void admitNext(nextId); continue }
+    if (!q) {
+      void admitNext(nextId)
+      continue
+    }
     const branch = await startSpawn(q)
     if (branch) {
       safeSend(getWindow_, 'agent:event', {
@@ -783,8 +851,15 @@ export function registerAgentIpc(
       const priorCurrent = store().current(key)
       // A thread id the provider reported after the record was last saved (a crash in
       // between) is kept by the provider owner.
-      const resumeSessionId = priorCurrent?.sdkSessionId ??
-        (priorCurrent ? (await providerOwner().recover(priorCurrent.id).catch(() => null))?.resume : undefined)
+      const resumeSessionId =
+        priorCurrent?.sdkSessionId ??
+        (priorCurrent
+          ? (
+              await providerOwner()
+                .recover(priorCurrent.id)
+                .catch(() => null)
+            )?.resume
+          : undefined)
       // Isolated chats run in a private `trezi/chat-<id>` worktree (repo roots only);
       // isolatedCwd returns the live root otherwise. adoptSession re-stamps the record
       // back to the live project so history/reattach see it under the real root.
@@ -903,7 +978,9 @@ export function registerAgentIpc(
     if (sessions.has(target)) {
       activeKey = target
       activeSessionKeyByProject.set(key, target)
-      await conversation().activate(target).catch(() => {})
+      await conversation()
+        .activate(target)
+        .catch(() => {})
     }
   })
 
@@ -990,14 +1067,20 @@ export function registerAgentIpc(
         return { ok: false, error: 'That chat is no longer open.' }
       }
       stopProvider(existing)
-      void conversation().release(sessionKey).catch(() => {})
+      void conversation()
+        .release(sessionKey)
+        .catch(() => {})
       forgetChat(sessionKey)
-      handoffHistory.set(sessionKey, previous.transcript.map((entry) => ({ ...entry })))
+      handoffHistory.set(
+        sessionKey,
+        previous.transcript.map((entry) => ({ ...entry }))
+      )
       sessions.set(sessionKey, s)
       if (activeKey === sessionKey) activeSessionKeyByProject.set(key, sessionKey)
       return { ok: true }
     } catch (err) {
-      if (err instanceof ConversationError && err.code === 'busy') return { ok: false, error: err.message }
+      if (err instanceof ConversationError && err.code === 'busy')
+        return { ok: false, error: err.message }
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   }
@@ -1010,7 +1093,11 @@ export function registerAgentIpc(
       sessionKey: string,
       options: AgentOptions = {}
     ): Promise<{ ok: boolean; error?: string }> => {
-      if (runningKeys.has(sessionKey)) return { ok: false, error: 'Wait for the current response to finish before switching models.' }
+      if (runningKeys.has(sessionKey))
+        return {
+          ok: false,
+          error: 'Wait for the current response to finish before switching models.'
+        }
       return restartChatSession(root, sessionKey, options, 'model')
     }
   )
@@ -1041,7 +1128,9 @@ export function registerAgentIpc(
         // Already resumed and still live — just switch to it.
         activeSessionKeyByProject.set(key, sessionKey)
         if (intendedKey === key) activeKey = sessionKey
-        await conversation().activate(sessionKey).catch(() => {})
+        await conversation()
+          .activate(sessionKey)
+          .catch(() => {})
         return { ok: true, sessionKey }
       }
       try {
@@ -1110,7 +1199,10 @@ export function registerAgentIpc(
       // a backgrounded session into a chat the renderer isn't showing).
       if (activeKey === sessionKey) activeKey = intendedKey === key ? nextActive : null
       await closing
-      if (nextActive) await conversation().activate(nextActive).catch(() => {})
+      if (nextActive)
+        await conversation()
+          .activate(nextActive)
+          .catch(() => {})
       return { ok: true, remaining, activeSessionKey: nextActive }
     }
   )
@@ -1127,7 +1219,9 @@ export function registerAgentIpc(
     // The owner cleans the name, keeps it over any generated one, and updates a
     // copy already in History (a resumed/parked chat). A never-persisted live
     // record stays out of `sessions:list`.
-    const result = await conversation().title(sessionKey, title, 'user').catch(() => ({ ok: false, error: 'no live chat', title: undefined }))
+    const result = await conversation()
+      .title(sessionKey, title, 'user')
+      .catch(() => ({ ok: false, error: 'no live chat', title: undefined }))
     if (!result.ok || !result.title) return { ok: false, error: result.error ?? 'empty name' }
     session.record.title = result.title
     session.emit({ type: 'title', title: result.title })
@@ -1146,24 +1240,29 @@ export function registerAgentIpc(
     if (!session || !activeKey) return
     await session.setModel?.(model)
     session.options.model = model
-    await conversation().configure(activeKey, session.options).catch(() => {})
+    await conversation()
+      .configure(activeKey, session.options)
+      .catch(() => {})
   })
 
-  ipcMain.handle('agent:set-permission-mode', async (_e, mode: PermissionMode, sessionKey?: string) => {
-    const key = sessionKey === undefined ? activeKey : sessionKey
-    const session = key ? sessions.get(key) : undefined
-    if (!session || !key) return
-    // Apply to the backend first; only commit our copy if it took (keeps the
-    // toolbar and the live agent in agreement).
-    await session.setPermissionMode?.(mode)
-    session.options.permissionMode = mode
-    // Switching to a more permissive posture should also release prompts already
-    // on screen — otherwise the user picks "Auto" but the pending card stays. The
-    // owner records the mode and answers which open prompts it no longer asks.
-    for (const id of await conversation().mode(key, mode)) {
-      if (session.pending.has(id)) resolvePending(session, id, 'allow')
+  ipcMain.handle(
+    'agent:set-permission-mode',
+    async (_e, mode: PermissionMode, sessionKey?: string) => {
+      const key = sessionKey === undefined ? activeKey : sessionKey
+      const session = key ? sessions.get(key) : undefined
+      if (!session || !key) return
+      // Apply to the backend first; only commit our copy if it took (keeps the
+      // toolbar and the live agent in agreement).
+      await session.setPermissionMode?.(mode)
+      session.options.permissionMode = mode
+      // Switching to a more permissive posture should also release prompts already
+      // on screen — otherwise the user picks "Auto" but the pending card stays. The
+      // owner records the mode and answers which open prompts it no longer asks.
+      for (const id of await conversation().mode(key, mode)) {
+        if (session.pending.has(id)) resolvePending(session, id, 'allow')
+      }
     }
-  })
+  )
 
   // A permission card can belong to a BACKGROUNDED chat (its turn kept running
   // while the user switched away) — the renderer now shows every live session's
@@ -1175,8 +1274,11 @@ export function registerAgentIpc(
   // repeated answer, which then settles nothing. Only if the owner cannot answer at
   // all is the card settled by lookup, so the user is never left blocked.
   ipcMain.handle('agent:respond-permission', async (_e, id: string, behavior: 'allow' | 'deny') => {
-    const chat = await conversation().resolve(id, 'permission').catch(() => undefined)
-    const session = chat === undefined ? findSessionWithPending(id) : chat ? sessions.get(chat) : undefined
+    const chat = await conversation()
+      .resolve(id, 'permission')
+      .catch(() => undefined)
+    const session =
+      chat === undefined ? findSessionWithPending(id) : chat ? sessions.get(chat) : undefined
     if (session?.pending.has(id)) resolvePending(session, id, behavior)
   })
 
@@ -1185,8 +1287,11 @@ export function registerAgentIpc(
   ipcMain.handle(
     'agent:respond-question',
     async (_e, id: string, answers: QuestionAnswers | null) => {
-      const chat = await conversation().resolve(id, 'question').catch(() => undefined)
-      const session = chat === undefined ? findSessionWithQuestion(id) : chat ? sessions.get(chat) : undefined
+      const chat = await conversation()
+        .resolve(id, 'question')
+        .catch(() => undefined)
+      const session =
+        chat === undefined ? findSessionWithQuestion(id) : chat ? sessions.get(chat) : undefined
       if (session?.pendingQuestions?.has(id)) resolveQuestion(session, id, answers)
     }
   )
@@ -1195,77 +1300,106 @@ export function registerAgentIpc(
   // busy), records the user entry when the provider is about to get it, and hands
   // the model-switch history over once. `turnId` names the turn (the composer's
   // submission id), so its events, and no other turn's, complete it in the chat.
-  ipcMain.handle('agent:send', async (_e, text: string, images?: ImageAttachment[], requestedKey?: string, turn?: AgentTurnOptions, turnId?: string) => {
-    const key = requestedKey ?? activeKey
-    const session = key ? sessions.get(key) : null
-    if (requestedKey && !session) throw new Error('This chat is closed.')
-    if (key && runningKeys.has(key)) throw new Error('This chat is already running.')
-    if (!session || !key) {
-      safeSend(getWindow, 'agent:event', {
-        type: 'error',
-        message: 'Open a project first — the agent works inside a repo.'
-      } satisfies AgentEvent)
-      return
-    }
-    const id = typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
-    try {
-      await conversation().begin(key, id)
-    } catch (error) {
-      if (error instanceof ConversationError && error.code === 'busy') throw new Error('This chat is already running.')
-      if (error instanceof ConversationError && error.code === 'notFound') throw new Error('This chat is closed.')
-      throw error
-    }
-    const preparation = { cancelled: false }
-    preparingTurns.set(key, preparation)
-    const note = images?.length ? `${text} [${images.length} image(s) attached]`.trim() : text
-    // Capture the destination before any await; queued background messages must
-    // never follow a subsequent project or chat switch.
-    runningKeys.add(key)
-    reconciliation.begin(key)
-    // Turn-start: sync the user's between-turn live edits into this chat's worktree
-    // (serialized behind the chat's chain — waits out any in-flight merge). No-op for
-    // a non-isolated chat.
-    try {
-      await beforeTurn(key, text)
-      if (preparation.cancelled) throw new Error('Message cancelled before sending.')
-      if (sessions.get(key) !== session) throw new Error('This chat is closed.')
-      // A stopped turn's hold is not a conflict: the next turn continues on top of it.
-      const parked = requestedKey ? isolationSnapshot(requestedKey) : undefined
-      if (parked?.state === 'parked' && parked.reason !== 'interrupted') {
-        throw new Error('Resolve this chat’s conflicting changes before sending queued messages.')
+  ipcMain.handle(
+    'agent:send',
+    async (
+      _e,
+      text: string,
+      images?: ImageAttachment[],
+      requestedKey?: string,
+      turn?: AgentTurnOptions,
+      turnId?: string
+    ) => {
+      const key = requestedKey ?? activeKey
+      const session = key ? sessions.get(key) : null
+      if (requestedKey && !session) throw new Error('This chat is closed.')
+      if (key && runningKeys.has(key)) throw new Error('This chat is already running.')
+      if (!session || !key) {
+        safeSend(getWindow, 'agent:event', {
+          type: 'error',
+          message: 'Open a project first — the agent works inside a repo.'
+        } satisfies AgentEvent)
+        return
       }
-      const entry = { role: 'user' as const, text: note, at: Date.now() }
-      const { handoff } = await conversation().send(key, id, entry).catch((error) => {
-        if (error instanceof ConversationError && error.code === 'cancelled') throw new Error('Message cancelled before sending.')
+      const id =
+        typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
+      try {
+        await conversation().begin(key, id)
+      } catch (error) {
+        if (error instanceof ConversationError && error.code === 'busy')
+          throw new Error('This chat is already running.')
+        if (error instanceof ConversationError && error.code === 'notFound')
+          throw new Error('This chat is closed.')
         throw error
-      })
-      if (preparation.cancelled || sessions.get(key) !== session) throw new Error('Message cancelled before sending.')
-      session.record.transcript.push(entry)
-      // Memory is part of the provider's initial instructions. If the user edited it
-      // while this session remained open, inject the new snapshot exactly once on the
-      // next turn (not every turn, which would needlessly inflate context).
-      const root = session.record.projectRoot
-      const prompt = await memoryInjection.prompt(root, key, text)
-      const supportsUi = !session.options.provider || ['claude', 'codex'].includes(session.options.provider)
-      const useUi = turn?.projectUi === true && supportsUi
-      const uiEngine = turn?.projectUiEngine === 'jev' ? 'jev' : 'agent'
-      setProjectUiEnabled(key, useUi, uiEngine)
-      const uiNotice = turn?.projectUi === true && !supportsUi
-        ? 'The requested project component composition mode requires Claude or Codex. Explain this limitation for UI requests.\n\n' : ''
-      const islandContext = await chatIslandContext(key)
-      if (preparation.cancelled || sessions.get(key) !== session) throw new Error('Message cancelled before sending.')
-      // A model switch: the fresh provider gets the recorded conversation, once.
-      const history = handoff ? handoffHistory.get(key) ?? [] : []
-      if (handoff) handoffHistory.delete(key)
-      trackers.get(session)?.push(id, 0)
-      session.send(handoffPrompt(history, projectUiInstructions(useUi, uiEngine) + uiNotice + islandContext + prompt), images)
-    } catch (error) {
-      runningKeys.delete(key)
-      preparingTurns.delete(key)
-      await conversation().abort(key, id).catch(() => false)
-      throw error
+      }
+      const preparation = { cancelled: false }
+      preparingTurns.set(key, preparation)
+      const note = images?.length ? `${text} [${images.length} image(s) attached]`.trim() : text
+      // Capture the destination before any await; queued background messages must
+      // never follow a subsequent project or chat switch.
+      runningKeys.add(key)
+      reconciliation.begin(key)
+      // Turn-start: sync the user's between-turn live edits into this chat's worktree
+      // (serialized behind the chat's chain — waits out any in-flight merge). No-op for
+      // a non-isolated chat.
+      try {
+        await beforeTurn(key, text)
+        if (preparation.cancelled) throw new Error('Message cancelled before sending.')
+        if (sessions.get(key) !== session) throw new Error('This chat is closed.')
+        // A stopped turn's hold is not a conflict: the next turn continues on top of it.
+        const parked = requestedKey ? isolationSnapshot(requestedKey) : undefined
+        if (parked?.state === 'parked' && parked.reason !== 'interrupted') {
+          throw new Error('Resolve this chat’s conflicting changes before sending queued messages.')
+        }
+        const entry = { role: 'user' as const, text: note, at: Date.now() }
+        const { handoff } = await conversation()
+          .send(key, id, entry)
+          .catch((error) => {
+            if (error instanceof ConversationError && error.code === 'cancelled')
+              throw new Error('Message cancelled before sending.')
+            throw error
+          })
+        if (preparation.cancelled || sessions.get(key) !== session)
+          throw new Error('Message cancelled before sending.')
+        session.record.transcript.push(entry)
+        // Memory is part of the provider's initial instructions. If the user edited it
+        // while this session remained open, inject the new snapshot exactly once on the
+        // next turn (not every turn, which would needlessly inflate context).
+        const root = session.record.projectRoot
+        const prompt = await memoryInjection.prompt(root, key, text)
+        const supportsUi =
+          !session.options.provider || ['claude', 'codex'].includes(session.options.provider)
+        const useUi = turn?.projectUi === true && supportsUi
+        const uiEngine = turn?.projectUiEngine === 'jev' ? 'jev' : 'agent'
+        setProjectUiEnabled(key, useUi, uiEngine)
+        const uiNotice =
+          turn?.projectUi === true && !supportsUi
+            ? 'The requested project component composition mode requires Claude or Codex. Explain this limitation for UI requests.\n\n'
+            : ''
+        const islandContext = await chatIslandContext(key)
+        if (preparation.cancelled || sessions.get(key) !== session)
+          throw new Error('Message cancelled before sending.')
+        // A model switch: the fresh provider gets the recorded conversation, once.
+        const history = handoff ? (handoffHistory.get(key) ?? []) : []
+        if (handoff) handoffHistory.delete(key)
+        trackers.get(session)?.push(id, 0)
+        session.send(
+          handoffPrompt(
+            history,
+            projectUiInstructions(useUi, uiEngine) + uiNotice + islandContext + prompt
+          ),
+          images
+        )
+      } catch (error) {
+        runningKeys.delete(key)
+        preparingTurns.delete(key)
+        await conversation()
+          .abort(key, id)
+          .catch(() => false)
+        throw error
+      }
     }
-  })
+  )
 
   // Give a PASTED image a path. A dropped image already has one (the renderer
   // recovers it via webUtils), but clipboard bytes exist nowhere on disk, so the
@@ -1332,12 +1466,21 @@ export function registerAgentIpc(
       // Stable id assigned up front so the rail row survives a queued→running flip.
       const id = randomUUID().slice(0, 8)
       const q: QueuedSpawn = {
-        id, root, parentKey, parentSessionKey, text,
-        options: backgroundAgentOptions(options, origin), origin
+        id,
+        root,
+        parentKey,
+        parentSessionKey,
+        text,
+        options: backgroundAgentOptions(options, origin),
+        origin
       }
       // Held before the owner answers, so a slot freed meanwhile can start it.
       queuedSpawns.set(id, q)
-      if (!(await conversation().spawn(id, parentKey).catch(() => false))) {
+      if (
+        !(await conversation()
+          .spawn(id, parentKey)
+          .catch(() => false))
+      ) {
         // Queued (or the owner cannot admit it now): a slot freeing starts it.
         return { ok: true, spawnId: id, queued: true }
       }
@@ -1356,7 +1499,13 @@ export function registerAgentIpc(
   ipcMain.handle('agent:spawn-interrupt', async (_e, id: string) => {
     const waiting = queuedSpawns.get(id)
     // Still queued with the owner — or admitted but not yet started here.
-    if (waiting && ((await conversation().spawnCancel(id).catch(() => false)) || queuedSpawns.has(id))) {
+    if (
+      waiting &&
+      ((await conversation()
+        .spawnCancel(id)
+        .catch(() => false)) ||
+        queuedSpawns.has(id))
+    ) {
       const q = waiting
       queuedSpawns.delete(id)
       safeSend(getWindow, 'agent:event', {
@@ -1448,18 +1597,23 @@ export function registerAgentIpc(
   // LKM-151 post-Stop card: revert (undoable), undo that revert, or keep the stopped
   // turn's held work. "Ask agent to finish" is an ordinary turn from the renderer.
   ipcMain.handle('agent:revert-stopped', async (_e, sessionKey = activeKey) =>
-    sessionKey ? revertStoppedTurn(sessionKey) : { ok: false, files: [] })
+    sessionKey ? revertStoppedTurn(sessionKey) : { ok: false, files: [] }
+  )
   ipcMain.handle('agent:undo-revert-stopped', async (_e, sessionKey = activeKey) =>
-    sessionKey ? undoStoppedRevert(sessionKey) : { ok: false, files: [] })
+    sessionKey ? undoStoppedRevert(sessionKey) : { ok: false, files: [] }
+  )
   ipcMain.handle('agent:keep-stopped', async (_e, sessionKey = activeKey) =>
-    sessionKey ? keepStoppedTurn(sessionKey) : { ok: false, files: [] })
+    sessionKey ? keepStoppedTurn(sessionKey) : { ok: false, files: [] }
+  )
 
   // PR: push the spawn's branch + open a PR from it (no checkout — the work is already
   // committed on the branch). Persists prUrl back onto the history record.
   ipcMain.handle(
     'agent:spawn-pr',
     async (_e, root: string, branch: string, _title: string, recordId: string) => {
-      const result = await workflowOwner().branchPr(root, branch, (base, head) => generatePublishDescription(root, base, head))
+      const result = await workflowOwner().branchPr(root, branch, (base, head) =>
+        generatePublishDescription(root, base, head)
+      )
       if (result.ok && result.prUrl) {
         // Persist prUrl onto the history record (overwrite by id).
         const rec = store().get(recordId)
@@ -1510,7 +1664,13 @@ export function registerAgentIpc(
   // Turn state (running, the turn in flight) comes from the owner, so a reattach sees
   // what the coordinator decided; the transcript is the provider's live capture.
   ipcMain.handle('agent:workspace-snapshot', async (): Promise<WorkspaceSnapshot> => {
-    const owned = new Map((await conversation().snapshot().catch(() => ({ chats: [] }))).chats.map((chat) => [chat.chat, chat]))
+    const owned = new Map(
+      (
+        await conversation()
+          .snapshot()
+          .catch(() => ({ chats: [] }))
+      ).chats.map((chat) => [chat.chat, chat])
+    )
     const byProject = new Map<string, LiveProjectSnapshot>()
     for (const [sessionKey, s] of sessions) {
       const pKey = s.record.projectKey
@@ -1547,15 +1707,19 @@ export function registerAgentIpc(
     const preparation = sessionKey ? preparingTurns.get(sessionKey) : undefined
     if (preparation) preparation.cancelled = true
     // The owner marks the turn cancelled: it lands as failed and never continues.
-    if (sessionKey) await conversation().cancel(sessionKey).catch(() => {})
+    if (sessionKey)
+      await conversation()
+        .cancel(sessionKey)
+        .catch(() => {})
     const session = sessionKey ? sessions.get(sessionKey) : undefined
-    if (!session || !sessionKey)
-      return // Release any open prompts (interrupt may not abort their per-call signal),
-      // so cards don't orphan and the backend callbacks unblock.
-    void conversation().release(sessionKey).catch(() => {})
-    ;[...session.pending.keys()].forEach((id) => resolvePending(session, id, 'deny'))
+    if (!session || !sessionKey) return // Release any open prompts (interrupt may not abort their per-call signal),
+    // so cards don't orphan and the backend callbacks unblock.
+    void conversation()
+      .release(sessionKey)
+      .catch(() => {})
+    for (const id of [...session.pending.keys()]) resolvePending(session, id, 'deny')
     if (session.pendingQuestions)
-      [...session.pendingQuestions.keys()].forEach((id) => resolveQuestion(session, id, null))
+      for (const id of [...session.pendingQuestions.keys()]) resolveQuestion(session, id, null)
     const root = session.root
     // A stop that lands after the turn already finished/aborted makes the SDK
     // throw "Operation aborted" — treat it as the no-op it is.
@@ -1587,11 +1751,13 @@ export function registerAgentIpc(
     }
     const closing: Promise<unknown>[] = []
     for (const [sessionKey, s] of sessions) {
-      closing.push(closeChat(
-        sessionKey,
-        s,
-        sessionKey === currentByProject.get(s.record.projectKey) ? 'current' : 'history'
-      ))
+      closing.push(
+        closeChat(
+          sessionKey,
+          s,
+          sessionKey === currentByProject.get(s.record.projectKey) ? 'current' : 'history'
+        )
+      )
     }
     sessions.clear()
     memoryInjection.clear()

@@ -41,9 +41,13 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
   evidence.inspect = inspected
 
   // Evaluate: DOM reads work; writes, navigation, storage, oversized and slow results do not.
-  const read = await json('preview_evaluate', { expression: `document.querySelector('#${CARD}').getBoundingClientRect().width` })
+  const read = await json('preview_evaluate', {
+    expression: `document.querySelector('#${CARD}').getBoundingClientRect().width`
+  })
   assert.equal(Math.round(read.value), 120)
-  const before = await page('JSON.stringify([document.title, location.href, document.body.childElementCount])')
+  const before = await page(
+    'JSON.stringify([document.title, location.href, document.body.childElementCount])'
+  )
   const rejected: Record<string, string> = {}
   for (const [expression, pattern] of [
     ["document.title = 'changed by agent'", /read-only/],
@@ -60,7 +64,11 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
     assert.match(textOf(result), pattern, expression)
     rejected[expression] = textOf(result)
   }
-  assert.equal(await page('JSON.stringify([document.title, location.href, document.body.childElementCount])'), before, 'evaluate changed nothing')
+  assert.equal(
+    await page('JSON.stringify([document.title, location.href, document.body.childElementCount])'),
+    before,
+    'evaluate changed nothing'
+  )
   evidence.rejected = rejected
 
   // Console: the page error and the console.error call were captured.
@@ -68,7 +76,10 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
   await waitFor(
     async () => {
       logged = textOf(await runPreviewAgentTool('preview_console', { errorsOnly: true }))
-      return logged.includes('agent-console-fixture: thrown') && logged.includes('agent-console-fixture: logged')
+      return (
+        logged.includes('agent-console-fixture: thrown') &&
+        logged.includes('agent-console-fixture: logged')
+      )
     },
     'console captures the page error',
     5000,
@@ -84,7 +95,10 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
   const tablet = await json('preview_viewport', { width: 768 })
   assert.equal(tablet.innerWidth, 768)
   const restored = await json('preview_viewport', { restore: true })
-  assert.ok(Math.abs(restored.innerWidth - original) <= 1, `restore returns to ${original} CSS px (got ${restored.innerWidth})`)
+  assert.ok(
+    Math.abs(restored.innerWidth - original) <= 1,
+    `restore returns to ${original} CSS px (got ${restored.innerWidth})`
+  )
   evidence.viewport = { original, mobile, tablet, restored }
 
   // Element screenshot: an image bounded to the element (plus padding), not the whole page.
@@ -96,16 +110,23 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
   assert.equal(Math.round(meta.crop.height), 60)
   const scale = meta.pixels.width / meta.crop.width
   assert.ok(scale >= 0.9 && scale <= 3.1, `capture scale ${scale}`)
-  assert.ok(Math.abs(meta.pixels.height / scale - meta.crop.height) <= 2, 'the capture height matches the element')
+  assert.ok(
+    Math.abs(meta.pixels.height / scale - meta.crop.height) <= 2,
+    'the capture height matches the element'
+  )
   assert.ok(meta.pixels.width < original * scale * 0.5, 'the capture is the element, not the page')
   writeFileSync(join(artifacts, 'agent-preview-element.png'), Buffer.from(image.data, 'base64'))
   evidence.screenshot = meta
   writeFileSync(join(artifacts, 'agent-preview.json'), JSON.stringify(evidence, null, 2))
-  console.log('Native agent preview tools: inspect box-shadow, read-only bounded evaluate, console page error, viewport width/restore and element-cropped screenshot.')
+  console.log(
+    'Native agent preview tools: inspect box-shadow, read-only bounded evaluate, console page error, viewport width/restore and element-cropped screenshot.'
+  )
 }
 
 /** Leave the preview as the other checks expect it. */
 export async function restoreAgentPreview(page: Page) {
   await runPreviewAgentTool('preview_viewport', { restore: true }).catch(() => {})
-  await page(`(() => { document.getElementById(${JSON.stringify(CARD)})?.remove(); return true })()`).catch(() => {})
+  await page(
+    `(() => { document.getElementById(${JSON.stringify(CARD)})?.remove(); return true })()`
+  ).catch(() => {})
 }

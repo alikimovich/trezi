@@ -21,13 +21,19 @@ const sendToWin = (channel: string, ...args: unknown[]): void => {
 export function registerSimulatorIpc(getWindow: () => NativeView | null): void {
   getWin = getWindow
   const owner = platformOwner()
-  owner.onSimulatorLog(line => sendToWin('simulator:log', line))
-  owner.onSimulatorPick(pick => sendToWin('simulator:element-picked', pick))
+  owner.onSimulatorLog((line) => sendToWin('simulator:log', line))
+  owner.onSimulatorPick((pick) => sendToWin('simulator:element-picked', pick))
   ipcMain.handle('simulator:preflight', () => owner.simulatorPreflight())
-  ipcMain.handle('simulator:start', (_e, opts: { root: string; command?: string; udid?: string }) => owner.simulatorStart(opts))
+  ipcMain.handle('simulator:start', (_e, opts: { root: string; command?: string; udid?: string }) =>
+    owner.simulatorStart(opts)
+  )
   ipcMain.handle('simulator:stop', () => owner.simulatorStop())
   // Arm/disarm element-select for the sim (a tap then becomes a pick).
-  ipcMain.handle('simulator:set-select-mode', (_e, active: boolean) => owner.simulatorSelect(!!active))
+  ipcMain.handle('simulator:set-select-mode', (_e, active: boolean) =>
+    owner.simulatorSelect(!!active)
+  )
   // The service also stops it when it shuts down; this ends it with the window.
-  app.on('before-quit', () => { void owner.simulatorStop().catch(() => {}) })
+  app.on('before-quit', () => {
+    void owner.simulatorStop().catch(() => {})
+  })
 }

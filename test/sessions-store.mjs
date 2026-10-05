@@ -6,11 +6,12 @@
  *
  * Run with: bun run test:sessionstore
  */
-import { serviceProfile } from './helpers/with-service-owners.mjs'
-import { createSessionStore } from '../src/main/sessions-store.ts'
-import { setConversationOwner, swiftConversationOwner } from '../src/main/conversation-owner.ts'
+
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { setConversationOwner, swiftConversationOwner } from '../src/main/conversation-owner.ts'
+import { createSessionStore } from '../src/main/sessions-store.ts'
+import { serviceProfile } from './helpers/with-service-owners.mjs'
 
 const base = join(serviceProfile, 'trezi')
 let failed = 0
@@ -97,7 +98,10 @@ try {
   // A record from an older version (the `main` slot, written before the service)
   // still reads as current, and saving current replaces it.
   mkdirSync(join(base, 'sessions'), { recursive: true })
-  writeFileSync(join(base, 'sessions/legacy-main.json'), JSON.stringify(rec('legacy-main', '/p/legacy', 1, { slot: 'main' })))
+  writeFileSync(
+    join(base, 'sessions/legacy-main.json'),
+    JSON.stringify(rec('legacy-main', '/p/legacy', 1, { slot: 'main' }))
+  )
   ok(store.current('/p/legacy')?.id === 'legacy-main', 'legacy Main slot migrates as current')
   store.saveCurrent(rec('legacy-current', '/p/legacy', 2))
   await store.flush()
@@ -108,16 +112,31 @@ try {
   ok(store.list('/p/a').length === 2, 'a corrupt record is skipped')
 
   // LKM-120: a title that came from an error is renamed to the neutral one on load.
-  writeFileSync(join(base, 'sessions/err-title.json'), JSON.stringify(rec('err-title', '/p/titles', 5, { title: 'Not logged in · Please run /login' })))
-  writeFileSync(join(base, 'sessions/real-title.json'), JSON.stringify(rec('real-title', '/p/titles', 6, { title: 'Make Header Sticky' })))
+  writeFileSync(
+    join(base, 'sessions/err-title.json'),
+    JSON.stringify(rec('err-title', '/p/titles', 5, { title: 'Not logged in · Please run /login' }))
+  )
+  writeFileSync(
+    join(base, 'sessions/real-title.json'),
+    JSON.stringify(rec('real-title', '/p/titles', 6, { title: 'Make Header Sticky' }))
+  )
   const titled = store.list('/p/titles')
   ok(titled.length === 2, `a renamed record is listed once (${titled.length})`)
-  ok(titled.find((r) => r.id === 'err-title')?.title === 'New chat', 'an error title lists as New chat')
-  ok(titled.find((r) => r.id === 'real-title')?.title === 'Make Header Sticky', 'a real title is kept')
+  ok(
+    titled.find((r) => r.id === 'err-title')?.title === 'New chat',
+    'an error title lists as New chat'
+  )
+  ok(
+    titled.find((r) => r.id === 'real-title')?.title === 'Make Header Sticky',
+    'a real title is kept'
+  )
   await store.flush()
   const onDisk = JSON.parse(readFileSync(join(base, 'sessions/err-title.json'), 'utf8'))
   ok(onDisk.title === 'New chat', `the neutral title is saved through the owner (${onDisk.title})`)
-  writeFileSync(join(base, 'sessions/err-get.json'), JSON.stringify(rec('err-get', '/p/titles', 7, { title: 'Invalid API key · Please run /login' })))
+  writeFileSync(
+    join(base, 'sessions/err-get.json'),
+    JSON.stringify(rec('err-get', '/p/titles', 7, { title: 'Invalid API key · Please run /login' }))
+  )
   ok(store.get('err-get')?.title === 'New chat', 'get renames an error title too')
   await store.flush()
 
@@ -145,7 +164,9 @@ try {
   ok(store.list('/p/a').length === 2, 'reads need no service')
 
   if (failed === 0) {
-    console.log('SESSIONS-STORE OK — owner-backed save/list/get/remove, per-project, sort, prune cap, current slot, id guard')
+    console.log(
+      'SESSIONS-STORE OK — owner-backed save/list/get/remove, per-project, sort, prune cap, current slot, id guard'
+    )
   } else {
     process.exitCode = 1
   }

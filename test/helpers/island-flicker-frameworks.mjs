@@ -1,24 +1,21 @@
 // LKM-140: measure shadow flicker on real Next.js (Webpack dev) and Vite/CSS fixtures in system WebKit.
 import './with-service-owners.mjs'
 import assert from 'node:assert/strict'
+import { spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { spawn, spawnSync } from 'node:child_process'
-import { once } from 'node:events'
 import { findFreePort, waitForReachable } from '../../src/main/devserver-net.ts'
 import { PREVIEW_HOST, withPort } from '../../src/main/project-detect.ts'
-import { spawnHostBridge } from './host-bridge.mjs'
+import { MDX_HELPER_CONTENT } from '../../src/main/setup-mdx.ts'
 import { NEXT_ADAPTER_CONTENT, NEXT_LOADER_CONTENT } from '../../src/main/setup-next.ts'
 import { REACT_HELPER_CONTENT } from '../../src/main/setup-react.ts'
-import { MDX_HELPER_CONTENT } from '../../src/main/setup-mdx.ts'
+import { spawnHostBridge } from './host-bridge.mjs'
 import { measureFramework, resetPreviewSource } from './island-flicker-framework-core.mjs'
 
-if (
-  process.platform !== 'darwin' ||
-  !existsSync('out/native/Trezi.app/Contents/MacOS/TreziHost')
-) {
+if (process.platform !== 'darwin' || !existsSync('out/native/Trezi.app/Contents/MacOS/TreziHost')) {
   console.log('ISLAND-FLICKER-FRAMEWORKS SKIP — build the macOS native host first.')
   process.exit(0)
 }
@@ -73,7 +70,7 @@ async function withHost(run) {
   try {
     await once(host, 'ready', { signal: AbortSignal.timeout(15000) })
     host.send('visible', { view: 'preview', visible: true })
-    const page = code => host.request('evaluate', { view: 'preview', code })
+    const page = (code) => host.request('evaluate', { view: 'preview', code })
     async function wait(check, label = 'page', polls = 200) {
       for (let i = 0; i < polls; i++) {
         try {
@@ -102,7 +99,14 @@ function opener(host, page, wait, url) {
       const href = `${url}${url.includes('?') ? '&' : '?'}trezi-load=${++seq}`
       host.send('load', { view: 'preview', url: href })
       try {
-        return await wait(() => page(`location.href === ${JSON.stringify(href)} && !!document.querySelector("#shadow-phone")`), href, 50)
+        return await wait(
+          () =>
+            page(
+              `location.href === ${JSON.stringify(href)} && !!document.querySelector("#shadow-phone")`
+            ),
+          href,
+          50
+        )
       } catch (error) {
         failure = error
       }
@@ -113,7 +117,7 @@ function opener(host, page, wait, url) {
 
 /** True once `url` (the page or the island module) carries `css`; else what it serves instead. */
 function servedAt(url) {
-  return async css => {
+  return async (css) => {
     const text = await (await fetch(url, { cache: 'no-store' })).text()
     if (text.includes(css)) return true
     const at = text.indexOf('rgba(0, 0, 0, 0.35)')
@@ -122,10 +126,31 @@ function servedAt(url) {
 }
 
 /** The LKM-133 live-write drag, a reset to the initial source, then the override drag. */
-async function measureBoth({ host, page, wait, url, served, label, root, sourceFile, component, format }) {
+async function measureBoth({
+  host,
+  page,
+  wait,
+  url,
+  served,
+  label,
+  root,
+  sourceFile,
+  component,
+  format
+}) {
   const open = opener(host, page, wait, url)
   await open()
-  const run = withOverrides => measureFramework({ label, page, waitForCard: open, served, root, sourceFile, component, withOverrides })
+  const run = (withOverrides) =>
+    measureFramework({
+      label,
+      page,
+      waitForCard: open,
+      served,
+      root,
+      sourceFile,
+      component,
+      withOverrides
+    })
   await run(false)
   await resetPreviewSource(page, root, sourceFile, format, open, served)
   await run(true)
@@ -134,7 +159,7 @@ async function measureBoth({ host, page, wait, url, served, label, root, sourceF
 async function prepareNext(root) {
   await cp(resolve('test/fixtures/next-app'), root, {
     recursive: true,
-    filter: p => !p.includes('node_modules') && !p.endsWith('bun.lock')
+    filter: (p) => !p.includes('node_modules') && !p.endsWith('bun.lock')
   })
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
   pkg.dependencies.next = '16.3.5'
@@ -156,7 +181,7 @@ async function prepareNext(root) {
 async function prepareVite(root) {
   await cp(resolve('test/fixtures/island-flicker-vite'), root, {
     recursive: true,
-    filter: p => !p.includes('node_modules') && !p.endsWith('bun.lock')
+    filter: (p) => !p.includes('node_modules') && !p.endsWith('bun.lock')
   })
   await install(root)
 }
@@ -173,8 +198,19 @@ try {
       command: 'bun run dev --webpack',
       framework: 'next',
       urlPath: '/shadow-flicker',
-      run: url => measureBoth({ host, page, wait, url, served: servedAt(url), label: 'next', root: nextRoot,
-        sourceFile: 'app/shadow-flicker/ShadowPhone.tsx', component: 'ShadowPhone', format: 'tsx' })
+      run: (url) =>
+        measureBoth({
+          host,
+          page,
+          wait,
+          url,
+          served: servedAt(url),
+          label: 'next',
+          root: nextRoot,
+          sourceFile: 'app/shadow-flicker/ShadowPhone.tsx',
+          component: 'ShadowPhone',
+          format: 'tsx'
+        })
     })
 
     await withServer({
@@ -182,8 +218,19 @@ try {
       command: 'bun run dev',
       framework: 'vite',
       urlPath: '/',
-      run: url => measureBoth({ host, page, wait, url, served: servedAt(new URL('/src/phone.js', url).href),
-        label: 'vite', root: viteRoot, sourceFile: 'src/phone.js', component: 'Shadow', format: 'js' })
+      run: (url) =>
+        measureBoth({
+          host,
+          page,
+          wait,
+          url,
+          served: servedAt(new URL('/src/phone.js', url).href),
+          label: 'vite',
+          root: viteRoot,
+          sourceFile: 'src/phone.js',
+          component: 'Shadow',
+          format: 'js'
+        })
     })
   })
 

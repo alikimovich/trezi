@@ -2,7 +2,14 @@ import type { ImageAttachment, RunningSimulator, SimElementPick, SimPreflight } 
 
 /** A server listening from a project folder (the "Running servers" recovery sheet).
  *  `identity` is the pid and kernel start time, which a stop must repeat unchanged. */
-export interface PreviewProcess { pid: number; root: string; command: string; started: string; addresses: string[]; identity?: string }
+export interface PreviewProcess {
+  pid: number
+  root: string
+  command: string
+  started: string
+  addresses: string[]
+  identity?: string
+}
 
 /**
  * The platform owner seam (S14). The service's platform owner performs the OS
@@ -17,7 +24,12 @@ export interface PreviewProcess { pid: number; root: string; command: string; st
  */
 
 export class PlatformError extends Error {
-  constructor(readonly code: string, message: string) { super(message) }
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
+    super(message)
+  }
 }
 
 export interface MediaGrant {
@@ -59,7 +71,12 @@ export interface PlatformOwner {
   /** An existing absolute path with its default app: '' on success, else the failure text. */
   openFile(path: string): Promise<string>
   /** "Open in editor": a file inside `root` at a line, with the first editor CLI that works. */
-  openInEditor(root: string, file: string, line: number, column?: number): Promise<{ ok: boolean; error?: string }>
+  openInEditor(
+    root: string,
+    file: string,
+    line: number,
+    column?: number
+  ): Promise<{ ok: boolean; error?: string }>
 }
 
 let owner: PlatformOwner | null = null
@@ -70,6 +87,7 @@ export function setPlatformOwner(next: PlatformOwner | null): void {
 }
 
 export function platformOwner(): PlatformOwner {
-  if (!owner) throw new Error('Trezi’s service is not running, so this system action is unavailable.')
+  if (!owner)
+    throw new Error('Trezi’s service is not running, so this system action is unavailable.')
   return owner
 }

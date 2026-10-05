@@ -8,25 +8,48 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterTurn, beforeTurn, initChatIsolation, isolatedCwd, isolationSnapshot, releaseChat } from '../src/main/chat-isolation.ts'
+import {
+  afterTurn,
+  beforeTurn,
+  initChatIsolation,
+  isolatedCwd,
+  isolationSnapshot,
+  releaseChat
+} from '../src/main/chat-isolation.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from '../src/main/stopped-turn.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-stop-recovery-'))
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const git = (cwd, ...args) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const events = []
 const records = new Map()
 initChatIsolation({
   worktreesDir: () => join(dir, 'worktrees'),
-  store: () => ({ get: id => records.get(id), save: record => records.set(record.id, record), remove: id => records.delete(id) }),
-  getWindow: () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } })
+  store: () => ({
+    get: (id) => records.get(id),
+    save: (record) => records.set(record.id, record),
+    remove: (id) => records.delete(id)
+  }),
+  getWindow: () => ({
+    webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) }
+  })
 })
 
 // CRLF, a BOM-less UTF-8 accent and no final newline: "byte-exact" must mean bytes.
-const ORIGINAL = Buffer.from('export function Bar() {\r\n  return <div className="é">\r\n    <span>hi</span>\r\n  </div>\r\n}', 'utf8')
+const ORIGINAL = Buffer.from(
+  'export function Bar() {\r\n  return <div className="é">\r\n    <span>hi</span>\r\n  </div>\r\n}',
+  'utf8'
+)
 // The first of two dependent edits: a fragment opened, its closing edit never made.
-const HALF = Buffer.from('export function Bar() {\r\n  return <>\r\n  <div className="é">\r\n    <span>hi</span>\r\n  </div>\r\n}', 'utf8')
-const DONE = Buffer.from('export function Bar() {\r\n  return <>\r\n  <div className="é">\r\n    <span>hi</span>\r\n  </div>\r\n  </>\r\n}', 'utf8')
+const HALF = Buffer.from(
+  'export function Bar() {\r\n  return <>\r\n  <div className="é">\r\n    <span>hi</span>\r\n  </div>\r\n}',
+  'utf8'
+)
+const DONE = Buffer.from(
+  'export function Bar() {\r\n  return <>\r\n  <div className="é">\r\n    <span>hi</span>\r\n  </div>\r\n  </>\r\n}',
+  'utf8'
+)
 const FILE = 'src/bar.tsx'
 
 let n = 0
@@ -44,7 +67,13 @@ async function fixture() {
   const cwd = await isolatedCwd(root, key)
   await beforeTurn(key, 'edit')
   events.length = 0
-  return { key, root, cwd, live: () => readFileSync(join(root, FILE)), copy: () => readFileSync(join(cwd, FILE)) }
+  return {
+    key,
+    root,
+    cwd,
+    live: () => readFileSync(join(root, FILE)),
+    copy: () => readFileSync(join(cwd, FILE))
+  }
 }
 const last = () => events.at(-1)
 
@@ -55,7 +84,11 @@ try {
   assert.equal(await afterTurn(stop.key, 'Wrap the bar in a fragment', [], 'failed'), null)
   assert.ok(stop.live().equals(ORIGINAL), 'a stopped turn never writes the live checkout')
   assert.equal(git(stop.root, 'status', '--porcelain'), '')
-  assert.deepEqual(isolationSnapshot(stop.key), { state: 'parked', branch: isolationSnapshot(stop.key).branch, reason: 'interrupted' })
+  assert.deepEqual(isolationSnapshot(stop.key), {
+    state: 'parked',
+    branch: isolationSnapshot(stop.key).branch,
+    reason: 'interrupted'
+  })
   assert.equal(last().state, 'parked')
   assert.equal(last().reason, 'interrupted')
   assert.deepEqual(last().files, [FILE])
@@ -94,7 +127,10 @@ try {
   assert.equal(last().state, 'merged')
   assert.equal(last().group, kept.group)
   assert.equal(isolationSnapshot(keep.key).state, 'isolated')
-  assert.equal(git(keep.root, 'log', '-1', '--format=%s'), 'Keep partial changes from a stopped turn')
+  assert.equal(
+    git(keep.root, 'log', '-1', '--format=%s'),
+    'Keep partial changes from a stopped turn'
+  )
   const reverted = await revertGroup(keep.root, kept.group)
   assert.equal(reverted.ok, true)
   assert.ok(keep.live().equals(ORIGINAL), 'the kept turn reverts byte for byte')
@@ -137,7 +173,9 @@ try {
   await releaseChat(release.key)
   assert.ok(release.live().equals(ORIGINAL))
   assert.equal(records.size, 1, 'only the drift chat keeps a park record')
-  console.log('STOP RECOVERY OK — stopped turns hold, revert byte-exact (undoable), keep and finish')
+  console.log(
+    'STOP RECOVERY OK — stopped turns hold, revert byte-exact (undoable), keep and finish'
+  )
 } finally {
   rmSync(dir, { recursive: true, force: true })
 }

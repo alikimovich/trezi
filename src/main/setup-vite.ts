@@ -84,7 +84,9 @@ export default function trezi() {
 async function installedVersion(root: string, name: string): Promise<string | undefined> {
   for (let folder = root; ; folder = dirname(folder)) {
     try {
-      const version = JSON.parse(await readFile(join(folder, 'node_modules', name, 'package.json'), 'utf8')).version
+      const version = JSON.parse(
+        await readFile(join(folder, 'node_modules', name, 'package.json'), 'utf8')
+      ).version
       if (typeof version === 'string') return version
     } catch {
       /* Not installed here. */
@@ -110,10 +112,18 @@ export async function detectVite(root: string): Promise<ViteSetupInfo | undefine
   const declared = (name: string): string | undefined =>
     pkg.devDependencies?.[name] ?? pkg.dependencies?.[name] ?? pkg.peerDependencies?.[name]
   const declaredVersion = declared('vite')
-  const reactPlugin = ['@vitejs/plugin-react', '@vitejs/plugin-react-swc', '@vitejs/plugin-react-oxc'].find(declared)
+  const reactPlugin = [
+    '@vitejs/plugin-react',
+    '@vitejs/plugin-react-swc',
+    '@vitejs/plugin-react-oxc'
+  ].find(declared)
   if (!declaredVersion && !reactPlugin) return undefined
   const version = await installedVersion(root, 'vite')
-  const info: ViteSetupInfo = { version, declaredVersion, major: majorOf(version ?? declaredVersion) }
+  const info: ViteSetupInfo = {
+    version,
+    declaredVersion,
+    major: majorOf(version ?? declaredVersion)
+  }
   if (reactPlugin) {
     info.reactPlugin = reactPlugin
     info.reactPluginVersion = (await installedVersion(root, reactPlugin)) ?? declared(reactPlugin)

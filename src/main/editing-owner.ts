@@ -1,5 +1,5 @@
-import type { IslandBlock, IslandRecord, IslandValue } from '../shared/chat-islands'
 import type { ControlPanelManifest } from '../shared/api'
+import type { IslandBlock, IslandRecord, IslandValue } from '../shared/chat-islands'
 
 /**
  * The editing owner seam (S12). Under the Swift launch the service's editing
@@ -44,16 +44,32 @@ export interface IslandCommandAdmission {
 }
 
 export type SidecarName = 'control-panels.json' | 'annotations.json' | 'tokens.json'
-export const SIDECAR_NAMES: readonly SidecarName[] = ['control-panels.json', 'annotations.json', 'tokens.json']
+export const SIDECAR_NAMES: readonly SidecarName[] = [
+  'control-panels.json',
+  'annotations.json',
+  'tokens.json'
+]
 export type SidecarCommit = { ok: true; hash: string } | { ok: false; conflict: true }
 export type NavigationEvent = 'landed' | 'failed' | 'begin' | 'close'
 /** `files`: project-relative paths with a legacy reference; `helpers`: legacy helper files. */
-export interface LegacyNamesPlan { legacy: boolean; clean: boolean; files: string[]; helpers: string[] }
+export interface LegacyNamesPlan {
+  legacy: boolean
+  clean: boolean
+  files: string[]
+  helpers: string[]
+}
 /** `dirty` with `migrated: false`: refused, nothing changed. `kept`: differing legacy copies. */
-export type LegacyNamesResult = { migrated: false; dirty: boolean } | { migrated: true; dirty: boolean; files: string[]; kept: string[] }
+export type LegacyNamesResult =
+  | { migrated: false; dirty: boolean }
+  | { migrated: true; dirty: boolean; files: string[]; kept: string[] }
 
 export class EditingError extends Error {
-  constructor(readonly code: string, message: string) { super(message) }
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
+    super(message)
+  }
 }
 
 export interface EditingOwner {
@@ -63,22 +79,56 @@ export interface EditingOwner {
   islandsClose(chat: string): Promise<void>
   islands(chat: string): Promise<IslandRecord[]>
   /** `origin` is the turn id Bun attributes the tool call to (the owner checks it). */
-  islandDefine(chat: string, turn: number, origin: string | null, id?: string, revision?: number): Promise<IslandAdmission>
-  islandCommit(chat: string, token: string, definition: { manifest: ControlPanelManifest; blocks: IslandBlock[] },
-    engine: 'agent' | 'jev', initial: Record<string, IslandValue>, fallback?: string): Promise<IslandRecord[]>
+  islandDefine(
+    chat: string,
+    turn: number,
+    origin: string | null,
+    id?: string,
+    revision?: number
+  ): Promise<IslandAdmission>
+  islandCommit(
+    chat: string,
+    token: string,
+    definition: { manifest: ControlPanelManifest; blocks: IslandBlock[] },
+    engine: 'agent' | 'jev',
+    initial: Record<string, IslandValue>,
+    fallback?: string
+  ): Promise<IslandRecord[]>
   islandAbort(chat: string, token: string): Promise<void>
   /** A turn's terminal (`turn` null: whatever the chat is doing). `records` null: chat not open. */
-  islandSettle(chat: string, turn: string | null, successful: boolean): Promise<{ records: IslandRecord[] | null; cancelled: boolean }>
-  islandCommand(chat: string, id: string, revision: number, action: 'commit' | 'reset' | 'undo' | 'reload', sourceRevision: string): Promise<IslandCommandAdmission>
-  islandFinish(chat: string, ticket: string, outcome: { ok: boolean; group?: string; revision?: string }, last: boolean): Promise<void>
+  islandSettle(
+    chat: string,
+    turn: string | null,
+    successful: boolean
+  ): Promise<{ records: IslandRecord[] | null; cancelled: boolean }>
+  islandCommand(
+    chat: string,
+    id: string,
+    revision: number,
+    action: 'commit' | 'reset' | 'undo' | 'reload',
+    sourceRevision: string
+  ): Promise<IslandCommandAdmission>
+  islandFinish(
+    chat: string,
+    ticket: string,
+    outcome: { ok: boolean; group?: string; revision?: string },
+    last: boolean
+  ): Promise<void>
   // Deferred preview navigation
   /** Answers whether it may open now (false: it waits for its turn to land). */
   navigate(chat: string, root: string, path: string, turn: string | null): Promise<boolean>
   navigation(chat: string, kind: NavigationEvent, turn: string | null): Promise<boolean>
   navigationTake(chat: string): Promise<{ root: string; path: string } | null>
-  navigationState(): Promise<Array<{ chat: string; root: string; path: string; turn: string | null; awaiting: boolean }>>
+  navigationState(): Promise<
+    Array<{ chat: string; root: string; path: string; turn: string | null; awaiting: boolean }>
+  >
   /** Hash-bound project sidecar commit; `expectedHash` null means the file must not exist. */
-  sidecar(root: string, name: SidecarName, expectedHash: string | null, content: string): Promise<SidecarCommit>
+  sidecar(
+    root: string,
+    name: SidecarName,
+    expectedHash: string | null,
+    content: string
+  ): Promise<SidecarCommit>
   // Project files in `.trezi/` (S15), each in the project's repository lane
   /** Moves legacy sidecar metadata into `.trezi/`; answers the legacy copies a differing file won over. */
   migrateSidecar(root: string): Promise<string[]>
@@ -109,6 +159,10 @@ export function swiftEditingOwner(): EditingOwner | null {
 
 /** The Swift owner; with no service there is none (no islands or sidecar writes). */
 export function editingOwner(): EditingOwner {
-  if (!owner) throw new EditingError('unavailable', 'Trezi’s service is not running, so this project cannot be edited.')
+  if (!owner)
+    throw new EditingError(
+      'unavailable',
+      'Trezi’s service is not running, so this project cannot be edited.'
+    )
   return owner
 }

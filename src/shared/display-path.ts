@@ -26,13 +26,19 @@ const END = /[\s"'`<>()[\]{},;]/
 const RECOVERY = /refs\/(?:trezi|praxis)\/recovery\/(?:[^\s"'`<>()[\]{},;]*[^\s"'`<>()[\]{},;.:])?/g
 const PATH_CHAR = /[\w./~-]/
 
-interface Root { root: string; kind: 'project' | 'profile' }
+interface Root {
+  root: string
+  kind: 'project' | 'profile'
+}
 
 function roots(ctx: PathContext): Root[] {
   const seen = new Set<string>()
   const list: Root[] = []
   // A profile wins over a project at the same path; longer roots win over their parents.
-  for (const [kind, paths] of [['profile', ctx.profiles], ['project', ctx.projects]] as const)
+  for (const [kind, paths] of [
+    ['profile', ctx.profiles],
+    ['project', ctx.projects]
+  ] as const)
     for (const raw of paths) {
       const root = raw.replace(/\/+$/, '')
       if (!root.startsWith('/') || seen.has(root)) continue
@@ -55,7 +61,8 @@ export function shortPath(path: string, ctx: PathContext): string {
   if (/^refs\/(?:trezi|praxis)\/recovery\//.test(path)) return RECOVERY_COPY
   for (const entry of roots(ctx)) {
     if (path === entry.root) return label(entry, '')
-    if (path.startsWith(`${entry.root}/`)) return label(entry, path.slice(entry.root.length + 1).replace(/\/+$/, ''))
+    if (path.startsWith(`${entry.root}/`))
+      return label(entry, path.slice(entry.root.length + 1).replace(/\/+$/, ''))
   }
   return path
 }
@@ -69,8 +76,16 @@ export function shortPaths(text: string, ctx: PathContext): string {
     let at = out.indexOf(root)
     while (at >= 0) {
       const after = at + root.length
-      const boundary = (at === 0 || !PATH_CHAR.test(out[at - 1])) && (after === out.length || out[after] === '/' || END.test(out[after]) || /[.:]/.test(out[after]))
-      if (!boundary) { at = out.indexOf(root, at + 1); continue }
+      const boundary =
+        (at === 0 || !PATH_CHAR.test(out[at - 1])) &&
+        (after === out.length ||
+          out[after] === '/' ||
+          END.test(out[after]) ||
+          /[.:]/.test(out[after]))
+      if (!boundary) {
+        at = out.indexOf(root, at + 1)
+        continue
+      }
       let end = after
       if (out[end] === '/') while (end < out.length && !END.test(out[end])) end++
       // Sentence punctuation after a path is not part of it.

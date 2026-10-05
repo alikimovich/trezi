@@ -38,7 +38,9 @@ const DAY = 24 * 60 * 60 * 1000
 /** The idle period in milliseconds for a stored preference value; null turns the sweep off. */
 export function idlePeriod(value: string | null | undefined): number | null {
   if (value === 'never') return null
-  const days = (CHAT_WORKSPACE_IDLE_CHOICES as readonly string[]).includes(value ?? '') ? Number(value) : DEFAULT_DAYS
+  const days = (CHAT_WORKSPACE_IDLE_CHOICES as readonly string[]).includes(value ?? '')
+    ? Number(value)
+    : DEFAULT_DAYS
   return days * DAY
 }
 
@@ -67,7 +69,9 @@ export function legacyWorkspaceDirs(profile: string): string[] {
     /* a profile that does not exist yet */
   }
   const support = dirname(real)
-  return ['Praxis', 'dsgn'].flatMap((app) => ['praxis', 'dsgn'].map((name) => join(support, app, name, 'worktrees')))
+  return ['Praxis', 'dsgn'].flatMap((app) =>
+    ['praxis', 'dsgn'].map((name) => join(support, app, name, 'worktrees'))
+  )
 }
 
 export interface SweepResult {
@@ -125,17 +129,23 @@ export async function cleanLegacyWorkspaces(): Promise<{ removed: string[]; kept
     const repos = new Set<string>()
     for (const id of await readdir(real).catch(() => [] as string[])) {
       if (id.startsWith('.')) continue
-      const common = await execFileP('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-        cwd: join(real, id),
-        timeout: 15_000
-      }).then(
+      const common = await execFileP(
+        'git',
+        ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+        {
+          cwd: join(real, id),
+          timeout: 15_000
+        }
+      ).then(
         (r) => r.stdout.trim(),
         () => ''
       )
       if (common) repos.add(dirname(common))
     }
     for (const repo of repos) {
-      await handleReclaimed(await pruneOrphans(repo, real, new Set(liveChatWorktreeIds()), hasParkRecord))
+      await handleReclaimed(
+        await pruneOrphans(repo, real, new Set(liveChatWorktreeIds()), hasParkRecord)
+      )
     }
     if (await removeLegacyFolder(real)) result.removed.push(dir)
     else result.kept.push(dir)

@@ -6,8 +6,8 @@ import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import * as channels from '../shared/preview-channels'
 import { platformOwner } from '../main/platform-owner'
+import * as channels from '../shared/preview-channels'
 import { bridge } from './bridge'
 
 export const app = Object.assign(new EventEmitter(), {
@@ -15,13 +15,16 @@ export const app = Object.assign(new EventEmitter(), {
     if (name === 'temp') return tmpdir()
     if (name === 'userData')
       return (
-        process.env.TREZI_USER_DATA || nativeProfilePath(join(homedir(), 'Library/Application Support'))
+        process.env.TREZI_USER_DATA ||
+        nativeProfilePath(join(homedir(), 'Library/Application Support'))
       )
     throw new Error(`Unsupported native path: ${name}`)
   },
   getAppPath: () => resolve(__dirname, '../..')
 })
-export interface NativeIpcEvent { sender: NativeWebContents }
+export interface NativeIpcEvent {
+  sender: NativeWebContents
+}
 type Handler = (event: NativeIpcEvent, ...args: any[]) => any
 const requests = new Map<string, Handler>()
 /** Trusted in-process observation; preview IPC cannot emit these events. */
@@ -78,7 +81,9 @@ export const shell = {
     await platformOwner().openLink(url)
   },
   async openPath(path: string) {
-    return platformOwner().openFile(resolve(path)).catch((error) => String(error))
+    return platformOwner()
+      .openFile(resolve(path))
+      .catch((error) => String(error))
   }
 }
 
@@ -118,7 +123,12 @@ export class NativeView {
     removeInsertedCSS: (key: string) => Promise<any>
     /** Agent preview tools (LKM-138): the TreziPreview or the handler-less TreziAgent world. */
     evaluateIn: (code: string, world: 'preview' | 'agent', timeout: number) => Promise<unknown>
-    captureRect: (rect: { x: number; y: number; width: number; height: number }) => Promise<NativeImage>
+    captureRect: (rect: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }) => Promise<NativeImage>
     setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
   }
   constructor(readonly id: string) {
@@ -134,7 +144,12 @@ export class NativeView {
         this.url = url
         bridge().send('load', { view: id, url })
       },
-      capturePage: async () => new NativeImage(id === 'main' ? await bridge().request('captureShellImage') : await bridge().request('capture', { view: id })),
+      capturePage: async () =>
+        new NativeImage(
+          id === 'main'
+            ? await bridge().request('captureShellImage')
+            : await bridge().request('capture', { view: id })
+        ),
       executeJavaScript: (code: string) => bridge().request('evaluate', { view: id, code }),
       insertCSS: async (css: string) => {
         const key = randomUUID()
@@ -152,8 +167,13 @@ export class NativeView {
           code: `document.getElementById(${JSON.stringify(key)})?.remove()`
         }),
       evaluateIn: (code, world, timeout) =>
-        bridge().request('evaluate', { view: id, code, isolated: world === 'preview', world }, timeout),
-      captureRect: async (rect) => new NativeImage(await bridge().request('capture', { view: id, rect })),
+        bridge().request(
+          'evaluate',
+          { view: id, code, isolated: world === 'preview', world },
+          timeout
+        ),
+      captureRect: async (rect) =>
+        new NativeImage(await bridge().request('capture', { view: id, rect })),
       setViewport: (width) => bridge().request('previewViewport', { view: id, width })
     }
   }
@@ -169,4 +189,3 @@ export class NativeView {
 }
 export const views = new Map<string, NativeView>()
 export type NativeWebContents = NativeView['webContents']
-

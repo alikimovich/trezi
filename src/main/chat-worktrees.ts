@@ -1,11 +1,11 @@
-import { provisionDependencies } from './worktree-dependencies'
-import { editingOwner } from './editing-owner'
 import { execFile } from 'child_process'
 import { lstat, readFile } from 'fs/promises'
 import { join } from 'path'
 import { promisify } from 'util'
-import { createWorktree, type Worktree } from './worktrees'
+import { editingOwner } from './editing-owner'
 import { repositoryOwner } from './repository-owner'
+import { provisionDependencies } from './worktree-dependencies'
+import { createWorktree, type Worktree } from './worktrees'
 
 /**
  * Per-CHAT git-worktree isolation (v9). Generalizes the comment-spawn worktree
@@ -178,7 +178,10 @@ export async function stageResolve(liveRoot: string, wt: Worktree): Promise<Reso
   // Setup helpers live under excluded `.trezi/` paths, so syncing them first never
   // makes the worktree look changed to the service's parked-state check.
   await editingOwner().syncSetupHelpers(liveRoot, wt.path)
-  const { conflicted, files, clean, baseSha } = await repositoryOwner().stageResolve({ ...wt, repoRoot: liveRoot })
+  const { conflicted, files, clean, baseSha } = await repositoryOwner().stageResolve({
+    ...wt,
+    repoRoot: liveRoot
+  })
   wt.baseSha = baseSha
   return { conflicted, files, clean }
 }
@@ -189,5 +192,7 @@ export async function stageResolve(liveRoot: string, wt: Worktree): Promise<Reso
  * live and its worktree keeps the branch checked out (a `git branch -D` would fail).
  */
 export async function discardParked(wt: Worktree): Promise<void> {
-  return repositoryOwner().discardParked(wt).catch(() => {})
+  return repositoryOwner()
+    .discardParked(wt)
+    .catch(() => {})
 }

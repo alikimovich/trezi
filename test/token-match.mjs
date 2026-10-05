@@ -15,7 +15,7 @@ import {
   groupRole,
   resolveTokenForValue,
   tokenReference,
-  tokensForProp, 
+  tokensForProp,
   tokenValueKind
 } from '../src/shared/token-match.ts'
 
@@ -238,11 +238,8 @@ eq(
 // The comparator still normalizes notation (#6c6c6c ⇄ rgb(108, 108, 108)) —
 // value equality is still a real requirement, just no longer a sufficient one.
 eq(
-  resolveTokenForValue(
-    colorCands,
-    'rgb(108, 108, 108)',
-    cssOpts({ provenVar: '--color-text' })
-  )?.match.token.name,
+  resolveTokenForValue(colorCands, 'rgb(108, 108, 108)', cssOpts({ provenVar: '--color-text' }))
+    ?.match.token.name,
   '--color-text',
   'provenVar + matching value → names it'
 )
@@ -399,7 +396,10 @@ eq(
   'manifest: the same-family token names the row'
 )
 const mfRadiusOnly = tokensForProp(
-  { source: 'manifest', groups: [{ name: 'radius', tokens: [{ name: 'radius-none', value: '0px' }] }] },
+  {
+    source: 'manifest',
+    groups: [{ name: 'radius', tokens: [{ name: 'radius-none', value: '0px' }] }]
+  },
   'padding-top'
 )
 eq(

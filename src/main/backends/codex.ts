@@ -18,13 +18,14 @@ import {
   type TokenUsage,
   usageDelta
 } from '../../shared/run-stats'
+import { agentFileAccess, realPath } from '../agent-file-access'
 import { type RolloutUsageWatch, watchRolloutUsage } from '../codex-usage'
 import { parseCodexModels } from '../model-catalog'
-import { type TreziAgentToolRegistration, registerTreziAgentTools } from '../trezi-agent-tools'
 import { resolveConnection } from '../providers'
-import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { scrubSecret } from '../providers-store'
 import { treziRules } from '../rules'
+import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
+import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
 import { isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
 import {
   codexFallbackNotice,
@@ -37,8 +38,7 @@ import {
 } from './codex-model'
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
-import { createItemTracker, codexItemWarning } from './codex-stream'
-import { agentFileAccess, realPath } from '../agent-file-access'
+import { codexItemWarning, createItemTracker } from './codex-stream'
 import { liveTreeChanges, liveTreeSnapshot, liveWriteNote } from './live-tree-watch'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
@@ -307,11 +307,19 @@ async function startSession(
     // session's grant first (a background edit is not granted the editor or islands).
     // In a provider helper they run in Bun, reached through the owner (`sessionTool`).
     const scope = {
-      root, liveRoot: ctx?.liveRoot ?? root, emitKey, background: !!ctx?.sessionId, connectionId: options.connectionId,
-      notify: (channel: string, payload: unknown): void => sendToRenderer(getWindow, channel, payload)
+      root,
+      liveRoot: ctx?.liveRoot ?? root,
+      emitKey,
+      background: !!ctx?.sessionId,
+      connectionId: options.connectionId,
+      notify: (channel: string, payload: unknown): void =>
+        sendToRenderer(getWindow, channel, payload)
     }
-    treziTools = await registerTreziAgentTools(sessionTool(ctx?.tools, (action, args) =>
-      authorizedTool(ctx?.grant, action, args, () => runTreziTool(action, args, scope))))
+    treziTools = await registerTreziAgentTools(
+      sessionTool(ctx?.tools, (action, args) =>
+        authorizedTool(ctx?.grant, action, args, () => runTreziTool(action, args, scope))
+      )
+    )
     const mcpConfig = treziMcpConfig(app.getAppPath(), treziTools)
     await verifyTreziMcp(mcpConfig)
     // The seat skips a model this login already rejected (`codex-model.ts`).

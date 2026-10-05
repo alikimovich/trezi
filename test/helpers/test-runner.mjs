@@ -1,12 +1,24 @@
 import { spawn } from 'node:child_process'
-import { closeSync, mkdtempSync, openSync, rmSync, createReadStream, writeFileSync, readFileSync, unlinkSync } from 'node:fs'
+import {
+  closeSync,
+  createReadStream,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 
 // Only recognize the test's own status line, not arbitrary mentions of SKIP.
 export async function skipReason(log, name) {
-  const label = name.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('-', '[- ]')
+  const label = name
+    .toUpperCase()
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replaceAll('-', '[- ]')
   const marker = new RegExp(`^(?:SKIP\\b|${label}(?: LIVE)? SKIP\\b)`)
   const input = createReadStream(log)
   try {
@@ -14,7 +26,9 @@ export async function skipReason(log, name) {
       if (marker.test(line)) return line
     }
     return null
-  } finally { input.destroy() }
+  } finally {
+    input.destroy()
+  }
 }
 
 /** Whether a failed group kill means "nothing left to kill". macOS reports EPERM, not
@@ -26,7 +40,16 @@ export function killTargetGone(error, reaping, platform = process.platform) {
   return error.code === 'ESRCH' || (reaping && platform === 'darwin' && error.code === 'EPERM')
 }
 
-export async function runCommand({ command, args, cwd, name, log, timeoutMs, signal, graceMs = 2000 }) {
+export async function runCommand({
+  command,
+  args,
+  cwd,
+  name,
+  log,
+  timeoutMs,
+  signal,
+  graceMs = 2000
+}) {
   const start = Date.now()
   if (signal?.aborted) return { name, outcome: 'CANCELLED', duration: 0, log }
   const profile = mkdtempSync(join(tmpdir(), `trezi-test-${name}-`))
@@ -43,34 +66,62 @@ export async function runCommand({ command, args, cwd, name, log, timeoutMs, sig
       // Every test owns a process group, including its ordinary server children.
       if (process.platform === 'win32') child.kill(sig)
       else process.kill(-child.pid, sig)
-    } catch (error) { if (!killTargetGone(error, reaping)) spawnError ??= error }
+    } catch (error) {
+      if (!killTargetGone(error, reaping)) spawnError ??= error
+    }
   }
   const stop = () => {
     kill('SIGTERM')
     escalation ??= setTimeout(() => kill('SIGKILL'), graceMs)
   }
-  const abort = () => { cancelled = true; stop() }
+  const abort = () => {
+    cancelled = true
+    stop()
+  }
   try {
     fd = openSync(log, 'w')
     child = spawn(command, args, {
-      cwd, detached: process.platform !== 'win32', stdio: ['ignore', fd, fd],
+      cwd,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', fd, fd],
       env: { ...process.env, TREZI_USER_DATA: profile }
     })
     signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) abort()
-    timer = setTimeout(() => { timedOut = true; stop() }, timeoutMs)
+    timer = setTimeout(() => {
+      timedOut = true
+      stop()
+    }, timeoutMs)
     const result = await new Promise((resolve) => {
-      child.on('error', (error) => { spawnError = error })
+      child.on('error', (error) => {
+        spawnError = error
+      })
       child.on('close', (code, exitSignal) => resolve({ code, signal: exitSignal }))
     })
     // Reap leftover descendants before another test can use shared fixtures.
     kill('SIGKILL', true)
-    const reason = result.code === 0 && !spawnError && !cancelled && !timedOut
-      ? await skipReason(log, name) : null
-    const outcome = cancelled ? 'CANCELLED' : timedOut ? 'TIMEOUT'
-      : spawnError || result.code !== 0 || result.signal ? 'FAIL' : reason ? 'SKIP' : 'PASS'
-    return { name, outcome, duration: Date.now() - start, log, ...result,
-      ...(reason ? { note: reason } : {}), ...(spawnError ? { note: spawnError.message } : {}) }
+    const reason =
+      result.code === 0 && !spawnError && !cancelled && !timedOut
+        ? await skipReason(log, name)
+        : null
+    const outcome = cancelled
+      ? 'CANCELLED'
+      : timedOut
+        ? 'TIMEOUT'
+        : spawnError || result.code !== 0 || result.signal
+          ? 'FAIL'
+          : reason
+            ? 'SKIP'
+            : 'PASS'
+    return {
+      name,
+      outcome,
+      duration: Date.now() - start,
+      log,
+      ...result,
+      ...(reason ? { note: reason } : {}),
+      ...(spawnError ? { note: spawnError.message } : {})
+    }
   } finally {
     clearTimeout(timer)
     clearTimeout(escalation)
@@ -88,14 +139,16 @@ export async function runQueue(items, jobs, run, signal) {
   let cursor = 0
   async function batch(indices) {
     let next = 0
-    await Promise.all(Array.from({ length: Math.min(jobs, indices.length) }, async () => {
-      while (next < indices.length) {
-        const index = indices[next++]
-        results[index] = signal?.aborted
-          ? { name: items[index].name, outcome: 'CANCELLED', duration: 0 }
-          : await run(items[index])
-      }
-    }))
+    await Promise.all(
+      Array.from({ length: Math.min(jobs, indices.length) }, async () => {
+        while (next < indices.length) {
+          const index = indices[next++]
+          results[index] = signal?.aborted
+            ? { name: items[index].name, outcome: 'CANCELLED', duration: 0 }
+            : await run(items[index])
+        }
+      })
+    )
   }
   while (cursor < items.length) {
     if (items[cursor].exclusive) await batch([cursor++])
@@ -116,23 +169,39 @@ export function acquireRunLock(path) {
   } catch (error) {
     if (error.code !== 'EEXIST') throw error
     let owner = 'unknown'
-    try { owner = readFileSync(path, 'utf8').trim() } catch {}
+    try {
+      owner = readFileSync(path, 'utf8').trim()
+    } catch {}
     const pid = Number(/^pid=(\d+)$/.exec(owner)?.[1])
     if (Number.isSafeInteger(pid) && pid > 1) {
       let alive = true
-      try { process.kill(pid, 0) } catch (killError) { alive = killError.code !== 'ESRCH' }
+      try {
+        process.kill(pid, 0)
+      } catch (killError) {
+        alive = killError.code !== 'ESRCH'
+      }
       if (!alive) {
         unlinkSync(path)
         return acquireRunLock(path)
       }
     }
-    throw new Error(`Another suite owns ${path} (${owner}). Wait for it to finish. If it crashed, verify its PID is gone before removing the lock.`)
+    throw new Error(
+      `Another suite owns ${path} (${owner}). Wait for it to finish. If it crashed, verify its PID is gone before removing the lock.`
+    )
   }
-  try { writeFileSync(fd, `pid=${process.pid}\n`) }
-  catch (error) { unlinkSync(path); throw error }
-  finally { closeSync(fd) }
+  try {
+    writeFileSync(fd, `pid=${process.pid}\n`)
+  } catch (error) {
+    unlinkSync(path)
+    throw error
+  } finally {
+    closeSync(fd)
+  }
   let released = false
   return () => {
-    if (!released) { released = true; unlinkSync(path) }
+    if (!released) {
+      released = true
+      unlinkSync(path)
+    }
   }
 }

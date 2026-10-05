@@ -6,12 +6,13 @@
  *
  * Run with: bun test/project-create.mjs
  */
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
-import { compileWorkflowFixture, startWorkflowFixture } from './helpers/workflow-fixture.mjs'
 import { setWorkflowOwner } from '../src/main/workflow-owner.ts'
+import { compileWorkflowFixture, startWorkflowFixture } from './helpers/workflow-fixture.mjs'
 
 const { createProject, packageName } = await import('../src/main/scaffold.ts')
 
@@ -77,7 +78,10 @@ try {
   mkdirSync(taken, { recursive: true })
   writeFileSync(join(taken, 'keep.txt'), 'x')
   const res2 = await createProject(taken, { install: false })
-  assert(!res2.ok && /isn't empty/.test(res2.error ?? ''), `non-empty guard: ${JSON.stringify(res2)}`)
+  assert(
+    !res2.ok && /isn't empty/.test(res2.error ?? ''),
+    `non-empty guard: ${JSON.stringify(res2)}`
+  )
   assert(!existsSync(join(taken, 'package.json')), 'must not write into a non-empty dir')
 
   console.log('PROJECT-CREATE OK — template, naming, git init, non-empty guard')

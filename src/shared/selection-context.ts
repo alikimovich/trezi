@@ -7,7 +7,7 @@ import { projectRelative } from './project-path'
 // can't masquerade as a new instruction paragraph) and cap by code point
 // (surrogate-safe). The source is additionally validated to a `path:line` shape.
 export const oneLine = (s: string, max: number): string =>
-  Array.from(s.replace(new RegExp("[\\u0000-\\u001F\\u007F]+", "g"), " "))
+  Array.from(s.replace(new RegExp('[\\u0000-\\u001F\\u007F]+', 'g'), ' '))
     .slice(0, max)
     .join('')
     .trim()
@@ -31,9 +31,10 @@ export const describeSelectionForPrompt = (el: SelectedElement, root?: string | 
  * source ref. Kept alongside the message so the bubble can render the pill after
  * the selection is cleared from the composer.
  */
-export const selectionForBubble = (el: SelectedElement): NonNullable<NativeChatMessage['selection']> => ({
+export const selectionForBubble = (
+  el: SelectedElement
+): NonNullable<NativeChatMessage['selection']> => ({
   tag: el.tag,
   ident: el.id ? `#${el.id}` : el.classes[0] ? `.${el.classes[0]}` : '',
   source: el.source ?? null
 })
-

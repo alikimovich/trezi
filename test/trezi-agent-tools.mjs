@@ -1,4 +1,3 @@
-import { chatIslandDescription } from '../bin/chat-island-schema.mjs'
 /**
  * Codex ↔ Trezi MCP control bridge (pure Node/Bun, no provider credentials).
  * Proves the loopback bridge is session-scoped and that the actual stdio MCP
@@ -10,19 +9,23 @@ import { spawn } from 'node:child_process'
 import { request as httpRequest } from 'node:http'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  registerTreziAgentTools,
-  shutdownTreziAgentTools
-} from '../src/main/trezi-agent-tools.ts'
-
+import { chatIslandDescription } from '../bin/chat-island-schema.mjs'
 import { observeAgentPreview } from '../src/main/preview-observation-tools.ts'
 import { registerPreviewSource } from '../src/main/preview-state.ts'
+import { registerTreziAgentTools, shutdownTreziAgentTools } from '../src/main/trezi-agent-tools.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const calls = []
 const registration = await registerTreziAgentTools(async (action, args) => {
   if (action.startsWith('preview_')) return observeAgentPreview(action, args)
-  if (action === 'chat_island' || action === 'project_ui_catalog' || action === 'compose_project_ui' || action === 'open_preview' || action === 'open_code') return { received: args ?? {} }
+  if (
+    action === 'chat_island' ||
+    action === 'project_ui_catalog' ||
+    action === 'compose_project_ui' ||
+    action === 'open_preview' ||
+    action === 'open_code'
+  )
+    return { received: args ?? {} }
   calls.push(action)
   if (action === 'workspace_state') {
     return { state: 'parked', files: ['src/App.tsx'] }
@@ -131,7 +134,10 @@ try {
     'workspace_state'
   ])
 
-  assert.equal(listed.result.tools.find(tool => tool.name === 'chat_island').description, chatIslandDescription)
+  assert.equal(
+    listed.result.tools.find((tool) => tool.name === 'chat_island').description,
+    chatIslandDescription
+  )
 
   const previewCall = (name) => request('tools/call', { name, arguments: {} })
   const absent = await previewCall('preview_screenshot')
@@ -142,44 +148,93 @@ try {
   const image = {
     isEmpty: () => false,
     getSize: () => ({ width: 1600, height: 900 }),
-    resize: ({ width }) => { assert.equal(width, 1200); resized = true; return image },
-    toJPEG: (quality) => { assert.equal(quality, 70); return jpeg }
+    resize: ({ width }) => {
+      assert.equal(width, 1200)
+      resized = true
+      return image
+    },
+    toJPEG: (quality) => {
+      assert.equal(quality, 70)
+      return jpeg
+    }
   }
-  registerPreviewSource({ getUrl: () => 'http://localhost:3000/page?view=full#intro', capture: async () => image })
+  registerPreviewSource({
+    getUrl: () => 'http://localhost:3000/page?view=full#intro',
+    capture: async () => image
+  })
   const location = await previewCall('preview_location')
   assert.match(location.result.content[0].text, /page\?view=full#intro/)
   const captured = await previewCall('preview_screenshot')
-  assert.deepEqual(captured.result.content, [{ type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') }], 'real stdio transport preserves image content instead of stringifying it')
+  assert.deepEqual(
+    captured.result.content,
+    [{ type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') }],
+    'real stdio transport preserves image content instead of stringifying it'
+  )
   assert.equal(captured.result.structuredContent, undefined)
   assert.ok(resized)
   // LKM-138: inspection arguments survive the MCP transport and reach the isolated host.
   const evaluated = []
   registerPreviewSource({
-    getUrl: () => 'http://localhost:3000/', capture: async () => image,
-    agent: { evaluate: async (code, world) => { evaluated.push(world); return { element: '<h1>', styles: { 'box-shadow': 'rgb(0, 0, 0) 0px 2px 4px 0px' } } }, captureRect: async () => null, setViewport: async () => ({ width: null, zoom: 1 }) }
+    getUrl: () => 'http://localhost:3000/',
+    capture: async () => image,
+    agent: {
+      evaluate: async (code, world) => {
+        evaluated.push(world)
+        return { element: '<h1>', styles: { 'box-shadow': 'rgb(0, 0, 0) 0px 2px 4px 0px' } }
+      },
+      captureRect: async () => null,
+      setViewport: async () => ({ width: null, zoom: 1 })
+    }
   })
-  const inspected = await request('tools/call', { name: 'preview_inspect', arguments: { selector: 'h1' } })
+  const inspected = await request('tools/call', {
+    name: 'preview_inspect',
+    arguments: { selector: 'h1' }
+  })
   assert.match(inspected.result.content[0].text, /box-shadow/)
   assert.deepEqual(evaluated, ['preview'])
-  const looped = await request('tools/call', { name: 'preview_evaluate', arguments: { expression: '(() => { while (true) {} })()' } })
+  const looped = await request('tools/call', {
+    name: 'preview_evaluate',
+    arguments: { expression: '(() => { while (true) {} })()' }
+  })
   assert.equal(looped.result.isError, true)
   assert.match(looped.result.content[0].text, /loops cannot run/)
   assert.deepEqual(evaluated, ['preview'], 'a rejected expression never reaches the page')
-  registerPreviewSource({ getUrl: () => null, capture: async () => { throw new Error('closed') } })
+  registerPreviewSource({
+    getUrl: () => null,
+    capture: async () => {
+      throw new Error('closed')
+    }
+  })
   assert.match((await previewCall('preview_location')).result.content[0].text, /No project preview/)
   assert.equal((await previewCall('preview_screenshot')).result.content[0].type, 'text')
-  registerPreviewSource({ getUrl: () => null, capture: async () => ({ ...image, isEmpty: () => true }) })
+  registerPreviewSource({
+    getUrl: () => null,
+    capture: async () => ({ ...image, isEmpty: () => true })
+  })
   assert.equal((await previewCall('preview_screenshot')).result.content[0].type, 'text')
   assert.equal(await bridgeCall('wrong', 'preview_screenshot'), 401)
 
-  const island = await request('tools/call', { name: 'chat_island', arguments: { action: 'catalog' } })
+  const island = await request('tools/call', {
+    name: 'chat_island',
+    arguments: { action: 'catalog' }
+  })
   assert.deepEqual(island.result.structuredContent.received, { action: 'catalog' })
   assert.equal(await bridgeCall('wrong', 'chat_island'), 401)
   const catalog = await request('tools/call', { name: 'project_ui_catalog', arguments: {} })
   assert.deepEqual(catalog.result.structuredContent.received, {})
-  const composition = { file: 'src/Page.tsx', spec: { root: 'a', elements: { a: { type: 'Card', props: {}, children: [] } } } }
-  const composed = await request('tools/call', { name: 'compose_project_ui', arguments: composition })
-  assert.deepEqual(composed.result.structuredContent.received, composition, 'composition survives the real MCP transport')
+  const composition = {
+    file: 'src/Page.tsx',
+    spec: { root: 'a', elements: { a: { type: 'Card', props: {}, children: [] } } }
+  }
+  const composed = await request('tools/call', {
+    name: 'compose_project_ui',
+    arguments: composition
+  })
+  assert.deepEqual(
+    composed.result.structuredContent.received,
+    composition,
+    'composition survives the real MCP transport'
+  )
   const status = await request('tools/call', {
     name: 'workspace_state',
     arguments: {}
@@ -195,18 +250,62 @@ try {
   for (const name of ['define_controls', 'open_controls']) {
     const removed = await request('tools/call', { name, arguments: {} })
     assert.ok(removed.error || removed.result?.isError, 'Removed panel tool cannot execute')
-    assert.equal(await bridgeCall(registration.token, name), 400, 'Legacy socket action is rejected')
+    assert.equal(
+      await bridgeCall(registration.token, name),
+      400,
+      'Legacy socket action is rejected'
+    )
   }
-  const revealed = await request('tools/call', { name: 'open_code', arguments: { file: 'src/App.tsx', startLine: 10, endLine: 14 } })
-  assert.deepEqual(revealed.result.structuredContent.received, { file: 'src/App.tsx', startLine: 10, endLine: 14 })
-  const navigated = await request('tools/call', { name: 'open_preview', arguments: { path: '/work/article?view=full#intro' } })
-  assert.deepEqual(navigated.result.structuredContent.received, { path: '/work/article?view=full#intro' })
-  const manifest = { file: 'src/App.tsx', component: 'App', title: 'Motion', params: [
-    { id: 'delay', label: 'Delay', kind: 'number', min: 0, max: 1000, step: 10, unit: 'ms', apply: { strategy: 'literal', anchor: 'const DELAY = ' } }
-  ] }
-  const registered = await request('tools/call', { name: 'chat_island', arguments: { action: 'define', manifest, blocks: [{ id: 'motion', title: 'Motion', kind: 'group', params: ['delay'] }] } })
-  assert.deepEqual(registered.result.structuredContent.received, { action: 'define', manifest, blocks: [{ id: 'motion', title: 'Motion', kind: 'group', params: ['delay'] }] }, 'Island definition survives the stdio/socket bridge')
-
+  const revealed = await request('tools/call', {
+    name: 'open_code',
+    arguments: { file: 'src/App.tsx', startLine: 10, endLine: 14 }
+  })
+  assert.deepEqual(revealed.result.structuredContent.received, {
+    file: 'src/App.tsx',
+    startLine: 10,
+    endLine: 14
+  })
+  const navigated = await request('tools/call', {
+    name: 'open_preview',
+    arguments: { path: '/work/article?view=full#intro' }
+  })
+  assert.deepEqual(navigated.result.structuredContent.received, {
+    path: '/work/article?view=full#intro'
+  })
+  const manifest = {
+    file: 'src/App.tsx',
+    component: 'App',
+    title: 'Motion',
+    params: [
+      {
+        id: 'delay',
+        label: 'Delay',
+        kind: 'number',
+        min: 0,
+        max: 1000,
+        step: 10,
+        unit: 'ms',
+        apply: { strategy: 'literal', anchor: 'const DELAY = ' }
+      }
+    ]
+  }
+  const registered = await request('tools/call', {
+    name: 'chat_island',
+    arguments: {
+      action: 'define',
+      manifest,
+      blocks: [{ id: 'motion', title: 'Motion', kind: 'group', params: ['delay'] }]
+    }
+  })
+  assert.deepEqual(
+    registered.result.structuredContent.received,
+    {
+      action: 'define',
+      manifest,
+      blocks: [{ id: 'motion', title: 'Motion', kind: 'group', params: ['delay'] }]
+    },
+    'Island definition survives the stdio/socket bridge'
+  )
 } finally {
   registration.dispose()
   child.kill()

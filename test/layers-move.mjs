@@ -26,7 +26,10 @@ const ok = (cond, msg) => {
   }
 }
 const eq = (actual, expected, msg) =>
-  ok(actual === expected, `${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
+  ok(
+    actual === expected,
+    `${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
+  )
 
 // A node stand-in: {start, end, ws?} — `ws: true` marks a whitespace-only
 // separator (the React/Svelte/HTML movers each derive this from their own
@@ -96,7 +99,11 @@ const listChildren = [wsA, A, wsB, B, wsC, C, wsEnd]
     node(code.indexOf('\n</div>'), code.indexOf('\n</div>') + 1, true)
   ]
   const out = moveSiblingWithinParent(code, children, c, a, 'before', isWs)
-  eq(out, '<div>\n  <Icon c/>\n  <Icon a/>\n  <Icon b/>\n</div>', 'self-closing nodes reorder cleanly')
+  eq(
+    out,
+    '<div>\n  <Icon c/>\n  <Icon a/>\n  <Icon b/>\n</div>',
+    'self-closing nodes reorder cleanly'
+  )
 }
 
 // --- no separator to borrow: a compact, no-whitespace-between-siblings file —
@@ -125,7 +132,9 @@ ok(
 )
 
 if (failed === 0) {
-  console.log('LAYERS-MOVE OK — splice reorder up/down, self-closing, indentation, no-separator fallback, refusals')
+  console.log(
+    'LAYERS-MOVE OK — splice reorder up/down, self-closing, indentation, no-separator fallback, refusals'
+  )
 } else {
   console.error(`LAYERS-MOVE: ${failed} assertion(s) failed`)
 }

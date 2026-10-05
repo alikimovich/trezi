@@ -19,8 +19,8 @@
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 // AGENTS.md is the canonical agent guide; CLAUDE.md only imports it, and the
@@ -33,7 +33,7 @@ const DOCS = [
   ...readdirSync(join(root, GUIDE_DIR))
     .filter((f) => f.endsWith('.md'))
     .sort()
-    .map((f) => `${GUIDE_DIR}/${f}`),
+    .map((f) => `${GUIDE_DIR}/${f}`)
 ]
 // Anchored to a real top-level dir at a genuine path start (the lookbehind
 // rejects mid-path matches like the `src/` inside `renderer/src/styles.css`).
@@ -44,7 +44,10 @@ const PATH_RE = /(?<![\w/.-])(?:src|test|scripts|docs|build|\.github)\/[A-Za-z0-
 // Valid set = every file the next commit would carry (tracked or new and not ignored,
 // and still on disk, so a deleted file fails before its deletion is committed) + all
 // its ancestor directories. In a clean checkout this is exactly the tracked files.
-const tracked = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' })
+const tracked = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+  cwd: root,
+  encoding: 'utf8'
+})
   .split('\n')
   .filter((f) => f && existsSync(join(root, f)))
 const valid = new Set()

@@ -53,8 +53,17 @@ export function createSessionStore(baseDir: string): SessionStore {
   const pend = (id: string, value: SessionRecord | null, write: Promise<void>): void => {
     const version = ++versions
     overlay.set(id, { value: value && structuredClone(value), version })
-    const settled = write.catch(error => console.error(`Trezi could not save chat history (${id}):`, error instanceof Error ? error.message : error))
-      .finally(() => { if (overlay.get(id)?.version === version) overlay.delete(id); writes.delete(settled) })
+    const settled = write
+      .catch((error) =>
+        console.error(
+          `Trezi could not save chat history (${id}):`,
+          error instanceof Error ? error.message : error
+        )
+      )
+      .finally(() => {
+        if (overlay.get(id)?.version === version) overlay.delete(id)
+        writes.delete(settled)
+      })
     writes.add(settled)
   }
   const fileFor = (id: string): string => join(dir, `${id}.json`)
@@ -64,7 +73,15 @@ export function createSessionStore(baseDir: string): SessionStore {
     const title = migrateChatTitle(rec.title)
     if (!title || title === rec.title || !SAFE_ID.test(rec.id)) return rec
     rec.title = title
-    try { pend(rec.id, rec, writer().rename(rec.id, title).then(() => {})) } catch {}
+    try {
+      pend(
+        rec.id,
+        rec,
+        writer()
+          .rename(rec.id, title)
+          .then(() => {})
+      )
+    } catch {}
     return rec
   }
 
@@ -101,7 +118,10 @@ export function createSessionStore(baseDir: string): SessionStore {
     if (!SAFE_ID.test(rec.id)) throw new Error(`unsafe session id: ${rec.id}`)
     // The service replaces the other current record itself, in the same write.
     const write = writer().save(rec, true)
-    for (const old of readAll().filter((r) => r.projectKey === rec.projectKey && isCurrent(r) && r.id !== rec.id)) pend(old.id, null, write)
+    for (const old of readAll().filter(
+      (r) => r.projectKey === rec.projectKey && isCurrent(r) && r.id !== rec.id
+    ))
+      pend(old.id, null, write)
     pend(rec.id, rec, write)
   }
 
@@ -130,7 +150,9 @@ export function createSessionStore(baseDir: string): SessionStore {
     pend(id, null, writer().remove(id))
   }
 
-  const flush = async (): Promise<void> => { await Promise.all([...writes]) }
+  const flush = async (): Promise<void> => {
+    await Promise.all([...writes])
+  }
 
   return { save, saveCurrent, list, current, get, remove, flush }
 }

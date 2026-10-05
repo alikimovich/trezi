@@ -32,30 +32,64 @@ export interface RepositoryOwner {
   withLease<T>(root: string, operation: () => Promise<T>): Promise<T>
   /** The leases the calling async chain holds (S08 source writes run inside them). */
   heldLeases(): string[]
-  createWorktree(root: string, worktreesDir: string, opts: { id: string; branch: string; linkNodeModules: boolean }): Promise<OwnedWorktree>
+  createWorktree(
+    root: string,
+    worktreesDir: string,
+    opts: { id: string; branch: string; linkNodeModules: boolean }
+  ): Promise<OwnedWorktree>
   syncWorktree(wt: OwnedWorktree): Promise<{ synced: boolean; baseSha: string }>
   attachBranch(wt: OwnedWorktree): Promise<void>
   retireBranch(wt: OwnedWorktree): Promise<void>
-  commitWorktree(wt: OwnedWorktree, message: string): Promise<{ committed: boolean; files: string[] }>
+  commitWorktree(
+    wt: OwnedWorktree,
+    message: string
+  ): Promise<{ committed: boolean; files: string[] }>
   autoApply(wt: OwnedWorktree, files: string[]): Promise<{ applied: boolean; edits: OwnedEdit[] }>
-  completeTurn(wt: OwnedWorktree, message: string, land: boolean): Promise<{
-    outcome: 'noop' | 'merged' | 'parked'; files: string[]; edits: OwnedEdit[]; newBase?: string
+  completeTurn(
+    wt: OwnedWorktree,
+    message: string,
+    land: boolean
+  ): Promise<{
+    outcome: 'noop' | 'merged' | 'parked'
+    files: string[]
+    edits: OwnedEdit[]
+    newBase?: string
   }>
-  applyParked(wt: OwnedWorktree): Promise<{ ok: boolean; conflict: boolean; files: string[]; newBase?: string; error?: string }>
-  applyBranch(root: string, branch: string): Promise<{ ok: boolean; conflict: boolean; empty?: boolean; error?: string }>
-  stageResolve(wt: OwnedWorktree): Promise<{ conflicted: string[]; files: string[]; clean: boolean; baseSha: string }>
+  applyParked(
+    wt: OwnedWorktree
+  ): Promise<{ ok: boolean; conflict: boolean; files: string[]; newBase?: string; error?: string }>
+  applyBranch(
+    root: string,
+    branch: string
+  ): Promise<{ ok: boolean; conflict: boolean; empty?: boolean; error?: string }>
+  stageResolve(
+    wt: OwnedWorktree
+  ): Promise<{ conflicted: string[]; files: string[]; clean: boolean; baseSha: string }>
   discardParked(wt: OwnedWorktree): Promise<void>
   removeWorktree(wt: OwnedWorktree, keepBranch: boolean, intent: RemoveIntent): Promise<void>
   /** Idle cleanup: removes a clean checkout; a dirty one stays, its work at a recovery ref. */
-  reclaimWorktree(wt: OwnedWorktree): Promise<{ removed: boolean; dirty: boolean; ref: string | null }>
+  reclaimWorktree(
+    wt: OwnedWorktree
+  ): Promise<{ removed: boolean; dirty: boolean; ref: string | null }>
   deleteBranch(root: string, branch: string, intent: 'discard' | 'integrated'): Promise<void>
-  pruneOrphans(root: string, worktreesDir: string, skip: string[], parked: string[]): Promise<
-    Array<{ id: string; dirty: boolean; branch: string | null; repoRoot: string | null }>
-  >
-  pruneBranches(root: string, protectedIds: string[]): Promise<{ deleted: string[]; preserved: string[] }>
+  pruneOrphans(
+    root: string,
+    worktreesDir: string,
+    skip: string[],
+    parked: string[]
+  ): Promise<Array<{ id: string; dirty: boolean; branch: string | null; repoRoot: string | null }>>
+  pruneBranches(
+    root: string,
+    protectedIds: string[]
+  ): Promise<{ deleted: string[]; preserved: string[] }>
   /** An emptied old-name worktree folder (and its empty old-name parent); false when anything is left. */
   removeLegacyFolder(directory: string): Promise<boolean>
-  commitLive(root: string, files: string[], title: string, body?: string): Promise<{ committed: boolean; sha?: string; files: string[] }>
+  commitLive(
+    root: string,
+    files: string[],
+    title: string,
+    body?: string
+  ): Promise<{ committed: boolean; sha?: string; files: string[] }>
   checkout(root: string, branch: string): Promise<BranchResult>
   switchBranch(root: string, branch: string): Promise<BranchResult>
   /** Operations a previous service left unfinished, with the recovery refs that hold their work. */
@@ -63,7 +97,10 @@ export interface RepositoryOwner {
   /** The recovery refs in `roots` and in the journal's repositories (read only). */
   recoveryRefs(roots: string[]): Promise<RecoveryRepository[]>
   /** Explicit user intent: deletes refs still at the commit the user saw. */
-  deleteRecoveryRefs(root: string, refs: { ref: string; sha: string }[]): Promise<{ deleted: string[]; kept: string[] }>
+  deleteRecoveryRefs(
+    root: string,
+    refs: { ref: string; sha: string }[]
+  ): Promise<{ deleted: string[]; kept: string[] }>
 }
 
 export interface RepositoryJournalEntry {
@@ -104,6 +141,7 @@ export function setRepositoryOwner(next: RepositoryOwner | null): void {
 
 /** The installed Swift owner; without the service there is none, and no Git effect runs. */
 export function repositoryOwner(): RepositoryOwner {
-  if (!owner) throw new Error('Trezi’s service is not running, so the repository cannot be changed.')
+  if (!owner)
+    throw new Error('Trezi’s service is not running, so the repository cannot be changed.')
   return owner
 }

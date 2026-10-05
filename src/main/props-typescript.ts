@@ -1,5 +1,5 @@
-import ts from 'typescript'
 import { join } from 'node:path'
+import ts from 'typescript'
 import type { PropField } from '../shared/api'
 
 /** Resolve the instantiated JSX signature, including imported/inherited/generic

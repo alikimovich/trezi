@@ -19,7 +19,11 @@ const LEGACY_PREFIX = 'dsgn/'
 
 /** Is this branch a Trezi work branch (current or legacy prefix)? */
 export function isWorkBranch(branch: string): boolean {
-  return branch.startsWith('praxis/') || branch.startsWith(TREZI_PREFIX) || branch.startsWith(LEGACY_PREFIX)
+  return (
+    branch.startsWith('praxis/') ||
+    branch.startsWith(TREZI_PREFIX) ||
+    branch.startsWith(LEGACY_PREFIX)
+  )
 }
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -72,7 +76,9 @@ export async function enclosingRepoRoot(root: string): Promise<string | null> {
  *  titlebar branch switcher. Carries uncommitted changes across like git does. */
 export async function checkoutBranch(root: string, branch: string): Promise<BranchResult> {
   // Only an existing local branch; the service refuses anything Git could read as a path.
-  return repositoryOwner().checkout(root, branch).catch((e) => ({ isRepo: true, branch, created: false, error: msg(e) }))
+  return repositoryOwner()
+    .checkout(root, branch)
+    .catch((e) => ({ isRepo: true, branch, created: false, error: msg(e) }))
 }
 
 /** Local branches (current first, then trezi/* newest-active, then the rest). */
@@ -126,7 +132,14 @@ export function normalizeBranchName(requested: string): string {
 /** Switch to (creating if needed) a specific trezi/* branch. */
 export async function switchBranch(root: string, requested: string): Promise<BranchResult> {
   const name = normalizeBranchName(requested)
-  return repositoryOwner().switchBranch(root, name).catch(async (e) => ({ isRepo: true, branch: await getCurrentBranch(root), created: false, error: msg(e) }))
+  return repositoryOwner()
+    .switchBranch(root, name)
+    .catch(async (e) => ({
+      isRepo: true,
+      branch: await getCurrentBranch(root),
+      created: false,
+      error: msg(e)
+    }))
 }
 
 /**

@@ -155,9 +155,15 @@ async function hasBun(): Promise<boolean> {
 }
 
 /** Starter files for a template (the JS helper's proposal). */
-export function starterFiles(root: string, template: ProjectCreateOptions['template'] | undefined): Record<string, string> {
+export function starterFiles(
+  root: string,
+  template: ProjectCreateOptions['template'] | undefined
+): Record<string, string> {
   return template === 'empty'
-    ? { '.gitignore': 'node_modules\n.next\n.svelte-kit\ndist\nbuild\n.env\n.env.*\n!.env.example\n.DS_Store\n' }
+    ? {
+        '.gitignore':
+          'node_modules\n.next\n.svelte-kit\ndist\nbuild\n.env\n.env.*\n!.env.example\n.DS_Store\n'
+      }
     : templateFiles(packageName(root))
 }
 
@@ -173,6 +179,7 @@ export async function createProject(
   if (opts.template && !['react', 'empty'].includes(opts.template)) {
     return { ok: false, error: 'Unknown project starter.' }
   }
-  const install = opts.template !== 'empty' && opts.install !== false ? ((await hasBun()) ? 'bun' : 'npm') : null
+  const install =
+    opts.template !== 'empty' && opts.install !== false ? ((await hasBun()) ? 'bun' : 'npm') : null
   return workflowOwner().createProject(root, starterFiles(root, opts.template), install)
 }

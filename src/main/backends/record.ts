@@ -41,7 +41,8 @@ export function createRecordCapture(root: string, projectKey: string): RecordCap
   const flushAssistant = (): void => {
     const text = assistantBuf.trim()
     if (text) record.transcript.push({ role: 'assistant', text, at: assistantAt ?? Date.now() })
-    assistantBuf = ''; assistantAt = undefined
+    assistantBuf = ''
+    assistantAt = undefined
   }
 
   return {

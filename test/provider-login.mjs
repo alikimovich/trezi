@@ -402,7 +402,10 @@ try {
         assert.ok(cwd, report.detail)
         assert.match(cwd, /\/trezi-helper$/, `root ${root} runs in the private temporary directory`)
         for (const home of homes)
-          assert.ok(cwd !== home && !home.startsWith(`${cwd}/`) && cwd !== '/', `root ${root}: cwd ${cwd} is not a home`)
+          assert.ok(
+            cwd !== home && !home.startsWith(`${cwd}/`) && cwd !== '/',
+            `root ${root}: cwd ${cwd} is not a home`
+          )
         assert.equal(statSync(cwd).mode & 0o777, 0o700)
       }
       const project = await run.owner.data.checkLogin('claude', WT)
@@ -686,15 +689,25 @@ esac
       const listed = real(['list-keychains', '-d', 'user'], true, env)
       const fallback = real(['default-keychain'], true, env)
       assert.equal(listed.status, 0)
-      assert.ok(fallback.status > 0, `default-keychain under an empty HOME: exit ${fallback.status}`)
+      assert.ok(
+        fallback.status > 0,
+        `default-keychain under an empty HOME: exit ${fallback.status}`
+      )
       const run = await fixture({ bundled: loggedOut, security: SECURITY, HOME })
       try {
         const report = await run.owner.data.checkLogin('claude', WT)
-        assert.deepEqual(report.keychain, { listKeychains: 0, defaultKeychain: fallback.status }, report.detail)
+        assert.deepEqual(
+          report.keychain,
+          { listKeychains: 0, defaultKeychain: fallback.status },
+          report.detail
+        )
         assert.equal(report.keychainList, 'none')
         assert.equal(report.keychainDefault, `unavailable (exit ${fallback.status})`)
         assert.equal(report.keychainItem, false, 'the lookup ran and found nothing')
-        assert.match(report.detail, /\(no user keychain: a login kept in the Keychain cannot be read here\)/)
+        assert.match(
+          report.detail,
+          /\(no user keychain: a login kept in the Keychain cannot be read here\)/
+        )
         assert.deepEqual(readdirSync(HOME), ['.gitconfig'], 'the probe created nothing in HOME')
       } finally {
         await stop(run)

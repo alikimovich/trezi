@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import type { ServiceFailure } from '../shared/service-contract/types'
+import { parseCodexModels } from '../main/model-catalog'
+import type { ProviderDataOwner } from '../main/provider-data'
 import { type HelperHandlers, ProviderError, type ProviderOwner } from '../main/provider-owner'
 import { LIMITS, MESSAGES, permissionTarget, validImages } from '../main/provider-policy'
-import type { ProviderDataOwner } from '../main/provider-data'
-import { parseCodexModels } from '../main/model-catalog'
+import type { ServiceFailure } from '../shared/service-contract/types'
 
 type Result = { kind: 'succeeded'; payload: any } | { kind: 'failed'; payload: ServiceFailure }
 interface ServiceMessage {
@@ -30,10 +30,16 @@ const MAX_TOOL_RESULT = 16 * 1024 * 1024
  * it already authorized, which Bun runs and answers (`provider-helper` frames).
  * `data` is the same connection's provider data client (`main/provider-data.ts`).
  */
-export function serviceProvider(link: ProviderLink, options: { timeout?: number } = {}): ProviderOwner & { data: ProviderDataOwner } {
+export function serviceProvider(
+  link: ProviderLink,
+  options: { timeout?: number } = {}
+): ProviderOwner & { data: ProviderDataOwner } {
   const connection = randomUUID()
   const timeout = options.timeout ?? 60_000
-  const pending = new Map<number, { resolve: (value: Result) => void; timer: ReturnType<typeof setTimeout> }>()
+  const pending = new Map<
+    number,
+    { resolve: (value: Result) => void; timer: ReturnType<typeof setTimeout> }
+  >()
   const helpers = new Map<string, HelperHandlers>()
   let sequence = 0
 
@@ -51,46 +57,75 @@ export function serviceProvider(link: ProviderLink, options: { timeout?: number 
     const handlers = helpers.get(message.session)
     if (message.kind === 'tool' && typeof message.id === 'number') {
       const id = message.id
-      const answer = (frame: { result?: unknown; error?: string }) => link.sendService({ service: 'provider-helper', id, ...frame })
-      if (!handlers || typeof message.tool !== 'string') return answer({ error: 'The provider session is closed.' })
+      const answer = (frame: { result?: unknown; error?: string }) =>
+        link.sendService({ service: 'provider-helper', id, ...frame })
+      if (!handlers || typeof message.tool !== 'string')
+        return answer({ error: 'The provider session is closed.' })
       void Promise.resolve()
         .then(() => handlers.tool(message.tool as string, message.args))
         .then(
           (result) => {
             const size = JSON.stringify(result ?? null).length
-            answer(size <= MAX_TOOL_RESULT ? { result: result ?? null } : { error: 'The tool result is too large.' })
+            answer(
+              size <= MAX_TOOL_RESULT
+                ? { result: result ?? null }
+                : { error: 'The tool result is too large.' }
+            )
           },
           (error) => answer({ error: error instanceof Error ? error.message : String(error) })
         )
       return
     }
     if (!handlers) return
-    if (message.kind === 'event' && message.value && typeof message.value === 'object') handlers.event(message.value as never)
-    else if (message.kind === 'record' && message.record && typeof message.record === 'object') handlers.record(message.record as never)
+    if (message.kind === 'event' && message.value && typeof message.value === 'object')
+      handlers.event(message.value as never)
+    else if (message.kind === 'record' && message.record && typeof message.record === 'object')
+      handlers.record(message.record as never)
     else if (message.kind === 'exit') {
       helpers.delete(message.session)
       handlers.exit(typeof message.reason === 'string' ? message.reason : 'stopped')
     }
   })
 
-  const call = (method: string, body: Record<string, unknown>, mode: 'read' | 'mutation' = 'mutation'): Promise<any> => {
+  const call = (
+    method: string,
+    body: Record<string, unknown>,
+    mode: 'read' | 'mutation' = 'mutation'
+  ): Promise<any> => {
     const id = ++sequence
     return new Promise<Result>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id)
-        reject(new ProviderError('deadlineExceeded', `The Trezi service did not answer the provider request (${method}) in time.`))
+        reject(
+          new ProviderError(
+            'deadlineExceeded',
+            `The Trezi service did not answer the provider request (${method}) in time.`
+          )
+        )
       }, timeout)
       pending.set(id, { resolve, timer })
-      link.sendService({ service: 'provider', id, request: {
-        connection, requestID: randomUUID(), operationID: randomUUID(), scope: {}, mode, service: 'provider', method, body
-      } })
+      link.sendService({
+        service: 'provider',
+        id,
+        request: {
+          connection,
+          requestID: randomUUID(),
+          operationID: randomUUID(),
+          scope: {},
+          mode,
+          service: 'provider',
+          method,
+          body
+        }
+      })
     }).then((result) => {
       if (result.kind === 'succeeded') return result.payload
       throw new ProviderError(result.payload.code, result.payload.message)
     })
   }
   // JSON drops `undefined`, as the pipe does.
-  const plain = <T>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)))
+  const plain = <T>(value: T): T =>
+    value === undefined ? value : JSON.parse(JSON.stringify(value))
 
   return {
     kind: 'swift',
@@ -99,7 +134,11 @@ export function serviceProvider(link: ProviderLink, options: { timeout?: number 
       // Registered first: the helper may emit (its slash commands) before it is ready.
       helpers.set(grant.session, handlers)
       try {
-        return await call('openHelper', { ...plain(grant), options: plain(start.options), context: plain(start.context) })
+        return await call('openHelper', {
+          ...plain(grant),
+          options: plain(start.options),
+          context: plain(start.context)
+        })
       } catch (error) {
         helpers.delete(grant.session)
         throw error
@@ -109,26 +148,54 @@ export function serviceProvider(link: ProviderLink, options: { timeout?: number 
     // input carries the whole file. One too large to check is denied, never sent.
     permission: async (session, tool, input) => {
       const target = permissionTarget(tool, input)
-      if (target !== undefined && target.length > LIMITS.permissionTarget) return { decision: 'deny', message: MESSAGES.targetTooLarge }
-      return call('permission', target === undefined ? { session, tool } : { session, tool, target })
+      if (target !== undefined && target.length > LIMITS.permissionTarget)
+        return { decision: 'deny', message: MESSAGES.targetTooLarge }
+      return call(
+        'permission',
+        target === undefined ? { session, tool } : { session, tool, target }
+      )
     },
     authorize: async (session, tool, args) => {
-      await call('authorize', { session, tool, bytes: Buffer.byteLength(JSON.stringify(args ?? {}) ?? '') })
+      await call('authorize', {
+        session,
+        tool,
+        bytes: Buffer.byteLength(JSON.stringify(args ?? {}) ?? '')
+      })
     },
-    turn: async (session) => { await call('turn', { session }) },
+    turn: async (session) => {
+      await call('turn', { session })
+    },
     send: async (session, text, images) => {
       // Checked here too: an oversized line would fail the private pipe closed.
-      if (images?.length && !validImages(images)) throw new ProviderError('invalidRequest', 'The pasted images are not supported or too large.')
-      if (text.length > LIMITS.sendText) throw new ProviderError('invalidRequest', 'The message is too long.')
-      await call('send', images?.length ? { session, text, images: plain(images) } : { session, text })
+      if (images?.length && !validImages(images))
+        throw new ProviderError(
+          'invalidRequest',
+          'The pasted images are not supported or too large.'
+        )
+      if (text.length > LIMITS.sendText)
+        throw new ProviderError('invalidRequest', 'The message is too long.')
+      await call(
+        'send',
+        images?.length ? { session, text, images: plain(images) } : { session, text }
+      )
     },
     cancel: (session) => call('cancel', { session }),
-    settled: async (session) => { await call('settled', { session }) },
-    terminal: async (session, kind) => { await call('terminal', { session, kind }) },
-    resume: async (session, id, record) => { await call('resume', { session, id, record }) },
+    settled: async (session) => {
+      await call('settled', { session })
+    },
+    terminal: async (session, kind) => {
+      await call('terminal', { session, kind })
+    },
+    resume: async (session, id, record) => {
+      await call('resume', { session, id, record })
+    },
     recover: async (record) => (await call('recover', { record }, 'read')).recovered ?? null,
-    answer: async (session, id, kind, value) => { await call('answer', { session, id, kind, value: plain(value) ?? null }) },
-    configure: async (session, change) => { await call('configure', { session, ...plain(change) }) },
+    answer: async (session, id, kind, value) => {
+      await call('answer', { session, id, kind, value: plain(value) ?? null })
+    },
+    configure: async (session, change) => {
+      await call('configure', { session, ...plain(change) })
+    },
     close: async (session) => {
       helpers.delete(session)
       await call('close', { session })
@@ -138,18 +205,32 @@ export function serviceProvider(link: ProviderLink, options: { timeout?: number 
     data: {
       kind: 'swift',
       save: async (input) => (await call('connectionSave', { input: plain(input) })).connection,
-      remove: async (id) => { await call('connectionRemove', { id }) },
+      remove: async (id) => {
+        await call('connectionRemove', { id })
+      },
       // An id the store could never hold has no key (and is not worth a round trip).
-      secretFor: async (id) => (SAFE_ID.test(id) ? ((await call('connectionSecret', { id }, 'read')).secret ?? null) : null),
+      secretFor: async (id) =>
+        SAFE_ID.test(id) ? ((await call('connectionSecret', { id }, 'read')).secret ?? null) : null,
       saveCatalog: async (backend, models) =>
-        (await call('catalogSave', { backend, models: models.map(({ id, label }) => ({ id, label })) })).saved === true,
+        (
+          await call('catalogSave', {
+            backend,
+            models: models.map(({ id, label }) => ({ id, label }))
+          })
+        ).saved === true,
       codexModels: async () => {
         const { stdout } = await call('codexModels', {}, 'read')
-        try { return typeof stdout === 'string' ? parseCodexModels(JSON.parse(stdout)) : [] } catch { return [] }
+        try {
+          return typeof stdout === 'string' ? parseCodexModels(JSON.parse(stdout)) : []
+        } catch {
+          return []
+        }
       },
-      saveSeatToken: async (provider, token) => (await call('seatTokenSave', { provider, token })).hasToken === true,
+      saveSeatToken: async (provider, token) =>
+        (await call('seatTokenSave', { provider, token })).hasToken === true,
       seatTokenStatus: () => call('seatTokenStatus', {}, 'read'),
-      checkLogin: async (provider, root) => (await call('diagnose', { provider, root }, 'read')).report
+      checkLogin: async (provider, root) =>
+        (await call('diagnose', { provider, root }, 'read')).report
     }
   }
 }

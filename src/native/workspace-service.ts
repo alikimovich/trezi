@@ -1,11 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import type { Revision, ServiceFailure } from '../shared/service-contract/types'
 import type { WorkspaceStore } from './workspace'
-import { type WorkspaceOperation, type WorkspaceView, validateOperation } from './workspace-model'
+import { validateOperation, type WorkspaceOperation, type WorkspaceView } from './workspace-model'
 
-interface Snapshot extends WorkspaceView { revision: Revision; digest: string }
+interface Snapshot extends WorkspaceView {
+  revision: Revision
+  digest: string
+}
 type Result = { kind: 'succeeded'; payload: any } | { kind: 'failed'; payload: ServiceFailure }
-interface ServiceMessage { service?: string; id?: number; name?: string; snapshot?: Snapshot; reply: { result: Result } }
+interface ServiceMessage {
+  service?: string
+  id?: number
+  name?: string
+  snapshot?: Snapshot
+  reply: { result: Result }
+}
 /** Bun's end of the supervised private pipe (see `NativeBridge.sendService`). */
 export interface WorkspaceLink {
   sendService(frame: object): void
@@ -13,10 +22,16 @@ export interface WorkspaceLink {
 }
 
 export class WorkspaceServiceError extends Error {
-  constructor(readonly code: string, message: string) { super(message) }
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
+    super(message)
+  }
 }
 
-const newer = (next: Revision, current?: Revision) => !current || next.epoch !== current.epoch || BigInt(next.counter) > BigInt(current.counter)
+const newer = (next: Revision, current?: Revision) =>
+  !current || next.epoch !== current.epoch || BigInt(next.counter) > BigInt(current.counter)
 
 /**
  * The workspace owned by the Swift service (S04). Reads use the last acknowledged
@@ -26,9 +41,19 @@ const newer = (next: Revision, current?: Revision) => !current || next.epoch !==
  * as a new operation on the newer revision. A timeout or failure rejects: Bun
  * never writes workspace.json itself under the Swift owner.
  */
-export async function serviceWorkspace(link: WorkspaceLink, timeout = 30_000): Promise<WorkspaceStore> {
+export async function serviceWorkspace(
+  link: WorkspaceLink,
+  timeout = 30_000
+): Promise<WorkspaceStore> {
   const connection = randomUUID()
-  const pending = new Map<number, { resolve: (value: Result) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
+  const pending = new Map<
+    number,
+    {
+      resolve: (value: Result) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
   const listeners = new Set<() => void>()
   let sequence = 0
   let current: Snapshot | undefined
@@ -40,15 +65,16 @@ export async function serviceWorkspace(link: WorkspaceLink, timeout = 30_000): P
     return true
   }
   // Late replies (after a timeout) and events still move the mirror forward.
-  link.on('service-reply', message => {
+  link.on('service-reply', (message) => {
     if (message.service !== 'workspace') return
     install(message.snapshot)
     const request = pending.get(message.id ?? -1)
     if (!request) return
-    clearTimeout(request.timer); pending.delete(message.id ?? -1)
+    clearTimeout(request.timer)
+    pending.delete(message.id ?? -1)
     request.resolve(message.reply.result)
   })
-  link.on('service-event', message => {
+  link.on('service-event', (message) => {
     if (message.service !== 'workspace' || message.name !== 'workspace.changed') return
     if (install(message.snapshot)) for (const listener of listeners) listener()
   })
@@ -58,14 +84,29 @@ export async function serviceWorkspace(link: WorkspaceLink, timeout = 30_000): P
     return new Promise<Result>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id)
-        reject(new WorkspaceServiceError('deadlineExceeded', 'The workspace was not saved: the Trezi service did not answer. Nothing was written locally.'))
+        reject(
+          new WorkspaceServiceError(
+            'deadlineExceeded',
+            'The workspace was not saved: the Trezi service did not answer. Nothing was written locally.'
+          )
+        )
       }, timeout)
       pending.set(id, { resolve, reject, timer })
-      link.sendService({ service: 'workspace', id, request: {
-        connection, requestID: randomUUID(), operationID: randomUUID(), scope: {},
-        mode: method === 'snapshot' ? 'read' : 'mutation', ...(expectedRevision ? { expectedRevision } : {}),
-        service: 'workspace', method, body
-      } })
+      link.sendService({
+        service: 'workspace',
+        id,
+        request: {
+          connection,
+          requestID: randomUUID(),
+          operationID: randomUUID(),
+          scope: {},
+          mode: method === 'snapshot' ? 'read' : 'mutation',
+          ...(expectedRevision ? { expectedRevision } : {}),
+          service: 'workspace',
+          method,
+          body
+        }
+      })
     })
   }
   const settled = (result: Result) => {
@@ -88,18 +129,35 @@ export async function serviceWorkspace(link: WorkspaceLink, timeout = 30_000): P
   }
 
   install(settled(await request('snapshot', {})))
-  const view = (): WorkspaceView => structuredClone({ projects: current!.projects, activeKey: current!.activeKey, recents: current!.recents })
+  const view = (): WorkspaceView =>
+    structuredClone({
+      projects: current!.projects,
+      activeKey: current!.activeKey,
+      recents: current!.recents
+    })
   return {
     snapshot: view,
     open: async (root, chatSettings) => {
       const result = await run({ method: 'open', root, ...(chatSettings ? { chatSettings } : {}) })
       return { key: result.key, created: result.created }
     },
-    select: async key => { await run({ method: 'select', key }) },
-    close: async key => { await run({ method: 'close', key }) },
-    reorder: async (key, before) => { await run({ method: 'reorder', key, before }) },
-    update: async projects => { await run({ method: 'update', projects }) },
-    recent: async (root, name) => { await run({ method: 'recent', root, name }) },
-    subscribe: listener => { listeners.add(listener) }
+    select: async (key) => {
+      await run({ method: 'select', key })
+    },
+    close: async (key) => {
+      await run({ method: 'close', key })
+    },
+    reorder: async (key, before) => {
+      await run({ method: 'reorder', key, before })
+    },
+    update: async (projects) => {
+      await run({ method: 'update', projects })
+    },
+    recent: async (root, name) => {
+      await run({ method: 'recent', root, name })
+    },
+    subscribe: (listener) => {
+      listeners.add(listener)
+    }
   }
 }

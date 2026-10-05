@@ -10,16 +10,17 @@
  *
  * Run with: bun run test:file-tree
  */
-import { listProjectFiles } from '../src/main/file-tree.ts'
+
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { listProjectFiles } from '../src/main/file-tree.ts'
 
 const base = mkdtempSync(join(tmpdir(), 'file-tree-'))
 let failed = 0
 const ok = (cond, msg) => {
-  if (!cond) (failed++, console.error('  ✗', msg))
+  if (!cond) failed++, console.error('  ✗', msg)
 }
 
 try {

@@ -1,7 +1,10 @@
 // LKM-161: type-level test of the island override wire format (src/shared/preview-channels.ts).
 // Never run; `bun run typecheck` and `typecheck:native` compile it, and each expected
 // error below fails the build if its malformed message ever type-checks.
-import type { IslandOverrideMessage, IslandOverrideRequest } from '../../src/shared/preview-channels'
+import type {
+  IslandOverrideMessage,
+  IslandOverrideRequest
+} from '../../src/shared/preview-channels'
 
 export const wellFormed: IslandOverrideMessage[] = [
   { op: 'apply', key: 'k', from: '0 1px 2px red', css: '0 2px 4px red' },
@@ -12,7 +15,11 @@ export const wellFormed: IslandOverrideMessage[] = [
 export const request: IslandOverrideRequest = { id: 1, op: 'clear', key: 'k' }
 
 // @ts-expect-error apply needs the value the elements show now
-export const applyWithoutFrom: IslandOverrideMessage = { op: 'apply', key: 'k', css: '0 2px 4px red' }
+export const applyWithoutFrom: IslandOverrideMessage = {
+  op: 'apply',
+  key: 'k',
+  css: '0 2px 4px red'
+}
 // @ts-expect-error settle compares against the written css
 export const settleWithoutCss: IslandOverrideMessage = { op: 'settle', key: 'k' }
 // @ts-expect-error clear names the override

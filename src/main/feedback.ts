@@ -32,10 +32,7 @@ async function captureWindow(win: NativeView | null): Promise<string | null> {
   }
 }
 
-async function submitFeedback(
-  repoRoot: string,
-  input: FeedbackInput
-): Promise<FeedbackResult> {
+async function submitFeedback(repoRoot: string, input: FeedbackInput): Promise<FeedbackResult> {
   const body = (input.body ?? '').trim()
   if (!body) return { ok: false, error: 'Please describe your feedback first.' }
 
@@ -59,7 +56,5 @@ async function submitFeedback(
 export function registerFeedbackIpc(getWindow: () => NativeView | null): void {
   const repoRoot = app.getAppPath()
   ipcMain.handle('feedback:capture', () => captureWindow(getWindow()))
-  ipcMain.handle('feedback:submit', (_e, input: FeedbackInput) =>
-    submitFeedback(repoRoot, input)
-  )
+  ipcMain.handle('feedback:submit', (_e, input: FeedbackInput) => submitFeedback(repoRoot, input))
 }

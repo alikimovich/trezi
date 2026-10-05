@@ -139,8 +139,22 @@ for (const width of [680, 780]) {
     minimumWidth: 680,
     values: { default: 'last-used', projectUi: 'false', engine: 'agent' },
     ...sidebar('general'),
-    controls: [control('default', 'Use last selected model'), control('claudePlugins', 'Don’t allow'), control('agentFileAccess', 'Full access'), control('workspaceIdle', '7 days'), control('activityAutoOpen', 'For problems that need me')],
-    text: ['General', 'Al Providers', 'Experimental', 'General', 'Default model', 'New chats start with this model.', 'Use last selected model']
+    controls: [
+      control('default', 'Use last selected model'),
+      control('claudePlugins', 'Don’t allow'),
+      control('agentFileAccess', 'Full access'),
+      control('workspaceIdle', '7 days'),
+      control('activityAutoOpen', 'For problems that need me')
+    ],
+    text: [
+      'General',
+      'Al Providers',
+      'Experimental',
+      'General',
+      'Default model',
+      'New chats start with this model.',
+      'Use last selected model'
+    ]
   }
   assertSectionEvidence(general, width, 'general')
   const providers = {
@@ -165,14 +179,20 @@ for (const width of [680, 780]) {
     assert.throws(() => assertSectionEvidence(bad, width, section))
   }
   reject(general, 'general', (e) => (e.controls = []))
-  reject(general, 'general', (e) => (e.controls = e.controls.filter((c) => c.id !== 'claudePlugins')))
+  reject(
+    general,
+    'general',
+    (e) => (e.controls = e.controls.filter((c) => c.id !== 'claudePlugins'))
+  )
   reject(general, 'general', (e) => e.controls.push(control('projectUi', 'Off')))
   reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Experimental')))
   reject(general, 'general', (e) => (e.text[5] = 'New chats start with'))
   reject(general, 'general', (e) => (e.sidebarSelected = 1))
   reject(general, 'general', (e) => (e.foreground = false))
   reject(providers, 'providers', (e) => (e.text = e.text.slice(0, 4)))
-  reject(providers, 'providers', (e) => e.controls.push(control('default', 'Use last selected model')))
+  reject(providers, 'providers', (e) =>
+    e.controls.push(control('default', 'Use last selected model'))
+  )
   reject(providers, 'providers', (e) => (e.section = 'general'))
   // Verbatim OCR from the manager's General capture (settings-visible-680-general): the
   // pixels show "Default model"; Vision returned "Detault model" (f read as t). Must
