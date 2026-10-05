@@ -129,6 +129,11 @@ export async function checkVisibleSettings(
     'false',
     'Claude plugins are off in a new profile (LKM-138)'
   )
+  assert.equal(
+    initial.values.agentFileAccess,
+    'full',
+    'Agents have full file access in a new profile (LKM-163)'
+  )
   // LKM-143: General shows the version stamped into this build, as `trezi --version` prints it.
   assert.match(
     initial.values.version ?? '',
@@ -169,6 +174,12 @@ export async function checkVisibleSettings(
   await reopen()
   assert.equal((await inspect()).values.claudePlugins, 'true')
   await choose('claudePlugins', 'false')
+  await reopen()
+  // LKM-163: Agent file access autosaves and survives close/reopen, then goes back to Full access.
+  await choose('agentFileAccess', 'project')
+  await reopen()
+  assert.equal((await inspect()).values.agentFileAccess, 'project')
+  await choose('agentFileAccess', 'full')
   await reopen()
   // LKM-152: Show Activity automatically defaults to problems that need the user and persists.
   assert.equal(
