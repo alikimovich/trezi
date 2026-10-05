@@ -69,6 +69,8 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
+  /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
+  landingError?: string
   /** LKM-151: the files and undo group of the last turn that landed on the live tree. */
   landed?: { files: string[]; group?: string }
   /** LKM-151: a dev-server compile/parse error in a file the last turn touched. */
@@ -291,6 +293,8 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
           : event.reason === 'reverted'
             ? 'reverted'
             : undefined
+      chat.landingError =
+        event.reason === 'failed' ? (event.error ?? 'The landing failed.') : undefined
       if (event.state === 'merged' && event.group && event.revertable !== false && last)
         last.revertGroup = event.group
       if (event.state === 'merged')

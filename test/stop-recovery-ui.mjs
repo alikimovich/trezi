@@ -367,7 +367,29 @@ chat.isRunning = false
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
 assert.ok(card('conflict'))
 assert.equal(renders.at(-1).composer.queueCanSend, false)
-assert.match(renders.at(-1).composer.queueNote, /resolve the conflicting edits/)
+assert.match(renders.at(-1).composer.queueNote, /retry, resolve or discard the held changes/)
+assert.match(card('conflict').title, /didn’t land/)
+assert.deepEqual(
+  card('conflict').actions.map((a) => a.action),
+  ['discard', 'landing-retry', 'resolve']
+)
+
+// LKM-165: a landing that failed says why and offers Retry; never "pending".
+emit({
+  type: 'isolation',
+  state: 'parked',
+  files: ['src/a.tsx'],
+  reason: 'failed',
+  error: 'index.lock exists'
+})
+assert.match(card('conflict').detail, /couldn’t apply them to the project: index\.lock exists/)
+assert.match(card('conflict').detail, /src\/a\.tsx/)
+await act('landing-retry', 'conflict')
+await tick()
+assert.deepEqual(calls.at(-1), ['agent:retry-landing', 'a'])
+emit({ type: 'isolation', state: 'merged', files: ['src/a.tsx'], group: 'chat:w:3' })
+assert.equal(card('conflict'), undefined, 'a landed retry clears the card')
+assert.equal(chat.landingError, undefined)
 console.log(
   'STOP RECOVERY UI OK — guard, relative sources, dev-server errors, post-Stop and preview-error cards, queue'
 )

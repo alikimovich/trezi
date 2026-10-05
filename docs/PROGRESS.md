@@ -2,6 +2,46 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-165: long chats stay fast, and parked edits always land (issue #230)
+
+- **Root cause: edits never landed.**
+  - Failed Codex turns hold their work in the chat worktree. The live base moved on, so the next successful turn, after the switch to Claude, drift-parked.
+  - The `agent:send` guard then refused every turn on a drift-parked chat. Native always passes the chat key, so the guard also refused the Resolve card's own resolution turn. The chat could never land again.
+  - Separately, `afterTurn` swallowed landing exceptions. The chat stayed "isolated" with nothing landed and no card.
+  - Codex could not call `workspace_state`: approval-free sessions refused the tool because it was not pre-approved. So the agent guessed the edits were "pending".
+  - The symlinked project path was checked and is not a cause: the Swift owner resolves real paths.
+- **Fix.**
+  - `sendRefusal` (new `src/main/chat-status.ts`, which holds the read-only views moved out of `chat-isolation.ts`) refuses only an unresolved drift park. After Resolve stages markers, the resolution turn sends.
+  - A landing exception parks the chat with `reason: 'failed'` and its error (`landingError`, cleared by `clearPark`).
+  - The card is now "This turn’s changes didn’t land", with Discard / Retry / Resolve. Retry is `agent:retry-landing` → `retryLanding`.
+  - The queue note names all three ways out.
+  - `workspace_state` reports `lastLanding` and never says "pending".
+  - `src/main/backends/codex-mcp.ts` pre-approves every Trezi MCP tool. `test/codex-mcp-approvals.mjs` checks the generated config.
+  - `test/chat-landing-recovery.mjs` (Swift owner harness, in `test/repository-owner.mjs`) covers four cases:
+    - two failed Codex turns, then a successful Claude turn on the same worktree, landing both files;
+    - a stuck drift park that Resolve unblocks;
+    - a stale park, cleared by the user, that Retry lands;
+    - an `index.lock` landing failure that shows the failed card and lands on Retry.
+- **Root cause: the slowdown.**
+  - Every `chatState` frame (a keystroke, an attachment, a card, a stream delta, the mode switch's re-render) carried the whole transcript.
+  - `ChatView.update` then re-serialized and decoded all of it on the main thread, computed the follow signature over every message, and reassigned the snapshot, so SwiftUI re-diffed the transcript.
+  - Bun's side was only about 2 ms even at 2.4 MB.
+- **Fix.**
+  - `chatFrames` (`src/native/chat-frames.ts`) omits `messages` when they equal the last frame sent for that chat.
+  - `Chat.swift` decodes a `ChatFrame` and keeps the previous messages in that case. It skips the update entirely when only composer-owned keys changed, and compares a cheap `followHead` when the messages are kept.
+  - The shell's `select-object` renders the toolbar before awaiting the preview round trip.
+  - `test/native-long-chat-perf.mjs` (2,000 messages) holds the mode switch and attachment add under 100 ms (about 3–4 ms measured, bridge payload included). It also asserts that composer frames carry no transcript.
+- **Feedback diagnostics.**
+  - The feedback sheet has an "Include diagnostics" consent choice, off by default, with a readonly line saying what it covers.
+  - With consent, `src/main/feedback-diagnostics.ts` attaches:
+    - Bun's console output from the last hour (a bounded ring buffer, since Trezi keeps no log files and `open -a` discards the host and service stderr);
+    - `log show --last 1h` for the Trezi processes;
+    - the chat's landing state;
+    - `git status` of its worktree;
+    - a 3-second `sample` of the host when a `webViews` ping takes 250 ms or more or times out. The host now sends its pid in the `ready` event.
+  - Everything is redacted (token shapes, `key=value` secrets, URL credentials, private keys) and the home folder becomes `~`, capped at 24,000 characters. `test/feedback-diagnostics.mjs` uses injected commands, so no real `log` or `sample` runs.
+  - Bun never reads the service-private repository journal, so the "ledger state" is the chat's landing state as Bun holds it.
+
 ## 2026-10-04 — LKM-158: clean Biome lint baseline, lint in quick verification (F4)
 
 - **Why.** Review L8 (`docs/REVIEW-2026-10.md`): `biome check src test` reported 579 errors, mostly format and import order, so `bun run lint` failed repo-wide and new lint debt went unnoticed.

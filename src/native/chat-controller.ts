@@ -109,6 +109,10 @@ export class NativeChatController {
         chat.title = migrateChatTitle(live.record.title)
         chat.isolation = live.isolation?.state ?? 'live'
         chat.stopped = live.isolation?.reason === 'interrupted' ? 'held' : undefined
+        chat.landingError =
+          live.isolation?.reason === 'failed'
+            ? (live.isolation.error ?? 'The landing failed.')
+            : undefined
         const stoppedMessage =
           chat.stopped && [...chat.messages].reverse().find((m) => m.role === 'assistant')
         if (stoppedMessage) stoppedMessage.revertGroup = `${STOPPED_GROUP}${chat.chat}`

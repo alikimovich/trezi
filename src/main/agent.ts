@@ -38,6 +38,8 @@ import {
   liveChatWorktreeIds,
   releaseChat,
   resolveParkedChat,
+  retryLanding,
+  sendRefusal,
   showParkedChat
 } from './chat-isolation'
 import { TurnTracker } from './chat-turns'
@@ -1346,11 +1348,10 @@ export function registerAgentIpc(
         await beforeTurn(key, text)
         if (preparation.cancelled) throw new Error('Message cancelled before sending.')
         if (sessions.get(key) !== session) throw new Error('This chat is closed.')
-        // A stopped turn's hold is not a conflict: the next turn continues on top of it.
-        const parked = requestedKey ? isolationSnapshot(requestedKey) : undefined
-        if (parked?.state === 'parked' && parked.reason !== 'interrupted') {
-          throw new Error('Resolve this chat’s conflicting changes before sending queued messages.')
-        }
+        // Only an unresolved drift park refuses; a stopped or failed-landing hold and
+        // the Resolve card's own turn continue on top of it (LKM-165).
+        const refusal = requestedKey ? sendRefusal(requestedKey) : null
+        if (refusal) throw new Error(refusal)
         const entry = { role: 'user' as const, text: note, at: Date.now() }
         const { handoff } = await conversation()
           .send(key, id, entry)
@@ -1593,6 +1594,14 @@ export function registerAgentIpc(
     if (!sessionKey) return { ok: false }
     return discardParkedChat(sessionKey)
   })
+
+  // LKM-165 landing card — "Retry": land the held batch again; the outcome reaches the
+  // chat as the usual isolation event.
+  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey) =>
+    sessionKey
+      ? retryLanding(sessionKey)
+      : { ok: false, state: 'isolated' as const, error: 'no-session' }
+  )
 
   // LKM-151 post-Stop card: revert (undoable), undo that revert, or keep the stopped
   // turn's held work. "Ask agent to finish" is an ordinary turn from the renderer.

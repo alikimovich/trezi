@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Long chat slows the app and edits never land (LKM-165, issue #230)
+
+- [x] Root cause documented: the drift-park send guard refused the Resolve turn, and landing exceptions were swallowed (`docs/WORKTREES.md`, `docs/PROGRESS.md`).
+- [x] A Codex→Claude chat lands after failed Codex turns; stale and stuck parks recover (`test/chat-landing-recovery.mjs`).
+- [x] An unlandable turn shows Retry/Resolve/Discard with its reason; `workspace_state` never reports "pending".
+- [x] Unchanged transcripts are not re-sent or re-decoded; mode switch and attachment add stay under 100 ms at 2,000 messages (`test/native-long-chat-perf.mjs`).
+- [x] Trezi MCP tools pre-approved for Codex (`test/codex-mcp-approvals.mjs`).
+- [x] Feedback sheet diagnostics consent; redacted bundle with `~` paths (`test/feedback-diagnostics.mjs`, `test/native-support-sheets.mjs`).
+
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
 - [x] `clearPark` (`src/main/chat-park.ts`) at all 9 unpark sites; no other `parked = false`.

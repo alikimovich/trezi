@@ -35,8 +35,14 @@ parked
   → Resolve (UI or agent tool): rebase both sides into the worktree; AI resolves markers
       (add/add, modify/delete and rename conflicts are markers too, a deleted side
        labelled "(deleted)"; only an unreadable patch is an error — LKM-130)
+  → Retry: land the held work again once the live change is gone (LKM-165)
   → Discard: reset worktree, detach, delete chat branch
   → successful resolution: land once, detach, delete chat branch
+
+landing threw (index lock, unreadable tree, owner error — LKM-165)
+  → parked with reason failed and the error on the card; the chat never stays
+      "isolated" with nothing landed
+  → Retry / Resolve / Discard as for any park
 
 parked, reason interrupted (Stop or a failed turn; not a conflict — LKM-151)
   → Revert this turn's changes: hidden at once (live never changed); Undo re-holds it;
@@ -104,6 +110,28 @@ invokes the same queued resolver as the conflict card, leaving marker-bearing fi
 the chat's current worktree for the model to reconcile. The tool is idempotent after
 staging, refuses to reset a worktree already edited in the current turn, and exposes no
 raw Git/reset/discard escape hatch.
+
+### Parked chats always have a way out (LKM-165)
+
+Issue #230: after failed Codex turns, a switch to Claude never landed. The failed turns
+held their work and the live base moved on, so the next successful turn drift-parked.
+From then on `agent:send` refused every turn on the chat, including the Resolve card's
+own resolution turn (native always names the chat), so nothing could land and the
+agent kept reporting the edits as pending. Separately, a landing that threw was
+swallowed: the chat stayed isolated with nothing landed and no card. The symlinked
+project path was not a cause (the Swift owner works on real paths).
+
+- The send guard (`sendRefusal` in `src/main/chat-status.ts`) refuses only an
+  unresolved drift park; once Resolve has staged markers, the resolution turn sends.
+- A landing exception parks the chat with `reason: 'failed'` and the error, shown on the
+  card. The card offers Discard, Retry (`agent:retry-landing`, which re-runs the landing
+  against the current live tree) and Resolve.
+- Landing, park and worktree state are per chat, not per provider: a provider switch
+  keeps the same worktree and cumulative batch, and the next successful turn lands every
+  held file (`test/chat-landing-recovery.mjs`).
+- `workspace_state` reports `lastLanding` (merged, parked, unchanged or failed, with the
+  files and time) and guidance that never says "pending"; Codex has the Trezi tools
+  pre-approved so it can call it (`docs/PROVIDERS.md`).
 
 ## Stopped turns and broken previews (LKM-151)
 

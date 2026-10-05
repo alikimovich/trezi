@@ -198,9 +198,13 @@ the turn instead of silently dropping inline controls and preview tools. This ch
 does not call a model. These session-scoped tools are not installed into separate
 Codex or Claude application chats.
 
-The SDK session explicitly allows the validated `open_preview`, `open_code` navigation and `chat_island` tools via
-its per-tool approval configuration, matching Claude's in-process allowlist. Other
-MCP tools and shell approval policy keep their existing configuration.
+The SDK session pre-approves every Trezi tool (navigation, `chat_island`, preview,
+UI catalog, `workspace_state` and `prepare_conflict_resolution`) via its per-tool
+approval configuration, matching Claude's in-process allowlist. Sessions run with
+approvals disabled, so a tool left out is refused outright: before LKM-165,
+`workspace_state` was, and Codex reported "requires approval, but this session
+disables approvals". `test/codex-mcp-approvals.mjs` pins the list. Other MCP tools
+and shell approval policy keep their existing configuration.
 
 Trezi's Codex sessions (chat turns and the project-memory pass) run only the MCP
 servers Trezi passes. The CLI merges `--config` tables into the user's

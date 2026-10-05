@@ -25,6 +25,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - A chat running in its own worktree can no longer write the live project from a shell command (Claude) or from Codex and Responses connections; the agent is pointed at its worktree copy instead (LKM-156).
 - A connected project whose restarted preview shows no source-mapped element for the whole grace period now offers "Source links stopped working" with Reconnect; stamps returning hide it, and Not now is remembered across relaunch (LKM-157).
 - Agent turns started from the Inspector, Styles, Props, inline text edits, custom controls and Layers moves name the source relative to the project, so a chat's edits land in its own worktree instead of the live checkout (LKM-155).
+- A chat whose changes were held, for example after failed Codex turns and a switch to Claude, can land again: Resolve is no longer blocked, a landing that fails shows its reason with Retry, Resolve and Discard, and the agent no longer reports edits as pending forever (LKM-165).
+- Long chats no longer slow the app: typing, adding an attachment and switching preview modes no longer re-send and re-decode the whole conversation (LKM-165).
+- Codex can use Trezi's own tools, such as checking whether its edits landed, without being refused (LKM-165).
+- Send feedback can attach diagnostics with your consent: the last hour of logs, the chat's landing state and git status, and a short sample of the app when it is busy, with secrets removed and home paths shortened (LKM-165).
 
 ### Changed
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.

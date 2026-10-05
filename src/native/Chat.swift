@@ -21,15 +21,23 @@ struct ChatSnapshot: Decodable {
     let chat: String; let messages: [ChatMessage]; let running: Bool; let cards: [ChatCard]
     let questions: [ChatQuestionRequest]
 }
+/// A `chatState` frame (`chat-frames.ts`): `messages` is absent when they are unchanged
+/// since the last frame for this chat, so a long transcript is not decoded again (LKM-165).
+struct ChatFrame: Decodable {
+    let activity: ChatActivityState?; let streamingId: String?
+    let chat: String; let messages: [ChatMessage]?; let running: Bool; let cards: [ChatCard]
+    let questions: [ChatQuestionRequest]
+}
 private extension ChatSnapshot {
     // Source-value refreshes and composer updates are not new conversation content.
+    var followHead: [String] { [chat, activity?.label ?? "", String(running)] + cards.map { $0.id + $0.title } + questions.map { $0.id } }
     var followContent: [String] {
-        [chat, activity?.label ?? "", String(running)] + messages.flatMap { message in
+        followHead + messages.flatMap { message in
             [message.id, message.text] + message.segments.flatMap { segment in
                 if let island = segment.island { return [island.id, String(island.revision)] }
                 return [segment.text ?? ""] + (segment.statuses ?? [])
             }
-        } + cards.map { $0.id + $0.title } + questions.map { $0.id }
+        }
     }
 }
 final class ChatModel: ObservableObject {
@@ -96,6 +104,7 @@ final class ChatModel: ObservableObject {
 final class NativeChat: NSHostingView<ChatConversation> {
     let model = ChatModel()
     var lastState: [String: Any] = [:]
+    private var lastConversation: [String: Any] = [:]
     /// Native sibling over the conversation (see ChatLatestButton).
     let latestButton = ChatLatestButton()
     private var latestObservers: Set<AnyCancellable> = []
@@ -123,10 +132,22 @@ final class NativeChat: NSHostingView<ChatConversation> {
         lastState = state
         isHidden = !(state["visible"] as? Bool ?? false)
         model.visible = !isHidden
-        if let data = try? JSONSerialization.data(withJSONObject: state), let snapshot = try? JSONDecoder().decode(ChatSnapshot.self, from: data) {
-            let completed = model.snapshot?.chat == snapshot.chat && model.snapshot?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false)
+        // A frame that only moved the composer (text, attachments) or the column leaves
+        // the conversation alone: no decode of the kept transcript, no SwiftUI pass.
+        var conversation = state
+        for key in ["composer", "bounds", "visible", "messages"] { conversation.removeValue(forKey: key) }
+        let previous = model.snapshot
+        let kept = state["messages"] == nil && previous?.chat == state["chat"] as? String
+        if kept, NSDictionary(dictionary: conversation).isEqual(to: lastConversation) {
+            // Nothing the conversation shows changed.
+        } else if let data = try? JSONSerialization.data(withJSONObject: state), let frame = try? JSONDecoder().decode(ChatFrame.self, from: data) {
+            lastConversation = conversation
+            let messages = frame.messages ?? (kept ? previous?.messages : nil) ?? []
+            let snapshot = ChatSnapshot(activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
+            let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false)
             model.cat.update(running: snapshot.running, questioning: !snapshot.questions.isEmpty || snapshot.cards.contains { $0.actions.contains { $0.action == "permission" } }, completed: completed)
-            if model.snapshot?.followContent != snapshot.followContent { model.followRevision += 1 }
+            let follow = kept ? previous?.followHead != snapshot.followHead : previous?.followContent != snapshot.followContent
+            if follow { model.followRevision += 1 }
             model.snapshot = snapshot; model.revision += 1
         }
         model.cat.show(!isHidden)

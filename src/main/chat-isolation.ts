@@ -25,13 +25,18 @@ import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
-import { previewEvidence } from './preview-evidence'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { TurnTerminalOutcome } from './turn-terminal'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
 export { handleReclaimed, hasParkRecord } from './chat-park'
 export { initChatIsolation } from './chat-state'
+export {
+  agentWorkspaceEvidence,
+  agentWorkspaceState,
+  isolationSnapshot,
+  sendRefusal
+} from './chat-status'
 export {
   applyParkedBranch,
   discardParkedBranch,
@@ -57,7 +62,8 @@ export {
  * hook no-ops (the chat runs on the live root exactly as before).
  *
  * This module owns a chat's lifecycle. Its state is in `chat-state.ts`, park records
- * and crash recovery in `chat-park.ts`, the landing step in `chat-landing.ts`, the
+ * and crash recovery in `chat-park.ts`, the landing step in `chat-landing.ts`, its
+ * read-only views (snapshot, send guard, agent workspace state) in `chat-status.ts`, the
  * parked-chat actions in `parked-chat.ts` and the setup helper sync in `chat-helpers.ts`.
  *
  * Serialization has two levels: each chat has a promise `chain`, and every live-tree
@@ -182,6 +188,8 @@ function lastTurn(transcript: SessionTranscriptEntry[]): SessionTranscriptEntry[
  * the review UI. `noop` emits a successful landing acknowledgement without a commit.
  * With reconciliation enabled, stage text drift privately and return marker-bearing
  * files for one provider continuation; clean three-way results land in this queue.
+ * A landing that throws holds the work as a failed park with Retry (LKM-165); it is
+ * never swallowed silently, which left the chat "isolated" with nothing landed.
  */
 export function afterTurn(
   sessionKey: string,
@@ -194,67 +202,142 @@ export function afterTurn(
   if (!st) return Promise.resolve(null)
   const turn = lastTurn(transcript)
   st.lastUsed = Date.now()
-  const task = st.chain
-    .then(() =>
-      enqueueRepoWrite(st.liveRoot, async () => {
-        st.lastUsed = Date.now()
-        if (st.reclaimed) return null
-        await settleReverted(st)
-        const turnNo = ++st.turnNo
-        let outcome = await completeTurn(st.liveRoot, st.wt, message, {
-          land: terminal === 'success'
-        })
-        let reconcileFiles: string[] | null = null
-        if (
-          reconcile &&
-          terminal === 'success' &&
-          outcome.outcome === 'parked' &&
-          !(await conflictMarkerFiles(st.wt, outcome.files)).length &&
-          (await canReconcileText(st.liveRoot, st.wt, outcome.files))
-        ) {
-          try {
-            const prep = await stageResolve(st.liveRoot, st.wt)
-            if (prep.clean) outcome = await completeTurn(st.liveRoot, st.wt, message)
-            else reconcileFiles = prep.conflicted
-          } catch {
-            /* preserve the recovery branch and surface the fallback */
-          }
-        }
-        if (outcome.outcome === 'merged') {
-          await landTurn(sessionKey, st, outcome, turnNo, message)
-        } else if (outcome.outcome === 'parked') {
-          // A stopped or failed turn holds its work (LKM-151); a drift park stays a
-          // conflict even when a later turn on top of it is stopped.
-          st.interrupted = terminal !== 'success' && (!st.parked || st.interrupted)
-          st.parked = true
-          st.parkedFiles = outcome.files
-          const markers = await conflictMarkerFiles(st.wt, outcome.files)
-          st.resolvingFiles = markers.length ? markers : null
-          upsertParkRecord(st, outcome.files, turn)
-          if (!reconcileFiles)
-            emitIsolation(
-              sessionKey,
-              'parked',
-              st.wt.branch,
-              outcome.files,
-              undefined,
-              undefined,
-              st.interrupted ? 'interrupted' : undefined
-            )
-        } else if (outcome.newBase) {
-          clearPark(st)
-          st.wt.baseSha = outcome.newBase
-          await retireWorktreeBranch(st.wt)
-          // Setup may only restore an excluded helper; config can already be wired.
-          // Acknowledge the no-op so it can restart and verify instead of waiting forever.
-          if (terminal === 'success') emitIsolation(sessionKey, 'merged', st.wt.branch, [])
-        }
-        return reconcileFiles
-      })
-    )
-    .catch(() => null)
-  st.chain = task
-  return task
+  const task = st.chain.then(() =>
+    enqueueRepoWrite(st.liveRoot, async () => {
+      st.lastUsed = Date.now()
+      if (st.reclaimed) return null
+      try {
+        return await landBatch(sessionKey, st, message, turn, terminal, reconcile)
+      } catch (error) {
+        await landingFailed(sessionKey, st, error, turn)
+        return null
+      }
+    })
+  )
+  st.chain = task.catch(() => null)
+  return task.catch(() => null)
+}
+
+/** One landing attempt of the chat's cumulative batch. Inside the repository lease. */
+async function landBatch(
+  sessionKey: string,
+  st: ChatState,
+  message: string,
+  turn: SessionTranscriptEntry[],
+  terminal: TurnTerminalOutcome,
+  reconcile: boolean
+): Promise<string[] | null> {
+  await settleReverted(st)
+  const turnNo = ++st.turnNo
+  let outcome = await completeTurn(st.liveRoot, st.wt, message, {
+    land: terminal === 'success'
+  })
+  let reconcileFiles: string[] | null = null
+  if (
+    reconcile &&
+    terminal === 'success' &&
+    outcome.outcome === 'parked' &&
+    !(await conflictMarkerFiles(st.wt, outcome.files)).length &&
+    (await canReconcileText(st.liveRoot, st.wt, outcome.files))
+  ) {
+    try {
+      const prep = await stageResolve(st.liveRoot, st.wt)
+      if (prep.clean) outcome = await completeTurn(st.liveRoot, st.wt, message)
+      else reconcileFiles = prep.conflicted
+    } catch {
+      /* preserve the recovery branch and surface the fallback */
+    }
+  }
+  const at = Date.now()
+  if (outcome.outcome === 'merged') {
+    await landTurn(sessionKey, st, outcome, turnNo, message)
+    st.lastLanding = { outcome: 'merged', files: outcome.files, at }
+  } else if (outcome.outcome === 'parked') {
+    // A stopped or failed turn holds its work (LKM-151); a drift park stays a
+    // conflict even when a later turn on top of it is stopped.
+    st.interrupted = terminal !== 'success' && (!st.parked || st.interrupted)
+    st.parked = true
+    st.parkedFiles = outcome.files
+    // This attempt reached the repository: an earlier landing error is history.
+    st.landingError = undefined
+    const markers = await conflictMarkerFiles(st.wt, outcome.files)
+    st.resolvingFiles = markers.length ? markers : null
+    upsertParkRecord(st, outcome.files, turn)
+    if (terminal === 'success') st.lastLanding = { outcome: 'parked', files: outcome.files, at }
+    if (!reconcileFiles)
+      emitIsolation(
+        sessionKey,
+        'parked',
+        st.wt.branch,
+        outcome.files,
+        undefined,
+        undefined,
+        st.interrupted ? 'interrupted' : undefined
+      )
+  } else if (outcome.newBase) {
+    clearPark(st)
+    st.wt.baseSha = outcome.newBase
+    await retireWorktreeBranch(st.wt)
+    if (terminal === 'success') st.lastLanding = { outcome: 'unchanged', files: outcome.files, at }
+    // Setup may only restore an excluded helper; config can already be wired.
+    // Acknowledge the no-op so it can restart and verify instead of waiting forever.
+    if (terminal === 'success') emitIsolation(sessionKey, 'merged', st.wt.branch, [])
+  }
+  return reconcileFiles
+}
+
+/** The landing threw (the repository owner refused or Git failed). Hold the work —
+ *  parked, so the next turn start never resets it away — and say so with the reason,
+ *  so the chat shows Retry instead of looking landed or pending forever. */
+async function landingFailed(
+  sessionKey: string,
+  st: ChatState,
+  error: unknown,
+  turn: SessionTranscriptEntry[] = []
+): Promise<void> {
+  const reason = (error instanceof Error ? error.message : String(error)).slice(0, 500)
+  // The batch's files, best effort: the checkout itself may be what failed.
+  const changed = await gitOut(st.wt.path, ['diff', '--name-only', st.wt.baseSha]).then(
+    (out) => out.split('\n').filter(Boolean),
+    () => [] as string[]
+  )
+  if (changed.length) st.parkedFiles = changed
+  st.parked = true
+  st.landingError = reason || 'The landing failed.'
+  st.lastLanding = { outcome: 'failed', files: st.parkedFiles, at: Date.now(), error: reason }
+  upsertParkRecord(st, st.parkedFiles, turn)
+  emitIsolation(
+    sessionKey,
+    'parked',
+    st.wt.branch,
+    st.parkedFiles,
+    undefined,
+    undefined,
+    'failed',
+    st.landingError
+  )
+}
+
+/**
+ * The chat card's Retry (LKM-165): land the held cumulative batch again, as a finished
+ * turn would. A failed landing or a drift park the user has since cleared up lands;
+ * otherwise the chat shows the same card with the new reason. A stopped turn's hold
+ * is not retried here: its own card offers Keep.
+ */
+export async function retryLanding(
+  sessionKey: string
+): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
+  const st = states.get(sessionKey)
+  if (!st) return { ok: false, state: 'isolated', error: 'That chat is no longer open.' }
+  if (!st.parked || st.reverted || (st.interrupted && !st.landingError))
+    return { ok: true, state: st.parked && !st.reverted ? 'parked' : 'isolated' }
+  // Its outcome reaches the chat as the usual isolation event (merged, or the card again).
+  await afterTurn(sessionKey, 'Land held chat changes', [], 'success')
+  return {
+    ok: true,
+    state: st.parked ? 'parked' : 'isolated',
+    ...(st.landingError ? { error: st.landingError } : {})
+  }
 }
 
 /** Ids of every live chat worktree across ALL open projects — the `pruneOrphans`
@@ -359,88 +442,4 @@ export async function releaseChat(
  *  checkouts stay on disk for the next launch's crash recovery (C4). */
 export function dropAll(): void {
   states.clear()
-}
-
-/** The isolation status of a live chat for `agent:workspace-snapshot` (renderer
- *  reload reattach). Undefined for a non-isolated chat (the renderer treats that as
- *  live). */
-export function isolationSnapshot(
-  sessionKey: string
-): { state: 'live' | 'isolated' | 'parked'; branch?: string; reason?: 'interrupted' } | undefined {
-  const st = states.get(sessionKey)
-  if (!st) return undefined
-  const parked = st.parked && !st.reverted
-  return {
-    state: parked ? 'parked' : 'isolated',
-    ...(st.wt.branch ? { branch: st.wt.branch } : {}),
-    ...(parked && st.interrupted ? { reason: 'interrupted' as const } : {})
-  }
-}
-
-/** Authoritative state exposed to the chat's Trezi MCP tools. Unlike `git status`
- *  inside the private checkout, this reports whether the landing coordinator has
- *  accepted, parked, or staged the cumulative batch. Paths stay out of the result:
- *  the model already runs in its own worktree and should never target the live one. */
-export function agentWorkspaceState(sessionKey: string): {
-  state: 'live' | 'isolated' | 'parked' | 'resolving'
-  branch?: string
-  files: string[]
-  guidance: string
-} {
-  const st = states.get(sessionKey)
-  if (!st) {
-    return {
-      state: 'live',
-      files: [],
-      guidance: 'This chat edits the live folder directly; no Trezi worktree landing is active.'
-    }
-  }
-  if (st.resolvingFiles) {
-    return {
-      state: 'resolving',
-      branch: st.wt.branch,
-      files: st.resolvingFiles,
-      guidance:
-        'Both sides are staged in this worktree. Resolve every conflict marker in the listed files; Trezi will land the result when the turn completes.'
-    }
-  }
-  if (st.parked) {
-    return {
-      state: 'parked',
-      branch: st.wt.branch,
-      files: st.parkedFiles,
-      guidance:
-        'Trezi refused to land this cumulative batch safely. Call prepare_conflict_resolution before editing or giving the user terminal instructions.'
-    }
-  }
-  return {
-    state: 'isolated',
-    branch: st.wt.branch,
-    files: [],
-    guidance:
-      'This chat is healthy and isolated. Trezi will validate and land its edits when the turn completes.'
-  }
-}
-
-/** Git state and preview observations are distinct: a reachable preview is not
- * proof that a just-landed revision finished compiling. */
-export async function agentWorkspaceEvidence(sessionKey: string, root: string) {
-  const state = agentWorkspaceState(sessionKey)
-  const st = states.get(sessionKey)
-  const liveRoot = st?.liveRoot ?? root
-  return {
-    ...state,
-    liveRoot,
-    checkout: st?.wt.path ?? root,
-    worktreeBaseRevision: st?.wt.baseSha ?? null,
-    liveRevision: await gitOut(liveRoot, ['rev-parse', 'HEAD']).then(
-      (s) => s.trim(),
-      () => null
-    ),
-    liveDirty: await gitOut(liveRoot, ['status', '--porcelain']).then(
-      (s) => Boolean(s.trim()),
-      () => null
-    ),
-    preview: previewEvidence(liveRoot)
-  }
 }
