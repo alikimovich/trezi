@@ -166,7 +166,8 @@ export function serviceProvider(
       await call('turn', { session })
     },
     send: async (session, text, images) => {
-      // Checked here too: an oversized line would fail the private pipe closed.
+      // Checked here too: an oversized line would fail the private pipe closed. The chat
+      // controller sends only `sendableImages` (LKM-166); this stays strict for any other caller.
       if (images?.length && !validImages(images))
         throw new ProviderError(
           'invalidRequest',

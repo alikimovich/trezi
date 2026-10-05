@@ -17,6 +17,8 @@ export interface Attachment {
   path: string
   type: string
   data: string
+  /** Base64 PNG (about 512 px) standing in for an image the provider cannot read, such as an SVG. */
+  preview?: string
 }
 export interface Submission {
   id: string

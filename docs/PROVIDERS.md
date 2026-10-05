@@ -937,3 +937,34 @@ profile's `Trezi Native` alias. With Full access, Codex's direct writes to the l
 checkout (edits, discarded uncommitted work, commits) are reported after the turn in
 one chat note (`live-tree-watch.ts`). Details,
 limits and tests: [worktrees](WORKTREES.md#agent-file-access-and-symlinked-paths-lkm-163).
+
+## Attachments never fail a turn (LKM-166)
+
+`planAttachments` (`src/native/chat-attachments.ts`) decides how each composer
+attachment reaches the agent; `chat-controller.run()` calls it before `agent:send`.
+Provider-policy stays strict (`validImages`, `IMAGE_TYPES` png/jpeg/gif/webp, 16
+images, 14 MiB each, 20 MiB total), so the chat controller only ever hands it
+`sendableImages`.
+
+- **Images the provider takes** are sent as images and also listed by path under
+  `[Attached images — …]` (the picked file, or a copy `attachments:save` writes to the
+  profile's `trezi/attachments` folder for a pasted one).
+- **SVG and other formats the provider cannot read** (HEIC, TIFF, …) keep their original
+  on disk, listed under `[Attached files]` as `<path> (image/svg+xml; a PNG preview of it
+  is attached as an image)`. The composer rasterizes the preview at attach time
+  (`AttachmentPayload`, `src/native/AttachmentThumbnail.swift`: 512 px longer side, PNG)
+  and sends it as the turn's image.
+- **Oversized rasters** (over 7 MiB raw) are downscaled at attach time through 2048, 1536,
+  1024, 768 and 512 px (JPEG stays JPEG, everything else becomes PNG); the picker no longer
+  refuses images over 10 MiB, and files over 64 MiB are referenced by path only.
+- **Other files** (PDF, text, code) are listed by their path under `[Attached files]`.
+- **Anything that cannot be attached** (no readable path, a save that failed, more
+  images than a turn takes) is named in a `[Not attached: …]` line in the message to the
+  agent. The turn is sent regardless.
+
+Originals live where they already were (the picked file) or in the profile's private
+attachments folder, which the agent can read; Trezi does not copy them into the chat's
+worktree, so there is no extra excluded folder (see `docs/WORKTREES.md`).
+`test/chat-attachments.mjs` covers each case through the controller; the
+`sent-attachments` native smoke check sends an SVG and an oversized PNG through the real
+composer.

@@ -53,8 +53,10 @@ unbordered provider/model/permission selectors below the field. Labels size to
 content up to 60 points. Enter submits, Shift+Enter inserts a newline, and marked
 IME text bypasses submission. Slash completion supports keyboard and pointer
 selection. Readable image attachments are limited to 10 MiB; failed image reads
-and oversized pasted images show an actionable chat error. Sent images display
-native thumbnails. The original cat animates for idle/running/question/completion
+and oversized pasted images show an actionable chat error. Composer tiles and sent
+images share 72 pt thumbnails (`src/native/AttachmentThumbnail.swift`): aspect kept,
+transparent images (SVG, PNG) on a checkerboard, a wrapping row in the sent bubble,
+the file name on hover and a larger preview on click. The original cat animates for idle/running/question/completion
 states, pauses when hidden and respects Reduce Motion.
 Queued messages appear in a rounded stack tucked behind the composer, with
 one-line previews, attachment counts, copy/remove actions and Resume when paused.

@@ -258,7 +258,7 @@ check to its group, and a check with no group there is an error:
 | `shadow-light` | `chat-islands`, Shadow Light part (same fixture scope; the check runs when either group is selected) |
 | `sidebar` | project switching and visible sidebar captures/interactions |
 | `settings` | sheets and forms: running servers, New project, project memory, Settings (General, inline AI Providers, Experimental), feedback, diagnose, activity |
-| `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`) |
+| `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`); sent-bubble attachment thumbnails, wrapping and preview (`smoke-sent-attachments.ts`) |
 | `composer` | composer growth/paste/attachments, per-chat drafts, slash commands, visible composer |
 
 An unknown or empty group name fails before the build. `--live` requires `core`

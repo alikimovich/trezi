@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Compact sent and composer attachment thumbnails (LKM-166)
+
+- [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.
+- [x] Composer tiles use the same cells (`src/native/AttachmentThumbnail.swift`); the strip is 84 pt.
+- [x] Native `sent-attachments` smoke check (group `chat`) bounds thumbnail size, wrapping and text position, and opens and closes the preview.
+- [x] Attachments never fail the turn: SVG/other formats send a 512 px PNG preview and keep the original by path, other files go by path, oversized rasters are downscaled, leftovers are named (`src/native/chat-attachments.ts`, `AttachmentPayload`; `test/chat-attachments.mjs`).
 ## Editing inspector island click-through and ghosting (LKM-162)
 
 - [x] The island's frame takes the pointer (`NativeEditingInspector` hit-test fallback, swallowed clicks and scrolls) and `PreviewWebView` (`src/native/PreviewPointer.swift`) gates WebKit's tracking areas, first-responder moves and clicks by the window's hit view.

@@ -41,6 +41,7 @@ if (process.platform !== 'darwin') {
         'Composer',
         'ComposerVerification',
         'ComposerAttachments',
+        'AttachmentThumbnail',
         'ComposerQueue',
         'ComposerBeam'
       ].map((name) => `src/native/${name}.swift`),

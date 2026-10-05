@@ -189,15 +189,29 @@ export function authorizeTool(
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
 
-/** A turn's images: at most `images` of them, each valid, `imagesTotal` together. */
-export function validImages(images: readonly { mediaType?: unknown; data?: unknown }[]): boolean {
+/**
+ * The images of a turn the provider can take, in order, and how many were left out
+ * (an unsupported type, malformed, over a limit). Never throws: a turn is not failed
+ * for an attachment, the caller says what was left out instead.
+ */
+export function sendableImages<T extends { mediaType?: unknown; data?: unknown }>(
+  images: readonly T[]
+): { kept: T[]; dropped: number } {
+  const kept: T[] = []
   let total = 0
   for (const image of images) {
-    if (!validImage(image.mediaType, image.data)) return false
-    total += (image.data as string).length
+    if (!validImage(image.mediaType, image.data)) continue
+    const size = (image.data as string).length
+    if (kept.length >= LIMITS.images || total + size > LIMITS.imagesTotal) continue
+    kept.push(image)
+    total += size
   }
-  return images.length <= LIMITS.images && total <= LIMITS.imagesTotal
+  return { kept, dropped: images.length - kept.length }
 }
+
+/** A turn's images: at most `images` of them, each valid, `imagesTotal` together. */
+export const validImages = (images: readonly { mediaType?: unknown; data?: unknown }[]): boolean =>
+  sendableImages(images).dropped === 0
 
 /** A pasted/dropped image or a tool's image block: an allowed type, well-formed, bounded. */
 export function validImage(mediaType: unknown, data: unknown): boolean {
