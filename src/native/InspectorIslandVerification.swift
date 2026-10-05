@@ -133,7 +133,7 @@ extension Host {
                 return ["found":true, "target":target, "control":hit?.isDescendant(of: view) ?? false, "visible":view.visibleRect.height >= view.bounds.height - 1,
                         "insideIsland":editingInspector.bounds.contains(editingInspector.convert(point, from: nil))]
             }
-            return ["tab":state.tab, "island":rect(island), "controls":["field":probe(field), "slider":probe(slider), "tabs":probe(tabs)]]
+            return ["tab":state.tab, "error":state.error, "busy":state.busy, "generation":state.generation, "fields":state.fields.count, "island":rect(island), "controls":["field":probe(field), "slider":probe(slider), "tabs":probe(tabs)]]
         }
     }
     private func descendants(of view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants(of: $0) } }

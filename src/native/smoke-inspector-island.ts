@@ -46,6 +46,10 @@ function checkOpen(state: Island, label: string) {
 export type IslandPage = {
   evaluate: (code: string) => Promise<unknown>
   source: () => string
+  /** The selected element's computed value of one style property (`styles:read`). */
+  styles: (prop: string) => Promise<unknown>
+  /** Selects the fixture heading in the page, as a click on it would. */
+  select: () => Promise<void>
   selectMode: (on: boolean) => Promise<unknown>
 }
 
@@ -58,9 +62,25 @@ async function checkPointer(
   page: IslandPage,
   evidence: Record<string, unknown>
 ) {
+  // The page's selection did not survive the island's open/close and resize cycles above
+  // (styles:read had no element), so a Styles edit had nothing to preview on: select again.
+  evidence.pointerSelectionBefore = await page.styles('padding-top')
+  await page.select()
+  await waitFor(
+    async () => ((await page.styles('padding-top')) as { values?: unknown } | null)?.values,
+    'the heading selected in the page'
+  )
+  // A new selection rebuilds the island's fields as its reads arrive; type only once they settle.
+  let last = ''
+  let steady = 0
   const targets = await waitFor(async () => {
     const state = await island({ pointer: true })
-    return state.tab === 'styles' && state.controls?.field?.found && state
+    if (state.tab !== 'styles' || !state.controls?.field?.found) return false
+    const key = `${state.generation}:${state.fields}`
+    steady = key === last ? steady + 1 : 0
+    last = key
+    if (steady < 3) await delay(250)
+    return steady >= 3 && state
   }, 'Styles tab with the padding-top field')
   evidence.pointerTargets = targets
   for (const name of ['field', 'slider', 'tabs']) {
@@ -77,14 +97,25 @@ async function checkPointer(
   assert.ok(edit.focused, `pointer: a click focuses padding-top ${JSON.stringify(edit)}`)
   await waitFor(
     () => /padding(Top|-top)["']?\s*:\s*["']?12/.test(page.source()),
-    'padding-top 12 in the source'
+    'padding-top 12 in the source',
+    10000,
+    async () => ({
+      island: await island({ pointer: true }),
+      selection: await page.styles('padding-top')
+    })
   )
+  const paddingTop = () =>
+    page.evaluate(`getComputedStyle(document.querySelector('#native-title')).paddingTop`)
   await waitFor(
-    async () =>
-      (await page.evaluate(
-        `getComputedStyle(document.querySelector('#native-title')).paddingTop`
-      )) === '12px',
-    'padding-top 12px on the element'
+    async () => (await paddingTop()) === '12px',
+    'padding-top 12px on the element',
+    10000,
+    async () => ({
+      computed: await paddingTop(),
+      inline: await page.evaluate(`document.querySelector('#native-title').getAttribute('style')`),
+      selection: await page.styles('padding-top'),
+      island: await island({ pointer: true })
+    })
   )
   await page.selectMode(true)
   try {
