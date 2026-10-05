@@ -12,33 +12,14 @@
 // - push: the per-ref status lines (untranslated in every version) decide a retry.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { skipUnlessSwift } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 skipUnlessSwift('the Swift Git message parser')
-const root = fileURLToPath(new URL('..', import.meta.url))
-const scratch = mkdtempSync(join(tmpdir(), 'trezi-git-messages-'))
-process.on('exit', () => rmSync(scratch, { recursive: true, force: true }))
-
-const binary = join(scratch, 'git-messages')
-const compiler = process.platform === 'darwin' ? ['xcrun', 'swiftc'] : ['swiftc']
-const built = spawnSync(
-  compiler[0],
-  [
-    ...compiler.slice(1),
-    '-module-cache-path',
-    join(scratch, 'module-cache'),
-    'src/service/GitMessages.swift',
-    'test/fixtures/git-messages/main.swift',
-    '-o',
-    binary
-  ],
-  { cwd: root, encoding: 'utf8', timeout: 180_000 }
-)
-assert.equal(built.status, 0, `swiftc: ${built.error || ''}\n${built.stdout}\n${built.stderr}`)
+const binary = swiftBuild('git-messages', [
+  'src/service/GitMessages.swift',
+  'test/fixtures/git-messages/main.swift'
+])
 
 function parse(cases) {
   const result = spawnSync(binary, [], {

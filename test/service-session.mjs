@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serviceInfoPlist } from '../scripts/service-info.mjs'
 import { skipUnlessDarwin } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 skipUnlessDarwin('The security session probe')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -53,22 +54,11 @@ try {
     main,
     'import Foundation\nFileHandle.standardOutput.write(try! JSONSerialization.data(withJSONObject: SecuritySessionProbe.report()))\n'
   )
-  const compiled = spawnSync(
-    'xcrun',
-    [
-      'swiftc',
-      '-module-cache-path',
-      join(scratch, 'mc'),
-      main,
-      join(root, 'src/native/SecuritySession.swift'),
-      '-o',
-      probe,
-      '-framework',
-      'Security'
-    ],
-    { encoding: 'utf8' }
+  swiftBuild(
+    'security-session',
+    [main, 'src/native/SecuritySession.swift', '-framework', 'Security'],
+    { out: probe }
   )
-  assert.equal(compiled.status, 0, compiled.stderr)
   const run = (command, args) => {
     const result = spawnSync(command, args, { encoding: 'utf8' })
     assert.equal(result.status, 0, result.stderr)

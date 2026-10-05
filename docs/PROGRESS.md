@@ -2,6 +2,28 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-167: unit tier and quick verification about 4x faster
+
+- **Why.** Quick verification (typecheck, typecheck:native, unit tier) took 5-7 min. The unit tier alone took 328.6 s on the operator Mac. About 25 Swift tests each compiled their fixture with a private, cold Clang module cache, at about 25 s per compile. Only 4 workers ran, and `service-process` and `keychain-rebuild` were exclusive barriers.
+- **Swift build cache.** `test/helpers/swift-build.mjs`:
+  - `swiftBuild` caches each fixture binary under `.local/test-cache/swift`, keyed by toolchain, flags and source bytes, with one shared module cache.
+  - At most 2 compiles run across all test processes (lock-file slots, dead owners taken over).
+  - Every unit-tier swiftc call site now goes through it: the fixture helpers, the owner tests, the AppKit layout fixtures and `service-process` (copies, since it signs them).
+  - `keychain-rebuild` uses the uncached `swiftCompile` with the shared module cache, so its three builds still really happen.
+- **Runner.** `test/run.mjs`:
+  - Workers: `max(min(4, cores), min(cores - 2, 8))`, with no exclusive barriers.
+  - `--report` prints the 20 slowest tests and merges PASS durations into `.local/test-times.json`. The next run starts the slowest tests first.
+  - `--typecheck` runs both typechecks next to the tier.
+  - `bun run test:quick` combines them, and CI uses the same command with an `actions/cache` of `.local/test-cache`.
+- **Slow tests.**
+  - `workflow-owner` is split in two processes. The scenarios stay; `test/workflow-durability.mjs` runs the same file's tool and durability checks.
+  - The composer-layout fixture waited one fixed 0.2 s run-loop turn for the pin and flaked under 8 workers. It now waits for the condition, at most 5 s.
+  - `island-flicker-frameworks` failed once under load: the Vite "before" run reloads the preview page on every source write, and with no frame sample in a gap it saw no swap and no mismatch. The sampler now counts reloaded documents (kept in `sessionStorage`, since a reload drops window counters) and a reload mid-drag counts as the flicker signal. The "after" checks are unchanged.
+- **Result.**
+  - Manager quick verification: 87.2 s (unit tier 83.1 s, 156 PASS, 2 SKIP; before, 155 PASS, 2 SKIP plus the split).
+  - Locally, warm: 55.7 s with typechecks. Cold cache: 122.1 s.
+  - Table in `docs/TESTING.md` "Unit tier speed".
+  - Still slow, from runtime rather than compiles: the durability half (client deadlines after injected crashes) and the composer/settings layout fixtures.
 ## 2026-10-05 — LKM-166 (repair): attachments never fail the turn
 
 - **Problem.** An SVG attachment was sent inline as `image/svg+xml`; `validImages` (png/jpeg/gif/webp only) rejected it and the turn failed with "The pasted images are not supported or too large." Oversized images and files had the same cliff.

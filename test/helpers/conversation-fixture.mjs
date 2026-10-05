@@ -2,21 +2,16 @@
 // with Bun's real client wired to it. Used by test/conversation-owner.mjs and the
 // parity preload that re-runs legacy chat suites against the Swift owner.
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
 import { serviceConversation } from '../../src/native/conversation-service.ts'
 import { serviceRepository } from '../../src/native/repository-service.ts'
 import { serviceSource } from '../../src/native/source-service.ts'
 import { skipUnlessDarwin } from './darwin.mjs'
 import { SOURCES as SOURCE_SOURCES } from './source-fixture.mjs'
+import { swiftBuild } from './swift-build.mjs'
 
-const root = fileURLToPath(new URL('../..', import.meta.url))
 export const SOURCES = [
   ...SOURCE_SOURCES,
   ...['MemoryFile', 'ConversationState', 'ConversationStore', 'ConversationOwner'].map(
@@ -27,29 +22,10 @@ export const SOURCES = [
 /** Compiles the fixture once per source hash and compiler version; returns the binary path. */
 export function compileConversationFixture() {
   skipUnlessDarwin('the Swift conversation owner')
-  const files = [...SOURCES, 'test/fixtures/conversation-owner/main.swift']
-  const compiler = spawnSync('xcrun', ['swiftc', '--version'], { encoding: 'utf8' })
-  const key = createHash('sha256')
-  key.update(`${compiler.stdout}${compiler.stderr}`)
-  for (const file of files) key.update(`${file}\0`).update(readFileSync(join(root, file)))
-  const cache = join(tmpdir(), 'trezi-conversation-owner-cache')
-  mkdirSync(cache, { recursive: true })
-  const cached = join(cache, `fixture-${key.digest('hex').slice(0, 24)}`)
-  if (!existsSync(cached)) {
-    const building = `${cached}.${process.pid}.tmp`
-    const result = spawnSync(
-      'xcrun',
-      ['swiftc', '-module-cache-path', join(cache, 'module-cache'), ...files, '-o', building],
-      { cwd: root, encoding: 'utf8', timeout: 400_000 }
-    )
-    assert.equal(
-      result.status,
-      0,
-      `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
-    )
-    renameSync(building, cached)
-  }
-  return cached
+  return swiftBuild('conversation-owner', [
+    ...SOURCES,
+    'test/fixtures/conversation-owner/main.swift'
+  ])
 }
 
 /** A fixture process on `profile`: Bun's conversation client, raw frames and commands. */

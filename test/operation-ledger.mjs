@@ -1,7 +1,7 @@
 // S03 durable operation ledger: real processes, real files, SIGKILL at every
 // durable boundary and restart. Foundation-only; no window, XPC or profile.
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
@@ -16,10 +16,9 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
 import { skipUnlessDarwin } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-ledger-'))
 const binary = join(scratch, 'ledger-fixture')
 const live = new Set()
@@ -27,22 +26,15 @@ let cases = 0
 
 function compile() {
   skipUnlessDarwin('the Swift operation ledger')
-  const args = [
-    'swiftc',
-    '-module-cache-path',
-    join(scratch, 'module-cache'),
-    ...['ServiceContract', 'LedgerStore', 'OperationLedger', 'LedgerMirror'].map(
-      (name) => `src/service/${name}.swift`
-    ),
-    'test/fixtures/operation-ledger/main.swift',
-    '-o',
-    binary
-  ]
-  const result = spawnSync('xcrun', args, { cwd: root, encoding: 'utf8', timeout: 300_000 })
-  assert.equal(
-    result.status,
-    0,
-    `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
+  swiftBuild(
+    'operation-ledger',
+    [
+      ...['ServiceContract', 'LedgerStore', 'OperationLedger', 'LedgerMirror'].map(
+        (name) => `src/service/${name}.swift`
+      ),
+      'test/fixtures/operation-ledger/main.swift'
+    ],
+    { out: binary }
   )
 }
 

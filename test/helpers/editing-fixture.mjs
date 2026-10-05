@@ -2,21 +2,14 @@
 // conversation, repository and source owners it works with, and Bun's real clients
 // wired to it. Used by test/editing-owner.mjs and test/helpers/with-service-owners.mjs,
 // which runs the island, controls and notes suites on the Swift owners.
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { serviceEditing } from '../../src/native/editing-service.ts'
 import {
   SOURCES as CONVERSATION_SOURCES,
   startConversationFixture
 } from './conversation-fixture.mjs'
 import { skipUnlessDarwin } from './darwin.mjs'
+import { swiftBuild } from './swift-build.mjs'
 
-const root = fileURLToPath(new URL('../..', import.meta.url))
 export const SOURCES = [
   ...CONVERSATION_SOURCES,
   ...[
@@ -31,29 +24,7 @@ export const SOURCES = [
 /** Compiles the fixture once per source hash and compiler version; returns the binary path. */
 export function compileEditingFixture() {
   skipUnlessDarwin('the Swift editing owner')
-  const files = [...SOURCES, 'test/fixtures/editing-owner/main.swift']
-  const compiler = spawnSync('xcrun', ['swiftc', '--version'], { encoding: 'utf8' })
-  const key = createHash('sha256')
-  key.update(`${compiler.stdout}${compiler.stderr}`)
-  for (const file of files) key.update(`${file}\0`).update(readFileSync(join(root, file)))
-  const cache = join(tmpdir(), 'trezi-editing-owner-cache')
-  mkdirSync(cache, { recursive: true })
-  const cached = join(cache, `fixture-${key.digest('hex').slice(0, 24)}`)
-  if (!existsSync(cached)) {
-    const building = `${cached}.${process.pid}.tmp`
-    const result = spawnSync(
-      'xcrun',
-      ['swiftc', '-module-cache-path', join(cache, 'module-cache'), ...files, '-o', building],
-      { cwd: root, encoding: 'utf8', timeout: 400_000 }
-    )
-    assert.equal(
-      result.status,
-      0,
-      `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
-    )
-    renameSync(building, cached)
-  }
-  return cached
+  return swiftBuild('editing-owner', [...SOURCES, 'test/fixtures/editing-owner/main.swift'])
 }
 
 /** A fixture process on `profile` (same line protocol as the conversation fixture). */

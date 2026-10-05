@@ -37,16 +37,23 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run typecheck
+      # Compiled Swift test fixtures, the shared Clang module cache and the last test
+      # times (test/helpers/swift-build.mjs, LKM-167). Binaries are keyed by toolchain,
+      # flags and source contents, so a stale cache only costs a rebuild.
+      - name: Swift test cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .local/test-cache
+            .local/test-times.json
+          key: unit-swift-${{ runner.os }}-${{ github.sha }}
+          restore-keys: unit-swift-${{ runner.os }}-
 
-      - name: Typecheck (native)
-        run: bun run typecheck:native
-
-      # --log-tail prints the last 150 lines of every failing test's log into the job
-      # output; the full logs are in the artifact below.
-      - name: Unit tests
-        run: node test/run.mjs unit --timeout-ms=120000 --log-tail=150
+      # Both typechecks run next to the unit tier (--typecheck), and --report prints the
+      # 20 slowest. --log-tail prints the last 150 lines of every failing test's log into
+      # the job output; the full logs are in the artifact below.
+      - name: Typecheck + unit tests
+        run: node test/run.mjs unit --typecheck --report --timeout-ms=120000 --log-tail=150
 
       # always(): upload after a green, red or cancelled run alike, so the logs of a
       # failing (or flaky) test can be downloaded for 7 days.

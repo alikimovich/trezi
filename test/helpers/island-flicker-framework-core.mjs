@@ -351,6 +351,16 @@ export async function installSampler(page, { fresh = false, selector = SELECTOR 
     window.__shadowFrames = [];
     // A re-install (live writes reattach it after each step) keeps the run's swap count.
     if (${fresh} || typeof window.__hmrStyleSwaps !== 'number') { window.__hmrStyleSwaps = 0; window.__shadowLast = ''; }
+    // A full reload (Vite without an HMR boundary) drops every window counter, so the run's
+    // reloads are kept in sessionStorage: each new document is one swap of the preview (LKM-167).
+    try {
+      window.__treziDoc = window.__treziDoc || Math.random().toString(36).slice(2);
+      const seen = sessionStorage.getItem('__treziDoc');
+      const count = Number(sessionStorage.getItem('__treziReloads')) || 0;
+      if (${fresh}) sessionStorage.setItem('__treziReloads', '0');
+      else if (seen && seen !== window.__treziDoc) sessionStorage.setItem('__treziReloads', String(count + 1));
+      sessionStorage.setItem('__treziDoc', window.__treziDoc);
+    } catch {}
     let stopped = false;
     ${PAGE_SHADOW_LAYERS}
     const tick = () => {
@@ -407,19 +417,28 @@ export async function analyzeFrames(page, stepCss, nodeFrames) {
     const pulled = window.__shadowFrames;
     window.__shadowFrames = [];
     const raf = Array.isArray(pulled) ? pulled : [];
+    let reloads = 0;
+    try {
+      reloads = Number(sessionStorage.getItem('__treziReloads')) || 0;
+      // A document the sampler never ran in (a reload after the last step) counts too.
+      const seen = sessionStorage.getItem('__treziDoc');
+      if (seen && seen !== window.__treziDoc) reloads++;
+    } catch {}
     return {
       computedSteps,
       raf,
+      reloads,
       hmrStyleSwaps: typeof window.__hmrStyleSwaps === 'number' ? window.__hmrStyleSwaps : 0
     };
-  })()`).catch(() => ({ computedSteps: [], raf: [], hmrStyleSwaps: 0 }))
+  })()`).catch(() => ({ computedSteps: [], raf: [], reloads: 0, hmrStyleSwaps: 0 }))
   const frames = [...nodeFrames]
   mergeFrames(frames, fromPage.raf)
   mergeFrames(frames, await pullFrames(page))
   return {
     computedSteps: fromPage.computedSteps?.length ? fromPage.computedSteps : [],
     frames,
-    hmrStyleSwaps: fromPage.hmrStyleSwaps ?? 0
+    hmrStyleSwaps: fromPage.hmrStyleSwaps ?? 0,
+    reloads: fromPage.reloads ?? 0
   }
 }
 
@@ -482,12 +501,17 @@ export async function runDrag({
     const spotEnd = await spotSample(page, path.length)
     if (spotEnd) nodeFrames.push(spotEnd)
   }
-  const { frames, hmrStyleSwaps, computedSteps } = await analyzeFrames(page, steps, nodeFrames)
+  const { frames, hmrStyleSwaps, reloads, computedSteps } = await analyzeFrames(
+    page,
+    steps,
+    nodeFrames
+  )
   assert.ok(frames.length > 0, `${label}: record at least one preview shadow sample`)
   assert.ok(computedSteps.length === steps.length, `${label}: derive computed steps in the preview`)
   const counts = {
     steps: path.length,
     hmrStyleSwaps,
+    reloads,
     sourceWrites: writes.length,
     ...departures(frames, computedSteps)
   }
@@ -564,9 +588,14 @@ export async function measureFramework({
       assert.equal(counts.foreign, 0, `${label} after: no foreign values`)
     } else {
       assert.ok(counts.sourceWrites > 1, `${label} before: multiple source writes`)
+      // A reload of the preview document mid-drag is itself the flicker; whether a frame
+      // sample lands in the gap depends on machine load (LKM-167), a reload does not.
       assert.ok(
-        counts.gaps > 0 || counts.foreign > 0 || counts.hmrStyleSwaps >= path.length,
-        `${label} before: HMR swap gap or transient mismatch`
+        counts.gaps > 0 ||
+          counts.foreign > 0 ||
+          counts.hmrStyleSwaps >= path.length ||
+          counts.reloads > 0,
+        `${label} before: HMR swap gap, reload or transient mismatch`
       )
     }
     return counts

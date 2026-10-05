@@ -27,6 +27,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MIN_MACOS } from '../scripts/requirements.mjs'
 import { sign } from '../scripts/signing.mjs'
+import { swiftCompile } from './helpers/swift-build.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const source = join(root, 'src/native/Secrets.swift')
@@ -40,29 +41,26 @@ const keychain = join(scratch, 'rebuild.keychain-db')
 let created = false
 
 // The same swiftc invocation as scripts/build-native.mjs, from a folder of its own.
+// Never the binary cache (each build must really happen); the shared module cache
+// keeps the three builds warm (LKM-167).
 const build = (name, from = source) => {
   const dir = join(scratch, name)
   mkdirSync(dir)
   const out = join(dir, 'TreziSecrets')
-  const built = run(
-    'xcrun',
+  const built = swiftCompile(
     [
-      'swiftc',
       '-O',
       '-target',
       target,
-      '-module-cache-path',
-      join(dir, 'module-cache'),
       '-suppress-warnings',
       from,
-      '-o',
-      out,
       '-framework',
       'Security',
       '-framework',
       'CryptoKit'
     ],
-    { timeout: 300_000 }
+    out,
+    { cwd: dir, timeout: 300_000 }
   )
   assert.equal(built.status, 0, built.stderr)
   return out

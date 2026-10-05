@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 // A `step:` on a SwiftUI Slider makes AppKit draw one tick mark per step (LKM-115).
@@ -46,36 +45,9 @@ for (const name of ['EditingInspector', 'ChatIsland']) {
 if (process.platform !== 'darwin') {
   console.log('NATIVE-SLIDER-TICKS SKIP — macOS AppKit required')
 } else {
-  const scratch = mkdtempSync(join(tmpdir(), 'trezi-slider-ticks-'))
-  const cache = join(root, 'out/native/module-cache')
-  mkdirSync(cache, { recursive: true })
-  const run = (args) => {
-    const result = spawnSync(args[0], args.slice(1), {
-      cwd: root,
-      encoding: 'utf8',
-      timeout: 180_000
-    })
-    assert.equal(
-      result.status,
-      0,
-      `${args[0]}: ${result.error || result.signal || ''}\n${result.stdout}\n${result.stderr}`
-    )
-    return result.stdout
-  }
-  try {
-    const binary = join(scratch, 'slider-ticks')
-    run([
-      'xcrun',
-      'swiftc',
-      '-module-cache-path',
-      cache,
-      'test/fixtures/slider-ticks/main.swift',
-      ...['EditingInspector', 'SnappedSlider'].map((name) => `src/native/${name}.swift`),
-      '-o',
-      binary
-    ])
-    console.log(run([binary]).trim())
-  } finally {
-    rmSync(scratch, { recursive: true, force: true })
-  }
+  const binary = swiftBuild('slider-ticks', [
+    'test/fixtures/slider-ticks/main.swift',
+    ...['EditingInspector', 'SnappedSlider'].map((name) => `src/native/${name}.swift`)
+  ])
+  console.log(runFixture(binary).trim())
 }

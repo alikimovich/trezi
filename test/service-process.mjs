@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-service-'))
@@ -171,17 +172,11 @@ try {
   if (process.platform !== 'darwin') {
     console.log('SERVICE-PROCESS SKIP — macOS XPC and process supervision require Darwin')
   } else {
-    const compile = (sources, output) =>
-      run('xcrun', [
-        'swiftc',
-        '-module-cache-path',
-        join(scratch, 'modules'),
-        ...sources,
-        '-o',
-        output
-      ])
+    // Private copies: the bundle binaries are codesigned in place below.
+    const compile = (name, sources, output) => swiftBuild(name, sources, { out: output })
     const crashFixture = join(scratch, 'guardian-fixture')
     compile(
+      'guardian-fixture',
       [
         'src/service/BackendSupervisor.swift',
         'src/service/ProcessGuardian.swift',
@@ -192,6 +187,7 @@ try {
     console.log(run(crashFixture, [], { TREZI_TEST_BUN: bun }).trim())
     const supervisor = join(scratch, 'supervisor')
     compile(
+      'supervisor-fixture',
       [
         'src/service/BackendSupervisor.swift',
         'test/fixtures/service-process/SupervisorFixture.swift'
@@ -264,6 +260,7 @@ try {
     const host = join(app, 'MacOS/TreziHost')
     const executable = join(service, 'MacOS/TreziService')
     compile(
+      'xpc-service',
       [
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
@@ -335,6 +332,7 @@ try {
       executable
     )
     compile(
+      'xpc-host',
       [
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
@@ -354,6 +352,7 @@ try {
     console.log(run(host, ['--codec']).trim())
     const intruder = join(app, 'MacOS/Intruder')
     compile(
+      'xpc-intruder',
       [
         '-D',
         'INTRUDER',
