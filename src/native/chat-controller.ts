@@ -254,7 +254,7 @@ export class NativeChatController {
           : {})
       })
     }
-    if (!chat.isRunning && key !== this.active) chat.needsReview = true
+    if (!chat.isRunning && key !== this.active && event.type !== 'model') chat.needsReview = true
     if (event.type === 'delta' && priorPhase === 'writing') {
       if (!this.streamUpdates.has(key))
         this.streamUpdates.set(
@@ -498,6 +498,8 @@ export class NativeChatController {
   async changeModel(chat: Chat, settings: ChatAgentSettings) {
     if (chat.isRunning || chat.sending || chat.switching) return
     chat.switching = true
+    // The restarted session reports its own model on its first turn (LKM-164).
+    chat.resolvedModel = undefined
     this.changed(chat)
     try {
       const result = await this.services.invoke(

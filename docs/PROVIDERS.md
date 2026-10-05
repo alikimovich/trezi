@@ -13,7 +13,7 @@ Provider helpers (one supervised process per session, held to its grant) are bui
 and verified with a fake provider; the real adapters move into them after an
 authorized live run. See [providers](SWIFT-BACKEND-PROVIDERS.md).
 
-PR publishing uses a separate read-only Codex turn with `gpt-5.6-luna` and low
+PR publishing uses a separate read-only Codex turn with `gpt-6-sol` and low
 reasoning effort through the built-in Codex account. It summarizes the committed
 merge-base diff after reconciliation, without chat or commit messages. Titles are
 bounded to 72 characters and descriptions to 120 words. The turn has a 60-second
@@ -58,7 +58,7 @@ question cards, resume, image transport, and background-agent support are separa
 declared because they have different lifecycle and security requirements.
 
 Preview comments use the originating chat's provider: Claude subscriptions run
-the `sonnet` alias (latest Sonnet), Codex subscriptions run `gpt-5.6-sol`, and
+the `sonnet` alias (latest Sonnet), Codex subscriptions run `gpt-6-sol`, and
 Gateway/custom connections keep the chat's exact model and connection. The choice
 is captured when submitted, including queued comments, without changing the chat.
 Comments inherit reasoning effort and start a fresh provider session in an isolated
@@ -119,7 +119,7 @@ pending instead of bypassing Trezi's landing lifecycle or claiming success.
 
 ## Skills menu and Codex runtime
 
-Trezi bundles Codex SDK/CLI 0.154.0 or newer; updating the global `codex` binary
+Trezi bundles Codex SDK/CLI 0.160.1 or newer; updating the global `codex` binary
 alone does not update the runtime used by Trezi. Run `bun install` and rebuild
 after pulling a dependency update.
 
@@ -512,6 +512,44 @@ two JSON errors, then the exec error. Now:
 
 The root cause is inferred from the reproduction; the live CLI output was not
 captured item by item. The operator's rerun of `test:provider-live` confirms it.
+
+## Current models and bumping the SDKs (LKM-164)
+
+**Symptom.** Asked "which model are you", a Claude chat answered "Sonnet 4.6", then
+"Opus 4.8" after a switch. The picker sends aliases (`opus`, `sonnet`, `fable`,
+`default`); the Claude Code CLI bundled in `@anthropic-ai/claude-agent-sdk` decides
+what they mean, and an old SDK maps them to old models. Codex is the same: the model
+table comes from the CLI vendored by `@openai/codex-sdk`.
+
+**What keeps it current.**
+
+- `model-catalog.json` entries carry a `harness` stamp: the installed versions of
+  the seat's SDK and CLI (`harnessStamp` in `src/main/model-catalog.ts`, read from
+  `node_modules` by `provider-data.ts`). An entry from another stamp, or from before
+  the stamp existed, is ignored, so a bumped SDK never serves the old list.
+- A list is refreshed at most once a day (`CATALOG_TTL_MS`): Codex by `codex debug
+  models` (at start and an hourly due-check in `providers.ts`), Claude from the next
+  session's `supportedModels()` (`recordClaudeModels` writes only a stale list).
+- A Claude session's init message names the model it resolved (`claude-opus-5-5`).
+  The backend emits it as a `model` event (relayed by `ProviderFrames.swift`, not
+  turn output), and the Model picker labels the selected row with it ("Opus 5.5",
+  "Default · Opus 5.5"; `src/shared/model-label.ts`).
+- The last-resort arrays in `providers.ts` keep the Claude aliases and list the
+  current Codex models (`gpt-6-sol`, `gpt-6-astra`).
+
+**Bumping the SDKs (check).**
+
+1. `bun add @anthropic-ai/claude-agent-sdk@latest @openai/codex-sdk@latest`, then
+   check `bun.lock` changed both, plus `@openai/codex` and the platform packages.
+2. `bun run typecheck` and `bun run build` (the backend and `provider-helper.cjs`
+   bundles), then `node test/run.mjs unit`.
+3. Read the SDK changelogs for renamed options or message fields that
+   `backends/claude.ts` and `backends/codex.ts` use (`system`/`init` `model`,
+   `supportedModels()`, thread options).
+4. Hardcoded ids: `CODEX_FALLBACK` in `providers.ts`, `src/shared/background-model.ts`
+   and `src/main/publish-description.ts`.
+5. With authorization, the operator asks a chat "which model are you" on each seat and
+   checks the picker label; this is a live provider call.
 
 ## Claude seat login from a Claude Code session (LKM-124)
 

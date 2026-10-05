@@ -212,11 +212,12 @@ export function serviceProvider(
       // An id the store could never hold has no key (and is not worth a round trip).
       secretFor: async (id) =>
         SAFE_ID.test(id) ? ((await call('connectionSecret', { id }, 'read')).secret ?? null) : null,
-      saveCatalog: async (backend, models) =>
+      saveCatalog: async (backend, models, harness) =>
         (
           await call('catalogSave', {
             backend,
-            models: models.map(({ id, label }) => ({ id, label }))
+            models: models.map(({ id, label }) => ({ id, label })),
+            ...(harness ? { harness } : {})
           })
         ).saved === true,
       codexModels: async () => {

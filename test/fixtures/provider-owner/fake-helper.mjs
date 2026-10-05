@@ -52,6 +52,7 @@ const fake = {
     const say = (text) => { cap.appendAssistant(text); emit({ type: 'delta', text }) }
     const done = () => { cap.finalize(); emit({ type: 'done' }) }
     emit({ type: 'commands', commands: [{ name: 'fake', description: 'A fake command' }] })
+    emit({ type: 'model', model: 'claude-opus-5-5' })
     const run = async (text, images) => {
       const [command, ...rest] = text.split(' ')
       const arg = rest.join(' ')
