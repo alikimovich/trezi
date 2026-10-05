@@ -69,7 +69,7 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
   if (!chat.paused) return { queueNote: '', queueCanSend: true }
   if (chat.isolation === 'parked' && chat.stopped !== 'held')
     return {
-      queueNote: 'Waiting — resolve the conflicting edits to send these',
+      queueNote: 'Waiting — retry, resolve or discard the held changes to send these',
       queueCanSend: false
     }
   if (chat.stopped === 'held')

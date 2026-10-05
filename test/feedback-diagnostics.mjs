@@ -1,0 +1,128 @@
+// LKM-165: the feedback diagnostics bundle. Secrets are removed, the home folder is
+// shortened to `~`, the chat's landing state and worktree status are included, and the
+// host is sampled only when its main thread is slow. No real `log`, `sample` or
+// provider call runs: commands are injected.
+import assert from 'node:assert/strict'
+import {
+  BUSY_MS,
+  captureConsole,
+  DIAGNOSTICS_LIMIT,
+  gatherDiagnostics,
+  redact
+} from '../src/main/feedback-diagnostics.ts'
+import { buildFeedbackBody, SAFE_LIMIT } from '../src/shared/feedback-body.ts'
+
+const HOME = '/Users/someone'
+const SECRETS = [
+  'sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWx',
+  'sk-proj-1234567890abcdefghij',
+  'ghp_abcdefghijklmnopqrstuvwxyz0123',
+  'github_pat_11ABCDEFG0123456789_abcdefghij',
+  'xoxb-1234567890-abcdefghij',
+  'AKIAABCDEFGHIJKLMNOP',
+  'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlLXZhbHVl',
+  'opaque-bearer-value-123',
+  'hunter2-password',
+  'client-secret-value',
+  'url-password'
+]
+const leaky = [
+  `key ${SECRETS[0]} and ${SECRETS[1]}`,
+  `gh ${SECRETS[2]} ${SECRETS[3]}`,
+  `slack ${SECRETS[4]} aws ${SECRETS[5]} jwt ${SECRETS[6]}`,
+  `Authorization: Bearer ${SECRETS[7]}`,
+  `password=${SECRETS[8]} "client_secret": "${SECRETS[9]}"`,
+  `https://user:${SECRETS[10]}@example.com/repo.git`,
+  `-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----`,
+  `opened ${HOME}/dev/app/src/App.tsx`
+].join('\n')
+const clean = redact(leaky, HOME)
+for (const secret of SECRETS) assert.ok(!clean.includes(secret), `redacted ${secret}`)
+assert.ok(!clean.includes('b3BlbnNzaC1rZXktdjEAAAAA'), 'private keys are removed')
+assert.ok(!clean.includes(HOME), 'the home folder is shortened')
+assert.ok(clean.includes('opened ~/dev/app/src/App.tsx'))
+assert.ok(clean.includes('https://user:[redacted]@example.com/repo.git'))
+
+// Bun's console output is kept for the bundle and still printed.
+captureConsole()
+console.error(`provider failed: token=${SECRETS[1]} in ${HOME}/dev/app`)
+
+function sources(pingMs, output = {}) {
+  const calls = []
+  let clock = 1_000_000
+  return {
+    calls,
+    value: {
+      home: HOME,
+      hostPid: 4242,
+      chat: { key: 'chat-1', root: `${HOME}/dev/app` },
+      now: () => clock,
+      ping: async () => {
+        clock += pingMs
+      },
+      run: async (command, args) => {
+        calls.push([command, ...args])
+        if (command === '/usr/bin/sample')
+          return output.sample ?? `Sampling process 4242 for 3 seconds\nmain thread ${HOME}/x`
+        if (command === 'git') return `## trezi/chat-1\n M ${HOME}/dev/app/a.ts`
+        if (command === '/usr/bin/log')
+          return output.log ?? `TreziHost: Authorization: Bearer ${SECRETS[7]}`
+        throw new Error(`unexpected ${command}`)
+      }
+    }
+  }
+}
+
+const slow = sources(BUSY_MS + 400)
+const text = await gatherDiagnostics(slow.value)
+for (const secret of SECRETS) assert.ok(!text.includes(secret), `bundle has no ${secret}`)
+assert.ok(!text.includes(HOME), 'bundle paths are shortened')
+assert.match(text, /## App main thread\nreplied in \d+ ms \(busy\)/)
+assert.match(text, /## Main thread sample \(3 s\)\nSampling process 4242/)
+assert.deepEqual(
+  slow.calls.find(([c]) => c === '/usr/bin/sample'),
+  ['/usr/bin/sample', '4242', '3']
+)
+assert.match(
+  text,
+  /## Chat landing state\n\{[\s\S]*"state": "live"[\s\S]*"liveRoot": "~\/dev\/app"/
+)
+assert.match(text, /## Chat worktree git status\n## trezi\/chat-1\n M ~\/dev\/app\/a.ts/)
+assert.deepEqual(
+  slow.calls.find(([c]) => c === 'git'),
+  ['git', '--no-optional-locks', '-C', `${HOME}/dev/app`, 'status', '--porcelain=v1', '--branch']
+)
+assert.match(
+  text,
+  /## Backend log \(last hour\)\n.*error: provider failed: token=\[redacted\] in ~\/dev\/app/
+)
+assert.match(
+  text,
+  /## System log, Trezi processes \(last hour\)\nTreziHost: Authorization: Bearer \[redacted\]/
+)
+assert.deepEqual(slow.calls.find(([c]) => c === '/usr/bin/log').slice(1, 4), [
+  'show',
+  '--last',
+  '1h'
+])
+
+// A responsive host is not sampled; a host that does not answer is.
+const fast = sources(5)
+assert.ok(!(await gatherDiagnostics(fast.value)).includes('Main thread sample'))
+assert.ok(!fast.calls.some(([c]) => c === '/usr/bin/sample'))
+const hung = sources(0)
+hung.value.ping = () => Promise.reject(new Error('Native webViews timed out'))
+assert.match(await gatherDiagnostics(hung.value), /did not reply within 2 s \(busy\)/)
+assert.ok(hung.calls.some(([c]) => c === '/usr/bin/sample'))
+
+// Huge outputs are cut so the bundle fits the issue body next to the feedback.
+const huge = sources(BUSY_MS, { sample: 'x'.repeat(200_000), log: 'y'.repeat(200_000) })
+const big = await gatherDiagnostics(huge.value)
+assert.ok(big.length <= DIAGNOSTICS_LIMIT + 100, `bundle is ${big.length} characters`)
+const body = buildFeedbackBody({ body: 'The app is slow', diagnostics: big })
+assert.ok(body.length <= SAFE_LIMIT)
+assert.ok(body.includes('<summary>Diagnostics</summary>'))
+assert.ok(!buildFeedbackBody({ body: 'x' }).includes('Diagnostics'), 'nothing without consent')
+console.log(
+  'FEEDBACK DIAGNOSTICS OK — consented bundle redacted, paths shortened, busy host sampled'
+)

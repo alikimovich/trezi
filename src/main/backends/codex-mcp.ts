@@ -82,10 +82,10 @@ export function treziMcpConfig(appRoot: string, registration: TreziAgentToolRegi
         // A missing bridge must fail the turn, including subsequent CLI resumes.
         required: true,
         startup_timeout_sec: 15,
+        // Every Trezi tool is pre-approved: sessions run with approvals disabled, so an
+        // unapproved one is refused outright (LKM-165: `workspace_state` was).
         tools: Object.fromEntries(
-          requiredTools
-            .filter((name) => name !== 'workspace_state' && name !== 'prepare_conflict_resolution')
-            .map((name) => [name, { approval_mode: 'approve' }])
+          requiredTools.map((name) => [name, { approval_mode: 'approve' }])
         ),
         env: {
           TREZI_AGENT_TOOL_SOCKET: registration.socketPath,

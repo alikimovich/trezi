@@ -53,7 +53,7 @@ extension ProviderOwner {
                 relay(session, "event", [("value", relayed)])
             }
         case "record":
-            guard only(["entries", "filesTouched", "sdkSessionId"]), let delta = Self.record(frame) else {
+            guard only(["entries", "filesTouched", "sdkSessionId", "sdkCwd"]), let delta = Self.record(frame) else {
                 return violation(session, "a malformed or forbidden record delta")
             }
             relay(session, "record", [("record", delta)])
@@ -251,6 +251,10 @@ extension ProviderOwner {
         if let resume = frame["sdkSessionId"] {
             guard bounded(resume, 4096) != nil else { return nil }
             delta.append(("sdkSessionId", resume))
+        }
+        if let cwd = frame["sdkCwd"] {
+            guard bounded(cwd, 4096) != nil else { return nil }
+            delta.append(("sdkCwd", cwd))
         }
         return object(delta)
     }

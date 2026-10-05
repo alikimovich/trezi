@@ -71,6 +71,8 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
+  /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
+  landingError?: string
   /** LKM-151: the files and undo group of the last turn that landed on the live tree. */
   landed?: { files: string[]; group?: string }
   /** LKM-151: a dev-server compile/parse error in a file the last turn touched. */
@@ -78,6 +80,9 @@ export interface Chat extends NativeChatMirror {
   /** LKM-164: the model the session reported running (`claude-opus-5-5`); cleared when
    *  the chat switches model, so it never names the previous one. */
   resolvedModel?: string
+  /** LKM-165: what runs while the phase is 'applying', named in the activity row.
+   *  'waiting' is a turn the backend still holds that this chat did not start. */
+  operation?: 'landing' | 'parking' | 'resolving' | 'waiting'
 }
 /** The hover Revert of a stopped turn's message: routes to the held-work revert. */
 export const STOPPED_GROUP = 'stopped:'
@@ -122,6 +127,7 @@ export function newChat(chat: string): Chat {
 /** A turn starts thinking: its step timer and liveness start now. */
 export function begin(chat: Chat, now = Date.now()) {
   chat.phase = 'thinking'
+  chat.operation = undefined
   chat.activityDetail = ''
   chat.progressStep = undefined
   chat.stepAt = now
@@ -189,6 +195,7 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
 export function finish(chat: Chat, landing = false) {
   chat.isRunning = landing
   chat.phase = landing ? 'applying' : 'thinking'
+  chat.operation = landing ? 'landing' : undefined
   chat.activityDetail = ''
   if (!landing) chat.stopping = false
   if (!landing) {
@@ -286,6 +293,7 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       chat.isolation = 'isolated'
       chat.isRunning = true
       chat.phase = 'applying'
+      chat.operation = 'resolving'
       append(chat, 'Combining this chat’s changes with recent project edits…', true)
       break
     case 'isolation': {
@@ -299,6 +307,8 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
           : event.reason === 'reverted'
             ? 'reverted'
             : undefined
+      chat.landingError =
+        event.reason === 'failed' ? (event.error ?? 'The landing failed.') : undefined
       if (event.state === 'merged' && event.group && event.revertable !== false && last)
         last.revertGroup = event.group
       if (event.state === 'merged')
@@ -309,6 +319,8 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       // A stopped turn's message keeps its hover Revert: it drops the held work.
       if (chat.stopped === 'held' && last) last.revertGroup = `${STOPPED_GROUP}${chat.chat}`
       if (event.state === 'parked') chat.paused = true
+      if (event.state === 'parked' && chat.isRunning && chat.phase === 'applying')
+        chat.operation = 'parking'
       break
     }
     case 'permission-request':

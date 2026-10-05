@@ -34,6 +34,8 @@ export interface FeedbackBodyParts {
   conversation?: string | null
   /** A screenshot as a `data:image/...;base64,…` URI, when opted in. */
   screenshot?: string | null
+  /** Redacted diagnostics (LKM-165), when the user consented to attach them. */
+  diagnostics?: string | null
 }
 
 /**
@@ -60,6 +62,18 @@ export function buildFeedbackBody(parts: FeedbackBodyParts): string {
       '\n```\n\n</details>'
     if (used() + block.length + 2 <= SAFE_LIMIT) sections.push(block)
     else sections.push('_Conversation transcript omitted — too large to attach._')
+  }
+
+  const diagnostics = parts.diagnostics?.trim()
+  if (diagnostics) {
+    // A four-backtick fence, so a fence inside a log line cannot close it.
+    const block =
+      `<details>\n<summary>Diagnostics</summary>\n\n` +
+      '````\n' +
+      diagnostics +
+      '\n````\n\n</details>'
+    if (used() + block.length + 2 <= SAFE_LIMIT) sections.push(block)
+    else sections.push('_Diagnostics omitted — too large to attach._')
   }
 
   if (parts.screenshot) {

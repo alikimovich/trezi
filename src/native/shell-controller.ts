@@ -135,6 +135,8 @@ export class NativeShellController {
     const invoke = this.workspace.services.invoke
     if (action.action === 'select-object') {
       this.selecting = !this.selecting
+      // The toolbar shows the new mode at once, not after the preview round trip.
+      this.render()
       await invoke('preview:set-select-mode', this.selecting)
     } else if (action.action === 'device' && entry.previewKind !== 'simulator') {
       entry.viewport = entry.viewport === 'mobile' ? 'desktop' : 'mobile'

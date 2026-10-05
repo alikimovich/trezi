@@ -382,8 +382,11 @@ export type AgentEvent = (
        *  work has been pushed & merged via a PR) — the renderer hides Revert if false. */
       revertable?: boolean
       /** LKM-151: 'interrupted' on a park held from a stopped/failed turn (live never
-       *  had it); 'reverted' on the 'isolated' that follows the user reverting it. */
-      reason?: 'interrupted' | 'reverted'
+       *  had it); 'reverted' on the 'isolated' that follows the user reverting it.
+       *  LKM-165: 'failed' on a park held because landing itself failed (`error`). */
+      reason?: 'interrupted' | 'reverted' | 'failed'
+      /** On a 'failed' park: why the landing failed, for the chat's Retry card. */
+      error?: string
     }
 ) & {
   /** Which project's session emitted this — set by main so the renderer routes it
@@ -607,6 +610,8 @@ export interface SessionRecord {
    * affordance gates on, since it doubles as a Claude-backend marker.
    */
   sdkSessionId?: string
+  /** The resolved directory `sdkSessionId` was started in; a resume uses it (LKM-165). */
+  sdkCwd?: string
 }
 
 /** What `agent:open-project` hands back so the renderer can paint the current chat. */
@@ -633,7 +638,12 @@ export interface LiveChatSnapshot {
   turn?: string | null
   /** Per-chat worktree isolation status (v9), for the renderer to rehydrate the chat's
    *  isolation chip after a reload. Absent for a non-isolated chat (treated as 'live'). */
-  isolation?: { state: 'live' | 'isolated' | 'parked'; branch?: string; reason?: 'interrupted' }
+  isolation?: {
+    state: 'live' | 'isolated' | 'parked'
+    branch?: string
+    reason?: 'interrupted' | 'failed'
+    error?: string
+  }
   /** The options this session is ACTUALLY running with (main's live copy — the
    *  authority). The renderer reconciles its per-chat pickers against these on
    *  reattach so a reload can't leave the toolbar showing a posture the session
@@ -1182,6 +1192,10 @@ export interface FeedbackInput {
   screenshot?: string | null
   /** The rendered chat transcript, present only when opted in. */
   conversation?: string | null
+  /** Attach redacted logs, landing state and git status (LKM-165), only when opted in. */
+  diagnostics?: boolean
+  /** The chat the sheet was opened over, for its landing state and worktree status. */
+  chat?: { key: string; root?: string } | null
 }
 
 export interface FeedbackResult {

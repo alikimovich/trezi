@@ -96,6 +96,15 @@ require(settles(bottom, rowTop: -900 - 602.5, rowHeight: 621, startOffset: 45, e
         "A retained row far above the viewport reaches the reading edge")
 require(settles(bottom, rowTop: 3000, rowHeight: 1400, startOffset: 45, endOffset: 1381.5, viewportHeight: 776, readingHeight: 580),
         "A row taller than the viewport reaches the reading edge from below")
+// The recorded drift: `revision=1, applied=1, attempts=1, frame={{32, 44.2}, {376, 16}}`.
+// One on-edge hit used to count as applied; the streak needs several in a row and
+// restarts when the anchor drifts off the edge.
+var streak = 0
+for reached in [true, true, false, true, true] { streak = islandRevealStreak(reached: reached, streak: streak) }
+require(streak == 2 && streak < islandRevealStableChecks, "A drift off the edge restarts the stability streak")
+for _ in 0..<islandRevealStableChecks { streak = islandRevealStreak(reached: true, streak: streak) }
+require(streak >= islandRevealStableChecks, "Consecutive on-edge measurements settle the reveal")
+require(!islandRevealReached(top, frame: CGRect(x: 32, y: 44.237, width: 376, height: 16), readingHeight: height), "A 44pt drift is not at the top edge")
 // Tolerance boundary.
 require(islandRevealReached(top, frame: CGRect(x: 0, y: 8, width: 1, height: 1), readingHeight: height), "Top within 8 points")
 require(!islandRevealReached(top, frame: CGRect(x: 0, y: -8.5, width: 1, height: 1), readingHeight: height), "Top beyond 8 points")
