@@ -70,6 +70,30 @@ export function installNativeInspector(
     void controller.activate(entry?.root ?? '').catch(report)
     await activate(entry)
   }
+  // LKM-172: the selection, its chat chip, the editing island and the page's selection
+  // and hover boxes belong to one project and one page.
+  let page = '',
+    pickedOn: string | null = null
+  const pageOf = (url: string) => {
+    try {
+      const parsed = new URL(url)
+      return parsed.origin + parsed.pathname + parsed.search
+    } catch {
+      return url
+    }
+  }
+  const dropSelection = () => {
+    pickedOn = null
+    context.selection(null)
+    void controller.select(null).catch(report)
+  }
+  workspace.switching = () => {
+    page = ''
+    pickedOn = null
+    context.clearSelections()
+    controller.clear()
+    void workspace.services.invoke('preview:set-select-mode', false).catch(report)
+  }
   const effect = chat.services.effect
   chat.services.effect = (value) => {
     const selection = chat.chats.get(chat.active)?.context?.selection
@@ -86,9 +110,26 @@ export function installNativeInspector(
       void navigation.request(value).catch(report)
       return
     }
+    if (channel === 'preview:url-changed') {
+      const next = pageOf(value),
+        root = workspace.active?.root
+      // A pick made before the page reported its address belongs to that first address.
+      if (pickedOn === '') pickedOn = next
+      const selected = !!controller.element || !!(root && context.projects.get(root)?.selection)
+      // A reload of the same page keeps the selection: its element re-resolves by stamp.
+      if (pickedOn !== null && next !== pickedOn && selected) {
+        dropSelection()
+        void send('preview:clear-selected').catch(report)
+      }
+      page = next
+      return
+    }
     const entry = workspace.active
     if (!entry) return
-    if (channel === 'preview:element-picked') void controller.select(value).catch(report)
+    if (channel === 'preview:element-picked') {
+      pickedOn = page
+      void controller.select(value).catch(report)
+    } else if (channel === 'preview:selection-lost') dropSelection()
     else if (channel === 'preview:select-cancelled') {
       context.selection(null)
       void controller.select(null).catch(report)

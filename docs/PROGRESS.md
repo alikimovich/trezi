@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-172: the selection and the editing island belong to one project and one page
+
+- **Problem.** With an element selected and the editing island open in project A, switching to project B left A's island (A's element values) on screen through "Opening B…" and after. The inspector only reset in `services.activate`, which runs once B has opened, and it published only after its async reads. The chat chip of A stayed in A's context, so coming back restored it.
+- **Project switch.** `NativeWorkspaceController.switching` is called at the start of `select()` for any project other than the loaded one (a restart or a re-select of the loaded project is not a switch), before "Opening …" renders. `inspector-runtime.ts` then:
+  - calls `NativeInspectorController.clear()`, which drops the element, discards any refresh in flight, publishes the hidden island synchronously and clears live style previews (`activate` uses it too);
+  - calls `NativeContextController.clearSelections()`, so no project keeps a chip and returning restores nothing (the issue's preferred option);
+  - turns select mode off (`preview:set-select-mode false`), which drops the old page's selection outlines, toolbar and hover box.
+- **Navigation.** `preview:url-changed` to a different page (origin, path and query; the hash is ignored) than the one the element was picked on drops the selection, the chip and the island and clears the page's selection. A reload of the same page keeps it, because a source write live-reloads the page and the element re-resolves by its stamp; the Styles edit flow depends on that.
+- **Removed element.** The preload's 600 ms layout tick (`checkSelectionGone`) treats a pick as gone when none of its elements is connected and no element carries the same source stamp (HMR swaps nodes), on two ticks in a row. It drops its own outlines and toolbar and sends the new `trezi:preview:selection-lost` (`PREVIEW_SELECTION_LOST`, relayed as `preview:selection-lost`); unlike `select-cancelled` it leaves select mode as it is.
+- **Tests.** Unit: `native-inspector` (synchronous hidden publish, stale refresh discarded), `native-context` (`clearSelections`), `native-workspace-controller` (switch heard before Opening renders, not on restart/re-select). Native (`project-switching`, group `sidebar`): selects the first project's heading through Layers, opens the island, draws the hover box, then holds the second project's `project:detect` so the app stays at "Opening …" and checks that the island is hidden with no element (`inspectorInspect.title` is "Project controls"), both chats have no chip and the old page shows no outline, toolbar or hover box; after returning, nothing is restored. Evidence: `switch-selection.json`, `switch-selection-opening.png`.
+
 ## 2026-10-05 — LKM-167: unit tier and quick verification about 4x faster
 
 - **Why.** Quick verification (typecheck, typecheck:native, unit tier) took 5-7 min. The unit tier alone took 328.6 s on the operator Mac. About 25 Swift tests each compiled their fixture with a private, cold Clang module cache, at about 25 s per compile. Only 4 workers ran, and `service-process` and `keychain-rebuild` were exclusive barriers.

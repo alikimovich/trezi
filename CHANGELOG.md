@@ -28,6 +28,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Image and SVG attachments in a sent message no longer render as huge images that push the text down: they show as compact thumbnails in a wrapping row (transparent images on a checkerboard), name the file on hover and open a larger preview on click; composer attachments use the same compact tiles (LKM-166).
 - SVG and other non-image or oversized attachments no longer fail the turn (“The pasted images are not supported or too large.”): the agent gets the original's path plus a 512 px PNG preview for an SVG, other files by path, oversized images downscaled, and a note for anything that could not be attached (LKM-166).
 - The editing inspector island takes every click, scroll and hover inside its frame: the preview beneath no longer hovers or selects through it, and its controls sit on an opaque surface instead of showing the page through (LKM-162).
+- The editing inspector island, the selected element's chat chip and the preview's selection and hover boxes no longer stay behind after switching project (they clear at once, while "Opening …" shows, and are not restored on return), after the preview navigates to a different page, or when the selected element is removed from the page (LKM-172).
 - Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 
 ### Changed

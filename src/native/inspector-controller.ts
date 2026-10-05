@@ -96,13 +96,27 @@ export class NativeInspectorController {
     this.render({ ...this.state, fields: [...this.state.fields], actions: [...this.state.actions] })
   }
   async activate(root: string) {
-    this.clearReconciles()
+    this.clear()
     this.state.root = root
+    await this.refresh()
+  }
+  /** LKM-172: the selection and the island belong to one project and one page. Drops both
+   *  and publishes the hidden island now; a refresh still in flight is discarded. */
+  clear() {
+    this.clearReconciles()
+    ++this.sequence
+    ++this.state.generation
     this.requestedFile = null
     this.element = null
+    this.inspection = null
+    this.styles = null
+    this.controls = []
     this.state.visible = false
-    ++this.state.generation
-    await this.refresh()
+    this.state.busy = false
+    this.state.error = ''
+    this.build()
+    this.publish()
+    void this.send('styles:clear-preview', {}).catch(() => {})
   }
   async select(element: SelectedElement | null) {
     this.clearReconciles()

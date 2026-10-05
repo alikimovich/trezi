@@ -18,6 +18,7 @@
 export const PREVIEW_SET_MODE = 'trezi:preview:set-select-mode' // → preload (boolean)
 export const PREVIEW_PICKED = 'trezi:preview:element-picked' // → main (SelectedElement)
 export const PREVIEW_CANCELLED = 'trezi:preview:select-cancelled' // → main
+export const PREVIEW_SELECTION_LOST = 'trezi:preview:selection-lost' // → main (selected element removed)
 export const PREVIEW_TOGGLE_SELECT = 'trezi:preview:toggle-select' // → main (S pressed)
 export const PREVIEW_TOOLBAR_ACTION = 'trezi:preview:toolbar-action' // → main (code/delete/props)
 export const PREVIEW_CLEAR_SELECTED = 'trezi:preview:clear-selected' // → preload (pill ×, send)

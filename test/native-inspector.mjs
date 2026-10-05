@@ -96,6 +96,25 @@ assert.equal(
 controller.state.visible = true
 await controller.select(null)
 assert.equal(controller.state.visible, false, 'Clearing selection dismisses the inspector')
+// LKM-172: a project switch hides the island at once, before any read settles, and a
+// refresh still in flight for the old element cannot bring its fields back.
+await controller.select(element)
+controller.state.visible = true
+controller.publish()
+const pending = controller.refresh()
+const published = renders.length
+controller.clear()
+assert.equal(renders.length, published + 1, 'Clearing publishes synchronously')
+assert.equal(renders.at(-1).visible, false, 'Clearing hides the island')
+assert.equal(renders.at(-1).title, 'Project controls', 'Clearing drops the element')
+assert.equal(controller.element, null)
+assert.deepEqual(sent.at(-1), ['styles:clear-preview', {}])
+await pending
+assert.equal(renders.length, published + 1, 'The old element refresh is discarded')
+assert.equal(
+  controller.state.fields.some((f) => f.id === 'style:opacity'),
+  false
+)
 console.log(
   'Native inspector: source targeting, schema fields, token references, agent fallback and stale/uninstrumented write guards passed'
 )

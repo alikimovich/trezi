@@ -190,6 +190,15 @@ export class NativeContextController {
         : null
     this.changed(root)
   }
+  /** LKM-172: a selection belongs to one project and page; a project switch drops every
+   *  project's chip, so returning to a project restores none. */
+  clearSelections() {
+    for (const [root, state] of this.projects)
+      if (state.selection) {
+        state.selection = null
+        this.changed(root)
+      }
+  }
   readiness(info: { stamps: number; documentStartedAt?: number }) {
     const root = this.workspace.active?.root
     if (!root) return
