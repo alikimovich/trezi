@@ -129,6 +129,15 @@ project path was not a cause (the Swift owner works on real paths).
 - Landing, park and worktree state are per chat, not per provider: a provider switch
   keeps the same worktree and cumulative batch, and the next successful turn lands every
   held file (`test/chat-landing-recovery.mjs`).
+- A landing or turn that makes no progress cannot wedge the chat (`src/main/chat-watchdog.ts`).
+  `afterTurn` bounds the landing with `LandingGuard` (3 minutes); a timeout or Stop ends
+  the wait and parks the work as `failed` with Retry, freeing the chain and the repo
+  lease (the hung `landBatch` is abandoned, not cancelled). `TurnWatchdog` ends a turn
+  silent for 10 minutes. `agent:send` and `agent:interrupt` settle a service phase that
+  Bun no longer runs, so the chat never answers "This chat is already running." for a
+  turn nothing is running. A send that still meets a real turn is queued by the native
+  composer (LKM-151), and the activity row names the step: landing, holding changes,
+  combining with project edits or finishing the previous step.
 - `workspace_state` reports `lastLanding` (merged, parked, unchanged or failed, with the
   files and time) and guidance that never says "pending"; Codex has the Trezi tools
   pre-approved so it can call it (`docs/PROVIDERS.md`).

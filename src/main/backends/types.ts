@@ -71,6 +71,9 @@ export interface SpawnContext {
   /** Resume a past SDK session instead of starting fresh (v9 resume). Claude-only —
    *  other backends accept and ignore this. */
   resumeSessionId?: string
+  /** A compact summary of the chat being resumed (LKM-165): if the resume fails, the new
+   *  session starts from it instead of the lost one. */
+  resumeSummary?: string
   /** The REAL project root when the session's cwd is a per-chat worktree
    *  (`isolatedCwd`). Tool callbacks that persist app state (e.g.
    *  chat-island persistence) must write under

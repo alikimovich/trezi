@@ -49,6 +49,12 @@ function collapse(chat: Chat, cards: NativeChatCard[], current: NativeChatActivi
       : current
   return { messages, cards: shortCards, activity: shortActivity }
 }
+const APPLYING_LABELS: Record<NonNullable<Chat['operation']>, string> = {
+  landing: 'Landing changes into the project…',
+  parking: 'Holding changes for review…',
+  resolving: 'Combining with recent project edits…',
+  waiting: 'Finishing the previous step…'
+}
 function activity(chat: Chat): NativeChatActivity | null {
   if (!chat.isRunning) return null
   const counter = turnUsage(chat)
@@ -61,8 +67,14 @@ function activity(chat: Chat): NativeChatActivity | null {
     return live({ kind: 'waiting', label: 'Waiting for approval', animated: false })
   if (chat.questions.length)
     return live({ kind: 'waiting', label: 'Waiting for your answer', animated: false })
+  // What runs after the model finished, by name (LKM-165): landing, holding for review,
+  // or the automatic resolve turn's own reconciliation.
   if (chat.phase === 'applying')
-    return live({ kind: 'applying', label: 'Applying changes…', animated: true })
+    return live({
+      kind: 'applying',
+      label: APPLYING_LABELS[chat.operation ?? 'landing'],
+      animated: true
+    })
   // The model's own steps: the host ticks their elapsed time and, when events and
   // heartbeats stop, says how long nothing arrived (LKM-147).
   const clock = {

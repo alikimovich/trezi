@@ -11,6 +11,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unchanged transcripts are not re-sent or re-decoded; mode switch and attachment add stay under 100 ms at 2,000 messages (`test/native-long-chat-perf.mjs`).
 - [x] Trezi MCP tools pre-approved for Codex (`test/codex-mcp-approvals.mjs`).
 - [x] Feedback sheet diagnostics consent; redacted bundle with `~` paths (`test/feedback-diagnostics.mjs`, `test/native-support-sheets.mjs`).
+- [x] "Already running" is never a dead end: Bun and the service agree on what runs, the activity row names it and Stop works, a stuck turn or landing ends on its own with a note, and a message sent meanwhile is queued (`test/chat-stuck-turn.mjs`).
+- [x] A failed Claude resume recovers: one canonical cwd for start and resume, a new session seeded with a chat summary and one note, no raw error (`test/claude-resume.mjs`, `test/claude-cwd.mjs`).
 ## Current Claude and Codex models (LKM-164)
 
 - [x] Bump `@anthropic-ai/claude-agent-sdk` (0.3.186 → 0.3.289) and `@openai/codex-sdk` with its `@openai/codex` CLI (0.154.0 → 0.160.1) in `package.json` and `bun.lock`; no API changes needed, backend and provider-helper bundles build.

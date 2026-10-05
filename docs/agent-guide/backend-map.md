@@ -131,6 +131,10 @@ src/main/
                   crash recovery), chat-landing (landTurn), parked-chat (Apply/Discard/Resolve,
                   the stopped-turn hold), chat-status (read-only views: snapshot, send
                   refusal, the agent's workspace_state) and chat-helpers (setup helper sync).
+  chat-watchdog.ts  LandingGuard (bounded landing wait, Stop ends it) and TurnWatchdog (silent
+                  turn detector) behind "already running is never a dead end" (LKM-165)
+  backends/claude-resume.ts  canonical cwd, resume-failure detection and the chat summary that
+                  seeds a recovered Claude session (LKM-165)
   feedback.ts, feedback-diagnostics.ts
                   in-app feedback issue; the opt-in, redacted diagnostics bundle (LKM-165)
                   Their mutating functions dispatch to the Swift repository owner

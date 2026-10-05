@@ -7,6 +7,7 @@ import { type HelperHandlers, providerOwner } from '../provider-owner'
 import { runTreziTool, type SessionTool } from '../session-tools'
 import { claudeProvider } from './claude'
 import { claudeUserPluginsAllowed } from './claude-isolation'
+import { resumeSummary } from './claude-resume'
 import { codexProvider } from './codex'
 import { geminiProvider } from './gemini'
 import { createRecordCapture } from './record'
@@ -127,7 +128,7 @@ async function startHelperSession(
     }
   }
 
-  const open = (resume: string | undefined): Promise<unknown> =>
+  const open = (resume: string | undefined, summary = ctx?.resumeSummary): Promise<unknown> =>
     owner.openHelper(
       {
         session,
@@ -147,6 +148,7 @@ async function startHelperSession(
           emitKey,
           ...(ctx?.sessionId ? { sessionId: ctx.sessionId } : {}),
           ...(resume ? { resumeSessionId: resume } : {}),
+          ...(resume && summary ? { resumeSummary: summary } : {}),
           ...(ctx?.liveRoot ? { liveRoot: ctx.liveRoot } : {}),
           ...(ctx?.projectMemory ? { projectMemory: ctx.projectMemory } : {})
         }
@@ -170,7 +172,8 @@ async function startHelperSession(
       void owner.close(session).catch(ignore)
       session = randomUUID()
       gone = null
-      await open(reportedResume ?? ctx?.resumeSessionId)
+      // A resume that fails starts from what the chat showed so far (LKM-165).
+      await open(reportedResume ?? ctx?.resumeSessionId, resumeSummary(record))
     })().finally(() => {
       reopening = null
     })

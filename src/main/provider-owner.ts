@@ -96,6 +96,7 @@ export interface HelperStart {
     emitKey: string
     sessionId?: string
     resumeSessionId?: string
+    resumeSummary?: string
     liveRoot?: string
     projectMemory?: string
   }

@@ -12,6 +12,7 @@ import {
   recreateWorkspace,
   states
 } from './chat-state'
+import { LandingGuard } from './chat-watchdog'
 import {
   canReconcileText,
   completeTurn,
@@ -172,6 +173,16 @@ async function settleReverted(st: ChatState): Promise<void> {
   clearPark(st)
 }
 
+const landings = new LandingGuard()
+/** Stop on a landing: ends the wait now; the work is held (Retry) and the chat is free. */
+export function abandonLanding(sessionKey: string, reason: string): boolean {
+  return landings.abandon(sessionKey, reason)
+}
+/** Whether a landing of this chat is in flight. */
+export function landingInFlight(sessionKey: string): boolean {
+  return landings.has(sessionKey)
+}
+
 /** The tail of a transcript from its LAST user message on — the "last turn" a park
  *  record surfaces in the review UI (prompt + the assistant's reply to it). */
 function lastTurn(transcript: SessionTranscriptEntry[]): SessionTranscriptEntry[] {
@@ -207,7 +218,12 @@ export function afterTurn(
       st.lastUsed = Date.now()
       if (st.reclaimed) return null
       try {
-        return await landBatch(sessionKey, st, message, turn, terminal, reconcile)
+        // Bounded (LKM-165): a landing that stalls, or that Stop ends, is held with Retry
+        // and frees the chain and the repository lease behind it.
+        return await landings.run(
+          sessionKey,
+          landBatch(sessionKey, st, message, turn, terminal, reconcile)
+        )
       } catch (error) {
         await landingFailed(sessionKey, st, error, turn)
         return null

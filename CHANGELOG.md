@@ -28,6 +28,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - A chat whose changes were held, for example after failed Codex turns and a switch to Claude, can land again: Resolve is no longer blocked, a landing that fails shows its reason with Retry, Resolve and Discard, and the agent no longer reports edits as pending forever (LKM-165).
 - Long chats no longer slow the app: typing, adding an attachment and switching preview modes no longer re-send and re-decode the whole conversation (LKM-165).
 - Codex can use Trezi's own tools, such as checking whether its edits landed, without being refused (LKM-165).
+- "This chat is already running" is never a dead end, and stuck turns recover: the activity row names what is running (landing, holding changes, combining), Stop works on it, a step with no progress ends on its own with a note, and a message sent meanwhile waits in the queue (LKM-165).
+- A failed Claude resume recovers automatically: after a restart a chat no longer shows "No conversation found"; Trezi starts a new session in the same worktree, seeded with a summary of the chat, and says so in one note (LKM-165).
 - Send feedback can attach diagnostics with your consent: the last hour of logs, the chat's landing state and git status, and a short sample of the app when it is busy, with secrets removed and home paths shortened (LKM-165).
 - Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 

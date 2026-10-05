@@ -1,4 +1,5 @@
 import type { AgentEvent, ModelChoice, WorkspaceSnapshot } from '../shared/api'
+import { isChatBusy } from '../shared/chat-busy'
 import {
   agentOptionsFor,
   type ChatAgentSettings,
@@ -383,8 +384,9 @@ export class NativeChatController {
     chat.previewError = undefined
     const cancellation = chat.cancellation
     const { text, attachments, selection, turn } = submission
+    const userMessage = crypto.randomUUID()
     chat.messages.push({
-      id: crypto.randomUUID(),
+      id: userMessage,
       role: 'user',
       at: Date.now(),
       text,
@@ -399,7 +401,7 @@ export class NativeChatController {
         ...(a.type.startsWith('image/') ? { url: `data:${a.type};base64,${a.data}` } : {})
       }))
     })
-    assistant(chat)
+    const reply = assistant(chat).id
     const notice = this.services.notice?.(chat.settings)
     if (notice) {
       chat.activityDetail = notice
@@ -434,9 +436,24 @@ export class NativeChatController {
         submission.id
       )
     } catch (error) {
-      chat.paused = true
-      append(chat, `\n\nUnable to send: ${String(error)}`)
-      finish(chat)
+      // The backend still holds a turn this chat did not know about: the message waits
+      // in the queue, never refused, and the chat shows what is running (LKM-165).
+      if (isChatBusy(error) && cancellation === chat.cancellation) {
+        chat.messages = chat.messages.filter((m) => m.id !== userMessage && m.id !== reply)
+        chat.queue.unshift(submission)
+        chat.streamingId = null
+        chat.turn = undefined
+        chat.last = undefined
+        chat.turnStartedAt = null
+        chat.isRunning = true
+        chat.phase = 'applying'
+        chat.operation = 'waiting'
+        chat.aliveAt = Date.now()
+      } else {
+        chat.paused = true
+        append(chat, `\n\nUnable to send: ${String(error)}`)
+        finish(chat)
+      }
     } finally {
       chat.sending = false
       this.changed(chat)
@@ -444,13 +461,14 @@ export class NativeChatController {
     }
   }
   async drain(chat: Chat) {
-    // A stopped turn's hold is no conflict: the next message continues on top of it.
+    // A stopped turn's hold, and a landing that failed or was ended, are no conflict: the
+    // next message continues on top of them (the backend's `sendRefusal` agrees).
     if (
       this.chats.get(chat.chat) !== chat ||
       chat.isRunning ||
       chat.sending ||
       chat.paused ||
-      (chat.isolation === 'parked' && chat.stopped !== 'held')
+      (chat.isolation === 'parked' && chat.stopped !== 'held' && !chat.landingError)
     )
       return
     const next = chat.queue.shift()

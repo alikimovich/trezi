@@ -2,6 +2,24 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-165 repair: stuck turns recover, and a failed Claude resume restarts itself
+
+- **Gap found in review.** Two user-approved items had been left out of the first submission, and the report did not say so.
+  - Issue #230's chat showed "Worked for 3s" and then "Unable to send: Error: This chat is already running." with nothing running in the UI.
+  - After a restart it showed "Claude Code returned an error result: No conversation found with session ID …".
+- **Stuck turns (`src/main/chat-watchdog.ts`, `src/shared/chat-busy.ts`).**
+  - One source of truth: Bun's `runningKeys` and the service phase are reconciled. `agent:send` settles a chat the service holds but Bun does not (`releaseOwnerTurn`, one retry of `begin`), and `agent:interrupt` settles a chat that is still held after Stop (`staleChat`, `settleChat`), through the existing service ops `abort` and `landed`.
+  - `afterTurn` runs the landing inside `LandingGuard` (3 minutes without finishing). A timeout or Stop ends the wait; `landingFailed` holds the work with Retry and frees the chain and the repo lease. The hung `landBatch` itself is abandoned, not cancelled.
+  - `TurnWatchdog` (10 minutes without any event, checked every 30 s, unref'd, cleared on quit) ends a silent turn with the `STUCK_NOTE` chat note.
+  - The activity row names the step: `Chat.operation` is `landing`, `parking`, `resolving` or `waiting` (`chat-snapshot.ts` labels).
+  - A backend busy refusal is not shown. `NativeChatController.run` takes back the optimistic messages, queues the submission (LKM-151 composer queue) and shows "Finishing the previous step…" until the step ends. `drain` no longer waits on a park that came from a failed landing, matching `sendRefusal`.
+  - `test/chat-stuck-turn.mjs` (unit tier): a landing that never completes shows as running and names the landing, Stop frees it, and the next message is queued then sent, never refused; a stalled landing ends itself; a busy refusal queues.
+- **Claude resume (`src/main/backends/claude-resume.ts`).**
+  - Start and resume use one cwd, `canonicalCwd` (the realpath of the chat worktree), so the session id is found again. It is derived each time rather than stored beside the id.
+  - When a resumed session fails before completing a turn ("No conversation found", an unusable `--resume`, an `is_error` result with that text, a CLI exit), the adapter opens a new session in the same worktree and seeds the user's turn with `resumeSummary` (last 12 messages and the last 40 changed files, at most 6,000 characters), computed host-side and sent as a new context key (allow-listed in `ProviderOwner.swift`). It emits one status note, "Started a new session; earlier context was summarized", and never the raw error.
+  - `test/claude-resume.mjs` and `test/claude-cwd.mjs` (mocked SDK, `test/helpers/claude-sdk-mock.mjs`, unit tier) cover the recovery, an `is_error` result, an unresumed session still reporting its error, and the symlinked-worktree cwd.
+- **Housekeeping.** My `biome --write` over `src test` reformatted six unrelated files; I restored them by hand.
+
 ## 2026-10-05 — LKM-165: long chats stay fast, and parked edits always land (issue #230)
 
 - **Root cause: edits never landed.**

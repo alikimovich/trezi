@@ -922,6 +922,22 @@ It also checks that a background session's `chat_island` and `open_code` are ref
 by the owner before main. The Codex half needs a Unix-socket listen, which some
 sandboxes forbid.
 
+## Claude resume recovery (LKM-165)
+
+Start and resume pass the Claude SDK one cwd, `canonicalCwd(root)` in
+`src/main/backends/claude-resume.ts` (the realpath of the chat worktree), so a session id
+written under a symlinked path is found again. If a resumed session fails before it
+completes a turn ("No conversation found with session ID", an unusable `--resume`, an
+`is_error` result with that text, the CLI exiting), the adapter recovers once: it opens a
+new session in the same worktree, seeds the user's turn with `resumeSummary` (the last
+messages and changed files of the visible chat) and emits one status note, "Started a
+new session; earlier context was summarized". The raw error is not shown and the turn
+completes. `resumeSummary` is a `SpawnContext` key computed host-side (`agent.ts`
+`startChat`, `helper-session.ts` `reopen`) and allow-listed in `ProviderOwner.swift`.
+A session that was not resuming, or one that already completed a turn, still reports
+its errors. Sessions started under a non-canonical cwd by an older build go through the
+same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.
+
 ## Agent file access (LKM-163)
 
 Settings → General → Agent file access (`trezi:agent-file-access:v1`) decides how far
