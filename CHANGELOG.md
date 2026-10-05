@@ -26,6 +26,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - A connected project whose restarted preview shows no source-mapped element for the whole grace period now offers "Source links stopped working" with Reconnect; stamps returning hide it, and Not now is remembered across relaunch (LKM-157).
 - Agent turns started from the Inspector, Styles, Props, inline text edits, custom controls and Layers moves name the source relative to the project, so a chat's edits land in its own worktree instead of the live checkout (LKM-155).
 - Image and SVG attachments in a sent message no longer render as huge images that push the text down: they show as compact thumbnails in a wrapping row (transparent images on a checkerboard), name the file on hover and open a larger preview on click; composer attachments use the same compact tiles (LKM-166).
+- SVG and other non-image or oversized attachments no longer fail the turn (“The pasted images are not supported or too large.”): the agent gets the original's path plus a 512 px PNG preview for an SVG, other files by path, oversized images downscaled, and a note for anything that could not be attached (LKM-166).
 - Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 
 ### Changed

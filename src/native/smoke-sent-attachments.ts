@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { deflateSync } from 'node:zlib'
+import { LIMITS, validImage, validImages } from '../main/provider-policy'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { inspectUntil, waitFor } from './smoke-wait'
@@ -119,6 +120,20 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
     )
     await host.request('composerPerform', { action: 'send' })
     await waitFor(() => sent.length === 1, 'attachment message reaches the provider')
+    // The SVG did not fail the turn: its original is listed by path and a bounded PNG
+    // preview stands in for it; every image sent is one the provider accepts.
+    const [prompt, images] = sent[0] as [string, { mediaType: string; data: string }[]]
+    assert.ok(existsSync(svg) && prompt.includes(svg), `The SVG's path is listed: ${prompt}`)
+    assert.match(prompt, /\[Attached files\]\n/)
+    assert.ok(validImages(images), 'Every image sent is within the provider limits')
+    const previewSizes = images
+      .filter((image) => image.mediaType === 'image/png')
+      .map((image) => Buffer.from(image.data, 'base64').subarray(16, 24))
+      .map((ihdr) => [ihdr.readUInt32BE(0), ihdr.readUInt32BE(4)])
+    assert.ok(
+      previewSizes.some(([w, h]) => Math.max(w, h) === 512),
+      `The SVG sends a 512 px PNG preview: ${JSON.stringify(previewSizes)}`
+    )
     const message = [...chat.messages].reverse().find((m) => m.role === 'user' && m.text === text)
     assert.ok(message, 'The sent message is in the conversation')
     const ids = (message.attachments ?? []).map((a) => a.id)
@@ -176,6 +191,34 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
     nativeChat.event({ type: 'delta', projectKey: chat.chat, text: 'Thumbnails received.' })
     nativeChat.event({ type: 'done', projectKey: chat.chat, landingPending: false })
     await waitFor(() => !chat.isRunning, 'attachment turn ends')
+
+    // An oversized PNG is downscaled by the composer to the provider's limit, not refused.
+    const big = join(dir, 'noise.png')
+    const noise = Buffer.alloc(2600 * 1000 * 4)
+    for (let i = 0; i < noise.length; i++) noise[i] = (Math.imul(i, 2654435761) >>> 13) & 255
+    writeFileSync(
+      big,
+      png(2600, 1000, (x, y) => [...noise.subarray((y * 2600 + x) * 4, (y * 2600 + x) * 4 + 4)])
+    )
+    await host.request('composerPerform', { files: [big], text: 'Big picture' })
+    await inspectUntil(
+      (m) => host.request(m),
+      'composerInspect',
+      (s) => s.attachmentPreviews.count === 1 && s.text === 'Big picture' && s.enabled
+    )
+    await host.request('composerPerform', { action: 'send' })
+    await waitFor(() => sent.length === 2, 'oversized image message reaches the provider')
+    const [bigPrompt, bigImages] = sent[1] as [string, { mediaType: string; data: string }[]]
+    assert.ok(bigPrompt.includes(big), `The original's path is listed: ${bigPrompt}`)
+    assert.equal(bigImages.length, 1)
+    assert.ok(validImage(bigImages[0].mediaType, bigImages[0].data))
+    assert.ok(
+      bigImages[0].data.length <= LIMITS.imageBase64,
+      `The image is within the provider limit: ${bigImages[0].data.length}`
+    )
+    nativeChat.event({ type: 'delta', projectKey: chat.chat, text: 'Big picture received.' })
+    nativeChat.event({ type: 'done', projectKey: chat.chat, landingPending: false })
+    await waitFor(() => !chat.isRunning, 'oversized image turn ends')
     console.log(
       `Sent attachments: ${cells.length} thumbnails in ${rows.length} rows, ${below}pt to the bubble end, preview opened and closed.`
     )

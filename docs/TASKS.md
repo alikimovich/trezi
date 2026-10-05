@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.
 - [x] Composer tiles use the same cells (`src/native/AttachmentThumbnail.swift`); the strip is 84 pt.
 - [x] Native `sent-attachments` smoke check (group `chat`) bounds thumbnail size, wrapping and text position, and opens and closes the preview.
+- [x] Attachments never fail the turn: SVG/other formats send a 512 px PNG preview and keep the original by path, other files go by path, oversized rasters are downscaled, leftovers are named (`src/native/chat-attachments.ts`, `AttachmentPayload`; `test/chat-attachments.mjs`).
 ## Agent file access, full by default; symlinked paths (LKM-163)
 
 - [x] Codex gets the real worktree path; the Claude guard compares as-given and resolved paths (`realPath` in `src/main/agent-file-access.ts`), tested with the profile's `Trezi Native` alias.

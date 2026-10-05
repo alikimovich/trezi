@@ -56,7 +56,7 @@ struct AttachmentFrames: PreferenceKey {
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue()) { _, new in new } }
 }
 /// Decoded once per attachment: the bubble re-renders on every streamed update,
-/// and an image URL carries up to 10 MiB of base64.
+/// and an image URL carries megabytes of base64.
 final class SentThumbnails {
     static let shared = SentThumbnails()
     final class Entry { let image: CGImage; let alpha: Bool; init(_ image: CGImage) { self.image = image; alpha = AttachmentThumbnail.hasAlpha(image) } }

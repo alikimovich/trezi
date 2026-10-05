@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-166 (repair): attachments never fail the turn
+
+- **Problem.** An SVG attachment was sent inline as `image/svg+xml`; `validImages` (png/jpeg/gif/webp only) rejected it and the turn failed with "The pasted images are not supported or too large." Oversized images and files had the same cliff.
+- **Planner.** `src/native/chat-attachments.ts` `planAttachments` replaces the inline logic in `chat-controller.run()`: provider images are sent and listed by path; SVG/other formats list the original by path and send the composer's PNG `preview`; other files are listed by path; leftovers go in a `[Not attached: …]` line. `sendableImages` in `provider-policy.ts` filters to the limits; `provider-service` and the Swift owner stay strict.
+- **Composer.** `AttachmentPayload` (`AttachmentThumbnail.swift`) rasterizes the 512 px PNG preview and downscales rasters over 7 MiB raw instead of refusing them (the 10 MiB picker error is gone; files over 64 MiB go by path).
+- **Decision.** No `.trezi-attachments` folder in the worktree: files are referenced by their own path (picked) or the profile's private attachments folder (pasted), so the Swift repository owner and the exclusion lists are untouched. File bytes never cross the bridge, so copying non-images would have needed a new service writer.
+- **Tests.** `test/chat-attachments.mjs` (unit tier) covers SVG, pasted SVG, oversized PNG, files, too many images and failed saves, and a controller turn into `agent:send`; the `sent-attachments` smoke check also sends an SVG (path text, 512 px PNG preview) and a 2600×1000 noise PNG (downscaled under the limit) through the real composer.
+
 ## 2026-10-05 — LKM-166: compact attachment thumbnails in the sent bubble and composer
 
 - **Problem.** The sent bubble drew each image attachment with `NSImage` at up to 200×160 pt, one per line, so SVG icons with a large intrinsic size stacked as huge black shapes and pushed the text down.
