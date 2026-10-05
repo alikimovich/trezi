@@ -91,6 +91,7 @@ assert.deepEqual(
   [
     ['default', 'general'],
     ['claudePlugins', 'general'],
+    ['agentFileAccess', 'general'],
     ['workspaceIdle', 'general'],
     ['activityAutoOpen', 'general'],
     ['workspaceUsage', 'general'],
@@ -141,6 +142,51 @@ await action('change', {
 })
 assert.equal(values.get('trezi:activity-auto-open:v1'), 'always')
 values.delete('trezi:activity-auto-open:v1')
+await settings.open()
+// LKM-163: Agent file access defaults to Full access, persists, and rejects other values.
+assert.equal(field('agentFileAccess').label, 'Agent file access')
+assert.equal(field('agentFileAccess').value, 'full', 'Full access is the default')
+assert.deepEqual(
+  field('agentFileAccess').choices.map((c) => [c.value, c.label]),
+  [
+    ['full', 'Full access'],
+    ['project', 'Project only']
+  ]
+)
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  agentFileAccess: 'project'
+})
+assert.equal(values.get('trezi:agent-file-access:v1'), 'project')
+await action('change', { default: 'last-used', projectUi: 'false', engine: 'agent' })
+assert.equal(
+  values.get('trezi:agent-file-access:v1'),
+  'project',
+  'a caller without the field leaves it unchanged'
+)
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  agentFileAccess: 'sandboxed'
+})
+assert.match(sheets.current.state.message, /Invalid setting/)
+assert.equal(values.get('trezi:agent-file-access:v1'), 'project')
+await settings.open()
+assert.equal(field('agentFileAccess').value, 'project', 'reopen shows the saved choice')
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  agentFileAccess: 'full'
+})
+assert.equal(values.get('trezi:agent-file-access:v1'), 'full')
+values.set('trezi:agent-file-access:v1', 'bogus')
+await settings.open()
+assert.equal(field('agentFileAccess').value, 'full', 'an unknown stored value reads as Full access')
+values.delete('trezi:agent-file-access:v1')
 await settings.open()
 // LKM-143: General shows the version as a read-only row (the build stamps the label; unbuilt source says so).
 assert.equal(field('version').kind, 'readonly')
