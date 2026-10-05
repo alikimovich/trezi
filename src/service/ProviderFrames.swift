@@ -13,10 +13,10 @@ extension ProviderOwner {
         // Anything the turn produced (not the slash menu a session posts on its own, nor the
         // resume id its session init records, LKM-135) stops the first-event timer. A
         // `progress` heartbeat only says the helper is alive (LKM-147): a CLI that never
-        // answers must still reach the deadline.
+        // answers must still reach the deadline. Nor does the init's resolved `model` (LKM-164).
         let resumeOnly = type == "record" && frame["entries"] == .array([]) && frame["filesTouched"] == nil
         if ["record", "permission", "question", "tool"].contains(type) && !resumeOnly
-            || (type == "event" && !["commands", "progress"].contains(frame["event"]?["type"]?.text?.string ?? "")) {
+            || (type == "event" && !["commands", "progress", "model"].contains(frame["event"]?["type"]?.text?.string ?? "")) {
             heard(session)
         }
         func only(_ allowed: Set<String>) -> Bool { keys.isSubset(of: allowed.union(["type"])) }
@@ -193,6 +193,7 @@ extension ProviderOwner {
     static let eventFields: [String: Set<String>] = [
         "delta": ["text"], "status": ["text"], "error": ["message"], "done": [], "usage": ["input", "output", "cached"],
         "commands": ["commands"], "permission-resolved": ["id"], "question-resolved": ["id"], "progress": [],
+        "model": ["model"],
     ]
     /// Fields an event may leave out: an error's card code (LKM-119), a progress step (LKM-147).
     static let optionalEventFields: [String: Set<String>] = ["error": ["code"], "progress": ["step"]]
@@ -221,6 +222,8 @@ extension ProviderOwner {
                 guard let text = field.text, text.count <= ProviderPolicy.Limits.eventText else { return .failure(EventRefusal("an oversized event")) }
             case "step":
                 guard bounded(field, 512) != nil else { return .failure(EventRefusal("a malformed progress event")) }
+            case "model":
+                guard bounded(field, 256) != nil else { return .failure(EventRefusal("a malformed model event")) }
             case "input", "output", "cached":
                 guard case .number(let n) = field, n.isFinite, n >= 0 else { return .failure(EventRefusal("a malformed usage event")) }
             case "commands":

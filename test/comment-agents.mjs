@@ -62,7 +62,7 @@ try {
   const first = await start(),
     a = providers.at(-1)
   assert.equal(first.ok, true)
-  assert.equal(a.options.model, 'gpt-5.6-sol')
+  assert.equal(a.options.model, 'gpt-6-sol')
   writeFileSync(join(a.root, 'color.txt'), 'blue\n')
   a.context.onEvent({ type: 'done' })
   a.context.onEvent({ type: 'done' })

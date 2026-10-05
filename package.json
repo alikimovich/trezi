@@ -81,6 +81,7 @@
     "test:project-icon": "bun test/project-icon.mjs",
     "test:providers": "bun test/providers-store.mjs",
     "test:model-catalog": "bun test/model-catalog.mjs",
+    "test:model-label": "bun test/model-label.mjs",
     "test:codex-retry": "bun test/codex-retry-cause.mjs",
     "test:codex-stream": "bun test/codex-stream.mjs",
     "test:codex-model": "bun test/codex-model.mjs",

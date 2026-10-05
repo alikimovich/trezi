@@ -11,7 +11,7 @@ for (const provider of [undefined, 'claude', 'codex', 'gemini']) {
   const comment = backgroundAgentOptions(source)
   assert.equal(
     comment.model,
-    provider === 'codex' ? 'gpt-5.6-sol' : provider === 'gemini' ? 'parent-model' : 'sonnet'
+    provider === 'codex' ? 'gpt-6-sol' : provider === 'gemini' ? 'parent-model' : 'sonnet'
   )
   assert.equal(comment.provider, provider)
   assert.equal(comment.effort, 'high')
@@ -27,7 +27,7 @@ for (const provider of [undefined, 'claude', 'codex', 'gemini']) {
   )
 }
 assert.equal(backgroundAgentOptions({}).model, 'sonnet')
-assert.equal(backgroundAgentOptions({ provider: 'codex' }).model, 'gpt-5.6-sol')
+assert.equal(backgroundAgentOptions({ provider: 'codex' }).model, 'gpt-6-sol')
 console.log(
   'BACKGROUND-MODEL OK — Sonnet, Sol, exact Gateway model, visual edits and parent settings preserved'
 )

@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Current Claude and Codex models (LKM-164)
+
+- [ ] Bump `@anthropic-ai/claude-agent-sdk` (0.3.186 → 0.3.289) and `@openai/codex-sdk` (0.154.0 → 0.160.1) with `bun.lock`: the worker sandbox could not reach the npm registry; follow "Bumping the SDKs" in `docs/PROVIDERS.md`.
+- [x] `model-catalog.json` entries carry the SDK/CLI `harness` stamp and are ignored after a bump; daily refresh (`CATALOG_TTL_MS`, hourly due-check, Claude written once a day).
+- [x] The init message's resolved model labels the Model picker's selected row (`src/shared/model-label.ts`, `model` event relayed by `ProviderFrames.swift`).
+- [x] Codex fallback, background comments and PR descriptions on `gpt-6-sol`/`gpt-6-astra`; Claude aliases kept.
+- [x] `test/model-catalog.mjs`, `test/model-label.mjs`, `test/provider-data.mjs`, `test/provider-owner.mjs`.
+- [ ] Operator, after merge: ask each seat "which model are you" and check the picker label (live).
+
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
 - [x] `clearPark` (`src/main/chat-park.ts`) at all 9 unpark sites; no other `parked = false`.

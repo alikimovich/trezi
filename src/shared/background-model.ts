@@ -8,7 +8,7 @@ export function backgroundAgentOptions(
   origin: BackgroundSpawnOrigin = 'comment'
 ): AgentOptions {
   if (origin !== 'comment' || options.connectionId) return { ...options }
-  if (options.provider === 'codex') return { ...options, model: 'gpt-5.6-sol' }
+  if (options.provider === 'codex') return { ...options, model: 'gpt-6-sol' }
   if (!options.provider || options.provider === 'claude') return { ...options, model: 'sonnet' }
   return { ...options }
 }

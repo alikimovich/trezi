@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-164: current Claude and Codex models, resolved model in the picker
+
+- **Why.** A Claude chat said it was "Sonnet 4.6", then "Opus 4.8". The picker sends aliases and the bundled Claude Code CLI (SDK 0.3.186) resolves them; the model list was cached on disk without knowing which SDK wrote it, and the Codex fallback still listed `gpt-5.6-*`.
+- **SDK bump not done here.** The worker sandbox refused `registry.npmjs.org` (403), so `package.json`/`bun.lock` still pin 0.3.186 and 0.154.0. The steps are in `docs/PROVIDERS.md` ("Bumping the SDKs"); the code below needs no SDK API change (the init `model` field and `supportedModels()` exist in both).
+- **Cache invalidation.** Each `model-catalog.json` entry carries `harness`, the seat's installed SDK and CLI versions (`harnessStamp`, read from `node_modules` once per run). A different or missing stamp reads as no list (fallback, due for discovery). The Swift writer stores the optional `harness`; old callers write the same bytes as before.
+- **Daily refresh.** `CATALOG_TTL_MS` is one day. `providers.ts` checks hourly (unref'd timer) whether the Codex probe is due. `recordClaudeModels` writes only a stale list, so not every session rewrites the file.
+- **Resolved model.** `backends/claude.ts` emits `{type: 'model', model}` from the init message. `ProviderFrames.swift` relays it (bounded to 256, not counted as turn output). `chat-state.ts` keeps it as `resolvedModel`, `changeModel` clears it, and `chat-snapshot.ts` labels the selected Model row with `pickerLabel` ("Opus 5.5", "Default · Opus 5.5"). Codex reports no resolved model; its picker ids are already concrete.
+- **Hardcoded ids.** `CODEX_FALLBACK` is `gpt-6-sol`, `gpt-6-astra`; background comments (`background-model.ts`) and PR descriptions (`publish-description.ts`) moved from `gpt-5.6-sol`/`gpt-5.6-luna` to `gpt-6-sol`.
+- **Tests.** `test/model-catalog.mjs` (stamp per seat, bump drops only that seat, unstamped legacy entry, day TTL, Claude written once a day), `test/model-label.mjs` (labels, the picker row after a `model` event), `test/provider-data.mjs` (Swift stores the stamp), `test/provider-owner.mjs` (the event is relayed; an oversized one is a violation).
+
 ## 2026-10-04 — LKM-158: clean Biome lint baseline, lint in quick verification (F4)
 
 - **Why.** Review L8 (`docs/REVIEW-2026-10.md`): `biome check src test` reported 579 errors, mostly format and import order, so `bun run lint` failed repo-wide and new lint debt went unnoticed.
