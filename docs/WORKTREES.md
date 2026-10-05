@@ -440,3 +440,13 @@ survive. Shutdown does not land or discard worktree edits or target unrelated se
 
 Legacy profile/worktree paths and the identities kept on purpose are listed in
 [legacy names](agent-guide/legacy-names.md).
+
+## Attachments and the chat worktree (LKM-166)
+
+A chat's attachments are not copied into its worktree: a picked file is referenced by its
+own path, and a pasted image is saved by the service in the profile's
+`trezi/attachments` folder (pruned after 7 days), outside every repository. That is why no
+`.trezi-attachments` folder exists and the worktree exclusion list (`excludedWorktreePath`
+in `src/main/worktrees.ts`, `RepositoryPaths.excluded` in `src/service/RepositoryGit.swift`)
+is unchanged: an attachment can never be committed or merged into the live tree. See
+`docs/PROVIDERS.md` for how the agent is told about them.

@@ -24,6 +24,21 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - Locally, warm: 55.7 s with typechecks. Cold cache: 122.1 s.
   - Table in `docs/TESTING.md` "Unit tier speed".
   - Still slow, from runtime rather than compiles: the durability half (client deadlines after injected crashes) and the composer/settings layout fixtures.
+## 2026-10-05 — LKM-166 (repair): attachments never fail the turn
+
+- **Problem.** An SVG attachment was sent inline as `image/svg+xml`; `validImages` (png/jpeg/gif/webp only) rejected it and the turn failed with "The pasted images are not supported or too large." Oversized images and files had the same cliff.
+- **Planner.** `src/native/chat-attachments.ts` `planAttachments` replaces the inline logic in `chat-controller.run()`: provider images are sent and listed by path; SVG/other formats list the original by path and send the composer's PNG `preview`; other files are listed by path; leftovers go in a `[Not attached: …]` line. `sendableImages` in `provider-policy.ts` filters to the limits; `provider-service` and the Swift owner stay strict.
+- **Composer.** `AttachmentPayload` (`AttachmentThumbnail.swift`) rasterizes the 512 px PNG preview and downscales rasters over 7 MiB raw instead of refusing them (the 10 MiB picker error is gone; files over 64 MiB go by path).
+- **Decision.** No `.trezi-attachments` folder in the worktree: files are referenced by their own path (picked) or the profile's private attachments folder (pasted), so the Swift repository owner and the exclusion lists are untouched. File bytes never cross the bridge, so copying non-images would have needed a new service writer.
+- **Tests.** `test/chat-attachments.mjs` (unit tier) covers SVG, pasted SVG, oversized PNG, files, too many images and failed saves, and a controller turn into `agent:send`; the `sent-attachments` smoke check also sends an SVG (path text, 512 px PNG preview) and a 2600×1000 noise PNG (downscaled under the limit) through the real composer.
+
+## 2026-10-05 — LKM-166: compact attachment thumbnails in the sent bubble and composer
+
+- **Problem.** The sent bubble drew each image attachment with `NSImage` at up to 200×160 pt, one per line, so SVG icons with a large intrinsic size stacked as huge black shapes and pushed the text down.
+- **Shared thumbnail.** `src/native/AttachmentThumbnail.swift`: 72 pt square cells, decoded at 2x. Raster images use ImageIO. Anything else `NSImage` reads (SVG) is drawn at the requested pixel size, so a vector with any intrinsic size yields a bounded, sharp bitmap. Images with alpha sit on a checkerboard; opaque ones sit on a neutral fill.
+- **Sent bubble.** `src/native/ChatAttachments.swift`: `AttachmentFlow` (a SwiftUI `Layout`) wraps thumbnails and file chips into rows and reports the widest row, so a short row keeps the bubble narrow. Thumbnails decode once per attachment id (`NSCache`), not on every streamed re-render. Hover shows the file name (`.help`). A click sets `ChatModel.attachmentPreview`, which opens a popover with a larger preview and the name.
+- **Composer.** Tiles use the same 72 pt aspect-fit cells and checkerboard (was 96 pt aspect-fill). The strip is 84 pt (was 108) and still scrolls horizontally. The click preview also uses the shared decoder, so SVGs preview too.
+- **Tests.** New `sent-attachments` smoke check (`src/native/smoke-sent-attachments.ts`, group `chat`): sends 8 SVG/PNG/JPG attachments with the provider call intercepted. Composer tiles are ≤96 pt and checkerboards appear only on transparent tiles. In the sent bubble, each thumbnail is 48–96 pt and inside the bubble, the cells form at least 2 packed rows, and the text ends <80 pt below the last row (42 pt in the run). Opening the preview through `chatAttachmentPreview` (test profile only) shows a popover window, and closing it removes it. Captures: `sent-attachments.png`. The existing composer check now expects the 84 pt strip and overflows with seven tiles.
 ## 2026-10-05 — LKM-162: editing inspector island owns the pointer and renders opaque
 
 - **Symptom.** With an element selected, the island's fields, slider and tabs ignored input; the page under it kept hovering and selecting, and the page showed through the controls.

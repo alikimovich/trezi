@@ -239,21 +239,20 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         for url in urls {
             let type = UTType(filenameExtension: url.pathExtension)
             let image = type?.conforms(to: .image) ?? false
-            if image {
-                guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 10 * 1024 * 1024,
-                      let data = try? Data(contentsOf: url) else { emitAction("attachment-error", ["message":"Could not attach \(url.lastPathComponent). Images must be readable and no larger than 10 MiB."]); continue }
-                files.append(["path":url.path, "name":url.lastPathComponent, "type":type?.preferredMIMEType ?? "image/png", "data":data.base64EncodedString()])
-            } else { files.append(["path":url.path, "name":url.lastPathComponent, "type":"application/octet-stream", "data":""]) }
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if image, size <= AttachmentPayload.readBytes {
+                guard let data = try? Data(contentsOf: url) else { emitAction("attachment-error", ["message":"Could not read \(url.lastPathComponent)."]); continue }
+                files.append(AttachmentPayload.file(path: url.path, name: url.lastPathComponent, type: type?.preferredMIMEType ?? "image/png", data: data))
+            } else { files.append(AttachmentPayload.plainFile(path: url.path, name: url.lastPathComponent)) }
         }
         for file in files { emitAction("files", ["files":[file]]) }
     }
     func readPasteboard(_ board: NSPasteboard) -> Bool {
         if let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly:true]) as? [URL], !urls.isEmpty { attach(urls); return true }
         let data = board.data(forType: .png) ?? board.data(forType: .tiff).flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) }
-        if let data = data, data.count <= 10 * 1024 * 1024 {
-            emitAction("files", ["files":[["name":"Pasted image.png", "path":"", "type":"image/png", "data":data.base64EncodedString()]]]); return true
+        if let data {
+            emitAction("files", ["files":[AttachmentPayload.file(path: "", name: "Pasted image.png", type: "image/png", data: data)]]); return true
         }
-        if let data, data.count > 10 * 1024 * 1024 { emitAction("attachment-error", ["message":"The pasted image exceeds the 10 MiB attachment limit."]); return true }
         return false
     }
     // Integration-only caller in Host requires an ephemeral test profile.

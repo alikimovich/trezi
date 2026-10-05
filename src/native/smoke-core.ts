@@ -22,6 +22,7 @@ import {
   runSmokeChecks,
   type SmokeCheck
 } from './smoke-runner'
+import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets } from './smoke-sheets'
 import { checkSourceEditor } from './smoke-source-editor'
@@ -337,7 +338,7 @@ export async function runNativeCoreSmoke(
           )
           assert.equal(previews.attachmentPreviews.count, count)
           assert.equal(previews.attachmentPreviews.images, 'paths' in clipboard ? 0 : 1)
-          assert.equal(previews.attachmentPreviews.height, 108)
+          assert.equal(previews.attachmentPreviews.height, 84)
           assert.ok(previews.inputHeight >= compactComposer.inputHeight - 1)
           const attached = nativeChat.get(nativeChat.active).attachments
           if ('paths' in clipboard)
@@ -370,11 +371,12 @@ export async function runNativeCoreSmoke(
           dispatched: false
         })
         const previewFixture = join(artifacts, 'composer-ready-beam.png')
+        // Compact tiles (LKM-166): six images and a file card overflow the strip.
         await host.request('composerPerform', {
-          files: [previewFixture, join(fixture, 'index.html'), previewFixture, previewFixture]
+          files: [previewFixture, join(fixture, 'index.html'), ...Array(5).fill(previewFixture)]
         })
-        const mixed = await inspect('composerInspect', (s) => s.attachmentPreviews.count === 4)
-        assert.equal(mixed.attachmentPreviews.images, 3)
+        const mixed = await inspect('composerInspect', (s) => s.attachmentPreviews.count === 7)
+        assert.equal(mixed.attachmentPreviews.images, 6)
         assert.ok(
           mixed.attachmentPreviews.documentWidth > mixed.attachmentPreviews.viewportWidth,
           'Attachments scroll horizontally'
@@ -384,9 +386,9 @@ export async function runNativeCoreSmoke(
           Buffer.from(await host.request('captureComposer'), 'base64')
         )
         await host.request('composerPerform', { remove: 1 })
-        const removed = await inspect('composerInspect', (s) => s.attachments.length === 3)
-        assert.equal(removed.attachmentPreviews.images, 3, 'Remove targets the file between images')
-        for (let i = 0; i < 3; i++) await host.request('composerPerform', { remove: 0 })
+        const removed = await inspect('composerInspect', (s) => s.attachments.length === 6)
+        assert.equal(removed.attachmentPreviews.images, 6, 'Remove targets the file between images')
+        for (let i = 0; i < 6; i++) await host.request('composerPerform', { remove: 0 })
         await inspect(
           'composerInspect',
           (s) => s.attachments.length === 0 && s.bounds.height === compactComposer.bounds.height
@@ -731,6 +733,17 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkNativeChat(host, join(artifacts, 'swift-chat.png'))
+      }
+    },
+    {
+      name: 'sent-attachments',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkSentAttachments(host, artifacts)
+      },
+      cleanup: async () => {
+        await host.request('chatAttachmentPreview', { attachment: null })
+        await clearComposer()
       }
     },
     {

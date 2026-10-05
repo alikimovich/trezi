@@ -60,6 +60,7 @@ const UNIT = [
   'native-settings-layout',
   'native-settings-evidence',
   'native-chat-controller',
+  'chat-attachments',
   'stop-recovery-ui',
   'live-write-guard',
   'agent-file-access',
