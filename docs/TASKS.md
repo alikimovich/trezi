@@ -8,6 +8,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.
 - [x] Composer tiles use the same cells (`src/native/AttachmentThumbnail.swift`); the strip is 84 pt.
 - [x] Native `sent-attachments` smoke check (group `chat`) bounds thumbnail size, wrapping and text position, and opens and closes the preview.
+## Agent file access, full by default; symlinked paths (LKM-163)
+
+- [x] Codex gets the real worktree path; the Claude guard compares as-given and resolved paths (`realPath` in `src/main/agent-file-access.ts`), tested with the profile's `Trezi Native` alias.
+- [x] Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default, Codex `danger-full-access`) or Project only (LKM-156 sandbox); passed to every helper session.
+- [x] Worktree isolation in both modes: the Claude guard unchanged; Codex direct live writes in Full access named in one chat note (`src/main/backends/live-tree-watch.ts`).
+- [x] `test/live-write-guard.mjs` covers both modes and symlinks; `test/agent-file-access.mjs` drives the adapter with a stand-in CLI.
 
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
