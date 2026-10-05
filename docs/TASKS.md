@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Current Claude and Codex models (LKM-164)
+
+- [x] Bump `@anthropic-ai/claude-agent-sdk` (0.3.186 → 0.3.289) and `@openai/codex-sdk` with its `@openai/codex` CLI (0.154.0 → 0.160.1) in `package.json` and `bun.lock`; no API changes needed, backend and provider-helper bundles build.
+- [x] `model-catalog.json` entries carry the SDK/CLI `harness` stamp and are ignored after a bump; daily refresh (`CATALOG_TTL_MS`, hourly due-check, Claude written once a day).
+- [x] The init message's resolved model labels the Model picker's selected row (`src/shared/model-label.ts`, `model` event relayed by `ProviderFrames.swift`).
+- [x] Codex fallback, background comments and PR descriptions on `gpt-6-sol`/`gpt-6-astra`; Claude aliases kept.
+- [x] `test/model-catalog.mjs`, `test/model-label.mjs`, `test/provider-data.mjs`, `test/provider-owner.mjs`.
+- [ ] Operator, after merge: ask each seat "which model are you" and check the picker label (live).
 ## Agent file access, full by default; symlinked paths (LKM-163)
 
 - [x] Codex gets the real worktree path; the Claude guard compares as-given and resolved paths (`realPath` in `src/main/agent-file-access.ts`), tested with the profile's `Trezi Native` alias.

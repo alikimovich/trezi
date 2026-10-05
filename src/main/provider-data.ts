@@ -9,6 +9,8 @@ import {
   type CatalogBackend,
   type CatalogModel,
   createModelCatalog,
+  harnessStamp,
+  installedVersion,
   type ModelCatalog
 } from './model-catalog'
 import { createProviderStore, type ProviderStore } from './providers-store'
@@ -29,8 +31,9 @@ export interface ProviderDataOwner {
   save(input: ProviderConnectionInput): Promise<ProviderConnection>
   remove(id: string): Promise<void>
   secretFor(id: string): Promise<string | null>
-  /** Persists a discovered list; false when it could not be written. */
-  saveCatalog(backend: CatalogBackend, models: CatalogModel[]): Promise<boolean>
+  /** Persists a discovered list with the harness stamp it came from (LKM-164); false
+   *  when it could not be written. */
+  saveCatalog(backend: CatalogBackend, models: CatalogModel[], harness?: string): Promise<boolean>
   /** `codex debug models`, parsed; [] on any failure. */
   codexModels(): Promise<CatalogModel[]>
   /** A built-in seat's subscription token (`claude setup-token`, LKM-119); '' removes it.
@@ -82,13 +85,27 @@ export const connectionStore = {
     owner ? owner.secretFor(id).catch(() => null) : null
 }
 
+/** The bundled SDK/CLI versions per seat, read once per run from the checkout's
+ *  node_modules (the packages stay external to the backend bundle). */
+const harnesses = new Map<CatalogBackend, string>()
+function bundledHarness(backend: CatalogBackend): string {
+  let stamp = harnesses.get(backend)
+  if (stamp === undefined) {
+    const root = app.getAppPath()
+    stamp = harnessStamp(backend, (pkg) => installedVersion(root, pkg))
+    harnesses.set(backend, stamp)
+  }
+  return stamp
+}
+
 /** Lazy for the same reason as the store: `getDataDir` isn't final until registration. */
 export function modelCatalog(): ModelCatalog {
   catalog ??= createModelCatalog({
     baseDir: getDataDir(),
-    persist: (backend, models) => {
+    harness: bundledHarness,
+    persist: (backend, models, harness) => {
       if (!owner) return false // no service: this run keeps the list in memory
-      void owner.saveCatalog(backend, models).catch(() => false)
+      void owner.saveCatalog(backend, models, harness).catch(() => false)
       return true
     }
   })

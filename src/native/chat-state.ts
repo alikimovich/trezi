@@ -73,6 +73,9 @@ export interface Chat extends NativeChatMirror {
   landed?: { files: string[]; group?: string }
   /** LKM-151: a dev-server compile/parse error in a file the last turn touched. */
   previewError?: { file: string; message: string }
+  /** LKM-164: the model the session reported running (`claude-opus-5-5`); cleared when
+   *  the chat switches model, so it never names the previous one. */
+  resolvedModel?: string
 }
 /** The hover Revert of a stopped turn's message: routes to the held-work revert. */
 export const STOPPED_GROUP = 'stopped:'
@@ -234,6 +237,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       break
     case 'commands':
       chat.commands = event.commands
+      break
+    case 'model':
+      chat.resolvedModel = event.model
       break
     case 'usage': {
       // The chat total, and the running turn's own count on its response (a

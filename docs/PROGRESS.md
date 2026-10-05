@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-164: current Claude and Codex models, resolved model in the picker
+
+- **Why.** A Claude chat said it was "Sonnet 4.6", then "Opus 4.8". The picker sends aliases and the bundled Claude Code CLI (SDK 0.3.186) resolves them; the model list was cached on disk without knowing which SDK wrote it, and the Codex fallback still listed `gpt-5.6-*`.
+- **SDKs updated.** `@anthropic-ai/claude-agent-sdk` 0.3.186 → 0.3.289 and `@openai/codex-sdk` with its `@openai/codex` CLI 0.154.0 → 0.160.1 (`package.json`, `bun.lock`). No API change was needed: typecheck is clean, the init message still carries `model`, `codex debug models` (the catalog probe) still exists, and the bundled CLIs know `claude-opus-5-5`/`claude-sonnet-5-5`/`claude-fable-5-1` and `gpt-6-sol`/`gpt-6-astra`. The steps for the next bump are in `docs/PROVIDERS.md` ("Bumping the SDKs").
+- **Cache invalidation.** Each `model-catalog.json` entry carries `harness`, the seat's installed SDK and CLI versions (`harnessStamp`, read from `node_modules` once per run). A different or missing stamp reads as no list (fallback, due for discovery). The Swift writer stores the optional `harness`; old callers write the same bytes as before.
+- **Daily refresh.** `CATALOG_TTL_MS` is one day. `providers.ts` checks hourly (unref'd timer) whether the Codex probe is due. `recordClaudeModels` writes only a stale list, so not every session rewrites the file.
+- **Resolved model.** `backends/claude.ts` emits `{type: 'model', model}` from the init message. `ProviderFrames.swift` relays it (bounded to 256, not counted as turn output). `chat-state.ts` keeps it as `resolvedModel`, `changeModel` clears it, and `chat-snapshot.ts` labels the selected Model row with `pickerLabel` ("Opus 5.5", "Default · Opus 5.5"). Codex reports no resolved model; its picker ids are already concrete.
+- **Hardcoded ids.** `CODEX_FALLBACK` is `gpt-6-sol`, `gpt-6-astra`; background comments (`background-model.ts`) and PR descriptions (`publish-description.ts`) moved from `gpt-5.6-sol`/`gpt-5.6-luna` to `gpt-6-sol`.
+- **Tests.** `test/model-catalog.mjs` (stamp per seat, bump drops only that seat, unstamped legacy entry, day TTL, Claude written once a day; the checkout's SDKs are at least these versions and lists stamped by 0.3.186/0.154.0 are dropped), `test/model-label.mjs` (labels, the picker row after a `model` event), `test/provider-data.mjs` (Swift stores the stamp), `test/provider-owner.mjs` (the event is relayed; an oversized one is a violation).
+
 ## 2026-10-05 — LKM-163 repair: Codex live-write note also covers reverts and commits
 
 - **Gap found in review.** `liveTreeChanges` only walked the after-snapshot, so a live file that was dirty before the turn and clean after it (`git checkout -- f`, `restore`, `stash`, `reset --hard`) and a commit made in the live checkout produced no note, although the ticket says direct live writes must not fail silently.

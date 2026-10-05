@@ -150,7 +150,7 @@ struct ProviderData {
     }
 
     /// Records a discovered list (an empty one is ignored); a write failure costs only persistence.
-    func saveCatalog(backend: String, models: [(id: JSText, label: JSText)]) -> Bool {
+    func saveCatalog(backend: String, models: [(id: JSText, label: JSText)], harness: String? = nil) -> Bool {
         guard !models.isEmpty else { return false }
         var entries: [(JSText, JSValue)] = []
         if let data = FileManager.default.contents(atPath: catalogFile),
@@ -163,8 +163,11 @@ struct ProviderData {
             }
             entries.removeAll { !Self.catalogEntry($0.1) }
         }
-        let entry = JSValue.object([(JSText("at"), .number(now())), (JSText("models"), .array(models.map {
-            .object([(JSText("id"), .string($0.id)), (JSText("label"), .string($0.label))]) }))])
+        var fields: [(JSText, JSValue)] = [(JSText("at"), .number(now())), (JSText("models"), .array(models.map {
+            .object([(JSText("id"), .string($0.id)), (JSText("label"), .string($0.label))]) }))]
+        // The bundled SDK/CLI versions the list came from (LKM-164); absent from older callers.
+        if let harness { fields.append((JSText("harness"), .string(JSText(harness)))) }
+        let entry = JSValue.object(fields)
         if let index = entries.firstIndex(where: { $0.0 == JSText(backend) }) { entries[index].1 = entry } else { entries.append((JSText(backend), entry)) }
         let body = JSValue.object([(JSText("version"), .number(1)), (JSText("entries"), .object(entries))])
         do { try prepareDirectory(); try Self.replace(catalogFile, body.utf8(), mode: 0o666); return true } catch { return false }
