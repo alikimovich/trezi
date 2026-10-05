@@ -173,6 +173,10 @@ const CODEX_RETRY_MS = 5 * 60_000
 /** How long a COLD `providers:choices` may wait on the first probe (see the IPC
  *  handler). Only ever paid once, before any list has been cached to disk. */
 const COLD_START_WAIT_MS = 2_500
+/** How often a running app checks whether the daily refresh is due (LKM-164): an app
+ *  left open for days still notices a new model. The probe itself runs only once the
+ *  cached list is a day old (`CATALOG_TTL_MS`). */
+const REFRESH_CHECK_MS = 60 * 60_000
 
 let codexProbe: Promise<void> | null = null
 let codexProbedAt = 0
@@ -230,26 +234,24 @@ const DEFAULT_MODEL = 'default'
  * models` and the Agent SDK's `Query.supportedModels()` — and the answer is
  * cached to disk, so these arrays should be reached ~once per install at most.
  *
- * They are a snapshot of what discovery returned on 2026-08-07 and WILL rot.
+ * They are a snapshot of the current families (LKM-164, 2026-10-05) and WILL rot.
  * When they're wrong the seat is almost certainly unusable anyway (no working
  * CLI / never-authenticated account), so they exist to keep the picker from
  * rendering empty, not to be right.
  */
 const CLAUDE_FALLBACK: Array<[modelId: string, label: string]> = [
-  // Left exactly as the curated array had them (minus the sentinel, which
-  // `builtinChoices` now prepends): these short aliases are what shipped, and a
-  // fallback that quietly drops a model the user could pick before would be its
-  // own regression. Discovery returns the fuller ids (`claude-fable-5[1m]`, …).
+  // Aliases, not ids: the bundled CLI resolves each to its family's current model,
+  // so they stay current as long as the SDK does (docs/PROVIDERS.md, "Bumping the
+  // SDKs"). The chat shows what one resolved to (LKM-164).
   ['fable', 'Fable'],
   ['opus', 'Opus'],
   ['sonnet', 'Sonnet'],
   ['haiku', 'Haiku']
 ]
 const CODEX_FALLBACK: Array<[modelId: string, label: string]> = [
-  ['gpt-5.6-sol', 'GPT-5.6-Sol'],
-  ['gpt-5.6-terra', 'GPT-5.6-Terra'],
-  ['gpt-5.6-luna', 'GPT-5.6-Luna'],
-  ['gpt-5.5', 'GPT-5.5']
+  // What a ChatGPT login offers today.
+  ['gpt-6-sol', 'GPT-6-Sol'],
+  ['gpt-6-astra', 'GPT-6-Astra']
 ]
 
 /**
@@ -409,6 +411,7 @@ export function registerProviderIpc(
   // picker render: the probe is a ~1s subprocess, and this runs long before a
   // window exists, so by the time the renderer asks the answer is already there.
   void refreshCodexModels()
+  setInterval(() => void refreshCodexModels(), REFRESH_CHECK_MS).unref?.()
 
   ipcMain.handle('providers:list', (): ProviderConnection[] => store.list())
 

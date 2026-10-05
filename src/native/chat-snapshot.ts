@@ -1,5 +1,6 @@
 import type { ModelChoice } from '../shared/api'
 import { shortPaths } from '../shared/display-path'
+import { pickerLabel } from '../shared/model-label'
 import type {
   NativeChatActivity,
   NativeChatCard,
@@ -255,9 +256,16 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
           label: 'Model',
           value: selection.choice?.value ?? model,
           disabled: !chat.ready || chat.isRunning || chat.switching,
-          options: selection.option?.models.map((c) => ({ value: c.value, label: c.label })) ?? [
-            { value: model, label: model === 'default' ? 'Default' : model }
-          ]
+          // The selected row names what the session runs ("Opus 5.5"), LKM-164.
+          options: (
+            selection.option?.models.map((c) => ({ value: c.value, label: c.label })) ?? [
+              { value: model, label: model === 'default' ? 'Default' : model }
+            ]
+          ).map((o) =>
+            o.value === (selection.choice?.value ?? model)
+              ? { ...o, label: pickerLabel(o.label, chat.resolvedModel) }
+              : o
+          )
         },
         {
           label: 'Permission mode',

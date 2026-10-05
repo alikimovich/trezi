@@ -368,6 +368,10 @@ try {
       events.some((e) => e.type === 'commands' && e.commands[0].name === 'fake'),
       'events emitted while starting arrive'
     )
+    assert.ok(
+      events.some((e) => e.type === 'model' && e.model === 'claude-opus-5-5'),
+      'the resolved model is relayed (LKM-164)'
+    )
     assert.ok(events.every((e) => e.projectKey === 'chat-1'))
     // Stream.
     const hello = await turn('say hello')
@@ -579,6 +583,11 @@ try {
         'a title',
         { type: 'event', event: { type: 'title', title: 'Pwned' } },
         'a title event it may not send'
+      ],
+      [
+        'oversized model',
+        { type: 'event', event: { type: 'model', model: 'm'.repeat(300) } },
+        'a malformed model event'
       ],
       [
         'user entry',

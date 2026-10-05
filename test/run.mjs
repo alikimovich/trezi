@@ -135,6 +135,7 @@ const UNIT = [
   'project-memory-evaluation',
   'providers-store',
   'model-catalog',
+  'model-label',
   'codex-retry-cause',
   'codex-stream',
   'interrupt-escalation',

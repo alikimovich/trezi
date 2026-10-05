@@ -1420,7 +1420,12 @@ async function startSession(
         cliStarted()
         switch (msg.type) {
           case 'system': {
-            const sys = msg as { subtype?: string; slash_commands?: string[]; session_id?: string }
+            const sys = msg as {
+              subtype?: string
+              slash_commands?: string[]
+              session_id?: string
+              model?: string
+            }
             // The turn's session began, or the CLI reports work (a request, a retry,
             // thinking) before any output: the owner keeps waiting (LKM-135).
             if (sys.subtype === 'init') phase('init')
@@ -1436,6 +1441,9 @@ async function startSession(
                 sdkCommandNames = sys.slash_commands
                 emitCommands()
               }
+              // What the picker's alias resolved to, for the chat to show (LKM-164).
+              const model = typeof sys.model === 'string' ? sys.model.trim() : ''
+              if (model && model.length <= 256) emit({ type: 'model', model })
             }
             break
           }

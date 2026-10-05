@@ -317,6 +317,9 @@ export type AgentEvent = (
   | { type: 'delta'; text: string }
   | { type: 'status'; text: string }
   | { type: 'commands'; commands: SlashCommandItem[] }
+  /** The model the session resolved its choice to, from the SDK's init message
+   *  (`claude-opus-5-5` for the `opus` alias, LKM-164). Not turn output. */
+  | { type: 'model'; model: string }
   | { type: 'permission-request'; request: PermissionRequest }
   /** A pending request was resolved without the user (abort/session change) — dismiss its card. */
   | { type: 'permission-resolved'; id: string }

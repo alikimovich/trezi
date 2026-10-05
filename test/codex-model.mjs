@@ -34,6 +34,7 @@ import {
   supportedCodexModel,
   unsupportedCodexModel
 } from '../src/main/backends/codex-model.ts'
+import { harnessStamp, installedVersion } from '../src/main/model-catalog.ts'
 import { compileProviderFixture, startProviderFixture } from './helpers/provider-fixture.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -199,13 +200,20 @@ const { startProviderSession } = await import('../src/main/provider-sessions.ts'
 const { shutdownTreziAgentTools } = await import('../src/main/trezi-agent-tools.ts')
 const { newChat, reduce } = await import('../src/native/chat-state.ts')
 
-// The picker's catalog, as the service's `codex debug models` probe persisted it.
+// The picker's catalog, as the service's `codex debug models` probe persisted it with
+// the installed Codex SDK/CLI (an entry from another version is ignored, LKM-164).
 const probed = () => {
   writeFileSync(
     join(DATA, 'model-catalog.json'),
     JSON.stringify({
       version: 1,
-      entries: { codex: { at: Date.now(), models: MODELS.map((id) => ({ id, label: id })) } }
+      entries: {
+        codex: {
+          at: Date.now(),
+          models: MODELS.map((id) => ({ id, label: id })),
+          harness: harnessStamp('codex', (pkg) => installedVersion(root, pkg))
+        }
+      }
     })
   )
   setProviderDataDir(() => DATA)
