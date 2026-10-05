@@ -38,6 +38,8 @@ import {
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
 import { createItemTracker, codexItemWarning } from './codex-stream'
+import { agentFileAccess, realPath } from '../agent-file-access'
+import { liveTreeChanges, liveTreeSnapshot, liveWriteNote } from './live-tree-watch'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
@@ -73,8 +75,8 @@ import type { ModelProvider, PendingPrompt, ProviderSession, SpawnContext } from
  * heuristic maps them to the "sign in with ChatGPT" banner, and the connection ones are
  * deliberately phrased so it does NOT (a broken connection is not a login problem).
  *
- * Tool approvals run headless (`approvalPolicy: 'never'`, `sandboxMode: 'workspace-write'`)
- * — mapping Codex approvals → trezi permission cards is a follow-up (the SDK event stream
+ * Tool approvals run headless (`approvalPolicy: 'never'`; `sandboxMode` from Settings →
+ * Agent file access, `codex-sandbox.ts`) — mapping Codex approvals → trezi permission cards is a follow-up (the SDK event stream
  * has no approval-request event to bridge).
  */
 
@@ -229,6 +231,11 @@ async function startSession(
   // additional/resumed chat's history entry (no lookup could ever find it again).
   const emitKey = ctx?.emitKey ?? key
   const cap = createRecordCapture(root, key)
+  const access = agentFileAccess(options.agentFileAccess)
+  // Full access has no sandbox to keep a worktree chat off the live checkout, so each
+  // turn compares the live tree before and after (`live-tree-watch.ts`).
+  const liveRoot = ctx?.liveRoot ?? root
+  const watchLive = access === 'full' && realPath(root) !== realPath(liveRoot)
   const pending = new Map<string, PendingPrompt>()
   let disposed = false
   let aborted = false // session teardown (permanent)
@@ -309,8 +316,9 @@ async function startSession(
     await verifyTreziMcp(mcpConfig)
     // The seat skips a model this login already rejected (`codex-model.ts`).
     const model = conn ? options.model : await seatModel(options.model)
-    // The worktree is the only writable project tree (LKM-156, `codex-sandbox.ts`).
-    const sandbox = codexSandbox(root, ctx?.liveRoot ?? root)
+    // Settings → Agent file access (LKM-163, `codex-sandbox.ts`): no sandbox by default,
+    // or the worktree as the only writable project tree (LKM-156).
+    const sandbox = codexSandbox(root, ctx?.liveRoot ?? root, access)
     threadOptions = {
       ...sandbox.thread,
       ...(model ? { model } : {}),
@@ -444,6 +452,7 @@ async function startSession(
     // On turn 2+ the thread id is already known, so the tail starts with the turn;
     // on turn 1 it starts at `thread.started`, a moment later.
     if (thread.id) startUsageWatch(thread.id)
+    const liveBefore = watchLive ? await liveTreeSnapshot(liveRoot) : null
     // A model this ChatGPT login cannot use fails the turn before any output. Try the
     // next listed model on a fresh copy of the thread, say so, and keep it for later
     // turns; main reads the notice (`provider-sessions.ts`). Connections never do this.
@@ -470,6 +479,13 @@ async function startSession(
     // `turn.completed`, so the rollout is the only record of what it spent.
     await usageWatch?.poll().catch(() => {})
     stopUsageWatch()
+    const liveAfter = liveBefore ? await liveTreeSnapshot(liveRoot) : null
+    const liveChanged = liveBefore && liveAfter ? liveTreeChanges(liveBefore, liveAfter) : []
+    if (liveChanged.length && !disposed) {
+      const note = liveWriteNote(liveChanged, root)
+      cap.appendAssistant(note)
+      emit({ type: 'delta', text: note })
+    }
     cap.finalize()
     emit({ type: 'done' })
   }

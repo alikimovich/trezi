@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { NativeView } from '../../native/platform'
 import type { AgentEvent, AgentOptions } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
+import { currentAgentFileAccess } from '../agent-file-access'
 import { type HelperHandlers, providerOwner } from '../provider-owner'
 import { runTreziTool, type SessionTool } from '../session-tools'
 import { createRecordCapture } from './record'
@@ -118,7 +119,11 @@ async function startHelperSession(
     owner.openHelper(
       { session, chat: emitKey, provider, root, liveRoot: ctx?.liveRoot ?? root, background: !!ctx?.sessionId },
       {
-        options: provider === 'claude' ? { ...options, claudeUserPlugins: claudeUserPluginsAllowed() } : options,
+        options: {
+          ...options,
+          ...(provider === 'claude' ? { claudeUserPlugins: claudeUserPluginsAllowed() } : {}),
+          agentFileAccess: currentAgentFileAccess()
+        },
         context: {
           emitKey,
           ...(ctx?.sessionId ? { sessionId: ctx.sessionId } : {}),

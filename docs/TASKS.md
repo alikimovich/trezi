@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Agent file access, full by default; symlinked paths (LKM-163)
+
+- [x] Codex gets the real worktree path; the Claude guard compares as-given and resolved paths (`realPath` in `src/main/agent-file-access.ts`), tested with the profile's `Trezi Native` alias.
+- [x] Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default, Codex `danger-full-access`) or Project only (LKM-156 sandbox); passed to every helper session.
+- [x] Worktree isolation in both modes: the Claude guard unchanged; Codex direct live writes in Full access named in one chat note (`src/main/backends/live-tree-watch.ts`).
+- [x] `test/live-write-guard.mjs` covers both modes and symlinks; `test/agent-file-access.mjs` drives the adapter with a stand-in CLI.
+
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
 - [x] `clearPark` (`src/main/chat-park.ts`) at all 9 unpark sites; no other `parked = false`.

@@ -121,6 +121,7 @@ export async function checkVisibleSettings(host: NativeBridge, artifacts: string
   assert.equal(initial.values.projectUi, 'false')
   assert.equal(initial.values.engine, 'agent')
   assert.equal(initial.values.claudePlugins, 'false', 'Claude plugins are off in a new profile (LKM-138)')
+  assert.equal(initial.values.agentFileAccess, 'full', 'Agents have full file access in a new profile (LKM-163)')
   // LKM-143: General shows the version stamped into this build, as `trezi --version` prints it.
   assert.match(initial.values.version ?? '', /^Trezi \d+\.\d+\.\d+\S* \(build \d+, [0-9a-f]{7,}\)$/, 'General shows the built version')
   assertSidebarParity(initial.sourceList, projects)
@@ -157,6 +158,12 @@ export async function checkVisibleSettings(host: NativeBridge, artifacts: string
   await reopen()
   assert.equal((await inspect()).values.claudePlugins, 'true')
   await choose('claudePlugins', 'false')
+  await reopen()
+  // LKM-163: Agent file access autosaves and survives close/reopen, then goes back to Full access.
+  await choose('agentFileAccess', 'project')
+  await reopen()
+  assert.equal((await inspect()).values.agentFileAccess, 'project')
+  await choose('agentFileAccess', 'full')
   await reopen()
   // LKM-152: Show Activity automatically defaults to problems that need the user and persists.
   assert.equal(initial.values.activityAutoOpen, 'problems', 'Show Activity automatically defaults to For problems that need me')

@@ -2,14 +2,21 @@
 // or from Codex, which the ChatGPT seat and every Responses connection share. The Codex
 // half drives the real CLI against a local fake Responses endpoint (no provider call)
 // and prints SKIP where the machine cannot run it (no local port, no nested sandbox).
+// LKM-163: both "Agent file access" modes (the Claude guard is the same in both; Codex
+// is sandboxed only in Project only) and worktree/project paths behind symlinks.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync, realpathSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { codexSandbox } from '../src/main/backends/codex-sandbox.ts'
+import {
+  liveTreeChanges,
+  liveTreeSnapshot,
+  liveWriteNote
+} from '../src/main/backends/live-tree-watch.ts'
 import { liveCheckoutCommand, liveCheckoutEdit } from '../src/main/live-write-guard.ts'
 
 // --- Claude: Bash commands that name the live root are denied with the worktree path.
@@ -79,8 +86,8 @@ assert.equal(bash(`echo x > ${live}/a.txt && cat ${nested}/a.txt`, nested).path,
 assert.equal(liveCheckoutEdit('Bash', { command: 42 }, wt, live), null)
 assert.equal(liveCheckoutEdit('Bash', null, wt, live), null)
 
-// --- Codex: the sandbox scope.
-const plain = codexSandbox(live, live)
+// --- Codex: the sandbox scope, Project only.
+const plain = codexSandbox(live, live, 'project')
 assert.deepEqual(
   plain,
   {
@@ -94,22 +101,149 @@ assert.deepEqual(
   },
   'a non-worktree project is unchanged'
 )
-const scoped = codexSandbox(wt, live, { TMPDIR: '/var/folders/x/T/' })
+const scoped = codexSandbox(wt, live, 'project', { TMPDIR: '/var/folders/x/T/' })
 assert.equal(scoped.thread.workingDirectory, wt)
 assert.deepEqual(
   scoped.config,
   { sandbox_workspace_write: { writable_roots: [] } },
   "the user's extra roots are dropped"
 )
-assert.deepEqual(codexSandbox(wt, '/tmp/app', {}).config.sandbox_workspace_write, {
+assert.deepEqual(codexSandbox(wt, '/tmp/app', 'project', {}).config.sandbox_workspace_write, {
   writable_roots: [],
   exclude_slash_tmp: true
 })
 assert.deepEqual(
-  codexSandbox(wt, '/var/folders/x/T/app', { TMPDIR: '/var/folders/x/T/' }).config
+  codexSandbox(wt, '/var/folders/x/T/app', 'project', { TMPDIR: '/var/folders/x/T/' }).config
     .sandbox_workspace_write,
   { writable_roots: [], exclude_tmpdir_env_var: true }
 )
+
+// --- Codex: Full access (the default) has no sandbox, in a worktree or not.
+for (const root of [wt, live]) {
+  assert.deepEqual(
+    codexSandbox(root, live, 'full', { TMPDIR: '/var/folders/x/T/' }),
+    {
+      thread: {
+        workingDirectory: root,
+        skipGitRepoCheck: true,
+        sandboxMode: 'danger-full-access',
+        approvalPolicy: 'never'
+      },
+      config: {}
+    },
+    `Full access passes danger-full-access (${root})`
+  )
+}
+
+// --- Symlinked paths (LKM-163): the profile's worktree root as an upgraded Mac has it
+// (`Trezi Native` → `Praxis Native`, `trezi` → `praxis`), a project behind a symlinked
+// folder, and `/tmp` → `/private/tmp`.
+const links = realpathSync(await mkdtemp(join(tmpdir(), 'trezi-guard-links-')))
+try {
+  const support = join(links, 'Application Support')
+  const store = join(support, 'Praxis Native', 'praxis')
+  await mkdir(join(store, 'worktrees', 'chat-1'), { recursive: true })
+  await symlink('Praxis Native', join(support, 'Trezi Native'))
+  await symlink(store, join(support, 'Praxis Native', 'trezi'))
+  await mkdir(join(links, 'disk', 'projects', 'swiftly-demos'), { recursive: true })
+  await symlink(join(links, 'disk', 'projects'), join(links, 'projects'))
+  const linkedWt = join(support, 'Trezi Native', 'trezi', 'worktrees', 'chat-1')
+  const realWt = join(store, 'worktrees', 'chat-1')
+  const linkedLive = join(links, 'projects', 'swiftly-demos')
+  const realLive = join(links, 'disk', 'projects', 'swiftly-demos')
+  for (const access of ['project', 'full']) {
+    const sandbox = codexSandbox(linkedWt, linkedLive, access, {})
+    assert.equal(
+      sandbox.thread.workingDirectory,
+      realWt,
+      `${access}: Codex gets the real worktree path`
+    )
+    // (Temp roots are excluded too where the test's own temp folder is under `/tmp`.)
+    if (access === 'project')
+      assert.deepEqual(sandbox.config.sandbox_workspace_write.writable_roots, [])
+    else assert.deepEqual(sandbox.config, {})
+    // Same project under two names: not a worktree session.
+    assert.deepEqual(codexSandbox(linkedLive, realLive, access, {}).config, {}, access)
+  }
+  assert.equal(codexSandbox(wt, '/tmp/app', 'project', {}).thread.workingDirectory, wt)
+  // The Claude guard (the same rule in both modes) knows both names of each root.
+  const edit = (path, root = linkedWt, liveRoot = linkedLive) =>
+    liveCheckoutEdit('Write', { file_path: path }, root, liveRoot)
+  for (const [root, liveRoot] of [
+    [linkedWt, linkedLive],
+    [realWt, realLive],
+    [linkedWt, realLive],
+    [realWt, linkedLive]
+  ]) {
+    for (const target of [join(linkedLive, 'src/a.tsx'), join(realLive, 'src/a.tsx')]) {
+      const denied = edit(target, root, liveRoot)
+      assert.equal(denied?.path, join(root, 'src/a.tsx'), `${target} from ${root} → ${liveRoot}`)
+      assert.match(denied.reason, /Edit .* instead/)
+    }
+    for (const target of [join(linkedWt, 'src/a.tsx'), join(realWt, 'src/new/b.tsx')])
+      assert.equal(edit(target, root, liveRoot), null, `the worktree's own ${target}`)
+    assert.equal(
+      liveCheckoutEdit(
+        'Bash',
+        { command: `sed -i '' s/a/b/ ${realLive}/src/a.tsx` },
+        root,
+        liveRoot
+      )?.path,
+      join(root, 'src/a.tsx'),
+      'Bash naming the real live path'
+    )
+    assert.equal(
+      liveCheckoutEdit('Bash', { command: `echo x > ${realWt}/a.txt` }, root, liveRoot),
+      null,
+      "Bash naming the worktree's real path"
+    )
+  }
+  assert.equal(
+    edit(join(realLive, 'a.ts'), linkedLive, realLive),
+    null,
+    'a non-worktree project under two names'
+  )
+} finally {
+  await rm(links, { recursive: true, force: true })
+}
+
+// --- Codex in Full access: a live-tree change during a turn is named in one note.
+const watched = realpathSync(await mkdtemp(join(tmpdir(), 'trezi-live-watch-')))
+try {
+  const git = (...args) => execFileSync('git', args, { stdio: 'pipe' })
+  await writeFile(join(watched, 'a.txt'), 'a\n')
+  await writeFile(join(watched, 'b.txt'), 'b\n')
+  git('init', '-q', watched)
+  git('-C', watched, 'add', '-A')
+  git('-C', watched, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init')
+  await writeFile(join(watched, 'user-dirty.txt'), 'the user\n')
+  const before = await liveTreeSnapshot(watched)
+  assert.deepEqual([...before.keys()], ['user-dirty.txt'])
+  assert.deepEqual(
+    liveTreeChanges(before, await liveTreeSnapshot(watched)),
+    [],
+    'no change, no note'
+  )
+  const index = await readFile(join(watched, '.git/index'))
+  await writeFile(join(watched, 'a.txt'), 'changed\n')
+  await mkdir(join(watched, 'src'))
+  await writeFile(join(watched, 'src/new file.ts'), 'x\n')
+  await writeFile(join(watched, 'user-dirty.txt'), 'the agent, longer\n')
+  const after = await liveTreeSnapshot(watched)
+  assert.deepEqual(liveTreeChanges(before, after), ['a.txt', 'src/new file.ts', 'user-dirty.txt'])
+  assert.deepEqual(
+    await readFile(join(watched, '.git/index')),
+    index,
+    'the snapshot never writes the index'
+  )
+  assert.equal(await liveTreeSnapshot(join(watched, 'missing')), null, 'not a repository')
+  const note = liveWriteNote(['a.txt', 'b', 'c', 'd', 'e', 'f', 'g'], '/wt')
+  assert.match(note, /^\n\n⚠️ Files in your live project changed during this turn/)
+  assert.match(note, /a\.txt, b, c, d, e and 2 more/)
+  assert.match(note, /\(\/wt\)/)
+} finally {
+  await rm(watched, { recursive: true, force: true })
+}
 
 // --- Codex: the real CLI, driven by a fake Responses endpoint, cannot write the live tree.
 const skip = (reason) => {
@@ -120,10 +254,14 @@ const tmp = await mkdtemp(join(tmpdir(), 'trezi-live-guard-'))
 const git = (...args) => execFileSync('git', args, { stdio: 'pipe' })
 try {
   const liveRoot = join(tmp, 'live'),
-    worktree = join(tmp, 'wt'),
+    // Behind a symlink alias like the profile's `Trezi Native` → `Praxis Native`: Codex
+    // refused that writable root before LKM-163 resolved it.
+    worktree = join(tmp, 'Trezi Native', 'wt'),
     home = join(tmp, 'home')
   await mkdir(liveRoot, { recursive: true })
   await mkdir(home, { recursive: true })
+  await mkdir(join(tmp, 'Praxis Native'))
+  await symlink('Praxis Native', join(tmp, 'Trezi Native'))
   await writeFile(join(liveRoot, 'a.txt'), 'live\n')
   git('init', '-q', liveRoot)
   git('-C', liveRoot, 'add', '-A')
@@ -140,7 +278,7 @@ try {
   process.env.CODEX_HOME = home
   process.env.HOME = home
 
-  const run = async (root, plan) => {
+  const run = async (root, plan, access = 'project') => {
     // Each request repeats the earlier tool outputs; keep one per call.
     const outputs = new Map()
     let step = 0
@@ -193,7 +331,7 @@ try {
     if (listening) return skip(`no local port (${listening.code ?? listening.message})`)
     try {
       const { Codex } = await import('@openai/codex-sdk')
-      const sandbox = codexSandbox(root, liveRoot)
+      const sandbox = codexSandbox(root, liveRoot, access)
       // The adapter's own thread options and sandbox config, on a connection-style provider.
       const codex = new Codex({
         apiKey: 'fake-key',
@@ -215,29 +353,38 @@ try {
       await codex
         .startThread({ ...sandbox.thread, model: 'fake-model' })
         .run('go', { signal: AbortSignal.timeout(60_000) })
-      return [...outputs.values()]
+      const said = [...outputs.values()]
+      assert.ok(
+        !said.some((o) => /symlink/i.test(o)),
+        `Codex refused a symlinked path: ${said.join(' | ')}`
+      )
+      return said
     } catch (err) {
+      // The reported bug (LKM-163) is a failure, never a SKIP.
+      if (err instanceof assert.AssertionError || /symlink/i.test(String(err?.message))) throw err
       return skip(`the Codex CLI did not run (${String(err?.message ?? err).slice(0, 200)})`)
     } finally {
       server.close()
     }
   }
 
+  // The worktree path has a space (`Trezi Native`): quote every path in the shell.
+  const sh = (path) => `'${path}'`
   const attempts = [
-    `echo x > ${liveRoot}/a.txt`,
-    `echo x >> ${liveRoot}/a.txt`,
-    `sed -i '' s/live/sed/ ${liveRoot}/a.txt`,
-    `cp ${worktree}/seed.txt ${liveRoot}/cp.txt`,
-    `mv ${worktree}/move.txt ${liveRoot}/mv.txt`,
-    `echo x | tee ${liveRoot}/tee.txt`,
-    `echo x > ${liveRoot}/.git/probe`,
-    `echo ok > ${worktree}/ok.txt`
+    `echo x > ${sh(`${liveRoot}/a.txt`)}`,
+    `echo x >> ${sh(`${liveRoot}/a.txt`)}`,
+    `sed -i '' s/live/sed/ ${sh(`${liveRoot}/a.txt`)}`,
+    `cp ${sh(`${worktree}/seed.txt`)} ${sh(`${liveRoot}/cp.txt`)}`,
+    `mv ${sh(`${worktree}/move.txt`)} ${sh(`${liveRoot}/mv.txt`)}`,
+    `echo x | tee ${sh(`${liveRoot}/tee.txt`)}`,
+    `echo x > ${sh(`${liveRoot}/.git/probe`)}`,
+    `echo ok > ${sh(`${worktree}/ok.txt`)}`
   ].join('; ')
   const outputs = await run(worktree, [
     { cmd: attempts },
     // Asking to leave the sandbox is refused outright under approvalPolicy 'never'.
     {
-      cmd: `echo x > ${liveRoot}/escalated.txt`,
+      cmd: `echo x > ${sh(`${liveRoot}/escalated.txt`)}`,
       extra: { sandbox_permissions: 'require_escalated', justification: 'test' }
     }
   ])
@@ -259,13 +406,49 @@ try {
       assert.match(outputs[1] ?? '', /escalat/i)
 
       // A project that is not isolated still writes its own tree.
-      const own = await run(liveRoot, [{ cmd: `echo own > ${liveRoot}/own.txt` }])
+      const own = await run(liveRoot, [{ cmd: `echo own > ${sh(`${liveRoot}/own.txt`)}` }])
       if (own)
         assert.equal(
           await readFile(join(liveRoot, 'own.txt'), 'utf8'),
           'own\n',
           'a non-worktree session is unchanged'
         )
+
+      // Full access (LKM-163): no sandbox, so the agent writes outside the project and
+      // even the live tree; the adapter's before/after snapshot names that live write.
+      const outside = join(tmp, 'outside')
+      await mkdir(outside)
+      const before = await liveTreeSnapshot(liveRoot)
+      const full = await run(
+        worktree,
+        [
+          {
+            cmd: `echo out > ${sh(`${outside}/out.txt`)}; echo full > ${sh(`${liveRoot}/full.txt`)}; echo wt > ${sh(`${worktree}/full-ok.txt`)}`
+          }
+        ],
+        'full'
+      )
+      if (full) {
+        assert.equal(
+          await readFile(join(outside, 'out.txt'), 'utf8'),
+          'out\n',
+          'writes outside the project'
+        )
+        assert.equal(
+          await readFile(join(worktree, 'full-ok.txt'), 'utf8'),
+          'wt\n',
+          'and in its worktree'
+        )
+        assert.equal(
+          await readFile(join(liveRoot, 'full.txt'), 'utf8'),
+          'full\n',
+          'Full access is not sandboxed'
+        )
+        assert.ok(
+          liveTreeChanges(before, await liveTreeSnapshot(liveRoot)).includes('full.txt'),
+          'the direct live write is detected'
+        )
+      }
     }
   }
 } finally {

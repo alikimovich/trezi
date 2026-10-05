@@ -139,7 +139,7 @@ for (const width of [680, 780]) {
     minimumWidth: 680,
     values: { default: 'last-used', projectUi: 'false', engine: 'agent' },
     ...sidebar('general'),
-    controls: [control('default', 'Use last selected model'), control('claudePlugins', 'Don’t allow'), control('workspaceIdle', '7 days'), control('activityAutoOpen', 'For problems that need me')],
+    controls: [control('default', 'Use last selected model'), control('claudePlugins', 'Don’t allow'), control('agentFileAccess', 'Full access'), control('workspaceIdle', '7 days'), control('activityAutoOpen', 'For problems that need me')],
     text: ['General', 'Al Providers', 'Experimental', 'General', 'Default model', 'New chats start with this model.', 'Use last selected model']
   }
   assertSectionEvidence(general, width, 'general')

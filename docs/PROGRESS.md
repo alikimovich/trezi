@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-163: agent file access, full by default; symlinked paths in the Codex sandbox
+
+- **Bug.** On the test Mac, a Codex chat said "the workspace path contains a symlink" and could not run any file command. Every chat worktree sits under the profile aliases `Trezi Native` → `Praxis Native` and `trezi` → `praxis` (`ProfilePaths.swift`). The Codex CLI's Seatbelt builder normalizes only the top-level `/tmp`/`/var` aliases. Any other symlink component in a writable root, the working directory included, fails with "symlinked writable roots are not supported" (found in the CLI binary). The LKM-156 test passed because its worktree was under `/var/folders` only.
+- **Fix.** `realPath` (`src/main/agent-file-access.ts`) resolves a path, keeping a missing tail on the nearest existing ancestor. `codexSandbox` gives Codex the worktree's real path in both modes. The Claude guard (`live-write-guard.ts`) compares Edit targets and both roots as given and resolved, and its Bash spellings use the same helper.
+- **Setting.** Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default; unknown values read as it) or Project only. `helper-session.ts` passes `agentFileAccess` to every helper session, read when the session opens. The extra General row pushed Show Activity automatically below the fold at the 680×460 minimum, so the Settings minimum height is now 520 (`SheetSections.swift`; default 780×540 unchanged).
+  - Full access: Codex `danger-full-access` with no sandbox config, `approvalPolicy: 'never'`.
+  - Project only: the LKM-156 sandbox unchanged.
+  - The Claude guard is the same in both modes, a correctness rule for the live checkout only.
+- **Codex live writes in Full access.** `live-tree-watch.ts` snapshots the live tree's uncommitted files before and after each turn: `git --no-optional-locks status -z` plus size and mtime, so the index is never written. Files that became dirty or changed again are named in one ⚠️ note, appended to the transcript. The note says the files changed, not that Codex changed them (the user or another chat's landing could have). A direct commit is not caught.
+- **Tests.**
+  - `test/live-write-guard.mjs` (unit): Project only as before, Full access thread options, a symlinked profile worktree and symlinked project in both modes, and the guard with every as-given/resolved combination.
+  - It also covers the live-tree snapshot (no index write) and the note. Its real-CLI half now runs from a worktree behind a symlink alias, and a Codex symlink refusal fails instead of skipping. It adds a Full-access run that writes outside the project and is detected in the live tree.
+  - New `test/agent-file-access.mjs` (unit): the setting and its helper plumbing. It also drives the real adapter with a stand-in CLI to check `--sandbox danger-full-access`, the real `--cd`, the single note and no note in Project only.
+  - `native-settings`, `native-settings-evidence` and the native Settings smoke add the field.
+  - The real-CLI and adapter halves need a local port or a Unix-socket listen. They print SKIP in the worker sandbox.
+
 ## 2026-10-04 — LKM-159: split chat-isolation.ts, one unpark and one landing (F5)
 
 - **Why.** Review M1, M2 and L6 (`docs/REVIEW-2026-10.md`): `src/main/chat-isolation.ts` was 953 lines, the unpark reset was copied at 9 sites with small differences, `keepStoppedTurn` copied the merged branch of `afterTurn`, and `stoppedTurnSeam` exported the mutable `ChatState` as `IsolatedChat`.

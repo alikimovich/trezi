@@ -440,6 +440,12 @@ export interface AgentOptions {
    * Set by main from Settings when a helper session opens; absent ⇒ isolated.
    */
   claudeUserPlugins?: boolean
+  /**
+   * Settings → "Agent file access" (LKM-163): 'full' lets the agent read and write
+   * anywhere the user can (Codex `danger-full-access`); 'project' keeps Codex to the
+   * chat worktree. Set by main when a helper session opens; absent ⇒ 'full'.
+   */
+  agentFileAccess?: 'full' | 'project'
 }
 
 /** Trezi-managed durable context for one project, stored outside the repo. */

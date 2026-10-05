@@ -2,6 +2,7 @@ import type { ModelChoice, ProviderConnection } from '../shared/api'
 import type { NativeSheetAction, NativeSheetField, NativeSheetSection, NativeSheetState } from '../shared/native-sheet'
 import { parsePreferredModelState, preferredSelectValue, setFixedPreference, settingsFromChoice, setLastUsedMode } from '../shared/preferred-model'
 import { CLAUDE_USER_PLUGINS_KEY } from '../main/backends/claude-isolation'
+import { AGENT_FILE_ACCESS_CHOICES, AGENT_FILE_ACCESS_KEY, agentFileAccess } from '../main/agent-file-access'
 import { ACTIVITY_AUTO_OPEN_CHOICES, ACTIVITY_AUTO_OPEN_KEY, activityAutoOpen } from './activity-controller'
 import { appVersion } from './app-version'
 import type { NativePreferences } from './preferences'
@@ -48,6 +49,7 @@ export class NativeSettingsController {
       fields: [
         { id: 'default', section: 'general', label: 'Default model', help: 'New chats start with this model.', kind: 'choice', value: preferredSelectValue(preferred), choices: defaultChoices(choices) },
         { id: 'claudePlugins', section: 'general', label: 'Allow my Claude Code plugins in Trezi chats', help: 'Off: Claude chats load your CLAUDE.md files and skills, but not your own Claude Code plugins or MCP servers. Applies to new chats.', kind: 'choice', value: this.preferences.get(CLAUDE_USER_PLUGINS_KEY) === 'true' ? 'true' : 'false', choices: [{ value: 'false', label: 'Don’t allow' }, { value: 'true', label: 'Allow' }] },
+        { id: 'agentFileAccess', section: 'general', label: 'Agent file access', help: 'Full access: any file and the network. Project only: Codex edits only the chat’s copy of your project. Applies to new chats.', kind: 'choice', value: agentFileAccess(this.preferences.get(AGENT_FILE_ACCESS_KEY)), choices: AGENT_FILE_ACCESS_CHOICES },
         { id: 'workspaceIdle', section: 'general', label: 'Remove idle chat workspaces after', help: 'Each chat edits a private copy of your project. An idle copy is removed and made again on the chat’s next message. Copies with unsaved or unapplied work are kept.', kind: 'choice', value: IDLE_CHOICES.some(c => c.value === this.preferences.get(IDLE_KEY)) ? this.preferences.get(IDLE_KEY)! : '7', choices: IDLE_CHOICES },
         { id: 'activityAutoOpen', section: 'general', label: 'Show Activity automatically', help: 'Unread warnings always show a dot on Activity.', kind: 'choice', value: activityAutoOpen(this.preferences.get(ACTIVITY_AUTO_OPEN_KEY)), choices: ACTIVITY_AUTO_OPEN_CHOICES },
         { id: 'workspaceUsage', section: 'general', label: 'Chat workspaces', help: 'Clean up now removes every idle copy under the same rules; running chats are kept.', kind: 'readonly', value: 'Calculating…', draft: true },
@@ -105,6 +107,8 @@ export class NativeSettingsController {
     if (idle !== undefined && !IDLE_CHOICES.some(c => c.value === idle)) throw new Error('Invalid setting.')
     const activity = action.values.activityAutoOpen
     if (activity !== undefined && !ACTIVITY_AUTO_OPEN_CHOICES.some(c => c.value === activity)) throw new Error('Invalid setting.')
+    const access = action.values.agentFileAccess
+    if (access !== undefined && !AGENT_FILE_ACCESS_CHOICES.some(c => c.value === access)) throw new Error('Invalid setting.')
     // One atomic batch, built from the committed state when it is sent (a chat may
     // have recorded a newer last-used model since the sheet opened). Autosave
     // keeps the draft and closing waits for this to settle.
@@ -118,7 +122,8 @@ export class NativeSettingsController {
         ['trezi:project-ui-engine:v1', action.values.engine],
         ...(plugins === undefined ? [] : [[CLAUDE_USER_PLUGINS_KEY, plugins] as [string, string]]),
         ...(idle === undefined ? [] : [[IDLE_KEY, idle] as [string, string]]),
-        ...(activity === undefined ? [] : [[ACTIVITY_AUTO_OPEN_KEY, activity] as [string, string]])
+        ...(activity === undefined ? [] : [[ACTIVITY_AUTO_OPEN_KEY, activity] as [string, string]]),
+        ...(access === undefined ? [] : [[AGENT_FILE_ACCESS_KEY, access] as [string, string]])
       ]
     })
     this.notify()
