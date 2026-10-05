@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-163 repair: Codex live-write note also covers reverts and commits
+
+- **Gap found in review.** `liveTreeChanges` only walked the after-snapshot, so a live file that was dirty before the turn and clean after it (`git checkout -- f`, `restore`, `stash`, `reset --hard`) and a commit made in the live checkout produced no note, although the ticket says direct live writes must not fail silently.
+- **Fix.** `live-tree-watch.ts`: a snapshot is now `{head, files}` (`git rev-parse HEAD` plus the dirty files). `liveTreeChanges` also reports paths that vanished from the dirty set. `liveTreeReport` adds the files of `git diff --name-only before..after` when HEAD moved and returns `{files, committed}`. `liveWriteNote` says the changes may be reverted or discarded and names a commit (with no file list for an empty commit). The adapter still appends one note per turn.
+- **Tests.** `test/agent-file-access.mjs` covers `checkout`, `restore`, `stash` and `reset --hard` of dirty work, a commit, an empty commit and a quiet tree against real repositories, and its stand-in-CLI turns run a discard, a commit and an empty commit in the live tree, each giving exactly one note. `test/live-write-guard.mjs` follows the new snapshot shape.
+
 ## 2026-10-05 — LKM-163: agent file access, full by default; symlinked paths in the Codex sandbox
 
 - **Bug.** On the test Mac, a Codex chat said "the workspace path contains a symlink" and could not run any file command. Every chat worktree sits under the profile aliases `Trezi Native` → `Praxis Native` and `trezi` → `praxis` (`ProfilePaths.swift`). The Codex CLI's Seatbelt builder normalizes only the top-level `/tmp`/`/var` aliases. Any other symlink component in a writable root, the working directory included, fails with "symlinked writable roots are not supported" (found in the CLI binary). The LKM-156 test passed because its worktree was under `/var/folders` only.

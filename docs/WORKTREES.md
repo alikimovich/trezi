@@ -170,12 +170,16 @@ The Codex sandbox above applies only with Agent file access set to Project only 
   in both modes. It is a correctness rule, not a security sandbox: it blocks only the
   live checkout, and its denial names the worktree path to edit instead.
 - **Codex in Full access.** Codex has no pre-tool hook. So the adapter snapshots the live
-  tree's uncommitted files (`git --no-optional-locks status`, plus each file's size and
-  mtime) before and after each turn (`src/main/backends/live-tree-watch.ts`). Files that
-  became dirty or changed again are named in one chat note: Trezi did not track them,
-  and Revert cannot undo them. A file the user or another chat's landing changed during
-  the turn is named too, so the note says the files changed, not that Codex changed
-  them. A direct commit in the live checkout leaves no dirty file and is not caught.
+  tree (its HEAD, and its uncommitted files from `git --no-optional-locks status` plus
+  each file's size and mtime) before and after each turn
+  (`src/main/backends/live-tree-watch.ts`). One chat note names every file that became
+  dirty or changed again, every file that was uncommitted before and is clean after
+  (`git checkout -- f`, `restore`, `stash` or `reset --hard` discarded the user's work),
+  and, when HEAD moved, a commit made in the live checkout (with the files from
+  `git diff --name-only before..after`). Trezi did not track any of it, and Revert cannot
+  undo it. A file the user or another chat's landing changed during the turn is named
+  too, so the note says the live project changed, not that Codex changed it. Landing
+  runs after `done`, so the chat's own landing is never in the comparison.
 - **Symlinked paths.** Every chat worktree sits under the profile's symlink aliases on an
   upgraded Mac (`Trezi Native` and `trezi` link to the folders of an earlier name,
   `src/service/ProfilePaths.swift`), and a project may sit under a symlinked folder.

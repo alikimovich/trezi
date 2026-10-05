@@ -218,7 +218,8 @@ try {
   git('-C', watched, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init')
   await writeFile(join(watched, 'user-dirty.txt'), 'the user\n')
   const before = await liveTreeSnapshot(watched)
-  assert.deepEqual([...before.keys()], ['user-dirty.txt'])
+  assert.deepEqual([...before.files.keys()], ['user-dirty.txt'])
+  assert.match(before.head, /^[0-9a-f]{40}$/, 'the snapshot records HEAD')
   assert.deepEqual(
     liveTreeChanges(before, await liveTreeSnapshot(watched)),
     [],
@@ -238,7 +239,7 @@ try {
   )
   assert.equal(await liveTreeSnapshot(join(watched, 'missing')), null, 'not a repository')
   const note = liveWriteNote(['a.txt', 'b', 'c', 'd', 'e', 'f', 'g'], '/wt')
-  assert.match(note, /^\n\n⚠️ Files in your live project changed during this turn/)
+  assert.match(note, /^\n\n⚠️ Your live project changed during this turn/)
   assert.match(note, /a\.txt, b, c, d, e and 2 more/)
   assert.match(note, /\(\/wt\)/)
 } finally {

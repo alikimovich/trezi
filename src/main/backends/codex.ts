@@ -39,7 +39,7 @@ import {
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
 import { codexItemWarning, createItemTracker } from './codex-stream'
-import { liveTreeChanges, liveTreeSnapshot, liveWriteNote } from './live-tree-watch'
+import { liveTreeReport, liveTreeSnapshot, liveWriteNote } from './live-tree-watch'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
@@ -488,9 +488,10 @@ async function startSession(
     await usageWatch?.poll().catch(() => {})
     stopUsageWatch()
     const liveAfter = liveBefore ? await liveTreeSnapshot(liveRoot) : null
-    const liveChanged = liveBefore && liveAfter ? liveTreeChanges(liveBefore, liveAfter) : []
-    if (liveChanged.length && !disposed) {
-      const note = liveWriteNote(liveChanged, root)
+    const liveChanged =
+      liveBefore && liveAfter ? await liveTreeReport(liveRoot, liveBefore, liveAfter) : null
+    if (liveChanged && (liveChanged.files.length || liveChanged.committed) && !disposed) {
+      const note = liveWriteNote(liveChanged.files, root, liveChanged.committed)
       cap.appendAssistant(note)
       emit({ type: 'delta', text: note })
     }

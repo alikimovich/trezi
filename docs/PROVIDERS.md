@@ -896,5 +896,6 @@ access), so a change applies to new chats.
 Codex gets the worktree's real path as its working directory. Its Seatbelt profile
 refuses a writable root behind a symlink, and every chat worktree sits under the
 profile's `Trezi Native` alias. With Full access, Codex's direct writes to the live
-checkout are reported after the turn in one chat note (`live-tree-watch.ts`). Details,
+checkout (edits, discarded uncommitted work, commits) are reported after the turn in
+one chat note (`live-tree-watch.ts`). Details,
 limits and tests: [worktrees](WORKTREES.md#agent-file-access-and-symlinked-paths-lkm-163).
