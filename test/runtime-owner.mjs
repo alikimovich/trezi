@@ -8,8 +8,7 @@
 // where local binding is allowed and otherwise make the whole test report SKIP.
 import './helpers/with-repository-owner.mjs'
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import {
   chmodSync,
@@ -17,7 +16,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync
@@ -25,7 +23,6 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
 import { hostVariants, normalizeUrl, stripAnsi, URL_RE } from '../src/main/devserver-net.ts'
 import { registerServiceDevServer } from '../src/main/devserver-service.ts'
 import {
@@ -34,8 +31,8 @@ import {
 } from '../src/main/project-dependencies.ts'
 import { detectProject, interpretFailure, withPort } from '../src/main/project-detect.ts'
 import { serviceRuntime } from '../src/native/runtime-service.ts'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-runtime-owner-'))
 const binary = join(scratch, 'runtime-fixture')
 const live = new Set()
@@ -45,12 +42,8 @@ let cases = 0
 const PORT = 47000 + (process.pid % 900)
 
 /**
- * Compiles the fixture, or reuses a binary built from byte-identical sources. Cold,
- * this is a 16-file swiftc build that takes 30-45 s while other Swift-compiling
- * tests run beside it and it spends the shared 120 s budget. The cache key covers
- * every source and the compiler version, so an edited source always rebuilds; the
- * build goes to a private path and is renamed into place, so parallel runs never
- * see a half-written binary.
+ * Compiles the fixture, or reuses a binary built from byte-identical sources
+ * (test/helpers/swift-build.mjs): an edited source always rebuilds.
  */
 function compile() {
   const sources = [
@@ -71,39 +64,12 @@ function compile() {
     'RuntimeServer',
     'RuntimeOwner'
   ].map((name) => `src/service/${name}.swift`)
-  const files = [...sources, 'test/fixtures/runtime-owner/main.swift']
-  const compiler = spawnSync('xcrun', ['swiftc', '--version'], { encoding: 'utf8' })
-  const key = createHash('sha256')
-  key.update(`${compiler.stdout}${compiler.stderr}`)
-  for (const file of files) key.update(`${file}\0`).update(readFileSync(join(root, file)))
-  const cache = join(tmpdir(), 'trezi-runtime-owner-cache')
-  mkdirSync(cache, { recursive: true })
-  const cached = join(cache, `fixture-${key.digest('hex').slice(0, 24)}`)
-  if (!existsSync(cached)) {
-    const building = `${cached}.${process.pid}.tmp`
-    const result = spawnSync(
-      'xcrun',
-      [
-        'swiftc',
-        '-module-cache-path',
-        join(cache, 'module-cache'),
-        ...files,
-        '-framework',
-        'CoreServices',
-        '-o',
-        building
-      ],
-      { cwd: root, encoding: 'utf8', timeout: 400_000 }
-    )
-    assert.equal(
-      result.status,
-      0,
-      `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
-    )
-    renameSync(building, cached)
-  }
   // A private copy: the fixture is also its own watchdog, so it must not be replaced under a run.
-  writeFileSync(binary, readFileSync(cached), { mode: 0o755 })
+  swiftBuild(
+    'runtime-owner',
+    [...sources, 'test/fixtures/runtime-owner/main.swift', '-framework', 'CoreServices'],
+    { out: binary }
+  )
 }
 
 const dir = (name = `case-${++cases}`) => {

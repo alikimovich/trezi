@@ -14,6 +14,7 @@ extension Host {
         case "inspectorIsland":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await captureInspectorIsland()) } catch { reply(id, error: error.localizedDescription) } } }
+            else if c["pointer"] as? Bool == true { Task { @MainActor in do { reply(id, try await verifyInspectorPointer(c)) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, verifyInspectorIsland(c)) }
         case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count])
         case "sourceInspect":
@@ -121,6 +122,10 @@ extension Host {
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "chatInspect": reply(id, chat.inspect())
+        // The same state a thumbnail click sets; null closes the preview (LKM-166).
+        case "chatAttachmentPreview":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            chat.model.attachmentPreview = c["attachment"] as? String; reply(id)
         case "chatPerform": chat.model.action(c["action"] as? String ?? "", id: c["card"] as? String, value: c["value"] as? String, answers: c["answers"] as? [String: String]); reply(id)
         case "composerVerification":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

@@ -31,6 +31,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - "This chat is already running" is never a dead end, and stuck turns recover: the activity row names what is running (landing, holding changes, combining), Stop works on it, a step with no progress ends on its own with a note, and a message sent meanwhile waits in the queue (LKM-165).
 - A failed Claude resume recovers automatically: after a restart a chat no longer shows "No conversation found"; Trezi starts a new session in the same worktree, seeded with a summary of the chat, and says so in one note (LKM-165).
 - Send feedback can attach diagnostics with your consent: the last hour of logs, the chat's landing state and git status, and a short sample of the app when it is busy, with secrets removed and home paths shortened (LKM-165).
+- Image and SVG attachments in a sent message no longer render as huge images that push the text down: they show as compact thumbnails in a wrapping row (transparent images on a checkerboard), name the file on hover and open a larger preview on click; composer attachments use the same compact tiles (LKM-166).
+- SVG and other non-image or oversized attachments no longer fail the turn (“The pasted images are not supported or too large.”): the agent gets the original's path plus a 512 px PNG preview for an SVG, other files by path, oversized images downscaled, and a note for anything that could not be attached (LKM-166).
+- The editing inspector island takes every click, scroll and hover inside its frame: the preview beneath no longer hovers or selects through it, and its controls sit on an opaque surface instead of showing the page through (LKM-162).
 - Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 
 ### Changed

@@ -46,6 +46,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var urlObservers: [String: NSKeyValueObservation] = [:]
     var preferences: [String: Any] = [:]
     var recentMenu = NSMenu(title: "Open Recent")
+    /// Element picks the page reported; the island pointer verification reads it.
+    var previewPicks = 0
     let world = WKContentWorld.world(name: "TreziPreview")
     let directory: String
     let ephemeral: Bool
@@ -70,7 +72,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         let script = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
         // Selection must intercept input before the project's capture listeners.
         config.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: contentWorld))
-        let view = WKWebView(frame: .zero, configuration: config)
+        // Gated so the page never takes the pointer from a native view floating over it (LKM-162).
+        let view = PreviewWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self; view.uiDelegate = self; view.isInspectable = true
         views[id] = view; canvas.addSubview(view)
         canvas.addSubview(inspectorSlot, positioned: .above, relativeTo: view); PreviewInspector.confine(view, to: inspectorSlot)
@@ -268,6 +271,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let name = views.first(where: { $0.value === message.webView })?.key,
               let body = message.body as? [String: Any], let data = try? JSONSerialization.data(withJSONObject: body), data.count <= 16 * 1024 * 1024 else { return }
+        if body["channel"] as? String == "trezi:preview:element-picked" { previewPicks += 1 }
         // Source identity is supplied by the host, never by page-controlled JSON.
         emit(["event":"ipc", "view":name, "message":body])
     }

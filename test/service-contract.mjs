@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build, stop } from 'esbuild'
 import { skipUnlessSwift } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 skipUnlessSwift('the Swift half of the contract parity check')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -127,17 +128,10 @@ try {
   )
   for (let i = 0; i < fixtures.length; i++)
     assert.deepEqual(tsResults[i], expected[i], `TypeScript: ${fixtures[i].name}`)
-  const binary = join(scratch, 'contract-fixtures')
-  const compiler = process.platform === 'darwin' ? 'xcrun' : 'swiftc'
-  const args = [
-    '-module-cache-path',
-    join(scratch, 'module-cache'),
+  const binary = swiftBuild('service-contract', [
     'src/service/ServiceContract.swift',
-    'test/fixtures/service-contract/main.swift',
-    '-o',
-    binary
-  ]
-  run(compiler, process.platform === 'darwin' ? ['swiftc', ...args] : args)
+    'test/fixtures/service-contract/main.swift'
+  ])
   const swiftResults = JSON.parse(
     run(binary, ['src/shared/service-contract/schema.json', inputPath])
   )

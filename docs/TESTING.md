@@ -1,10 +1,10 @@
 # Testing Trezi
 
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
-bounded concurrency (default up to four workers). `service-process` is an exclusive
-barrier (no parallel workers) and has a 240 s budget because it compiles the full
-Swift service. `keychain-rebuild` (LKM-144) is exclusive too, with 300 s, because it
-compiles the Keychain helper three times. Keychain tests use only password-made
+bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
+no exclusive barriers: Swift compiles share a cache and a 2-wide lane, see
+[Unit tier speed](#unit-tier-speed-lkm-167). `service-process` keeps a 240 s budget
+and `keychain-rebuild` (LKM-144) 300 s for a cold cache. Keychain tests use only password-made
 temporary keychains and calls that cannot prompt. Native desktop and live provider checks are serial. Logs and JSON summaries are written to `test/artifacts/runs/`;
 a lock prevents overlapping runner invocations. PASS, SKIP, FAIL, timeout and
 cancellation remain distinct outcomes. Each test is killed after 120 s by default
@@ -16,6 +16,7 @@ bun run typecheck:native
 node test/run.mjs unit
 node test/run.mjs unit --filter=trezi-cli,native-workspace-controller
 node test/run.mjs unit --serial
+bun run test:quick   # node test/run.mjs unit --typecheck --report
 bun run test:native
 ```
 
@@ -33,6 +34,50 @@ source/content/style writes, window geometry, docking, preview input isolation a
 that exactly one WebKit view exists. `TREZI_NATIVE_BACKGROUND_TEST=1` skips real
 pointer gestures/animation timing, which must be reported as reduced coverage.
 `test:native-live` separately submits a real provider turn against a fixture.
+
+### Unit tier speed (LKM-167)
+
+- **Swift build cache.** Every unit test that compiles Swift calls
+  `swiftBuild(name, args)` in `test/helpers/swift-build.mjs`. The binary is cached
+  under `.local/test-cache/swift/` (or `$TREZI_TEST_CACHE/swift`), keyed by
+  `swiftc --version`, the SDK path, the flags and every source file's bytes, so an
+  unchanged fixture is never rebuilt and a changed source always is. All compiles
+  share one Clang module cache: a cold module cache costs about 25 s per compile.
+  Tests that sign, bundle or replace a binary pass `{ out }` and get a private copy.
+  `keychain-rebuild` must really rebuild, so it uses `swiftCompile` (uncached, shared
+  module cache). Delete the folder any time.
+- **swiftc lane.** At most 2 compiles run at once across all test processes
+  (`.local/test-cache/swift/slots/`; a dead owner's slot is taken over). That is why
+  no unit test needs to be an exclusive barrier any more.
+- **Order.** `--report` prints the 20 slowest tests and merges each PASS duration into
+  `.local/test-times.json`. The next run starts the slowest tests first. Without the
+  file, tests run in list order.
+- **Typecheck.** `--typecheck` runs `bun run typecheck` and `bun run typecheck:native`
+  next to the tier and counts them as results (`[typecheck]`). `bun run test:quick`
+  is `unit --typecheck --report`.
+- **Long tests split, sleeps bounded.** `workflow-owner` runs the scenarios;
+  `workflow-durability` runs the same file's tool and durability checks in a second
+  process. The composer fixture waits for the pin to land (at most 5 s) instead of
+  one fixed 0.2 s run-loop turn, which flaked under 8 workers.
+
+Measured on the operator Mac (12 cores, 8 workers), 2026-10-05:
+
+| Run | Before | After |
+| --- | --- | --- |
+| Unit tier, wall time | 328.6 s (4 workers, 2 exclusive barriers) | 83.1 s (manager quick verify, warm cache); 55.7 s locally with `--typecheck` |
+| Unit tier, cold Swift cache | 328.6 s | 122.1 s with `--typecheck` |
+| Quick verification (typecheck, typecheck:native, unit) | 5-7 min | 87.2 s |
+| Sum of test durations | 867 s | 512 s |
+| `keychain-rebuild` | 65.6 s | 3.8 s |
+| `service-process` | 44.4 s | 7.2 s |
+| `memory-owner` / `workspace-owner` / `preferences-owner` | 53.1 / 52.4 / 52.3 s | 22.8 / 23.1 / 25.0 s |
+| `operation-ledger` | 47.2 s | 17.4 s |
+| `workflow-owner` | 51.3 s | 9.1 s + `workflow-durability` 48.3 s, in parallel |
+| `git-messages` / `service-contract` / `service-session` | 28.0 / 19.2 / 22.2 s | 0.3 / 0.8 / 1.2 s |
+
+The remaining long tests are runtime, not compile: `workflow-durability` (client
+deadlines after injected crashes), the composer and settings layout fixtures
+(run-loop turns), and the repository, platform and preferences owners.
 
 ### Native smoke summary
 
@@ -258,7 +303,7 @@ check to its group, and a check with no group there is an error:
 | `shadow-light` | `chat-islands`, Shadow Light part (same fixture scope; the check runs when either group is selected) |
 | `sidebar` | project switching and visible sidebar captures/interactions |
 | `settings` | sheets and forms: running servers, New project, project memory, Settings (General, inline AI Providers, Experimental), feedback, diagnose, activity |
-| `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`) |
+| `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`); sent-bubble attachment thumbnails, wrapping and preview (`smoke-sent-attachments.ts`) |
 | `composer` | composer growth/paste/attachments, per-chat drafts, slash commands, visible composer |
 
 An unknown or empty group name fails before the build. `--live` requires `core`
@@ -286,10 +331,13 @@ full suite.
 
   ```sh
   bun install --frozen-lockfile
-  bun run typecheck
-  bun run typecheck:native
-  node test/run.mjs unit --timeout-ms=120000
+  node test/run.mjs unit --typecheck --report --timeout-ms=120000
   ```
+
+  Both typechecks run next to the unit tier. `actions/cache` restores
+  `.local/test-cache` and `.local/test-times.json` from the latest run (key per
+  commit, restored by prefix), so unchanged Swift fixtures are not recompiled
+  ([Unit tier speed](#unit-tier-speed-lkm-167)).
 
   If a step fails, the run uploads `test/artifacts/runs/` as `unit-test-logs`.
   CI runs no native GUI tier and no live tier. The runner has no desktop session

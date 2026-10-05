@@ -13,6 +13,12 @@ and provider-seat rules are here.
   renderer. AppKit owns geometry and native inspectors reserve their own space.
 - **Preview instrumentation is isolated.** Keep the WKContentWorld and restricted
   message allowlist; re-send select/style/layer state after navigation.
+- **Native views over the preview don't block WebKit's pointer by hit-testing.**
+  WebKit's tracking areas deliver moves anywhere in its visible rect, and the
+  window hands it clicks an overlay left unhandled. The preview is a
+  `PreviewWebView` (`src/native/PreviewPointer.swift`) that gates these by the
+  window's hit view. Keep it, and make floating islands swallow their own clicks
+  (LKM-162).
 - **Inspect WebKit through its native Web Inspector.** There is no Electron CDP
   port. Use the native host test protocol for deterministic integration checks.
 - **In service mode the launcher reports the HOST's exit status**, and

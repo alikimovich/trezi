@@ -4,7 +4,7 @@
 // idempotency, conflicts, injected write failures, SIGKILL at every durable boundary,
 // offline edits and Bun's client.
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import {
@@ -19,11 +19,10 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
 import { servicePreferences } from '../src/native/preferences-service.ts'
 import { skipUnlessDarwin } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-preferences-owner-'))
 const binary = join(scratch, 'preferences-fixture')
 const live = new Set()
@@ -38,24 +37,9 @@ function compile() {
     'PreferencesFile',
     'PreferencesOwner'
   ].map((name) => `src/service/${name}.swift`)
-  const result = spawnSync(
-    'xcrun',
-    [
-      'swiftc',
-      '-module-cache-path',
-      join(scratch, 'module-cache'),
-      ...sources,
-      'test/fixtures/preferences-owner/main.swift',
-      '-o',
-      binary
-    ],
-    { cwd: root, encoding: 'utf8', timeout: 300_000 }
-  )
-  assert.equal(
-    result.status,
-    0,
-    `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
-  )
+  swiftBuild('preferences-owner', [...sources, 'test/fixtures/preferences-owner/main.swift'], {
+    out: binary
+  })
 }
 
 function profile(initial) {

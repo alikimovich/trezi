@@ -59,6 +59,66 @@ Newest first. Append a dated entry when you finish a chunk of work.
     - a 3-second `sample` of the host when a `webViews` ping takes 250 ms or more or times out. The host now sends its pid in the `ready` event.
   - Everything is redacted (token shapes, `key=value` secrets, URL credentials, private keys) and the home folder becomes `~`, capped at 24,000 characters. `test/feedback-diagnostics.mjs` uses injected commands, so no real `log` or `sample` runs.
   - Bun never reads the service-private repository journal, so the "ledger state" is the chat's landing state as Bun holds it.
+## 2026-10-05 — LKM-167: unit tier and quick verification about 4x faster
+
+- **Why.** Quick verification (typecheck, typecheck:native, unit tier) took 5-7 min. The unit tier alone took 328.6 s on the operator Mac. About 25 Swift tests each compiled their fixture with a private, cold Clang module cache, at about 25 s per compile. Only 4 workers ran, and `service-process` and `keychain-rebuild` were exclusive barriers.
+- **Swift build cache.** `test/helpers/swift-build.mjs`:
+  - `swiftBuild` caches each fixture binary under `.local/test-cache/swift`, keyed by toolchain, flags and source bytes, with one shared module cache.
+  - At most 2 compiles run across all test processes (lock-file slots, dead owners taken over).
+  - Every unit-tier swiftc call site now goes through it: the fixture helpers, the owner tests, the AppKit layout fixtures and `service-process` (copies, since it signs them).
+  - `keychain-rebuild` uses the uncached `swiftCompile` with the shared module cache, so its three builds still really happen.
+- **Runner.** `test/run.mjs`:
+  - Workers: `max(min(4, cores), min(cores - 2, 8))`, with no exclusive barriers.
+  - `--report` prints the 20 slowest tests and merges PASS durations into `.local/test-times.json`. The next run starts the slowest tests first.
+  - `--typecheck` runs both typechecks next to the tier.
+  - `bun run test:quick` combines them, and CI uses the same command with an `actions/cache` of `.local/test-cache`.
+- **Slow tests.**
+  - `workflow-owner` is split in two processes. The scenarios stay; `test/workflow-durability.mjs` runs the same file's tool and durability checks.
+  - The composer-layout fixture waited one fixed 0.2 s run-loop turn for the pin and flaked under 8 workers. It now waits for the condition, at most 5 s.
+  - `island-flicker-frameworks` failed once under load: the Vite "before" run reloads the preview page on every source write, and with no frame sample in a gap it saw no swap and no mismatch. The sampler now counts reloaded documents (kept in `sessionStorage`, since a reload drops window counters) and a reload mid-drag counts as the flicker signal. The "after" checks are unchanged.
+- **Result.**
+  - Manager quick verification: 87.2 s (unit tier 83.1 s, 156 PASS, 2 SKIP; before, 155 PASS, 2 SKIP plus the split).
+  - Locally, warm: 55.7 s with typechecks. Cold cache: 122.1 s.
+  - Table in `docs/TESTING.md` "Unit tier speed".
+  - Still slow, from runtime rather than compiles: the durability half (client deadlines after injected crashes) and the composer/settings layout fixtures.
+## 2026-10-05 — LKM-166 (repair): attachments never fail the turn
+
+- **Problem.** An SVG attachment was sent inline as `image/svg+xml`; `validImages` (png/jpeg/gif/webp only) rejected it and the turn failed with "The pasted images are not supported or too large." Oversized images and files had the same cliff.
+- **Planner.** `src/native/chat-attachments.ts` `planAttachments` replaces the inline logic in `chat-controller.run()`: provider images are sent and listed by path; SVG/other formats list the original by path and send the composer's PNG `preview`; other files are listed by path; leftovers go in a `[Not attached: …]` line. `sendableImages` in `provider-policy.ts` filters to the limits; `provider-service` and the Swift owner stay strict.
+- **Composer.** `AttachmentPayload` (`AttachmentThumbnail.swift`) rasterizes the 512 px PNG preview and downscales rasters over 7 MiB raw instead of refusing them (the 10 MiB picker error is gone; files over 64 MiB go by path).
+- **Decision.** No `.trezi-attachments` folder in the worktree: files are referenced by their own path (picked) or the profile's private attachments folder (pasted), so the Swift repository owner and the exclusion lists are untouched. File bytes never cross the bridge, so copying non-images would have needed a new service writer.
+- **Tests.** `test/chat-attachments.mjs` (unit tier) covers SVG, pasted SVG, oversized PNG, files, too many images and failed saves, and a controller turn into `agent:send`; the `sent-attachments` smoke check also sends an SVG (path text, 512 px PNG preview) and a 2600×1000 noise PNG (downscaled under the limit) through the real composer.
+
+## 2026-10-05 — LKM-166: compact attachment thumbnails in the sent bubble and composer
+
+- **Problem.** The sent bubble drew each image attachment with `NSImage` at up to 200×160 pt, one per line, so SVG icons with a large intrinsic size stacked as huge black shapes and pushed the text down.
+- **Shared thumbnail.** `src/native/AttachmentThumbnail.swift`: 72 pt square cells, decoded at 2x. Raster images use ImageIO. Anything else `NSImage` reads (SVG) is drawn at the requested pixel size, so a vector with any intrinsic size yields a bounded, sharp bitmap. Images with alpha sit on a checkerboard; opaque ones sit on a neutral fill.
+- **Sent bubble.** `src/native/ChatAttachments.swift`: `AttachmentFlow` (a SwiftUI `Layout`) wraps thumbnails and file chips into rows and reports the widest row, so a short row keeps the bubble narrow. Thumbnails decode once per attachment id (`NSCache`), not on every streamed re-render. Hover shows the file name (`.help`). A click sets `ChatModel.attachmentPreview`, which opens a popover with a larger preview and the name.
+- **Composer.** Tiles use the same 72 pt aspect-fit cells and checkerboard (was 96 pt aspect-fill). The strip is 84 pt (was 108) and still scrolls horizontally. The click preview also uses the shared decoder, so SVGs preview too.
+- **Tests.** New `sent-attachments` smoke check (`src/native/smoke-sent-attachments.ts`, group `chat`): sends 8 SVG/PNG/JPG attachments with the provider call intercepted. Composer tiles are ≤96 pt and checkerboards appear only on transparent tiles. In the sent bubble, each thumbnail is 48–96 pt and inside the bubble, the cells form at least 2 packed rows, and the text ends <80 pt below the last row (42 pt in the run). Opening the preview through `chatAttachmentPreview` (test profile only) shows a popover window, and closing it removes it. Captures: `sent-attachments.png`. The existing composer check now expects the 84 pt strip and overflows with seven tiles.
+## 2026-10-05 — LKM-162: editing inspector island owns the pointer and renders opaque
+
+- **Symptom.** With an element selected, the island's fields, slider and tabs ignored input; the page under it kept hovering and selecting, and the page showed through the controls.
+- **Causes (probed in an offscreen AppKit harness).** The static hit-test was already right (`hits.inside === 'inspector'`), so that check could not catch this bug.
+  - A click AppKit left unhandled on a view floating over the page (glass, padding, labels) still reached the `WKWebView` beneath.
+  - WebKit's own tracking areas (owned by `WKMouseTrackingObserver`, `mouseMoved` | `enteredExited` | `inVisibleRect`) deliver every move in the web view's visible rect and ignore sibling overlays. The window also sends every `mouseMoved` to the page while it is first responder.
+- **Fix.**
+  - `NativeEditingInspector` hit-tests its whole frame to itself where no control does, and swallows mouse-downs and scrolls.
+  - `PreviewWebView` (`src/native/PreviewPointer.swift`) replaces each WebKit tracking area with one owned by `PreviewPointerGate`. The gate forwards a move, enter or cursor update only when the window's hit view at that point is the page, and gates the first-responder moves, clicks and scrolls the same way.
+  - When the pointer leaves the page for a native view, one synthesized exit outside the page clears its hover box (preload's `mouseout` with no `relatedTarget`) and the cursor resets to the arrow.
+  - `_setIgnoresNonWheelEvents:` was rejected because it would also cut keys.
+- **Ghosting.** The island's controls sit on an opaque `windowBackgroundColor` rounded surface; the Liquid Glass stays as the edge.
+- **Tests.** `checkPointer` in `src/native/smoke-inspector-island.ts` runs in the foreground only (it needs the key window); `TREZI_NATIVE_BACKGROUND_TEST` logs a SKIP. It:
+  - switches to Styles and hit-tests the padding-top field, its slider and the tabs to the controls inside the island;
+  - in select mode with the page first responder, posts moves, a padding click and a wheel inside the island and feeds the gated tracking areas the same moves. No move, enter, down or wheel reaches WebKit and no `element-picked` is sent, while tracking-area moves beside the island do reach it. In the real app AppKit did not route posted moves to the first responder even with `acceptsMouseMovedEvents`, so that path is recorded (`besideWindow`) but not asserted;
+  - before that, clicks padding-top (the click must focus its field editor), types 12, submits, and waits for the source and the element's computed `padding-top`. It runs first because turning select mode off (preload `setActive(false)`) drops the page's selection, which a Styles preview targets.
+- **Native runs (worker).** Three runs of chat, composer, core, islands, settings, shadow-light and sidebar, each stopping at the first failing new assertion:
+  - Run 1: the posted move beside the island never reached the page.
+  - Run 2: the cause was the window path. Even with `acceptsMouseMovedEvents`, AppKit did not hand posted moves to the first responder (`besideWindow: {}`), while the tracking-area path worked both ways (`besideTracking: {enter 4, move 4}`, inside `{exit 1}`).
+  - Run 3: the hit targets, moves, clicks, wheel and `picks: 0` passed, and the click focused padding-top and wrote `paddingTop: "12px"` to the source. The computed style never read 12px, because the moves check had already turned select mode off and on, clearing the page's selection.
+  - Repair runs (manager `test:native` failed on `padding-top 12px on the element`): the reorder did not help. Diagnostics showed `styles:read` null (no page selection) and, after a re-select, the island error `SyntaxError: Unexpected token (1:0)`. Cause: the fixture's static server live-reloads the page on every write under the root. The opacity edit earlier in the `inspector` step reloaded it, dropping the page's selection and the `native-style.tsx:1:36` stamp the step set by hand, so the heading's own `index.html:3:1` stamp (not JSX) was parsed. The padding edit's own write would reload the page again and drop the preview override.
+  - Fix, test-side only: `checkPointer` re-stamps and re-selects the heading (`IslandPage.select`) and waits for the island's field list to settle before typing. The fixture `index.html` re-reads `native-style.tsx` padding-top on load, standing in for HMR, so the edit reaches the element through the reload.
+  - These repair changes were not re-run natively: the worker's native budget was spent. Only typecheck and lint were run.
 ## 2026-10-05 — LKM-164: current Claude and Codex models, resolved model in the picker
 
 - **Why.** A Claude chat said it was "Sonnet 4.6", then "Opus 4.8". The picker sends aliases and the bundled Claude Code CLI (SDK 0.3.186) resolves them; the model list was cached on disk without knowing which SDK wrote it, and the Codex fallback still listed `gpt-5.6-*`.

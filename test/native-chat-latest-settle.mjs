@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-139: following the latest row never leaves the transcript blank. The
 // fixture hosts the conversation's lazy stack, AppKit pin and ChatLatestSettle
@@ -13,8 +14,6 @@ if (process.platform !== 'darwin') {
 } else {
   const root = fileURLToPath(new URL('..', import.meta.url))
   const scratch = mkdtempSync(join(tmpdir(), 'trezi-chat-latest-settle-'))
-  const cache = join(root, 'out/native/module-cache')
-  mkdirSync(cache, { recursive: true })
   const run = (args) => {
     const result = spawnSync(args[0], args.slice(1), {
       cwd: root,
@@ -37,16 +36,14 @@ if (process.platform !== 'darwin') {
       .join('; ')
   try {
     const binary = join(scratch, 'chat-latest-settle')
-    run([
-      'xcrun',
-      'swiftc',
-      '-module-cache-path',
-      cache,
-      'test/fixtures/chat-latest-settle/main.swift',
-      ...['ChatScrollStyle', 'ChatEnvironment'].map((name) => `src/native/${name}.swift`),
-      '-o',
-      binary
-    ])
+    swiftBuild(
+      'chat-latest-settle',
+      [
+        'test/fixtures/chat-latest-settle/main.swift',
+        ...['ChatScrollStyle', 'ChatEnvironment'].map((name) => `src/native/${name}.swift`)
+      ],
+      { out: binary }
+    )
     // LKM-149: never settled while the latest row is below the reading edge (it
     // is re-measured after a relayout), an unresolved pin escalates to a
     // relayout, and history footers are 28 pt.

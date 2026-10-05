@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
-import { fileURLToPath } from 'node:url'
 import { runProviderHelper, setHelperHeartbeat } from '../src/main/backends/helper-host.ts'
 import { CHARS_PER_TOKEN, streamedChars, streamUsage } from '../src/main/backends/stream-usage.ts'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-147: live turn progress below the UI — the streamed token estimate, the
 // helper's heartbeat and the status line's clock.
@@ -197,52 +194,30 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 if (process.platform !== 'darwin') {
   console.log('TURN-PROGRESS CLOCK SKIP — macOS Swift toolchain required')
 } else {
-  const root = fileURLToPath(new URL('..', import.meta.url))
-  const scratch = mkdtempSync(join(tmpdir(), 'trezi-activity-clock-'))
-  const cache = join(root, 'out/native/module-cache')
-  mkdirSync(cache, { recursive: true })
-  try {
-    const binary = join(scratch, 'activity-clock')
-    const run = (args) => {
-      const result = spawnSync(args[0], args.slice(1), {
-        cwd: root,
-        encoding: 'utf8',
-        timeout: 180_000
-      })
-      assert.equal(
-        result.status,
-        0,
-        `${args[0]}: ${result.error || result.signal || ''}\n${result.stdout}\n${result.stderr}`
-      )
-      return result.stdout
-    }
-    run([
-      'xcrun',
-      'swiftc',
-      '-module-cache-path',
-      cache,
-      'src/native/ChatActivityClock.swift',
-      'test/fixtures/activity-clock/main.swift',
-      '-o',
-      binary
-    ])
-    const shown = Object.fromEntries(
-      JSON.parse(run([binary])).map(({ case: name, ...rest }) => [name, rest.label ?? rest.idle])
-    )
-    assert.equal(shown.fresh, 'Thinking…', 'a step just started shows no timer')
-    assert.equal(shown.thinking, 'Thinking · 0:45')
-    assert.equal(shown.tool, 'Running bun test · 1:24')
-    assert.equal(shown.hour, 'Running bun test · 1:02:05')
-    assert.equal(shown.unstamped, 'Writing…')
-    assert.equal(shown.beating, '', 'no hint while heartbeats arrive')
-    assert.equal(shown.almost, '', 'no hint under a minute')
-    assert.equal(shown.stopped, 'No activity for 1 min')
-    assert.equal(shown.long, 'No activity for 3 min')
-    assert.equal(shown.none, '')
-    console.log(
-      'Turn progress: status clock (m:ss, h:mm:ss, 2 s threshold) and idle hint (60 s without heartbeats) passed.'
-    )
-  } finally {
-    rmSync(scratch, { recursive: true, force: true })
-  }
+  const binary = swiftBuild('activity-clock', [
+    'src/native/ChatActivityClock.swift',
+    'test/fixtures/activity-clock/main.swift'
+  ])
+  const result = spawnSync(binary, [], { encoding: 'utf8', timeout: 180_000 })
+  assert.equal(
+    result.status,
+    0,
+    `${binary}: ${result.error || result.signal || ''}\n${result.stdout}\n${result.stderr}`
+  )
+  const shown = Object.fromEntries(
+    JSON.parse(result.stdout).map(({ case: name, ...rest }) => [name, rest.label ?? rest.idle])
+  )
+  assert.equal(shown.fresh, 'Thinking…', 'a step just started shows no timer')
+  assert.equal(shown.thinking, 'Thinking · 0:45')
+  assert.equal(shown.tool, 'Running bun test · 1:24')
+  assert.equal(shown.hour, 'Running bun test · 1:02:05')
+  assert.equal(shown.unstamped, 'Writing…')
+  assert.equal(shown.beating, '', 'no hint while heartbeats arrive')
+  assert.equal(shown.almost, '', 'no hint under a minute')
+  assert.equal(shown.stopped, 'No activity for 1 min')
+  assert.equal(shown.long, 'No activity for 3 min')
+  assert.equal(shown.none, '')
+  console.log(
+    'Turn progress: status clock (m:ss, h:mm:ss, 2 s threshold) and idle hint (60 s without heartbeats) passed.'
+  )
 }

@@ -69,6 +69,7 @@
     "test:service-session": "bun test/service-session.mjs",
     "test:editing-owner": "bun test/editing-owner.mjs",
     "test:workflow-owner": "bun test/workflow-owner.mjs",
+    "test:workflow-durability": "bun test/workflow-durability.mjs",
     "test:platform-owner": "bun test/platform-owner.mjs",
     "test:annotation-store": "bun test/annotation-store.mjs",
     "test:retirement-census": "bun test/retirement-census.mjs",
@@ -121,6 +122,7 @@
     "start": "bun scripts/start-native.mjs",
     "setup": "bash ./install.sh",
     "test": "node test/run.mjs unit native",
+    "test:quick": "node test/run.mjs unit --typecheck --report",
     "test:trezi-agent-tools": "bun test/trezi-agent-tools.mjs",
     "test:preview-agent-tools": "bun test/preview-agent-tools.mjs"
   },

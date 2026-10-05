@@ -113,11 +113,14 @@ struct EditingInspectorContent: View {
                     }.id("\(state.root):\(state.generation)").padding(2).padding(.trailing, 10)
                 }
             }.padding(14).frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Opaque under the controls (LKM-162): over an arbitrary page, clear glass let the page's
+                // text, hover boxes and selection outlines show through and ghost the fields and sliders.
+                .background(RoundedRectangle(cornerRadius: NativeEditingInspector.cornerRadius, style: .continuous).fill(Color(nsColor: .windowBackgroundColor)))
         }
     }
 }
 /// Floats over the preview's right edge like the composer island: the same inset,
-/// corner radius and Liquid Glass, so opening it never narrows the preview.
+/// corner radius and Liquid Glass edge, so opening it never narrows the preview.
 final class NativeEditingInspector: NSView {
     // ChatLayout.composerInset and the composer's radius; literal so fixtures compile this file alone.
     static let inset: CGFloat = 10, cornerRadius: CGFloat = 24
@@ -145,6 +148,13 @@ final class NativeEditingInspector: NSView {
         isHidden = true
     }
     required init?(coder: NSCoder) { fatalError() }
+    // The island's whole frame takes the pointer (LKM-162): AppKit otherwise handed a click
+    // or scroll its glass, padding or labels left unhandled to the preview beneath.
+    override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) ?? (!isHidden && frame.contains(point) ? self : nil) }
+    override func mouseDown(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func otherMouseDown(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
     func update(_ value: [String: Any]) { guard let data = try? JSONSerialization.data(withJSONObject: value), let state = try? JSONDecoder().decode(InspectorState.self, from: data) else { return }; model.state = state; isHidden = !state.visible }
     /// The island's frame over `area` (the preview's full, unchanged frame), or zero when closed.
     static func frame(in area: NSRect, width preferred: CGFloat, visible: Bool) -> NSRect {

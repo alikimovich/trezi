@@ -18,6 +18,7 @@ import type { NativeComposerAction } from '../shared/native-composer'
 import { defaultChoiceFor, providerOptions, resolveSelection } from '../shared/provider-choices'
 import { parseSlashToken } from '../shared/slash-token'
 import { cardAction } from './chat-actions'
+import { planAttachments } from './chat-attachments'
 import { matches, permissionModes, snapshot } from './chat-snapshot'
 import {
   append,
@@ -409,28 +410,16 @@ export class NativeChatController {
     }
     this.changed(chat)
     try {
-      const images = attachments.filter((a) => a.type.startsWith('image/'))
-      const paths = await Promise.all(
-        images.map(
-          (a) =>
-            a.path ||
-            this.services.invoke('attachments:save', { mediaType: a.type, data: a.data }, a.name)
-        )
+      const plan = await planAttachments(attachments, (a) =>
+        this.services.invoke('attachments:save', { mediaType: a.type, data: a.data }, a.name)
       )
       if (cancellation !== chat.cancellation || this.chats.get(chat.chat) !== chat)
         throw new Error('Message cancelled before sending.')
-      const files = attachments.filter((a) => !a.type.startsWith('image/')).map((a) => a.path)
-      const prompt =
-        (files.length ? `[Attached files]\n${files.join('\n')}\n\n` : '') +
-        (paths.length
-          ? `[Attached images — the image(s) in this message are on disk at]\n${paths.join('\n')}\n\n`
-          : '') +
-        (selection?.prompt ?? '') +
-        text
+      const prompt = plan.header + (selection?.prompt ?? '') + text
       await this.services.invoke(
         'agent:send',
         prompt,
-        images.length ? images.map((a) => ({ mediaType: a.type, data: a.data })) : undefined,
+        plan.images.length ? plan.images : undefined,
         chat.chat,
         turn,
         submission.id

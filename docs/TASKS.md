@@ -13,6 +13,16 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Feedback sheet diagnostics consent; redacted bundle with `~` paths (`test/feedback-diagnostics.mjs`, `test/native-support-sheets.mjs`).
 - [x] "Already running" is never a dead end: Bun and the service agree on what runs, the activity row names it and Stop works, a stuck turn or landing ends on its own with a note, and a message sent meanwhile is queued (`test/chat-stuck-turn.mjs`).
 - [x] A failed Claude resume recovers: one canonical cwd for start and resume, a new session seeded with a chat summary and one note, no raw error (`test/claude-resume.mjs`, `test/claude-cwd.mjs`).
+## Compact sent and composer attachment thumbnails (LKM-166)
+
+- [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.
+- [x] Composer tiles use the same cells (`src/native/AttachmentThumbnail.swift`); the strip is 84 pt.
+- [x] Native `sent-attachments` smoke check (group `chat`) bounds thumbnail size, wrapping and text position, and opens and closes the preview.
+- [x] Attachments never fail the turn: SVG/other formats send a 512 px PNG preview and keep the original by path, other files go by path, oversized rasters are downscaled, leftovers are named (`src/native/chat-attachments.ts`, `AttachmentPayload`; `test/chat-attachments.mjs`).
+## Editing inspector island click-through and ghosting (LKM-162)
+
+- [x] The island's frame takes the pointer (`NativeEditingInspector` hit-test fallback, swallowed clicks and scrolls) and `PreviewWebView` (`src/native/PreviewPointer.swift`) gates WebKit's tracking areas, first-responder moves and clicks by the window's hit view.
+- [x] Opaque island surface under the controls; native smoke (`checkPointer` in `src/native/smoke-inspector-island.ts`) hit-tests field, slider and tabs, counts what reaches the page, and edits padding-top through the real field.
 ## Current Claude and Codex models (LKM-164)
 
 - [x] Bump `@anthropic-ai/claude-agent-sdk` (0.3.186 → 0.3.289) and `@openai/codex-sdk` with its `@openai/codex` CLI (0.154.0 → 0.160.1) in `package.json` and `bun.lock`; no API changes needed, backend and provider-helper bundles build.
