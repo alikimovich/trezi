@@ -87,12 +87,13 @@ const loadCodex = (): Promise<CodexModule> => (codexPromise ??= import('@openai/
 const execFileP = promisify(execFile)
 // Overridable so tests can force the CLI-absent path even where `codex` resolves
 // (e.g. `bun run` puts node_modules/.bin — which has the SDK's codex shim — on PATH).
-const CODEX_BIN = process.env.TREZI_CODEX_BIN || 'codex'
+// Read per call: a test may set it after this module was imported.
+const codexBin = (): string => process.env.TREZI_CODEX_BIN || 'codex'
 /** The SDK shells out to the `codex` CLI; probe it up front so a missing/unauthed CLI
  *  fails soft FAST + clearly, instead of surfacing a slow spawn ENOENT mid-turn. */
 async function codexCliPresent(): Promise<boolean> {
   try {
-    await execFileP(CODEX_BIN, ['--version'], { timeout: 4000 })
+    await execFileP(codexBin(), ['--version'], { timeout: 4000 })
     return true
   } catch {
     return false
