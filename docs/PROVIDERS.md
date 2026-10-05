@@ -917,3 +917,23 @@ through the source, the preview URL and capture, navigation, Gen UI and the inst
 It also checks that a background session's `chat_island` and `open_code` are refused
 by the owner before main. The Codex half needs a Unix-socket listen, which some
 sandboxes forbid.
+
+## Agent file access (LKM-163)
+
+Settings → General → Agent file access (`trezi:agent-file-access:v1`) decides how far
+an agent reaches on the user's Mac. Main reads it whenever a provider helper session
+opens and passes it to every adapter as `AgentOptions.agentFileAccess` (absent ⇒ Full
+access), so a change applies to new chats.
+
+| | Full access (default) | Project only |
+| --- | --- | --- |
+| Codex and Responses connections | `sandboxMode: 'danger-full-access'`, network on | `workspace-write` in the chat worktree, user `writable_roots` dropped (LKM-156) |
+| Claude | no extra path limits | the same |
+| Both | `approvalPolicy: 'never'` for Codex; the Claude live-write guard; chat worktree isolation | the same |
+
+Codex gets the worktree's real path as its working directory. Its Seatbelt profile
+refuses a writable root behind a symlink, and every chat worktree sits under the
+profile's `Trezi Native` alias. With Full access, Codex's direct writes to the live
+checkout (edits, discarded uncommitted work, commits) are reported after the turn in
+one chat note (`live-tree-watch.ts`). Details,
+limits and tests: [worktrees](WORKTREES.md#agent-file-access-and-symlinked-paths-lkm-163).

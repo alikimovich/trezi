@@ -12,6 +12,27 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Hardcoded ids.** `CODEX_FALLBACK` is `gpt-6-sol`, `gpt-6-astra`; background comments (`background-model.ts`) and PR descriptions (`publish-description.ts`) moved from `gpt-5.6-sol`/`gpt-5.6-luna` to `gpt-6-sol`.
 - **Tests.** `test/model-catalog.mjs` (stamp per seat, bump drops only that seat, unstamped legacy entry, day TTL, Claude written once a day; the checkout's SDKs are at least these versions and lists stamped by 0.3.186/0.154.0 are dropped), `test/model-label.mjs` (labels, the picker row after a `model` event), `test/provider-data.mjs` (Swift stores the stamp), `test/provider-owner.mjs` (the event is relayed; an oversized one is a violation).
 
+## 2026-10-05 — LKM-163 repair: Codex live-write note also covers reverts and commits
+
+- **Gap found in review.** `liveTreeChanges` only walked the after-snapshot, so a live file that was dirty before the turn and clean after it (`git checkout -- f`, `restore`, `stash`, `reset --hard`) and a commit made in the live checkout produced no note, although the ticket says direct live writes must not fail silently.
+- **Fix.** `live-tree-watch.ts`: a snapshot is now `{head, files}` (`git rev-parse HEAD` plus the dirty files). `liveTreeChanges` also reports paths that vanished from the dirty set. `liveTreeReport` adds the files of `git diff --name-only before..after` when HEAD moved and returns `{files, committed}`. `liveWriteNote` says the changes may be reverted or discarded and names a commit (with no file list for an empty commit). The adapter still appends one note per turn.
+- **Tests.** `test/agent-file-access.mjs` covers `checkout`, `restore`, `stash` and `reset --hard` of dirty work, a commit, an empty commit and a quiet tree against real repositories, and its stand-in-CLI turns run a discard, a commit and an empty commit in the live tree, each giving exactly one note. `test/live-write-guard.mjs` follows the new snapshot shape.
+
+## 2026-10-05 — LKM-163: agent file access, full by default; symlinked paths in the Codex sandbox
+
+- **Bug.** On the test Mac, a Codex chat said "the workspace path contains a symlink" and could not run any file command. Every chat worktree sits under the profile aliases `Trezi Native` → `Praxis Native` and `trezi` → `praxis` (`ProfilePaths.swift`). The Codex CLI's Seatbelt builder normalizes only the top-level `/tmp`/`/var` aliases. Any other symlink component in a writable root, the working directory included, fails with "symlinked writable roots are not supported" (found in the CLI binary). The LKM-156 test passed because its worktree was under `/var/folders` only.
+- **Fix.** `realPath` (`src/main/agent-file-access.ts`) resolves a path, keeping a missing tail on the nearest existing ancestor. `codexSandbox` gives Codex the worktree's real path in both modes. The Claude guard (`live-write-guard.ts`) compares Edit targets and both roots as given and resolved, and its Bash spellings use the same helper.
+- **Setting.** Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default; unknown values read as it) or Project only. `helper-session.ts` passes `agentFileAccess` to every helper session, read when the session opens. The extra General row pushed Show Activity automatically below the fold at the 680×460 minimum, so the Settings minimum height is now 520 (`SheetSections.swift`; default 780×540 unchanged).
+  - Full access: Codex `danger-full-access` with no sandbox config, `approvalPolicy: 'never'`.
+  - Project only: the LKM-156 sandbox unchanged.
+  - The Claude guard is the same in both modes, a correctness rule for the live checkout only.
+- **Codex live writes in Full access.** `live-tree-watch.ts` snapshots the live tree's uncommitted files before and after each turn: `git --no-optional-locks status -z` plus size and mtime, so the index is never written. Files that became dirty or changed again are named in one ⚠️ note, appended to the transcript. The note says the files changed, not that Codex changed them (the user or another chat's landing could have). A direct commit is not caught.
+- **Tests.**
+  - `test/live-write-guard.mjs` (unit): Project only as before, Full access thread options, a symlinked profile worktree and symlinked project in both modes, and the guard with every as-given/resolved combination.
+  - It also covers the live-tree snapshot (no index write) and the note. Its real-CLI half now runs from a worktree behind a symlink alias, and a Codex symlink refusal fails instead of skipping. It adds a Full-access run that writes outside the project and is detected in the live tree.
+  - New `test/agent-file-access.mjs` (unit): the setting and its helper plumbing. It also drives the real adapter with a stand-in CLI to check `--sandbox danger-full-access`, the real `--cd`, the single note and no note in Project only.
+  - `native-settings`, `native-settings-evidence` and the native Settings smoke add the field.
+  - The real-CLI and adapter halves need a local port or a Unix-socket listen. They print SKIP in the worker sandbox.
 ## 2026-10-04 — LKM-158: clean Biome lint baseline, lint in quick verification (F4)
 
 - **Why.** Review L8 (`docs/REVIEW-2026-10.md`): `biome check src test` reported 579 errors, mostly format and import order, so `bun run lint` failed repo-wide and new lint debt went unnoticed.

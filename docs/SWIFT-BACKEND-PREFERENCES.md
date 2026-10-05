@@ -52,7 +52,7 @@ launch.
 
 | Caller | Keys | Behavior |
 | --- | --- | --- |
-| `src/native/settings-controller.ts` | `preferred-model`, `project-ui:v1`, `project-ui-engine:v1`, `chat-workspace-idle-days:v1`, `activity-auto-open:v1` | One atomic batch, built from the committed state when sent (a newer last-used model is kept). Autosave keeps a failed draft; closing waits for the save. |
+| `src/native/settings-controller.ts` | `preferred-model`, `project-ui:v1`, `project-ui-engine:v1`, `chat-workspace-idle-days:v1`, `activity-auto-open:v1`, `agent-file-access:v1` | One atomic batch, built from the committed state when sent (a newer last-used model is kept). Autosave keeps a failed draft; closing waits for the save. |
 | `src/native/workspace-runtime.ts` | `preferred-model` (last used) | Batch computed from the committed state when sent; failure is reported. |
 | `src/native/git-controller.ts` | `publish-mode` | Renders after the commit; storage does not change publishing. |
 | `src/native/shell-controller.ts` | `chat-hidden` | The toggle is immediate; the save is awaited and a failure reported. |

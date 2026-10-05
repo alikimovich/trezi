@@ -11,6 +11,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Codex fallback, background comments and PR descriptions on `gpt-6-sol`/`gpt-6-astra`; Claude aliases kept.
 - [x] `test/model-catalog.mjs`, `test/model-label.mjs`, `test/provider-data.mjs`, `test/provider-owner.mjs`.
 - [ ] Operator, after merge: ask each seat "which model are you" and check the picker label (live).
+## Agent file access, full by default; symlinked paths (LKM-163)
+
+- [x] Codex gets the real worktree path; the Claude guard compares as-given and resolved paths (`realPath` in `src/main/agent-file-access.ts`), tested with the profile's `Trezi Native` alias.
+- [x] Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default, Codex `danger-full-access`) or Project only (LKM-156 sandbox); passed to every helper session.
+- [x] Worktree isolation in both modes: the Claude guard unchanged; Codex direct live writes in Full access named in one chat note (`src/main/backends/live-tree-watch.ts`).
+- [x] `test/live-write-guard.mjs` covers both modes and symlinks; `test/agent-file-access.mjs` drives the adapter with a stand-in CLI.
 
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
