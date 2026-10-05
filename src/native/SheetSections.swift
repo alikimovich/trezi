@@ -6,8 +6,9 @@ import SwiftUI
 /// help on the left, control on the right) with the section's actions below.
 struct SectionedSheetContent: View {
     static let defaultSize = NSSize(width: 780, height: 540)
-    /// Full-size content: the height includes the unified toolbar over the pane.
-    static let minimumSize = NSSize(width: 680, height: 460)
+    /// Full-size content: the height includes the unified toolbar over the pane. Tall
+    /// enough that every General picker is visible at the minimum width (LKM-163).
+    static let minimumSize = NSSize(width: 680, height: 520)
     @ObservedObject var model: SheetModel
     let state: SheetState
     let sections: [SheetSection]

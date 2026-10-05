@@ -11,6 +11,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unchanged transcripts are not re-sent or re-decoded; mode switch and attachment add stay under 100 ms at 2,000 messages (`test/native-long-chat-perf.mjs`).
 - [x] Trezi MCP tools pre-approved for Codex (`test/codex-mcp-approvals.mjs`).
 - [x] Feedback sheet diagnostics consent; redacted bundle with `~` paths (`test/feedback-diagnostics.mjs`, `test/native-support-sheets.mjs`).
+## Agent file access, full by default; symlinked paths (LKM-163)
+
+- [x] Codex gets the real worktree path; the Claude guard compares as-given and resolved paths (`realPath` in `src/main/agent-file-access.ts`), tested with the profile's `Trezi Native` alias.
+- [x] Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default, Codex `danger-full-access`) or Project only (LKM-156 sandbox); passed to every helper session.
+- [x] Worktree isolation in both modes: the Claude guard unchanged; Codex direct live writes in Full access named in one chat note (`src/main/backends/live-tree-watch.ts`).
+- [x] `test/live-write-guard.mjs` covers both modes and symlinks; `test/agent-file-access.mjs` drives the adapter with a stand-in CLI.
 
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 

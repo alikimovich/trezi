@@ -1,6 +1,6 @@
-import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, relative } from 'node:path'
+import { realPath } from './agent-file-access'
 
 // LKM-151: a chat that runs in its own worktree must never write the live checkout
 // directly. An absolute path to the live tree (a picked element's source, an earlier
@@ -14,6 +14,11 @@ import { isAbsolute, join, normalize, relative } from 'node:path'
 // `xargs`, formatters, `git -C`, `cd … &&`), so any command that names the live root is
 // denied, reads included. The worktree holds the same files, so nothing is lost.
 // Codex has no such hook; its sandbox keeps it out instead (`codex-sandbox.ts`).
+//
+// LKM-163: this is a correctness rule, not a security sandbox, so it applies with
+// either "Agent file access" setting; Full access adds no other path limit. Paths are
+// compared as given and resolved: every chat worktree sits under the profile's symlink
+// alias, and a project may sit under a symlinked folder, so the same file has two names.
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const BASH_TOOLS = new Set(['Bash'])
@@ -24,6 +29,10 @@ const inside = (path: string, dir: string): boolean => {
 }
 
 const NOTE = 'Trezi lands your changes in the live project when the turn finishes.'
+
+/** `path` as given and with symlinks resolved (one entry when they agree). */
+const names = (path: string): string[] => [...new Set([normalize(path), realPath(path)])]
+const sameDir = (a: string, b: string): boolean => names(a).some((x) => names(b).includes(x))
 
 /**
  * The denial for a tool call that would touch the live checkout `liveRoot` while the
@@ -37,7 +46,7 @@ export function liveCheckoutEdit(
   root: string,
   liveRoot: string
 ): { reason: string; path: string } | null {
-  if (!liveRoot || normalize(root) === normalize(liveRoot)) return null
+  if (!liveRoot || sameDir(root, liveRoot)) return null
   const record = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   if (BASH_TOOLS.has(tool))
     return typeof record.command === 'string'
@@ -51,10 +60,15 @@ export function liveCheckoutEdit(
         ? record.notebook_path
         : null
   if (!target || !isAbsolute(target)) return null
-  const path = normalize(target)
+  const paths = names(target)
   // The worktree may live under the live tree (it does not today); its own paths are fine.
-  if (inside(path, root) || !inside(path, liveRoot)) return null
-  const equivalent = join(root, relative(liveRoot, path))
+  if (paths.some((path) => names(root).some((dir) => inside(path, dir)))) return null
+  let rest: string | null = null
+  for (const path of paths)
+    for (const dir of names(liveRoot))
+      if (rest === null && inside(path, dir)) rest = relative(dir, path)
+  if (rest === null) return null
+  const equivalent = join(root, rest)
   return {
     path: equivalent,
     reason: `This chat edits its own copy of the project, not the live checkout. Edit ${equivalent} instead; ${NOTE}`
@@ -82,10 +96,7 @@ function spellings(dir: string): string[] {
       for (const prefix of ['~/', '$HOME/', '${HOME}/']) out.add(prefix + rest)
     }
   }
-  add(dir)
-  try {
-    add(realpathSync(dir))
-  } catch {}
+  for (const name of names(dir)) add(name)
   // Longest first, so `/private/var/x` is not read as `/var/x` with a prefix.
   return [...out].sort((a, b) => b.length - a.length)
 }
@@ -114,7 +125,7 @@ export function liveCheckoutCommand(
   root: string,
   liveRoot: string
 ): { reason: string; path: string } | null {
-  if (!liveRoot || normalize(root) === normalize(liveRoot)) return null
+  if (!liveRoot || sameDir(root, liveRoot)) return null
   // Blank out the worktree's own paths first, so they never read as live ones.
   let text = command
   for (const spelling of spellings(root)) {

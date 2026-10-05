@@ -182,6 +182,53 @@ Shell commands and Codex are covered too (LKM-156, below).
   `config.toml` lists the live root as a writable root, and it stays read-only.
 - **Non-Git projects** run in the live tree itself: no hook denial, no sandbox override.
 
+The Codex sandbox above applies only with Agent file access set to Project only (LKM-163, below).
+
+### Agent file access and symlinked paths (LKM-163)
+
+- **Setting.** Settings → General → Agent file access (`trezi:agent-file-access:v1`,
+  preferences owner). Main reads it whenever a provider helper session opens and passes
+  it as `AgentOptions.agentFileAccess`, so a change applies to new chats.
+  - **Full access** (default; unset or unknown values read as this): the agent reads
+    and writes anywhere the user can and has network access. Codex runs with
+    `sandboxMode: 'danger-full-access'` and no sandbox config. Claude gets no extra path limits.
+  - **Project only**: the LKM-156 behaviour above (Codex `workspace-write` in the worktree).
+- **Isolation stays in both modes.** The agent still works in its chat worktree, and
+  Trezi lands the result in the live checkout. The Claude `PreToolUse` hook is the same
+  in both modes. It is a correctness rule, not a security sandbox: it blocks only the
+  live checkout, and its denial names the worktree path to edit instead.
+- **Codex in Full access.** Codex has no pre-tool hook. So the adapter snapshots the live
+  tree (its HEAD, and its uncommitted files from `git --no-optional-locks status` plus
+  each file's size and mtime) before and after each turn
+  (`src/main/backends/live-tree-watch.ts`). One chat note names every file that became
+  dirty or changed again, every file that was uncommitted before and is clean after
+  (`git checkout -- f`, `restore`, `stash` or `reset --hard` discarded the user's work),
+  and, when HEAD moved, a commit made in the live checkout (with the files from
+  `git diff --name-only before..after`). Trezi did not track any of it, and Revert cannot
+  undo it. A file the user or another chat's landing changed during the turn is named
+  too, so the note says the live project changed, not that Codex changed it. Landing
+  runs after `done`, so the chat's own landing is never in the comparison.
+- **Symlinked paths.** Every chat worktree sits under the profile's symlink aliases on an
+  upgraded Mac (`Trezi Native` and `trezi` link to the folders of an earlier name,
+  `src/service/ProfilePaths.swift`), and a project may sit under a symlinked folder.
+  Codex's Seatbelt profile refuses a writable root with any symlink component other
+  than the top-level `/tmp`/`/var` aliases ("symlinked writable roots are not
+  supported"). That stopped every Codex chat before its first command. Codex now gets
+  the worktree's real path (`realPath` in `src/main/agent-file-access.ts`) as its working
+  directory in both modes. The Claude guard compares targets and both roots as given
+  and resolved.
+- **No permission dialogs.** Trezi adds no paths, entitlements or approvals. Codex keeps
+  `approvalPolicy: 'never'` in both modes and never asks. Full access drops Codex's own
+  Seatbelt profile, which never prompts. A macOS privacy prompt can still appear when the
+  agent itself opens a protected folder (Desktop, Documents), as it could already for reads.
+- **Tests.** `test/live-write-guard.mjs` covers both modes, the symlinked worktree and
+  project, and the real CLI. That includes a project-only run from a worktree behind a
+  symlink alias, which fails instead of skipping if Codex refuses the symlink, and a
+  Full-access run that writes outside the project and is detected in the live tree.
+  `test/agent-file-access.mjs` drives the real adapter with a stand-in CLI: the setting
+  reaches every helper session, Full access passes `--sandbox danger-full-access`, `--cd`
+  is the real worktree path, and a live write gives one note.
+
 `src/shared/dev-error.ts` reads the dev server's log lines and spots Vite
 (esbuild/Babel/Rolldown `PARSE_ERROR`), Next.js and tsc-style errors. If the error
 names a file that the chat's last landed turn touched, a card in Trezi's own chat UI

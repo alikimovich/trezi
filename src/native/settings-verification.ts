@@ -117,8 +117,8 @@ export function assertSectionEvidence(
   if (section === 'general')
     assert.deepEqual(
       ids,
-      ['activityAutoOpen', 'claudePlugins', 'default', 'workspaceIdle'],
-      'General shows the default model, Claude plugins, workspace cleanup and Activity pickers'
+      ['activityAutoOpen', 'agentFileAccess', 'claudePlugins', 'default', 'workspaceIdle'],
+      'General shows the default model, Claude plugins, agent file access, workspace cleanup and Activity pickers'
     )
   else
     assert.ok(

@@ -29,6 +29,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Long chats no longer slow the app: typing, adding an attachment and switching preview modes no longer re-send and re-decode the whole conversation (LKM-165).
 - Codex can use Trezi's own tools, such as checking whether its edits landed, without being refused (LKM-165).
 - Send feedback can attach diagnostics with your consent: the last hour of logs, the chat's landing state and git status, and a short sample of the app when it is busy, with secrets removed and home paths shortened (LKM-165).
+- Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 
 ### Changed
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.
@@ -41,6 +42,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Preview toolbar: the address/branch block fills the free width up to the right action groups and follows window resizes live; a long URL truncates in the middle and a branch at its end only when space is short.
 - Chat: one live status line names the current step with its elapsed time (“Running bun test · 1:24”), the running turn’s token counter grows as Claude streams and sits on its own line under it until the turn ends, and “No activity for N min” appears only when the provider’s heartbeat stops; the duplicate “Still thinking…” row is gone.
 - Activity opens by itself only for problems that need you (a failed project open, a dev server that keeps crashing), once per kind per session; startup recovery notices are gray and collapsed into one line, unread warnings show a dot in the sidebar, Window → Activity (⌘L) opens it, and Settings → General → Show Activity automatically chooses Never, For problems that need me or Always.
+- Agents have full file access by default: Settings → General → Agent file access lets them read and write anywhere you can, with network access (Full access), or keeps Codex to the chat's copy of the project (Project only). Chats still work in their own copy, and a Codex turn that edits, reverts or commits in the live project says so in the chat (LKM-163).
 
 ### Fixed
 - Chat: the transcript no longer goes blank after sending until scrolled.

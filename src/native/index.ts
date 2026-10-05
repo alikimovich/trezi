@@ -6,6 +6,7 @@ import {
   registerAgentIpc,
   setProjectMemoryOwner
 } from '../main/agent'
+import { AGENT_FILE_ACCESS_KEY, setAgentFileAccessSource } from '../main/agent-file-access'
 import { registerAnnotationsIpc } from '../main/annotations'
 import {
   CLAUDE_USER_PLUGINS_KEY,
@@ -162,6 +163,7 @@ async function main() {
     throw new Error(`Trezi could not read preferences from its service: ${error.message}`)
   })
   setClaudeUserPluginsSource(() => preferences.get(CLAUDE_USER_PLUGINS_KEY))
+  setAgentFileAccessSource(() => preferences.get(AGENT_FILE_ACCESS_KEY))
   const workspace = await serviceWorkspace(host).catch((error) => {
     throw new Error(`Trezi could not read the workspace from its service: ${error.message}`)
   })

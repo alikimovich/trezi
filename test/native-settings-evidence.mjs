@@ -142,6 +142,7 @@ for (const width of [680, 780]) {
     controls: [
       control('default', 'Use last selected model'),
       control('claudePlugins', 'Don’t allow'),
+      control('agentFileAccess', 'Full access'),
       control('workspaceIdle', '7 days'),
       control('activityAutoOpen', 'For problems that need me')
     ],

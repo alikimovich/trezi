@@ -63,6 +63,7 @@ const UNIT = [
   'native-long-chat-perf',
   'stop-recovery-ui',
   'live-write-guard',
+  'agent-file-access',
   'project-path',
   'network-volume-note',
   'native-composer-layout',
