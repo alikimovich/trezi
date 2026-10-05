@@ -25,6 +25,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - A chat running in its own worktree can no longer write the live project from a shell command (Claude) or from Codex and Responses connections; the agent is pointed at its worktree copy instead (LKM-156).
 - A connected project whose restarted preview shows no source-mapped element for the whole grace period now offers "Source links stopped working" with Reconnect; stamps returning hide it, and Not now is remembered across relaunch (LKM-157).
 - Agent turns started from the Inspector, Styles, Props, inline text edits, custom controls and Layers moves name the source relative to the project, so a chat's edits land in its own worktree instead of the live checkout (LKM-155).
+- Image and SVG attachments in a sent message no longer render as huge images that push the text down: they show as compact thumbnails in a wrapping row (transparent images on a checkerboard), name the file on hover and open a larger preview on click; composer attachments use the same compact tiles (LKM-166).
 
 ### Changed
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.

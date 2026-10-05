@@ -130,6 +130,8 @@ const result = Bun.spawnSync(
     join(root, 'src/native/Composer.swift'),
     join(root, 'src/native/ComposerVerification.swift'),
     join(root, 'src/native/ComposerAttachments.swift'),
+    join(root, 'src/native/AttachmentThumbnail.swift'),
+    join(root, 'src/native/ChatAttachments.swift'),
     join(root, 'src/native/ComposerQueue.swift'),
     join(root, 'src/native/ComposerBeam.swift'),
     join(root, 'src/native/Chat.swift'),

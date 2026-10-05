@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Compact sent and composer attachment thumbnails (LKM-166)
+
+- [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.
+- [x] Composer tiles use the same cells (`src/native/AttachmentThumbnail.swift`); the strip is 84 pt.
+- [x] Native `sent-attachments` smoke check (group `chat`) bounds thumbnail size, wrapping and text position, and opens and closes the preview.
+
 ## Split chat-isolation.ts, one unpark and one landing (LKM-159, F5)
 
 - [x] `clearPark` (`src/main/chat-park.ts`) at all 9 unpark sites; no other `parked = false`.

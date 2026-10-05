@@ -121,6 +121,10 @@ extension Host {
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "chatInspect": reply(id, chat.inspect())
+        // The same state a thumbnail click sets; null closes the preview (LKM-166).
+        case "chatAttachmentPreview":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            chat.model.attachmentPreview = c["attachment"] as? String; reply(id)
         case "chatPerform": chat.model.action(c["action"] as? String ?? "", id: c["card"] as? String, value: c["value"] as? String, answers: c["answers"] as? [String: String]); reply(id)
         case "composerVerification":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

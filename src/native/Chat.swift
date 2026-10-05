@@ -59,6 +59,10 @@ final class ChatModel: ObservableObject {
     @Published var hoverOverride: String?
     /// The live status lines as rendered this second (LKM-147), for inspection.
     var statusLines: [String] = []
+    /// Sent attachment cells by attachment id, for inspection (LKM-166).
+    var attachmentFrames: [String: CGRect] = [:]
+    /// The sent attachment whose larger preview is open.
+    @Published var attachmentPreview: String?
     var bottomPosition: CGFloat = 0
     var latestButtonFrame = CGRect.zero
     /// What the conversation's SwiftUI views read (see ChatAccessibilityEcho).
@@ -162,7 +166,8 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
          "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
          "footerFrames":model.footerFrames.mapValues { NSStringFromRect($0) }, "revealedActions":model.revealedActions, "messageFrames":model.messageFrames.mapValues { NSStringFromRect($0) },
-         "statusLines":model.statusLines, "activityTokens":model.snapshot?.activity?.tokens?.label ?? "",
+         "statusLines":model.statusLines, "attachmentFrames":model.attachmentFrames.mapValues { NSStringFromRect($0) }, "attachmentPreview":model.attachmentPreview ?? "",
+         "attachmentPopover":NSApp.windows.contains { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }, "activityTokens":model.snapshot?.activity?.tokens?.label ?? "",
          "activity":model.snapshot?.activity?.label ?? "", "activityKind":model.snapshot?.activity?.kind ?? "", "activityAnimated":model.snapshot?.activity?.animated ?? false,
          "islands":model.snapshot?.messages.flatMap { $0.segments.compactMap { $0.island }.map { ["id":$0.id,"revision":$0.revision,"status":$0.status,"title":$0.title,"blocks":$0.blocks.count,"blockKinds":$0.blocks.map(\.kind),"fields":$0.fields.count,"sourceRevision":$0.sourceRevision] as [String: Any] } } ?? [],
          "cards":model.snapshot?.cards.map(\.id) ?? [], "questionCount":model.snapshot?.questions.count ?? 0]
@@ -338,6 +343,7 @@ struct ChatConversation: View {
                     .onPreferenceChange(TurnFooterPositions.self) { model.footerFrames = $0 }
                     .onPreferenceChange(RevealedActions.self) { model.revealedActions = $0 }
                     .onPreferenceChange(ChatStatusLines.self) { model.statusLines = $0 }
+                    .onPreferenceChange(AttachmentFrames.self) { model.attachmentFrames = $0 }
                     .overlay(alignment: .top) {
                         stickyRequest(proxy: proxy)
                     }
@@ -390,7 +396,7 @@ private struct NativeMessageRow: View {
                     Text(workedDuration(0)).font(.caption).hidden()
                 }
                 if let selection = message.selection { Text(selection.tag + selection.ident).font(.caption.monospaced()).foregroundStyle(.secondary) }
-                ForEach(message.attachments ?? []) { attachment in NativeAttachment(attachment: attachment) }
+                if let attachments = message.attachments, !attachments.isEmpty { SentAttachments(attachments: attachments, model: model) }
                 ForEach(Array(message.segments.enumerated()), id: \.offset) { _, segment in
                     if let island = segment.island { NativeChatIsland(island: island, model: model) }
                     else if segment.kind == "tools" {
@@ -448,15 +454,6 @@ private struct ChatActionButtonStyle: ButtonStyle {
                 .contentShape(RoundedRectangle(cornerRadius: 6))
                 .onHover { hovered = $0 }
         }
-    }
-}
-private struct NativeAttachment: View {
-    let attachment: ChatAttachment
-    var body: some View {
-        if let raw = attachment.url, raw.hasPrefix("data:image/"), let comma = raw.firstIndex(of: ","),
-           let data = Data(base64Encoded: String(raw[raw.index(after: comma)...])), let image = NSImage(data: data) {
-            Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: 200, maxHeight: 160).accessibilityLabel("Attached image")
-        } else { Label(attachment.name ?? "Attachment", systemImage: "doc").font(.caption).textSelection(.enabled) }
     }
 }
 private struct NativeChatCard: View {

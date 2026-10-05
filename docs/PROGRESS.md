@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-166: compact attachment thumbnails in the sent bubble and composer
+
+- **Problem.** The sent bubble drew each image attachment with `NSImage` at up to 200×160 pt, one per line, so SVG icons with a large intrinsic size stacked as huge black shapes and pushed the text down.
+- **Shared thumbnail.** `src/native/AttachmentThumbnail.swift`: 72 pt square cells, decoded at 2x. Raster images use ImageIO. Anything else `NSImage` reads (SVG) is drawn at the requested pixel size, so a vector with any intrinsic size yields a bounded, sharp bitmap. Images with alpha sit on a checkerboard; opaque ones sit on a neutral fill.
+- **Sent bubble.** `src/native/ChatAttachments.swift`: `AttachmentFlow` (a SwiftUI `Layout`) wraps thumbnails and file chips into rows and reports the widest row, so a short row keeps the bubble narrow. Thumbnails decode once per attachment id (`NSCache`), not on every streamed re-render. Hover shows the file name (`.help`). A click sets `ChatModel.attachmentPreview`, which opens a popover with a larger preview and the name.
+- **Composer.** Tiles use the same 72 pt aspect-fit cells and checkerboard (was 96 pt aspect-fill). The strip is 84 pt (was 108) and still scrolls horizontally. The click preview also uses the shared decoder, so SVGs preview too.
+- **Tests.** New `sent-attachments` smoke check (`src/native/smoke-sent-attachments.ts`, group `chat`): sends 8 SVG/PNG/JPG attachments with the provider call intercepted. Composer tiles are ≤96 pt and checkerboards appear only on transparent tiles. In the sent bubble, each thumbnail is 48–96 pt and inside the bubble, the cells form at least 2 packed rows, and the text ends <80 pt below the last row (42 pt in the run). Opening the preview through `chatAttachmentPreview` (test profile only) shows a popover window, and closing it removes it. Captures: `sent-attachments.png`. The existing composer check now expects the 84 pt strip and overflows with seven tiles.
+
 ## 2026-10-04 — LKM-158: clean Biome lint baseline, lint in quick verification (F4)
 
 - **Why.** Review L8 (`docs/REVIEW-2026-10.md`): `biome check src test` reported 579 errors, mostly format and import order, so `bun run lint` failed repo-wide and new lint debt went unnoticed.
