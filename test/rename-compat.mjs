@@ -24,6 +24,7 @@ import { nativeProfilePath, nativeSessionPath } from '../src/native/profile-path
 import { sourceStamp } from '../src/preview/source-stamp'
 import { compatibleEnvironment } from '../src/shared/rename-compat'
 import { useRunnerEnv } from './helpers/runner-env.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 // The service's editing owner runs the migration (LKM-111 removed the TS copy).
 const migrateLegacySidecar = (project) => editingOwner().migrateSidecar(project)
@@ -35,20 +36,11 @@ const put = (path, value) => writeFileSync(path, value)
 
 const binary = join(root, 'profile-paths')
 function buildProfilePaths() {
-  const built = spawnSync(
-    'xcrun',
-    [
-      'swiftc',
-      '-module-cache-path',
-      join(root, 'module-cache'),
-      'src/service/ProfilePaths.swift',
-      'test/fixtures/profile-paths/main.swift',
-      '-o',
-      binary
-    ],
-    { cwd: new URL('..', import.meta.url).pathname, encoding: 'utf8', timeout: 300_000 }
+  swiftBuild(
+    'profile-paths',
+    ['src/service/ProfilePaths.swift', 'test/fixtures/profile-paths/main.swift'],
+    { out: binary }
   )
-  assert.equal(built.status, 0, `swiftc: ${built.error || ''}\n${built.stdout}\n${built.stderr}`)
 }
 /** What the service does before Bun starts (ProfilePaths.swift, LKM-102): `kind` is `profile` or `sessions`. */
 function migrate(kind, path, cwd) {

@@ -25,6 +25,7 @@ and fails on an unlisted one; the gate requires 0 Bun-owned rows and no rollback
 | `bun run typecheck` | Type-check native/backend/shared code and isolated preview. Run after every change |
 | `bun run typecheck:native` | Native/backend/shared check only |
 | `node test/run.mjs unit` | Backend and controller tests, no desktop |
+| `bun run test:quick` | Quick verification in one command: both typechecks next to the unit tier, plus the 20 slowest tests (`--typecheck --report`, `docs/TESTING.md`) |
 | `bun run test:<name>` | One test (see package.json for ~40 aliases) |
 | `bun run test:native` | Disposable-profile native desktop integration |
 | `bun run test` | Unit + native UI tiers (via `test/run.mjs`) |

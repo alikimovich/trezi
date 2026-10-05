@@ -35,6 +35,7 @@ const UNIT = [
   'native-settings-claude',
   'editing-owner',
   'workflow-owner',
+  'workflow-durability',
   'platform-owner',
   'native-visible-capture',
   'native-smoke-runner',
@@ -175,26 +176,39 @@ const UNIT = [
 const NATIVE = ['native-runtime', 'native-source-window', 'native-chat-scroll', 'native-next-hmr']
 const LIVE = ['native-runtime-live', 'provider-live-parity']
 const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
-// Builds the full Swift service and runs real XPC; must not share workers with other
-// swiftc-heavy unit tests or the default 120 s budget is eaten by parallel compiles.
-// keychain-rebuild compiles the Keychain helper three times (LKM-144).
-const UNIT_EXCLUSIVE = new Set(['service-process', 'keychain-rebuild'])
+// Unit tests share workers: every swiftc compile goes through the 2-wide swiftc lane in
+// test/helpers/swift-build.mjs (LKM-167), so no unit test needs to run alone. These
+// still get a longer budget for a cold Swift cache.
 const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,
   'keychain-rebuild': 300_000,
   'setup-vite-real': 300_000
 }
+// `--typecheck` runs these next to the tests (quick verification in one command).
+const TYPECHECKS = {
+  typecheck: ['run', 'typecheck'],
+  'typecheck-native': ['run', 'typecheck:native']
+}
+// Durations from the last `--report` run; the slowest tests start first.
+const TIMES = join(ROOT, '.local/test-times.json')
 const selected = new Set()
 const options = {
-  jobs: Math.min(4, availableParallelism()),
+  // Unit tests are mostly CPU-light processes; swiftc is bounded by its own lane.
+  // Two cores stay free, up to 8 workers, never fewer than the old min(4, cores) (a
+  // 3-core CI runner keeps 3).
+  jobs: Math.max(Math.min(4, availableParallelism()), Math.min(availableParallelism() - 2, 8)),
   'timeout-ms': 120_000,
   'log-tail': 0,
   filter: null
 }
 let serial = false
+let report = false
+let typecheck = false
 try {
   for (const arg of process.argv.slice(2)) {
     if (arg === '--serial') serial = true
+    else if (arg === '--report') report = true
+    else if (arg === '--typecheck') typecheck = true
     else if (arg === 'all') for (const t of Object.keys(TIERS)) selected.add(t)
     else if (Object.hasOwn(TIERS, arg)) selected.add(arg)
     else {
@@ -218,7 +232,7 @@ try {
   }
 } catch (error) {
   console.error(
-    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=4] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name]`
+    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name] [--report] [--typecheck]`
   )
   process.exit(2)
 }
@@ -259,17 +273,41 @@ function logTail(path, count, label) {
     `----- end ${label} -----`
   ].join('\n')
 }
+let previous = {}
+try {
+  previous = JSON.parse(readFileSync(TIMES, 'utf8')).tests ?? {}
+} catch {}
 console.log(`Test logs: ${logs}`)
+const checks = typecheck
+  ? Object.entries(TYPECHECKS).map(async ([name, args]) => {
+      console.log(`START [typecheck] ${name}`)
+      const result = await runCommand({
+        command: 'bun',
+        args,
+        cwd: ROOT,
+        name,
+        log: join(logs, `typecheck-${name}.log`),
+        timeoutMs: 300_000,
+        signal: controller.signal
+      })
+      console.log(`${result.outcome} [typecheck] ${name} ${fmt(result.duration)}`)
+      if (result.outcome !== 'PASS') {
+        console.log(`  Log: ${result.log}`)
+        if (options['log-tail'])
+          console.log(logTail(result.log, options['log-tail'], `typecheck-${name}`))
+      }
+      return { tier: 'typecheck', ...result }
+    })
+  : []
 for (const [tier, members] of Object.entries(TIERS)) {
   if (!selected.has(tier)) continue
   const tests = members.filter((name) => !options.filter || options.filter.has(name))
   if (!tests.length) continue
   const jobs = serial || tier !== 'unit' ? 1 : options.jobs
   console.log(`\n${tier}: ${tests.length} tests, at most ${jobs} workers`)
-  const items = tests.map((name) => ({
-    name,
-    exclusive: tier !== 'unit' || UNIT_EXCLUSIVE.has(name)
-  }))
+  // Longest first, so a slow test never starts last; unknown tests keep their order.
+  if (tier === 'unit') tests.sort((a, b) => (previous[b] ?? 0) - (previous[a] ?? 0))
+  const items = tests.map((name) => ({ name, exclusive: tier !== 'unit' }))
   const tierResults = await runQueue(
     items,
     jobs,
@@ -301,6 +339,7 @@ for (const [tier, members] of Object.entries(TIERS)) {
   )
   results.push(...tierResults.map((r) => ({ tier, ...r })))
 }
+results.push(...(await Promise.all(checks)))
 const duration = Date.now() - start
 const counts = {}
 for (const r of results) counts[r.outcome] = (counts[r.outcome] || 0) + 1
@@ -308,6 +347,28 @@ writeFileSync(
   join(logs, 'summary.json'),
   JSON.stringify({ duration, counts, builds, results }, null, 2) + '\n'
 )
+if (report) {
+  const timed = results.filter((r) => ['PASS', 'SKIP', 'FAIL', 'TIMEOUT'].includes(r.outcome))
+  console.log('\nSlowest 20:')
+  for (const r of [...timed].sort((a, b) => b.duration - a.duration).slice(0, 20))
+    console.log(
+      `  ${fmt(r.duration).padStart(7)}  [${r.tier}] ${r.name}${r.outcome === 'PASS' ? '' : ` (${r.outcome})`}`
+    )
+  // Merged, so a filtered run keeps the other tests' last times; only a full pass is
+  // a duration worth ordering by (a fast failure or skip would start it last).
+  const tests = { ...previous }
+  for (const r of timed) if (r.outcome === 'PASS') tests[r.name] = r.duration
+  mkdirSync(dirname(TIMES), { recursive: true })
+  writeFileSync(
+    TIMES,
+    JSON.stringify(
+      { updated: new Date().toISOString(), duration, jobs: options.jobs, tests },
+      null,
+      2
+    ) + '\n'
+  )
+  console.log(`Times: ${TIMES}`)
+}
 console.log(
   `\nSUMMARY: ${Object.entries(counts)
     .map(([s, n]) => `${n} ${s}`)

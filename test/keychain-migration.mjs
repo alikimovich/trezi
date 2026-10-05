@@ -10,9 +10,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
-const root = fileURLToPath(new URL('../', import.meta.url))
 const SERVICE = 'dev.trezi.native.secrets'
 const LEGACY = 'dev.praxis.native.secrets' // the earlier name, read once
 // Bounded: a hung security agent must not eat the unit budget (LKM-144). Every call here
@@ -40,25 +39,19 @@ const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-keychain-')))
 const keychains = []
 try {
   const helper = join(scratch, 'TreziSecrets')
-  const built = spawnSync(
-    'xcrun',
+  swiftBuild(
+    'keychain-secrets',
     [
-      'swiftc',
       '-O',
       '-suppress-warnings',
-      '-module-cache-path',
-      join(scratch, 'cache'),
-      join(root, 'src/native/Secrets.swift'),
-      '-o',
-      helper,
+      'src/native/Secrets.swift',
       '-framework',
       'Security',
       '-framework',
       'CryptoKit'
     ],
-    { encoding: 'utf8' }
+    { out: helper }
   )
-  assert.equal(built.status, 0, built.stderr)
   const crypto = (keychain, op, input) => {
     const result = spawnSync(helper, ['--crypto', op, '--keychain', keychain], {
       input,

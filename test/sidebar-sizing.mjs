@@ -1,44 +1,11 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 if (process.platform !== 'darwin') {
   console.log('SIDEBAR-SIZING SKIP — macOS AppKit required')
 } else {
-  const root = fileURLToPath(new URL('..', import.meta.url))
-  const scratch = mkdtempSync(join(tmpdir(), 'trezi-sidebar-sizing-'))
-  const cache = join(root, 'out/native/module-cache')
-  mkdirSync(cache, { recursive: true })
-  const run = (args) => {
-    const result = spawnSync(args[0], args.slice(1), {
-      cwd: root,
-      encoding: 'utf8',
-      timeout: 180_000
-    })
-    assert.equal(
-      result.status,
-      0,
-      `${args[0]}: ${result.error || result.signal || ''}\n${result.stdout}\n${result.stderr}`
-    )
-    return result.stdout
-  }
-  try {
-    const binary = join(scratch, 'sidebar-sizing')
-    run([
-      'xcrun',
-      'swiftc',
-      '-module-cache-path',
-      cache,
-      'test/fixtures/sidebar-sizing/main.swift',
-      'src/native/SidebarSizing.swift',
-      '-o',
-      binary
-    ])
-    console.log(run([binary]).trim())
-  } finally {
-    rmSync(scratch, { recursive: true, force: true })
-  }
+  const binary = swiftBuild('sidebar-sizing', [
+    'test/fixtures/sidebar-sizing/main.swift',
+    'src/native/SidebarSizing.swift'
+  ])
+  console.log(runFixture(binary).trim())
 }

@@ -5,7 +5,7 @@
 // SIGKILL at every durable boundary, service restart, Bun's client, the evaluation
 // queue and the editor's failed-autosave draft retention.
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import {
@@ -21,14 +21,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
 import { createProjectMemoryUpdateQueue } from '../src/main/project-memory.ts'
 import { serviceProjectMemory } from '../src/native/project-memory-service.ts'
 import { NativeSheetController } from '../src/native/sheets-runtime.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { skipUnlessDarwin } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-memory-owner-'))
 const binary = join(scratch, 'memory-fixture')
 const NOW = 1790000000000
@@ -49,24 +48,9 @@ function compile() {
     'MemoryFile',
     'MemoryOwner'
   ].map((name) => `src/service/${name}.swift`)
-  const result = spawnSync(
-    'xcrun',
-    [
-      'swiftc',
-      '-module-cache-path',
-      join(scratch, 'module-cache'),
-      ...sources,
-      'test/fixtures/memory-owner/main.swift',
-      '-o',
-      binary
-    ],
-    { cwd: root, encoding: 'utf8', timeout: 300_000 }
-  )
-  assert.equal(
-    result.status,
-    0,
-    `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
-  )
+  swiftBuild('memory-owner', [...sources, 'test/fixtures/memory-owner/main.swift'], {
+    out: binary
+  })
 }
 
 /** A profile with the session store in place (as Bun's `nativeSessionPath` leaves it). */

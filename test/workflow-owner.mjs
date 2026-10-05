@@ -6,10 +6,10 @@
 //   run's PR, Connect, remote status/pull/switch, instrumentation helpers, a new project,
 //   the Trezi update, the diagnosis memory, skill packs and feedback, with the Git and
 //   GitHub state each leaves (the TS twin these once matched was removed in LKM-111);
-// - durability: a reply lost after a remote effect, a crash after the PR, the merge,
-//   the repository or the pull, GitHub failing after acting, install/build failures and
-//   their resumption, cancellation, busy, restart listing and dismissal, drain, a
-//   relaunch, redaction and schema.
+// - durability (run by test/workflow-durability.mjs): a reply lost after a remote
+//   effect, a crash after the PR, the merge, the repository or the pull, GitHub failing
+//   after acting, install/build failures and their resumption, cancellation, busy,
+//   restart listing and dismissal, drain, a relaunch, redaction and schema.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
@@ -197,318 +197,328 @@ async function owned(name, scenario, options) {
   return result
 }
 
+// The tool and durability checks are their own unit test, test/workflow-durability.mjs,
+// so the two halves run side by side (LKM-167).
+const durabilityPart = process.env.TREZI_WORKFLOW_PART === 'durability'
 try {
-  // ───────────── scenarios ─────────────
-  const merged = await owned('publish-merge', async (owner, w) => {
-    write(w.local, 'a.txt', 'two\n')
-    return { result: await owner.publish(w.local, 'merge', describe), state: snapshot(w) }
-  })
-  assert.equal(merged.result.ok, true)
-  assert.deepEqual(merged.state.remote, ['main'])
-  assert.equal(merged.state.mainLog[0], 'Update the greeting (#1)')
-  assert.equal(merged.state.branch, 'trezi/main')
+  if (!durabilityPart) {
+    // ───────────── scenarios ─────────────
+    const merged = await owned('publish-merge', async (owner, w) => {
+      write(w.local, 'a.txt', 'two\n')
+      return { result: await owner.publish(w.local, 'merge', describe), state: snapshot(w) }
+    })
+    assert.equal(merged.result.ok, true)
+    assert.deepEqual(merged.state.remote, ['main'])
+    assert.equal(merged.state.mainLog[0], 'Update the greeting (#1)')
+    assert.equal(merged.state.branch, 'trezi/main')
 
-  const reused = await owned('publish-pr-reuse', async (owner, w) => {
-    write(w.local, 'a.txt', 'two\n')
-    const first = await owner.publish(w.local, 'pr', describe)
-    write(w.local, 'b.txt', 'more\n')
-    const second = await owner.publish(w.local, 'pr', describe)
-    return { first, second, state: snapshot(w) }
-  })
-  assert.equal(reused.second.url, reused.first.url)
-  assert.equal(reused.state.gh.counts.prCreate, 1)
+    const reused = await owned('publish-pr-reuse', async (owner, w) => {
+      write(w.local, 'a.txt', 'two\n')
+      const first = await owner.publish(w.local, 'pr', describe)
+      write(w.local, 'b.txt', 'more\n')
+      const second = await owner.publish(w.local, 'pr', describe)
+      return { first, second, state: snapshot(w) }
+    })
+    assert.equal(reused.second.url, reused.first.url)
+    assert.equal(reused.state.gh.counts.prCreate, 1)
 
-  const conflicted = await owned('publish-conflict', async (owner, w) => {
-    const peer = w.peer()
-    git(peer, 'checkout', '-q', '-b', 'trezi/main')
-    commit(peer, 'a.txt', 'peer\n')
-    git(peer, 'push', '-q', 'origin', 'trezi/main')
-    write(w.local, 'a.txt', 'local\n')
-    return { result: await owner.publish(w.local, 'merge', describe), state: snapshot(w) }
-  })
-  assert.deepEqual(conflicted.result.conflictFiles, ['a.txt'])
-  assert.equal(conflicted.result.recoveryRefs.length, 2)
+    const conflicted = await owned('publish-conflict', async (owner, w) => {
+      const peer = w.peer()
+      git(peer, 'checkout', '-q', '-b', 'trezi/main')
+      commit(peer, 'a.txt', 'peer\n')
+      git(peer, 'push', '-q', 'origin', 'trezi/main')
+      write(w.local, 'a.txt', 'local\n')
+      return { result: await owner.publish(w.local, 'merge', describe), state: snapshot(w) }
+    })
+    assert.deepEqual(conflicted.result.conflictFiles, ['a.txt'])
+    assert.equal(conflicted.result.recoveryRefs.length, 2)
 
-  const nothing = await owned('publish-nothing', async (owner, w) => ({
-    result: await owner.publish(w.local, 'merge', describe),
-    state: snapshot(w)
-  }))
-  assert.equal(nothing.result.error, 'Nothing to publish — no changes since main.')
-
-  const handoff = await owned('handoff', async (owner, w) => {
-    write(w.local, 'a.txt', 'handoff\n')
-    mkdirSync(join(w.local, '.trezi'))
-    write(w.local, '.trezi/annotations.json', '[{"id":"n1","text":"Tighten the header"}]\n')
-    return {
-      result: await owner.handoff(w.local, 'Design handoff', 1, describe),
+    const nothing = await owned('publish-nothing', async (owner, w) => ({
+      result: await owner.publish(w.local, 'merge', describe),
       state: snapshot(w)
-    }
-  })
+    }))
+    assert.equal(nothing.result.error, 'Nothing to publish — no changes since main.')
 
-  assert.equal(handoff.result.ok, true)
-  assert.equal(handoff.state.branch, 'trezi/handoff-X')
+    const handoff = await owned('handoff', async (owner, w) => {
+      write(w.local, 'a.txt', 'handoff\n')
+      mkdirSync(join(w.local, '.trezi'))
+      write(w.local, '.trezi/annotations.json', '[{"id":"n1","text":"Tighten the header"}]\n')
+      return {
+        result: await owner.handoff(w.local, 'Design handoff', 1, describe),
+        state: snapshot(w)
+      }
+    })
 
-  const branchPr = await owned('branch-pr', async (owner, w) => {
-    git(w.local, 'checkout', '-q', '-b', 'trezi/chat-1')
-    commit(w.local, 'c.txt', 'chat\n')
-    git(w.local, 'checkout', '-q', 'trezi/main')
-    const result = await owner.branchPr(w.local, 'trezi/chat-1', describe)
-    const missing = await owner.branchPr(w.local, 'trezi/chat-9', describe)
-    return { result, missing, state: snapshot(w) }
-  })
+    assert.equal(handoff.result.ok, true)
+    assert.equal(handoff.state.branch, 'trezi/handoff-X')
 
-  assert.equal(branchPr.result.prUrl, 'https://github.com/fake/repo/pull/1')
-  assert.equal(branchPr.missing.error, 'That branch no longer exists.')
+    const branchPr = await owned('branch-pr', async (owner, w) => {
+      git(w.local, 'checkout', '-q', '-b', 'trezi/chat-1')
+      commit(w.local, 'c.txt', 'chat\n')
+      git(w.local, 'checkout', '-q', 'trezi/main')
+      const result = await owner.branchPr(w.local, 'trezi/chat-1', describe)
+      const missing = await owner.branchPr(w.local, 'trezi/chat-9', describe)
+      return { result, missing, state: snapshot(w) }
+    })
 
-  const connected = await owned(
-    'connect',
-    async (owner, w) => {
-      const result = await owner.connect(w.local, {
-        name: 'demo-app',
-        owner: 'octo',
-        private: true
-      })
-      const again = await owner.connect(w.local, { name: 'demo-app', owner: 'octo', private: true })
-      const bare = join(w.base, 'repos', 'octo', 'demo-app.git')
+    assert.equal(branchPr.result.prUrl, 'https://github.com/fake/repo/pull/1')
+    assert.equal(branchPr.missing.error, 'That branch no longer exists.')
+
+    const connected = await owned(
+      'connect',
+      async (owner, w) => {
+        const result = await owner.connect(w.local, {
+          name: 'demo-app',
+          owner: 'octo',
+          private: true
+        })
+        const again = await owner.connect(w.local, {
+          name: 'demo-app',
+          owner: 'octo',
+          private: true
+        })
+        const bare = join(w.base, 'repos', 'octo', 'demo-app.git')
+        return {
+          result,
+          again,
+          remote: git(w.local, 'remote', 'get-url', 'origin'),
+          branches: git(bare, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'),
+          head: git(bare, 'symbolic-ref', 'HEAD'),
+          state: snapshot(w)
+        }
+      },
+      { remote: false }
+    )
+    assert.equal(connected.result.ok, true)
+    assert.equal(connected.branches, 'main\ntrezi/main')
+
+    const remote = await owned('remote', async (owner, w) => {
+      const peer = w.peer()
+      git(peer, 'checkout', '-q', '-b', 'feature/design')
+      commit(peer, 'feature.txt', 'remote feature\n')
+      git(peer, 'push', '-q', 'origin', 'feature/design')
+      git(peer, 'checkout', '-q', 'main')
+      commit(peer, 'main.txt', 'remote main\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      const cached = await owner.remoteStatus(w.local, false)
+      const fetched = await owner.remoteStatus(w.local, true)
+      const busy = await owner.remoteUpdate(
+        w.local,
+        { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' },
+        true
+      )
+      const stale = await owner.remoteUpdate(
+        w.local,
+        { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'other' },
+        false
+      )
+      const pulled = await owner.remoteUpdate(
+        w.local,
+        { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' },
+        false
+      )
+      const switched = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'checkout',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'trezi/main'
+        },
+        false
+      )
+      const update = await owner.updateCheck(w.local)
+      let outside
+      try {
+        await owner.remoteStatus(join(w.local, '..'), false)
+      } catch (error) {
+        outside = error.message
+      }
+      return { cached, fetched, update, busy, stale, pulled, switched, outside, state: snapshot(w) }
+    })
+
+    assert.equal(remote.pulled.ok, true)
+    assert.equal(remote.switched.branch, 'feature/design')
+    assert.equal(remote.busy.ok, false)
+    assert.match(remote.outside, /top-level folder/)
+    assert.deepEqual(remote.update, { status: 'idle', behind: 0 }) // the fixture branch is not behind its own upstream
+
+    const setup = await owned('setup', async (owner, w) => {
+      write(
+        w.local,
+        'package.json',
+        JSON.stringify({
+          dependencies: { react: '^19.0.0', next: '^15.0.0' },
+          scripts: { dev: 'next dev' }
+        })
+      )
+      mkdirSync(join(w.local, 'node_modules/next'), { recursive: true })
+      write(
+        w.local,
+        'node_modules/next/package.json',
+        JSON.stringify({ name: 'next', version: '15.2.0' })
+      )
+      const files = helperFiles(await detect(w.local))
+      const first = await owner.writeHelpers(w.local, files)
+      write(w.local, '.trezi/trezi-next.cjs', '// edited by hand\n')
+      const second = await owner.writeHelpers(w.local, files)
+      const kept = readFileSync(join(w.local, '.trezi/trezi-next.cjs'), 'utf8')
+      mkdirSync(join(w.local, '.dsgn'))
+      write(w.local, '.dsgn/dsgn-source.cjs', 'old')
+      const removed = await owner.removeHelpers(w.local)
+      return { first, second, kept, removed, left: readdirSync(join(w.local, '.trezi')) }
+    })
+
+    assert.equal(setup.first.written, true)
+    assert.equal(setup.second.written, false)
+    assert.equal(setup.first.helpers.length, 4)
+    assert.equal(setup.kept, '// edited by hand\n')
+    assert.equal(setup.removed.files.length, 5)
+
+    // LKM-153: React on Vite 8 gets the Vite plugin beside the Babel visitor; the owner
+    // accepts it, hashes it for the setup prompt and removes it on uninstall.
+    const viteSetup = await owned('setup-vite', async (owner, w) => {
+      write(
+        w.local,
+        'package.json',
+        JSON.stringify({
+          dependencies: { react: '^19.2.0' },
+          devDependencies: { vite: '^8.0.0', '@vitejs/plugin-react': '^6.0.0' }
+        })
+      )
+      const files = helperFiles(await detect(w.local))
+      const wrote = await owner.writeHelpers(w.local, files)
+      const plugin = readFileSync(join(w.local, '.trezi/trezi-vite.mjs'), 'utf8')
+      const removed = await owner.removeHelpers(w.local)
+      return {
+        files,
+        wrote,
+        plugin,
+        removed,
+        left: existsSync(join(w.local, '.trezi/trezi-vite.mjs'))
+      }
+    })
+    assert.equal(viteSetup.wrote.ok, true, viteSetup.wrote.error)
+    assert.deepEqual(
+      viteSetup.wrote.helpers.map((h) => h.path),
+      ['.trezi/trezi-source.cjs', '.trezi/trezi-vite.mjs']
+    )
+    assert.equal(viteSetup.plugin, viteSetup.files[1].content)
+    assert.ok(viteSetup.removed.files.includes('.trezi/trezi-vite.mjs'))
+    assert.equal(viteSetup.left, false)
+
+    const created = await owned('create-project', async (owner, w) => {
+      const root = join(w.base, 'New App')
+      const result = await owner.createProject(root, starterFiles(root, 'react'), 'bun')
+      const again = await owner.createProject(root, starterFiles(root, 'react'), 'bun')
       return {
         result,
         again,
-        remote: git(w.local, 'remote', 'get-url', 'origin'),
-        branches: git(bare, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'),
-        head: git(bare, 'symbolic-ref', 'HEAD'),
+        files: readdirSync(root).sort(),
+        log: git(root, 'log', '--format=%s'),
+        pm: w.pm().calls
+      }
+    })
+
+    assert.equal(created.result.ok, true)
+    assert.match(created.again.error, /isn't empty/)
+    assert.deepEqual(created.pm, ['bun install'])
+
+    const updated = await owned('update', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      const peer = w.peer()
+      commit(peer, 'release.txt', 'new release\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      const progress = []
+      const result = await owner.update(w.local, (text) => progress.push(text))
+      return {
+        result,
+        head: git(w.local, 'rev-parse', 'HEAD') === git(w.origin, 'rev-parse', 'main'),
+        pm: w.pm().calls,
         state: snapshot(w)
       }
-    },
-    { remote: false }
-  )
-  assert.equal(connected.result.ok, true)
-  assert.equal(connected.branches, 'main\ntrezi/main')
-
-  const remote = await owned('remote', async (owner, w) => {
-    const peer = w.peer()
-    git(peer, 'checkout', '-q', '-b', 'feature/design')
-    commit(peer, 'feature.txt', 'remote feature\n')
-    git(peer, 'push', '-q', 'origin', 'feature/design')
-    git(peer, 'checkout', '-q', 'main')
-    commit(peer, 'main.txt', 'remote main\n')
-    git(peer, 'push', '-q', 'origin', 'main')
-    const cached = await owner.remoteStatus(w.local, false)
-    const fetched = await owner.remoteStatus(w.local, true)
-    const busy = await owner.remoteUpdate(
-      w.local,
-      { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' },
-      true
-    )
-    const stale = await owner.remoteUpdate(
-      w.local,
-      { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'other' },
-      false
-    )
-    const pulled = await owner.remoteUpdate(
-      w.local,
-      { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' },
-      false
-    )
-    const switched = await owner.remoteUpdate(
-      w.local,
-      {
-        action: 'checkout',
-        ref: 'refs/remotes/origin/feature/design',
-        expectedBranch: 'trezi/main'
-      },
-      false
-    )
-    const update = await owner.updateCheck(w.local)
-    let outside
-    try {
-      await owner.remoteStatus(join(w.local, '..'), false)
-    } catch (error) {
-      outside = error.message
-    }
-    return { cached, fetched, update, busy, stale, pulled, switched, outside, state: snapshot(w) }
-  })
-
-  assert.equal(remote.pulled.ok, true)
-  assert.equal(remote.switched.branch, 'feature/design')
-  assert.equal(remote.busy.ok, false)
-  assert.match(remote.outside, /top-level folder/)
-  assert.deepEqual(remote.update, { status: 'idle', behind: 0 }) // the fixture branch is not behind its own upstream
-
-  const setup = await owned('setup', async (owner, w) => {
-    write(
-      w.local,
-      'package.json',
-      JSON.stringify({
-        dependencies: { react: '^19.0.0', next: '^15.0.0' },
-        scripts: { dev: 'next dev' }
-      })
-    )
-    mkdirSync(join(w.local, 'node_modules/next'), { recursive: true })
-    write(
-      w.local,
-      'node_modules/next/package.json',
-      JSON.stringify({ name: 'next', version: '15.2.0' })
-    )
-    const files = helperFiles(await detect(w.local))
-    const first = await owner.writeHelpers(w.local, files)
-    write(w.local, '.trezi/trezi-next.cjs', '// edited by hand\n')
-    const second = await owner.writeHelpers(w.local, files)
-    const kept = readFileSync(join(w.local, '.trezi/trezi-next.cjs'), 'utf8')
-    mkdirSync(join(w.local, '.dsgn'))
-    write(w.local, '.dsgn/dsgn-source.cjs', 'old')
-    const removed = await owner.removeHelpers(w.local)
-    return { first, second, kept, removed, left: readdirSync(join(w.local, '.trezi')) }
-  })
-
-  assert.equal(setup.first.written, true)
-  assert.equal(setup.second.written, false)
-  assert.equal(setup.first.helpers.length, 4)
-  assert.equal(setup.kept, '// edited by hand\n')
-  assert.equal(setup.removed.files.length, 5)
-
-  // LKM-153: React on Vite 8 gets the Vite plugin beside the Babel visitor; the owner
-  // accepts it, hashes it for the setup prompt and removes it on uninstall.
-  const viteSetup = await owned('setup-vite', async (owner, w) => {
-    write(
-      w.local,
-      'package.json',
-      JSON.stringify({
-        dependencies: { react: '^19.2.0' },
-        devDependencies: { vite: '^8.0.0', '@vitejs/plugin-react': '^6.0.0' }
-      })
-    )
-    const files = helperFiles(await detect(w.local))
-    const wrote = await owner.writeHelpers(w.local, files)
-    const plugin = readFileSync(join(w.local, '.trezi/trezi-vite.mjs'), 'utf8')
-    const removed = await owner.removeHelpers(w.local)
-    return {
-      files,
-      wrote,
-      plugin,
-      removed,
-      left: existsSync(join(w.local, '.trezi/trezi-vite.mjs'))
-    }
-  })
-  assert.equal(viteSetup.wrote.ok, true, viteSetup.wrote.error)
-  assert.deepEqual(
-    viteSetup.wrote.helpers.map((h) => h.path),
-    ['.trezi/trezi-source.cjs', '.trezi/trezi-vite.mjs']
-  )
-  assert.equal(viteSetup.plugin, viteSetup.files[1].content)
-  assert.ok(viteSetup.removed.files.includes('.trezi/trezi-vite.mjs'))
-  assert.equal(viteSetup.left, false)
-
-  const created = await owned('create-project', async (owner, w) => {
-    const root = join(w.base, 'New App')
-    const result = await owner.createProject(root, starterFiles(root, 'react'), 'bun')
-    const again = await owner.createProject(root, starterFiles(root, 'react'), 'bun')
-    return {
-      result,
-      again,
-      files: readdirSync(root).sort(),
-      log: git(root, 'log', '--format=%s'),
-      pm: w.pm().calls
-    }
-  })
-
-  assert.equal(created.result.ok, true)
-  assert.match(created.again.error, /isn't empty/)
-  assert.deepEqual(created.pm, ['bun install'])
-
-  const updated = await owned('update', async (owner, w) => {
-    git(w.local, 'checkout', '-q', 'main')
-    const peer = w.peer()
-    commit(peer, 'release.txt', 'new release\n')
-    git(peer, 'push', '-q', 'origin', 'main')
-    const progress = []
-    const result = await owner.update(w.local, (text) => progress.push(text))
-    return {
-      result,
-      head: git(w.local, 'rev-parse', 'HEAD') === git(w.origin, 'rev-parse', 'main'),
-      pm: w.pm().calls,
-      state: snapshot(w)
-    }
-  })
-
-  assert.deepEqual(updated.result, { ok: true })
-  assert.equal(updated.head, true)
-  assert.deepEqual(updated.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
-
-  const diagnosed = await owned('diagnostics', async (owner, w) => {
-    const error = "Cannot find module '@ai-sdk/xai' imported from /Users/x/chat.ts"
-    const signature = signatureFor(error)
-    const none = await owner.recallDiagnosis(w.local, signature)
-    await owner.rememberDiagnosis(w.local, {
-      signature,
-      summary: 'Missing dependency',
-      detail: 'Install it.',
-      steps: [
-        { text: 'Install @ai-sdk/xai', command: 'bun add @ai-sdk/xai', scope: 'repo' },
-        { text: 'Restart', scope: 'host' }
-      ],
-      seenBefore: false,
-      status: 'proposed'
     })
-    await owner.rememberDiagnosis('/other/project', {
-      signature: '1234',
-      summary: 'Numeric key',
-      steps: [],
-      seenBefore: false
+
+    assert.deepEqual(updated.result, { ok: true })
+    assert.equal(updated.head, true)
+    assert.deepEqual(updated.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
+
+    const diagnosed = await owned('diagnostics', async (owner, w) => {
+      const error = "Cannot find module '@ai-sdk/xai' imported from /Users/x/chat.ts"
+      const signature = signatureFor(error)
+      const none = await owner.recallDiagnosis(w.local, signature)
+      await owner.rememberDiagnosis(w.local, {
+        signature,
+        summary: 'Missing dependency',
+        detail: 'Install it.',
+        steps: [
+          { text: 'Install @ai-sdk/xai', command: 'bun add @ai-sdk/xai', scope: 'repo' },
+          { text: 'Restart', scope: 'host' }
+        ],
+        seenBefore: false,
+        status: 'proposed'
+      })
+      await owner.rememberDiagnosis('/other/project', {
+        signature: '1234',
+        summary: 'Numeric key',
+        steps: [],
+        seenBefore: false
+      })
+      const recalled = await owner.recallDiagnosis(w.local, signature)
+      await owner.diagnosisStatus(w.local, signature, 'applied')
+      await owner.diagnosisStatus(w.local, 'ffff', 'dismissed')
+      return {
+        none,
+        recalled,
+        after: await owner.recallDiagnosis(w.local, signature),
+        file: readFileSync(join(w.profile, 'diagnostics.json'), 'utf8')
+      }
     })
-    const recalled = await owner.recallDiagnosis(w.local, signature)
-    await owner.diagnosisStatus(w.local, signature, 'applied')
-    await owner.diagnosisStatus(w.local, 'ffff', 'dismissed')
-    return {
-      none,
-      recalled,
-      after: await owner.recallDiagnosis(w.local, signature),
-      file: readFileSync(join(w.profile, 'diagnostics.json'), 'utf8')
-    }
-  })
 
-  assert.equal(diagnosed.after.status, 'applied')
-  assert.equal(diagnosed.recalled.seenBefore, true)
+    assert.equal(diagnosed.after.status, 'applied')
+    assert.equal(diagnosed.recalled.seenBefore, true)
 
-  const skills = await owned('skills', async (owner, w) => {
-    const input = { packId: 'anthropic-frontend-design', scope: 'project', liveRoot: w.local }
-    const ok = await owner.installSkills(input)
-    writeFileSync(w.pmState, JSON.stringify({ calls: w.pm().calls, fail: { skills: 1 } }))
-    const failed = await owner.installSkills(input)
-    const refused = await owner.installSkills({ ...input, packId: 'not-a-pack' })
-    return { ok, failed, refused, calls: w.pm().calls }
-  })
+    const skills = await owned('skills', async (owner, w) => {
+      const input = { packId: 'anthropic-frontend-design', scope: 'project', liveRoot: w.local }
+      const ok = await owner.installSkills(input)
+      writeFileSync(w.pmState, JSON.stringify({ calls: w.pm().calls, fail: { skills: 1 } }))
+      const failed = await owner.installSkills(input)
+      const refused = await owner.installSkills({ ...input, packId: 'not-a-pack' })
+      return { ok, failed, refused, calls: w.pm().calls }
+    })
 
-  assert.equal(skills.ok.ok, true)
-  assert.deepEqual(skills.ok.installed, ['frontend-design'])
-  assert.equal(skills.failed.ok, false)
-  assert.match(skills.refused.message, /not in the curated skill-pack allowlist/)
-  assert.equal(skills.calls.length, 2)
+    assert.equal(skills.ok.ok, true)
+    assert.deepEqual(skills.ok.installed, ['frontend-design'])
+    assert.equal(skills.failed.ok, false)
+    assert.match(skills.refused.message, /not in the curated skill-pack allowlist/)
+    assert.equal(skills.calls.length, 2)
 
-  const feedback = await owned('feedback', async (owner, w) => {
-    const title = 'Sidebar focus'
-    const body = 'Steps to reproduce…'
-    const result = await owner.feedback(w.local, title, body)
-    const issue = w.gh().issues[0]
-    return {
-      result,
-      issue: issue ? { title: issue.title, body: issue.body } : null,
-      create: w.gh().counts?.issueCreate
-    }
-  })
-  assert.equal(feedback.result.ok, true)
-  assert.deepEqual(feedback.issue, { title: 'Sidebar focus', body: 'Steps to reproduce…' })
-  assert.equal(feedback.create, 1)
-
-  // ───────────── durability (Swift owner) ─────────────
-  await import('./helpers/workflow-tools-checks.mjs').then((module) =>
-    module.toolChecks({ world, start, log })
-  )
-  await import('./helpers/workflow-durability.mjs').then((module) =>
-    module.durability({ world, start, snapshot, git, write, commit, describe, log, fakes })
-  )
-  console.log(
-    'WORKFLOW OWNER OK — scenarios, lost replies, crashes, failures, cancellation, restart, relaunch, drain, redaction, schema'
-  )
+    const feedback = await owned('feedback', async (owner, w) => {
+      const title = 'Sidebar focus'
+      const body = 'Steps to reproduce…'
+      const result = await owner.feedback(w.local, title, body)
+      const issue = w.gh().issues[0]
+      return {
+        result,
+        issue: issue ? { title: issue.title, body: issue.body } : null,
+        create: w.gh().counts?.issueCreate
+      }
+    })
+    assert.equal(feedback.result.ok, true)
+    assert.deepEqual(feedback.issue, { title: 'Sidebar focus', body: 'Steps to reproduce…' })
+    assert.equal(feedback.create, 1)
+    console.log('WORKFLOW OWNER OK — scenarios (durability: test/workflow-durability.mjs)')
+  } else {
+    // ───────────── durability (Swift owner) ─────────────
+    await import('./helpers/workflow-tools-checks.mjs').then((module) =>
+      module.toolChecks({ world, start, log })
+    )
+    await import('./helpers/workflow-durability.mjs').then((module) =>
+      module.durability({ world, start, snapshot, git, write, commit, describe, log, fakes })
+    )
+    console.log(
+      'WORKFLOW DURABILITY OK — tools, lost replies, crashes, failures, cancellation, restart, relaunch, drain, redaction, schema'
+    )
+  }
 } finally {
   for (const fixture of fixtures) await fixture.stop().catch(() => {})
   rmSync(scratch, { recursive: true, force: true })

@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   assertSidebarFocusClean,
   restoreSidebarFocus,
   withSidebarCleanup
 } from '../src/native/smoke-sidebar.ts'
+import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 // Fake host: each sidebarFocus request pops the next report; cleanup requests are recorded.
 const host = (reports) => {
@@ -75,39 +71,11 @@ await withSidebarCleanup(host([clean]), async () => {})
 if (process.platform !== 'darwin') {
   console.log('SIDEBAR-FOCUS SKIP (Swift half) — macOS AppKit required')
 } else {
-  const root = fileURLToPath(new URL('..', import.meta.url))
-  const scratch = mkdtempSync(join(tmpdir(), 'trezi-sidebar-focus-'))
-  const cache = join(root, 'out/native/module-cache')
-  mkdirSync(cache, { recursive: true })
-  const run = (args) => {
-    const result = spawnSync(args[0], args.slice(1), {
-      cwd: root,
-      encoding: 'utf8',
-      timeout: 180_000
-    })
-    assert.equal(
-      result.status,
-      0,
-      `${args[0]}: ${result.error || result.signal || ''}\n${result.stdout}\n${result.stderr}`
-    )
-    return result.stdout
-  }
-  try {
-    const binary = join(scratch, 'sidebar-focus')
-    run([
-      'xcrun',
-      'swiftc',
-      '-module-cache-path',
-      cache,
-      'test/fixtures/sidebar-focus/main.swift',
-      'src/native/SidebarFocus.swift',
-      '-o',
-      binary
-    ])
-    console.log(run([binary]).trim())
-  } finally {
-    rmSync(scratch, { recursive: true, force: true })
-  }
+  const binary = swiftBuild('sidebar-focus', [
+    'test/fixtures/sidebar-focus/main.swift',
+    'src/native/SidebarFocus.swift'
+  ])
+  console.log(runFixture(binary).trim())
 }
 console.log(
   'SIDEBAR FOCUS CLEANUP PASS — teardown runs on failure, leftovers are named, the capture guard is never retried'

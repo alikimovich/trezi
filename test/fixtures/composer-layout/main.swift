@@ -227,7 +227,13 @@ print("Chat spacing and native scroller policy passed without a window")
 // Replay the manager's exact one-line -> six-line document geometry without
 // a window. A request against the old bounds cannot reach the new reading end.
 final class FlippedDocument: NSView { override var isFlipped: Bool { true } }
-func drainLayout() { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2)) }
+/// 0.2 s of main loop, then on until `done` holds (at most 5 s): a loaded machine
+/// can starve the fixed window before the main-queue pin runs (LKM-167).
+func drainLayout(until done: () -> Bool = { true }) {
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+    let deadline = Date(timeIntervalSinceNow: 5)
+    while !done() && Date() < deadline { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
+}
 func distanceFromEnd(_ scroll: NSScrollView) -> CGFloat {
     scroll.documentView!.frame.maxY - scroll.contentView.bounds.maxY
 }
@@ -245,7 +251,7 @@ require(distanceFromEnd(growingScroll) >= 83,
 var following = true
 probe.follows = { following }
 probe.scheduleConfiguration()
-drainLayout()
+drainLayout(until: { distanceFromEnd(growingScroll) < 1 })
 require(distanceFromEnd(growingScroll) < 1,
     "Settled layout pin reaches new bottom: pins \(probe.pinCount), clip \(growingScroll.contentView.bounds), doc \(growingDocument.frame), attached \(probe.enclosingScrollView != nil)")
 for height: CGFloat in [7413, 7496, 7653, 7413] {

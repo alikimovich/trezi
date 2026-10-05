@@ -5,7 +5,7 @@
 // at every durable boundary, service restart, offline edits and Bun's client +
 // controller.
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import {
@@ -25,6 +25,8 @@ import { fileURLToPath } from 'node:url'
 import { NativeWorkspaceController } from '../src/native/workspace-controller.ts'
 import { serviceWorkspace } from '../src/native/workspace-service.ts'
 import { skipUnlessDarwin } from './helpers/darwin.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
+import { WORKSPACE_FIXTURE } from './helpers/workspace-fixture.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-workspace-owner-'))
@@ -35,34 +37,7 @@ let cases = 0
 
 function compile() {
   skipUnlessDarwin('the Swift workspace owner')
-  const sources = [
-    'ServiceContract',
-    'LedgerStore',
-    'OperationLedger',
-    'PreferencesFile',
-    'PreferencesOwner',
-    'WorkspaceFile',
-    'WorkspaceOwner',
-    'DomainChannel'
-  ].map((name) => `src/service/${name}.swift`)
-  const result = spawnSync(
-    'xcrun',
-    [
-      'swiftc',
-      '-module-cache-path',
-      join(scratch, 'module-cache'),
-      ...sources,
-      'test/fixtures/workspace-owner/main.swift',
-      '-o',
-      binary
-    ],
-    { cwd: root, encoding: 'utf8', timeout: 300_000 }
-  )
-  assert.equal(
-    result.status,
-    0,
-    `swiftc: ${result.error || ''}\n${result.stdout}\n${result.stderr}`
-  )
+  swiftBuild('workspace-owner', WORKSPACE_FIXTURE, { out: binary })
 }
 
 function profile(initial) {
