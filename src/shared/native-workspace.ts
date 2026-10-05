@@ -1,6 +1,6 @@
-import type { ProjectEntry } from './workspace'
-import type { ChatAgentSettings } from './chat-settings'
 import type { SessionRecord } from './api'
+import type { ChatAgentSettings } from './chat-settings'
+import type { ProjectEntry } from './workspace'
 
 export type NativeProjectStatus =
   | { kind: 'idle' }
@@ -32,7 +32,13 @@ export type NativeWorkspaceCommand =
   | { type: 'restart'; key: string; command?: string }
 export interface NativeWorkspaceBridge {
   command(command: NativeWorkspaceCommand): Promise<void>
-  onProjection(callback: (value: { chatHidden: boolean; viewport: string; selectMode: boolean }) => void): () => void
+  onProjection(
+    callback: (value: { chatHidden: boolean; viewport: string; selectMode: boolean }) => void
+  ): () => void
   onState(callback: (state: NativeWorkspaceSnapshot) => void): () => void
 }
-declare global { interface Window { treziNativeWorkspace?: NativeWorkspaceBridge } }
+declare global {
+  interface Window {
+    treziNativeWorkspace?: NativeWorkspaceBridge
+  }
+}

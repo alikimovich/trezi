@@ -1,14 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { findPack } from '../main/skill-packs'
-import type { ServiceFailure } from '../shared/service-contract/types'
-import type { PublishMessage } from '../shared/publish-message'
 import { healPublishBranch } from '../main/publish'
+import { findPack } from '../main/skill-packs'
 import { type Describe, WorkflowError, type WorkflowOwner } from '../main/workflow-owner'
+import type { PublishMessage } from '../shared/publish-message'
+import type { ServiceFailure } from '../shared/service-contract/types'
 
 type Result = { kind: 'succeeded'; payload: any } | { kind: 'failed'; payload: ServiceFailure }
-interface ServiceMessage { service?: string; id?: number; reply?: { result: Result } }
+interface ServiceMessage {
+  service?: string
+  id?: number
+  reply?: { result: Result }
+}
 /** Bun's end of the supervised private pipe (see `NativeBridge.sendService`). */
 export interface WorkflowLink {
   sendService(frame: object): void
@@ -34,20 +38,28 @@ export interface WorkflowClientOptions {
  * the description helper, which only proposes a title and body. A failure rejects with
  * the owner's code; Bun never performs the workflow itself.
  */
-export function serviceWorkflows(link: WorkflowLink, options: WorkflowClientOptions = {}): WorkflowOwner {
+export function serviceWorkflows(
+  link: WorkflowLink,
+  options: WorkflowClientOptions = {}
+): WorkflowOwner {
   const connection = randomUUID()
   const timeout = options.timeout ?? 15 * 60_000
   const retries = options.retries ?? 2
   const pending = new Map<number, (value: Result) => void>()
   let sequence = 0
 
-  link.on('service-reply', message => {
+  link.on('service-reply', (message) => {
     if (message.service !== 'workflow' || !message.reply) return
     const resolve = pending.get(message.id ?? -1)
     if (resolve) resolve(message.reply.result)
   })
 
-  const call = (method: string, body: Record<string, unknown>, mode: 'read' | 'mutation' = 'mutation', attempts = retries): Promise<any> => {
+  const call = (
+    method: string,
+    body: Record<string, unknown>,
+    mode: 'read' | 'mutation' = 'mutation',
+    attempts = retries
+  ): Promise<any> => {
     const operationID = randomUUID()
     const ids: number[] = []
     return new Promise<Result>((resolve, reject) => {
@@ -61,17 +73,33 @@ export function serviceWorkflows(link: WorkflowLink, options: WorkflowClientOpti
         const id = ++sequence
         ids.push(id)
         pending.set(id, settle)
-        link.sendService({ service: 'workflow', id, request: {
-          connection, requestID: randomUUID(), operationID, scope: {}, mode, service: 'workflow', method, body
-        } })
+        link.sendService({
+          service: 'workflow',
+          id,
+          request: {
+            connection,
+            requestID: randomUUID(),
+            operationID,
+            scope: {},
+            mode,
+            service: 'workflow',
+            method,
+            body
+          }
+        })
         timer = setTimeout(() => {
           if (left > 0) return attempt(left - 1)
           for (const stale of ids) pending.delete(stale)
-          reject(new WorkflowError('deadlineExceeded', `The Trezi service did not answer the ${method} request in time; asking again resumes it.`))
+          reject(
+            new WorkflowError(
+              'deadlineExceeded',
+              `The Trezi service did not answer the ${method} request in time; asking again resumes it.`
+            )
+          )
         }, timeout)
       }
       attempt(mode === 'read' ? 0 : attempts)
-    }).then(result => {
+    }).then((result) => {
       if (result.kind === 'succeeded') return result.payload
       throw new WorkflowError(result.payload.code, result.payload.message)
     })
@@ -88,9 +116,22 @@ export function serviceWorkflows(link: WorkflowLink, options: WorkflowClientOpti
     try {
       described = await describe(reply.base, reply.head)
     } catch (error) {
-      return (await call('describe', { workflow: reply.workflow, error: message(error) || 'The description could not be generated.', ...leases() })).result
+      return (
+        await call('describe', {
+          workflow: reply.workflow,
+          error: message(error) || 'The description could not be generated.',
+          ...leases()
+        })
+      ).result
     }
-    return (await call('describe', { workflow: reply.workflow, title: described.title, body: described.body, ...leases() })).result
+    return (
+      await call('describe', {
+        workflow: reply.workflow,
+        title: described.title,
+        body: described.body,
+        ...leases()
+      })
+    ).result
   }
 
   return {
@@ -101,23 +142,56 @@ export function serviceWorkflows(link: WorkflowLink, options: WorkflowClientOpti
       return finish(await call('publish', { root, mode, intent: 'publish', ...leases() }), describe)
     },
     async handoff(root, title, notes, describe) {
-      return finish(await call('handoff', { root, title: title || 'trezi: design handoff', notes, intent: 'publish', ...leases() }), describe)
+      return finish(
+        await call('handoff', {
+          root,
+          title: title || 'trezi: design handoff',
+          notes,
+          intent: 'publish',
+          ...leases()
+        }),
+        describe
+      )
     },
     async branchPr(root, branch, describe) {
-      return finish(await call('branchPr', { root, branch, intent: 'publish', ...leases() }), describe)
+      return finish(
+        await call('branchPr', { root, branch, intent: 'publish', ...leases() }),
+        describe
+      )
     },
     async connect(root, options) {
-      const reply = await call('connect', { root, name: options.name, owner: options.owner?.trim() ?? '', private: !!options.private, intent: 'connect', ...leases() })
+      const reply = await call('connect', {
+        root,
+        name: options.name,
+        owner: options.owner?.trim() ?? '',
+        private: !!options.private,
+        intent: 'connect',
+        ...leases()
+      })
       return reply.result
     },
     remoteStatus: (root, fetch) => call('remoteStatus', { root, fetch, ...leases() }),
     async remoteUpdate(root, action, busy) {
-      const reply = await call('remoteUpdate', { root, action: action.action, ref: action.ref, expectedBranch: action.expectedBranch ?? null, busy,
-        intent: 'update', ...leases() })
+      const reply = await call('remoteUpdate', {
+        root,
+        action: action.action,
+        ref: action.ref,
+        expectedBranch: action.expectedBranch ?? null,
+        busy,
+        intent: 'update',
+        ...leases()
+      })
       return reply.result
     },
     async writeHelpers(root, files) {
-      return (await call('setup', { root, files: files.map(({ path, content }) => ({ path, content })), intent: 'setup', ...leases() })).result
+      return (
+        await call('setup', {
+          root,
+          files: files.map(({ path, content }) => ({ path, content })),
+          intent: 'setup',
+          ...leases()
+        })
+      ).result
     },
     async removeHelpers(root) {
       return (await call('uninstall', { root, intent: 'uninstall', ...leases() })).result
@@ -125,14 +199,16 @@ export function serviceWorkflows(link: WorkflowLink, options: WorkflowClientOpti
     async createProject(root, files, install) {
       return (await call('createProject', { root, files, install, intent: 'create' })).result
     },
-    updateCheck: root => call('updateCheck', { root, ...leases() }),
+    updateCheck: (root) => call('updateCheck', { root, ...leases() }),
     async update(root, progress) {
       let polling = true
       const poll = async () => {
         while (polling) {
-          await new Promise(resolve => setTimeout(resolve, options.progressInterval ?? 500))
+          await new Promise((resolve) => setTimeout(resolve, options.progressInterval ?? 500))
           if (!polling) return
-          const running = (await call('workflows', {}, 'read').catch(() => [])).find((w: any) => w.kind === 'update' && w.root === root && w.state === 'running')
+          const running = (await call('workflows', {}, 'read').catch(() => [])).find(
+            (w: any) => w.kind === 'update' && w.root === root && w.state === 'running'
+          )
           if (running?.progress && polling) progress?.(running.progress)
         }
       }
@@ -150,14 +226,33 @@ export function serviceWorkflows(link: WorkflowLink, options: WorkflowClientOpti
     },
     async installSkills(input) {
       const pack = findPack(input.packId)
-      const targetDir = input.scope === 'user' ? join(homedir(), '.claude', 'skills') : join(input.liveRoot, '.claude', 'skills')
+      const targetDir =
+        input.scope === 'user'
+          ? join(homedir(), '.claude', 'skills')
+          : join(input.liveRoot, '.claude', 'skills')
       // The catalog is Bun's; the owner accepts only a GitHub owner/name and plain skill names.
       if (!pack) {
-        return { ok: false, packId: input.packId, scope: input.scope, targetDir, installed: [],
-          message: `Refusing to install '${input.packId}': not in the curated skill-pack allowlist.` }
+        return {
+          ok: false,
+          packId: input.packId,
+          scope: input.scope,
+          targetDir,
+          installed: [],
+          message: `Refusing to install '${input.packId}': not in the curated skill-pack allowlist.`
+        }
       }
-      return (await call('skills', { root: input.liveRoot, packId: pack.id, scope: input.scope, repo: pack.repo,
-        skills: pack.skills ?? [], title: pack.title, intent: 'skills', ...leases() })).result
+      return (
+        await call('skills', {
+          root: input.liveRoot,
+          packId: pack.id,
+          scope: input.scope,
+          repo: pack.repo,
+          skills: pack.skills ?? [],
+          title: pack.title,
+          intent: 'skills',
+          ...leases()
+        })
+      ).result
     },
     recallDiagnosis: (root, signature) => call('diagnosis', { root, signature }, 'read'),
     async rememberDiagnosis(root, diagnosis) {

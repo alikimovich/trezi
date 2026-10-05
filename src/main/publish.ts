@@ -21,7 +21,9 @@ async function git(root: string, args: string[]): Promise<string> {
  * (`checkout -b` carries uncommitted work along). Answers the branch to publish, or
  * the refusal to show. Runs before any publish effect.
  */
-export async function healPublishBranch(root: string): Promise<{ branch: string } | { error: string } | null> {
+export async function healPublishBranch(
+  root: string
+): Promise<{ branch: string } | { error: string } | null> {
   let branch: string
   try {
     await git(root, ['rev-parse', '--is-inside-work-tree'])
@@ -46,8 +48,9 @@ export async function healPublishBranch(root: string): Promise<{ branch: string 
     }
   }
   if (!healed.branch || healed.branch === base || healed.error) {
-    return { error: `You're on ${base} and Trezi couldn't create a work branch${healed.error ? `: ${healed.error}` : '.'}` }
+    return {
+      error: `You're on ${base} and Trezi couldn't create a work branch${healed.error ? `: ${healed.error}` : '.'}`
+    }
   }
   return { branch: healed.branch }
 }
-

@@ -3,11 +3,15 @@ import type { SetupResult } from './api'
 export function setupPrompt(res: SetupResult): string | null {
   const file = res.files?.[0]
   const proof = res.helpers?.map((h) => `${h.path}: SHA-256 ${h.sha256}`).join('\n') ?? ''
-  const copied = res.checkout ? `Trezi copied them into this chat workspace (${res.checkout}); the dev server uses the live project's copies. Never write .trezi/ yourself. ` : ''
+  const copied = res.checkout
+    ? `Trezi copied them into this chat workspace (${res.checkout}); the dev server uses the live project's copies. Never write .trezi/ yourself. `
+    : ''
   const verify = `Before changing config, read the helpers in this checkout and verify these hashes:\n${proof}\n${copied}If a helper is absent or differs, stop and report it. `
   if (res.strategy === 'vite-plugin') {
     const vite = res.vite
-    const plugin = vite?.reactPlugin ? `${vite.reactPlugin} ${vite.reactPluginVersion ?? '(version unknown)'}` : 'no React plugin'
+    const plugin = vite?.reactPlugin
+      ? `${vite.reactPlugin} ${vite.reactPluginVersion ?? '(version unknown)'}`
+      : 'no React plugin'
     return (
       verify +
       `Trezi detected a React project on Vite ${vite?.version ?? `(not installed; declared ${vite?.declaredVersion ?? 'unknown'})`} with ${plugin}, ` +

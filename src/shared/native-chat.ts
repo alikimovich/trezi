@@ -1,10 +1,23 @@
 import type { QuestionRequest } from './api'
 export interface NativeChatMessage {
-  at?: number; workedMs?: number
-  id: string; role: 'user' | 'assistant'; text: string
+  at?: number
+  workedMs?: number
+  id: string
+  role: 'user' | 'assistant'
+  text: string
   // `labels`: the statuses' collapsed form (`display-path.ts`), added by the snapshot.
-  segments: ({ kind: 'text'; text: string; at?: number } | { kind: 'tools'; statuses: string[]; labels?: string[] } | { kind: 'island'; island: import('./chat-islands').IslandView })[]
-  attachments?: { id: string; kind?: 'image' | 'file'; name?: string; path?: string; url?: string }[]
+  segments: (
+    | { kind: 'text'; text: string; at?: number }
+    | { kind: 'tools'; statuses: string[]; labels?: string[] }
+    | { kind: 'island'; island: import('./chat-islands').IslandView }
+  )[]
+  attachments?: {
+    id: string
+    kind?: 'image' | 'file'
+    name?: string
+    path?: string
+    url?: string
+  }[]
   selection?: { tag: string; ident: string; source: string | null }
   revertGroup?: string
   /** Tokens this assistant turn's model calls reported (cached is part of input). */
@@ -47,17 +60,42 @@ export interface NativeChatState {
     /** LKM-151: why a paused queue will not send on its own, and whether "Send now" can. */
     queueNote: string
     queueCanSend: boolean
-    ready: boolean; running: boolean; thinking: boolean
-    text: string; caret: number; revision: number; stop: boolean; enabled: boolean; sendLabel: string
-    context: string; attachments: { id: string; name: string; type: string; data: string }[]
+    ready: boolean
+    running: boolean
+    thinking: boolean
+    text: string
+    caret: number
+    revision: number
+    stop: boolean
+    enabled: boolean
+    sendLabel: string
+    context: string
+    attachments: { id: string; name: string; type: string; data: string }[]
     suggestions: { title: string; description: string; active: boolean }[]
-    choices: { label: string; value: string; disabled: boolean; options: { value: string; label: string }[] }[]
+    choices: {
+      label: string
+      value: string
+      disabled: boolean
+      options: { value: string; label: string }[]
+    }[]
   }
 }
-export type NativeChatAction = { chat: string; action: string; id?: string; value?: string; answers?: Record<string, string> | null }
+export type NativeChatAction = {
+  chat: string
+  action: string
+  id?: string
+  value?: string
+  answers?: Record<string, string> | null
+}
 export interface NativeChatBridge {
   focusComposer: () => void
   command: (command: import('./native-chat-controller').NativeChatCommand) => void
-  onEffect: (callback: (effect: import('./native-chat-controller').NativeChatEffect) => void) => () => void
+  onEffect: (
+    callback: (effect: import('./native-chat-controller').NativeChatEffect) => void
+  ) => () => void
 }
-declare global { interface Window { treziNativeChat?: NativeChatBridge } }
+declare global {
+  interface Window {
+    treziNativeChat?: NativeChatBridge
+  }
+}

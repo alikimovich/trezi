@@ -4,7 +4,7 @@
  * no network, no Electron. Run via: bun run test:github-connect
  */
 import assert from 'node:assert'
-import { sanitizeRepoName, resolveConnectPlan, planGitHubConnection } from '../src/shared/github.ts'
+import { planGitHubConnection, resolveConnectPlan, sanitizeRepoName } from '../src/shared/github.ts'
 
 // --- sanitizeRepoName -------------------------------------------------------
 
@@ -81,6 +81,9 @@ for (const prefix of ['praxis', 'trezi']) {
     assert.equal(plan.defaultBranch, ancestor ? 'main' : `${prefix}/main`)
   }
 }
-assert.deepStrictEqual(await planGitHubConnection('main', async () => {
-  assert.fail('Plain branches must not probe ancestry')
-}), resolveConnectPlan('main', false))
+assert.deepStrictEqual(
+  await planGitHubConnection('main', async () => {
+    assert.fail('Plain branches must not probe ancestry')
+  }),
+  resolveConnectPlan('main', false)
+)

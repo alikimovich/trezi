@@ -1,77 +1,103 @@
 import '../shared/rename-compat'
-import { removeSmokeDirectory, saveSmokeFailure, smokeDirectory, writeSmokeProject } from './smoke-fixture'
-import { NativeUpdateController } from './update-controller'
-import { installNativeInspector } from './inspector-runtime'
-import { NativePreviewRecovery } from './preview-recovery'
-import { NativePreviewSupervisor } from './preview-supervisor'
-import { NativeLegacyNames } from './legacy-names'
-import { NativeRecoveryRefs } from './repository-recovery'
-import { NativeLayersController } from './layers-controller'
-import { agentOptionsFor } from '../shared/chat-settings'
-import { NativeEditorController } from './editor-controller'
 import { isAbsolute, join, resolve } from 'node:path'
-import { conversationsClosed, projectHasRunningAgents, registerAgentIpc, setProjectMemoryOwner } from '../main/agent'
+import {
+  conversationsClosed,
+  projectHasRunningAgents,
+  registerAgentIpc,
+  setProjectMemoryOwner
+} from '../main/agent'
 import { registerAnnotationsIpc } from '../main/annotations'
-import { CHAT_WORKSPACE_IDLE_KEY, cleanLegacyWorkspaces, idlePeriod, sweepIdleWorkspaces } from '../main/chat-workspaces'
+import {
+  CLAUDE_USER_PLUGINS_KEY,
+  setClaudeUserPluginsSource
+} from '../main/backends/claude-isolation'
+import {
+  CHAT_WORKSPACE_IDLE_KEY,
+  cleanLegacyWorkspaces,
+  idlePeriod,
+  sweepIdleWorkspaces
+} from '../main/chat-workspaces'
 import { registerControlsIpc } from '../main/control-panels'
+import { type ConversationOwner, setConversationOwner } from '../main/conversation-owner'
 import { registerDevServerIpc } from '../main/devserver'
 import { registerDiagnoseIpc } from '../main/diagnose'
+import { setEditingOwner } from '../main/editing-owner'
 import { registerFeedbackIpc } from '../main/feedback'
 import { createProjectFile, deleteProjectFile, renameProjectFile } from '../main/file-ops'
 import { listProjectFiles } from '../main/file-tree'
 import { checkoutBranch, ensureBranch, listBranches, switchBranch } from '../main/git'
 import { registerGitRemoteIpc } from '../main/git-remote'
 import { registerGithubIpc } from '../main/github'
+import { type PlatformOwner, setPlatformOwner } from '../main/platform-owner'
 import { type PreviewState, registerPreviewIpc } from '../main/preview-ipc'
+import { setDependencyInstaller } from '../main/project-dependencies'
 import { readProjectIcon } from '../main/project-icon'
 import { registerPropsIpc } from '../main/props'
+import { setProviderDataOwner } from '../main/provider-data'
+import { setProviderOwner } from '../main/provider-owner'
+import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-owner'
 import { createProject } from '../main/scaffold'
 import { registerSetupIpc } from '../main/setup'
 import { registerSimulatorIpc } from '../main/simulator'
+import { type SourceOwner, setSourceOwner } from '../main/source-owner'
 import { registerStylesIpc } from '../main/styles'
 import { registerTokensIpc } from '../main/tokens'
-import * as channels from '../shared/preview-channels'
-import { NativeBridge, setBridge } from './bridge'
-import { app, dispatchIPC, ipcMain, NativeView, shell, views, serviceEvents } from './platform'
-import { runNativeCoreSmoke } from './smoke-core'
-import { installShutdown } from './shutdown'
-import { parsePreferredModelState, resolvePreferredSettings } from '../shared/preferred-model'
-import { servicePreferences } from './preferences-service'
-import { serviceWorkspace } from './workspace-service'
-import { serviceProjectMemory } from './project-memory-service'
-import { type ProjectRuntime, serviceRuntime } from './runtime-service'
-import { setDependencyInstaller } from '../main/project-dependencies'
-import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-owner'
-import { serviceRepository } from './repository-service'
-import { type SourceOwner, setSourceOwner } from '../main/source-owner'
-import { serviceSource } from './source-service'
-import { type ConversationOwner, setConversationOwner } from '../main/conversation-owner'
-import { serviceConversation } from './conversation-service'
-import { serviceProvider } from './provider-service'
-import { setProviderOwner } from '../main/provider-owner'
-import { CLAUDE_USER_PLUGINS_KEY, setClaudeUserPluginsSource } from '../main/backends/claude-isolation'
-import { setProviderDataOwner } from '../main/provider-data'
-import { serviceEditing } from './editing-service'
-import { setEditingOwner } from '../main/editing-owner'
-import { serviceWorkflows } from './workflow-service'
 import { setWorkflowOwner, workflowOwner } from '../main/workflow-owner'
-import { servicePlatform } from './platform-service'
-import { type PlatformOwner, setPlatformOwner } from '../main/platform-owner'
-import { installNativeChat } from './chat-runtime'
-import { networkVolumeNote } from './network-volume-note'
-import { NativeShellController } from './shell-controller'
-import { NativeSupportSheets } from './support-sheets'
-import { NativeGitController } from './git-controller'
+import { agentOptionsFor } from '../shared/chat-settings'
 import { environmentChanges } from '../shared/environment-changes'
+import { parsePreferredModelState, resolvePreferredSettings } from '../shared/preferred-model'
+import * as channels from '../shared/preview-channels'
+import {
+  ACTIVITY_AUTO_OPEN_KEY,
+  activityAutoOpen,
+  NativeActivityController
+} from './activity-controller'
+import {
+  reportConversationRecovery,
+  reportRepositoryRecovery,
+  reportSourceRecovery
+} from './activity-startup'
+import { NativeBridge, setBridge } from './bridge'
+import { installNativeChat } from './chat-runtime'
 import { NativeContextController } from './context-controller'
-import { NativeReviewController } from './review-controller'
-import { ACTIVITY_AUTO_OPEN_KEY, activityAutoOpen, NativeActivityController } from './activity-controller'
-import { reportConversationRecovery, reportRepositoryRecovery, reportSourceRecovery } from './activity-startup'
+import { serviceConversation } from './conversation-service'
 import { displayText, setDisplayProfile } from './display-paths'
-import { NativeSettingsController } from './settings-controller'
+import { serviceEditing } from './editing-service'
+import { NativeEditorController } from './editor-controller'
+import { NativeGitController } from './git-controller'
+import { installNativeInspector } from './inspector-runtime'
+import { NativeLayersController } from './layers-controller'
+import { NativeLegacyNames } from './legacy-names'
+import { networkVolumeNote } from './network-volume-note'
+import { app, dispatchIPC, ipcMain, NativeView, serviceEvents, shell, views } from './platform'
+import { servicePlatform } from './platform-service'
+import { servicePreferences } from './preferences-service'
+import { NativePreviewRecovery } from './preview-recovery'
+import { NativePreviewSupervisor } from './preview-supervisor'
+import { serviceProjectMemory } from './project-memory-service'
+import { serviceProvider } from './provider-service'
+import { NativeRecoveryRefs } from './repository-recovery'
+import { serviceRepository } from './repository-service'
+import { NativeReviewController } from './review-controller'
+import { type ProjectRuntime, serviceRuntime } from './runtime-service'
 import { withClaudePane } from './settings-claude'
+import { NativeSettingsController } from './settings-controller'
 import { NativeSheetController } from './sheets-runtime'
+import { NativeShellController } from './shell-controller'
+import { installShutdown } from './shutdown'
+import { runNativeCoreSmoke } from './smoke-core'
+import {
+  removeSmokeDirectory,
+  saveSmokeFailure,
+  smokeDirectory,
+  writeSmokeProject
+} from './smoke-fixture'
+import { serviceSource } from './source-service'
+import { NativeSupportSheets } from './support-sheets'
+import { NativeUpdateController } from './update-controller'
+import { serviceWorkflows } from './workflow-service'
 import { installNativeWorkspace } from './workspace-runtime'
+import { serviceWorkspace } from './workspace-service'
 
 async function main() {
   // The Swift service supervises this process and holds the profile lock
@@ -79,7 +105,9 @@ async function main() {
   // started any other way could share a profile with a running Trezi, so it refuses
   // and writes nothing.
   if (process.env.TREZI_SERVICE_LOCKED !== '1' || process.env.TREZI_SERVICE_SUPERVISED !== '1')
-    throw new Error('Trezi must be started by its service (open -a Trezi, trezi, or bun run dev), which holds the profile lock. Nothing was changed.')
+    throw new Error(
+      'Trezi must be started by its service (open -a Trezi, trezi, or bun run dev), which holds the profile lock. Nothing was changed.'
+    )
   // stdout is the service's frame pipe: logs go to stderr.
   console.log = console.info = console.debug = (...args) => console.error(...args)
   const testing = process.argv.includes('--test')
@@ -103,7 +131,10 @@ async function main() {
       app.emit('before-quit')
       // Chats are saved by the conversation owner; bounded, and a chat cut short keeps
       // its checkpoint for the next launch.
-      await Promise.race([conversationsClosed().catch(() => {}), new Promise(resolve => setTimeout(resolve, 3000).unref?.())])
+      await Promise.race([
+        conversationsClosed().catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 3000).unref?.())
+      ])
       // The service-mode host exits with this status; the launcher reports it.
       host?.send('quit', { status: typeof process.exitCode === 'number' ? process.exitCode : 0 })
       // Keep the native profile separate from retired Electron installations.
@@ -125,16 +156,20 @@ async function main() {
   host.hold()
   const mainView = new NativeView('main')
   // The Swift service owns every domain; there is no local fallback write, ever.
-  const preferences = await servicePreferences(host).catch(error => { throw new Error(`Trezi could not read preferences from its service: ${error.message}`) })
+  const preferences = await servicePreferences(host).catch((error) => {
+    throw new Error(`Trezi could not read preferences from its service: ${error.message}`)
+  })
   setClaudeUserPluginsSource(() => preferences.get(CLAUDE_USER_PLUGINS_KEY))
-  const workspace = await serviceWorkspace(host).catch(error => { throw new Error(`Trezi could not read the workspace from its service: ${error.message}`) })
+  const workspace = await serviceWorkspace(host).catch((error) => {
+    throw new Error(`Trezi could not read the workspace from its service: ${error.message}`)
+  })
   // Project memory (S05): read on demand, so there is no startup snapshot to await.
   const memory = serviceProjectMemory(host)
   setProjectMemoryOwner(() => memory)
   // Managed project runtimes (S06): the service runs servers, installs and static sites.
   const runtimeOwner = serviceRuntime(host)
   runtime = runtimeOwner
-  setDependencyInstaller(root => runtimeOwner.install(root))
+  setDependencyInstaller((root) => runtimeOwner.install(root))
   // Repository coordination (S07): every Trezi Git effect and repository lease goes
   // through the service's per-repository lane, journal and recovery refs.
   const repository: RepositoryOwner = serviceRepository(host)
@@ -169,12 +204,17 @@ async function main() {
   const refreshPreferences = () => {
     const values = preferences.snapshot()
     let preferred: unknown
-    try { preferred = JSON.parse(values['trezi:preferred-model'] ?? 'null') } catch {}
+    try {
+      preferred = JSON.parse(values['trezi:preferred-model'] ?? 'null')
+    } catch {}
     workspaceController.preferred = resolvePreferredSettings(parsePreferredModelState(preferred))
-    for (const chat of chatController.chats.values()) if (chat.context) chat.context.turn = {
-      ...chat.context.turn, projectUi: values['trezi:project-ui:v1'] === 'true',
-      projectUiEngine: values['trezi:project-ui-engine:v1'] === 'jev' ? 'jev' : 'agent'
-    }
+    for (const chat of chatController.chats.values())
+      if (chat.context)
+        chat.context.turn = {
+          ...chat.context.turn,
+          projectUi: values['trezi:project-ui:v1'] === 'true',
+          projectUiEngine: values['trezi:project-ui-engine:v1'] === 'jev' ? 'jev' : 'agent'
+        }
     host!.send('preferences', { values })
     host!.send('layoutWidth', { width: Number(values['trezi:native-chat-width']) || 440 })
   }
@@ -280,65 +320,170 @@ async function main() {
   let shellController: NativeShellController | undefined
   const renderShell = () => shellController?.render()
   // LKM-152: the window opens by itself only as Settings → Show Activity automatically allows.
-  const activityController = new NativeActivityController((method, data) => host!.send(method, data), text => displayText(text), () => activityAutoOpen(preferences.get(ACTIVITY_AUTO_OPEN_KEY)))
+  const activityController = new NativeActivityController(
+    (method, data) => host!.send(method, data),
+    (text) => displayText(text),
+    () => activityAutoOpen(preferences.get(ACTIVITY_AUTO_OPEN_KEY))
+  )
   host.on('activity-action', ({ action }) => activityController.action(action))
-  host.on('menu', ({ action }) => { if (action === 'logs') activityController.action('toggle'); else if (action === 'activity') activityController.action('show') })
-  serviceEvents.on('event', (channel, line) => { if (channel === 'devserver:log' || channel === 'simulator:log') activityController.append(line, 'server') })
+  host.on('menu', ({ action }) => {
+    if (action === 'logs') activityController.action('toggle')
+    else if (action === 'activity') activityController.action('show')
+  })
+  serviceEvents.on('event', (channel, line) => {
+    if (channel === 'devserver:log' || channel === 'simulator:log')
+      activityController.append(line, 'server')
+  })
   // Startup recovery reports are gray notices that never open the window (`activity-startup.ts`).
-  void repository.status().then(status => reportRepositoryRecovery(activityController, status), () => {})
-  void conversation.status().then(({ recovered }) => reportConversationRecovery(activityController, recovered), () => {})
-  void source.status().then(status => reportSourceRecovery(activityController, status), () => {})
-  const reportPreferences = (error: unknown) => activityController.append(`Could not save a preference: ${error instanceof Error ? error.message : String(error)}`, 'error')
+  void repository.status().then(
+    (status) => reportRepositoryRecovery(activityController, status),
+    () => {}
+  )
+  void conversation.status().then(
+    ({ recovered }) => reportConversationRecovery(activityController, recovered),
+    () => {}
+  )
+  void source.status().then(
+    (status) => reportSourceRecovery(activityController, status),
+    () => {}
+  )
+  const reportPreferences = (error: unknown) =>
+    activityController.append(
+      `Could not save a preference: ${error instanceof Error ? error.message : String(error)}`,
+      'error'
+    )
   host.on('native-layout-width', ({ width }) => {
     if (!Number.isFinite(width) || width < 320 || width > 760) return
     void preferences.set('trezi:native-chat-width', String(width)).catch(reportPreferences)
   })
-  host.on('native-layout-sizes', sizes => { if (['source','layers','inspector'].every(key => Number.isFinite(sizes[key]))) void preferences.set('trezi:native-panel-sizes', JSON.stringify({ source:sizes.source, layers:sizes.layers, inspector:sizes.inspector })).catch(reportPreferences) })
+  host.on('native-layout-sizes', (sizes) => {
+    if (['source', 'layers', 'inspector'].every((key) => Number.isFinite(sizes[key])))
+      void preferences
+        .set(
+          'trezi:native-panel-sizes',
+          JSON.stringify({ source: sizes.source, layers: sizes.layers, inspector: sizes.inspector })
+        )
+        .catch(reportPreferences)
+  })
   host.on('native-layout-frame', ({ frame }) => {
     void dispatchIPC('main', { type: 'send', channel: 'preview:set-bounds', args: [frame] })
   })
-  const chatController = installNativeChat(host!, mainView, networkVolumeNote(preferences, reportPreferences))
+  const chatController = installNativeChat(
+    host!,
+    mainView,
+    networkVolumeNote(preferences, reportPreferences)
+  )
   // LKM-151: a compile/parse error in a file the last turn touched gets Trezi's own recovery card.
   runtimeOwner.onLog((root, line) => chatController.devServerLog(root, line))
-  const workspaceController = installNativeWorkspace(host!, mainView, workspace, chatController, preferences)
+  const workspaceController = installNativeWorkspace(
+    host!,
+    mainView,
+    workspace,
+    chatController,
+    preferences
+  )
   // A failed open has no automatic recovery: only Retry or a fix by the user (LKM-152).
-  workspaceController.openFailed = (name, message) => activityController.append(`Could not open ${name}: ${message}`, 'needs-action', { event: 'project-open-failed' })
-  const contextController = new NativeContextController(workspaceController, chatController, () => ({ projectUi: preferences.get('trezi:project-ui:v1') === 'true', projectUiEngine: preferences.get('trezi:project-ui-engine:v1') === 'jev' ? 'jev' : 'agent' }), (channel, ...args) => dispatchIPC('main', { type: 'send', channel, args }))
+  workspaceController.openFailed = (name, message) =>
+    activityController.append(`Could not open ${name}: ${message}`, 'needs-action', {
+      event: 'project-open-failed'
+    })
+  const contextController = new NativeContextController(
+    workspaceController,
+    chatController,
+    () => ({
+      projectUi: preferences.get('trezi:project-ui:v1') === 'true',
+      projectUiEngine: preferences.get('trezi:project-ui-engine:v1') === 'jev' ? 'jev' : 'agent'
+    }),
+    (channel, ...args) => dispatchIPC('main', { type: 'send', channel, args })
+  )
   // LKM-153: a `[trezi-source]` warning is the reason a verified setup found no stamps.
   runtimeOwner.onLog((root, line) => contextController.devServerLog(root, line))
   // LKM-157: a connected project whose restarted preview stays unstamped is offered Reconnect.
-  workspaceController.restarted = root => contextController.restarted(root)
+  workspaceController.restarted = (root) => contextController.restarted(root)
   const visualEdit = async (root: string, prompt: string) => {
-    const entry = workspaceController.state.projects.find(p => p.root === root)
+    const entry = workspaceController.state.projects.find((p) => p.root === root)
     if (!entry || !prompt.trim()) return
     const chat = chatController.chats.get(entry.activeSessionKey)
-    const result = await workspaceController.services.invoke('agent:spawn-comment', root, prompt, entry.activeSessionKey, chat ? agentOptionsFor(chat.settings) : {}, 'text-edit').catch(() => null)
-    if (!result?.ok) { await chatController.command({ type: 'seed', chat: entry.activeSessionKey, text: prompt }); activityController.append('Could not start the visual edit in the background; the instruction is in the composer.', 'error') }
+    const result = await workspaceController.services
+      .invoke(
+        'agent:spawn-comment',
+        root,
+        prompt,
+        entry.activeSessionKey,
+        chat ? agentOptionsFor(chat.settings) : {},
+        'text-edit'
+      )
+      .catch(() => null)
+    if (!result?.ok) {
+      await chatController.command({ type: 'seed', chat: entry.activeSessionKey, text: prompt })
+      activityController.append(
+        'Could not start the visual edit in the background; the instruction is in the composer.',
+        'error'
+      )
+    }
   }
-  const layersController = new NativeLayersController(workspaceController.services.invoke, (channel, ...args) => dispatchIPC('main', { type: 'send', channel, args }), state => host!.send('layersState', { state }), visualEdit)
-  host.on('layers-action', action => { void layersController.action(action).catch(error => activityController.append(String(error), 'error')) })
-  host.on('shell-action', action => { if (action.action === 'layers') void layersController.toggle() })
+  const layersController = new NativeLayersController(
+    workspaceController.services.invoke,
+    (channel, ...args) => dispatchIPC('main', { type: 'send', channel, args }),
+    (state) => host!.send('layersState', { state }),
+    visualEdit
+  )
+  host.on('layers-action', (action) => {
+    void layersController
+      .action(action)
+      .catch((error) => activityController.append(String(error), 'error'))
+  })
+  host.on('shell-action', (action) => {
+    if (action.action === 'layers') void layersController.toggle()
+  })
   serviceEvents.on('event', (channel, value) => {
-    if (channel === 'layers:changed' || channel === 'preview:url-changed') void layersController.refresh()
-    if (channel === 'layers:move-request') void layersController.move(value).catch(error => activityController.append(String(error), 'error'))
+    if (channel === 'layers:changed' || channel === 'preview:url-changed')
+      void layersController.refresh()
+    if (channel === 'layers:move-request')
+      void layersController
+        .move(value)
+        .catch((error) => activityController.append(String(error), 'error'))
   })
   // A media document is shown by path: the platform owner's
   // grant for the source editor (re-issued when it expired or the file changed). Only
   // the newest state is delivered when a resolution is outstanding.
   let sourceStates = 0
-  const editorController = new NativeEditorController(workspaceController.services.invoke, state => {
-    const media = state.document?.media, sequence = ++sourceStates
-    const deliver = (mediaPath?: string) => { if (sequence === sourceStates) host!.send('sourceState', { state: { ...state, mediaPath } }) }
-    if (!media) deliver()
-    else void platform.mediaPath(media.url, state.root, join(state.root, state.document!.file)).then(deliver, () => deliver())
-    if (shellController && workspaceController.active?.root === state.root) { shellController.codeOpen = state.visible; shellController.schedule() }
-  })
-  const openSource = (source?: string, popped?: boolean) => { const root = workspaceController.active?.root; if (root) void editorController.open(root, source, popped) }
-  const editorAction = (action: any) => { if (workspaceController.state.projects.some(p => p.root === action.root)) void editorController.action(action) }
+  const editorController = new NativeEditorController(
+    workspaceController.services.invoke,
+    (state) => {
+      const media = state.document?.media,
+        sequence = ++sourceStates
+      const deliver = (mediaPath?: string) => {
+        if (sequence === sourceStates) host!.send('sourceState', { state: { ...state, mediaPath } })
+      }
+      if (!media) deliver()
+      else
+        void platform
+          .mediaPath(media.url, state.root, join(state.root, state.document!.file))
+          .then(deliver, () => deliver())
+      if (shellController && workspaceController.active?.root === state.root) {
+        shellController.codeOpen = state.visible
+        shellController.schedule()
+      }
+    }
+  )
+  const openSource = (source?: string, popped?: boolean) => {
+    const root = workspaceController.active?.root
+    if (root) void editorController.open(root, source, popped)
+  }
+  const editorAction = (action: any) => {
+    if (workspaceController.state.projects.some((p) => p.root === action.root))
+      void editorController.action(action)
+  }
   host.on('source-action', editorAction)
-  ipcMain.handle('source:popout', (_event, root, source) => editorController.open(root, source, true))
-  ipcMain.handle('source:close-window', () => { const root = workspaceController.active?.root; if (root) return editorController.action({ root, action: 'hide' }) })
-  host.on('shell-action', action => {
+  ipcMain.handle('source:popout', (_event, root, source) =>
+    editorController.open(root, source, true)
+  )
+  ipcMain.handle('source:close-window', () => {
+    const root = workspaceController.active?.root
+    if (root) return editorController.action({ root, action: 'hide' })
+  })
+  host.on('shell-action', (action) => {
     if (action.action !== 'code') return
     const root = workspaceController.active?.root
     if (!root) return
@@ -346,17 +491,21 @@ async function main() {
     else openSource(contextController.projects.get(root)?.selection?.bubble.source ?? undefined)
   })
   serviceEvents.on('event', (channel, value) => {
-    if (channel === 'source:reveal' && value.root === workspaceController.active?.root) openSource(`${value.source}:${value.startLine}`)
+    if (channel === 'source:reveal' && value.root === workspaceController.active?.root)
+      openSource(`${value.source}:${value.startLine}`)
   })
-  workspaceController.services.activate = async entry => {
+  workspaceController.services.activate = async (entry) => {
     host!.send('sourceActive', { root: entry?.root ?? '' })
     void layersController.activate(entry?.root ?? '')
-    if (shellController) { shellController.codeOpen = entry ? editorController.session(entry.root).state.visible : false; shellController.schedule() }
+    if (shellController) {
+      shellController.codeOpen = entry ? editorController.session(entry.root).state.visible : false
+      shellController.schedule()
+    }
     await contextController.activate(entry)
   }
   const projectEffect = chatController.services.effect
-  chatController.services.effect = effect => {
-    void contextController.effect(effect).catch(error => workspaceController.reportError(error))
+  chatController.services.effect = (effect) => {
+    void contextController.effect(effect).catch((error) => workspaceController.reportError(error))
     if (effect.type === 'layers') void layersController.toggle()
     else projectEffect(effect)
   }
@@ -364,100 +513,270 @@ async function main() {
     if (channel === 'preview:element-picked') contextController.selection(value)
     else if (channel === 'preview:readiness') contextController.readiness(value)
     else if (channel === 'agent:event') {
-      const files = value.type === 'isolation' && value.state === 'merged' ? value.files : value.type === 'spawn-finished' && value.outcome === 'applied' ? value.files : undefined
-      const entry = workspaceController.state.projects.find(p => p.key === value.projectKey || p.sessionKeys.includes(value.projectKey))
-      if (files && entry && (environmentChanges(files).restart || !entry.url)) void workspaceController.refreshEnvironment(entry.key, files).catch(error => activityController.append(String(error), 'error'))
+      const files =
+        value.type === 'isolation' && value.state === 'merged'
+          ? value.files
+          : value.type === 'spawn-finished' && value.outcome === 'applied'
+            ? value.files
+            : undefined
+      const entry = workspaceController.state.projects.find(
+        (p) => p.key === value.projectKey || p.sessionKeys.includes(value.projectKey)
+      )
+      if (files && entry && (environmentChanges(files).restart || !entry.url))
+        void workspaceController
+          .refreshEnvironment(entry.key, files)
+          .catch((error) => activityController.append(String(error), 'error'))
     }
   })
   serviceEvents.on('command', (channel, args, result) => {
-    if (channel === 'agent:spawn-comment' && result?.ok) contextController.queued(args[2], result.spawnId, args[1].slice(0, 70), !!result.queued)
-    if (channel === 'annotations:add' || channel === 'annotations:remove') void contextController.notes(args[0]).catch(error => workspaceController.reportError(error))
+    if (channel === 'agent:spawn-comment' && result?.ok)
+      contextController.queued(args[2], result.spawnId, args[1].slice(0, 70), !!result.queued)
+    if (channel === 'annotations:add' || channel === 'annotations:remove')
+      void contextController.notes(args[0]).catch((error) => workspaceController.reportError(error))
     if (channel === 'agent:close-project') contextController.projects.delete(args[0])
   })
-  const { inspector: inspectorController } = installNativeInspector(host!, workspaceController, chatController, contextController, visualEdit, openSource, error => activityController.append(String(error), 'error'))
+  const { inspector: inspectorController } = installNativeInspector(
+    host!,
+    workspaceController,
+    chatController,
+    contextController,
+    visualEdit,
+    openSource,
+    (error) => activityController.append(String(error), 'error')
+  )
   const sheetController = new NativeSheetController(host!, workspaceController, chatController)
-  const gitController = new NativeGitController(sheetController, activityController, preferences, renderShell)
-  shellController = new NativeShellController(workspaceController, chatController, gitController, preferences,
-    state => host!.send('shellState', { state }), ({ viewport }) => {
+  const gitController = new NativeGitController(
+    sheetController,
+    activityController,
+    preferences,
+    renderShell
+  )
+  shellController = new NativeShellController(
+    workspaceController,
+    chatController,
+    gitController,
+    preferences,
+    (state) => host!.send('shellState', { state }),
+    ({ viewport }) => {
       previewView.webContents.send(channels.PREVIEW_HIDE_SCROLLBARS, viewport === 'mobile')
-    })
+    }
+  )
   const renderWorkspace = workspaceController.services.render
-  workspaceController.services.render = state => { renderWorkspace(state); shellController!.schedule(); host!.send('recents', { recents: state.recents }) }
+  workspaceController.services.render = (state) => {
+    renderWorkspace(state)
+    shellController!.schedule()
+    host!.send('recents', { recents: state.recents })
+  }
   host.on('menu', ({ action }) => {
     const root = workspaceController.active?.root
     if (action === 'toggle-chat') void shellController!.action({ action: 'expand' })
-    else if (action === 'reload' && workspaceController.active?.url) host!.send('reload', { view: 'preview' })
-    else if (['undo', 'redo'].includes(action) && root) void workspaceController.services.invoke(`edit:${action}`, root).then(result => { if (result.conflict) activityController.append('The file changed on disk; undo/redo refused to overwrite it.', 'error'); void inspectorController.refresh() }).catch(error => activityController.append(String(error), 'error'))
+    else if (action === 'reload' && workspaceController.active?.url)
+      host!.send('reload', { view: 'preview' })
+    else if (['undo', 'redo'].includes(action) && root)
+      void workspaceController.services
+        .invoke(`edit:${action}`, root)
+        .then((result) => {
+          if (result.conflict)
+            activityController.append(
+              'The file changed on disk; undo/redo refused to overwrite it.',
+              'error'
+            )
+          void inspectorController.refresh()
+        })
+        .catch((error) => activityController.append(String(error), 'error'))
   })
   const renderChatEffect = chatController.services.effect
-  chatController.services.effect = effect => { renderChatEffect(effect); if (effect.type === 'mirror') shellController!.schedule() }
-  host.on('shell-action', action => {
-    if (['expand', 'device', 'select-object', 'address', 'home'].includes(action.action)) void shellController!.action(action).catch(error => activityController.append(String(error), 'error'))
+  chatController.services.effect = (effect) => {
+    renderChatEffect(effect)
+    if (effect.type === 'mirror') shellController!.schedule()
+  }
+  host.on('shell-action', (action) => {
+    if (['expand', 'device', 'select-object', 'address', 'home'].includes(action.action))
+      void shellController!
+        .action(action)
+        .catch((error) => activityController.append(String(error), 'error'))
   })
   serviceEvents.on('event', (channel, value) => {
-    if (channel === 'preview:url-changed') { shellController!.location = value; shellController!.schedule() }
-    if (channel === 'preview:toggle-select') void shellController!.action({ action: 'select-object' }).catch(error => activityController.append(String(error), 'error'))
-    if (channel === 'preview:select-cancelled') { shellController!.selecting = false; shellController!.schedule() }
+    if (channel === 'preview:url-changed') {
+      shellController!.location = value
+      shellController!.schedule()
+    }
+    if (channel === 'preview:toggle-select')
+      void shellController!
+        .action({ action: 'select-object' })
+        .catch((error) => activityController.append(String(error), 'error'))
+    if (channel === 'preview:select-cancelled') {
+      shellController!.selecting = false
+      shellController!.schedule()
+    }
   })
-  serviceEvents.on('command', (channel, args) => { if (channel === 'preview:set-select-mode') { shellController!.selecting = !!args[0]; shellController!.schedule() } })
+  serviceEvents.on('command', (channel, args) => {
+    if (channel === 'preview:set-select-mode') {
+      shellController!.selecting = !!args[0]
+      shellController!.schedule()
+    }
+  })
   const activateContext = workspaceController.services.activate
-  const legacyNames = new NativeLegacyNames(sheetController, (channel, ...args) => workspaceController.services.invoke(channel, ...args), (text, kind) => activityController.append(text, kind))
-  const recoveryRefs = new NativeRecoveryRefs(sheetController, repository, () => workspaceController.state.projects.map(p => p.root), (text, kind) => activityController.append(text, kind))
-  host.on('activity-action', ({ action }) => { if (action === 'recovery') void recoveryRefs.open().catch(error => activityController.append(`Could not list recovery refs: ${error instanceof Error ? error.message : String(error)}`, 'error')) })
-  workspaceController.services.activate = async entry => {
+  const legacyNames = new NativeLegacyNames(
+    sheetController,
+    (channel, ...args) => workspaceController.services.invoke(channel, ...args),
+    (text, kind) => activityController.append(text, kind)
+  )
+  const recoveryRefs = new NativeRecoveryRefs(
+    sheetController,
+    repository,
+    () => workspaceController.state.projects.map((p) => p.root),
+    (text, kind) => activityController.append(text, kind)
+  )
+  host.on('activity-action', ({ action }) => {
+    if (action === 'recovery')
+      void recoveryRefs
+        .open()
+        .catch((error) =>
+          activityController.append(
+            `Could not list recovery refs: ${error instanceof Error ? error.message : String(error)}`,
+            'error'
+          )
+        )
+  })
+  workspaceController.services.activate = async (entry) => {
     await activateContext(entry)
     if (!entry) return
-    void gitController.refresh(entry.root).catch(error => activityController.append(String(error), 'error'))
-    void legacyNames.check(entry.key, entry.root).catch(error => activityController.append(String(error), 'error'))
+    void gitController
+      .refresh(entry.root)
+      .catch((error) => activityController.append(String(error), 'error'))
+    void legacyNames
+      .check(entry.key, entry.root)
+      .catch((error) => activityController.append(String(error), 'error'))
   }
-  host.on('shell-action', action => {
+  host.on('shell-action', (action) => {
     const key = action.project ?? workspaceController.state.activeKey
-    if (action.action === 'publish-mode') { void gitController.setMode(action.value).then(refreshPreferences, reportPreferences); return }
+    if (action.action === 'publish-mode') {
+      void gitController.setMode(action.value).then(refreshPreferences, reportPreferences)
+      return
+    }
     if (!key) return
-    const operation = action.action === 'branch' ? gitController.branch(key, action.value ?? '') : action.action === 'new-branch' ? gitController.branch(key, action.value ?? '', true) : action.action === 'publish' ? gitController.publish(key) : action.action === 'git-updates' ? gitController.updates(key) : null
-    void operation?.catch(error => activityController.append(String(error), 'error'))
+    const operation =
+      action.action === 'branch'
+        ? gitController.branch(key, action.value ?? '')
+        : action.action === 'new-branch'
+          ? gitController.branch(key, action.value ?? '', true)
+          : action.action === 'publish'
+            ? gitController.publish(key)
+            : action.action === 'git-updates'
+              ? gitController.updates(key)
+              : null
+    void operation?.catch((error) => activityController.append(String(error), 'error'))
   })
   // The service drains before it relaunches Trezi (with the active project).
-  const updates = new NativeUpdateController(sheetController, root, () => {
-    host!.send('serviceRestart', { project: workspaceController.active?.root })
-  }, workflowOwner(), () => [...chatController.chats.values()].some(chat => chat.isRunning || chat.text || chat.attachments.length) ? 'Finish running chats and send or clear your drafts before restarting.' : [...editorController.sessions.values()].some(session => [...session.documents.values()].some(doc => doc.text !== doc.baseline)) ? 'Save source editor drafts before restarting.' : null)
-  host.on('menu', ({ action }) => { if (action === 'updates') void updates.open().catch(error => activityController.append(String(error), 'error')) })
-  host.on('download-error', ({ message }) => activityController.append(`Download failed: ${message}`, 'error'))
+  const updates = new NativeUpdateController(
+    sheetController,
+    root,
+    () => {
+      host!.send('serviceRestart', { project: workspaceController.active?.root })
+    },
+    workflowOwner(),
+    () =>
+      [...chatController.chats.values()].some(
+        (chat) => chat.isRunning || chat.text || chat.attachments.length
+      )
+        ? 'Finish running chats and send or clear your drafts before restarting.'
+        : [...editorController.sessions.values()].some((session) =>
+              [...session.documents.values()].some((doc) => doc.text !== doc.baseline)
+            )
+          ? 'Save source editor drafts before restarting.'
+          : null
+  )
+  host.on('menu', ({ action }) => {
+    if (action === 'updates')
+      void updates.open().catch((error) => activityController.append(String(error), 'error'))
+  })
+  host.on('download-error', ({ message }) =>
+    activityController.append(`Download failed: ${message}`, 'error')
+  )
   host.on('download-finished', () => activityController.append('Download finished.', 'success'))
-  const supportSheets = new NativeSupportSheets(sheetController, () => host!.request('captureFeedback'), url => shell.openExternal(url))
-  const previewRecovery = new NativePreviewRecovery(sheetController, root => platform.findServers(root), server => platform.stopServer(server))
-  host.on('menu', ({ action }) => { if (action === 'servers' && workspaceController.state.activeKey) previewRecovery.open(workspaceController.state.activeKey) })
-  const reviewController = new NativeReviewController(sheetController, url => shell.openExternal(url))
-  const settingsController = withClaudePane(new NativeSettingsController(sheetController, preferences, refreshPreferences))
+  const supportSheets = new NativeSupportSheets(
+    sheetController,
+    () => host!.request('captureFeedback'),
+    (url) => shell.openExternal(url)
+  )
+  const previewRecovery = new NativePreviewRecovery(
+    sheetController,
+    (root) => platform.findServers(root),
+    (server) => platform.stopServer(server)
+  )
+  host.on('menu', ({ action }) => {
+    if (action === 'servers' && workspaceController.state.activeKey)
+      previewRecovery.open(workspaceController.state.activeKey)
+  })
+  const reviewController = new NativeReviewController(sheetController, (url) =>
+    shell.openExternal(url)
+  )
+  const settingsController = withClaudePane(
+    new NativeSettingsController(sheetController, preferences, refreshPreferences)
+  )
   // An external edit adopted by the service reaches the controllers and the host.
-  preferences.subscribe(() => { refreshPreferences(); shellController?.render() })
-  host.on('sheet-action', action => { void sheetController.action(action) })
+  preferences.subscribe(() => {
+    refreshPreferences()
+    shellController?.render()
+  })
+  host.on('sheet-action', (action) => {
+    void sheetController.action(action)
+  })
   const openSheet = (kind: string, key?: string) => {
     if (sheetController.current?.state.busy) return
-    if (kind === 'settings') void settingsController.open().catch(error => workspaceController.reportError(error))
-    else if (kind === 'feedback') void supportSheets.feedback().catch(error => activityController.append(String(error), 'error'))
-    else if (kind === 'diagnose' && workspaceController.state.activeKey) supportSheets.diagnose(workspaceController.state.activeKey)
-    else if (kind === 'review' && key) void reviewController.open(key).catch(error => workspaceController.reportError(error))
+    if (kind === 'settings')
+      void settingsController.open().catch((error) => workspaceController.reportError(error))
+    else if (kind === 'feedback')
+      void supportSheets
+        .feedback()
+        .catch((error) => activityController.append(String(error), 'error'))
+    else if (kind === 'diagnose' && workspaceController.state.activeKey)
+      supportSheets.diagnose(workspaceController.state.activeKey)
+    else if (kind === 'review' && key)
+      void reviewController.open(key).catch((error) => workspaceController.reportError(error))
     else if (kind === 'new-project') sheetController.newProject()
-    else if (kind === 'memory' && key) void sheetController.memory(key).catch(error => workspaceController.reportError(error))
+    else if (kind === 'memory' && key)
+      void sheetController.memory(key).catch((error) => workspaceController.reportError(error))
   }
-  host.on('menu', ({ action }) => { if (['new-project', 'settings', 'feedback', 'diagnose'].includes(action)) openSheet(action) })
-  host.on('shell-action', action => { if (action.action === 'rename-chat' && action.id && workspaceController.state.activeKey) sheetController.renameChat(action.id, workspaceController.state.activeKey); if (action.action === 'select' && action.id?.startsWith('history:')) openSheet('review', action.id.slice(8)); if (action.action === 'memory') openSheet('memory', action.project ?? workspaceController.state.activeKey ?? undefined) })
+  host.on('menu', ({ action }) => {
+    if (['new-project', 'settings', 'feedback', 'diagnose'].includes(action)) openSheet(action)
+  })
+  host.on('shell-action', (action) => {
+    if (action.action === 'rename-chat' && action.id && workspaceController.state.activeKey)
+      sheetController.renameChat(action.id, workspaceController.state.activeKey)
+    if (action.action === 'select' && action.id?.startsWith('history:'))
+      openSheet('review', action.id.slice(8))
+    if (action.action === 'memory')
+      openSheet('memory', action.project ?? workspaceController.state.activeKey ?? undefined)
+  })
   // After the last automatic restart the crash loop needs the user.
-  const previewSupervisor = new NativePreviewSupervisor(workspaceController, undefined, reason => activityController.append(`The dev server kept stopping and Trezi gave up restarting it: ${reason}`, 'needs-action', { event: 'devserver-crash-loop' }))
+  const previewSupervisor = new NativePreviewSupervisor(workspaceController, undefined, (reason) =>
+    activityController.append(
+      `The dev server kept stopping and Trezi gave up restarting it: ${reason}`,
+      'needs-action',
+      { event: 'devserver-crash-loop' }
+    )
+  )
   serviceEvents.on('event', (channel, value) => {
     if (channel !== 'devserver:exit') return
     activityController.append(value.reason, 'error')
     previewSupervisor.exited(value)
   })
-  host.on('native-preview-action', action => {
+  host.on('native-preview-action', (action) => {
     if (workspaceController.state.activeKey !== action.project) return
     if (action.action === 'logs') activityController.action('show')
     else if (action.action === 'servers') previewRecovery.open(action.project)
     else if (action.action === 'diagnose') openSheet('diagnose')
     else if (action.action === 'run') {
       previewSupervisor.reset()
-      void workspaceController.command({ type: 'restart', key: action.project, ...(action.command?.trim() ? { command: action.command.trim() } : {}) }).catch(error => activityController.append(String(error), 'error'))
+      void workspaceController
+        .command({
+          type: 'restart',
+          key: action.project,
+          ...(action.command?.trim() ? { command: action.command.trim() } : {})
+        })
+        .catch((error) => activityController.append(String(error), 'error'))
     }
   })
 
@@ -475,7 +794,13 @@ async function main() {
   host.on('external', ({ url }) => {
     void shell.openExternal(url).catch(console.error)
   })
-  host.on('load-error', message => { activityController.append(message.message, 'error'); if (message.view === 'preview' && workspaceController.active) { workspaceController.state.status = { kind: 'error', message: message.message }; workspaceController.changed() } })
+  host.on('load-error', (message) => {
+    activityController.append(message.message, 'error')
+    if (message.view === 'preview' && workspaceController.active) {
+      workspaceController.state.status = { kind: 'error', message: message.message }
+      workspaceController.changed()
+    }
+  })
   host.on('loaded', ({ view, url }) => {
     const current = views.get(view)
     if (current) current.url = url
@@ -483,7 +808,10 @@ async function main() {
     previewView.webContents.send(channels.PREVIEW_SET_MODE, state.selectMode)
     previewView.webContents.send(channels.PREVIEW_SET_COMMENT_MODE, state.commentMode)
     previewView.webContents.send(channels.PREVIEW_SET_FRAME, state.frameMode)
-    previewView.webContents.send(channels.PREVIEW_HIDE_SCROLLBARS, workspaceController.active?.viewport === 'mobile')
+    previewView.webContents.send(
+      channels.PREVIEW_HIDE_SCROLLBARS,
+      workspaceController.active?.viewport === 'mobile'
+    )
     previewView.webContents.send(channels.PREVIEW_SET_PINS, state.pins)
     previewView.webContents.send(channels.PREVIEW_SET_STATUS, state.statusText)
     previewView.webContents.send(channels.LAYERS_SET_WATCH, state.layersWatch)
@@ -507,27 +835,43 @@ async function main() {
   // a folder dropped on the Dock icon): opened once the workspace is attached.
   let attached = false
   const openRequests: string[] = []
-  const openRequested = (root: string) => workspaceController.command({ type: 'open', root }).catch(error => activityController.append(`Could not open ${root}: ${String(error)}`, 'needs-action', { event: 'project-open-failed' }))
+  const openRequested = (root: string) =>
+    workspaceController.command({ type: 'open', root }).catch((error) =>
+      activityController.append(`Could not open ${root}: ${String(error)}`, 'needs-action', {
+        event: 'project-open-failed'
+      })
+    )
   host.on('open-project', ({ root }) => {
     if (typeof root !== 'string' || !isAbsolute(root) || testing) return
-    if (attached) void openRequested(root); else openRequests.push(root)
+    if (attached) void openRequested(root)
+    else openRequests.push(root)
   })
   host.once('ready', async () => {
     host!.send('preferences', { values: preferences.snapshot() })
     host!.send('layoutWidth', { width: Number(preferences.get('trezi:native-chat-width')) || 440 })
-    try { host!.send('layoutSizes', { sizes: JSON.parse(preferences.get('trezi:native-panel-sizes') ?? '{}') }) } catch {}
+    try {
+      host!.send('layoutSizes', {
+        sizes: JSON.parse(preferences.get('trezi:native-panel-sizes') ?? '{}')
+      })
+    } catch {}
     shellController!.render()
     let preferred: unknown
-    try { preferred = JSON.parse(preferences.get('trezi:preferred-model') ?? 'null') } catch {}
-    await workspaceController.command({ type: 'attach', preferred: resolvePreferredSettings(parsePreferredModelState(preferred)) })
+    try {
+      preferred = JSON.parse(preferences.get('trezi:preferred-model') ?? 'null')
+    } catch {}
+    await workspaceController.command({
+      type: 'attach',
+      preferred: resolvePreferredSettings(parsePreferredModelState(preferred))
+    })
     await chatController.command({ type: 'attach' })
-    if (requestedProject && !testing) await workspaceController.command({ type: 'open', root: resolve(requestedProject) })
+    if (requestedProject && !testing)
+      await workspaceController.command({ type: 'open', root: resolve(requestedProject) })
     attached = true
     for (const root of openRequests.splice(0)) await openRequested(root)
     console.log('Trezi is running on Bun + system WebKit. ')
     if (testing) {
       try {
-        await runNativeCoreSmoke(host!, fixture!, root, key => preferences.get(key))
+        await runNativeCoreSmoke(host!, fixture!, root, (key) => preferences.get(key))
         process.exitCode = 0
         await cleanup()
       } catch (error) {
@@ -537,7 +881,9 @@ async function main() {
           saveSmokeFailure(root, await host!.request('captureShell'))
           console.error('Native chat state:', await host!.request('chatInspect'))
           console.error('Native geometry:', await host!.request('layoutInspect'))
-        } catch { /* preserve original failure */ }
+        } catch {
+          /* preserve original failure */
+        }
         await cleanup()
         process.exitCode = 1
       } finally {

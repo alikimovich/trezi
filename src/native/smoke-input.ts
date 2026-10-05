@@ -10,10 +10,10 @@ export async function captureForegroundChat(host: NativeBridge): Promise<any> {
       // Readiness cannot hold focus across ScreenCaptureKit's asynchronous work.
       // Swift rejects those pixels; reacquire and take an entirely new capture.
       // The legacy test bridge exposes only localized error strings.
-      const foregroundLost = error instanceof Error && (
-        error.message === 'Chat window is not in the foreground' ||
-        error.message === 'Chat lost foreground during capture'
-      )
+      const foregroundLost =
+        error instanceof Error &&
+        (error.message === 'Chat window is not in the foreground' ||
+          error.message === 'Chat lost foreground during capture')
       if (!foregroundLost || attempt === 3) throw error
       console.warn(`Visible chat capture lost foreground (attempt ${attempt}/3); reacquiring`)
     }
@@ -27,7 +27,7 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   const wait = async (code: string): Promise<void> => {
     for (let i = 0; i < 100; i++) {
       if (await evaluate(code)) return
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
     const state = await evaluate(`(() => {
       const el = document.querySelector('#native-title');
@@ -65,7 +65,9 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
     return point;
   })()`)
   await input(point)
-  await wait(`document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-toolbar]')?.style.display === 'flex'`)
+  await wait(
+    `document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-toolbar]')?.style.display === 'flex'`
+  )
   await input({ ...point, clicks: 2 })
   await wait(`document.querySelector('#native-title').isContentEditable`)
   await input({ key: 'ArrowRight' })
@@ -75,8 +77,12 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   if ((await evaluate('window.previewInputs.length')) !== 0)
     throw new Error('Inline editing leaked input to the preview app')
   await input({ key: 'Escape' })
-  await wait(`!document.querySelector('#native-title').isContentEditable && document.documentElement.style.cursor !== 'crosshair'`)
-  if (await evaluate(`document.querySelector('#native-title').textContent !== 'Native Trezi fixture'`))
+  await wait(
+    `!document.querySelector('#native-title').isContentEditable && document.documentElement.style.cursor !== 'crosshair'`
+  )
+  if (
+    await evaluate(`document.querySelector('#native-title').textContent !== 'Native Trezi fixture'`)
+  )
     throw new Error('Escape did not restore the inline text')
   await input(point)
   await input({ key: 'ArrowRight' })
@@ -87,17 +93,24 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   await wait(`document.querySelector('#native-title').isContentEditable`)
   await input({ key: 'Enter' })
   await wait(`!document.querySelector('#native-title').isContentEditable`)
-  console.log('Native selection blocks page input; inline caret movement and normal interaction passed.')
+  console.log(
+    'Native selection blocks page input; inline caret movement and normal interaction passed.'
+  )
 }
 
 /** Restore the main test window after auxiliary windows before paint/input checks. */
-export async function preparePreviewInput(host: NativeBridge, preserveResponder = false): Promise<void> {
+export async function preparePreviewInput(
+  host: NativeBridge,
+  preserveResponder = false
+): Promise<void> {
   let ready: any
   for (let i = 0; i < 100; i++) {
     ready = await host.request('previewInput', { prepare: true, preserveResponder })
     if (ready.active && ready.key && ready.focused && ready.visible) break
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50))
   }
   if (!ready?.active || !ready.key || !ready.focused || !ready.visible)
-    throw new Error(`Native preview input could not acquire the foreground window: ${JSON.stringify(ready)}`)
+    throw new Error(
+      `Native preview input could not acquire the foreground window: ${JSON.stringify(ready)}`
+    )
 }

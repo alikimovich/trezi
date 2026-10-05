@@ -22,9 +22,11 @@ const text = (value: string, isError = false): PreviewToolResult => ({
   content: [{ type: 'text', text: value }],
   ...(isError ? { isError: true } : {})
 })
-const json = (value: unknown) => text(JSON.stringify(value, null, 2), !!(value as { error?: unknown })?.error)
+const json = (value: unknown) =>
+  text(JSON.stringify(value, null, 2), !!(value as { error?: unknown })?.error)
 const NO_PREVIEW = 'No project preview is open.'
-const NOT_READY = 'The preview instrumentation is not ready (the page may still be loading). Try again.'
+const NOT_READY =
+  'The preview instrumentation is not ready (the page may still be loading). Try again.'
 
 // ---- preview_evaluate --------------------------------------------------------------
 
@@ -67,9 +69,17 @@ export async function validateExpression(expression: unknown): Promise<string | 
       continue
     }
     const type = (node as { type?: unknown }).type
-    if (typeof type === 'string' && FORBIDDEN[type]) return `${FORBIDDEN[type]} cannot run in preview_evaluate.`
+    if (typeof type === 'string' && FORBIDDEN[type])
+      return `${FORBIDDEN[type]} cannot run in preview_evaluate.`
     for (const [key, value] of Object.entries(node))
-      if (key !== 'loc' && key !== 'extra' && !key.endsWith('Comments') && value && typeof value === 'object') stack.push(value)
+      if (
+        key !== 'loc' &&
+        key !== 'extra' &&
+        !key.endsWith('Comments') &&
+        value &&
+        typeof value === 'object'
+      )
+        stack.push(value)
   }
   return null
 }
@@ -83,7 +93,11 @@ export function evaluationCode(expression: string, limits = EVALUATE_LIMITS): st
 async function evaluate(host: PreviewAgentHost, args: { expression?: unknown }) {
   const invalid = await validateExpression(args.expression)
   if (invalid) return json({ error: `preview_evaluate rejected: ${invalid}` })
-  const result = (await host.evaluate(evaluationCode(args.expression as string), 'agent', CALL_TIMEOUT)) as
+  const result = (await host.evaluate(
+    evaluationCode(args.expression as string),
+    'agent',
+    CALL_TIMEOUT
+  )) as
     | { ok: true; type: string; value: unknown; bytes: number; ms: number }
     | { ok: false; error: string }
     | null
@@ -104,11 +118,14 @@ interface Target {
 function target(raw: unknown): Target | { error: string } {
   const args = (raw ?? {}) as Record<string, unknown>
   if (typeof args.selector === 'string' && args.selector.trim()) {
-    if (args.selector.length > 1000) return { error: 'The selector is longer than 1000 characters.' }
-    const index = Number.isInteger(args.index) && (args.index as number) >= 0 ? (args.index as number) : 0
+    if (args.selector.length > 1000)
+      return { error: 'The selector is longer than 1000 characters.' }
+    const index =
+      Number.isInteger(args.index) && (args.index as number) >= 0 ? (args.index as number) : 0
     return { selector: args.selector, index }
   }
-  if (Number.isFinite(args.x) && Number.isFinite(args.y)) return { x: args.x as number, y: args.y as number }
+  if (Number.isFinite(args.x) && Number.isFinite(args.y))
+    return { x: args.x as number, y: args.y as number }
   return { error: 'Pass a CSS selector (optionally with index) or an x/y point in CSS pixels.' }
 }
 
@@ -164,12 +181,19 @@ async function viewport(host: PreviewAgentHost, raw: unknown) {
     await host.setViewport(null)
     return json({ restored: true, ...(await measure(host, null)) })
   }
-  const preset = typeof args.preset === 'string' ? VIEWPORT_PRESETS[args.preset as keyof typeof VIEWPORT_PRESETS] : undefined
+  const preset =
+    typeof args.preset === 'string'
+      ? VIEWPORT_PRESETS[args.preset as keyof typeof VIEWPORT_PRESETS]
+      : undefined
   if (args.preset !== undefined && !preset)
-    return json({ error: `Unknown preset. Use one of: ${Object.keys(VIEWPORT_PRESETS).join(', ')}.` })
+    return json({
+      error: `Unknown preset. Use one of: ${Object.keys(VIEWPORT_PRESETS).join(', ')}.`
+    })
   const width = preset ?? (Number.isFinite(args.width) ? Math.round(args.width as number) : NaN)
   if (!(width >= VIEWPORT_RANGE.min && width <= VIEWPORT_RANGE.max))
-    return json({ error: `Pass a preset or a width from ${VIEWPORT_RANGE.min} to ${VIEWPORT_RANGE.max} CSS px.` })
+    return json({
+      error: `Pass a preset or a width from ${VIEWPORT_RANGE.min} to ${VIEWPORT_RANGE.max} CSS px.`
+    })
   const applied = await host.setViewport(width)
   if (restoreTimer) clearTimeout(restoreTimer)
   restoreTimer = setTimeout(() => {
@@ -201,7 +225,10 @@ interface Prepared {
 async function elementScreenshot(host: PreviewAgentHost, raw: unknown): Promise<PreviewToolResult> {
   const request = target(raw)
   if ('error' in request) return json(request)
-  const padding = Math.max(0, Math.min(64, Number((raw as { padding?: unknown })?.padding ?? 8) || 0))
+  const padding = Math.max(
+    0,
+    Math.min(64, Number((raw as { padding?: unknown })?.padding ?? 8) || 0)
+  )
   const prepared = (await host.evaluate(
     `globalThis.__treziAgentInspect?.prepareCapture(${JSON.stringify(request)}) ?? null`,
     'preview',
@@ -211,9 +238,16 @@ async function elementScreenshot(host: PreviewAgentHost, raw: unknown): Promise<
   if ('error' in prepared) return json(prepared)
   try {
     if (prepared.crop.width < 1 || prepared.crop.height < 1)
-      return json({ error: `${prepared.element} has no visible area to capture.`, rect: prepared.rect })
+      return json({
+        error: `${prepared.element} has no visible area to capture.`,
+        rect: prepared.rect
+      })
     if (prepared.scrolled)
-      await host.evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))', 'preview', CALL_TIMEOUT)
+      await host.evaluate(
+        'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))',
+        'preview',
+        CALL_TIMEOUT
+      )
     const { crop } = prepared
     const image = await host.captureRect({
       x: crop.x - padding,
@@ -227,24 +261,44 @@ async function elementScreenshot(host: PreviewAgentHost, raw: unknown): Promise<
     const { width, height } = image.getSize()
     return {
       content: [
-        { type: 'image', data: data.toString('base64'), mimeType: data === png ? 'image/png' : 'image/jpeg' },
+        {
+          type: 'image',
+          data: data.toString('base64'),
+          mimeType: data === png ? 'image/png' : 'image/jpeg'
+        },
         {
           type: 'text',
-          text: JSON.stringify({ element: prepared.element, source: prepared.source, rect: prepared.rect, crop, padding, pixels: { width, height } })
+          text: JSON.stringify({
+            element: prepared.element,
+            source: prepared.source,
+            rect: prepared.rect,
+            crop,
+            padding,
+            pixels: { width, height }
+          })
         }
       ]
     }
   } finally {
     if (prepared.scrolled)
       await host
-        .evaluate(`globalThis.__treziAgentInspect?.restoreScroll(${JSON.stringify(prepared.restore)}) ?? null`, 'preview', CALL_TIMEOUT)
+        .evaluate(
+          `globalThis.__treziAgentInspect?.restoreScroll(${JSON.stringify(prepared.restore)}) ?? null`,
+          'preview',
+          CALL_TIMEOUT
+        )
         .catch(() => {})
   }
 }
 
 // ---- dispatch ------------------------------------------------------------------------
 
-export type PreviewAgentAction = 'preview_inspect' | 'preview_evaluate' | 'preview_console' | 'preview_viewport' | 'preview_screenshot'
+export type PreviewAgentAction =
+  | 'preview_inspect'
+  | 'preview_evaluate'
+  | 'preview_console'
+  | 'preview_viewport'
+  | 'preview_screenshot'
 
 /** Runs one agent preview action; failures come back as error text the model can read. */
 export async function runPreviewAgentTool(
@@ -255,7 +309,8 @@ export async function runPreviewAgentTool(
   if (!host) return text(NO_PREVIEW, true)
   try {
     if (action === 'preview_inspect') return await inspect(host, args)
-    if (action === 'preview_evaluate') return await evaluate(host, (args ?? {}) as { expression?: unknown })
+    if (action === 'preview_evaluate')
+      return await evaluate(host, (args ?? {}) as { expression?: unknown })
     if (action === 'preview_console') return await readConsole(host, args)
     if (action === 'preview_viewport') return await viewport(host, args)
     return await elementScreenshot(host, args)

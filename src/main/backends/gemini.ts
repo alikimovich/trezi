@@ -139,8 +139,7 @@ async function startSession(
       }
       proc.stdout.on('data', (d: Buffer) => {
         buf += d.toString()
-        let nl: number
-        while ((nl = buf.indexOf('\n')) >= 0) {
+        for (let nl = buf.indexOf('\n'); nl >= 0; nl = buf.indexOf('\n')) {
           onLine(buf.slice(0, nl))
           buf = buf.slice(nl + 1)
         }

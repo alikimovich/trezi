@@ -6,24 +6,44 @@ import { fileURLToPath } from 'node:url'
 import { parseSmokeGroups } from '../src/native/smoke-groups.ts'
 
 function assertSidebarEvidence(dir, since) {
-  const fresh = name => {
+  const fresh = (name) => {
     const path = join(dir, name)
-    assert.ok(statSync(path, { throwIfNoEntry: false })?.mtimeMs >= since, `Native suite did not write fresh ${name}`)
+    assert.ok(
+      statSync(path, { throwIfNoEntry: false })?.mtimeMs >= since,
+      `Native suite did not write fresh ${name}`
+    )
     return path
   }
-  for (const width of [260, 180]) for (const row of [0, 1]) for (const state of ['rest', 'hover']) {
-    const stem = `sidebar-${width}-${row}-${state}`
-    assert.ok(statSync(fresh(`${stem}.png`)).size > 1000, `${stem}.png is empty`)
-    const evidence = JSON.parse(readFileSync(fresh(`${stem}.json`), 'utf8'))
-    assert.equal(evidence.rows.length, 2, `${stem}.json rows`)
-    assert.ok(evidence.rows.every(r => r.folder && r.template), `${stem}.json folder rows`)
-  }
+  for (const width of [260, 180])
+    for (const row of [0, 1])
+      for (const state of ['rest', 'hover']) {
+        const stem = `sidebar-${width}-${row}-${state}`
+        assert.ok(statSync(fresh(`${stem}.png`)).size > 1000, `${stem}.png is empty`)
+        const evidence = JSON.parse(readFileSync(fresh(`${stem}.json`), 'utf8'))
+        assert.equal(evidence.rows.length, 2, `${stem}.json rows`)
+        assert.ok(
+          evidence.rows.every((r) => r.folder && r.template),
+          `${stem}.json folder rows`
+        )
+      }
   const interactions = JSON.parse(readFileSync(fresh('sidebar-interactions.json'), 'utf8'))
-  const checks = interactions.filter(entry => entry.drag)
-  assert.deepEqual(checks.map(entry => entry.width), [260, 180], 'Menu/reorder checks at both widths')
-  assert.ok(checks.every(entry => entry.menu.opened && entry.memoryOpened && entry.drag.accepted && entry.focusRestored), 'Menu/reorder evidence')
+  const checks = interactions.filter((entry) => entry.drag)
+  assert.deepEqual(
+    checks.map((entry) => entry.width),
+    [260, 180],
+    'Menu/reorder checks at both widths'
+  )
+  assert.ok(
+    checks.every(
+      (entry) =>
+        entry.menu.opened && entry.memoryOpened && entry.drag.accepted && entry.focusRestored
+    ),
+    'Menu/reorder evidence'
+  )
   JSON.parse(readFileSync(fresh('sidebar-selection.json'), 'utf8'))
-  console.log('Native sidebar evidence: 8 fresh foreground captures plus selection, menu and reorder records.')
+  console.log(
+    'Native sidebar evidence: 8 fresh foreground captures plus selection, menu and reorder records.'
+  )
 }
 
 if (process.platform !== 'darwin') {
@@ -42,8 +62,11 @@ if (process.platform !== 'darwin') {
   })
   if (result.error) throw result.error
   // A passing smoke run must have produced fresh sidebar folder evidence for review.
-  if (result.status === 0 && groups.has('sidebar')) assertSidebarEvidence(join(cwd, 'test/artifacts/native'), started)
-  const host = fileURLToPath(new URL('../out/native/Trezi.app/Contents/MacOS/TreziHost', import.meta.url))
+  if (result.status === 0 && groups.has('sidebar'))
+    assertSidebarEvidence(join(cwd, 'test/artifacts/native'), started)
+  const host = fileURLToPath(
+    new URL('../out/native/Trezi.app/Contents/MacOS/TreziHost', import.meta.url)
+  )
   for (const args of [[], ['/tmp']]) {
     const direct = spawnSync(host, args, { encoding: 'utf8', timeout: 10000 })
     if (direct.error) throw direct.error

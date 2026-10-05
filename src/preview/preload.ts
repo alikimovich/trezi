@@ -1,6 +1,10 @@
-import { sourceStamp, sourceSelector } from './source-stamp'
-import { ANIMATION_REPLAY, ISLAND_OVERRIDE, ISLAND_OVERRIDE_REPLY } from '../shared/preview-channels'
+import {
+  ANIMATION_REPLAY,
+  ISLAND_OVERRIDE,
+  ISLAND_OVERRIDE_REPLY
+} from '../shared/preview-channels'
 import { islandOverride } from './island-override'
+import { sourceSelector, sourceStamp } from './source-stamp'
 import './agent-console'
 import './agent-inspect'
 /**
@@ -19,8 +23,6 @@ import './agent-inspect'
  * events from the previewed app.
  */
 import { ipcRenderer } from '../native/preview-transport'
-import { createThreeDInspector } from './three-d'
-import { createViewportReadout } from './viewport-readout'
 import type { SelectedElement } from '../shared/api'
 import { CONTROL_OVERLAY_SELECTOR } from '../shared/control-overlay'
 import { isScopeClass } from '../shared/display-classes'
@@ -39,13 +41,13 @@ import {
   LAYERS_READ_REPLY,
   LAYERS_SELECT,
   LAYERS_SET_WATCH,
-  PREVIEW_MOVE_NODE,
   PREVIEW_PICKED as PICKED,
   PREVIEW_PIN_CLICK as PIN_CLICK,
+  PREVIEW_HIDE_SCROLLBARS,
+  PREVIEW_MOVE_NODE,
   PREVIEW_READINESS as READINESS,
   PREVIEW_SET_COMMENT_MODE as SET_COMMENT_MODE,
   PREVIEW_SET_FRAME as SET_FRAME,
-  PREVIEW_HIDE_SCROLLBARS,
   PREVIEW_SET_MODE as SET_MODE,
   PREVIEW_SET_PINS as SET_PINS,
   PREVIEW_SET_STATUS as SET_STATUS,
@@ -58,14 +60,12 @@ import {
   PREVIEW_TOGGLE_SELECT as TOGGLE_SELECT,
   PREVIEW_TOOLBAR_ACTION as TOOLBAR_ACTION
 } from '../shared/preview-channels'
-import {
-  buildLayersSnapshot,
-  type LayerFingerprint,
-  resolveLayerElement
-} from './layers'
 import { installDragReorder } from './drag-reorder'
+import { buildLayersSnapshot, type LayerFingerprint, resolveLayerElement } from './layers'
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
 import { specifiedValues, varRefName } from './style-provenance'
+import { createThreeDInspector } from './three-d'
+import { createViewportReadout } from './viewport-readout'
 
 type CommentMode = 'comment' | 'annotate' | null
 
@@ -75,8 +75,7 @@ type CommentMode = 'comment' | 'annotate' | null
 // query param (not a page global) is the signal because the preload runs in an
 // isolated world and can't see the page's `window`, but `location` is shared.
 // Phase 2/3 add the simulator-specific overlay separately.
-const IS_SIM_BRIDGE =
-  typeof location !== 'undefined' && /[?&]treziSim=1\b/.test(location.search)
+const IS_SIM_BRIDGE = typeof location !== 'undefined' && /[?&]treziSim=1\b/.test(location.search)
 
 /** Computed styles worth surfacing in the inspector + Styles panel: the v1
  *  longhand set (curated, not the whole CSSOM). Longhands, not shorthands, so
@@ -293,7 +292,8 @@ function ensureOverlay(): void {
       'display:flex;align-items:center;justify-content:center;cursor:default;color:#d4d4d4;'
     b.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[kind].svg}</svg>`
     b.addEventListener('mouseenter', () => {
-      b.style.background = b.dataset.pressed === '1' ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)'
+      b.style.background =
+        b.dataset.pressed === '1' ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)'
     })
     b.addEventListener('mouseleave', () => {
       b.style.background = b.dataset.pressed === '1' ? 'rgba(255,255,255,0.16)' : 'transparent'
@@ -376,19 +376,41 @@ function ensureOverlay(): void {
  *  inline comment/annotate input is open — those actions don't apply there. */
 function setTrailingActions(show: boolean): void {
   const disp = show ? 'flex' : 'none'
-  toolbarEl?.querySelector<HTMLButtonElement>('[data-kind="three-d"]')?.style.setProperty('display', disp)
-  toolbarEl?.querySelector<HTMLButtonElement>('[data-kind="props"]')?.style.setProperty('display', disp)
-  toolbarEl?.querySelector<HTMLButtonElement>('[data-kind="delete"]')?.style.setProperty('display', disp)
+  toolbarEl
+    ?.querySelector<HTMLButtonElement>('[data-kind="three-d"]')
+    ?.style.setProperty('display', disp)
+  toolbarEl
+    ?.querySelector<HTMLButtonElement>('[data-kind="props"]')
+    ?.style.setProperty('display', disp)
+  toolbarEl
+    ?.querySelector<HTMLButtonElement>('[data-kind="delete"]')
+    ?.style.setProperty('display', disp)
   if (separatorEl) separatorEl.style.display = show ? 'block' : 'none'
   // Edit re-derives from the current selection's editability when shown.
   if (show) setEditAction()
-  else toolbarEl?.querySelector<HTMLButtonElement>('[data-kind="edit"]')?.style.setProperty('display', 'none')
+  else
+    toolbarEl
+      ?.querySelector<HTMLButtonElement>('[data-kind="edit"]')
+      ?.style.setProperty('display', 'none')
 }
 
 // Void/replaced elements have no editable text child even with 0 children.
 const NON_TEXT_TAGS = new Set([
-  'input', 'textarea', 'select', 'img', 'br', 'hr', 'svg', 'canvas', 'video',
-  'iframe', 'audio', 'embed', 'object', 'picture', 'source'
+  'input',
+  'textarea',
+  'select',
+  'img',
+  'br',
+  'hr',
+  'svg',
+  'canvas',
+  'video',
+  'iframe',
+  'audio',
+  'embed',
+  'object',
+  'picture',
+  'source'
 ])
 
 /**
@@ -454,7 +476,14 @@ function setSelectionHighlight(el: Element | null, group?: Element[]): void {
   const badge = makeChip()
   badge.setAttribute('data-trezi-selbadge', '')
   const tag = (els[0] ?? el).tagName.toLowerCase()
-  chipName(badge, group && els.length > 1 ? `${els.length} objects` : els.length > 1 ? `${tag} × ${els.length}` : shortLabel(el))
+  chipName(
+    badge,
+    group && els.length > 1
+      ? `${els.length} objects`
+      : els.length > 1
+        ? `${tag} × ${els.length}`
+        : shortLabel(el)
+  )
   // Size comes from positionSelection — it holds the anchor's live rect, and
   // re-runs on every scroll/resize/mutation, so the numbers track the layout.
   selLayer.appendChild(badge)
@@ -591,9 +620,10 @@ function hideOverlay(): void {
 
 /** Keep our overlay and project-owned tuning panels outside element selection. */
 function isOverlay(el: Element | null): boolean {
-  return !!el && (
-    !!el.closest(CONTROL_OVERLAY_SELECTOR) ||
-    (!!overlayHost && (el === overlayHost || overlayHost.contains(el)))
+  return (
+    !!el &&
+    (!!el.closest(CONTROL_OVERLAY_SELECTOR) ||
+      (!!overlayHost && (el === overlayHost || overlayHost.contains(el))))
   )
 }
 
@@ -1727,13 +1757,21 @@ const threeD = createThreeDInspector({
   }
 })
 
-const previewDrag = IS_SIM_BRIDGE ? null : installDragReorder({
-  selection: () => selectedEl,
-  blocked: () => threeD.active() || !!(editing || commenting || commentMode),
-  overlay: () => { ensureOverlay(); return overlayHost!.shadowRoot! },
-  clearHover: () => { hideOverlay(); clearMeasure() },
-  move: request => ipcRenderer.send(PREVIEW_MOVE_NODE, request)
-})
+const previewDrag = IS_SIM_BRIDGE
+  ? null
+  : installDragReorder({
+      selection: () => selectedEl,
+      blocked: () => threeD.active() || !!(editing || commenting || commentMode),
+      overlay: () => {
+        ensureOverlay()
+        return overlayHost!.shadowRoot!
+      },
+      clearHover: () => {
+        hideOverlay()
+        clearMeasure()
+      },
+      move: (request) => ipcRenderer.send(PREVIEW_MOVE_NODE, request)
+    })
 
 // Capture-phase so we see events before the page and can suppress the click.
 if (!IS_SIM_BRIDGE) {
@@ -1748,88 +1786,116 @@ if (!IS_SIM_BRIDGE) {
     window.addEventListener('DOMContentLoaded', installReadout, { once: true })
   } else installReadout()
   window.addEventListener('mousemove', onMove, true)
-window.addEventListener('click', onClick, true)
-window.addEventListener('dblclick', onDblClick, true)
-window.addEventListener('keydown', onKey, true)
-window.addEventListener('keyup', onKeyUp, true)
-for (const type of [
-  'keypress', 'pointerdown', 'pointerup', 'pointermove', 'mousedown', 'mouseup',
-  'mousemove', 'click', 'dblclick', 'auxclick', 'contextmenu', 'dragstart',
-  'touchstart', 'touchmove', 'touchend', 'wheel', 'beforeinput', 'input',
-  'compositionstart', 'compositionupdate', 'compositionend', 'paste', 'cut', 'copy'
-]) {
-  window.addEventListener(type, blockPageInput, { capture: true, passive: false })
-}
-// A window switch (Cmd+Tab) swallows the Option keyup — drop the measurement
-// rather than leave it stuck on when focus comes back.
-window.addEventListener('blur', () => {
-  altHeld = false
-  clearMeasure()
-})
-window.addEventListener('scroll', () => {
-  if (commenting) {
-    drawOverlay(commenting) // keep the highlight tracking the frozen el
-  } else if (active || commentMode) {
-    hideOverlay()
-    clearMeasure() // the hover it was measured from is gone too
+  window.addEventListener('click', onClick, true)
+  window.addEventListener('dblclick', onDblClick, true)
+  window.addEventListener('keydown', onKey, true)
+  window.addEventListener('keyup', onKeyUp, true)
+  for (const type of [
+    'keypress',
+    'pointerdown',
+    'pointerup',
+    'pointermove',
+    'mousedown',
+    'mouseup',
+    'mousemove',
+    'click',
+    'dblclick',
+    'auxclick',
+    'contextmenu',
+    'dragstart',
+    'touchstart',
+    'touchmove',
+    'touchend',
+    'wheel',
+    'beforeinput',
+    'input',
+    'compositionstart',
+    'compositionupdate',
+    'compositionend',
+    'paste',
+    'cut',
+    'copy'
+  ]) {
+    window.addEventListener(type, blockPageInput, { capture: true, passive: false })
   }
-  if (selectedEl) positionToolbar() // the pill tracks the selection in both states
-  if (selEls.length) positionSelection()
-  if (pinDots.size) positionPins()
-}, true)
-window.addEventListener('resize', () => {
-  if (commenting) drawOverlay(commenting)
-  if (selectedEl) positionToolbar()
-  if (selEls.length) positionSelection()
-  if (pinDots.size) positionPins()
-  if (measureTarget) refreshMeasure()
-  positionFrame()
-})
-// Cursor left the preview entirely (relatedTarget null) — drop the HOVER
-// highlight so it doesn't stick to the last element; the persistent selection
-// outlines are a separate layer and stay.
-window.addEventListener(
-  'mouseout',
-  (e: MouseEvent) => {
-    if (e.relatedTarget || commenting) return
-    lastHovered = null
-    hideOverlay()
+  // A window switch (Cmd+Tab) swallows the Option keyup — drop the measurement
+  // rather than leave it stuck on when focus comes back.
+  window.addEventListener('blur', () => {
+    altHeld = false
     clearMeasure()
-  },
-  true
-)
-// Pins track layout changes (hot-reload, async content) on a light cadence.
-const pinTimer = setInterval(() => {
-  if (pinDots.size) positionPins()
-  // Selection outlines track layout changes (async content, HMR) the same way.
-  if (selEls.length) positionSelection()
-  if (measureTarget) refreshMeasure()
-}, 600)
-window.addEventListener('pagehide', () => {
-  clearInterval(pinTimer)
-  if (editing) endEdit()
-})
+  })
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (commenting) {
+        drawOverlay(commenting) // keep the highlight tracking the frozen el
+      } else if (active || commentMode) {
+        hideOverlay()
+        clearMeasure() // the hover it was measured from is gone too
+      }
+      if (selectedEl) positionToolbar() // the pill tracks the selection in both states
+      if (selEls.length) positionSelection()
+      if (pinDots.size) positionPins()
+    },
+    true
+  )
+  window.addEventListener('resize', () => {
+    if (commenting) drawOverlay(commenting)
+    if (selectedEl) positionToolbar()
+    if (selEls.length) positionSelection()
+    if (pinDots.size) positionPins()
+    if (measureTarget) refreshMeasure()
+    positionFrame()
+  })
+  // Cursor left the preview entirely (relatedTarget null) — drop the HOVER
+  // highlight so it doesn't stick to the last element; the persistent selection
+  // outlines are a separate layer and stay.
+  window.addEventListener(
+    'mouseout',
+    (e: MouseEvent) => {
+      if (e.relatedTarget || commenting) return
+      lastHovered = null
+      hideOverlay()
+      clearMeasure()
+    },
+    true
+  )
+  // Pins track layout changes (hot-reload, async content) on a light cadence.
+  const pinTimer = setInterval(() => {
+    if (pinDots.size) positionPins()
+    // Selection outlines track layout changes (async content, HMR) the same way.
+    if (selEls.length) positionSelection()
+    if (measureTarget) refreshMeasure()
+  }, 600)
+  window.addEventListener('pagehide', () => {
+    clearInterval(pinTimer)
+    if (editing) endEdit()
+  })
 
-// Report whether the previewed app is "trezi-ready" — i.e. its elements carry
-// data-trezi-source stamps — so the app can offer to set up an unprepared project.
-// Re-sampled a few times so a slow-rendering SPA (stamps appear after `load`)
-// isn't falsely flagged; the renderer retracts the offer on any stamps>0 report.
-function reportReadiness(): number {
-  if (!location.protocol.startsWith('http')) return -1 // skip the placeholder
-  const stamps = document.querySelectorAll(sourceSelector()).length
-  ipcRenderer.send(READINESS, { stamps, url: location.href, documentStartedAt: performance.timeOrigin })
-  return stamps
-}
-window.addEventListener('load', () => {
-  const delays = [600, 1500, 3000]
-  const tick = (i: number): void => {
-    if (i >= delays.length) return
-    setTimeout(() => {
-      if (reportReadiness() <= 0) tick(i + 1) // keep checking until stamps appear
-    }, delays[i])
+  // Report whether the previewed app is "trezi-ready" — i.e. its elements carry
+  // data-trezi-source stamps — so the app can offer to set up an unprepared project.
+  // Re-sampled a few times so a slow-rendering SPA (stamps appear after `load`)
+  // isn't falsely flagged; the renderer retracts the offer on any stamps>0 report.
+  function reportReadiness(): number {
+    if (!location.protocol.startsWith('http')) return -1 // skip the placeholder
+    const stamps = document.querySelectorAll(sourceSelector()).length
+    ipcRenderer.send(READINESS, {
+      stamps,
+      url: location.href,
+      documentStartedAt: performance.timeOrigin
+    })
+    return stamps
   }
-  tick(0)
-})
+  window.addEventListener('load', () => {
+    const delays = [600, 1500, 3000]
+    const tick = (i: number): void => {
+      if (i >= delays.length) return
+      setTimeout(() => {
+        if (reportReadiness() <= 0) tick(i + 1) // keep checking until stamps appear
+      }, delays[i])
+    }
+    tick(0)
+  })
 
   ipcRenderer.on(SET_MODE, (_e, next: boolean) => {
     if (next && commentMode) setCommentMode(null) // exclusivity
@@ -1870,7 +1936,7 @@ window.addEventListener('load', () => {
   ipcRenderer.on(ANIMATION_REPLAY, (_e, component: unknown) => {
     if (typeof component === 'string' && component.length <= 80)
       window.dispatchEvent(new CustomEvent('trezi:animation-replay', { detail: component }))
-      window.dispatchEvent(new CustomEvent('praxis:animation-replay', { detail: component }))
+    window.dispatchEvent(new CustomEvent('praxis:animation-replay', { detail: component }))
   })
   ipcRenderer.on(STYLES_REPLAY, (_e, p: { prop?: unknown; from?: unknown; to?: unknown }) => {
     if (typeof p?.prop === 'string' && typeof p?.from === 'string' && typeof p?.to === 'string')

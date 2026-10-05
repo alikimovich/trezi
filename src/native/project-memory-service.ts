@@ -1,10 +1,26 @@
 import { randomUUID } from 'node:crypto'
+import {
+  MAX_PROJECT_MEMORY_CHARS,
+  normalizeProjectMemory,
+  type ProjectMemory,
+  ProjectMemoryError,
+  type ProjectMemoryStore
+} from '../main/project-memory'
 import type { Revision, ServiceFailure } from '../shared/service-contract/types'
-import { MAX_PROJECT_MEMORY_CHARS, normalizeProjectMemory, type ProjectMemory, ProjectMemoryError, type ProjectMemoryStore } from '../main/project-memory'
 
 type Result = { kind: 'succeeded'; payload: any } | { kind: 'failed'; payload: ServiceFailure }
-interface Snapshot { revision: Revision; digest: string; content: string; updatedAt: number }
-interface ServiceMessage { service?: string; id?: number; snapshot?: Snapshot; reply: { result: Result } }
+interface Snapshot {
+  revision: Revision
+  digest: string
+  content: string
+  updatedAt: number
+}
+interface ServiceMessage {
+  service?: string
+  id?: number
+  snapshot?: Snapshot
+  reply: { result: Result }
+}
 /** Bun's end of the supervised private pipe (see `NativeBridge.sendService`). */
 export interface ProjectMemoryLink {
   sendService(frame: object): void
@@ -23,62 +39,109 @@ const MAX_BODY = 64_000
  * evaluated against and resolves `null` when that is stale. A timeout or failure
  * rejects: Bun never writes a memory file itself under the Swift owner.
  */
-export function serviceProjectMemory(link: ProjectMemoryLink, timeout = 30_000): ProjectMemoryStore {
+export function serviceProjectMemory(
+  link: ProjectMemoryLink,
+  timeout = 30_000
+): ProjectMemoryStore {
   const connection = randomUUID()
-  const pending = new Map<number, { resolve: (value: ServiceMessage) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
+  const pending = new Map<
+    number,
+    {
+      resolve: (value: ServiceMessage) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
   let sequence = 0
   let queue: Promise<unknown> = Promise.resolve()
 
-  link.on('service-reply', message => {
+  link.on('service-reply', (message) => {
     if (message.service !== 'memory') return
     const request = pending.get(message.id ?? -1)
     if (!request) return
-    clearTimeout(request.timer); pending.delete(message.id ?? -1)
+    clearTimeout(request.timer)
+    pending.delete(message.id ?? -1)
     request.resolve(message)
   })
 
-  const request = (method: 'read' | 'save' | 'propose', body: object, expectedRevision?: Revision) => {
+  const request = (
+    method: 'read' | 'save' | 'propose',
+    body: object,
+    expectedRevision?: Revision
+  ) => {
     const id = ++sequence
     return new Promise<ServiceMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id)
-        reject(new ProjectMemoryError('deadlineExceeded', 'Project memory was not saved: the Trezi service did not answer. Nothing was written locally.'))
+        reject(
+          new ProjectMemoryError(
+            'deadlineExceeded',
+            'Project memory was not saved: the Trezi service did not answer. Nothing was written locally.'
+          )
+        )
       }, timeout)
       pending.set(id, { resolve, reject, timer })
-      link.sendService({ service: 'memory', id, request: {
-        connection, requestID: randomUUID(), operationID: randomUUID(), scope: {},
-        mode: method === 'read' ? 'read' : 'mutation', ...(expectedRevision ? { expectedRevision } : {}),
-        service: 'memory', method, body
-      } })
+      link.sendService({
+        service: 'memory',
+        id,
+        request: {
+          connection,
+          requestID: randomUUID(),
+          operationID: randomUUID(),
+          scope: {},
+          mode: method === 'read' ? 'read' : 'mutation',
+          ...(expectedRevision ? { expectedRevision } : {}),
+          service: 'memory',
+          method,
+          body
+        }
+      })
     })
   }
   const settled = ({ reply: { result } }: ServiceMessage) => {
     if (result.kind === 'succeeded') return result.payload
     throw new ProjectMemoryError(result.payload.code, result.payload.message)
   }
-  const conflict = ({ reply: { result } }: ServiceMessage) => result.kind === 'failed' && result.payload.code === 'conflict'
-  const memory = (value: Snapshot): ProjectMemory =>
-    ({ content: value.content, updatedAt: value.updatedAt, digest: value.digest, revision: value.revision })
+  const conflict = ({ reply: { result } }: ServiceMessage) =>
+    result.kind === 'failed' && result.payload.code === 'conflict'
+  const memory = (value: Snapshot): ProjectMemory => ({
+    content: value.content,
+    updatedAt: value.updatedAt,
+    digest: value.digest,
+    revision: value.revision
+  })
   const serial = <T>(job: () => Promise<T>): Promise<T> => {
     const run = queue.then(job)
     queue = run.catch(() => {})
     return run
   }
   const valid = (root: string, content?: string) => {
-    if (typeof root !== 'string' || !root.startsWith('/') || root.length > 4096) throw new ProjectMemoryError('invalidRequest', 'Project memory needs an absolute project root.')
+    if (typeof root !== 'string' || !root.startsWith('/') || root.length > 4096)
+      throw new ProjectMemoryError(
+        'invalidRequest',
+        'Project memory needs an absolute project root.'
+      )
     if (content !== undefined && (typeof content !== 'string' || content.length > MAX_BODY)) {
-      throw new ProjectMemoryError('invalidRequest', `Project memory is limited to ${MAX_PROJECT_MEMORY_CHARS.toLocaleString('en-US')} characters.`)
+      throw new ProjectMemoryError(
+        'invalidRequest',
+        `Project memory is limited to ${MAX_PROJECT_MEMORY_CHARS.toLocaleString('en-US')} characters.`
+      )
     }
   }
-  const read = async (root: string): Promise<ProjectMemory> => memory(settled(await request('read', { root })))
+  const read = async (root: string): Promise<ProjectMemory> =>
+    memory(settled(await request('read', { root })))
   /** The reply carries the committed record; it is read back only if it could not. */
   const committed = async (root: string, message: ServiceMessage): Promise<ProjectMemory> => {
-    const payload = settled(message), snapshot = message.snapshot
+    const payload = settled(message),
+      snapshot = message.snapshot
     return snapshot && snapshot.digest === payload.digest ? memory(snapshot) : read(root)
   }
 
   return {
-    get: async root => { valid(root); return serial(() => read(root)) },
+    get: async (root) => {
+      valid(root)
+      return serial(() => read(root))
+    },
     save: async (root, content) => {
       valid(root, content)
       return serial(async () => {
@@ -93,8 +156,13 @@ export function serviceProjectMemory(link: ProjectMemoryLink, timeout = 30_000):
     },
     propose: async (root, base, content) => {
       valid(root, content)
-      if (!normalizeProjectMemory(content)) throw new ProjectMemoryError('invalidRequest', 'A proposal cannot erase project memory.')
-      if (!base.revision) throw new ProjectMemoryError('invalidRequest', 'A proposal needs the revision it was evaluated against.')
+      if (!normalizeProjectMemory(content))
+        throw new ProjectMemoryError('invalidRequest', 'A proposal cannot erase project memory.')
+      if (!base.revision)
+        throw new ProjectMemoryError(
+          'invalidRequest',
+          'A proposal needs the revision it was evaluated against.'
+        )
       return serial(async () => {
         const result = await request('propose', { root, content }, base.revision)
         return conflict(result) ? null : committed(root, result)

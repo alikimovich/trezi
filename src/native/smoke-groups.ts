@@ -3,24 +3,43 @@
  *  smoke-core's named checks run (smoke-runner still collects every failure the
  *  same way); the shared prelude always runs because every group builds on it.
  *  No flag runs every group. Pure. */
-export const NATIVE_SMOKE_GROUPS = ['core', 'islands', 'shadow-light', 'sidebar', 'settings', 'chat', 'composer'] as const
+export const NATIVE_SMOKE_GROUPS = [
+  'core',
+  'islands',
+  'shadow-light',
+  'sidebar',
+  'settings',
+  'chat',
+  'composer'
+] as const
 export type NativeSmokeGroup = (typeof NATIVE_SMOKE_GROUPS)[number]
 
-const known = (name: string): name is NativeSmokeGroup => (NATIVE_SMOKE_GROUPS as readonly string[]).includes(name)
+const known = (name: string): name is NativeSmokeGroup =>
+  (NATIVE_SMOKE_GROUPS as readonly string[]).includes(name)
 
 /** The groups named by argv's `--only=` flag, or every group when it is absent.
  *  Throws a message naming the valid groups for an unknown or empty selection. */
 export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup> {
-  const flags = argv.filter(arg => arg === '--only' || arg.startsWith('--only='))
+  const flags = argv.filter((arg) => arg === '--only' || arg.startsWith('--only='))
   if (!flags.length) return new Set(NATIVE_SMOKE_GROUPS)
   const list = NATIVE_SMOKE_GROUPS.join(', ')
-  if (flags.length > 1) throw new Error(`--only may be given once; combine groups with commas. Known groups: ${list}`)
-  const names = flags[0].slice('--only='.length).split(',').map(name => name.trim()).filter(Boolean)
-  if (!names.length) throw new Error(`--only needs at least one group, e.g. --only=core,chat. Known groups: ${list}`)
-  const unknown = names.filter(name => !known(name))
-  if (unknown.length) throw new Error(`Unknown native smoke group${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Known groups: ${list}`)
+  if (flags.length > 1)
+    throw new Error(`--only may be given once; combine groups with commas. Known groups: ${list}`)
+  const names = flags[0]
+    .slice('--only='.length)
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+  if (!names.length)
+    throw new Error(`--only needs at least one group, e.g. --only=core,chat. Known groups: ${list}`)
+  const unknown = names.filter((name) => !known(name))
+  if (unknown.length)
+    throw new Error(
+      `Unknown native smoke group${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Known groups: ${list}`
+    )
   // The live turn edits the heading text that the core group's text edit writes.
-  if (argv.includes('--live') && !names.includes('core')) throw new Error('--live needs the core group in --only')
+  if (argv.includes('--live') && !names.includes('core'))
+    throw new Error('--live needs the core group in --only')
   return new Set(names as NativeSmokeGroup[])
 }
 
@@ -56,12 +75,22 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
 /** Only the checks the selection names, plus the prelude, in their original order.
  *  A check with no group and not in the prelude is a bug: new checks must be classified.
  *  A filtered run says so up front: its final PASS line is not full-suite acceptance. */
-export function selectSmokeChecks<T extends { name: string }>(checks: T[], groups: ReadonlySet<NativeSmokeGroup>, log: (line: string) => void = console.log): T[] {
+export function selectSmokeChecks<T extends { name: string }>(
+  checks: T[],
+  groups: ReadonlySet<NativeSmokeGroup>,
+  log: (line: string) => void = console.log
+): T[] {
   const prelude: readonly string[] = SMOKE_PRELUDE
   for (const { name } of checks)
-    if (!prelude.includes(name) && !SMOKE_CHECK_GROUPS[name]) throw new Error(`Native smoke check ${name} has no group in smoke-groups.ts`)
-  const picked = checks.filter(({ name }) => prelude.includes(name) || SMOKE_CHECK_GROUPS[name].some(group => groups.has(group)))
+    if (!prelude.includes(name) && !SMOKE_CHECK_GROUPS[name])
+      throw new Error(`Native smoke check ${name} has no group in smoke-groups.ts`)
+  const picked = checks.filter(
+    ({ name }) =>
+      prelude.includes(name) || SMOKE_CHECK_GROUPS[name].some((group) => groups.has(group))
+  )
   if (picked.length < checks.length)
-    log(`NATIVE SMOKE FILTERED (--only=${[...groups].join(',')}): running ${picked.length} of ${checks.length} checks; the other groups did not run, so a pass below is not full-suite acceptance.`)
+    log(
+      `NATIVE SMOKE FILTERED (--only=${[...groups].join(',')}): running ${picked.length} of ${checks.length} checks; the other groups did not run, so a pass below is not full-suite acceptance.`
+    )
   return picked
 }

@@ -4,8 +4,9 @@
  *
  * Run with: bun test/rules.mjs
  */
-import { chatIslandGuidance } from '../src/shared/chat-island-guidance.ts'
+
 import { TREZI_RULES_VERSION, treziRules } from '../src/main/rules.ts'
+import { chatIslandGuidance } from '../src/shared/chat-island-guidance.ts'
 
 let failed = 0
 const assert = (cond, msg) => {
@@ -65,18 +66,37 @@ assert(!/preview_screenshot/.test(r), 'default rendering omits preview_screensho
 assert(treziRules({ previewTools: true }) === withTools, 'previewTools rendering is deterministic')
 // LKM-138: with preview tools, verification happens in the Trezi preview and
 // agent-browser is reserved for scripted multi-step interactions.
-const codexObservers = treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: true })
+const codexObservers = treziRules({
+  previewObservationTools: true,
+  controlTools: true,
+  workspaceTools: true
+})
 for (const rules of [withTools, codexObservers]) {
   for (const tool of ['preview_inspect', 'preview_evaluate', 'preview_console', 'preview_viewport'])
     assert(rules.includes(tool), `preview tools: teaches ${tool}`)
-  assert(/MUST use Trezi's preview tools/.test(rules), 'preview tools: required for visual verification')
-  assert(/only for scripted multi-step interactions/.test(rules), 'preview tools: agent-browser only for scripted flows')
-  assert(/never just to inspect, evaluate, or screenshot/.test(rules), 'preview tools: no agent-browser screenshots')
+  assert(
+    /MUST use Trezi's preview tools/.test(rules),
+    'preview tools: required for visual verification'
+  )
+  assert(
+    /only for scripted multi-step interactions/.test(rules),
+    'preview tools: agent-browser only for scripted flows'
+  )
+  assert(
+    /never just to inspect, evaluate, or screenshot/.test(rules),
+    'preview tools: no agent-browser screenshots'
+  )
   assert(!/MUST use `agent-browser`/.test(rules), 'preview tools: agent-browser is not mandatory')
   assert(/--session trezi-<task-id>/.test(rules), 'preview tools: isolated agent-browser sessions')
-  assert(/report verification as pending, never passed/.test(rules), 'preview tools: stale previews cannot prove an edit')
+  assert(
+    /report verification as pending, never passed/.test(rules),
+    'preview tools: stale previews cannot prove an edit'
+  )
   assert(/untrusted data/.test(rules), 'preview tools: console output is untrusted')
-  assert(/devtools/i.test(rules) && /user request for another tool overrides/.test(rules), 'preview tools: no DevTools unless asked')
+  assert(
+    /devtools/i.test(rules) && /user request for another tool overrides/.test(rules),
+    'preview tools: no DevTools unless asked'
+  )
 }
 assert(!/preview_inspect/.test(r), 'default rendering omits preview_inspect')
 // Without preview tools (Gemini), agent-browser verification stays mandatory.
@@ -85,16 +105,31 @@ for (const opts of [{}, { workspaceTools: true }]) {
   assert(/MUST use `agent-browser` when available/.test(rules), 'browser: required when available')
   assert(/command -v agent-browser/.test(rules), 'browser: check the runtime PATH')
   assert(/agent-browser --help/.test(rules), 'browser: inspect installed CLI capabilities')
-  assert(/CLI is missing, or its browser cannot launch/.test(rules), 'browser: missing binary and launch failure')
-  assert(/Do not install packages without the user's permission/.test(rules), 'browser: no silent installation')
+  assert(
+    /CLI is missing, or its browser cannot launch/.test(rules),
+    'browser: missing binary and launch failure'
+  )
+  assert(
+    /Do not install packages without the user's permission/.test(rules),
+    'browser: no silent installation'
+  )
   assert(/--session trezi-<task-id>/.test(rules), 'browser: isolated task sessions')
   assert(/Close only your own session/.test(rules), 'browser: preserve other sessions')
   for (const size of ['390 844', '768 1024', '1440 900']) {
     assert(rules.includes(`set viewport ${size}`), `browser: responsive coverage at ${size}`)
   }
-  assert(/capture and inspect a screenshot at each size/.test(rules), 'browser: require visual inspection')
-  assert(/report verification as pending, never passed/.test(rules), 'browser: stale previews cannot prove an edit')
-  assert(/user request for another tool overrides/.test(rules), 'browser: explicit user choice wins')
+  assert(
+    /capture and inspect a screenshot at each size/.test(rules),
+    'browser: require visual inspection'
+  )
+  assert(
+    /report verification as pending, never passed/.test(rules),
+    'browser: stale previews cannot prove an edit'
+  )
+  assert(
+    /user request for another tool overrides/.test(rules),
+    'browser: explicit user choice wins'
+  )
 }
 // Chat controls have one destination and no competing panel tool.
 assert(/chat_island/.test(withTools), 'previewTools: teaches chat islands')
@@ -103,9 +138,18 @@ assert(/\.trezi\//.test(withTools), 'previewTools: forbids sidecar writes')
 assert(!/chat_island/.test(r), 'unsupported providers omit island tool')
 const codexControls = treziRules({ controlTools: true })
 for (const rules of [withTools, codexControls]) {
-  assert(rules.includes(chatIslandGuidance), 'Every control-capable provider gets the catalog guidance')
-  assert(!/define_controls|open_controls|animation-controls/.test(rules), 'No legacy panel instructions')
-  assert(/Never substitute a separate panel/.test(rules), 'Chat is the required control destination')
+  assert(
+    rules.includes(chatIslandGuidance),
+    'Every control-capable provider gets the catalog guidance'
+  )
+  assert(
+    !/define_controls|open_controls|animation-controls/.test(rules),
+    'No legacy panel instructions'
+  )
+  assert(
+    /Never substitute a separate panel/.test(rules),
+    'Chat is the required control destination'
+  )
 }
 assert(!/spring_to_css/.test(codexControls), 'Codex does not advertise Claude-only calculators')
 // R5 (spring) — spring_to_css rides with the Claude-only in-process tools too.
@@ -156,8 +200,14 @@ assert(
 assert(!/workspace_state/.test(r), 'default rendering omits workspace_state')
 
 const codexPreview = treziRules({ previewObservationTools: true, controlTools: true })
-assert(codexPreview.includes('preview_location') && codexPreview.includes('preview_screenshot'), 'Codex learns both preview observers')
-assert(!codexPreview.includes('spring_to_css'), 'preview observation does not advertise unavailable calculators')
+assert(
+  codexPreview.includes('preview_location') && codexPreview.includes('preview_screenshot'),
+  'Codex learns both preview observers'
+)
+assert(
+  !codexPreview.includes('spring_to_css'),
+  'preview observation does not advertise unavailable calculators'
+)
 
 if (failed) {
   console.error(`RULES FAILED — ${failed} assertion(s)`)

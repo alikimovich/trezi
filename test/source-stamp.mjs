@@ -4,7 +4,7 @@ import { sourceSelector } from '../src/preview/source-stamp.ts'
 // Bun's HTML selector engine supports the attribute selectors and :not, but
 // not the outer :is wrapper. Exercise its equivalent selector list here; the
 // native DOM regression exercises the unmodified selector and CSS.escape.
-globalThis.CSS = { escape: value => value } // These unit values are identifiers.
+globalThis.CSS = { escape: (value) => value } // These unit values are identifiers.
 const html = `<div id="conflict" data-trezi-source="new" data-praxis-source="old"></div>
 <div id="legacy" data-praxis-source="old"></div>
 <div id="canonical" data-trezi-source="old"></div>
@@ -20,9 +20,16 @@ for (const [value, expected] of [
   const selector = sourceSelector(value)
   assert.ok(selector.startsWith(':is(') && selector.endsWith(')'))
   const matches = []
-  await new HTMLRewriter().on(selector.slice(4, -1), {
-    element(element) { matches.push(element.getAttribute('id')) }
-  }).transform(new Response(html)).text()
+  await new HTMLRewriter()
+    .on(selector.slice(4, -1), {
+      element(element) {
+        matches.push(element.getAttribute('id'))
+      }
+    })
+    .transform(new Response(html))
+    .text()
   assert.deepEqual(matches, expected)
 }
-console.log('Source selectors: canonical precedence, legacy fallback, empty and equal stamps passed')
+console.log(
+  'Source selectors: canonical precedence, legacy fallback, empty and equal stamps passed'
+)

@@ -32,7 +32,7 @@ mkdirSync(join(contents, 'Resources'), { recursive: true })
 mkdirSync(join(contents, 'Helpers'), { recursive: true })
 copyFileSync(join(root, 'build/icon.icns'), join(contents, 'Resources/Trezi.icns'))
 writeFileSync(join(contents, 'Resources/cat.json'), JSON.stringify(nativeCatAssets(root)))
-const device = readFileSync(join(root, 'src/shared/iphone-frame.ts'), 'utf8').match(/FRAME_DATA_URI = '([^']+)'/)[1]
+const device = readFileSync(join(root, 'src/shared/iphone-frame.ts'), 'utf8').match(/FRAME_DATA_URI =\s*'([^']+)'/)[1]
 writeFileSync(join(out, 'device.png'), Buffer.from(device.split(',')[1], 'base64'))
 const backend = await bundle({
   metafile: true,

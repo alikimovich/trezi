@@ -28,7 +28,10 @@ const keysOf = (file: string, field: string): string[] => {
  * plus the repo's own settings files, which can only enable plugins the user installed).
  * Read per session so a plugin installed mid-chat is still excluded from the next one.
  */
-export function personalClaudePlugins(root: string, env: NodeJS.ProcessEnv = process.env): string[] {
+export function personalClaudePlugins(
+  root: string,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
   const home = env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
   return [
     ...new Set([

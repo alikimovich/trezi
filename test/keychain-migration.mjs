@@ -17,33 +17,58 @@ const SERVICE = 'dev.trezi.native.secrets'
 const LEGACY = 'dev.praxis.native.secrets' // the earlier name, read once
 // Bounded: a hung security agent must not eat the unit budget (LKM-144). Every call here
 // works on a temporary keychain made with a password, and none can show a prompt.
-const security = (...args) => spawnSync('/usr/bin/security', args, { encoding: 'utf8', timeout: 30_000 })
+const security = (...args) =>
+  spawnSync('/usr/bin/security', args, { encoding: 'utf8', timeout: 30_000 })
 
 // CryptoKit's AES.GCM combined form: 12-byte nonce, ciphertext, 16-byte tag.
 const seal = (key, text) => {
-  const nonce = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, nonce)
+  const nonce = randomBytes(12),
+    cipher = createCipheriv('aes-256-gcm', key, nonce)
   const body = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()])
   return Buffer.concat([nonce, body, cipher.getAuthTag()])
 }
 const open = (key, blob) => {
   const decipher = createDecipheriv('aes-256-gcm', key, blob.subarray(0, 12))
   decipher.setAuthTag(blob.subarray(blob.length - 16))
-  return Buffer.concat([decipher.update(blob.subarray(12, blob.length - 16)), decipher.final()]).toString('utf8')
+  return Buffer.concat([
+    decipher.update(blob.subarray(12, blob.length - 16)),
+    decipher.final()
+  ]).toString('utf8')
 }
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-keychain-')))
 const keychains = []
 try {
   const helper = join(scratch, 'TreziSecrets')
-  const built = spawnSync('xcrun', ['swiftc', '-O', '-suppress-warnings', '-module-cache-path', join(scratch, 'cache'),
-    join(root, 'src/native/Secrets.swift'), '-o', helper, '-framework', 'Security', '-framework', 'CryptoKit'], { encoding: 'utf8' })
+  const built = spawnSync(
+    'xcrun',
+    [
+      'swiftc',
+      '-O',
+      '-suppress-warnings',
+      '-module-cache-path',
+      join(scratch, 'cache'),
+      join(root, 'src/native/Secrets.swift'),
+      '-o',
+      helper,
+      '-framework',
+      'Security',
+      '-framework',
+      'CryptoKit'
+    ],
+    { encoding: 'utf8' }
+  )
   assert.equal(built.status, 0, built.stderr)
   const crypto = (keychain, op, input) => {
-    const result = spawnSync(helper, ['--crypto', op, '--keychain', keychain], { input, timeout: 20_000 })
+    const result = spawnSync(helper, ['--crypto', op, '--keychain', keychain], {
+      input,
+      timeout: 20_000
+    })
     return { status: result.status, out: result.stdout }
   }
-  const has = (keychain, service) => security('find-generic-password', '-s', service, '-a', 'master-key', keychain).status
-  const keychain = name => {
+  const has = (keychain, service) =>
+    security('find-generic-password', '-s', service, '-a', 'master-key', keychain).status
+  const keychain = (name) => {
     const path = join(scratch, `${name}.keychain-db`)
     const made = security('create-keychain', '-p', 'trezi-test', path)
     if (made.status !== 0) return { skip: made.status === null ? 'timed out' : made.stderr.trim() }
@@ -60,7 +85,20 @@ try {
     // A profile from before the rename: the key under the earlier name and a connection
     // key encrypted with it.
     const legacyKey = randomBytes(32)
-    assert.equal(security('add-generic-password', '-s', LEGACY, '-a', 'master-key', '-X', legacyKey.toString('hex'), '-A', kc).status, 0)
+    assert.equal(
+      security(
+        'add-generic-password',
+        '-s',
+        LEGACY,
+        '-a',
+        'master-key',
+        '-X',
+        legacyKey.toString('hex'),
+        '-A',
+        kc
+      ).status,
+      0
+    )
     const saved = seal(legacyKey, 'sk-saved-before-the-rename')
     assert.equal(has(kc, SERVICE), 44, 'no new item yet')
 
@@ -78,7 +116,20 @@ try {
     assert.equal(open(legacyKey, sealed.out), 'sk-after', 'new ciphertext uses the migrated key')
 
     // Exactly once: an item that reappears under the old name is never migrated again.
-    assert.equal(security('add-generic-password', '-s', LEGACY, '-a', 'master-key', '-X', randomBytes(32).toString('hex'), '-A', kc).status, 0)
+    assert.equal(
+      security(
+        'add-generic-password',
+        '-s',
+        LEGACY,
+        '-a',
+        'master-key',
+        '-X',
+        randomBytes(32).toString('hex'),
+        '-A',
+        kc
+      ).status,
+      0
+    )
     assert.equal(crypto(kc, 'decrypt', saved).out.toString('utf8'), 'sk-saved-before-the-rename')
     assert.equal(has(kc, LEGACY), 0, 'the reappeared old item is left alone')
     console.log('KEYCHAIN-MIGRATION migrate PASS')
@@ -89,26 +140,58 @@ try {
     assert.equal(has(fresh, SERVICE), 44, 'a decrypt does not create a key')
     const created = crypto(fresh, 'encrypt', Buffer.from('sk-new'))
     assert.equal(created.status, 0)
-    assert.equal(has(fresh, SERVICE), 0); assert.equal(has(fresh, LEGACY), 44)
+    assert.equal(has(fresh, SERVICE), 0)
+    assert.equal(has(fresh, LEGACY), 44)
     assert.equal(crypto(fresh, 'decrypt', created.out).out.toString('utf8'), 'sk-new')
     assert.equal(crypto(fresh, 'decrypt', saved).status, 1, 'another key does not open it')
     console.log('KEYCHAIN-MIGRATION fresh PASS')
 
     // A key of the wrong size under the old name is refused and kept, never copied.
     const odd = keychain('odd').path
-    assert.equal(security('add-generic-password', '-s', LEGACY, '-a', 'master-key', '-X', randomBytes(16).toString('hex'), '-A', odd).status, 0)
+    assert.equal(
+      security(
+        'add-generic-password',
+        '-s',
+        LEGACY,
+        '-a',
+        'master-key',
+        '-X',
+        randomBytes(16).toString('hex'),
+        '-A',
+        odd
+      ).status,
+      0
+    )
     assert.equal(crypto(odd, 'encrypt', Buffer.from('x')).status, 1)
-    assert.equal(has(odd, LEGACY), 0); assert.equal(has(odd, SERVICE), 44)
+    assert.equal(has(odd, LEGACY), 0)
+    assert.equal(has(odd, SERVICE), 44)
     console.log('KEYCHAIN-MIGRATION invalid PASS')
 
     // LKM-144: the first launch after updating runs one helper per saved key, one at a
     // time (`ProviderData.crypto`). Each later run reads the new item, never the old one.
     const repeat = keychain('repeat').path
     const repeatKey = randomBytes(32)
-    assert.equal(security('add-generic-password', '-s', LEGACY, '-a', 'master-key', '-X', repeatKey.toString('hex'), '-A', repeat).status, 0)
-    const keys = ['sk-one', 'sk-two', 'sk-three'].map(text => seal(repeatKey, text))
-    assert.deepEqual(keys.map(blob => crypto(repeat, 'decrypt', blob).out.toString('utf8')), ['sk-one', 'sk-two', 'sk-three'])
-    assert.equal(has(repeat, SERVICE), 0); assert.equal(has(repeat, LEGACY), 44, 'migrated by the first, then left alone')
+    assert.equal(
+      security(
+        'add-generic-password',
+        '-s',
+        LEGACY,
+        '-a',
+        'master-key',
+        '-X',
+        repeatKey.toString('hex'),
+        '-A',
+        repeat
+      ).status,
+      0
+    )
+    const keys = ['sk-one', 'sk-two', 'sk-three'].map((text) => seal(repeatKey, text))
+    assert.deepEqual(
+      keys.map((blob) => crypto(repeat, 'decrypt', blob).out.toString('utf8')),
+      ['sk-one', 'sk-two', 'sk-three']
+    )
+    assert.equal(has(repeat, SERVICE), 0)
+    assert.equal(has(repeat, LEGACY), 44, 'migrated by the first, then left alone')
     console.log('KEYCHAIN-MIGRATION repeated PASS')
 
     // Misuse: no operation is a usage error.

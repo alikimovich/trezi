@@ -19,21 +19,34 @@ import type { IslandOverrideMessage } from '../shared/preview-channels'
 
 const PROP = 'box-shadow'
 const MAX_TARGETS = 64
-interface Target { el: HTMLElement; original: string; priority: string; shown: string | null }
-interface Override { targets: Target[]; css: string; from: string }
+interface Target {
+  el: HTMLElement
+  original: string
+  priority: string
+  shown: string | null
+}
+interface Override {
+  targets: Target[]
+  css: string
+  from: string
+}
 const overrides = new Map<string, Override>()
 
 /** A computed box-shadow without fully transparent empty layers (Tailwind's ring slots). */
 export function shadowLayers(value: string): string {
   const layers: string[] = []
-  let depth = 0, start = 0
+  let depth = 0,
+    start = 0
   for (let i = 0; i <= value.length; i++) {
     const c = value[i]
     if (c === '(') depth++
     else if (c === ')') depth--
-    else if ((c === ',' && depth === 0) || i === value.length) { layers.push(value.slice(start, i).trim()); start = i + 1 }
+    else if ((c === ',' && depth === 0) || i === value.length) {
+      layers.push(value.slice(start, i).trim())
+      start = i + 1
+    }
   }
-  return layers.filter(layer => !/^rgba\(0, 0, 0, 0\)( 0px){2,4}$/.test(layer)).join(', ')
+  return layers.filter((layer) => !/^rgba\(0, 0, 0, 0\)( 0px){2,4}$/.test(layer)).join(', ')
 }
 
 /** The computed form of `css`, so authored and computed shadows compare. */
@@ -49,13 +62,18 @@ function computed(css: string): string {
 
 /** The elements (other than `held`) that show one of `values` now: the island's bound elements. */
 function discover(values: string[], held = new Set<Element>()): Target[] {
-  const wanted = new Set(values.map(computed).filter(value => value && value !== 'none'))
+  const wanted = new Set(values.map(computed).filter((value) => value && value !== 'none'))
   if (!wanted.size || !document.body) return []
   const found: Target[] = []
   for (const el of [document.body, ...document.body.querySelectorAll('*')]) {
     if (!(el instanceof HTMLElement) || held.has(el)) continue
     if (!wanted.has(shadowLayers(getComputedStyle(el).boxShadow))) continue
-    found.push({ el, original: el.style.getPropertyValue(PROP), priority: el.style.getPropertyPriority(PROP), shown: null })
+    found.push({
+      el,
+      original: el.style.getPropertyValue(PROP),
+      priority: el.style.getPropertyPriority(PROP),
+      shown: null
+    })
     if (found.length >= MAX_TARGETS) break
   }
   return found
@@ -63,23 +81,28 @@ function discover(values: string[], held = new Set<Element>()): Target[] {
 
 /** The held targets still in the page, plus the elements an HMR remount put in place of the others. */
 function resolve(override: Override): Target[] {
-  const connected = override.targets.filter(t => t.el.isConnected)
+  const connected = override.targets.filter((t) => t.el.isConnected)
   if (connected.length && connected.length === override.targets.length) return connected
-  const held = new Set<Element>(connected.map(t => t.el))
+  const held = new Set<Element>(connected.map((t) => t.el))
   return [...connected, ...discover([override.from, override.css], held)].slice(0, MAX_TARGETS)
 }
 
 /** The page (a React render, HMR) may rewrite the inline value we took over. */
 function owned(target: Target): boolean {
   const style = target.el.style
-  return target.shown !== null && style.getPropertyValue(PROP) === target.shown && style.getPropertyPriority(PROP) === 'important'
+  return (
+    target.shown !== null &&
+    style.getPropertyValue(PROP) === target.shown &&
+    style.getPropertyPriority(PROP) === 'important'
+  )
 }
 
 /** A box-shadow transition would make the computed value lag; the check needs the end value. */
 function settledShadow(el: HTMLElement): string {
   getComputedStyle(el).boxShadow
   for (const animation of el.getAnimations?.() ?? [])
-    if (animation instanceof CSSTransition && animation.transitionProperty === PROP) animation.cancel()
+    if (animation instanceof CSSTransition && animation.transitionProperty === PROP)
+      animation.cancel()
   return shadowLayers(getComputedStyle(el).boxShadow)
 }
 
@@ -109,7 +132,10 @@ function apply(key: string, from: string, css: string): number {
   }
   if (!override?.targets.length) {
     const targets = discover([from])
-    if (!targets.length) { overrides.delete(key); return 0 }
+    if (!targets.length) {
+      overrides.delete(key)
+      return 0
+    }
     override = { targets, css, from }
     overrides.set(key, override)
   }
@@ -166,7 +192,11 @@ let observer: MutationObserver | null = null
  * page paints the old value. Only `settle` lets the page's own value show.
  */
 function watch() {
-  if (!overrides.size || !document.body) { observer?.disconnect(); observer = null; return }
+  if (!overrides.size || !document.body) {
+    observer?.disconnect()
+    observer = null
+    return
+  }
   if (observer || typeof MutationObserver === 'undefined') return
   observer = new MutationObserver(() => {
     for (const override of overrides.values()) {
@@ -174,10 +204,16 @@ function watch() {
       for (const target of override.targets) if (!owned(target)) show(target, override.css)
     }
   })
-  observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style'] })
+  observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['style']
+  })
 }
 
-const text = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max
+const text = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= max
 const shadow = (value: unknown): value is string => text(value, 8192) && !/[<>{};]/.test(value)
 
 /** One validated message from Bun; the answer goes back on the reply channel. */
@@ -197,15 +233,20 @@ function parse(message: unknown): IslandOverrideMessage | null {
   if (m.op === 'clear') return { op: 'clear', key: m.key }
   if (!shadow(m.css)) return null
   if (m.op === 'settle') return { op: 'settle', key: m.key, css: m.css }
-  if (m.op === 'apply' && shadow(m.from)) return { op: 'apply', key: m.key, from: m.from, css: m.css }
+  if (m.op === 'apply' && shadow(m.from))
+    return { op: 'apply', key: m.key, from: m.from, css: m.css }
   return null
 }
 
 function handle(message: IslandOverrideMessage): number | boolean {
   switch (message.op) {
-    case 'apply': return apply(message.key, message.from, message.css)
-    case 'settle': return settle(message.key, message.css)
-    case 'clear': return clear(message.key)
-    case 'clearAll': return clearAll()
+    case 'apply':
+      return apply(message.key, message.from, message.css)
+    case 'settle':
+      return settle(message.key, message.css)
+    case 'clear':
+      return clear(message.key)
+    case 'clearAll':
+      return clearAll()
   }
 }

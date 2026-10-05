@@ -1,5 +1,5 @@
-import type { Revision } from '../shared/service-contract/types'
 import { projectKey } from '../shared/projectKey'
+import type { Revision } from '../shared/service-contract/types'
 
 /** Project memory is intentionally small: it is injected into model context. */
 export const MAX_PROJECT_MEMORY_CHARS = 16_000

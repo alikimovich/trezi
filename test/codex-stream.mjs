@@ -12,7 +12,7 @@
  *
  * Run with: bun run test:codex-stream
  */
-import { createItemTracker, codexItemWarning } from '../src/main/backends/codex-stream.ts'
+import { codexItemWarning, createItemTracker } from '../src/main/backends/codex-stream.ts'
 
 let failed = 0
 const ok = (cond, msg) => {
@@ -23,12 +23,22 @@ const ok = (cond, msg) => {
 }
 
 try {
-  const advisory = 'Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter.'
+  const advisory =
+    'Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter.'
   ok(codexItemWarning(advisory) === null, 'routine skill budget advisory stays out of chat')
-  ok(codexItemWarning('  ' + advisory + '\n') === null, 'advisory matching tolerates surrounding whitespace')
+  ok(
+    codexItemWarning('  ' + advisory + '\n') === null,
+    'advisory matching tolerates surrounding whitespace'
+  )
   const warning = 'Could not load a skill: ' + 'details '.repeat(40) + '\nCheck its SKILL.md.'
-  ok(codexItemWarning(warning) === `⚠ ${warning}`, 'other warnings preserve their complete multiline detail')
-  ok(codexItemWarning('Skills failed to load.') === '⚠ Skills failed to load.', 'real skill failures remain visible')
+  ok(
+    codexItemWarning(warning) === `⚠ ${warning}`,
+    'other warnings preserve their complete multiline detail'
+  )
+  ok(
+    codexItemWarning('Skills failed to load.') === '⚠ Skills failed to load.',
+    'real skill failures remain visible'
+  )
   ok(codexItemWarning('') === null, 'empty warnings do not create activity rows')
 
   // --- within one turn: readings stream as suffixes -----------------------

@@ -5,8 +5,8 @@
 import assert from 'node:assert'
 import {
   cssPropToJsKey,
-  mergeStyleString,
-  mergeStyleObjectSource
+  mergeStyleObjectSource,
+  mergeStyleString
 } from '../src/main/inline-style.ts'
 
 // --- cssPropToJsKey ---------------------------------------------------------
@@ -83,7 +83,11 @@ assert.strictEqual(
 )
 
 // Property match is case-insensitive; duplicates collapse to one declaration.
-assert.strictEqual(mergeStyleString('COLOR: blue', 'color', 'red'), 'color: red', 'case-insensitive')
+assert.strictEqual(
+  mergeStyleString('COLOR: blue', 'color', 'red'),
+  'color: red',
+  'case-insensitive'
+)
 assert.strictEqual(
   mergeStyleString('color: a; color: b', 'color', 'red'),
   'color: red',
@@ -144,7 +148,7 @@ assert.strictEqual(
     'color',
     'red'
   ),
-  "{ transitionTimingFunction: 'cubic-bezier(0.1, 0.2, 0.3, 0.4)', color: \"red\" }",
+  '{ transitionTimingFunction: \'cubic-bezier(0.1, 0.2, 0.3, 0.4)\', color: "red" }',
   'bezier entry survives'
 )
 
@@ -208,11 +212,15 @@ assert.strictEqual(
 // Duplicate keys: the LAST one wins at runtime, so that's the one replaced.
 assert.strictEqual(
   mergeStyleObjectSource("{ color: 'red', color: 'blue' }", 'color', '#0f0'),
-  "{ color: 'red', color: \"#0f0\" }",
+  '{ color: \'red\', color: "#0f0" }',
   'duplicate keys → last occurrence replaced'
 )
 assert.strictEqual(
-  mergeStyleObjectSource("{ 'background-color': 'red', backgroundColor: 'blue' }", 'background-color', '#0f0'),
+  mergeStyleObjectSource(
+    "{ 'background-color': 'red', backgroundColor: 'blue' }",
+    'background-color',
+    '#0f0'
+  ),
   "{ 'background-color': 'red', backgroundColor: \"#0f0\" }",
   'mixed-form duplicate → last occurrence replaced'
 )

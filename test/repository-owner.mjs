@@ -14,28 +14,43 @@
 //   damaged journal is refused untouched; drain refuses queued work.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  completeTurn,
+  createChatWorktree,
+  discardParked,
+  stageResolve,
+  syncFromLive
+} from '../src/main/chat-worktrees.ts'
+import { setEditingOwner } from '../src/main/editing-owner.ts'
+import { commitLiveTurn } from '../src/main/live-commit.ts'
+import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
+import { setRepositoryOwner } from '../src/main/repository-owner.ts'
+import { pruneOrphans, removeWorktree, retireWorktreeBranch } from '../src/main/worktrees.ts'
 import { compileEditingFixture, startEditingFixture } from './helpers/editing-fixture.mjs'
 import { compileRepositoryFixture, startRepositoryFixture } from './helpers/repository-fixture.mjs'
 import { useRunnerEnv } from './helpers/runner-env.mjs'
-import { setEditingOwner } from '../src/main/editing-owner.ts'
-import { setRepositoryOwner } from '../src/main/repository-owner.ts'
-import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
-import { completeTurn, createChatWorktree, discardParked, stageResolve, syncFromLive } from '../src/main/chat-worktrees.ts'
-import { commitLiveTurn } from '../src/main/live-commit.ts'
-import { pruneOrphans, removeWorktree, retireWorktreeBranch } from '../src/main/worktrees.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi repository-owner-')))
 const fixtures = new Set()
 let repos = 0
 
-const g = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
-const read = path => readFileSync(path, 'utf8')
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+const g = (cwd, ...args) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const read = (path) => readFileSync(path, 'utf8')
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function repo(files = { 'a.txt': 'one\n', 'b.txt': 'two\n' }) {
   const path = join(scratch, `repo-${++repos}`)
@@ -50,8 +65,15 @@ function repo(files = { 'a.txt': 'one\n', 'b.txt': 'two\n' }) {
   g(path, 'commit', '-q', '-m', 'init')
   return path
 }
-const profile = name => { const path = join(scratch, name); mkdirSync(path, { recursive: true }); return path }
-const recovery = repoRoot => g(repoRoot, 'for-each-ref', '--format=%(refname)', 'refs/trezi/recovery/').split('\n').filter(Boolean)
+const profile = (name) => {
+  const path = join(scratch, name)
+  mkdirSync(path, { recursive: true })
+  return path
+}
+const recovery = (repoRoot) =>
+  g(repoRoot, 'for-each-ref', '--format=%(refname)', 'refs/trezi/recovery/')
+    .split('\n')
+    .filter(Boolean)
 
 let binary
 async function fixture(profilePath, env = {}) {
@@ -59,10 +81,20 @@ async function fixture(profilePath, env = {}) {
   fixtures.add(started)
   return started
 }
-async function stop(started) { await started.stop(); fixtures.delete(started) }
-async function install(started, options) { const owner = started.owner(options); setRepositoryOwner(owner); return owner }
+async function stop(started) {
+  await started.stop()
+  fixtures.delete(started)
+}
+async function install(started, options) {
+  const owner = started.owner(options)
+  setRepositoryOwner(owner)
+  return owner
+}
 
-async function section(name, run) { await run(); console.log(`REPOSITORY-OWNER ${name} PASS`) }
+async function section(name, run) {
+  await run()
+  console.log(`REPOSITORY-OWNER ${name} PASS`)
+}
 
 /** A chat worktree with its branch attached, as at the start of a turn. */
 async function chat(live, dir, id) {
@@ -75,10 +107,13 @@ try {
   binary = compileRepositoryFixture()
   const suiteFixture = compileEditingFixture()
   // After the cached compiles: from here on Git, the fixtures and the suites see the CI runner's conditions.
+  // biome-ignore lint/correctness/useHookAtTopLevel: not a React hook, it sets the process env
   useRunnerEnv(scratch)
   // Creating a chat worktree copies the setup helpers through the editing owner: one
   // editing process serves every section (the repository owner under test is swapped).
-  const editing = await startEditingFixture(suiteFixture, profile('editing'), { REPOSITORY_WORKTREES_ROOT: scratch })
+  const editing = await startEditingFixture(suiteFixture, profile('editing'), {
+    REPOSITORY_WORKTREES_ROOT: scratch
+  })
   fixtures.add(editing)
   setEditingOwner(editing.owners().editing)
 
@@ -86,43 +121,101 @@ try {
     // The Git suites' own assertions, through the Swift owner. (setup-next installs the
     // Swift owners itself: test/helpers/with-service-owners.mjs.)
     // Chat worktrees also need the editing owner, so these run on the editing fixture.
-    const suites = ['chat-worktrees', 'resolve-conflicts', 'worktrees', 'live-commit', 'git', 'chat-recovery', 'auto-reconciliation', 'chat-workspace-cleanup', 'stop-recovery', 'chat-landing', 'setup-worktree']
-    const results = await Promise.all(suites.map(suite => new Promise(resolve => {
-      const child = spawn('bun', ['--preload', './test/helpers/repository-owner-preload.mjs', `test/${suite}.mjs`], {
-        cwd: root, env: { ...process.env, REPOSITORY_FIXTURE: suiteFixture, REPOSITORY_PROFILE: profile(`parity-${suite}`) }, stdio: ['ignore', 'pipe', 'pipe']
-      })
-      let output = ''
-      child.stdout.on('data', data => { output += data })
-      child.stderr.on('data', data => { output += data })
-      const timer = setTimeout(() => child.kill('SIGKILL'), 100_000)
-      child.on('exit', (code, signal) => { clearTimeout(timer); resolve({ suite, code, signal, output }) })
-    })))
+    const suites = [
+      'chat-worktrees',
+      'resolve-conflicts',
+      'worktrees',
+      'live-commit',
+      'git',
+      'chat-recovery',
+      'auto-reconciliation',
+      'chat-workspace-cleanup',
+      'stop-recovery',
+      'chat-landing',
+      'setup-worktree'
+    ]
+    const results = await Promise.all(
+      suites.map(
+        (suite) =>
+          new Promise((resolve) => {
+            const child = spawn(
+              'bun',
+              ['--preload', './test/helpers/repository-owner-preload.mjs', `test/${suite}.mjs`],
+              {
+                cwd: root,
+                env: {
+                  ...process.env,
+                  REPOSITORY_FIXTURE: suiteFixture,
+                  REPOSITORY_PROFILE: profile(`parity-${suite}`)
+                },
+                stdio: ['ignore', 'pipe', 'pipe']
+              }
+            )
+            let output = ''
+            child.stdout.on('data', (data) => {
+              output += data
+            })
+            child.stderr.on('data', (data) => {
+              output += data
+            })
+            const timer = setTimeout(() => child.kill('SIGKILL'), 100_000)
+            child.on('exit', (code, signal) => {
+              clearTimeout(timer)
+              resolve({ suite, code, signal, output })
+            })
+          })
+      )
+    )
     // Every failed suite's output, not only the first: CI shows just this log's tail.
     const failed = results.filter(({ code }) => code !== 0)
-    assert.deepEqual(failed.map(({ suite }) => suite), [], failed.map(({ suite, code, signal, output }) =>
-      `--- ${suite} against the Swift owner exited ${code ?? signal}:\n${output.slice(-3000)}`).join('\n'))
-    for (const { suite, output } of results) assert.ok(Number(/REPOSITORY-PARITY frames=(\d+)/.exec(output)?.[1] ?? 0) > 0, `${suite} sent no repository frames`)
+    assert.deepEqual(
+      failed.map(({ suite }) => suite),
+      [],
+      failed
+        .map(
+          ({ suite, code, signal, output }) =>
+            `--- ${suite} against the Swift owner exited ${code ?? signal}:\n${output.slice(-3000)}`
+        )
+        .join('\n')
+    )
+    for (const { suite, output } of results)
+      assert.ok(
+        Number(/REPOSITORY-PARITY frames=(\d+)/.exec(output)?.[1] ?? 0) > 0,
+        `${suite} sent no repository frames`
+      )
   })
 
   await section('lanes', async () => {
     const owned = await fixture(profile('lanes'))
     await install(owned)
-    const live = repo(), other = repo()
+    const live = repo(),
+      other = repo()
     const dir = join(scratch, 'lanes', 'trezi', 'worktrees')
     const wt = await chat(live, dir, 'lane1')
     const log = []
-    const at = label => log.push([label, Date.now()])
-    const when = label => log.find(([name]) => name === label)[1]
+    const at = (label) => log.push([label, Date.now()])
+    const when = (label) => log.find(([name]) => name === label)[1]
 
-    const a = enqueueRepoWrite(live, async () => { at('A start'); await sleep(300); at('A end') })
+    const a = enqueueRepoWrite(live, async () => {
+      at('A start')
+      await sleep(300)
+      at('A end')
+    })
     await sleep(20)
     // A worktree root resolves to the same common directory: same lane, after A.
-    const b = enqueueRepoWrite(wt.path, async () => { at('B start') })
+    const b = enqueueRepoWrite(wt.path, async () => {
+      at('B start')
+    })
     // A Swift effect outside any lease queues in the lane too.
     writeFileSync(join(live, 'c.txt'), 'c\n')
-    const c = commitLiveTurn(live, ['c.txt'], { title: 'lane commit' }).then(result => { at('C done'); return result })
+    const c = commitLiveTurn(live, ['c.txt'], { title: 'lane commit' }).then((result) => {
+      at('C done')
+      return result
+    })
     // An unrelated repository is not serialized behind them.
-    const d = enqueueRepoWrite(other, async () => { at('D start') })
+    const d = enqueueRepoWrite(other, async () => {
+      at('D start')
+    })
     await Promise.all([a, b, c, d])
     assert.ok(when('B start') >= when('A end'), 'a worktree waits for the live checkout lane')
     assert.ok(when('C done') >= when('A end'), 'an effect waits for the lease')
@@ -131,24 +224,31 @@ try {
 
     // Re-entrant: a nested lease on the same repository and effects inside a lease.
     const inner = await Promise.race([
-      enqueueRepoWrite(live, () => enqueueRepoWrite(wt.path, async () => {
-        writeFileSync(join(live, 'd.txt'), 'd\n')
-        return (await commitLiveTurn(live, ['d.txt'], { title: 'inside the lease' })).committed
-      })),
+      enqueueRepoWrite(live, () =>
+        enqueueRepoWrite(wt.path, async () => {
+          writeFileSync(join(live, 'd.txt'), 'd\n')
+          return (await commitLiveTurn(live, ['d.txt'], { title: 'inside the lease' })).committed
+        })
+      ),
       sleep(10_000).then(() => 'deadlock')
     ])
     assert.equal(inner, true)
 
     // Competing chats land in one order, both committed, nothing lost.
-    const one = await chat(live, dir, 'lane2'), two = await chat(live, dir, 'lane3')
+    const one = await chat(live, dir, 'lane2'),
+      two = await chat(live, dir, 'lane3')
     writeFileSync(join(one.path, 'one.txt'), 'from chat one\n')
     writeFileSync(join(two.path, 'two.txt'), 'from chat two\n')
-    const land = (wtree, title) => enqueueRepoWrite(live, async () => {
-      const outcome = await completeTurn(live, wtree, title)
-      assert.equal(outcome.outcome, 'merged', title)
-      return commitLiveTurn(live, outcome.files, { title })
-    })
-    const [first, second] = await Promise.all([land(one, 'chat one turn'), land(two, 'chat two turn')])
+    const land = (wtree, title) =>
+      enqueueRepoWrite(live, async () => {
+        const outcome = await completeTurn(live, wtree, title)
+        assert.equal(outcome.outcome, 'merged', title)
+        return commitLiveTurn(live, outcome.files, { title })
+      })
+    const [first, second] = await Promise.all([
+      land(one, 'chat one turn'),
+      land(two, 'chat two turn')
+    ])
     assert.ok(first.committed && second.committed)
     assert.equal(read(join(live, 'one.txt')), 'from chat one\n')
     assert.equal(read(join(live, 'two.txt')), 'from chat two\n')
@@ -193,7 +293,10 @@ try {
     writeFileSync(join(wt.path, 'e.txt'), 'new\n')
     outcome = await completeTurn(live, wt, 'after the outside commit')
     assert.equal(outcome.outcome, 'merged')
-    assert.equal((await commitLiveTurn(live, outcome.files, { title: 'after the outside commit' })).committed, true)
+    assert.equal(
+      (await commitLiveTurn(live, outcome.files, { title: 'after the outside commit' })).committed,
+      true
+    )
     assert.equal(g(live, 'rev-parse', 'HEAD^'), outside)
     assert.equal(g(live, 'diff', '--cached', '--name-only'), 'c.txt')
     setRepositoryOwner(null)
@@ -209,7 +312,13 @@ try {
     const wt = await chat(live, dir, 'int1')
     writeFileSync(join(wt.path, 'a.txt'), 'unlanded chat work\n')
     const head = g(live, 'rev-parse', 'HEAD')
-    const worktree = { id: wt.id, repoRoot: live, path: wt.path, branch: wt.branch, baseSha: wt.baseSha }
+    const worktree = {
+      id: wt.id,
+      repoRoot: live,
+      path: wt.path,
+      branch: wt.branch,
+      baseSha: wt.baseSha
+    }
     const refused = async (method, body, code, extra) => {
       const result = await owned.frame(method, body, extra)
       assert.equal(result.kind, 'failed', `${method} ${JSON.stringify(body)}`)
@@ -217,23 +326,55 @@ try {
     }
     await refused('discardParked', { root: live, worktree }, 'invalidRequest')
     await refused('discardParked', { root: live, worktree, intent: 'land' }, 'invalidRequest')
-    await refused('removeWorktree', { root: live, worktree, keepBranch: false, intent: 'delete' }, 'invalidRequest')
+    await refused(
+      'removeWorktree',
+      { root: live, worktree, keepBranch: false, intent: 'delete' },
+      'invalidRequest'
+    )
     await refused('removeWorktree', { root: live, worktree, keepBranch: false }, 'invalidRequest')
     await refused('completeTurn', { root: live, worktree, message: 'x' }, 'invalidRequest')
-    await refused('deleteBranch', { root: live, branch: 'main', intent: 'discard' }, 'invalidRequest')
+    await refused(
+      'deleteBranch',
+      { root: live, branch: 'main', intent: 'discard' },
+      'invalidRequest'
+    )
     await refused('switchBranch', { root: live, branch: 'main' }, 'invalidRequest')
-    await refused('commitLive', { root: live, files: ['a.txt'], title: 't', extra: 1 }, 'invalidRequest')
-    await refused('commitLive', { root: live, files: ['a.txt'], title: 't' }, 'invalidRequest', { expectedRevision: { epoch: 'e', counter: '1' } })
-    await refused('commitLive', { root: live, files: ['a.txt'], title: 't' }, 'unauthorized', { scope: { project: 'x' } })
+    await refused(
+      'commitLive',
+      { root: live, files: ['a.txt'], title: 't', extra: 1 },
+      'invalidRequest'
+    )
+    await refused('commitLive', { root: live, files: ['a.txt'], title: 't' }, 'invalidRequest', {
+      expectedRevision: { epoch: 'e', counter: '1' }
+    })
+    await refused('commitLive', { root: live, files: ['a.txt'], title: 't' }, 'unauthorized', {
+      scope: { project: 'x' }
+    })
     // Never the user's main checkout, never a checkout outside the profile.
     writeFileSync(join(live, 'b.txt'), 'the user is editing\n')
-    await refused('discardParked', { root: live, worktree: { ...worktree, path: live }, intent: 'discard' }, 'unauthorized')
-    await refused('syncWorktree', { root: live, worktree: { ...worktree, path: live } }, 'unauthorized')
+    await refused(
+      'discardParked',
+      { root: live, worktree: { ...worktree, path: live }, intent: 'discard' },
+      'unauthorized'
+    )
+    await refused(
+      'syncWorktree',
+      { root: live, worktree: { ...worktree, path: live } },
+      'unauthorized'
+    )
     const foreign = join(scratch, 'foreign-worktree')
     g(live, 'worktree', 'add', '-q', '-b', 'trezi/foreign', foreign)
-    writeFileSync(join(foreign, 'a.txt'), 'the user\'s own worktree\n')
-    await refused('discardParked', { root: live, worktree: { ...worktree, path: foreign, branch: 'trezi/foreign' }, intent: 'discard' }, 'unauthorized')
-    assert.equal(read(join(foreign, 'a.txt')), 'the user\'s own worktree\n')
+    writeFileSync(join(foreign, 'a.txt'), "the user's own worktree\n")
+    await refused(
+      'discardParked',
+      {
+        root: live,
+        worktree: { ...worktree, path: foreign, branch: 'trezi/foreign' },
+        intent: 'discard'
+      },
+      'unauthorized'
+    )
+    assert.equal(read(join(foreign, 'a.txt')), "the user's own worktree\n")
     assert.equal(read(join(live, 'b.txt')), 'the user is editing\n')
     assert.equal(read(join(wt.path, 'a.txt')), 'unlanded chat work\n')
     assert.equal(g(live, 'rev-parse', 'HEAD'), head)
@@ -245,13 +386,13 @@ try {
     // With intent: discard is still recoverable, and removing dirty work keeps it.
     await discardParked(wt)
     assert.equal(read(join(wt.path, 'a.txt')), 'one\n')
-    const discarded = recovery(live).find(ref => ref.includes('-discardParked-'))
+    const discarded = recovery(live).find((ref) => ref.includes('-discardParked-'))
     assert.ok(discarded, 'discard keeps a recovery ref')
     assert.equal(g(live, 'show', `${discarded}:a.txt`), 'unlanded chat work')
     writeFileSync(join(wt.path, 'new.txt'), 'dirty at removal\n')
     await removeWorktree(live, wt, { keepBranch: false, intent: 'abandon' })
     assert.equal(existsSync(wt.path), false)
-    const removed = recovery(live).find(ref => ref.includes('-removeWorktree-'))
+    const removed = recovery(live).find((ref) => ref.includes('-removeWorktree-'))
     assert.ok(removed, 'removal of dirty work keeps a recovery ref')
     assert.equal(g(live, 'show', `${removed}:new.txt`), 'dirty at removal')
     const status = await owned.frame('status', {})
@@ -268,16 +409,25 @@ try {
     const crashed = async (point, act) => {
       const owned = await fixture(home, { REPOSITORY_FAULT: point })
       await install(owned, { timeout: 1500 })
-      const pending = act().then(() => 'answered', error => error)
+      const pending = act().then(
+        () => 'answered',
+        (error) => error
+      )
       const status = await owned.exited
       fixtures.delete(owned)
       assert.equal(status.signal, 'SIGKILL', `${point}: ${owned.stderr}`)
       await pending
       setRepositoryOwner(null)
     }
-    const restart = async () => { const owned = await fixture(home); await install(owned); return owned }
+    const restart = async () => {
+      const owned = await fixture(home)
+      await install(owned)
+      return owned
+    }
     const interrupted = async (owned, kind) => {
-      const entry = (await owned.frame('status', {})).payload.interrupted.find(item => item.kind === kind)
+      const entry = (await owned.frame('status', {})).payload.interrupted.find(
+        (item) => item.kind === kind
+      )
       assert.ok(entry, `${kind} is reported as interrupted`)
       return entry
     }
@@ -294,15 +444,32 @@ try {
     assert.equal(read(join(live, 'b.txt')), 'two\n', 'the second did not')
     owned = await restart()
     const landing = await interrupted(owned, 'completeTurn')
-    const target = landing.refs.find(ref => ref.endsWith('-target'))
+    const target = landing.refs.find((ref) => ref.endsWith('-target'))
     assert.ok(target && recovery(live).includes(target), 'the target commit is kept')
     assert.equal(g(live, 'show', `${target}:b.txt`), 'two, landed')
     assert.equal(read(join(live, 'a.txt')), 'one, landed\n', 'nothing is reset on restart')
     assert.ok(existsSync(wt.path), 'the worktree is kept')
     assert.equal(g(live, 'rev-parse', `refs/heads/${wt.branch}`), g(live, 'rev-parse', target))
-    assert.equal((await owned.frame('acknowledge', { operationID: landing.operationID })).kind, 'failed', 'acknowledge needs its intent')
-    assert.equal((await owned.frame('acknowledge', { operationID: landing.operationID, intent: 'acknowledge' })).kind, 'succeeded')
-    assert.equal((await owned.frame('status', {})).payload.interrupted.some(item => item.operationID === landing.operationID), false)
+    assert.equal(
+      (await owned.frame('acknowledge', { operationID: landing.operationID })).kind,
+      'failed',
+      'acknowledge needs its intent'
+    )
+    assert.equal(
+      (
+        await owned.frame('acknowledge', {
+          operationID: landing.operationID,
+          intent: 'acknowledge'
+        })
+      ).kind,
+      'succeeded'
+    )
+    assert.equal(
+      (await owned.frame('status', {})).payload.interrupted.some(
+        (item) => item.operationID === landing.operationID
+      ),
+      false
+    )
     assert.ok(recovery(live).includes(target), 'acknowledging keeps the ref')
     setRepositoryOwner(null)
     await stop(owned)
@@ -311,8 +478,8 @@ try {
     const parkedLive = repo()
     owned = await restart()
     const parked = await chat(parkedLive, dir, 'crash2')
-    writeFileSync(join(parked.path, 'a.txt'), 'one, the chat\'s version\n')
-    writeFileSync(join(parkedLive, 'a.txt'), 'one, the user\'s version\n')
+    writeFileSync(join(parked.path, 'a.txt'), "one, the chat's version\n")
+    writeFileSync(join(parkedLive, 'a.txt'), "one, the user's version\n")
     assert.equal((await completeTurn(parkedLive, parked, 'parked turn')).outcome, 'parked')
     const parkedTip = g(parked.path, 'rev-parse', 'HEAD')
     setRepositoryOwner(null)
@@ -320,17 +487,25 @@ try {
     await crashed('resolve.reset', () => stageResolve(parkedLive, parked))
     owned = await restart()
     const resolve = await interrupted(owned, 'stageResolve')
-    const parkedRef = resolve.refs.find(ref => ref.endsWith('-parked'))
+    const parkedRef = resolve.refs.find((ref) => ref.endsWith('-parked'))
     assert.equal(g(parkedLive, 'rev-parse', parkedRef), parkedTip)
-    assert.equal(g(parkedLive, 'show', `${parkedRef}:a.txt`), 'one, the chat\'s version')
-    assert.equal(read(join(parkedLive, 'a.txt')), 'one, the user\'s version\n')
+    assert.equal(g(parkedLive, 'show', `${parkedRef}:a.txt`), "one, the chat's version")
+    assert.equal(read(join(parkedLive, 'a.txt')), "one, the user's version\n")
     setRepositoryOwner(null)
     await stop(owned)
 
     // A removal killed after preserving dirty work, before the checkout went.
-    const removal = await (async () => { const o = await restart(); const w = await chat(live, dir, 'crash3'); setRepositoryOwner(null); await stop(o); return w })()
+    const removal = await (async () => {
+      const o = await restart()
+      const w = await chat(live, dir, 'crash3')
+      setRepositoryOwner(null)
+      await stop(o)
+      return w
+    })()
     writeFileSync(join(removal.path, 'x.txt'), 'dirty when removed\n')
-    await crashed('remove.preserved', () => removeWorktree(live, removal, { keepBranch: false, intent: 'abandon' }))
+    await crashed('remove.preserved', () =>
+      removeWorktree(live, removal, { keepBranch: false, intent: 'abandon' })
+    )
     owned = await restart()
     const removed = await interrupted(owned, 'removeWorktree')
     assert.equal(g(live, 'show', `${removed.refs[0]}:x.txt`), 'dirty when removed')
@@ -348,8 +523,8 @@ try {
     // Two orphans: a plain dirty chat, and a PARKED chat (its tip is the cumulative squash).
     const plain = await chat(live, dir, 'orph1')
     const parked = await chat(live, dir, 'orph2')
-    writeFileSync(join(parked.path, 'a.txt'), 'one, the parked chat\'s version\n')
-    writeFileSync(join(live, 'a.txt'), 'one, the user\'s version\n')
+    writeFileSync(join(parked.path, 'a.txt'), "one, the parked chat's version\n")
+    writeFileSync(join(live, 'a.txt'), "one, the user's version\n")
     assert.equal((await completeTurn(live, parked, 'parked turn')).outcome, 'parked')
     const parkedTip = g(parked.path, 'rev-parse', 'HEAD')
     writeFileSync(join(plain.path, 'x.txt'), 'plain dirty work\n')
@@ -362,12 +537,17 @@ try {
     g(live, 'config', 'gpg.program', '/usr/bin/false')
     owned = await fixture(home)
     await install(owned)
-    const reclaimed = await pruneOrphans(live, dir, new Set(), id => id === parked.id)
-    assert.deepEqual(reclaimed.map(item => item.id).sort(), [parked.id, plain.id].sort())
+    const reclaimed = await pruneOrphans(live, dir, new Set(), (id) => id === parked.id)
+    assert.deepEqual(reclaimed.map((item) => item.id).sort(), [parked.id, plain.id].sort())
     // Nothing was force-removed: the dirty files are still on disk (in place or moved aside).
     const found = (id, file) => {
-      const names = execFileSync('ls', ['-A', dir], { encoding: 'utf8' }).split('\n').filter(Boolean)
-      return names.filter(name => name === id || name.startsWith(`.recovered-${id}-`)).map(name => join(dir, name, file)).find(existsSync)
+      const names = execFileSync('ls', ['-A', dir], { encoding: 'utf8' })
+        .split('\n')
+        .filter(Boolean)
+      return names
+        .filter((name) => name === id || name.startsWith(`.recovered-${id}-`))
+        .map((name) => join(dir, name, file))
+        .find(existsSync)
     }
     assert.equal(read(found(plain.id, 'x.txt')), 'plain dirty work\n')
     assert.equal(read(found(parked.id, 'y.txt')), 'parked dirty work\n')
@@ -375,13 +555,16 @@ try {
     assert.equal(g(live, 'rev-parse', `refs/heads/${parked.branch}`), parkedTip)
     // Both dirty states are at their own recovery refs (distinct names within one sweep).
     const refs = recovery(live)
-    const dirtyRefs = refs.filter(ref => ref.endsWith('-orphan-dirty'))
+    const dirtyRefs = refs.filter((ref) => ref.endsWith('-orphan-dirty'))
     assert.equal(dirtyRefs.length, 2)
     assert.equal(new Set(refs).size, refs.length)
-    const contents = dirtyRefs.map(ref => g(live, 'ls-tree', '-r', '--name-only', ref)).join('\n')
+    const contents = dirtyRefs.map((ref) => g(live, 'ls-tree', '-r', '--name-only', ref)).join('\n')
     assert.match(contents, /x\.txt/)
     assert.match(contents, /y\.txt/)
-    assert.ok(refs.some(ref => ref.endsWith('-orphan-head') && g(live, 'rev-parse', ref) === parkedTip), 'the parked tip has its own ref')
+    assert.ok(
+      refs.some((ref) => ref.endsWith('-orphan-head') && g(live, 'rev-parse', ref) === parkedTip),
+      'the parked tip has its own ref'
+    )
     assert.equal((await owned.frame('status', {})).payload.active.length, 0)
     setRepositoryOwner(null)
     await stop(owned)
@@ -398,7 +581,12 @@ try {
     await stop(owned)
     owned = await fixture(home)
     await install(owned)
-    const done = await pruneOrphans(again, join(home, 'trezi', 'worktrees-b'), new Set(), () => false)
+    const done = await pruneOrphans(
+      again,
+      join(home, 'trezi', 'worktrees-b'),
+      new Set(),
+      () => false
+    )
     assert.equal(done[0].dirty, true)
     assert.equal(existsSync(third.path), false)
     assert.equal(g(again, 'show', `refs/heads/${third.branch}:z.txt`), 'committed by recovery')
@@ -448,7 +636,11 @@ try {
     owned = await fixture(damagedHome)
     assert.match((await owned.frame('status', {})).payload.journal, /damaged/)
     writeFileSync(join(live, 'z.txt'), 'z\n')
-    const blocked = await owned.frame('commitLive', { root: live, files: ['z.txt'], title: 'blocked' })
+    const blocked = await owned.frame('commitLive', {
+      root: live,
+      files: ['z.txt'],
+      title: 'blocked'
+    })
     assert.equal(blocked.payload.code, 'recoveryRequired')
     assert.equal(g(live, 'status', '--porcelain', '--', 'z.txt'), '?? z.txt')
     const lease = await owned.frame('acquire', { root: live })
@@ -465,7 +657,8 @@ try {
   await section('malformed-patch', async () => {
     const owned = await fixture(profile('malformed'))
     const live = repo()
-    const patch = 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,3 @@\n-one\n+ONE\n'
+    const patch =
+      'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,3 @@\n-one\n+ONE\n'
     const applied = await owned.cmd({ cmd: 'apply', root: live, patch })
     assert.equal(applied.ok, false, JSON.stringify(applied))
     assert.equal(applied.conflict, false, JSON.stringify(applied))
@@ -475,9 +668,15 @@ try {
     assert.equal(problem.file, 'a.txt', JSON.stringify(applied))
     assert.ok(Number.isInteger(problem.line) && problem.line > 0, JSON.stringify(applied))
     assert.equal(applied.message, `a.txt: corrupt patch at line ${problem.line}`)
-    assert.ok(owned.stderr.includes('git apply --3way refused a patch') && owned.stderr.includes('Command failed: git apply --3way'),
-      `service log: ${owned.stderr}`)
-    assert.ok(/error: corrupt patch at /.test(owned.stderr), 'the service log has Git\'s full error output')
+    assert.ok(
+      owned.stderr.includes('git apply --3way refused a patch') &&
+        owned.stderr.includes('Command failed: git apply --3way'),
+      `service log: ${owned.stderr}`
+    )
+    assert.ok(
+      /error: corrupt patch at /.test(owned.stderr),
+      "the service log has Git's full error output"
+    )
     assert.equal(read(join(live, 'a.txt')), 'one\n')
     await stop(owned)
   })
@@ -488,12 +687,23 @@ try {
     const head = g(live, 'rev-parse', 'HEAD')
     const lease = await owned.frame('acquire', { root: live })
     writeFileSync(join(live, 'q.txt'), 'queued\n')
-    const queued = owned.frame('commitLive', { root: live, files: ['q.txt'], title: 'queued behind a lease' })
+    const queued = owned.frame('commitLive', {
+      root: live,
+      files: ['q.txt'],
+      title: 'queued behind a lease'
+    })
     await sleep(100)
     assert.equal((await owned.cmd({ cmd: 'close', timeout: 5 })).closed, true)
     assert.equal((await queued).payload.code, 'unavailable')
-    assert.equal((await owned.frame('commitLive', { root: live, files: ['q.txt'], title: 'late' })).payload.code, 'unavailable')
-    assert.equal((await owned.frame('release', { lease: lease.payload.lease })).payload.code, 'unavailable')
+    assert.equal(
+      (await owned.frame('commitLive', { root: live, files: ['q.txt'], title: 'late' })).payload
+        .code,
+      'unavailable'
+    )
+    assert.equal(
+      (await owned.frame('release', { lease: lease.payload.lease })).payload.code,
+      'unavailable'
+    )
     assert.equal(g(live, 'rev-parse', 'HEAD'), head)
     await stop(owned)
   })
@@ -501,6 +711,10 @@ try {
   console.log('REPOSITORY-OWNER OK')
 } finally {
   setRepositoryOwner(null)
-  for (const started of fixtures) { try { started.child.kill('SIGKILL') } catch {} }
+  for (const started of fixtures) {
+    try {
+      started.child.kill('SIGKILL')
+    } catch {}
+  }
   rmSync(scratch, { recursive: true, force: true })
 }

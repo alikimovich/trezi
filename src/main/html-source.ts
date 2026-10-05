@@ -94,7 +94,8 @@ export async function stampHtml(html: string, relpath: string): Promise<string> 
     if (SKIP_TAGS.has(tag)) return
     const st = el.sourceCodeLocation?.startTag
     if (!st) return // auto-inserted / unlocatable element
-    if (el.attrs?.some((a) => a.name === 'data-trezi-source' || a.name === 'data-praxis-source')) return // already stamped
+    if (el.attrs?.some((a) => a.name === 'data-trezi-source' || a.name === 'data-praxis-source'))
+      return // already stamped
 
     // Land the attribute right after the tag name: `<tag| ...>`. Scan the raw
     // source for the name rather than trusting tagName's case/length.

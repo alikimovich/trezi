@@ -12,11 +12,17 @@ import { setRepositoryOwner } from '../../src/main/repository-owner.ts'
 import { setSourceOwner } from '../../src/main/source-owner.ts'
 import { startEditingFixture } from './editing-fixture.mjs'
 
-const fixture = await startEditingFixture(process.env.REPOSITORY_FIXTURE, realpathSync(process.env.REPOSITORY_PROFILE),
-  { REPOSITORY_WORKTREES_ROOT: realpathSync(tmpdir()) })
+const fixture = await startEditingFixture(
+  process.env.REPOSITORY_FIXTURE,
+  realpathSync(process.env.REPOSITORY_PROFILE),
+  { REPOSITORY_WORKTREES_ROOT: realpathSync(tmpdir()) }
+)
 const send = fixture.link.sendService
 let frames = 0
-fixture.link.sendService = frame => { if (frame.service === 'repository') frames++; send(frame) }
+fixture.link.sendService = (frame) => {
+  if (frame.service === 'repository') frames++
+  send(frame)
+}
 const { conversation, repository, source, editing } = fixture.owners()
 setConversationOwner(conversation)
 setRepositoryOwner(repository)
@@ -24,8 +30,11 @@ setSourceOwner(source)
 setEditingOwner(editing)
 // The suite decides when the process ends; the fixture never holds it open.
 fixture.child.unref()
-for (const stream of [fixture.child.stdin, fixture.child.stdout, fixture.child.stderr]) stream.unref?.()
+for (const stream of [fixture.child.stdin, fixture.child.stdout, fixture.child.stderr])
+  stream.unref?.()
 process.on('exit', () => {
   console.log(`REPOSITORY-PARITY frames=${frames}`)
-  try { fixture.child.kill('SIGKILL') } catch {}
+  try {
+    fixture.child.kill('SIGKILL')
+  } catch {}
 })

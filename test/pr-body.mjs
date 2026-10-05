@@ -27,7 +27,10 @@ assert.ok(body.includes('line1 line2') && !body.includes('line1\nline2'), 'newli
 assert.ok(body.includes('### Changed files (2)'), 'changed-files heading')
 
 // Changed-files list is capped at 50.
-body = buildPrBody([], Array.from({ length: 60 }, (_, i) => `f${i}.tsx`))
+body = buildPrBody(
+  [],
+  Array.from({ length: 60 }, (_, i) => `f${i}.tsx`)
+)
 assert.ok(body.includes('Changed files (60)'), 'full count shown')
 assert.ok(body.includes('…and 10 more'), 'overflow summarized')
 

@@ -9,7 +9,10 @@ import type { WorkspacePatch, WorkspaceView } from './workspace-model'
 export interface WorkspaceStore {
   snapshot(): WorkspaceView
   /** An existing project (same key, or the same folder by real path) is returned, not duplicated. */
-  open(root: string, chatSettings?: Record<string, unknown>): Promise<{ key: string; created: boolean }>
+  open(
+    root: string,
+    chatSettings?: Record<string, unknown>
+  ): Promise<{ key: string; created: boolean }>
   select(key: string): Promise<void>
   close(key: string): Promise<void>
   reorder(key: string, before: string | null): Promise<void>

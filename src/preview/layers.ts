@@ -1,4 +1,4 @@
-import { sourceStamp, sourceSelector } from './source-stamp'
+import { sourceSelector, sourceStamp } from './source-stamp'
 /**
  * Layers panel — DOM tree walk + node resolution, injected alongside the rest
  * of `preload.ts` into the previewed app's isolated world. Split out because
@@ -20,8 +20,9 @@ import { sourceStamp, sourceSelector } from './source-stamp'
 
 import type { LayerFingerprint, LayerNode, LayersSnapshot } from '../shared/api'
 import { isScopeClass } from '../shared/display-classes'
-export type { LayerFingerprint, LayerNode, LayersSnapshot }
+
 export { isScopeClass } from '../shared/display-classes'
+export type { LayerFingerprint, LayerNode, LayersSnapshot }
 
 // Elements not worth showing as page structure: script-ish/head-ish tags the
 // user never reorders, plus icon internals (treated as a leaf below).
@@ -71,10 +72,12 @@ export function buildLayersSnapshot(): LayersSnapshot {
             .map((c) => c.slice(0, 30))
         : []
     const isLeafTag = LEAF_TAGS.has(tag)
-    const children = isLeafTag ? [] : elementChildren(el).filter((c) => !SKIP_TAGS.has(c.tagName.toLowerCase()))
+    const children = isLeafTag
+      ? []
+      : elementChildren(el).filter((c) => !SKIP_TAGS.has(c.tagName.toLowerCase()))
     const text =
       children.length === 0 && !isLeafTag
-        ? ((el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) || null)
+        ? (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) || null
         : null
 
     nodes.push({

@@ -15,7 +15,11 @@ import {
 
 /** Manager-owned foreground fixture, reached by the standard native suite. `projects`
  *  is the main window's sidebar (`shellInspect.sourceList`), for the parity check. */
-export async function checkVisibleSettings(host: NativeBridge, artifacts: string, projects: SourceListEvidence) {
+export async function checkVisibleSettings(
+  host: NativeBridge,
+  artifacts: string,
+  projects: SourceListEvidence
+) {
   const wait = async (check: () => Promise<boolean>) => {
     for (let i = 0; i < 100; i++) {
       if (await check()) return
@@ -120,9 +124,17 @@ export async function checkVisibleSettings(host: NativeBridge, artifacts: string
   assert.equal(initial.section, 'general', 'A new profile opens Settings on General')
   assert.equal(initial.values.projectUi, 'false')
   assert.equal(initial.values.engine, 'agent')
-  assert.equal(initial.values.claudePlugins, 'false', 'Claude plugins are off in a new profile (LKM-138)')
+  assert.equal(
+    initial.values.claudePlugins,
+    'false',
+    'Claude plugins are off in a new profile (LKM-138)'
+  )
   // LKM-143: General shows the version stamped into this build, as `trezi --version` prints it.
-  assert.match(initial.values.version ?? '', /^Trezi \d+\.\d+\.\d+\S* \(build \d+, [0-9a-f]{7,}\)$/, 'General shows the built version')
+  assert.match(
+    initial.values.version ?? '',
+    /^Trezi \d+\.\d+\.\d+\S* \(build \d+, [0-9a-f]{7,}\)$/,
+    'General shows the built version'
+  )
   assertSidebarParity(initial.sourceList, projects)
   writeFileSync(
     join(artifacts, 'settings-sidebar-parity.json'),
@@ -159,7 +171,11 @@ export async function checkVisibleSettings(host: NativeBridge, artifacts: string
   await choose('claudePlugins', 'false')
   await reopen()
   // LKM-152: Show Activity automatically defaults to problems that need the user and persists.
-  assert.equal(initial.values.activityAutoOpen, 'problems', 'Show Activity automatically defaults to For problems that need me')
+  assert.equal(
+    initial.values.activityAutoOpen,
+    'problems',
+    'Show Activity automatically defaults to For problems that need me'
+  )
   await choose('activityAutoOpen', 'never')
   await reopen()
   assert.equal((await inspect()).values.activityAutoOpen, 'never')

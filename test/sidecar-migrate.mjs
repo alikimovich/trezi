@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { editingOwner } from '../src/main/editing-owner.ts'
 
-const migrateLegacySidecar = root => editingOwner().migrateSidecar(root)
+const migrateLegacySidecar = (root) => editingOwner().migrateSidecar(root)
 const work = mkdtempSync(join(tmpdir(), 'trezi-sidecar-'))
 
 try {

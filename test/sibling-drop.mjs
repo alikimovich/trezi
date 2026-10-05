@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict'
 import { siblingSlot } from '../src/preview/sibling-drop.ts'
+
 const b = (left, top, width = 100, height = 40) => ({ left, top, width, height })
 const column = [b(0, 0), b(0, 50), b(0, 100)]
 let slot = siblingSlot(column, 0, 50, 138, false, false)
 assert.equal(slot.index, 2)
 assert.equal(slot.position, 'after')
 assert.equal(slot.vertical, false)
-assert.equal(siblingSlot(column, 0, 50, 51, false, false), null, 'adjacent original position is a no-op')
+assert.equal(
+  siblingSlot(column, 0, 50, 51, false, false),
+  null,
+  'adjacent original position is a no-op'
+)
 slot = siblingSlot(column, 2, 50, 1, false, false)
 assert.equal(slot.index, 0)
 assert.equal(slot.position, 'before')

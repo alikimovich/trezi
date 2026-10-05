@@ -7,10 +7,12 @@
  *
  * Run with: bun test/css-values.mjs
  */
+
+// Cross-module regression (finding: options were Tailwind family names, not
+// CSS): the select options must be committable through the S1 class path.
+import { tailwindClassFor } from '../src/main/tw-styles.ts'
 import {
   BEZIER_PRESETS,
-  STYLE_GROUPS,
-  STYLE_PROP_META,
   clamp,
   clampBezier,
   clampBezierX,
@@ -22,12 +24,11 @@ import {
   normalizeMs,
   parseBezier,
   parseCssNumber,
+  STYLE_GROUPS,
+  STYLE_PROP_META,
   snapBezierPreset,
   stylePropMeta
 } from '../src/shared/css-values.ts'
-// Cross-module regression (finding: options were Tailwind family names, not
-// CSS): the select options must be committable through the S1 class path.
-import { tailwindClassFor } from '../src/main/tw-styles.ts'
 
 let failed = 0
 let count = 0
@@ -231,8 +232,7 @@ assert(
 )
 // every coord must be within tolerance, not just the total
 assert(
-  snapBezierPreset({ x1: easeIn.x1, y1: easeIn.y1 + 0.05, x2: easeIn.x2, y2: easeIn.y2 }) ===
-    null,
+  snapBezierPreset({ x1: easeIn.x1, y1: easeIn.y1 + 0.05, x2: easeIn.x2, y2: easeIn.y2 }) === null,
   'one coord 0.05 off -> no snap even if others exact'
 )
 // nearest preset wins when two are in range (ease-in vs ease-in-out differ in x2)

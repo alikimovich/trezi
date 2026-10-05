@@ -31,7 +31,9 @@ export function recordEdit(
   // Ordered with later Undo requests by the pipe; a failure (or no service) only loses
   // this Undo step, never the edit that was already made.
   try {
-    void sourceOwner().record(root, [{ path: file, before, after }], { key, group }).catch(() => {})
+    void sourceOwner()
+      .record(root, [{ path: file, before, after }], { key, group })
+      .catch(() => {})
   } catch {}
 }
 
@@ -40,7 +42,8 @@ export const undo = (root: string): Promise<UndoResult> => sourceOwner().undo(ro
 /** Re-apply the last undone edit in `root` (writes its `after`), unless it changed. */
 export const redo = (root: string): Promise<UndoResult> => sourceOwner().redo(root)
 /** Whether `root` has a step to undo and to redo. */
-export const editAvailability = (root: string): Promise<{ undo: boolean; redo: boolean }> => sourceOwner().history(root)
+export const editAvailability = (root: string): Promise<{ undo: boolean; redo: boolean }> =>
+  sourceOwner().history(root)
 
 /**
  * Can the turn recorded under `group` be reverted right now? True iff its entries are
@@ -48,7 +51,8 @@ export const editAvailability = (root: string): Promise<{ undo: boolean; redo: b
  * that turn last wrote. A cheap pre-check so the UI can grey out a Revert button that
  * would only conflict; `revertGroup` re-validates the same guard before it writes.
  */
-export const canRevertGroup = (root: string, group: string): Promise<boolean> => sourceOwner().canRevert(root, group)
+export const canRevertGroup = (root: string, group: string): Promise<boolean> =>
+  sourceOwner().canRevert(root, group)
 
 /**
  * Addressable revert of ONE recorded group (a chat turn: `chat:<wtId>:<turnNo>`),
@@ -56,9 +60,12 @@ export const canRevertGroup = (root: string, group: string): Promise<boolean> =>
  * all-or-nothing, refusing (conflict) if any file drifted from the `after` that turn
  * wrote. Revert is one-way: nothing is pushed onto the redo stack.
  */
-export const revertGroup = (root: string, group: string): Promise<UndoResult> => sourceOwner().revert(root, group)
+export const revertGroup = (root: string, group: string): Promise<UndoResult> =>
+  sourceOwner().revert(root, group)
 
 /** Drop a project's history (e.g. when it's closed in the rail). */
 export const clearHistory = (root: string): void => {
-  void sourceOwner().clearHistory(root).catch(() => {})
+  void sourceOwner()
+    .clearHistory(root)
+    .catch(() => {})
 }

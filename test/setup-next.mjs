@@ -1,23 +1,24 @@
 import './helpers/with-service-owners.mjs'
-import { execFileSync } from 'node:child_process'
-import {
-  initChatIsolation,
-  isolatedCwd,
-  beforeTurn,
-  afterTurn,
-  releaseChat
-} from '../src/main/chat-isolation.ts'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { createRequire } from 'node:module'
-import { detectNext, NEXT_LOADER_CONTENT, NEXT_ADAPTER_CONTENT } from '../src/main/setup-next.ts'
-import { REACT_HELPER_CONTENT } from '../src/main/setup-react.ts'
+import {
+  afterTurn,
+  beforeTurn,
+  initChatIsolation,
+  isolatedCwd,
+  releaseChat
+} from '../src/main/chat-isolation.ts'
 import { editingOwner } from '../src/main/editing-owner.ts'
+import { typescriptProps } from '../src/main/props-typescript.ts'
+import { detectNext, NEXT_ADAPTER_CONTENT, NEXT_LOADER_CONTENT } from '../src/main/setup-next.ts'
+import { REACT_HELPER_CONTENT } from '../src/main/setup-react.ts'
 import { provisionDependencies } from '../src/main/worktree-dependencies.ts'
 import { setupPrompt } from '../src/shared/setup-prompt.ts'
-import { typescriptProps } from '../src/main/props-typescript.ts'
+
 const require = createRequire(import.meta.url)
 // The service's editing owner copies the helpers (LKM-111 removed the TS copy).
 const syncSetupArtifacts = (live, checkout) => editingOwner().syncSetupHelpers(live, checkout)
@@ -98,10 +99,15 @@ try {
   assert.ok(result.map.mappings)
   for (const tag of ['button', 'Card']) {
     const legacy = `<${tag} data-praxis-source="page.mdx:20:0" />`
-    const transform = code => babel.transformSync(code, {
-      filename: join(root, 'generated.jsx'), root, configFile: false, babelrc: false,
-      parserOpts: { plugins: ['jsx'] }, plugins: [plugin]
-    }).code
+    const transform = (code) =>
+      babel.transformSync(code, {
+        filename: join(root, 'generated.jsx'),
+        root,
+        configFile: false,
+        babelrc: false,
+        parserOpts: { plugins: ['jsx'] },
+        plugins: [plugin]
+      }).code
     const once = transform(legacy)
     assert.match(once, /data-praxis-source="page.mdx:20:0"/)
     assert.doesNotMatch(once, /data-trezi-source=/)
@@ -129,21 +135,38 @@ try {
   for (const hostStamp of ['', 'data-praxis-source="authored-legacy.tsx:4:0"']) {
     for (const parameter of ['props', '{ label }', '{ label } = {}']) {
       for (const canonical of [null, 'authored-current.tsx:9:0', '']) {
-        const canonicalProp = canonical === null ? '' : ` data-trezi-component-source="${canonical}"`
+        const canonicalProp =
+          canonical === null ? '' : ` data-trezi-component-source="${canonical}"`
         const source = `function Card(${parameter}) { return <button>Card</button> }
           function App() { return <Card ${hostStamp} data-praxis-component-source="authored-legacy.tsx:4:0"${canonicalProp} /> }`
         let output
-        const transform = source => {
-          loaderModule.exports.call({ resourcePath: join(root, 'src/Legacy.tsx'), getOptions: () => ({ root }),
-            callback(error, code) { if (error) throw error; output = code } }, source)
+        const transform = (source) => {
+          loaderModule.exports.call(
+            {
+              resourcePath: join(root, 'src/Legacy.tsx'),
+              getOptions: () => ({ root }),
+              callback(error, code) {
+                if (error) throw error
+                output = code
+              }
+            },
+            source
+          )
           return output
         }
         for (const code of [transform(source), transform(output)]) {
-          const js = new Bun.Transpiler({ loader: 'tsx', tsconfig: { compilerOptions: { jsx: 'react', jsxFactory: '__jsx' } } }).transformSync(code)
-          const jsx = (type, props, ...children) => typeof type === 'function' ? type(props || {}) : { type, props, children }
+          const js = new Bun.Transpiler({
+            loader: 'tsx',
+            tsconfig: { compilerOptions: { jsx: 'react', jsxFactory: '__jsx' } }
+          }).transformSync(code)
+          const jsx = (type, props, ...children) =>
+            typeof type === 'function' ? type(props || {}) : { type, props, children }
           const rendered = new Function('__jsx', js + '; return App()')(jsx)
           assert.equal(rendered.type, 'button')
-          assert.equal(rendered.props['data-trezi-component-source'], canonical ?? 'authored-legacy.tsx:4:0')
+          assert.equal(
+            rendered.props['data-trezi-component-source'],
+            canonical ?? 'authored-legacy.tsx:4:0'
+          )
         }
       }
     }
@@ -151,12 +174,28 @@ try {
   // Legacy locations forwarded through multiple component spreads must win over
   // generated inner defaults in both plain Babel and complete Next instrumentation.
   for (const useNext of [false, true]) {
-    const transform = source => {
-      if (!useNext) return babel.transformSync(source, { filename: join(root, 'src/Nested.jsx'), root,
-        configFile: false, babelrc: false, parserOpts: { plugins: ['jsx'] }, plugins: [plugin] }).code
+    const transform = (source) => {
+      if (!useNext)
+        return babel.transformSync(source, {
+          filename: join(root, 'src/Nested.jsx'),
+          root,
+          configFile: false,
+          babelrc: false,
+          parserOpts: { plugins: ['jsx'] },
+          plugins: [plugin]
+        }).code
       let result
-      loaderModule.exports.call({ resourcePath: join(root, 'src/Nested.jsx'), getOptions: () => ({ root }),
-        callback(error, code) { if (error) throw error; result = code } }, source)
+      loaderModule.exports.call(
+        {
+          resourcePath: join(root, 'src/Nested.jsx'),
+          getOptions: () => ({ root }),
+          callback(error, code) {
+            if (error) throw error
+            result = code
+          }
+        },
+        source
+      )
       return result
     }
     const source = `function Wrapper(props) { return <Button {...props}/> }
@@ -164,8 +203,12 @@ try {
       function App() { return <Wrapper data-praxis-component-source="authored.tsx:20:0" /> }`
     const once = transform(source)
     for (const code of [once, transform(once)]) {
-      const js = new Bun.Transpiler({ loader: 'tsx', tsconfig: { compilerOptions: { jsx: 'react', jsxFactory: '__jsx' } } }).transformSync(code)
-      const jsx = (type, props, ...children) => typeof type === 'function' ? type(props || {}) : { type, props, children }
+      const js = new Bun.Transpiler({
+        loader: 'tsx',
+        tsconfig: { compilerOptions: { jsx: 'react', jsxFactory: '__jsx' } }
+      }).transformSync(code)
+      const jsx = (type, props, ...children) =>
+        typeof type === 'function' ? type(props || {}) : { type, props, children }
       const rendered = new Function('__jsx', js + '; return App()')(jsx)
       assert.equal(rendered.props['data-trezi-component-source'], 'authored.tsx:20:0')
     }

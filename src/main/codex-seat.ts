@@ -20,7 +20,11 @@ export const withoutRejected = (models: CatalogModel[]): CatalogModel[] =>
 /** The seat's discovered models in the CLI's order; none before the first probe. */
 function codexListed(): string[] {
   try {
-    return modelCatalog().get('codex')?.map((m) => m.id) ?? []
+    return (
+      modelCatalog()
+        .get('codex')
+        ?.map((m) => m.id) ?? []
+    )
   } catch {
     return [] // data dir not resolvable yet
   }

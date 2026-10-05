@@ -1,5 +1,5 @@
-import type { ProviderSession } from './backends/types'
 import type { SessionTranscriptEntry } from '../shared/api'
+import type { ProviderSession } from './backends/types'
 import type { TurnTerminalOutcome } from './turn-terminal'
 
 type Preparation = { cancelled: boolean }
@@ -34,7 +34,13 @@ export class ReconciliationCoordinator {
     this.resolving.delete(key)
   }
 
-  async finish(key: string, message: string, terminal: TurnTerminalOutcome, turn?: string, run = 0): Promise<void> {
+  async finish(
+    key: string,
+    message: string,
+    terminal: TurnTerminalOutcome,
+    turn?: string,
+    run = 0
+  ): Promise<void> {
     const d = this.deps
     const session = d.currentSession(key)
     const wasResolving = this.resolving.delete(key)
@@ -47,11 +53,14 @@ export class ReconciliationCoordinator {
       if (!current()) return
       this.resolving.delete(key)
       d.showParked(key)
-      const completedAt = turn && d.landed ? await d.landed(key, turn).catch(() => undefined) : undefined
+      const completedAt =
+        turn && d.landed ? await d.landed(key, turn).catch(() => undefined) : undefined
       if (!current()) return
       d.running.delete(key)
       d.preparations.delete(key)
-      const entry = [...(session?.record.transcript ?? [])].reverse().find(entry => entry.role === 'user')
+      const entry = [...(session?.record.transcript ?? [])]
+        .reverse()
+        .find((entry) => entry.role === 'user')
       if (entry && entry.completedAt == null) entry.completedAt = completedAt ?? Date.now()
       session?.emit({ type: 'landing-finished', ...(turn ? { turn } : {}) })
     }
@@ -65,7 +74,12 @@ export class ReconciliationCoordinator {
       )
       if (!current()) return
       const next = run + 1
-      if (files?.length && session && !preparation.cancelled && (!turn || !d.continued || await d.continued(key, turn, next))) {
+      if (
+        files?.length &&
+        session &&
+        !preparation.cancelled &&
+        (!turn || !d.continued || (await d.continued(key, turn, next)))
+      ) {
         if (!current()) return
         this.resolving.add(key)
         d.begin(key)

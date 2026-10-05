@@ -1,12 +1,13 @@
-import { chatIslandShape, chatIslandDescription } from '../../../bin/chat-island-schema.mjs'
-import { previewToolShapes as previewShapes, previewToolText as PREVIEW_TOOL_TEXT } from '../../../bin/preview-tool-schema.mjs'
-import { runTreziTool, sessionTool } from '../session-tools'
-import type { PreviewObserver } from '../preview-observation-tools'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { NativeView } from '../../native/platform'
 import { z } from 'zod'
+import { chatIslandDescription, chatIslandShape } from '../../../bin/chat-island-schema.mjs'
+import {
+  previewToolText as PREVIEW_TOOL_TEXT,
+  previewToolShapes as previewShapes
+} from '../../../bin/preview-tool-schema.mjs'
+import type { NativeView } from '../../native/platform'
 import type {
   AgentEvent,
   AgentOptions,
@@ -20,23 +21,21 @@ import type {
 } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
 import { checkContrast, suggestAccessible } from '../apca'
+import { discoverPortableSkills } from '../bundled-skills'
 import { fluidClamp, fluidScale } from '../fluid'
+import { liveCheckoutEdit } from '../live-write-guard'
 import { recordClaudeModels } from '../model-catalog'
 import { oklchScale } from '../oklch'
-import { discoverPortableSkills } from '../bundled-skills'
-import { withSkillReferences } from './skill-menu'
-import { claudeIsolationOptions } from './claude-isolation'
+import type { PreviewObserver } from '../preview-observation-tools'
+import { providerOwner } from '../provider-owner'
 import {
-  checkClaudeLogin,
-  claudeCliChoice,
-  forgetClaudeCli,
-  isAuthFailure,
-  isLoginCommand,
-  LOGIN_COMMAND_MESSAGE,
-  resolveClaudeCli
-} from './claude-login'
-import { liveCheckoutEdit } from '../live-write-guard'
+  decidePermission,
+  INTERRUPT_GRACE_MS,
+  type PermissionVerdict,
+  permissionTarget
+} from '../provider-policy'
 import { treziRules } from '../rules'
+import { runTreziTool, sessionTool } from '../session-tools'
 import { elevationScale, layeredShadow } from '../shadows'
 import { SKILL_PACKS } from '../skill-packs'
 import { discoverProjectSkills, mergeSlashCommands } from '../skills'
@@ -52,14 +51,23 @@ import {
   toTransition
 } from '../spring'
 import { letterSpacing, lineHeight } from '../type-metrics'
+import { claudeIsolationOptions } from './claude-isolation'
+import {
+  checkClaudeLogin,
+  claudeCliChoice,
+  forgetClaudeCli,
+  isAuthFailure,
+  isLoginCommand,
+  LOGIN_COMMAND_MESSAGE,
+  resolveClaudeCli
+} from './claude-login'
 import { interruptWithEscalation } from './interrupt'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
+import { withSkillReferences } from './skill-menu'
 import { streamedChars, streamUsage } from './stream-usage'
 import { sanitizeTitle, transcriptDigest } from './title'
 import { describeTool, sendToRenderer, toolDetail } from './tools'
-import { providerOwner } from '../provider-owner'
-import { INTERRUPT_GRACE_MS, type PermissionVerdict, decidePermission, permissionTarget } from '../provider-policy'
 import type {
   ModelProvider,
   PendingPrompt,
@@ -421,8 +429,8 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
 
   close(): void {
     this.closed = true
-    let r: ((res: IteratorResult<SDKUserMessage>) => void) | undefined
-    while ((r = this.waiting.shift())) r({ value: undefined as never, done: true })
+    for (let r = this.waiting.shift(); r; r = this.waiting.shift())
+      r({ value: undefined as never, done: true })
   }
 
   [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
@@ -568,7 +576,9 @@ async function startSession(
   // Every Trezi tool call is authorized by the provider owner against this session's
   // grant before it runs (S10): a background edit is not granted the editor or islands,
   // a closed session nothing, and oversized arguments are refused.
-  const guarded = <T extends { name: string; handler: (...a: any[]) => Promise<any> }>(defs: T[]): T[] =>
+  const guarded = <T extends { name: string; handler: (...a: any[]) => Promise<any> }>(
+    defs: T[]
+  ): T[] =>
     defs.map((def) => ({
       ...def,
       handler: async (args: unknown, extra: unknown) => {
@@ -577,7 +587,10 @@ async function startSession(
             await providerOwner().authorize(ctx.grant, def.name, args)
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
-            return { content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }], isError: true }
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }],
+              isError: true
+            }
           }
         }
         return def.handler(args, extra)
@@ -587,19 +600,28 @@ async function startSession(
   // installs) run in Bun: from a provider helper they go there through the owner, which
   // checks the helper's grant (`sessionTool`, LKM-131); in Bun they run here.
   const scope = {
-    root, liveRoot: ctx?.liveRoot ?? root, emitKey, background: !!ctx?.sessionId, connectionId: options.connectionId,
+    root,
+    liveRoot: ctx?.liveRoot ?? root,
+    emitKey,
+    background: !!ctx?.sessionId,
+    connectionId: options.connectionId,
     notify: (channel: string, payload: unknown): void => sendToRenderer(getWindow, channel, payload)
   }
   const treziTool = sessionTool(ctx?.tools, (action, args) => runTreziTool(action, args, scope))
   const failed = (result: unknown): boolean => !!(result as { error?: unknown } | null)?.error
   const asText = async (pending: Promise<unknown>) => {
     const result = await pending
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], ...(failed(result) ? { isError: true } : {}) }
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      ...(failed(result) ? { isError: true } : {})
+    }
   }
   // The preview observers already answer as MCP content (text or a JPEG); a failure is text.
   const observed = async (action: PreviewObserver, args: unknown = {}) => {
     const result = (await treziTool(action, args)) as { content?: unknown } | null
-    return Array.isArray(result?.content) ? (result as { content: never[] }) : asText(Promise.resolve(result))
+    return Array.isArray(result?.content)
+      ? (result as { content: never[] })
+      : asText(Promise.resolve(result))
   }
   const previewServer = createSdkMcpServer({
     name: 'trezi',
@@ -617,13 +639,33 @@ async function startSession(
         {
           file: z.string(),
           prompt: z.string().optional(),
-          candidates: z.array(z.object({ id: z.string(), description: z.string(), element: z.object({ type: z.string(), props: z.record(z.string(), z.unknown()) }), root: z.boolean().optional(), resource: z.string().optional() })).optional(),
-          spec: z.object({
-            root: z.string(),
-            elements: z.record(z.string(), z.object({
-              type: z.string(), props: z.record(z.string(), z.unknown()), children: z.array(z.string())
-            }).strict())
-          }).strict().optional()
+          candidates: z
+            .array(
+              z.object({
+                id: z.string(),
+                description: z.string(),
+                element: z.object({ type: z.string(), props: z.record(z.string(), z.unknown()) }),
+                root: z.boolean().optional(),
+                resource: z.string().optional()
+              })
+            )
+            .optional(),
+          spec: z
+            .object({
+              root: z.string(),
+              elements: z.record(
+                z.string(),
+                z
+                  .object({
+                    type: z.string(),
+                    props: z.record(z.string(), z.unknown()),
+                    children: z.array(z.string())
+                  })
+                  .strict()
+              )
+            })
+            .strict()
+            .optional()
         },
         async (args) => asText(treziTool('compose_project_ui', args))
       ),
@@ -639,10 +681,30 @@ async function startSession(
         previewShapes.preview_screenshot,
         async (args) => observed('preview_screenshot', args)
       ),
-      tool('preview_inspect', PREVIEW_TOOL_TEXT.preview_inspect, previewShapes.preview_inspect, async (args) => observed('preview_inspect', args)),
-      tool('preview_evaluate', PREVIEW_TOOL_TEXT.preview_evaluate, previewShapes.preview_evaluate, async (args) => observed('preview_evaluate', args)),
-      tool('preview_console', PREVIEW_TOOL_TEXT.preview_console, previewShapes.preview_console, async (args) => observed('preview_console', args)),
-      tool('preview_viewport', PREVIEW_TOOL_TEXT.preview_viewport, previewShapes.preview_viewport, async (args) => observed('preview_viewport', args)),
+      tool(
+        'preview_inspect',
+        PREVIEW_TOOL_TEXT.preview_inspect,
+        previewShapes.preview_inspect,
+        async (args) => observed('preview_inspect', args)
+      ),
+      tool(
+        'preview_evaluate',
+        PREVIEW_TOOL_TEXT.preview_evaluate,
+        previewShapes.preview_evaluate,
+        async (args) => observed('preview_evaluate', args)
+      ),
+      tool(
+        'preview_console',
+        PREVIEW_TOOL_TEXT.preview_console,
+        previewShapes.preview_console,
+        async (args) => observed('preview_console', args)
+      ),
+      tool(
+        'preview_viewport',
+        PREVIEW_TOOL_TEXT.preview_viewport,
+        previewShapes.preview_viewport,
+        async (args) => observed('preview_viewport', args)
+      ),
       tool(
         'open_preview',
         'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Navigation waits for this turn to land.',
@@ -652,10 +714,16 @@ async function startSession(
       tool(
         'open_code',
         'Open the mini code editor at an exact project file and highlight inclusive source lines. Read the file first; use when asked to show the exact code or implementation.',
-        { file: z.string(), startLine: z.number().int().min(1), endLine: z.number().int().min(1).optional() },
+        {
+          file: z.string(),
+          startLine: z.number().int().min(1),
+          endLine: z.number().int().min(1).optional()
+        },
         async (args) => asText(treziTool('open_code', args))
       ),
-      tool('chat_island', chatIslandDescription, chatIslandShape, async (args) => asText(treziTool('chat_island', args))),
+      tool('chat_island', chatIslandDescription, chatIslandShape, async (args) =>
+        asText(treziTool('chat_island', args))
+      ),
       // Pure spring→CSS calculator. LLMs can't reliably integrate a spring in
       // their head, so this computes the EXACT `linear()` easing + duration the
       // agent should paste into the target repo's CSS. No state, no disk, no
@@ -1034,13 +1102,19 @@ async function startSession(
         },
         async (args) => {
           // Main checks the allowlist, then the workflow owner installs (`session-tools.ts`).
-          const result = (await treziTool('install_skills', args)) as { ok?: boolean; message?: string; error?: string }
+          const result = (await treziTool('install_skills', args)) as {
+            ok?: boolean
+            message?: string
+            error?: string
+          }
           const message = result.message ?? `install_skills failed: ${result.error ?? 'no result'}`
           const restart =
             'Newly installed skills are discovered when the agent starts its next turn — they take ' +
             'effect on your next message (or a fresh session), not mid-turn.'
           return {
-            content: [{ type: 'text' as const, text: result.ok ? `${message}\n\n${restart}` : message }],
+            content: [
+              { type: 'text' as const, text: result.ok ? `${message}\n\n${restart}` : message }
+            ],
             ...(result.ok ? {} : { isError: true })
           }
         }
@@ -1106,26 +1180,47 @@ async function startSession(
       // permission mode (hooks run before bypass/auto approvals; canUseTool does not).
       // LKM-156: nor names it in a Bash command.
       hooks: {
-        PreToolUse: [{
-          hooks: [async input => {
-            const pre = input as { tool_name?: string; tool_input?: unknown }
-            const denied = liveCheckoutEdit(pre.tool_name ?? '', pre.tool_input, root, ctx?.liveRoot ?? root)
-            return denied
-              ? { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'deny' as const, permissionDecisionReason: denied.reason } }
-              : { continue: true }
-          }]
-        }]
+        PreToolUse: [
+          {
+            hooks: [
+              async (input) => {
+                const pre = input as { tool_name?: string; tool_input?: unknown }
+                const denied = liveCheckoutEdit(
+                  pre.tool_name ?? '',
+                  pre.tool_input,
+                  root,
+                  ctx?.liveRoot ?? root
+                )
+                return denied
+                  ? {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        permissionDecision: 'deny' as const,
+                        permissionDecisionReason: denied.reason
+                      }
+                    }
+                  : { continue: true }
+              }
+            ]
+          }
+        ]
       },
       canUseTool: async (toolName, toolInput, opts) => {
         // The provider owner decides (S10); the adapter only settles the SDK callback.
         // An owner that cannot answer fails closed.
         const verdict: PermissionVerdict = ctx?.grant
-          ? await providerOwner().permission(ctx.grant, toolName, toolInput).catch(() => ({
-              decision: 'deny' as const,
-              message: 'Trezi could not check this permission.'
-            }))
+          ? await providerOwner()
+              .permission(ctx.grant, toolName, toolInput)
+              .catch(() => ({
+                decision: 'deny' as const,
+                message: 'Trezi could not check this permission.'
+              }))
           : decidePermission(toolName, permissionTarget(toolName, toolInput), {
-              live: true, background: !!ctx?.sessionId, root, liveRoot: ctx?.liveRoot ?? root, profile: ''
+              live: true,
+              background: !!ctx?.sessionId,
+              root,
+              liveRoot: ctx?.liveRoot ?? root,
+              profile: ''
             })
         // The agent asking the user a question isn't a permission decision — surface
         // it as an interactive multiple-choice card and feed the answer back as the
@@ -1225,13 +1320,14 @@ async function startSession(
   const portableSkills = await discoverPortableSkills()
   let projectSkills: SlashCommandItem[] = []
   let sdkCommandNames: string[] = []
-  const availablePortableSkills = () => portableSkills.filter(
-    (skill) => !projectSkills.some((project) => project.name === skill.name)
-  )
+  const availablePortableSkills = () =>
+    portableSkills.filter((skill) => !projectSkills.some((project) => project.name === skill.name))
   const emitCommands = (): void => {
     const merged = mergeSlashCommands(
       [...projectSkills, ...availablePortableSkills()],
-      sdkCommandNames.filter((name) => !portableSkills.some((skill) => name === `trezi:${skill.name}`))
+      sdkCommandNames.filter(
+        (name) => !portableSkills.some((skill) => name === `trezi:${skill.name}`)
+      )
     )
     if (merged.length) emit({ type: 'commands', commands: merged })
   }
@@ -1344,8 +1440,16 @@ async function startSession(
             break
           }
           case 'stream_event': {
-            const ev = (msg as { event?: { type?: string; message?: unknown; usage?: unknown; delta?: Record<string, unknown> } })
-              .event
+            const ev = (
+              msg as {
+                event?: {
+                  type?: string
+                  message?: unknown
+                  usage?: unknown
+                  delta?: Record<string, unknown>
+                }
+              }
+            ).event
             if (ev?.type === 'message_start') {
               // A new request — its counters start from zero again.
               usage.start()
@@ -1370,7 +1474,10 @@ async function startSession(
             // "Not logged in · Please run /login" is the CLI's, not the model's: a login
             // card, never assistant text (LKM-119).
             if (isAuthFailure(msg as never)) {
-              const said = msg.message.content.map((block) => (block.type === 'text' ? block.text : '')).join(' ').trim()
+              const said = msg.message.content
+                .map((block) => (block.type === 'text' ? block.text : ''))
+                .join(' ')
+                .trim()
               emit({ type: 'error', code: 'auth', message: said || 'Claude is not logged in.' })
               authFailed = true
               forgetClaudeCli()

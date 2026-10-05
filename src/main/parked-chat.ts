@@ -2,7 +2,13 @@ import { projectKey } from '../shared/projectKey'
 import { landTurn } from './chat-landing'
 import { clearPark, dropParkRecord, upsertParkRecord } from './chat-park'
 import { type ChatState, emitIsolation, onChain, states } from './chat-state'
-import { applyParked, completeTurn, discardParked, type ResolvePrep, stageResolve } from './chat-worktrees'
+import {
+  applyParked,
+  completeTurn,
+  discardParked,
+  type ResolvePrep,
+  stageResolve
+} from './chat-worktrees'
 import { commitLiveTurn } from './live-commit'
 import { retireWorktreeBranch } from './worktrees'
 
@@ -17,7 +23,15 @@ import { retireWorktreeBranch } from './worktrees'
 export function showParkedChat(sessionKey: string): void {
   const st = states.get(sessionKey)
   if (st?.parked && !st.reverted)
-    emitIsolation(sessionKey, 'parked', st.wt.branch, st.parkedFiles, undefined, undefined, st.interrupted ? 'interrupted' : undefined)
+    emitIsolation(
+      sessionKey,
+      'parked',
+      st.wt.branch,
+      st.parkedFiles,
+      undefined,
+      undefined,
+      st.interrupted ? 'interrupted' : undefined
+    )
 }
 
 /** The LIVE chat (if any) whose worktree is on `branch` in `root` — the seam that lets
@@ -161,7 +175,9 @@ export async function resolveParkedChat(
         return
       }
       // `res.error` is bounded by the owner and names the path and Git's reason.
-      throw new Error(`the merged result couldn't be written onto the project${res.error ? ` (${res.error})` : ''}`)
+      throw new Error(
+        `the merged result couldn't be written onto the project${res.error ? ` (${res.error})` : ''}`
+      )
     })
   } catch (e) {
     return { ok: false, conflicted: [], error: e instanceof Error ? e.message : String(e) }
@@ -201,10 +217,26 @@ export function markStoppedReverted(sessionKey: string, reverted: boolean): void
   st.reverted = reverted
   if (reverted) {
     dropParkRecord(st)
-    emitIsolation(sessionKey, 'isolated', st.wt.branch, st.parkedFiles, undefined, undefined, 'reverted')
+    emitIsolation(
+      sessionKey,
+      'isolated',
+      st.wt.branch,
+      st.parkedFiles,
+      undefined,
+      undefined,
+      'reverted'
+    )
   } else {
     upsertParkRecord(st, st.parkedFiles)
-    emitIsolation(sessionKey, 'parked', st.wt.branch, st.parkedFiles, undefined, undefined, 'interrupted')
+    emitIsolation(
+      sessionKey,
+      'parked',
+      st.wt.branch,
+      st.parkedFiles,
+      undefined,
+      undefined,
+      'interrupted'
+    )
   }
 }
 

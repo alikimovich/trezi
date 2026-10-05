@@ -22,7 +22,10 @@ type Any = any
 export async function agentEvaluateRuntime(
   run: (scope: object, self: object) => Promise<unknown>,
   limits: { timeMs: number; maxBytes: number }
-): Promise<{ ok: true; type: string; value: unknown; bytes: number; ms: number } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; type: string; value: unknown; bytes: number; ms: number }
+  | { ok: false; error: string }
+> {
   // biome-ignore lint/suspicious/noRedundantUseStrict: serialized with toString() and run as a classic script
   'use strict'
   const G: Any = globalThis
@@ -57,27 +60,87 @@ export async function agentEvaluateRuntime(
     const AsyncGeneratorFunction = Object.getPrototypeOf(async function* () {}).constructor
     const safe: Record<string, unknown> = Object.create(null)
     for (const name of [
-      'Object', 'Array', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'Math', 'JSON', 'Reflect',
-      'Promise', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Date', 'RegExp', 'Error', 'TypeError', 'RangeError',
-      'SyntaxError', 'ReferenceError', 'EvalError', 'URIError', 'AggregateError', 'ArrayBuffer', 'DataView',
-      'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array',
-      'Float32Array', 'Float64Array', 'BigInt64Array', 'BigUint64Array', 'Intl', 'parseInt', 'parseFloat',
-      'isNaN', 'isFinite', 'encodeURIComponent', 'decodeURIComponent', 'encodeURI', 'decodeURI', 'URL',
-      'URLSearchParams', 'NaN', 'Infinity', 'undefined'
+      'Object',
+      'Array',
+      'String',
+      'Number',
+      'Boolean',
+      'Symbol',
+      'BigInt',
+      'Math',
+      'JSON',
+      'Reflect',
+      'Promise',
+      'Map',
+      'Set',
+      'WeakMap',
+      'WeakSet',
+      'Date',
+      'RegExp',
+      'Error',
+      'TypeError',
+      'RangeError',
+      'SyntaxError',
+      'ReferenceError',
+      'EvalError',
+      'URIError',
+      'AggregateError',
+      'ArrayBuffer',
+      'DataView',
+      'Int8Array',
+      'Uint8Array',
+      'Uint8ClampedArray',
+      'Int16Array',
+      'Uint16Array',
+      'Int32Array',
+      'Uint32Array',
+      'Float32Array',
+      'Float64Array',
+      'BigInt64Array',
+      'BigUint64Array',
+      'Intl',
+      'parseInt',
+      'parseFloat',
+      'isNaN',
+      'isFinite',
+      'encodeURIComponent',
+      'decodeURIComponent',
+      'encodeURI',
+      'decodeURI',
+      'URL',
+      'URLSearchParams',
+      'NaN',
+      'Infinity',
+      'undefined'
     ])
       if (name in G) safe[name] = G[name]
     for (const value of Object.values(safe)) visit(value)
-    for (const value of [AsyncFunction, GeneratorFunction, AsyncGeneratorFunction, Function, [][Symbol.iterator]()])
+    for (const value of [
+      AsyncFunction,
+      GeneratorFunction,
+      AsyncGeneratorFunction,
+      Function,
+      [][Symbol.iterator]()
+    ])
       visit(value)
     const denied = () => {
       throw new TypeError('Compiling code is not available in preview_evaluate')
     }
     for (const ctor of [Function, AsyncFunction, GeneratorFunction, AsyncGeneratorFunction])
-      Object.defineProperty(ctor.prototype, 'constructor', { value: denied, writable: false, configurable: false })
+      Object.defineProperty(ctor.prototype, 'constructor', {
+        value: denied,
+        writable: false,
+        configurable: false
+      })
     intrinsics.add(denied)
     for (const value of intrinsics) Object.freeze(value)
     Object.defineProperty(G, STATE, {
-      value: Object.freeze({ intrinsics, safe: Object.freeze(safe), setTimeout: G.setTimeout, clearTimeout: G.clearTimeout }),
+      value: Object.freeze({
+        intrinsics,
+        safe: Object.freeze(safe),
+        setTimeout: G.setTimeout,
+        clearTimeout: G.clearTimeout
+      }),
       enumerable: false
     })
   }
@@ -101,19 +164,56 @@ export async function agentEvaluateRuntime(
       if (desc && typeof desc.value === 'function') calls.add(desc.value)
     }
   }
-  const query = ['querySelector', 'querySelectorAll', 'getElementById', 'getElementsByClassName', 'getElementsByTagName']
+  const query = [
+    'querySelector',
+    'querySelectorAll',
+    'getElementById',
+    'getElementsByClassName',
+    'getElementsByTagName'
+  ]
   const iterate = ['item', 'namedItem', 'forEach', 'entries', 'keys', 'values', Symbol.iterator]
-  iface('Document', [...query, 'getElementsByName', 'elementFromPoint', 'elementsFromPoint', 'hasFocus'])
+  iface('Document', [
+    ...query,
+    'getElementsByName',
+    'elementFromPoint',
+    'elementsFromPoint',
+    'hasFocus'
+  ])
   iface('DocumentFragment', query)
   iface('ShadowRoot', ['elementFromPoint', 'elementsFromPoint'])
   iface('Element', [
-    ...query, 'getAttribute', 'getAttributeNS', 'getAttributeNames', 'hasAttribute', 'hasAttributes',
-    'getBoundingClientRect', 'getClientRects', 'closest', 'matches', 'webkitMatchesSelector',
-    'checkVisibility', 'getAnimations'
+    ...query,
+    'getAttribute',
+    'getAttributeNS',
+    'getAttributeNames',
+    'hasAttribute',
+    'hasAttributes',
+    'getBoundingClientRect',
+    'getClientRects',
+    'closest',
+    'matches',
+    'webkitMatchesSelector',
+    'checkVisibility',
+    'getAnimations'
   ])
-  iface('Node', ['contains', 'compareDocumentPosition', 'hasChildNodes', 'getRootNode', 'isEqualNode', 'isSameNode'])
+  iface('Node', [
+    'contains',
+    'compareDocumentPosition',
+    'hasChildNodes',
+    'getRootNode',
+    'isEqualNode',
+    'isSameNode'
+  ])
   iface('SVGGraphicsElement', ['getBBox'])
-  for (const name of ['NodeList', 'HTMLCollection', 'DOMTokenList', 'DOMRectList', 'CSSRuleList', 'StyleSheetList', 'NamedNodeMap'])
+  for (const name of [
+    'NodeList',
+    'HTMLCollection',
+    'DOMTokenList',
+    'DOMRectList',
+    'CSSRuleList',
+    'StyleSheetList',
+    'NamedNodeMap'
+  ])
     iface(name, iterate)
   iface('DOMTokenList', ['contains'])
   iface('CSSStyleDeclaration', ['getPropertyValue', 'getPropertyPriority', 'item'])
@@ -121,18 +221,35 @@ export async function agentEvaluateRuntime(
   iface('DOMRect', ['toJSON'])
   iface('MediaQueryList', [])
   own(G, ['getComputedStyle', 'matchMedia'])
-  if (G.CSS) for (const name of ['supports', 'escape']) if (typeof G.CSS[name] === 'function') calls.add(G.CSS[name])
+  if (G.CSS)
+    for (const name of ['supports', 'escape'])
+      if (typeof G.CSS[name] === 'function') calls.add(G.CSS[name])
   try {
     for (const list of [document.childNodes, document.documentElement.classList])
       calls.add(Object.getPrototypeOf(list.values()).next)
   } catch {}
 
   // The membrane.
-  const DENY = new Set([STATE, 'eval', 'Function', 'Proxy', 'cookie', 'localStorage', 'sessionStorage', 'indexedDB', 'caches', 'opener', 'webkit'])
+  const DENY = new Set([
+    STATE,
+    'eval',
+    'Function',
+    'Proxy',
+    'cookie',
+    'localStorage',
+    'sessionStorage',
+    'indexedDB',
+    'caches',
+    'opener',
+    'webkit'
+  ])
   const readOnly = () => new TypeError('preview_evaluate is read-only: the page cannot be changed')
   const toProxy = new WeakMap<object, object>()
   const toReal = new WeakMap<object, object>()
-  const unwrap = (value: unknown) => (value !== null && typeof value === 'object') || typeof value === 'function' ? (toReal.get(value as object) ?? value) : value
+  const unwrap = (value: unknown) =>
+    (value !== null && typeof value === 'object') || typeof value === 'function'
+      ? (toReal.get(value as object) ?? value)
+      : value
   const callback = (fn: Any) =>
     function (this: unknown, ...args: unknown[]) {
       return unwrap(Reflect.apply(fn, wrap(this), args.map(wrap)))
@@ -148,13 +265,16 @@ export async function agentEvaluateRuntime(
     const shadow = typeof value === 'function' ? () => {} : {}
     const proxy = new Proxy(shadow, {
       get(_, key) {
-        if (DENY.has(key as string)) throw new TypeError(`${String(key)} is not available in preview_evaluate`)
+        if (DENY.has(key as string))
+          throw new TypeError(`${String(key)} is not available in preview_evaluate`)
         return wrap(Reflect.get(real, key, real))
       },
       has: (_, key) => !DENY.has(key as string) && Reflect.has(real, key),
       ownKeys: () => Reflect.ownKeys(real).filter((key) => !DENY.has(key as string)),
       getOwnPropertyDescriptor(_, key) {
-        const desc = DENY.has(key as string) ? undefined : Reflect.getOwnPropertyDescriptor(real, key)
+        const desc = DENY.has(key as string)
+          ? undefined
+          : Reflect.getOwnPropertyDescriptor(real, key)
         if (!desc) return undefined
         if ('value' in desc) desc.value = wrap(desc.value)
         else {
@@ -182,8 +302,18 @@ export async function agentEvaluateRuntime(
       },
       apply(_, self, args) {
         if (!calls.has(real))
-          throw new TypeError(`${real.name || 'This function'}() is not a read-only call and cannot run in preview_evaluate`)
-        return wrap(Reflect.apply(real, unwrap(self), args.map((arg) => (typeof arg === 'function' && !toReal.has(arg) ? callback(arg) : unwrap(arg)))))
+          throw new TypeError(
+            `${real.name || 'This function'}() is not a read-only call and cannot run in preview_evaluate`
+          )
+        return wrap(
+          Reflect.apply(
+            real,
+            unwrap(self),
+            args.map((arg) =>
+              typeof arg === 'function' && !toReal.has(arg) ? callback(arg) : unwrap(arg)
+            )
+          )
+        )
       },
       construct: () => {
         throw readOnly()
@@ -218,7 +348,10 @@ export async function agentEvaluateRuntime(
   // Bounded, page-object-free JSON.
   const describe = (el: Any) => {
     const id = el.id ? `#${el.id}` : ''
-    const cls = typeof el.className === 'string' && el.className.trim() ? `.${el.className.trim().split(/\s+/).slice(0, 4).join('.')}` : ''
+    const cls =
+      typeof el.className === 'string' && el.className.trim()
+        ? `.${el.className.trim().split(/\s+/).slice(0, 4).join('.')}`
+        : ''
     const source = el.getAttribute('data-trezi-source')
     return clip(`<${el.tagName.toLowerCase()}${id}${cls}>${source ? ` @ ${source}` : ''}`, 240)
   }
@@ -253,18 +386,26 @@ export async function agentEvaluateRuntime(
       }
       if (G.CSSStyleDeclaration && value instanceof G.CSSStyleDeclaration) {
         const out: Record<string, string> = {}
-        for (let i = 0; i < Math.min(value.length, MAX_ITEMS); i++) out[value[i]] = clip(value.getPropertyValue(value[i]), 400)
-        if (value.length > MAX_ITEMS) out['…'] = `${value.length - MAX_ITEMS} more properties; read specific ones with getPropertyValue`
+        for (let i = 0; i < Math.min(value.length, MAX_ITEMS); i++)
+          out[value[i]] = clip(value.getPropertyValue(value[i]), 400)
+        if (value.length > MAX_ITEMS)
+          out['…'] =
+            `${value.length - MAX_ITEMS} more properties; read specific ones with getPropertyValue`
         return out
       }
       if (Array.isArray(value)) return list(value, value.length)
       if (value instanceof Map) return list([...value].slice(0, MAX_ITEMS), value.size)
       if (value instanceof Set) return list([...value].slice(0, MAX_ITEMS), value.size)
-      if (value instanceof Date) return Number.isNaN(value.getTime()) ? 'Invalid Date' : value.toISOString()
+      if (value instanceof Date)
+        return Number.isNaN(value.getTime()) ? 'Invalid Date' : value.toISOString()
       if (value instanceof RegExp) return String(value)
-      if (value instanceof Error) return { name: value.name, message: clip(String(value.message), 1000) }
+      if (value instanceof Error)
+        return { name: value.name, message: clip(String(value.message), 1000) }
       if (typeof value.length === 'number' && typeof value.item === 'function')
-        return list(Array.from({ length: Math.min(value.length, MAX_ITEMS) }, (_, i) => value.item(i)), value.length)
+        return list(
+          Array.from({ length: Math.min(value.length, MAX_ITEMS) }, (_, i) => value.item(i)),
+          value.length
+        )
       const proto = Object.getPrototypeOf(value)
       if (proto !== Object.prototype && proto !== null) {
         if (typeof value.toJSON === 'function') return serialize(value.toJSON(), depth + 1, seen)
@@ -289,17 +430,31 @@ export async function agentEvaluateRuntime(
   let timer: unknown
   try {
     const timeout = new Promise((_, reject) => {
-      timer = state.setTimeout.call(G, () => reject(new Error(`Timed out after ${limits.timeMs} ms`)), limits.timeMs)
+      timer = state.setTimeout.call(
+        G,
+        () => reject(new Error(`Timed out after ${limits.timeMs} ms`)),
+        limits.timeMs
+      )
     })
     const value = await Promise.race([run(scope, self), timeout])
     const ms = Date.now() - started
-    if (ms > limits.timeMs) return fail(`Too slow: took ${ms} ms, over the ${limits.timeMs} ms limit`)
+    if (ms > limits.timeMs)
+      return fail(`Too slow: took ${ms} ms, over the ${limits.timeMs} ms limit`)
     const raw = unwrap(value)
-    const type = raw === null ? 'null' : G.Node && raw instanceof G.Node ? 'node' : Array.isArray(raw) ? 'array' : typeof raw
+    const type =
+      raw === null
+        ? 'null'
+        : G.Node && raw instanceof G.Node
+          ? 'node'
+          : Array.isArray(raw)
+            ? 'array'
+            : typeof raw
     const serialized = serialize(value, 0, new Set())
     const bytes = JSON.stringify(serialized ?? null).length
     if (bytes > limits.maxBytes)
-      return fail(`Result too large: ${bytes} bytes, over the ${limits.maxBytes}-byte limit. Return fewer fields or slice arrays.`)
+      return fail(
+        `Result too large: ${bytes} bytes, over the ${limits.maxBytes}-byte limit. Return fewer fields or slice arrays.`
+      )
     return { ok: true, type, value: serialized, bytes, ms }
   } catch (error) {
     return fail(error)

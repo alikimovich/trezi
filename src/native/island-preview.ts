@@ -1,6 +1,6 @@
-import { ISLAND_OVERRIDE, ISLAND_OVERRIDE_REPLY } from '../shared/preview-channels'
-import type { IslandOverrideMessage, IslandOverrideRequest } from '../shared/preview-channels'
 import type { IslandPreviewPort } from '../main/island-overrides'
+import type { IslandOverrideMessage, IslandOverrideRequest } from '../shared/preview-channels'
+import { ISLAND_OVERRIDE, ISLAND_OVERRIDE_REPLY } from '../shared/preview-channels'
 import { ipcMain, views } from './platform'
 
 /**
@@ -12,17 +12,27 @@ import { ipcMain, views } from './platform'
 export function islandPreviewPort(timeoutMs = 400): IslandPreviewPort {
   let sequence = 0
   const pending = new Map<number, (value: unknown) => void>()
-  ipcMain.on(ISLAND_OVERRIDE_REPLY, (event, reply: { id?: unknown; value?: unknown } | undefined) => {
-    if (event.sender !== views.get('preview')?.webContents) return
-    if (typeof reply?.id === 'number') pending.get(reply.id)?.(reply.value)
-  })
+  ipcMain.on(
+    ISLAND_OVERRIDE_REPLY,
+    (event, reply: { id?: unknown; value?: unknown } | undefined) => {
+      if (event.sender !== views.get('preview')?.webContents) return
+      if (typeof reply?.id === 'number') pending.get(reply.id)?.(reply.value)
+    }
+  )
   const ask = (message: IslandOverrideMessage) => {
     const view = views.get('preview')
     if (!view) return Promise.resolve(undefined)
     const id = ++sequence
-    return new Promise<unknown>(resolve => {
-      const timer = setTimeout(() => { pending.delete(id); resolve(null) }, timeoutMs)
-      pending.set(id, value => { clearTimeout(timer); pending.delete(id); resolve(value) })
+    return new Promise<unknown>((resolve) => {
+      const timer = setTimeout(() => {
+        pending.delete(id)
+        resolve(null)
+      }, timeoutMs)
+      pending.set(id, (value) => {
+        clearTimeout(timer)
+        pending.delete(id)
+        resolve(value)
+      })
       const request: IslandOverrideRequest = { id, ...message }
       view.webContents.send(ISLAND_OVERRIDE, request)
     })
@@ -37,6 +47,6 @@ export function islandPreviewPort(timeoutMs = 400): IslandPreviewPort {
       const done = await ask({ op: 'settle', key, css })
       return done === undefined ? true : typeof done === 'boolean' ? done : null
     },
-    clear: key => ask({ op: 'clear', key })
+    clear: (key) => ask({ op: 'clear', key })
   }
 }

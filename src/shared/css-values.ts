@@ -61,7 +61,8 @@ function sideMeta<P extends 'padding' | 'margin'>(
   max: number
 ): { [S in (typeof SIDES)[number] as `${P}-${S}`]: StylePropMeta } {
   const out = {} as { [S in (typeof SIDES)[number] as `${P}-${S}`]: StylePropMeta }
-  for (const s of SIDES) (out as Record<string, StylePropMeta>)[`${prefix}-${s}`] = pxMeta('layout', min, max)
+  for (const s of SIDES)
+    (out as Record<string, StylePropMeta>)[`${prefix}-${s}`] = pxMeta('layout', min, max)
   return out
 }
 
@@ -96,7 +97,14 @@ export const STYLE_PROP_META: Record<string, StylePropMeta> = {
 
   // --- typography ---
   'font-size': pxMeta('typography', 4, 200),
-  'font-weight': { group: 'typography', control: 'number', unit: '', min: 100, max: 900, step: 100 },
+  'font-weight': {
+    group: 'typography',
+    control: 'number',
+    unit: '',
+    min: 100,
+    max: 900,
+    step: 100
+  },
   'line-height': pxMeta('typography', 0, 400),
   'letter-spacing': pxMeta('typography', -10, 20, 0.1),
   'font-family': { group: 'typography', control: 'readonly' },
@@ -227,7 +235,8 @@ export const BEZIER_PRESETS: Record<string, Bezier> = {
   'ease-in-out': { x1: 0.42, y1: 0, x2: 0.58, y2: 1 }
 }
 
-const BEZIER_RE = /^cubic-bezier\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)$/i
+const BEZIER_RE =
+  /^cubic-bezier\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)$/i
 
 /**
  * 'cubic-bezier(.17,.67,.83,.67)' or a keyword (ease/ease-in/…/linear) →
@@ -375,7 +384,9 @@ export function toCssText(prop: string, n: number): string {
 }
 
 /** '#rrggbb[aa]' / rgb()/rgba() / transparent → channels; anything else null. */
-export function parseColorLike(text: string): { r: number; g: number; b: number; a: number } | null {
+export function parseColorLike(
+  text: string
+): { r: number; g: number; b: number; a: number } | null {
   const t = text.trim().toLowerCase()
   if (t === 'transparent') return { r: 0, g: 0, b: 0, a: 0 }
   if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(t)) {

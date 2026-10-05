@@ -103,4 +103,3 @@ export const settingsFromChoice = (
 /** The Settings <select> value for a stored preference. */
 export const preferredSelectValue = (state: PreferredModelState): string =>
   state.mode === 'fixed' && state.fixed ? state.fixed.model : LAST_USED_VALUE
-

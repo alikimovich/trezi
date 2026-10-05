@@ -27,15 +27,23 @@ export function registerAnnotationsIpc(): void {
   ipcMain.handle('annotations:add', (_e, root: string, input: AnnotationInput) =>
     annotations.add(root, input)
   )
-  ipcMain.handle('annotations:remove', (_e, root: string, id: string) => annotations.remove(root, id))
+  ipcMain.handle('annotations:remove', (_e, root: string, id: string) =>
+    annotations.remove(root, id)
+  )
   ipcMain.handle('publish:to-pr', (_e, root: string, opts: { title: string }) =>
     guarded(async () => {
       // A damaged notes file stops publication before any Git mutation.
       const notes = await annotations.list(root)
-      return workflowOwner().handoff(root, opts.title, notes.length, (base, head) => generatePublishDescription(root, base, head))
+      return workflowOwner().handoff(root, opts.title, notes.length, (base, head) =>
+        generatePublishDescription(root, base, head)
+      )
     })
   )
   ipcMain.handle('publish:ship', (_e, root: string, _summary?: string[], mode?: 'merge' | 'pr') =>
-    guarded(() => workflowOwner().publish(root, mode ?? 'merge', (base, head) => generatePublishDescription(root, base, head)))
+    guarded(() =>
+      workflowOwner().publish(root, mode ?? 'merge', (base, head) =>
+        generatePublishDescription(root, base, head)
+      )
+    )
   )
 }

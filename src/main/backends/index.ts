@@ -1,12 +1,12 @@
 import type { AgentOptions } from '../../shared/api'
-import type { ModelProvider } from './types'
 import { codexProvider } from './codex'
 import { helperProvider } from './helper-session'
 import { withSkillMenu } from './skill-menu'
+import type { ModelProvider } from './types'
 
 const codexWithSkills = withSkillMenu(codexProvider)
 
-export type { ModelProvider, ProviderSession, PendingPrompt } from './types'
+export type { ModelProvider, PendingPrompt, ProviderSession } from './types'
 
 /**
  * Pick the backend for a session from `options.provider` (the renderer sets it;
@@ -51,8 +51,12 @@ function geminiEnabled(): boolean {
 export function pickProvider(options: AgentOptions): ModelProvider {
   if (options.connectionId) return codexWithSkills
   // A helper never routes again: its own sessions are the adapters themselves (`provider-helper-entry.ts`).
-  if (process.env.TREZI_PROVIDER_HELPER === '1') throw new Error('A provider helper does not pick providers.')
-  if (process.env.TREZI_SERVICE_SUPERVISED !== '1') throw new Error('Built-in providers run in helpers of the Trezi service; start Trezi with open -a Trezi or trezi.')
+  if (process.env.TREZI_PROVIDER_HELPER === '1')
+    throw new Error('A provider helper does not pick providers.')
+  if (process.env.TREZI_SERVICE_SUPERVISED !== '1')
+    throw new Error(
+      'Built-in providers run in helpers of the Trezi service; start Trezi with open -a Trezi or trezi.'
+    )
   switch (options.provider) {
     case 'codex':
       return helperProvider('codex')

@@ -12,7 +12,16 @@
 //   while every built-in seat runs in a helper.
 import { mock } from 'bun:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,15 +30,25 @@ import { compileProviderFixture, startProviderFixture } from './helpers/provider
 // A fake Codex SDK: records how it was aimed and answers one turn.
 const aimed = []
 class FakeCodex {
-  constructor(options) { aimed.push(options) }
+  constructor(options) {
+    aimed.push(options)
+  }
   startThread() {
     return {
       id: null,
-      runStreamed: async () => ({ events: (async function* () {
-        yield { type: 'thread.started', thread_id: 'fake-thread' }
-        yield { type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: 'hello from the connection' } }
-        yield { type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }
-      })() })
+      runStreamed: async () => ({
+        events: (async function* () {
+          yield { type: 'thread.started', thread_id: 'fake-thread' }
+          yield {
+            type: 'item.completed',
+            item: { id: 'item_0', type: 'agent_message', text: 'hello from the connection' }
+          }
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 }
+          }
+        })()
+      })
     }
   }
 }
@@ -49,21 +68,43 @@ const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-provider-data-'))
 const CRYPTO = join(root, 'test/fixtures/provider-owner/fake-crypto.mjs')
 const fixtures = new Set()
 let count = 0
-const profile = name => { const path = join(scratch, `p-${name}-${++count}`); mkdirSync(join(path, 'trezi'), { recursive: true }); return path }
+const profile = (name) => {
+  const path = join(scratch, `p-${name}-${++count}`)
+  mkdirSync(join(path, 'trezi'), { recursive: true })
+  return path
+}
 const only = process.env.PROVIDER_DATA_ONLY?.split(',')
-async function section(name, run) { if (only && !only.includes(name)) return; await run(); console.log(`PROVIDER-DATA ${name} PASS`) }
-const outcome = promise => promise.then(value => ({ ok: value }), error => ({ error: error.message }))
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+async function section(name, run) {
+  if (only && !only.includes(name)) return
+  await run()
+  console.log(`PROVIDER-DATA ${name} PASS`)
+}
+const outcome = (promise) =>
+  promise.then(
+    (value) => ({ ok: value }),
+    (error) => ({ error: error.message })
+  )
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const until = async (condition, label, ms = 10_000) => {
   const deadline = Date.now() + ms
-  while (Date.now() < deadline) { if (condition()) return; await sleep(10) }
+  while (Date.now() < deadline) {
+    if (condition()) return
+    await sleep(10)
+  }
   throw new Error(`Timed out: ${label}`)
 }
 /** An executable script (`#!<this bun>`) at `path`. */
-const script = (path, source) => { writeFileSync(path, `#!${process.execPath}\n${source}`); chmodSync(path, 0o755); return path }
-const golden = JSON.parse(readFileSync(join(root, 'test/fixtures/provider-owner/data-golden.json'), 'utf8'))
+const script = (path, source) => {
+  writeFileSync(path, `#!${process.execPath}\n${source}`)
+  chmodSync(path, 0o755)
+  return path
+}
+const golden = JSON.parse(
+  readFileSync(join(root, 'test/fixtures/provider-owner/data-golden.json'), 'utf8')
+)
 // A void answer reads as `{ ok: null }`, as it was recorded.
-const normalized = answer => JSON.parse(JSON.stringify('error' in answer ? answer : { ok: answer.ok ?? null }))
+const normalized = (answer) =>
+  JSON.parse(JSON.stringify('error' in answer ? answer : { ok: answer.ok ?? null }))
 
 const { createProviderStore } = await import('../src/main/providers-store.ts')
 const { createModelCatalog, parseCodexModels } = await import('../src/main/model-catalog.ts')
@@ -74,7 +115,10 @@ const { startProviderSession } = await import('../src/main/provider-sessions.ts'
 const { resolveConnection } = await import('../src/main/providers.ts')
 
 async function fixture(home, env = {}) {
-  const started = await startProviderFixture(binary, home, { PROVIDER_CRYPTO: `${process.execPath}\u001f${CRYPTO}`, ...env })
+  const started = await startProviderFixture(binary, home, {
+    PROVIDER_CRYPTO: `${process.execPath}\u001f${CRYPTO}`,
+    ...env
+  })
   fixtures.add(started)
   return started
 }
@@ -87,26 +131,90 @@ try {
     const f = await fixture(home)
     const swift = f.owner().data
     const file = join(home, 'trezi/providers.json')
-    const steps = new Map(golden.connections.map(step => [step.label, step]))
+    const steps = new Map(golden.connections.map((step) => [step.label, step]))
     const same = async (label, run) => {
       const expected = steps.get(label)
       const answer = normalized(await outcome(Promise.resolve().then(run)))
       assert.deepEqual(answer, expected.answer, `${label}: the recorded answer`)
-      assert.equal(existsSync(file) ? readFileSync(file, 'utf8') : null, expected.file, `${label}: the recorded providers.json bytes`)
+      assert.equal(
+        existsSync(file) ? readFileSync(file, 'utf8') : null,
+        expected.file,
+        `${label}: the recorded providers.json bytes`
+      )
       return answer
     }
     const saves = [
-      ['create', { id: 'gw', label: ' AI Gateway ', baseUrl: ' https://ai-gateway.vercel.sh/v1// ', apiKey: ' sk-one ', models: ['kimi', ' kimi', 'deepseek', 3, ''] }],
-      ['keyless', { id: 'groq', label: 'Groq', preset: 'custom', baseUrl: 'https://api.groq.com/openai/v1', models: [] }],
-      ['path edit keeps the key', { id: 'gw', label: 'Gateway (work)', baseUrl: 'https://ai-gateway.vercel.sh/v1beta', models: ['a'] }],
-      ['blank key keeps the key', { id: 'gw', label: 'Gateway (work)', baseUrl: 'https://ai-gateway.vercel.sh/v1beta', apiKey: '   ', models: ['a'] }],
-      ['a key for a keyless one', { id: 'groq', label: 'Groq', preset: 'custom', baseUrl: 'https://api.groq.com/openai/v1', apiKey: 'gsk-two' }],
-      ['origin change drops the key', { id: 'groq', label: 'Groq', preset: 'custom', baseUrl: 'https://attacker.example/v1' }],
-      ['port change drops the key', { id: 'gw', label: 'Gateway (work)', baseUrl: 'https://ai-gateway.vercel.sh:444/v1' }],
-      ['unicode label', { id: 'local', label: 'Local ✨  ', preset: 'custom', baseUrl: 'http://127.0.0.1:1234/v1/', apiKey: 'lk' }]
+      [
+        'create',
+        {
+          id: 'gw',
+          label: ' AI Gateway ',
+          baseUrl: ' https://ai-gateway.vercel.sh/v1// ',
+          apiKey: ' sk-one ',
+          models: ['kimi', ' kimi', 'deepseek', 3, '']
+        }
+      ],
+      [
+        'keyless',
+        {
+          id: 'groq',
+          label: 'Groq',
+          preset: 'custom',
+          baseUrl: 'https://api.groq.com/openai/v1',
+          models: []
+        }
+      ],
+      [
+        'path edit keeps the key',
+        {
+          id: 'gw',
+          label: 'Gateway (work)',
+          baseUrl: 'https://ai-gateway.vercel.sh/v1beta',
+          models: ['a']
+        }
+      ],
+      [
+        'blank key keeps the key',
+        {
+          id: 'gw',
+          label: 'Gateway (work)',
+          baseUrl: 'https://ai-gateway.vercel.sh/v1beta',
+          apiKey: '   ',
+          models: ['a']
+        }
+      ],
+      [
+        'a key for a keyless one',
+        {
+          id: 'groq',
+          label: 'Groq',
+          preset: 'custom',
+          baseUrl: 'https://api.groq.com/openai/v1',
+          apiKey: 'gsk-two'
+        }
+      ],
+      [
+        'origin change drops the key',
+        { id: 'groq', label: 'Groq', preset: 'custom', baseUrl: 'https://attacker.example/v1' }
+      ],
+      [
+        'port change drops the key',
+        { id: 'gw', label: 'Gateway (work)', baseUrl: 'https://ai-gateway.vercel.sh:444/v1' }
+      ],
+      [
+        'unicode label',
+        {
+          id: 'local',
+          label: 'Local ✨  ',
+          preset: 'custom',
+          baseUrl: 'http://127.0.0.1:1234/v1/',
+          apiKey: 'lk'
+        }
+      ]
     ]
     for (const [label, input] of saves) await same(label, () => swift.save(input))
-    for (const [id, secret] of Object.entries(golden.secrets)) assert.equal(await swift.secretFor(id), secret, `secret ${id}`)
+    for (const [id, secret] of Object.entries(golden.secrets))
+      assert.equal(await swift.secretFor(id), secret, `secret ${id}`)
     assert.equal(await swift.secretFor('local'), 'lk')
     assert.equal(await swift.secretFor('gw'), null, 'the key did not follow the port change')
     // Refusals: the recorded message, never the key.
@@ -114,7 +222,10 @@ try {
       ['no label', { label: '  ', baseUrl: 'https://x.example' }],
       ['no url', { label: 'X', baseUrl: ' / ' }],
       ['unsafe id', { id: '../etc', label: 'X', baseUrl: 'https://x.example' }],
-      ['locked keychain', { id: 'gw', label: 'X', baseUrl: 'https://x.example', apiKey: 'sk-locked-secret' }]
+      [
+        'locked keychain',
+        { id: 'gw', label: 'X', baseUrl: 'https://x.example', apiKey: 'sk-locked-secret' }
+      ]
     ]) {
       const answer = await same(label, () => swift.save(input))
       assert.ok(answer.error, `${label} refused`)
@@ -132,38 +243,49 @@ try {
     const bare = profile('bare')
     const g = await startProviderFixture(binary, bare, { PROVIDER_CRYPTO: '' })
     fixtures.add(g)
-    const refused = await outcome(g.owner().data.save({ label: 'X', baseUrl: 'https://x.example', apiKey: 'sk-plain' }))
+    const refused = await outcome(
+      g.owner().data.save({ label: 'X', baseUrl: 'https://x.example', apiKey: 'sk-plain' })
+    )
     assert.equal(refused.error, golden.noStore)
     assert.ok(!existsSync(join(bare, 'trezi/providers.json')))
     // A write before the service aliased an older session store would split it: refused.
-    const older = join(scratch, 'older'); mkdirSync(join(older, 'praxis'), { recursive: true })
+    const older = join(scratch, 'older')
+    mkdirSync(join(older, 'praxis'), { recursive: true })
     const h = await startProviderFixture(binary, older, {})
     fixtures.add(h)
     const early = await outcome(h.owner().data.save({ label: 'X', baseUrl: 'https://x.example' }))
     assert.equal(early.error, "Trezi's session store is not ready yet.")
     assert.ok(!existsSync(join(older, 'trezi')))
-    for (const started of [f, g, h]) { await started.stop(); fixtures.delete(started) }
+    for (const started of [f, g, h]) {
+      await started.stop()
+      fixtures.delete(started)
+    }
   })
 
   // LKM-144: Keychain helper calls run one at a time, so parallel reads show one macOS
   // prompt (the first approval serves the rest), never one each.
   await section('keychain-serial', async () => {
     const home = profile('serial')
-    const busy = join(scratch, 'crypto-busy'), overlaps = join(scratch, 'crypto-overlaps')
-    const slow = script(join(scratch, 'slow-crypto.mjs'), `
+    const busy = join(scratch, 'crypto-busy'),
+      overlaps = join(scratch, 'crypto-overlaps')
+    const slow = script(
+      join(scratch, 'slow-crypto.mjs'),
+      `
 import { appendFileSync, mkdirSync, rmdirSync } from 'node:fs'
 try { mkdirSync(${JSON.stringify(busy)}) } catch { appendFileSync(${JSON.stringify(overlaps)}, 'x') }
 await new Promise(resolve => setTimeout(resolve, 250))
 try { rmdirSync(${JSON.stringify(busy)}) } catch {}
-await import(${JSON.stringify(CRYPTO)})`)
+await import(${JSON.stringify(CRYPTO)})`
+    )
     const f = await fixture(home, { PROVIDER_CRYPTO: `${process.execPath}\u001f${slow}` })
     const data = f.owner().data
     await data.save({ id: 'one', label: 'One', baseUrl: 'https://one.example', apiKey: 'sk-one' })
     await data.save({ id: 'two', label: 'Two', baseUrl: 'https://two.example', apiKey: 'sk-two' })
-    const read = await Promise.all(['one', 'two', 'one', 'two'].map(id => data.secretFor(id)))
+    const read = await Promise.all(['one', 'two', 'one', 'two'].map((id) => data.secretFor(id)))
     assert.deepEqual(read, ['sk-one', 'sk-two', 'sk-one', 'sk-two'])
     assert.ok(!existsSync(overlaps), 'no two Keychain helper calls ran at once')
-    await f.stop(); fixtures.delete(f)
+    await f.stop()
+    fixtures.delete(f)
   })
 
   await section('catalog', async () => {
@@ -178,42 +300,79 @@ await import(${JSON.stringify(CRYPTO)})`)
     }
     // Bun's reader, handed the Swift writer (`persist`), keeps serving from memory.
     const taken = []
-    const routed = createModelCatalog({ baseDir: join(home, 'trezi'), now: () => 1234, persist: (backend, models) => { taken.push([backend, models]); return true } })
+    const routed = createModelCatalog({
+      baseDir: join(home, 'trezi'),
+      now: () => 1234,
+      persist: (backend, models) => {
+        taken.push([backend, models])
+        return true
+      }
+    })
     const before = read()
     routed.set('codex', [{ id: 'm', label: 'M' }])
     assert.deepEqual(routed.get('codex'), [{ id: 'm', label: 'M' }])
     assert.deepEqual(taken, [['codex', [{ id: 'm', label: 'M' }]]])
     assert.equal(read(), before, 'Bun did not write')
     // A write the owner refused leaves the list in memory only; Bun never writes.
-    const refusing = createModelCatalog({ baseDir: join(home, 'trezi'), now: () => 1234, persist: () => false })
+    const refusing = createModelCatalog({
+      baseDir: join(home, 'trezi'),
+      now: () => 1234,
+      persist: () => false
+    })
     refusing.set('claude', [{ id: 'n', label: 'N' }])
     assert.deepEqual(refusing.get('claude'), [{ id: 'n', label: 'N' }])
     assert.equal(read(), before, 'Bun did not write after a refusal')
-    assert.equal((await f.frame('catalogSave', { backend: 'gemini', models: [] })).payload.code, 'invalidRequest')
-    assert.equal((await f.frame('catalogSave', { backend: 'codex', models: [{ id: 1, label: 'x' }] })).payload.code, 'invalidRequest')
-    await f.stop(); fixtures.delete(f)
+    assert.equal(
+      (await f.frame('catalogSave', { backend: 'gemini', models: [] })).payload.code,
+      'invalidRequest'
+    )
+    assert.equal(
+      (await f.frame('catalogSave', { backend: 'codex', models: [{ id: 1, label: 'x' }] })).payload
+        .code,
+      'invalidRequest'
+    )
+    await f.stop()
+    fixtures.delete(f)
   })
 
   await section('probe', async () => {
-    const payload = { models: [{ slug: 'gpt-b', display_name: 'B', visibility: 'list', priority: 2 },
-      { slug: 'hidden', visibility: 'hide', priority: 0 }, { slug: 'gpt-a', visibility: 'list', priority: 1 }] }
-    const good = script(join(scratch, 'codex-good'), `if (process.argv.slice(2).join(' ') !== 'debug models') process.exit(2)\nprocess.stdout.write(${JSON.stringify(JSON.stringify(payload))})\n`)
+    const payload = {
+      models: [
+        { slug: 'gpt-b', display_name: 'B', visibility: 'list', priority: 2 },
+        { slug: 'hidden', visibility: 'hide', priority: 0 },
+        { slug: 'gpt-a', visibility: 'list', priority: 1 }
+      ]
+    }
+    const good = script(
+      join(scratch, 'codex-good'),
+      `if (process.argv.slice(2).join(' ') !== 'debug models') process.exit(2)\nprocess.stdout.write(${JSON.stringify(JSON.stringify(payload))})\n`
+    )
     const bad = script(join(scratch, 'codex-bad'), 'process.stdout.write("not json")\n')
     const f = await fixture(profile('probe'), { TREZI_CODEX_BIN: good })
     assert.deepEqual(await f.owner().data.codexModels(), parseCodexModels(payload))
-    assert.deepEqual((await f.owner().data.codexModels()).map(m => m.id), ['gpt-a', 'gpt-b'])
+    assert.deepEqual(
+      (await f.owner().data.codexModels()).map((m) => m.id),
+      ['gpt-a', 'gpt-b']
+    )
     const g = await fixture(profile('probe-bad'), { TREZI_CODEX_BIN: bad })
     assert.deepEqual(await g.owner().data.codexModels(), [])
-    const h = await fixture(profile('probe-missing'), { TREZI_CODEX_BIN: join(scratch, 'no-such-codex') })
+    const h = await fixture(profile('probe-missing'), {
+      TREZI_CODEX_BIN: join(scratch, 'no-such-codex')
+    })
     assert.deepEqual(await h.owner().data.codexModels(), [])
-    for (const started of [f, g, h]) { await started.stop(); fixtures.delete(started) }
+    for (const started of [f, g, h]) {
+      await started.stop()
+      fixtures.delete(started)
+    }
   })
 
   await section('in-process', async () => {
     // A connection chat on the Swift owner: the key is resolved in Bun and the adapter
     // runs in-process, while a built-in seat routes to a provider helper.
-    const WT = join(scratch, 'wt'), LIVE = join(scratch, 'live')
-    mkdirSync(WT, { recursive: true }); mkdirSync(LIVE, { recursive: true })
+    const WT = join(scratch, 'wt'),
+      LIVE = join(scratch, 'live')
+    mkdirSync(WT, { recursive: true })
+    mkdirSync(LIVE, { recursive: true })
     const saved = { ...process.env }
     process.env.CODEX_HOME = join(scratch, 'codex-home')
     try {
@@ -226,42 +385,78 @@ await import(${JSON.stringify(CRYPTO)})`)
       setProviderDataOwner(owner.data)
       // Saved through the store the settings dialog uses (providers:save).
       const { connectionStore } = await import('../src/main/provider-data.ts')
-      const conn = await connectionStore.save({ id: 'fake-conn', label: 'Fake', preset: 'custom', baseUrl: 'https://fake.example/v1', apiKey: 'sk-fake-connection', models: ['fake-model'] })
+      const conn = await connectionStore.save({
+        id: 'fake-conn',
+        label: 'Fake',
+        preset: 'custom',
+        baseUrl: 'https://fake.example/v1',
+        apiKey: 'sk-fake-connection',
+        models: ['fake-model']
+      })
       assert.equal(conn.hasKey, true)
-      assert.ok(!readFileSync(join(home, 'trezi/providers.json'), 'utf8').includes('sk-fake-connection'), 'no plaintext key on disk')
-      assert.deepEqual(await resolveConnection('fake-conn'), { baseUrl: 'https://fake.example/v1', apiKey: 'sk-fake-connection', wireApi: 'responses' })
+      assert.ok(
+        !readFileSync(join(home, 'trezi/providers.json'), 'utf8').includes('sk-fake-connection'),
+        'no plaintext key on disk'
+      )
+      assert.deepEqual(await resolveConnection('fake-conn'), {
+        baseUrl: 'https://fake.example/v1',
+        apiKey: 'sk-fake-connection',
+        wireApi: 'responses'
+      })
       const options = { provider: 'claude', connectionId: 'fake-conn', model: 'fake-model' }
       const provider = pickProvider(options)
       assert.notEqual(provider.host, 'helper', 'a connection is never helper-hosted')
       assert.equal(provider.id, 'codex', 'a connection runs on the Codex harness')
-      for (const seat of ['claude', 'codex', undefined]) assert.equal(pickProvider({ provider: seat }).host, 'helper', `${seat ?? 'default'} runs in a helper`)
+      for (const seat of ['claude', 'codex', undefined])
+        assert.equal(
+          pickProvider({ provider: seat }).host,
+          'helper',
+          `${seat ?? 'default'} runs in a helper`
+        )
       const events = []
       aimed.length = 0
-      const session = await startProviderSession(provider, WT, options, () => null, { emitKey: 'chat-swift', liveRoot: LIVE, onEvent: e => events.push(e) })
+      const session = await startProviderSession(provider, WT, options, () => null, {
+        emitKey: 'chat-swift',
+        liveRoot: LIVE,
+        onEvent: (e) => events.push(e)
+      })
       session.send('hi')
-      await until(() => events.some(e => e.type === 'done'), 'connection turn')
-      assert.equal(events.filter(e => e.type === 'delta').map(e => e.text).join(''), 'hello from the connection')
-      assert.ok(!events.some(e => e.type === 'error'), JSON.stringify(events))
+      await until(() => events.some((e) => e.type === 'done'), 'connection turn')
+      assert.equal(
+        events
+          .filter((e) => e.type === 'delta')
+          .map((e) => e.text)
+          .join(''),
+        'hello from the connection'
+      )
+      assert.ok(!events.some((e) => e.type === 'error'), JSON.stringify(events))
       assert.equal(aimed.length, 1)
       assert.equal(aimed[0].apiKey, 'sk-fake-connection', 'the key reached the in-process SDK')
-      assert.equal(Object.values(aimed[0].config.model_providers)[0].base_url, 'https://fake.example/v1')
+      assert.equal(
+        Object.values(aimed[0].config.model_providers)[0].base_url,
+        'https://fake.example/v1'
+      )
       assert.ok(!JSON.stringify(events).includes('sk-fake-connection'), 'the key is never emitted')
       const sessions = (await providerOwner().snapshot()).sessions
       assert.equal(sessions.length, 1)
       assert.equal(sessions[0].host, 'bun', 'the owner sees an in-process session')
       session.shutdown()
       await sleep(50)
-      await f.stop(); fixtures.delete(f)
+      await f.stop()
+      fixtures.delete(f)
     } finally {
       setProviderOwner(null)
       setProviderDataOwner(null)
       for (const key of ['CODEX_HOME', 'TREZI_SERVICE_SUPERVISED']) {
-        if (key in saved) process.env[key] = saved[key]; else delete process.env[key]
+        if (key in saved) process.env[key] = saved[key]
+        else delete process.env[key]
       }
     }
   })
 
-  console.log('Provider data: connections, catalog and probe against the recorded answers, and in-process connection chats passed; no provider calls')
+  console.log(
+    'Provider data: connections, catalog and probe against the recorded answers, and in-process connection chats passed; no provider calls'
+  )
 } finally {
   for (const started of fixtures) await started.kill().catch(() => {})
   rmSync(scratch, { recursive: true, force: true })
