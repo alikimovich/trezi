@@ -155,7 +155,7 @@ final class ProviderOwner: @unchecked Sendable {
         "configure": (["session"], ["model", "mode"]), "close": (["session"], []),
         "snapshot": ([], []), "status": ([], []),
         "connectionSave": (["input"], []), "connectionRemove": (["id"], []), "connectionSecret": (["id"], []),
-        "catalogSave": (["backend", "models"], []), "codexModels": ([], []),
+        "catalogSave": (["backend", "models"], ["harness"]), "codexModels": ([], []),
         "seatTokenSave": (["provider", "token"], []), "seatTokenStatus": ([], []), "diagnose": (["provider", "root"], []),
     ]
 
@@ -181,7 +181,9 @@ final class ProviderOwner: @unchecked Sendable {
                 guard let id = $0["id"]?.text, let label = $0["label"]?.text else { throw ServiceContractFailure.invalidRequest }
                 return (id, label)
             }
-            dataWrites.async { self.settle(frame) { Self.object([("saved", .bool(self.data.saveCatalog(backend: backend, models: models)))]) } }
+            // Bun ignores an entry another SDK/CLI version wrote (LKM-164).
+            let harness = body.has("harness") ? try body.string("harness", max: 512) : nil
+            dataWrites.async { self.settle(frame) { Self.object([("saved", .bool(self.data.saveCatalog(backend: backend, models: models, harness: harness)))]) } }
         default:
             work.async { self.settle(frame) { Self.object([("stdout", self.data.codexModels().map { .string(JSText($0)) } ?? .null)]) } }
         }

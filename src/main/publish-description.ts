@@ -44,7 +44,7 @@ async function summarize(prompt: string): Promise<string> {
       },
       configOverrides: ['mcp_servers={}', 'skills.config=[]']
     }).startThread({
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-sol',
       modelReasoningEffort: 'low',
       workingDirectory: cwd,
       skipGitRepoCheck: true,

@@ -24,7 +24,10 @@ export function writeSmokeProject(testDir: string): string {
   )
   writeFileSync(
     join(fixture, 'index.html'),
-    '<!doctype html>\n<html><body>\n<h1 id="native-title" data-trezi-source="index.html:3:1">Native Trezi fixture</h1>\n<p>Bun owns this server.</p><script>window.previewInputs=[];for(const type of ["keydown","keyup","keypress","pointerdown","mousedown","click","dblclick","wheel","input"])window.addEventListener(type,event=>window.previewInputs.push(event.type),true)</script></body></html>'
+    '<!doctype html>\n<html><body>\n<h1 id="native-title" data-trezi-source="index.html:3:1">Native Trezi fixture</h1>\n<p>Bun owns this server.</p><script>window.previewInputs=[];for(const type of ["keydown","keyup","keypress","pointerdown","mousedown","click","dblclick","wheel","input"])window.addEventListener(type,event=>window.previewInputs.push(event.type),true)</script>' +
+      // Stands in for HMR: this static page never renders native-style.tsx, but every write
+      // under the root live-reloads it, so it re-reads that file's padding-top on load.
+      '<script>fetch("native-style.tsx").then(r=>r.text()).then(t=>{const m=/padding(?:Top|-top)["\']?\\s*:\\s*["\']?(\\d+)(?:px)?/.exec(t);if(m)document.querySelector("#native-title").style.paddingTop=m[1]+"px"}).catch(()=>{})</script></body></html>'
   )
   // Prepare the reload route before the managed server starts watching files.
   writeFileSync(join(fixture, 'about.html'), readFileSync(join(fixture, 'index.html')))

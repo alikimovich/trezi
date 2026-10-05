@@ -82,6 +82,7 @@
     "test:project-icon": "bun test/project-icon.mjs",
     "test:providers": "bun test/providers-store.mjs",
     "test:model-catalog": "bun test/model-catalog.mjs",
+    "test:model-label": "bun test/model-label.mjs",
     "test:codex-retry": "bun test/codex-retry-cause.mjs",
     "test:codex-stream": "bun test/codex-stream.mjs",
     "test:codex-model": "bun test/codex-model.mjs",
@@ -125,12 +126,12 @@
     "test:preview-agent-tools": "bun test/preview-agent-tools.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.186",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.289",
     "@babel/parser": "^8.0.0",
     "@json-render/codegen": "0.21.0",
     "@json-render/core": "0.21.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/codex-sdk": "^0.154.0",
+    "@openai/codex-sdk": "^0.160.1",
     "apca-w3": "^0.1.9",
     "colorparsley": "^0.1.8",
     "parse5": "^7.2.1",
