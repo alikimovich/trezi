@@ -1,25 +1,29 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { once } from 'node:events'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { once } from 'node:events'
 import { spawnHostBridge } from './helpers/host-bridge.mjs'
 
 const directory = mkdtempSync(join(tmpdir(), 'trezi-bridge-close-'))
 const executable = join(directory, 'host.mjs')
-writeFileSync(executable, `#!/usr/bin/env bun
+writeFileSync(
+  executable,
+  `#!/usr/bin/env bun
 import { createInterface } from 'node:readline'
 console.log(JSON.stringify({event:'ready'}))
 createInterface({input:process.stdin}).on('line', () => {
   console.log(JSON.stringify({event:'persist', value:'last host event'}))
   process.exit(0)
 })
-`, { mode: 0o755 })
+`,
+  { mode: 0o755 }
+)
 const bridge = spawnHostBridge(executable, directory, 'ephemeral')
 const errors = []
 let writes = 0
-bridge.on('host-error', error => errors.push(error))
-bridge.on('persist', event => {
+bridge.on('host-error', (error) => errors.push(error))
+bridge.on('persist', (event) => {
   writeFileSync(join(directory, 'workspace.json.tmp'), event.value)
   writes++
 })

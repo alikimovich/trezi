@@ -8,25 +8,40 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { adoptSession, afterTurn, beforeTurn, initChatIsolation, isolatedCwd, isolationSnapshot, releaseChat } from '../src/main/chat-isolation.ts'
+import {
+  adoptSession,
+  afterTurn,
+  beforeTurn,
+  initChatIsolation,
+  isolatedCwd,
+  isolationSnapshot,
+  releaseChat
+} from '../src/main/chat-isolation.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
 import { keepStoppedTurn } from '../src/main/stopped-turn.ts'
 
 // No unpark outside `clearPark` (src/main/chat-park.ts).
 const mainDir = new URL('../src/main/', import.meta.url)
 const unparks = readdirSync(mainDir, { recursive: true })
-  .filter(name => name.endsWith('.ts'))
-  .filter(name => /\.parked\s*=\s*false/.test(readFileSync(new URL(name, mainDir), 'utf8')))
+  .filter((name) => name.endsWith('.ts'))
+  .filter((name) => /\.parked\s*=\s*false/.test(readFileSync(new URL(name, mainDir), 'utf8')))
 assert.deepEqual(unparks, ['chat-park.ts'], 'only clearPark sets parked = false')
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-chat-landing-'))
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const git = (cwd, ...args) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const events = []
 const records = new Map()
 initChatIsolation({
   worktreesDir: () => join(dir, 'worktrees'),
-  store: () => ({ get: id => records.get(id), save: record => records.set(record.id, record), remove: id => records.delete(id) }),
-  getWindow: () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } })
+  store: () => ({
+    get: (id) => records.get(id),
+    save: (record) => records.set(record.id, record),
+    remove: (id) => records.delete(id)
+  }),
+  getWindow: () => ({
+    webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) }
+  })
 })
 
 const FILE = 'src/bar.ts'
@@ -64,7 +79,9 @@ function assertLanded(chat, { turn, title, content, revertable }) {
   })
   assert.equal(readFileSync(join(chat.root, FILE), 'utf8'), content)
   assert.equal(git(chat.root, 'log', '-1', '--format=%s'), title)
-  assert.ok(git(chat.root, 'log', '-1', '--format=%b').includes(`Trezi turn ${turn} (${chat.branch}).`))
+  assert.ok(
+    git(chat.root, 'log', '-1', '--format=%b').includes(`Trezi turn ${turn} (${chat.branch}).`)
+  )
   assert.equal(git(chat.root, 'status', '--porcelain'), '')
   assert.deepEqual(isolationSnapshot(chat.key), { state: 'isolated', branch: chat.branch })
   assert.equal(records.size, 0, 'the park record is dropped')
@@ -76,9 +93,18 @@ try {
   const done = await fixture()
   writeFileSync(join(done.cwd, FILE), 'export const bar = 1\n')
   assert.equal(await afterTurn(done.key, 'Set bar to one', [], 'success'), null)
-  const doneGroup = assertLanded(done, { turn: 1, title: 'Set bar to one', content: 'export const bar = 1\n', revertable: true })
+  const doneGroup = assertLanded(done, {
+    turn: 1,
+    title: 'Set bar to one',
+    content: 'export const bar = 1\n',
+    revertable: true
+  })
   assert.equal((await revertGroup(done.root, doneGroup)).ok, true)
-  assert.equal(readFileSync(join(done.root, FILE), 'utf8'), 'export const bar = 0\n', 'the finished turn reverts')
+  assert.equal(
+    readFileSync(join(done.root, FILE), 'utf8'),
+    'export const bar = 0\n',
+    'the finished turn reverts'
+  )
   await releaseChat(done.key)
 
   // A kept stopped turn lands through the same step, leaving its park.
@@ -96,14 +122,23 @@ try {
   })
   assert.deepEqual(result, { ok: true, files: [FILE], group: keptGroup })
   assert.equal((await revertGroup(kept.root, keptGroup)).ok, true)
-  assert.equal(readFileSync(join(kept.root, FILE), 'utf8'), 'export const bar = 0\n', 'the kept turn reverts')
+  assert.equal(
+    readFileSync(join(kept.root, FILE), 'utf8'),
+    'export const bar = 0\n',
+    'the kept turn reverts'
+  )
   await releaseChat(kept.key)
 
   // Work merged through a PR is not revertable, on either path.
   const pr = await fixture('https://github.com/example/app/pull/1')
   writeFileSync(join(pr.cwd, FILE), 'export const bar = 3\n')
   await afterTurn(pr.key, 'Set bar to three', [], 'success')
-  assertLanded(pr, { turn: 1, title: 'Set bar to three', content: 'export const bar = 3\n', revertable: false })
+  assertLanded(pr, {
+    turn: 1,
+    title: 'Set bar to three',
+    content: 'export const bar = 3\n',
+    revertable: false
+  })
   await beforeTurn(pr.key, 'more')
   writeFileSync(join(pr.cwd, FILE), 'export const bar = 4\n')
   await afterTurn(pr.key, 'Set bar to four', [], 'failed')

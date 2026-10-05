@@ -24,8 +24,17 @@ export async function checkSourceStamps(page: (code: string) => Promise<any>) {
     return { groups, consistent, healed, escaped };
   })()`)
   assert.deepEqual(result, {
-    groups: [['legacy', 'canonical', 'same'], ['conflict'], ['empty'], ['conflict', 'legacy', 'canonical', 'empty', 'same']],
-    consistent: true, healed: 'legacy', escaped: ['canonical']
+    groups: [
+      ['legacy', 'canonical', 'same'],
+      ['conflict'],
+      ['empty'],
+      ['conflict', 'legacy', 'canonical', 'empty', 'same']
+    ],
+    consistent: true,
+    healed: 'legacy',
+    escaped: ['canonical']
   })
-  console.log('Native DOM source stamps: canonical precedence, legacy fallback and HMR lookup passed.')
+  console.log(
+    'Native DOM source stamps: canonical precedence, legacy fallback and HMR lookup passed.'
+  )
 }

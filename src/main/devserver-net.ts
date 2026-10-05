@@ -67,7 +67,7 @@ export const URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)
 
 // Dev servers colorize output (e.g. a bold port) even with FORCE_COLOR=0; the
 // escape codes land inside the parsed URL and break it. Strip them first.
-// eslint-disable-next-line no-control-regex
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes start with ESC
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g
 
 export function stripAnsi(s: string): string {
@@ -75,7 +75,10 @@ export function stripAnsi(s: string): string {
 }
 
 export function normalizeUrl(raw: string): string {
-  return raw.replace('0.0.0.0', 'localhost').replace(/[.,)]*$/, '').replace(/\/$/, '')
+  return raw
+    .replace('0.0.0.0', 'localhost')
+    .replace(/[.,)]*$/, '')
+    .replace(/\/$/, '')
 }
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -142,7 +145,6 @@ export function defaultPorts(framework?: Framework): number[] {
       return []
   }
 }
-
 
 /**
  * If the user already runs this project's dev server, find it so we can attach

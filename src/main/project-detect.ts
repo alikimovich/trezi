@@ -1,4 +1,4 @@
-import { access, readFile, readdir } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { DetectedProject, Framework, PreviewKind } from '../shared/api'
 import { projectPackageManager } from './project-dependencies'
@@ -39,7 +39,10 @@ export function withPort(command: string, framework: Framework | undefined, port
     case 'next': {
       // npm consumes script flags unless separated; bun/pnpm forward them and
       // an extra '--' makes Next interpret --port as a project directory.
-      const separator = /^npm\s+(?:run|run-script)\b/.test(command.trim()) && !/\s--(?:\s|$)/.test(command) ? ' --' : ''
+      const separator =
+        /^npm\s+(?:run|run-script)\b/.test(command.trim()) && !/\s--(?:\s|$)/.test(command)
+          ? ' --'
+          : ''
       return `${command}${separator} --port ${port} -H ${PREVIEW_HOST}`
     }
     default:
@@ -96,7 +99,11 @@ export async function detectProject(root: string): Promise<DetectedProject> {
     // serve; otherwise there's nothing we know how to launch, so ask for a command.
     if (await findStaticEntry(root)) return staticProject(root)
     const entries = await readdir(root)
-    if (entries.every((entry) => ['.git', '.gitignore', '.DS_Store', '.trezi', '.praxis'].includes(entry))) {
+    if (
+      entries.every((entry) =>
+        ['.git', '.gitignore', '.DS_Store', '.trezi', '.praxis'].includes(entry)
+      )
+    ) {
       return { ...staticProject(root), framework: 'unknown', setupRequired: true }
     }
     throw new Error(

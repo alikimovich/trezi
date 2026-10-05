@@ -1,14 +1,20 @@
-import { previewEvidence } from './preview-evidence'
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
-import { type ChatState, chatDeps, emitIsolation, onChain, recreateWorkspace, states } from './chat-state'
 import {
-  completeTurn,
+  type ChatState,
+  chatDeps,
+  emitIsolation,
+  onChain,
+  recreateWorkspace,
+  states
+} from './chat-state'
+import {
   canReconcileText,
+  completeTurn,
   conflictMarkerFiles,
   createChatWorktree,
   discardParked,
@@ -19,12 +25,13 @@ import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
+import { previewEvidence } from './preview-evidence'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { TurnTerminalOutcome } from './turn-terminal'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
-export { initChatIsolation } from './chat-state'
 export { handleReclaimed, hasParkRecord } from './chat-park'
+export { initChatIsolation } from './chat-state'
 export {
   applyParkedBranch,
   discardParkedBranch,
@@ -225,7 +232,15 @@ export function afterTurn(
           st.resolvingFiles = markers.length ? markers : null
           upsertParkRecord(st, outcome.files, turn)
           if (!reconcileFiles)
-            emitIsolation(sessionKey, 'parked', st.wt.branch, outcome.files, undefined, undefined, st.interrupted ? 'interrupted' : undefined)
+            emitIsolation(
+              sessionKey,
+              'parked',
+              st.wt.branch,
+              outcome.files,
+              undefined,
+              undefined,
+              st.interrupted ? 'interrupted' : undefined
+            )
         } else if (outcome.newBase) {
           clearPark(st)
           st.wt.baseSha = outcome.newBase
@@ -268,8 +283,13 @@ export async function reclaimIdleWorkspace(
 ): Promise<'removed' | 'kept-dirty' | 'skipped'> {
   const st = states.get(sessionKey)
   const eligible = () =>
-    !!st && states.get(sessionKey) === st && !st.reclaimed && !st.parked && !st.resolvingFiles &&
-    st.lastUsed <= idleBefore && !busy(sessionKey)
+    !!st &&
+    states.get(sessionKey) === st &&
+    !st.reclaimed &&
+    !st.parked &&
+    !st.resolvingFiles &&
+    st.lastUsed <= idleBefore &&
+    !busy(sessionKey)
   if (!st || !eligible()) return 'skipped'
   return onChain(st, async () => {
     if (!eligible()) return 'skipped' as const
@@ -325,7 +345,10 @@ export async function releaseChat(
           upsertParkRecord(st, outcome.files)
         }
       }
-      await removeWorktree(st.liveRoot, st.wt, { keepBranch: st.parked, intent: st.parked ? 'release' : 'landed' })
+      await removeWorktree(st.liveRoot, st.wt, {
+        keepBranch: st.parked,
+        intent: st.parked ? 'release' : 'landed'
+      })
     })
   } catch {
     /* teardown never throws */
@@ -410,8 +433,14 @@ export async function agentWorkspaceEvidence(sessionKey: string, root: string) {
     liveRoot,
     checkout: st?.wt.path ?? root,
     worktreeBaseRevision: st?.wt.baseSha ?? null,
-    liveRevision: await gitOut(liveRoot, ['rev-parse', 'HEAD']).then(s => s.trim(), () => null),
-    liveDirty: await gitOut(liveRoot, ['status', '--porcelain']).then(s => Boolean(s.trim()), () => null),
+    liveRevision: await gitOut(liveRoot, ['rev-parse', 'HEAD']).then(
+      (s) => s.trim(),
+      () => null
+    ),
+    liveDirty: await gitOut(liveRoot, ['status', '--porcelain']).then(
+      (s) => Boolean(s.trim()),
+      () => null
+    ),
     preview: previewEvidence(liveRoot)
   }
 }

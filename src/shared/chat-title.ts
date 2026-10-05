@@ -38,10 +38,12 @@ const SYSTEM_TEXT: RegExp[] = [
 /** An error, auth or system message rather than real conversation content. */
 export function isSystemText(text: string): boolean {
   const t = text.replace(/\s+/g, ' ').trim().toLowerCase()
-  return !!t && SYSTEM_TEXT.some(pattern => pattern.test(t))
+  return !!t && SYSTEM_TEXT.some((pattern) => pattern.test(t))
 }
 
 /** A stored title as it should be shown: one that came from an error becomes neutral. */
-export function migrateChatTitle<T extends string | undefined>(title: T): T | typeof NEUTRAL_CHAT_TITLE {
+export function migrateChatTitle<T extends string | undefined>(
+  title: T
+): T | typeof NEUTRAL_CHAT_TITLE {
   return title && isSystemText(title) ? NEUTRAL_CHAT_TITLE : title
 }

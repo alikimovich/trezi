@@ -18,7 +18,11 @@
  *
  * Run with: bun test/repository-owner.mjs
  */
-import { commitLiveTurn, commitTitle, committableFiles } from '../src/main/live-commit.ts'
+
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   afterTurn,
   beforeTurn,
@@ -27,11 +31,8 @@ import {
   isolatedCwd,
   releaseChat
 } from '../src/main/chat-isolation.ts'
+import { commitLiveTurn, commitTitle, committableFiles } from '../src/main/live-commit.ts'
 import { aheadOfBase, changedSince, defaultBase } from '../src/main/publish-scope.ts'
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
 const base = mkdtempSync(join(tmpdir(), 'trezi-lc-'))
 let failed = 0
@@ -230,7 +231,10 @@ try {
     writeFileSync(join(cwd, 'a.txt'), 'turn one\n')
     afterTurn(key, 'make the header blue', [])
     ok(await waitForCommits(2), 'turn 1 committed on the live checkout')
-    ok(await waitFor(() => !branchExists(repo, branch)), 'a successfully landed turn deletes its branch')
+    ok(
+      await waitFor(() => !branchExists(repo, branch)),
+      'a successfully landed turn deletes its branch'
+    )
     ok(log(repo)[0] === 'make the header blue', `turn 1 subject (got ${log(repo)[0]})`)
 
     await beforeTurn(key, 'next')
@@ -241,7 +245,10 @@ try {
     ok(log(repo)[0] === 'add a footer', `turn 2 subject (got ${log(repo)[0]})`)
     ok(commitFiles(repo).join(',') === 'b.txt', 'turn 2 commits only its own file')
     ok(porcelain(repo).length === 0, 'the live checkout is clean between turns')
-    ok(await waitFor(() => !branchExists(repo, branch)), 'the second successful landing deletes the branch again')
+    ok(
+      await waitFor(() => !branchExists(repo, branch)),
+      'the second successful landing deletes the branch again'
+    )
 
     await releaseChat(key)
   }

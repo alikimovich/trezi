@@ -25,11 +25,18 @@ export function recordConsole(detail: unknown) {
   const split = detail.indexOf('\u0000')
   const level = detail.slice(0, split) as ConsoleEntry['level']
   if (split < 0 || !CONSOLE_LEVELS.includes(level)) return
-  entries.push({ seq: ++seq, level, text: detail.slice(split + 1, split + 1 + MAX_TEXT), at: Date.now() })
+  entries.push({
+    seq: ++seq,
+    level,
+    text: detail.slice(split + 1, split + 1 + MAX_TEXT),
+    at: Date.now()
+  })
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES)
 }
 
-export function readConsole(options: { since?: number; limit?: number; errorsOnly?: boolean } = {}) {
+export function readConsole(
+  options: { since?: number; limit?: number; errorsOnly?: boolean } = {}
+) {
   const since = Number(options.since) || 0
   const limit = Math.max(1, Math.min(MAX_ENTRIES, Math.floor(Number(options.limit) || 50)))
   const matching = entries.filter(

@@ -59,27 +59,47 @@ eq(lockfilesToRestore('\n\n'), [], 'blank lines → nothing to restore')
 const cli = join(repoRoot, 'bin/trezi')
 const help = spawnSync(cli, ['--help'], { encoding: 'utf8' })
 assert(help.status === 0, 'CLI help exits successfully')
-for (const text of ['trezi <folder>', 'trezi .', '--update', '--version']) assert(help.stdout.includes(text), `CLI help documents ${text}`)
+for (const text of ['trezi <folder>', 'trezi .', '--update', '--version'])
+  assert(help.stdout.includes(text), `CLI help documents ${text}`)
 assert(!help.stdout.includes('--remote'), 'CLI no longer advertises retired remote mode')
 const version = spawnSync(cli, ['--version'], { encoding: 'utf8' })
 // LKM-143: the built app's stamp when there is one, else the checkout's; Settings shows the same label.
 const builtPlist = join(repoRoot, 'out/native/Trezi.app/Contents/Info.plist')
-const stamp = key => spawnSync('plutil', ['-extract', key, 'raw', '-o', '-', builtPlist], { encoding: 'utf8' })
-const expectedVersion = existsSync(builtPlist) && stamp('TreziCommit').status === 0
-  ? versionLabel({ version: stamp('CFBundleShortVersionString').stdout.trim(), build: stamp('CFBundleVersion').stdout.trim(), commit: stamp('TreziCommit').stdout.trim() })
-  : versionLabel(buildInfo(repoRoot))
+const stamp = (key) =>
+  spawnSync('plutil', ['-extract', key, 'raw', '-o', '-', builtPlist], { encoding: 'utf8' })
+const expectedVersion =
+  existsSync(builtPlist) && stamp('TreziCommit').status === 0
+    ? versionLabel({
+        version: stamp('CFBundleShortVersionString').stdout.trim(),
+        build: stamp('CFBundleVersion').stdout.trim(),
+        commit: stamp('TreziCommit').stdout.trim()
+      })
+    : versionLabel(buildInfo(repoRoot))
 eq(version.stdout.trim(), expectedVersion, 'CLI prints "Trezi X.Y.Z (build N, sha)"')
-assert(/^Trezi \d+\.\d+\.\d+\S* \(build \d+, [0-9a-f]{7,}\)$/.test(version.stdout.trim()), `CLI version label format: ${version.stdout}`)
+assert(
+  /^Trezi \d+\.\d+\.\d+\S* \(build \d+, [0-9a-f]{7,}\)$/.test(version.stdout.trim()),
+  `CLI version label format: ${version.stdout}`
+)
 const retired = spawnSync(cli, ['serve', '/tmp'], { encoding: 'utf8' })
-assert(retired.status === 1 && retired.stderr.includes('retired'), 'retired browser mode fails with migration guidance')
+assert(
+  retired.status === 1 && retired.stderr.includes('retired'),
+  'retired browser mode fails with migration guidance'
+)
 const unknown = spawnSync(cli, ['--remote'], { encoding: 'utf8' })
-assert(unknown.status === 1 && unknown.stderr.includes('Unknown option'), 'unknown options are refused')
+assert(
+  unknown.status === 1 && unknown.stderr.includes('Unknown option'),
+  'unknown options are refused'
+)
 // An install whose `trezi` link still points at bin/trezi.mjs reaches the same command.
-const delegated = spawnSync(process.execPath, [join(repoRoot, 'bin/trezi.mjs'), '--version'], { encoding: 'utf8' })
+const delegated = spawnSync(process.execPath, [join(repoRoot, 'bin/trezi.mjs'), '--version'], {
+  encoding: 'utf8'
+})
 eq(delegated.stdout, version.stdout, 'bin/trezi.mjs hands launch arguments to bin/trezi')
 
 if (failed) {
   console.error(`TREZI-CLI FAILED — ${failed} assertion(s)`)
   process.exit(1)
 }
-console.log('TREZI-CLI OK — lockfilesToRestore picks dirty tracked lockfiles; bin/trezi help, version and refusals')
+console.log(
+  'TREZI-CLI OK — lockfilesToRestore picks dirty tracked lockfiles; bin/trezi help, version and refusals'
+)

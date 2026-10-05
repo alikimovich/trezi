@@ -15,16 +15,24 @@ import { setSourceOwner } from '../../src/main/source-owner.ts'
 import { compileEditingFixture, startEditingFixture } from './editing-fixture.mjs'
 
 export const serviceProfile = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-editing-profile-')))
-export const serviceFixture = await startEditingFixture(compileEditingFixture(), serviceProfile,
-  { REPOSITORY_WORKTREES_ROOT: realpathSync(tmpdir()) })
+export const serviceFixture = await startEditingFixture(compileEditingFixture(), serviceProfile, {
+  REPOSITORY_WORKTREES_ROOT: realpathSync(tmpdir())
+})
 const { conversation, repository, source, editing } = serviceFixture.owners()
 setConversationOwner(conversation)
 setRepositoryOwner(repository)
 setSourceOwner(source)
 setEditingOwner(editing)
 serviceFixture.child.unref()
-for (const stream of [serviceFixture.child.stdin, serviceFixture.child.stdout, serviceFixture.child.stderr]) stream.unref?.()
+for (const stream of [
+  serviceFixture.child.stdin,
+  serviceFixture.child.stdout,
+  serviceFixture.child.stderr
+])
+  stream.unref?.()
 process.on('exit', () => {
-  try { serviceFixture.child.kill('SIGKILL') } catch {}
+  try {
+    serviceFixture.child.kill('SIGKILL')
+  } catch {}
   rmSync(serviceProfile, { recursive: true, force: true })
 })

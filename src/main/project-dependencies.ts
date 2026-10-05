@@ -29,14 +29,17 @@ let serviceInstaller: ((root: string) => Promise<unknown>) | null = null
 
 /** The service runs and supervises installs (S06); set by the native entry point.
  * LKM-111 removed the in-process install that ran without one. */
-export function setDependencyInstaller(installer: ((root: string) => Promise<unknown>) | null): void {
+export function setDependencyInstaller(
+  installer: ((root: string) => Promise<unknown>) | null
+): void {
   serviceInstaller = installer
 }
 
 /** Install in the live checkout (worktree-local node_modules are never landed by Git),
  * in the repository's lane. The service logs its own progress and output. */
 export async function installProjectDependencies(root: string): Promise<void> {
-  if (!serviceInstaller) throw new Error('Trezi’s service is not running, so project dependencies cannot be installed.')
+  if (!serviceInstaller)
+    throw new Error('Trezi’s service is not running, so project dependencies cannot be installed.')
   const install = serviceInstaller
   return enqueueRepoWrite(root, async () => {
     await install(root)

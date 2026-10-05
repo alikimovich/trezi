@@ -2,16 +2,52 @@
 export type UUID = string
 /** Canonical unsigned decimal UInt64, never a JSON number. */
 export type Counter = string
-export type JSONValue = null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue }
+export type JSONValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JSONValue[]
+  | { [key: string]: JSONValue }
 export type JSONObject = { [key: string]: JSONValue }
-export interface WireVersion { major: 1; minor: 0 }
-export interface Scope { project?: UUID; chat?: UUID; turn?: UUID; checkout?: UUID; document?: UUID }
-export interface Revision { epoch: UUID; counter: Counter }
-export interface Cursor { serviceEpoch: UUID; sequence: Counter }
-export interface Capability { name: string; version: number }
-export type FailureCode = 'invalidRequest' | 'unsupportedVersion' | 'unsupportedCapability'
-  | 'unauthorized' | 'notFound' | 'conflict' | 'busy' | 'cancelled' | 'deadlineExceeded'
-  | 'unavailable' | 'ioFailure' | 'providerFailure' | 'recoveryRequired' | 'idempotencyMismatch'
+export interface WireVersion {
+  major: 1
+  minor: 0
+}
+export interface Scope {
+  project?: UUID
+  chat?: UUID
+  turn?: UUID
+  checkout?: UUID
+  document?: UUID
+}
+export interface Revision {
+  epoch: UUID
+  counter: Counter
+}
+export interface Cursor {
+  serviceEpoch: UUID
+  sequence: Counter
+}
+export interface Capability {
+  name: string
+  version: number
+}
+export type FailureCode =
+  | 'invalidRequest'
+  | 'unsupportedVersion'
+  | 'unsupportedCapability'
+  | 'unauthorized'
+  | 'notFound'
+  | 'conflict'
+  | 'busy'
+  | 'cancelled'
+  | 'deadlineExceeded'
+  | 'unavailable'
+  | 'ioFailure'
+  | 'providerFailure'
+  | 'recoveryRequired'
+  | 'idempotencyMismatch'
 export interface ServiceFailure {
   code: FailureCode
   message: string
@@ -70,7 +106,12 @@ export interface CancelPayload {
   scope: Scope
   target: UUID
 }
-export interface SnapshotPayload { scope: Scope; revision: Revision; cursor: Cursor; value: JSONObject }
+export interface SnapshotPayload {
+  scope: Scope
+  revision: Revision
+  cursor: Cursor
+  value: JSONObject
+}
 export interface Payloads {
   request: RequestPayload
   reply: ReplyPayload
@@ -80,9 +121,14 @@ export interface Payloads {
   cancel: CancelPayload
   snapshot: SnapshotPayload
 }
-export type Envelope = { [K in keyof Payloads]: { version: WireVersion; kind: K; payload: Payloads[K] } }[keyof Payloads]
+export type Envelope = {
+  [K in keyof Payloads]: { version: WireVersion; kind: K; payload: Payloads[K] }
+}[keyof Payloads]
 /** Separate fields: both identifiers may contain dots. */
-export interface ServiceMethod { service: string; method: string }
+export interface ServiceMethod {
+  service: string
+  method: string
+}
 export interface ValidationContext {
   /** Supplied by a trusted endpoint binding, never by the caller's payload. */
   expectedScope?: Scope

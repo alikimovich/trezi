@@ -45,7 +45,8 @@ const ownerPersist = (dir, now) => (backend, models) => {
   try {
     doc = JSON.parse(readFileSync(file, 'utf8'))
   } catch {}
-  if (!doc || typeof doc.entries !== 'object' || Array.isArray(doc.entries)) doc = { version: 1, entries: {} }
+  if (!doc || typeof doc.entries !== 'object' || Array.isArray(doc.entries))
+    doc = { version: 1, entries: {} }
   doc.entries[backend] = { at: now(), models }
   try {
     mkdirSync(dir, { recursive: true })
@@ -191,7 +192,11 @@ try {
   // --- cache: hit, expiry, persistence ---------------------------------------
   let clock = 1_000_000
   const cacheDir = join(base, 'cache')
-  const cache = createModelCatalog({ baseDir: cacheDir, now: () => clock, persist: ownerPersist(cacheDir, () => clock) })
+  const cache = createModelCatalog({
+    baseDir: cacheDir,
+    now: () => clock,
+    persist: ownerPersist(cacheDir, () => clock)
+  })
 
   ok(cache.get('codex') === null, 'a never-populated backend reads as null (not [])')
   ok(cache.isStale('codex') === true, 'a never-populated backend is stale — go discover')
@@ -223,7 +228,11 @@ try {
 
   // Persistence: a second catalog over the same dir sees the first one's writes,
   // which is what makes a fresh launch show real models before any session exists.
-  const reopened = createModelCatalog({ baseDir: cacheDir, now: () => clock, persist: ownerPersist(cacheDir, () => clock) })
+  const reopened = createModelCatalog({
+    baseDir: cacheDir,
+    now: () => clock,
+    persist: ownerPersist(cacheDir, () => clock)
+  })
   ok(
     reopened
       .get('codex')
@@ -258,7 +267,11 @@ try {
   for (const [what, body] of corruptCases) {
     const dir = mkdtempSync(join(base, 'corrupt-'))
     writeFileSync(join(dir, 'model-catalog.json'), body, 'utf8')
-    const c = createModelCatalog({ baseDir: dir, now: () => clock, persist: ownerPersist(dir, () => clock) })
+    const c = createModelCatalog({
+      baseDir: dir,
+      now: () => clock,
+      persist: ownerPersist(dir, () => clock)
+    })
     ok(c.get('codex') === null, `${what}: degrades to empty`)
     ok(c.isStale('codex') === true, `${what}: reads as stale, so discovery reruns`)
     // …and it is recoverable: the next successful probe simply overwrites it.
@@ -279,7 +292,11 @@ try {
     }),
     'utf8'
   )
-  const half = createModelCatalog({ baseDir: halfDir, now: () => clock, persist: ownerPersist(halfDir, () => clock) })
+  const half = createModelCatalog({
+    baseDir: halfDir,
+    now: () => clock,
+    persist: ownerPersist(halfDir, () => clock)
+  })
   ok(half.get('codex') === null, 'the mangled backend reads as absent')
   ok(half.get('claude')?.[0]?.id === 'sonnet', 'the intact backend is unaffected')
 

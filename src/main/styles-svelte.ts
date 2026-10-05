@@ -95,7 +95,11 @@ const hasTransitionShorthand = (styleValue: string): boolean =>
  * neither S1 nor S2 can reach — without saying so, the agent hunts for a class
  * or style attribute that isn't there.
  */
-export const styleAgentPrompt = (edit: StyleEdit, root: string, token: ResolvedTokenRef | null): string => {
+export const styleAgentPrompt = (
+  edit: StyleEdit,
+  root: string,
+  token: ResolvedTokenRef | null
+): string => {
   const what = token
     ? `to the design token \`${token.name}\` (\`${token.ref}\`, currently \`${edit.value}\`), ` +
       'using the token reference rather than the literal value,'
@@ -103,10 +107,11 @@ export const styleAgentPrompt = (edit: StyleEdit, root: string, token: ResolvedT
   // Caller (styles.ts) has already bounded/validated `authored`. Doubles as a
   // greppable needle for finding the declaration (often a global stylesheet,
   // not the component itself).
-  const unit = edit.authored && !token
-    ? ` It is currently authored as \`${edit.authored}\` — keep the project's unit and ` +
-      'idiom, converting the target value if needed.'
-    : ''
+  const unit =
+    edit.authored && !token
+      ? ` It is currently authored as \`${edit.authored}\` — keep the project's unit and ` +
+        'idiom, converting the target value if needed.'
+      : ''
   return (
     `Set the CSS property \`${edit.prop}\` ${what} on the element at ${projectRelative(edit.source, root)}.${unit} ` +
     "Its styles may live in this component's own `<style>` block or a global " +
@@ -146,7 +151,10 @@ export async function applyStyleEditSvelte(
   // A spread could carry class/style — the element's final attributes are unknowable.
   if (hasAttrOfType(el, 'SpreadAttribute')) return toAgent()
 
-  const commit = async (next: string, strategy: 'tailwind' | 'inline'): Promise<StyleEditResult> => {
+  const commit = async (
+    next: string,
+    strategy: 'tailwind' | 'inline'
+  ): Promise<StyleEditResult> => {
     const key = `${edit.source}:style:${edit.prop}`
     const res = await commitEdit(root, resolved.file, code, next, key, edit.group)
     return res.applied
@@ -158,7 +166,11 @@ export async function applyStyleEditSvelte(
   // could toggle a same-family utility we can't see, so its presence forfeits
   // the rewrite (the inline path below still works — it wins on specificity).
   const classAttr = findAttr(el, 'class')
-  if (looksTailwind(edit.classes) && classAttr?.literal != null && !hasAttrOfType(el, 'ClassDirective')) {
+  if (
+    looksTailwind(edit.classes) &&
+    classAttr?.literal != null &&
+    !hasAttrOfType(el, 'ClassDirective')
+  ) {
     const rewritten = tokenClassRewrite(classAttr.literal, edit, token)
     if (rewritten != null && SPLICE_SAFE_RE.test(rewritten)) {
       // findAttr spans the WHOLE attribute (`class="…"`) — rewrite it.

@@ -42,7 +42,10 @@ export function runProviderHelper(
   let session: ProviderSession | null = null
   let opening = false
   let toolSequence = 0
-  const tools = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>()
+  const tools = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >()
 
   // What the provider added to its record, sent before the event that followed it.
   let sentEntries = 0
@@ -55,17 +58,25 @@ export function runProviderHelper(
     sentEntries = record.transcript.length
     const files = record.filesTouched.filter((file) => !sentFiles.has(file))
     for (const file of files) sentFiles.add(file)
-    const resume = record.sdkSessionId && record.sdkSessionId !== sentResume ? record.sdkSessionId : undefined
+    const resume =
+      record.sdkSessionId && record.sdkSessionId !== sentResume ? record.sdkSessionId : undefined
     if (resume) sentResume = resume
     if (entries.length || files.length || resume) {
-      write({ type: 'record', entries, ...(files.length ? { filesTouched: files } : {}), ...(resume ? { sdkSessionId: resume } : {}) })
+      write({
+        type: 'record',
+        entries,
+        ...(files.length ? { filesTouched: files } : {}),
+        ...(resume ? { sdkSessionId: resume } : {})
+      })
     }
   }
 
   let heartbeat: ReturnType<typeof setInterval> | undefined
   const beat = (on: boolean): void => {
     clearInterval(heartbeat)
-    heartbeat = on ? setInterval(() => write({ type: 'event', event: { type: 'progress' } }), heartbeatMs) : undefined
+    heartbeat = on
+      ? setInterval(() => write({ type: 'event', event: { type: 'progress' } }), heartbeatMs)
+      : undefined
   }
 
   const onEvent = (tagged: AgentEvent): void => {
@@ -78,7 +89,13 @@ export function runProviderHelper(
     flushRecord()
     if (event.type === 'permission-request') {
       const r = event.request
-      write({ type: 'permission', id: r.id, tool: r.toolName, title: r.title, ...(r.detail ? { detail: r.detail } : {}) })
+      write({
+        type: 'permission',
+        id: r.id,
+        tool: r.toolName,
+        title: r.title,
+        ...(r.detail ? { detail: r.detail } : {})
+      })
     } else if (event.type === 'question-request') {
       write({ type: 'question', id: event.request.id, questions: event.request.questions })
     } else {
@@ -98,10 +115,15 @@ export function runProviderHelper(
   const handle = async (frame: Record<string, any>): Promise<void> => {
     switch (frame.type) {
       case 'open': {
-        if (opening || session) return write({ type: 'failed', message: 'The helper is already open.' })
+        if (opening || session)
+          return write({ type: 'failed', message: 'The helper is already open.' })
         opening = true
         const provider = providers[frame.provider]
-        if (!provider) return write({ type: 'failed', message: `This helper does not host ${String(frame.provider)}.` })
+        if (!provider)
+          return write({
+            type: 'failed',
+            message: `This helper does not host ${String(frame.provider)}.`
+          })
         try {
           session = await provider.startSession(frame.root, frame.options ?? {}, () => null, {
             ...(frame.context ?? {}),
@@ -126,7 +148,10 @@ export function runProviderHelper(
       }
       case 'send':
         if (session) beat(true)
-        return session?.send(String(frame.text ?? ''), Array.isArray(frame.images) ? frame.images : undefined)
+        return session?.send(
+          String(frame.text ?? ''),
+          Array.isArray(frame.images) ? frame.images : undefined
+        )
       case 'interrupt': {
         const s = session
         if (!s) return write({ type: 'settled' })
@@ -144,7 +169,8 @@ export function runProviderHelper(
         return session?.pendingQuestions?.get(frame.id)?.settle(frame.answers ?? null)
       case 'configure':
         if (typeof frame.model === 'string') await session?.setModel?.(frame.model).catch(() => {})
-        if (typeof frame.mode === 'string') await session?.setPermissionMode?.(frame.mode as PermissionMode).catch(() => {})
+        if (typeof frame.mode === 'string')
+          await session?.setPermissionMode?.(frame.mode as PermissionMode).catch(() => {})
         return
       case 'tool-result':
       case 'tool-error': {
@@ -163,9 +189,15 @@ export function runProviderHelper(
         try {
           report = provider?.checkLogin
             ? await provider.checkLogin()
-            : { loggedIn: null, detail: `This helper has no login check for ${String(frame.provider)}.` }
+            : {
+                loggedIn: null,
+                detail: `This helper has no login check for ${String(frame.provider)}.`
+              }
         } catch (error) {
-          report = { loggedIn: null, detail: error instanceof Error ? error.message : String(error) }
+          report = {
+            loggedIn: null,
+            detail: error instanceof Error ? error.message : String(error)
+          }
         }
         write({ type: 'diagnosis', report })
         return stop(0)
@@ -188,7 +220,8 @@ export function runProviderHelper(
     const received = frame as Record<string, any>
     // A tool answer settles at once: the frame waiting on it may be `open` itself (Codex
     // checks its Trezi tool bridge while starting, LKM-131).
-    if (received.type === 'tool-result' || received.type === 'tool-error') return void handle(received).catch(() => {})
+    if (received.type === 'tool-result' || received.type === 'tool-error')
+      return void handle(received).catch(() => {})
     // In order: a mode change lands before the turn sent after it.
     queue = queue.then(() => handle(received)).catch(() => {})
   })

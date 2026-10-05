@@ -1,23 +1,21 @@
 // The islands go through the service's editing and source owners: the real Swift ones.
 import './with-service-owners.mjs'
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
-import { ChatIslands } from '../../src/main/chat-islands.ts'
-import { mkdtemp, cp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
+import { existsSync } from 'node:fs'
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { ChatIslands } from '../../src/main/chat-islands.ts'
 import { findFreePort, waitForReachable } from '../../src/main/devserver-net.ts'
 import { PREVIEW_HOST, withPort } from '../../src/main/project-detect.ts'
-import { spawnHostBridge } from './host-bridge.mjs'
+import { MDX_HELPER_CONTENT } from '../../src/main/setup-mdx.ts'
 import { NEXT_ADAPTER_CONTENT, NEXT_LOADER_CONTENT } from '../../src/main/setup-next.ts'
 import { REACT_HELPER_CONTENT } from '../../src/main/setup-react.ts'
-import { MDX_HELPER_CONTENT } from '../../src/main/setup-mdx.ts'
-if (
-  process.platform !== 'darwin' ||
-  !existsSync('out/native/Trezi.app/Contents/MacOS/TreziHost')
-) {
+import { spawnHostBridge } from './host-bridge.mjs'
+
+if (process.platform !== 'darwin' || !existsSync('out/native/Trezi.app/Contents/MacOS/TreziHost')) {
   console.log('NATIVE-NEXT-HMR SKIP — build the macOS native host first.')
   process.exit(0)
 }
@@ -82,12 +80,24 @@ export default function Effect() {
   // started with the same command and port, in its own process group.
   const port = await findFreePort(7777)
   server = spawn('/bin/sh', ['-c', withPort('bun run dev --webpack', 'next', port)], {
-    cwd: root, detached: true, stdio: 'inherit',
-    env: { ...process.env, FORCE_COLOR: '0', BROWSER: 'none', PORT: String(port), HOST: PREVIEW_HOST, HOSTNAME: PREVIEW_HOST }
+    cwd: root,
+    detached: true,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      FORCE_COLOR: '0',
+      BROWSER: 'none',
+      PORT: String(port),
+      HOST: PREVIEW_HOST,
+      HOSTNAME: PREVIEW_HOST
+    }
   })
   const info = { url: `http://${PREVIEW_HOST}:${port}` }
   const deadline = Date.now() + 120000
-  assert.ok(await waitForReachable([info.url], () => Date.now() > deadline || server.exitCode !== null), 'the Next dev server is reachable')
+  assert.ok(
+    await waitForReachable([info.url], () => Date.now() > deadline || server.exitCode !== null),
+    'the Next dev server is reachable'
+  )
   host = spawnHostBridge(
     resolve('out/native/Trezi.app/Contents/MacOS/TreziHost'),
     resolve('out/native'),
@@ -230,6 +240,8 @@ export default function Effect() {
   )
 } finally {
   host?.send('quit')
-  try { if (server?.pid) process.kill(-server.pid, 'SIGTERM') } catch {}
+  try {
+    if (server?.pid) process.kill(-server.pid, 'SIGTERM')
+  } catch {}
   await rm(root, { recursive: true, force: true })
 }

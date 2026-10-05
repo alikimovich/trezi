@@ -162,7 +162,16 @@ try {
   const server = status.data.find((entry) => entry.name === 'trezi')
   assert.ok(server, 'Codex connects to the Trezi MCP server')
   assert.ok(!server.toolsError, 'Codex can list the tools')
-  for (const tool of ['chat_island', 'preview_screenshot', 'preview_location', 'preview_inspect', 'preview_evaluate', 'preview_console', 'preview_viewport', 'workspace_state']) {
+  for (const tool of [
+    'chat_island',
+    'preview_screenshot',
+    'preview_location',
+    'preview_inspect',
+    'preview_evaluate',
+    'preview_console',
+    'preview_viewport',
+    'workspace_state'
+  ]) {
     assert.ok(server.tools[tool], `Codex exposes ${tool}`)
   }
   assert.equal(config.mcp_servers.trezi.required, true, 'future turns cannot silently omit Trezi')

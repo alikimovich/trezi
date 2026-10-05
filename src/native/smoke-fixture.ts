@@ -15,7 +15,13 @@ export function writeSmokeProject(testDir: string): string {
   const fixture = join(testDir, 'Folder Alpha')
   mkdirSync(fixture)
   // A decodable raster icon exercises stored artwork in native sidebar verification.
-  writeFileSync(join(fixture, 'favicon.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64'))
+  writeFileSync(
+    join(fixture, 'favicon.png'),
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'base64'
+    )
+  )
   writeFileSync(
     join(fixture, 'index.html'),
     '<!doctype html>\n<html><body>\n<h1 id="native-title" data-trezi-source="index.html:3:1">Native Trezi fixture</h1>\n<p>Bun owns this server.</p><script>window.previewInputs=[];for(const type of ["keydown","keyup","keypress","pointerdown","mousedown","click","dblclick","wheel","input"])window.addEventListener(type,event=>window.previewInputs.push(event.type),true)</script></body></html>'

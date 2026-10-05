@@ -195,29 +195,53 @@ export function elevationScale(
 }
 
 export interface ShadowLightInput {
-  x: number; y: number; distance: number; blur: number; layers: number; decay: number; color: string
+  x: number
+  y: number
+  distance: number
+  blur: number
+  layers: number
+  decay: number
+  color: string
 }
 
 /** Screen-space light position: shadows fall opposite the light. Independent
  * blur permits a centered ambient shadow even when distance is zero. */
 export function shadowLight(input: ShadowLightInput): LayeredShadowResult {
   for (const [key, min, max] of [
-    ['x', -1, 1], ['y', -1, 1], ['distance', 0, 64], ['blur', 0, 80],
-    ['layers', 1, 8], ['decay', 0, 1]
+    ['x', -1, 1],
+    ['y', -1, 1],
+    ['distance', 0, 64],
+    ['blur', 0, 80],
+    ['layers', 1, 8],
+    ['decay', 0, 1]
   ] as const) {
     const n = input[key]
     if (!Number.isFinite(n) || n < min || n > max) throw new Error(`Invalid shadow ${key}.`)
   }
   if (!Number.isInteger(input.layers)) throw new Error('Shadow layers must be an integer.')
-  const color = typeof input.color === 'string' && /^rgba\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d*\.?\d+)\s*\)$/.exec(input.color)
+  const color =
+    typeof input.color === 'string' &&
+    /^rgba\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d*\.?\d+)\s*\)$/.exec(
+      input.color
+    )
   if (!color) throw new Error('Shadow color must be rgba(r, g, b, a).')
   const [r, g, b, a] = color.slice(1).map(Number)
-  if ([r, g, b].some(n => n > 255) || a > 1) throw new Error('Invalid shadow color channels.')
+  if ([r, g, b].some((n) => n > 255) || a > 1) throw new Error('Invalid shadow color channels.')
   const round = (n: number) => Number(n.toFixed(3))
   const layers = Array.from({ length: input.layers }, (_, i): ShadowLayer => {
     const f = ((i + 1) / input.layers) ** 2
-    return { xPx: round(-input.x * input.distance * f), yPx: round(-input.y * input.distance * f),
-      blurPx: round(input.blur * f), spreadPx: 0, alpha: round(a * input.decay ** i) }
+    return {
+      xPx: round(-input.x * input.distance * f),
+      yPx: round(-input.y * input.distance * f),
+      blurPx: round(input.blur * f),
+      spreadPx: 0,
+      alpha: round(a * input.decay ** i)
+    }
   })
-  return { layers, css: layers.map(l => `${l.xPx}px ${l.yPx}px ${l.blurPx}px ${rgba([r, g, b], l.alpha)}`).join(', ') }
+  return {
+    layers,
+    css: layers
+      .map((l) => `${l.xPx}px ${l.yPx}px ${l.blurPx}px ${rgba([r, g, b], l.alpha)}`)
+      .join(', ')
+  }
 }

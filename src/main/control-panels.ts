@@ -1,6 +1,6 @@
-import { views, ipcMain } from '../native/platform'
 import { readFile, stat } from 'fs/promises'
 import { isAbsolute, join, normalize } from 'path'
+import { ipcMain, views } from '../native/platform'
 import type {
   ControlPanelManifest,
   ResolvedControlPanel,
@@ -16,8 +16,8 @@ import {
   upsertPanel,
   validateManifest
 } from './control-manifest'
-import { commitEdit, withinRoot } from './props'
 import { editingOwner } from './editing-owner'
+import { commitEdit, withinRoot } from './props'
 import { contentHash } from './source-owner'
 
 /**
@@ -105,8 +105,16 @@ async function writeStore(
   hash: string | null
 ): Promise<void> {
   const store: ControlStore = { version: 1, panels: [...panels, ...preserved] }
-  const result = await editingOwner().sidecar(root, 'control-panels.json', hash, JSON.stringify(store, null, 2) + '\n')
-  if (!result.ok) throw new Error('.trezi/control-panels.json changed while saving; nothing was written. Try again.')
+  const result = await editingOwner().sidecar(
+    root,
+    'control-panels.json',
+    hash,
+    JSON.stringify(store, null, 2) + '\n'
+  )
+  if (!result.ok)
+    throw new Error(
+      '.trezi/control-panels.json changed while saving; nothing was written. Try again.'
+    )
 }
 
 // Main is the only writer, but two IPC calls can interleave at their awaits.
@@ -275,7 +283,7 @@ export function registerControlsIpc(): void {
     // panel locally, so main's cached panel state and the renderer's fetched
     // list both keep the deleted panel — it would come back on the next island
     // reload and could still be picked as a Regenerate target.
-    for (const w of [...views.values()].filter(view => view.id !== 'preview'))
+    for (const w of [...views.values()].filter((view) => view.id !== 'preview'))
       if (!w.webContents.isDestroyed()) w.webContents.send('controls:updated', { root })
     return panels
   })

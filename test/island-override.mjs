@@ -7,9 +7,15 @@ import assert from 'node:assert/strict'
 const observers = new Set()
 let pending = false
 class FakeMutationObserver {
-  constructor(callback) { this.callback = callback }
-  observe() { observers.add(this) }
-  disconnect() { observers.delete(this) }
+  constructor(callback) {
+    this.callback = callback
+  }
+  observe() {
+    observers.add(this)
+  }
+  disconnect() {
+    observers.delete(this)
+  }
 }
 /** The microtask checkpoint after a task: observers see the batched records before paint. */
 function checkpoint() {
@@ -21,20 +27,50 @@ function checkpoint() {
 }
 
 class Style {
-  constructor(el) { this.el = el; this.props = new Map() }
-  getPropertyValue(prop) { return this.props.get(prop)?.value ?? '' }
-  getPropertyPriority(prop) { return this.props.get(prop)?.priority ?? '' }
-  setProperty(prop, value, priority = '') { this.props.set(prop, { value, priority }); this.el.changed() }
-  removeProperty(prop) { this.props.delete(prop); this.el.changed() }
+  constructor(el) {
+    this.el = el
+    this.props = new Map()
+  }
+  getPropertyValue(prop) {
+    return this.props.get(prop)?.value ?? ''
+  }
+  getPropertyPriority(prop) {
+    return this.props.get(prop)?.priority ?? ''
+  }
+  setProperty(prop, value, priority = '') {
+    this.props.set(prop, { value, priority })
+    this.el.changed()
+  }
+  removeProperty(prop) {
+    this.props.delete(prop)
+    this.el.changed()
+  }
 }
 class HTMLElement {
-  constructor(rule = '') { this.style = new Style(this); this.children = []; this.parent = null; this.rule = rule }
-  get isConnected() { let el = this; while (el.parent) el = el.parent; return el === document.documentElement }
+  constructor(rule = '') {
+    this.style = new Style(this)
+    this.children = []
+    this.parent = null
+    this.rule = rule
+  }
+  get isConnected() {
+    let el = this
+    while (el.parent) el = el.parent
+    return el === document.documentElement
+  }
   /** Only mutations inside body reach the observer, as with `observe(document.body)`. */
   changed() {
-    for (let el = this; el; el = el.parent) if (el === document.body) { if (observers.size) pending = true; return }
+    for (let el = this; el; el = el.parent)
+      if (el === document.body) {
+        if (observers.size) pending = true
+        return
+      }
   }
-  append(child) { child.parent = this; this.children.push(child); this.changed() }
+  append(child) {
+    child.parent = this
+    this.children.push(child)
+    this.changed()
+  }
   remove() {
     const parent = this.parent
     if (!parent) return
@@ -49,8 +85,12 @@ class HTMLElement {
     this.parent = null
     parent.changed()
   }
-  querySelectorAll() { return this.children.flatMap(child => [child, ...child.querySelectorAll()]) }
-  getAnimations() { return [] }
+  querySelectorAll() {
+    return this.children.flatMap((child) => [child, ...child.querySelectorAll()])
+  }
+  getAnimations() {
+    return []
+  }
 }
 const documentElement = new HTMLElement()
 const body = new HTMLElement()
@@ -60,7 +100,9 @@ globalThis.HTMLElement = HTMLElement
 globalThis.CSSTransition = class {}
 globalThis.MutationObserver = FakeMutationObserver
 // Inline style (either priority) wins over the stylesheet rule; no value at all is 'none'.
-globalThis.getComputedStyle = el => ({ boxShadow: el.style.getPropertyValue('box-shadow') || el.rule || 'none' })
+globalThis.getComputedStyle = (el) => ({
+  boxShadow: el.style.getPropertyValue('box-shadow') || el.rule || 'none'
+})
 
 const { islandOverride } = await import('../src/preview/island-override.ts')
 
@@ -68,10 +110,22 @@ const FROM = '1px 2px 4px rgba(0, 0, 0, 0.35), 2px 4px 8px rgba(0, 0, 0, 0.21)'
 const MID = '-1px 2px 4px rgba(0, 0, 0, 0.35), -2px 4px 8px rgba(0, 0, 0, 0.21)'
 const CSS = '-2px 1px 4px rgba(0, 0, 0, 0.35), -4px 2px 8px rgba(0, 0, 0, 0.21)'
 const key = 'chat\nisland'
-const shown = el => getComputedStyle(el).boxShadow
-const apply = (css, from = FROM) => { const n = islandOverride({ op: 'apply', key, from, css }); checkpoint(); return n }
-const settle = css => { const done = islandOverride({ op: 'settle', key, css }); checkpoint(); return done }
-const reset = () => { islandOverride({ op: 'clearAll' }); checkpoint(); body.children.splice(0) }
+const shown = (el) => getComputedStyle(el).boxShadow
+const apply = (css, from = FROM) => {
+  const n = islandOverride({ op: 'apply', key, from, css })
+  checkpoint()
+  return n
+}
+const settle = (css) => {
+  const done = islandOverride({ op: 'settle', key, css })
+  checkpoint()
+  return done
+}
+const reset = () => {
+  islandOverride({ op: 'clearAll' })
+  checkpoint()
+  body.children.splice(0)
+}
 
 // React (Next): the card's inline style carries the source value.
 function reactCard(value) {
@@ -81,7 +135,8 @@ function reactCard(value) {
 }
 
 {
-  const card = reactCard(FROM), other = reactCard('0px 1px 2px rgba(0, 0, 0, 0.5)')
+  const card = reactCard(FROM),
+    other = reactCard('0px 1px 2px rgba(0, 0, 0, 0.5)')
   body.append(card)
   body.append(other)
   assert.equal(apply(MID), 1, 'apply holds the one element showing the source value')
@@ -104,10 +159,18 @@ function reactCard(value) {
   // Fast Refresh re-renders with the written value: React rewrites the inline style.
   remounted.style.setProperty('box-shadow', CSS)
   checkpoint()
-  assert.equal(remounted.style.getPropertyPriority('box-shadow'), 'important', 'the re-render is held until settle')
+  assert.equal(
+    remounted.style.getPropertyPriority('box-shadow'),
+    'important',
+    'the re-render is held until settle'
+  )
   assert.equal(settle(CSS), true, 'shown and own both compute to the written value')
   assert.equal(shown(remounted), CSS)
-  assert.equal(remounted.style.getPropertyPriority('box-shadow'), '', 'the page owns the value again')
+  assert.equal(
+    remounted.style.getPropertyPriority('box-shadow'),
+    '',
+    'the page owns the value again'
+  )
   assert.equal(settle(CSS), true, 'nothing held')
   assert.equal(observers.size, 0, 'no observer without an override')
   reset()
@@ -120,7 +183,8 @@ function reactCard(value) {
   assert.equal(apply(CSS), 1)
   card.remove()
   checkpoint()
-  for (let i = 0; i < 3; i++) assert.equal(settle(CSS), false, 'an empty target list is not settled')
+  for (let i = 0; i < 3; i++)
+    assert.equal(settle(CSS), false, 'an empty target list is not settled')
   // An element that already shows the written value comes back: it is the bound element.
   const back = reactCard(CSS)
   body.append(back)
@@ -158,9 +222,17 @@ function reactCard(value) {
   assert.equal(shown(card), FROM)
   assert.equal(card.style.getPropertyPriority('box-shadow'), '')
   assert.equal(observers.size, 0)
-  assert.equal(apply(CSS, '9px 9px 9px rgba(0, 0, 0, 0.1)'), 0, 'no element shows the start value: nothing held')
+  assert.equal(
+    apply(CSS, '9px 9px 9px rgba(0, 0, 0, 0.1)'),
+    0,
+    'no element shows the start value: nothing held'
+  )
   reset()
 }
 
-assert.equal(islandOverride({ op: 'apply', key, from: FROM, css: 'red; }' }), null, 'unsafe css is refused')
+assert.equal(
+  islandOverride({ op: 'apply', key, from: FROM, css: 'red; }' }),
+  null,
+  'unsafe css is refused'
+)
 console.log('ISLAND-OVERRIDE PASS')

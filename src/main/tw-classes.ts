@@ -9,15 +9,48 @@
 // so a prefix match alone is not enough — the suffix must be a color VALUE
 // (see colorClassFamily → isColorValueSuffix).
 export const COLOR_CLASS_FAMILIES = [
-  'bg', 'text', 'border', 'ring', 'fill', 'stroke', 'decoration', 'outline', 'accent',
-  'caret', 'divide', 'from', 'via', 'to', 'placeholder', 'shadow'
+  'bg',
+  'text',
+  'border',
+  'ring',
+  'fill',
+  'stroke',
+  'decoration',
+  'outline',
+  'accent',
+  'caret',
+  'divide',
+  'from',
+  'via',
+  'to',
+  'placeholder',
+  'shadow'
 ]
 
 // Tailwind's default palette hues. A `<hue>` or `<hue>-<shade>` suffix is a color.
 const COLOR_HUES = new Set([
-  'slate', 'gray', 'zinc', 'neutral', 'stone', 'red', 'orange', 'amber', 'yellow', 'lime',
-  'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia',
-  'pink', 'rose'
+  'slate',
+  'gray',
+  'zinc',
+  'neutral',
+  'stone',
+  'red',
+  'orange',
+  'amber',
+  'yellow',
+  'lime',
+  'green',
+  'emerald',
+  'teal',
+  'cyan',
+  'sky',
+  'blue',
+  'indigo',
+  'violet',
+  'purple',
+  'fuchsia',
+  'pink',
+  'rose'
 ])
 // Bare color keywords valid across the color utilities.
 const COLOR_KEYWORDS = new Set(['inherit', 'current', 'transparent', 'black', 'white'])
@@ -27,20 +60,75 @@ const COLOR_KEYWORDS = new Set(['inherit', 'current', 'transparent', 'black', 'w
 // containing a digit (widths, `10%` gradient stops) is rejected separately.
 const NON_COLOR_SUFFIXES = new Set([
   // text alignment / wrap / overflow
-  'left', 'center', 'right', 'justify', 'start', 'end', 'wrap', 'nowrap', 'balance',
-  'pretty', 'ellipsis', 'clip',
+  'left',
+  'center',
+  'right',
+  'justify',
+  'start',
+  'end',
+  'wrap',
+  'nowrap',
+  'balance',
+  'pretty',
+  'ellipsis',
+  'clip',
   // font sizes (text-) + elevation sizes (shadow-)
-  'xs', 'sm', 'base', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl',
-  '9xl', 'inner',
+  'xs',
+  'sm',
+  'base',
+  'md',
+  'lg',
+  'xl',
+  '2xl',
+  '3xl',
+  '4xl',
+  '5xl',
+  '6xl',
+  '7xl',
+  '8xl',
+  '9xl',
+  'inner',
   // line styles (border/ring/outline/divide/decoration)
-  'solid', 'dashed', 'dotted', 'double', 'wavy', 'hidden', 'none',
+  'solid',
+  'dashed',
+  'dotted',
+  'double',
+  'wavy',
+  'hidden',
+  'none',
   // sides / axes / corners (border-x, divide-y, …)
-  'x', 'y', 't', 'r', 'b', 'l', 's', 'e', 'tl', 'tr', 'bl', 'br',
+  'x',
+  'y',
+  't',
+  'r',
+  'b',
+  'l',
+  's',
+  'e',
+  'tl',
+  'tr',
+  'bl',
+  'br',
   // misc modifiers
-  'reverse', 'collapse', 'separate', 'offset', 'inset', 'auto', 'from-font',
+  'reverse',
+  'collapse',
+  'separate',
+  'offset',
+  'inset',
+  'auto',
+  'from-font',
   // bg-* non-color utilities
-  'fixed', 'local', 'scroll', 'cover', 'contain', 'repeat', 'no-repeat', 'top', 'bottom',
-  'origin', 'blend'
+  'fixed',
+  'local',
+  'scroll',
+  'cover',
+  'contain',
+  'repeat',
+  'no-repeat',
+  'top',
+  'bottom',
+  'origin',
+  'blend'
 ])
 
 /** Is a color-family class SUFFIX an actual color value (vs a layout/size/style

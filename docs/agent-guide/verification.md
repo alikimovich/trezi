@@ -31,7 +31,7 @@ and fails on an unlisted one; the gate requires 0 Bun-owned rows and no rollback
 | `bun run test:native-live` | Real provider fixture edit; requires authorization |
 | `bun run test:provider-live` | Bounded Claude + Codex parity, in-process vs helper (`TREZI_LIVE_PROVIDERS=1`); requires authorization |
 | `bun run verify` | Everything incl. live-agent e2e (needs display + creds) |
-| `bun run lint` | Biome lint over `src` + `test` |
+| `bun run lint` | Biome lint and format check over `src` + `test`; `test/lint.mjs` runs it in the unit tier, so it gates quick verification |
 
 The `dev:native`, `build:native`, and `typecheck:native` aliases remain supported.
 
@@ -40,6 +40,11 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
 - After changes run `bun run typecheck` and the relevant unit tests. Native changes
   also require `bun run typecheck:native` and `bun run test:native`. `bun run test`
   combines unit and native checks.
+- `bun run lint` must exit 0. `test/lint.mjs` runs it in the unit tier, so quick
+  verification fails on a new lint or format error; fix it with
+  `bunx biome check --write <files>`. Warnings and infos do not fail. `biome.json`
+  neither formats nor sorts imports in `test/fixtures/**`: fixtures stand in for user
+  apps and tests depend on their bytes and line numbers.
 - Live provider calls (`test:native-live` / `verify`) require authorization. Do not
   run real provider calls without it.
 - The runner tiers are `unit`, `native`, `live`, and `all`. Unit jobs are bounded

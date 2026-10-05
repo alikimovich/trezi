@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
-import { ReconciliationCoordinator } from '../src/main/conflict-resolution.ts'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -12,6 +11,7 @@ import {
   isolationSnapshot,
   releaseChat
 } from '../src/main/chat-isolation.ts'
+import { ReconciliationCoordinator } from '../src/main/conflict-resolution.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-auto-reconcile-'))
 const git = (cwd, ...args) =>
@@ -109,7 +109,7 @@ try {
     const landed = []
     let resolveLanding
     let active = {
-      record: { transcript: [{role: 'user', text: 'original request', at: 1000}] },
+      record: { transcript: [{ role: 'user', text: 'original request', at: 1000 }] },
       emit: (e) => emitted.push(e),
       send: (text) => {
         if (scenario === 'send-failure') throw new Error('provider unavailable')
@@ -141,7 +141,11 @@ try {
     resolveLanding(scenario === 'provider-failure' ? null : ['a.txt'])
     await finishing
     if (scenario === 'success') {
-      assert.equal(active.record.transcript[0].completedAt, undefined, 'Continuation is still part of the same turn')
+      assert.equal(
+        active.record.transcript[0].completedAt,
+        undefined,
+        'Continuation is still part of the same turn'
+      )
       assert.equal(sent.length, 1)
       assert(sent[0].includes('a.txt'))
       assert.equal(begins, 1)
@@ -156,7 +160,11 @@ try {
       assert.equal(sent.length, 0, `${scenario} must not dispatch a follow-up`)
       if (scenario !== 'close') assert(!running.has('origin-chat'))
     }
-    if (active) assert(active.record.transcript[0].completedAt > 1000, 'Terminal timing persists after landing')
+    if (active)
+      assert(
+        active.record.transcript[0].completedAt > 1000,
+        'Terminal timing persists after landing'
+      )
   }
   console.log('auto-reconciliation: OK')
 } finally {

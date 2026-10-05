@@ -7,16 +7,19 @@ import { handleReclaimed, initChatIsolation } from '../src/main/chat-isolation.t
 import { pruneOrphans } from '../src/main/worktrees.ts'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-chat-recovery-')))
-const git = (cwd, ...args) => execFileSync('git', args, {
-  cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
-}).trim()
+const git = (cwd, ...args) =>
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  }).trim()
 const records = new Map()
 initChatIsolation({
   worktreesDir: () => join(base, 'worktrees'),
   store: () => ({
-    get: id => records.get(id),
-    save: record => records.set(record.id, record),
-    remove: id => records.delete(id)
+    get: (id) => records.get(id),
+    save: (record) => records.set(record.id, record),
+    remove: (id) => records.delete(id)
   }),
   getWindow: () => null
 })

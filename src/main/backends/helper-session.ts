@@ -4,14 +4,20 @@ import type { AgentEvent, AgentOptions } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
 import { type HelperHandlers, providerOwner } from '../provider-owner'
 import { runTreziTool, type SessionTool } from '../session-tools'
-import { createRecordCapture } from './record'
-import { sendToRenderer } from './tools'
 import { claudeProvider } from './claude'
 import { claudeUserPluginsAllowed } from './claude-isolation'
 import { codexProvider } from './codex'
 import { geminiProvider } from './gemini'
-import type { ModelProvider, PendingPrompt, PendingQuestion, ProviderSession, SpawnContext } from './types'
+import { createRecordCapture } from './record'
 import { withSkillMenu } from './skill-menu'
+import { sendToRenderer } from './tools'
+import type {
+  ModelProvider,
+  PendingPrompt,
+  PendingQuestion,
+  ProviderSession,
+  SpawnContext
+} from './types'
 
 const ignore = (): void => {}
 
@@ -36,7 +42,8 @@ export function helperProvider(id: string): ModelProvider {
     supportsSpawn: adapter?.supportsSpawn ?? true,
     generateTitle: adapter?.generateTitle,
     updateProjectMemory: adapter?.updateProjectMemory,
-    startSession: (root, options, getWindow, ctx) => startHelperSession(id, root, options, getWindow, ctx)
+    startSession: (root, options, getWindow, ctx) =>
+      startHelperSession(id, root, options, getWindow, ctx)
   }
 }
 
@@ -61,7 +68,11 @@ async function startHelperSession(
 
   const emit = (event: AgentEvent): void => {
     if (disposed) return
-    const tagged = { ...event, projectKey: emitKey, ...(ctx?.sessionId ? { sessionId: ctx.sessionId } : {}) }
+    const tagged = {
+      ...event,
+      projectKey: emitKey,
+      ...(ctx?.sessionId ? { sessionId: ctx.sessionId } : {})
+    }
     ctx?.onEvent?.(tagged)
     sendToRenderer(getWindow, 'agent:event', tagged)
   }
@@ -99,7 +110,8 @@ async function startHelperSession(
     },
     record: (delta) => {
       record.transcript.push(...delta.entries)
-      if (delta.filesTouched) record.filesTouched = [...new Set([...record.filesTouched, ...delta.filesTouched])]
+      if (delta.filesTouched)
+        record.filesTouched = [...new Set([...record.filesTouched, ...delta.filesTouched])]
       if (delta.sdkSessionId && delta.sdkSessionId !== reportedResume) {
         reportedResume = delta.sdkSessionId
         record.sdkSessionId = delta.sdkSessionId
@@ -116,9 +128,19 @@ async function startHelperSession(
 
   const open = (resume: string | undefined): Promise<unknown> =>
     owner.openHelper(
-      { session, chat: emitKey, provider, root, liveRoot: ctx?.liveRoot ?? root, background: !!ctx?.sessionId },
       {
-        options: provider === 'claude' ? { ...options, claudeUserPlugins: claudeUserPluginsAllowed() } : options,
+        session,
+        chat: emitKey,
+        provider,
+        root,
+        liveRoot: ctx?.liveRoot ?? root,
+        background: !!ctx?.sessionId
+      },
+      {
+        options:
+          provider === 'claude'
+            ? { ...options, claudeUserPlugins: claudeUserPluginsAllowed() }
+            : options,
         context: {
           emitKey,
           ...(ctx?.sessionId ? { sessionId: ctx.sessionId } : {}),

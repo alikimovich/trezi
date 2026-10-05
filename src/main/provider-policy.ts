@@ -72,7 +72,11 @@ export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
 }
 
 /** Trezi tools that never prompt (side-effect-free or validated by their own service). */
-const AUTO_TREZI = new Set<string>(TREZI_TOOLS.filter((t) => t !== 'install_skills' && t !== 'workspace_state' && t !== 'prepare_conflict_resolution'))
+const AUTO_TREZI = new Set<string>(
+  TREZI_TOOLS.filter(
+    (t) => t !== 'install_skills' && t !== 'workspace_state' && t !== 'prepare_conflict_resolution'
+  )
+)
 const AUTO_ALLOW = AUTO_ALLOW_TOOLS
 const EDIT = EDIT_TOOLS
 const SIDECAR = /(^|[\s/\\"'])\.(trezi|praxis|dsgn)([/\\]|$)/
@@ -131,7 +135,11 @@ const within = (path: string, dir: string): boolean => {
 function touchesProfile(tool: string, target: string | undefined, scope: PolicyScope): boolean {
   if (!EDIT.has(tool) || !target || !scope.profile) return false
   const absolute = normalize(isAbsolute(target) ? target : resolve(scope.root, target))
-  return within(absolute, scope.profile) && !within(absolute, scope.root) && !within(absolute, scope.liveRoot)
+  return (
+    within(absolute, scope.profile) &&
+    !within(absolute, scope.root) &&
+    !within(absolute, scope.liveRoot)
+  )
 }
 
 /**
@@ -139,15 +147,23 @@ function touchesProfile(tool: string, target: string | undefined, scope: PolicyS
  * answered. Order matters and matches the pre-S10 adapter exactly: questions, Trezi
  * tools, the sidecar, Trezi's own data, read-only tools, then a closed session, else ask.
  */
-export function decidePermission(tool: string, target: string | undefined, scope: PolicyScope): PermissionVerdict {
-  if (tool === 'AskUserQuestion') return scope.live ? { decision: 'question' } : { decision: 'deny', message: MESSAGES.inactive }
+export function decidePermission(
+  tool: string,
+  target: string | undefined,
+  scope: PolicyScope
+): PermissionVerdict {
+  if (tool === 'AskUserQuestion')
+    return scope.live ? { decision: 'question' } : { decision: 'deny', message: MESSAGES.inactive }
   if (tool.startsWith(MCP_PREFIX)) {
     const name = tool.slice(MCP_PREFIX.length)
     if (AUTO_TREZI.has(name)) {
-      return scope.background && name in FOREGROUND_ONLY ? { decision: 'deny', message: FOREGROUND_ONLY[name] } : { decision: 'allow' }
+      return scope.background && name in FOREGROUND_ONLY
+        ? { decision: 'deny', message: FOREGROUND_ONLY[name] }
+        : { decision: 'allow' }
     }
   }
-  if (target !== undefined && (EDIT.has(tool) || tool === 'Bash') && SIDECAR.test(target)) return { decision: 'deny', message: MESSAGES.sidecar }
+  if (target !== undefined && (EDIT.has(tool) || tool === 'Bash') && SIDECAR.test(target))
+    return { decision: 'deny', message: MESSAGES.sidecar }
   if (touchesProfile(tool, target, scope)) return { decision: 'deny', message: MESSAGES.profile }
   if (AUTO_ALLOW.has(tool)) return { decision: 'allow' }
   if (!scope.live) return { decision: 'deny', message: MESSAGES.inactive }
@@ -157,10 +173,16 @@ export function decidePermission(tool: string, target: string | undefined, scope
 export type ToolRefusal = { code: 'unauthorized' | 'invalidRequest'; message: string }
 
 /** Whether a session may run one of Trezi's tools with arguments of `bytes` bytes. */
-export function authorizeTool(tool: string, bytes: number, scope: Pick<PolicyScope, 'live' | 'background'>): ToolRefusal | null {
+export function authorizeTool(
+  tool: string,
+  bytes: number,
+  scope: Pick<PolicyScope, 'live' | 'background'>
+): ToolRefusal | null {
   if (!scope.live) return { code: 'unauthorized', message: MESSAGES.closed }
-  if (!(TREZI_TOOLS as readonly string[]).includes(tool)) return { code: 'unauthorized', message: MESSAGES.ungranted(tool) }
-  if (scope.background && tool in FOREGROUND_ONLY) return { code: 'unauthorized', message: FOREGROUND_ONLY[tool] }
+  if (!(TREZI_TOOLS as readonly string[]).includes(tool))
+    return { code: 'unauthorized', message: MESSAGES.ungranted(tool) }
+  if (scope.background && tool in FOREGROUND_ONLY)
+    return { code: 'unauthorized', message: FOREGROUND_ONLY[tool] }
   if (bytes > LIMITS.toolArgs) return { code: 'invalidRequest', message: MESSAGES.tooLarge }
   return null
 }
@@ -191,7 +213,9 @@ export function validImage(mediaType: unknown, data: unknown): boolean {
 }
 
 /** A provider id: a label for in-process adapters; for helpers, one the service was built with. */
-export const validProviderID = (id: unknown): id is string => typeof id === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(id)
+export const validProviderID = (id: unknown): id is string =>
+  typeof id === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(id)
 
 /** A session, chat or approval id the owner stores and names files after. */
-export const validSessionID = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id)
+export const validSessionID = (id: unknown): id is string =>
+  typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id)

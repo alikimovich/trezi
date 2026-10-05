@@ -6,11 +6,11 @@
  * looksTailwind heuristic. Run with: bun run test:tw-styles
  */
 import {
-  tailwindClassFor,
-  tailwindTokenClassFor,
+  looksTailwind,
   rewriteClassList,
   rewriteClassListToken,
-  looksTailwind
+  tailwindClassFor,
+  tailwindTokenClassFor
 } from '../src/main/tw-styles.ts'
 
 let failed = 0
@@ -21,7 +21,10 @@ const ok = (cond, msg) => {
   }
 }
 const eq = (actual, expected, msg) =>
-  ok(actual === expected, `${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
+  ok(
+    actual === expected,
+    `${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
+  )
 
 // --- tailwindClassFor: every family, snap vs arbitrary ---
 
@@ -105,7 +108,11 @@ eq(
 eq(tailwindClassFor('transition-property', 'all'), 'transition-all', 'property all')
 eq(tailwindClassFor('transition-property', 'none'), 'transition-none', 'property none')
 eq(tailwindClassFor('transition-property', 'opacity'), 'transition-opacity', 'property opacity')
-eq(tailwindClassFor('transition-property', 'transform'), 'transition-transform', 'property transform')
+eq(
+  tailwindClassFor('transition-property', 'transform'),
+  'transition-transform',
+  'property transform'
+)
 eq(tailwindClassFor('transition-property', 'box-shadow'), 'transition-shadow', 'property shadow')
 eq(
   tailwindClassFor('transition-property', 'color, background-color, border-color, fill, stroke'),
@@ -124,7 +131,11 @@ eq(tailwindClassFor('color', 'red] hover:[x'), null, 'bracket injection → null
 
 // --- rewriteClassList: replace / append / ambiguous ---
 
-eq(rewriteClassList('flex p-2 text-sm', 'padding', '16px'), 'flex p-4 text-sm', 'replace scale class')
+eq(
+  rewriteClassList('flex p-2 text-sm', 'padding', '16px'),
+  'flex p-4 text-sm',
+  'replace scale class'
+)
 eq(rewriteClassList('flex text-sm', 'padding', '16px'), 'flex text-sm p-4', 'no match → append')
 eq(rewriteClassList('p-2 p-6', 'padding', '16px'), null, '>1 family match → null')
 eq(
@@ -137,7 +148,11 @@ eq(
   'rounded-[13px] border',
   'named → arbitrary replace; bare border untouched'
 )
-eq(rewriteClassList('rounded p-2', 'border-radius', '8px'), 'rounded-lg p-2', 'bare rounded replaced')
+eq(
+  rewriteClassList('rounded p-2', 'border-radius', '8px'),
+  'rounded-lg p-2',
+  'bare rounded replaced'
+)
 eq(
   rewriteClassList('text-gray-500 text-sm', 'color', '#3b82f6'),
   'text-[#3b82f6] text-sm',
@@ -170,8 +185,16 @@ eq(
 )
 eq(rewriteClassList('opacity-50', 'opacity', '0.37'), 'opacity-[0.37]', 'opacity replace')
 eq(rewriteClassList('leading-7', 'line-height', '1.5'), 'leading-normal', 'leading replace')
-eq(rewriteClassList('tracking-wide', 'letter-spacing', '0.5px'), 'tracking-[0.5px]', 'tracking replace')
-eq(rewriteClassList('-mt-2 flex', 'margin-top', '16px'), 'mt-4 flex', 'negative margin is a candidate')
+eq(
+  rewriteClassList('tracking-wide', 'letter-spacing', '0.5px'),
+  'tracking-[0.5px]',
+  'tracking replace'
+)
+eq(
+  rewriteClassList('-mt-2 flex', 'margin-top', '16px'),
+  'mt-4 flex',
+  'negative margin is a candidate'
+)
 eq(rewriteClassList('bg-blue-500', 'background-color', '#000'), 'bg-[#000]', 'bg palette replaced')
 eq(rewriteClassList('p-2', 'width', '10px'), null, 'unmappable prop → null even with classes')
 
@@ -262,7 +285,11 @@ eq(
 
 eq(tailwindTokenClassFor('color', 'brand-500'), 'text-brand-500', 'color token class')
 eq(tailwindTokenClassFor('background-color', 'surface'), 'bg-surface', 'bg token class')
-eq(tailwindTokenClassFor('padding-top', 'gutter'), 'pt-gutter', 'spacing token uses the side prefix')
+eq(
+  tailwindTokenClassFor('padding-top', 'gutter'),
+  'pt-gutter',
+  'spacing token uses the side prefix'
+)
 eq(tailwindTokenClassFor('border-radius', 'card'), 'rounded-card', 'radius token class')
 eq(tailwindTokenClassFor('font-size', 'hero'), 'text-hero', 'font-size token class')
 eq(tailwindTokenClassFor('letter-spacing', 'tight'), 'tracking-tight', 'tracking token class')

@@ -12,17 +12,33 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('../', import.meta.url))
 const self = fileURLToPath(import.meta.url)
 const RULES = [
-  ['runs the defaults tool', /(spawn|spawnSync|exec|execSync|execFile|execFileSync|Bun\.spawn|Bun\.spawnSync|Bun\.\$|\$)\s*\(\s*\[?\s*['"`](\/usr\/bin\/)?defaults['"`\s]/],
+  [
+    'runs the defaults tool',
+    /(spawn|spawnSync|exec|execSync|execFile|execFileSync|Bun\.spawn|Bun\.spawnSync|Bun\.\$|\$)\s*\(\s*\[?\s*['"`](\/usr\/bin\/)?defaults['"`\s]/
+  ],
   ['runs the defaults tool', /["'`]\/usr\/bin\/defaults["'`]/],
-  ['defaults write/delete command', /\bdefaults\s+(-currentHost\s+)?(write|delete|import|rename)\b/],
+  [
+    'defaults write/delete command',
+    /\bdefaults\s+(-currentHost\s+)?(write|delete|import|rename)\b/
+  ],
   ['com.apple domain via defaults', /\bdefaults\b[^\n]{0,80}\bcom\.apple\./],
-  ['writes CFPreferences', /CFPreferences(SetValue|SetAppValue|SetMultiple|AppSynchronize|Synchronize)\s*\(/],
-  ['writes another preferences domain', /UserDefaults\s*\(\s*suiteName:\s*"(com\.apple|NSGlobalDomain|Apple)/],
+  [
+    'writes CFPreferences',
+    /CFPreferences(SetValue|SetAppValue|SetMultiple|AppSynchronize|Synchronize)\s*\(/
+  ],
+  [
+    'writes another preferences domain',
+    /UserDefaults\s*\(\s*suiteName:\s*"(com\.apple|NSGlobalDomain|Apple)/
+  ],
   ['writes a persistent domain', /\.(setPersistentDomain|removePersistentDomain)\s*\(/],
-  ['broadcasts a system notification', /DistributedNotificationCenter\s*\.\s*default\s*\(\s*\)\s*\.\s*post/],
+  [
+    'broadcasts a system notification',
+    /DistributedNotificationCenter\s*\.\s*default\s*\(\s*\)\s*\.\s*post/
+  ],
   ['names a system preference domain/key', /com\.apple\.universalaccess|AppleShowScrollBars/]
 ]
-const violations = text => RULES.filter(([, pattern]) => pattern.test(text)).map(([label]) => label)
+const violations = (text) =>
+  RULES.filter(([, pattern]) => pattern.test(text)).map(([label]) => label)
 
 // The detector itself must catch every form earlier fixtures used, and not
 // flag ordinary identifiers named "defaults".
@@ -37,14 +53,19 @@ for (const bad of [
   'UserDefaults(suiteName: "com.apple.universalaccess")?.set(true, forKey: "x")',
   'UserDefaults.standard.setPersistentDomain(d, forName: "x")',
   'DistributedNotificationCenter.default().postNotificationName(name, object: nil)'
-]) assert.ok(violations(bad).length > 0, `Guard must flag: ${bad}`)
-for (const good of ['const defaults = { a: 1 }', 'Object.assign({}, defaults, options)', 'withDefaults(config)',
-  'UserDefaults.standard.set(true, forKey: "trezi.sidebar")'])
+])
+  assert.ok(violations(bad).length > 0, `Guard must flag: ${bad}`)
+for (const good of [
+  'const defaults = { a: 1 }',
+  'Object.assign({}, defaults, options)',
+  'withDefaults(config)',
+  'UserDefaults.standard.set(true, forKey: "trezi.sidebar")'
+])
   assert.deepEqual(violations(good), [], `Guard must not flag: ${good}`)
 
 const SKIP = new Set(['node_modules', 'artifacts', '.git', 'out', 'dist'])
 const files = []
-const walk = directory => {
+const walk = (directory) => {
   for (const name of readdirSync(directory)) {
     if (SKIP.has(name)) continue
     const path = join(directory, name)
@@ -53,16 +74,37 @@ const walk = directory => {
   }
 }
 for (const directory of ['src', 'test', 'scripts', 'bin']) {
-  try { walk(join(root, directory)) } catch (error) { if (error.code !== 'ENOENT') throw error }
+  try {
+    walk(join(root, directory))
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
 }
 const install = join(root, 'install.sh')
-try { statSync(install); files.push(install) } catch {}
-assert.ok(files.some(path => path.endsWith('test/helpers/chat-acceptance.mjs')), 'Scans the acceptance harness')
-assert.ok(files.some(path => path.endsWith('src/native/ChatAcceptance.swift')), 'Scans the native acceptance host command')
+try {
+  statSync(install)
+  files.push(install)
+} catch {}
+assert.ok(
+  files.some((path) => path.endsWith('test/helpers/chat-acceptance.mjs')),
+  'Scans the acceptance harness'
+)
+assert.ok(
+  files.some((path) => path.endsWith('src/native/ChatAcceptance.swift')),
+  'Scans the native acceptance host command'
+)
 
-const found = files.flatMap(path => {
+const found = files.flatMap((path) => {
   const lines = readFileSync(path, 'utf8').split('\n')
-  return lines.flatMap((line, index) => violations(line).map(label => `${relative(root, path)}:${index + 1} ${label}: ${line.trim()}`))
+  return lines.flatMap((line, index) =>
+    violations(line).map((label) => `${relative(root, path)}:${index + 1} ${label}: ${line.trim()}`)
+  )
 })
-assert.deepEqual(found, [], `System preference access in verification/app code:\n${found.join('\n')}`)
-console.log(`NO-SYSTEM-PREFERENCES OK — ${files.length} files; no defaults tool, CFPreferences writes, system domains or preference broadcasts`)
+assert.deepEqual(
+  found,
+  [],
+  `System preference access in verification/app code:\n${found.join('\n')}`
+)
+console.log(
+  `NO-SYSTEM-PREFERENCES OK — ${files.length} files; no defaults tool, CFPreferences writes, system domains or preference broadcasts`
+)

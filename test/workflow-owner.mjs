@@ -12,13 +12,26 @@
 //   relaunch, redaction and schema.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { compileWorkflowFixture, installFakes, startWorkflowFixture } from './helpers/workflow-fixture.mjs'
-import { detect, helperFiles } from '../src/main/setup.ts'
-import { starterFiles } from '../src/main/scaffold.ts'
 import { signatureFor } from '../src/main/diag-cache.ts'
+import { starterFiles } from '../src/main/scaffold.ts'
+import { detect, helperFiles } from '../src/main/setup.ts'
+import {
+  compileWorkflowFixture,
+  installFakes,
+  startWorkflowFixture
+} from './helpers/workflow-fixture.mjs'
 
 // Bun resolves a spawned command with the PATH it started with, so the scripted `gh`,
 // `bun` and `npm` must be on PATH before this process starts: re-run under them, with
@@ -26,34 +39,74 @@ import { signatureFor } from '../src/main/diag-cache.ts'
 if (!process.env.TREZI_WORKFLOW_FAKES) {
   const bin = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-workflow-fakes-')))
   installFakes(bin)
-  const child = spawnSync(process.execPath, ['--no-install', new URL(import.meta.url).pathname, ...process.argv.slice(2)],
-    { stdio: 'inherit', env: { ...process.env, TREZI_WORKFLOW_FAKES: bin, PATH: `${bin}:${process.env.PATH}` } })
+  const child = spawnSync(
+    process.execPath,
+    ['--no-install', new URL(import.meta.url).pathname, ...process.argv.slice(2)],
+    {
+      stdio: 'inherit',
+      env: { ...process.env, TREZI_WORKFLOW_FAKES: bin, PATH: `${bin}:${process.env.PATH}` }
+    }
+  )
   rmSync(bin, { recursive: true, force: true })
   process.exit(child.status ?? 1)
 }
-assert.equal(execFileSync('gh', ['--version'], { encoding: 'utf8' }).trim(), 'gh version 2.99.0 (fake)')
+assert.equal(
+  execFileSync('gh', ['--version'], { encoding: 'utf8' }).trim(),
+  'gh version 2.99.0 (fake)'
+)
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-workflow-owner-')))
 const binary = compileWorkflowFixture()
-const fakes = { gh: join(process.env.TREZI_WORKFLOW_FAKES, 'gh'), bun: join(process.env.TREZI_WORKFLOW_FAKES, 'bun') }
+const fakes = {
+  gh: join(process.env.TREZI_WORKFLOW_FAKES, 'gh'),
+  bun: join(process.env.TREZI_WORKFLOW_FAKES, 'bun')
+}
 const began = Date.now()
 const log = (...args) => console.log(`[${((Date.now() - began) / 1000).toFixed(1)}s]`, ...args)
 const fixtures = []
-const env = { GIT_AUTHOR_NAME: 'Tester', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 'Tester', GIT_COMMITTER_EMAIL: 't@example.com' }
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const env = {
+  GIT_AUTHOR_NAME: 'Tester',
+  GIT_AUTHOR_EMAIL: 't@example.com',
+  GIT_COMMITTER_NAME: 'Tester',
+  GIT_COMMITTER_EMAIL: 't@example.com'
+}
+const git = (cwd, ...args) =>
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe']
+  }).trim()
 const write = (cwd, file, content) => writeFileSync(join(cwd, file), content)
-const commit = (cwd, file, content) => { write(cwd, file, content); git(cwd, 'add', '-A'); git(cwd, 'commit', '-qm', `change ${file}`) }
-const describe = async base => ({ title: 'Update the greeting', body: `Changes against ${base}.` })
-const json = file => JSON.parse(readFileSync(file, 'utf8'))
+const commit = (cwd, file, content) => {
+  write(cwd, file, content)
+  git(cwd, 'add', '-A')
+  git(cwd, 'commit', '-qm', `change ${file}`)
+}
+const describe = async (base) => ({
+  title: 'Update the greeting',
+  body: `Changes against ${base}.`
+})
+const json = (file) => JSON.parse(readFileSync(file, 'utf8'))
 
 /** A project with an origin (bare) remote, pushed main, on trezi/main. */
 function world(name, { remote = true } = {}) {
   const base = join(scratch, name)
   mkdirSync(base, { recursive: true })
-  const w = { base, origin: join(base, 'origin.git'), local: join(base, 'project'), profile: join(base, 'profile'),
-    ghState: join(base, 'gh.json'), pmState: join(base, 'pm.json') }
+  const w = {
+    base,
+    origin: join(base, 'origin.git'),
+    local: join(base, 'project'),
+    profile: join(base, 'profile'),
+    ghState: join(base, 'gh.json'),
+    pmState: join(base, 'pm.json')
+  }
   mkdirSync(w.profile)
   git(base, 'init', '-q', '--initial-branch=main', w.local)
-  for (const [key, value] of [['user.name', 'Tester'], ['user.email', 't@example.com']]) git(w.local, 'config', key, value)
+  for (const [key, value] of [
+    ['user.name', 'Tester'],
+    ['user.email', 't@example.com']
+  ])
+    git(w.local, 'config', key, value)
   commit(w.local, 'a.txt', 'one\n')
   if (remote) {
     git(base, 'init', '-q', '--bare', '--initial-branch=main', w.origin)
@@ -62,14 +115,19 @@ function world(name, { remote = true } = {}) {
     git(w.local, 'remote', 'set-head', 'origin', 'main')
   }
   git(w.local, 'checkout', '-q', '-b', 'trezi/main')
-  writeFileSync(w.ghState, '{}'); writeFileSync(w.pmState, '{}')
+  writeFileSync(w.ghState, '{}')
+  writeFileSync(w.pmState, '{}')
   w.gh = () => json(w.ghState)
   w.pm = () => json(w.pmState)
   /** Another clone of the remote (a collaborator). */
   w.peer = () => {
     const peer = join(base, `peer-${Math.random().toString(36).slice(2, 7)}`)
     git(base, 'clone', '-q', w.origin, peer)
-    for (const [key, value] of [['user.name', 'Peer'], ['user.email', 'p@example.com']]) git(peer, 'config', key, value)
+    for (const [key, value] of [
+      ['user.name', 'Peer'],
+      ['user.email', 'p@example.com']
+    ])
+      git(peer, 'config', key, value)
     return peer
   }
   return w
@@ -77,25 +135,54 @@ function world(name, { remote = true } = {}) {
 
 /** Git and GitHub state after a scenario, paths and volatile names normalized. */
 function snapshot(w) {
-  const out = { branch: git(w.local, 'rev-parse', '--abbrev-ref', 'HEAD'), status: git(w.local, 'status', '--porcelain'),
-    files: readdirSync(w.local).filter(f => f !== '.git').sort() }
+  const out = {
+    branch: git(w.local, 'rev-parse', '--abbrev-ref', 'HEAD'),
+    status: git(w.local, 'status', '--porcelain'),
+    files: readdirSync(w.local)
+      .filter((f) => f !== '.git')
+      .sort()
+  }
   if (existsSync(w.origin)) {
-    out.remote = git(w.origin, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n').filter(Boolean).sort()
+    out.remote = git(w.origin, 'for-each-ref', '--format=%(refname:short)', 'refs/heads')
+      .split('\n')
+      .filter(Boolean)
+      .sort()
     out.mainLog = git(w.origin, 'log', '--format=%s', 'main').split('\n')
   }
   const gh = w.gh()
-  out.gh = { counts: gh.counts ?? {}, prs: (gh.prs ?? []).map(({ number, head, base, title, state, mergeSubject }) => ({ number, head, base, title, state, mergeSubject })) }
+  out.gh = {
+    counts: gh.counts ?? {},
+    prs: (gh.prs ?? []).map(({ number, head, base, title, state, mergeSubject }) => ({
+      number,
+      head,
+      base,
+      title,
+      state,
+      mergeSubject
+    }))
+  }
   return out
 }
 
-const normalize = (value, w) => JSON.parse(JSON.stringify(value ?? null)
-  .replaceAll(w.base, '<world>')
-  .replace(/trezi\/handoff-[a-z0-9]+/g, 'trezi/handoff-X')
-  .replace(/refs\/trezi\/recovery\/([^"]+?)\/\d+-\d+-(local|remote)/g, 'refs/trezi/recovery/$1/X-$2')
-  .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, 'T'))
+const normalize = (value, w) =>
+  JSON.parse(
+    JSON.stringify(value ?? null)
+      .replaceAll(w.base, '<world>')
+      .replace(/trezi\/handoff-[a-z0-9]+/g, 'trezi/handoff-X')
+      .replace(
+        /refs\/trezi\/recovery\/([^"]+?)\/\d+-\d+-(local|remote)/g,
+        'refs/trezi/recovery/$1/X-$2'
+      )
+      .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, 'T')
+  )
 
 async function start(w, extra = {}) {
-  const fixture = await startWorkflowFixture(binary, w.profile, { FAKE_GH_STATE: w.ghState, FAKE_PM_STATE: w.pmState, WORKFLOW_BUN: fakes.bun, ...extra })
+  const fixture = await startWorkflowFixture(binary, w.profile, {
+    FAKE_GH_STATE: w.ghState,
+    FAKE_PM_STATE: w.pmState,
+    WORKFLOW_BUN: fakes.bun,
+    ...extra
+  })
   fixtures.push(fixture)
   return fixture
 }
@@ -142,16 +229,24 @@ try {
   assert.deepEqual(conflicted.result.conflictFiles, ['a.txt'])
   assert.equal(conflicted.result.recoveryRefs.length, 2)
 
-  const nothing = await owned('publish-nothing', async (owner, w) => ({ result: await owner.publish(w.local, 'merge', describe), state: snapshot(w) }))
+  const nothing = await owned('publish-nothing', async (owner, w) => ({
+    result: await owner.publish(w.local, 'merge', describe),
+    state: snapshot(w)
+  }))
   assert.equal(nothing.result.error, 'Nothing to publish — no changes since main.')
 
   const handoff = await owned('handoff', async (owner, w) => {
     write(w.local, 'a.txt', 'handoff\n')
-    mkdirSync(join(w.local, '.trezi')); write(w.local, '.trezi/annotations.json', '[{"id":"n1","text":"Tighten the header"}]\n')
-    return { result: await owner.handoff(w.local, 'Design handoff', 1, describe), state: snapshot(w) }
+    mkdirSync(join(w.local, '.trezi'))
+    write(w.local, '.trezi/annotations.json', '[{"id":"n1","text":"Tighten the header"}]\n')
+    return {
+      result: await owner.handoff(w.local, 'Design handoff', 1, describe),
+      state: snapshot(w)
+    }
   })
 
-  assert.equal(handoff.result.ok, true); assert.equal(handoff.state.branch, 'trezi/handoff-X')
+  assert.equal(handoff.result.ok, true)
+  assert.equal(handoff.state.branch, 'trezi/handoff-X')
 
   const branchPr = await owned('branch-pr', async (owner, w) => {
     git(w.local, 'checkout', '-q', '-b', 'trezi/chat-1')
@@ -162,104 +257,217 @@ try {
     return { result, missing, state: snapshot(w) }
   })
 
-  assert.equal(branchPr.result.prUrl, 'https://github.com/fake/repo/pull/1'); assert.equal(branchPr.missing.error, 'That branch no longer exists.')
+  assert.equal(branchPr.result.prUrl, 'https://github.com/fake/repo/pull/1')
+  assert.equal(branchPr.missing.error, 'That branch no longer exists.')
 
-  const connected = await owned('connect', async (owner, w) => {
-    const result = await owner.connect(w.local, { name: 'demo-app', owner: 'octo', private: true })
-    const again = await owner.connect(w.local, { name: 'demo-app', owner: 'octo', private: true })
-    const bare = join(w.base, 'repos', 'octo', 'demo-app.git')
-    return { result, again, remote: git(w.local, 'remote', 'get-url', 'origin'), branches: git(bare, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'),
-      head: git(bare, 'symbolic-ref', 'HEAD'), state: snapshot(w) }
-  }, { remote: false })
+  const connected = await owned(
+    'connect',
+    async (owner, w) => {
+      const result = await owner.connect(w.local, {
+        name: 'demo-app',
+        owner: 'octo',
+        private: true
+      })
+      const again = await owner.connect(w.local, { name: 'demo-app', owner: 'octo', private: true })
+      const bare = join(w.base, 'repos', 'octo', 'demo-app.git')
+      return {
+        result,
+        again,
+        remote: git(w.local, 'remote', 'get-url', 'origin'),
+        branches: git(bare, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'),
+        head: git(bare, 'symbolic-ref', 'HEAD'),
+        state: snapshot(w)
+      }
+    },
+    { remote: false }
+  )
   assert.equal(connected.result.ok, true)
   assert.equal(connected.branches, 'main\ntrezi/main')
 
   const remote = await owned('remote', async (owner, w) => {
     const peer = w.peer()
-    git(peer, 'checkout', '-q', '-b', 'feature/design'); commit(peer, 'feature.txt', 'remote feature\n'); git(peer, 'push', '-q', 'origin', 'feature/design')
-    git(peer, 'checkout', '-q', 'main'); commit(peer, 'main.txt', 'remote main\n'); git(peer, 'push', '-q', 'origin', 'main')
+    git(peer, 'checkout', '-q', '-b', 'feature/design')
+    commit(peer, 'feature.txt', 'remote feature\n')
+    git(peer, 'push', '-q', 'origin', 'feature/design')
+    git(peer, 'checkout', '-q', 'main')
+    commit(peer, 'main.txt', 'remote main\n')
+    git(peer, 'push', '-q', 'origin', 'main')
     const cached = await owner.remoteStatus(w.local, false)
     const fetched = await owner.remoteStatus(w.local, true)
-    const busy = await owner.remoteUpdate(w.local, { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' }, true)
-    const stale = await owner.remoteUpdate(w.local, { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'other' }, false)
-    const pulled = await owner.remoteUpdate(w.local, { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' }, false)
-    const switched = await owner.remoteUpdate(w.local, { action: 'checkout', ref: 'refs/remotes/origin/feature/design', expectedBranch: 'trezi/main' }, false)
+    const busy = await owner.remoteUpdate(
+      w.local,
+      { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' },
+      true
+    )
+    const stale = await owner.remoteUpdate(
+      w.local,
+      { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'other' },
+      false
+    )
+    const pulled = await owner.remoteUpdate(
+      w.local,
+      { action: 'pull', ref: 'refs/remotes/origin/main', expectedBranch: 'trezi/main' },
+      false
+    )
+    const switched = await owner.remoteUpdate(
+      w.local,
+      {
+        action: 'checkout',
+        ref: 'refs/remotes/origin/feature/design',
+        expectedBranch: 'trezi/main'
+      },
+      false
+    )
     const update = await owner.updateCheck(w.local)
     let outside
-    try { await owner.remoteStatus(join(w.local, '..'), false) } catch (error) { outside = error.message }
+    try {
+      await owner.remoteStatus(join(w.local, '..'), false)
+    } catch (error) {
+      outside = error.message
+    }
     return { cached, fetched, update, busy, stale, pulled, switched, outside, state: snapshot(w) }
   })
 
-  assert.equal(remote.pulled.ok, true); assert.equal(remote.switched.branch, 'feature/design'); assert.equal(remote.busy.ok, false)
+  assert.equal(remote.pulled.ok, true)
+  assert.equal(remote.switched.branch, 'feature/design')
+  assert.equal(remote.busy.ok, false)
   assert.match(remote.outside, /top-level folder/)
   assert.deepEqual(remote.update, { status: 'idle', behind: 0 }) // the fixture branch is not behind its own upstream
 
   const setup = await owned('setup', async (owner, w) => {
-    write(w.local, 'package.json', JSON.stringify({ dependencies: { react: '^19.0.0', next: '^15.0.0' }, scripts: { dev: 'next dev' } }))
+    write(
+      w.local,
+      'package.json',
+      JSON.stringify({
+        dependencies: { react: '^19.0.0', next: '^15.0.0' },
+        scripts: { dev: 'next dev' }
+      })
+    )
     mkdirSync(join(w.local, 'node_modules/next'), { recursive: true })
-    write(w.local, 'node_modules/next/package.json', JSON.stringify({ name: 'next', version: '15.2.0' }))
+    write(
+      w.local,
+      'node_modules/next/package.json',
+      JSON.stringify({ name: 'next', version: '15.2.0' })
+    )
     const files = helperFiles(await detect(w.local))
     const first = await owner.writeHelpers(w.local, files)
     write(w.local, '.trezi/trezi-next.cjs', '// edited by hand\n')
     const second = await owner.writeHelpers(w.local, files)
     const kept = readFileSync(join(w.local, '.trezi/trezi-next.cjs'), 'utf8')
-    mkdirSync(join(w.local, '.dsgn')); write(w.local, '.dsgn/dsgn-source.cjs', 'old')
+    mkdirSync(join(w.local, '.dsgn'))
+    write(w.local, '.dsgn/dsgn-source.cjs', 'old')
     const removed = await owner.removeHelpers(w.local)
     return { first, second, kept, removed, left: readdirSync(join(w.local, '.trezi')) }
   })
 
-  assert.equal(setup.first.written, true); assert.equal(setup.second.written, false); assert.equal(setup.first.helpers.length, 4)
-  assert.equal(setup.kept, '// edited by hand\n'); assert.equal(setup.removed.files.length, 5)
+  assert.equal(setup.first.written, true)
+  assert.equal(setup.second.written, false)
+  assert.equal(setup.first.helpers.length, 4)
+  assert.equal(setup.kept, '// edited by hand\n')
+  assert.equal(setup.removed.files.length, 5)
 
   // LKM-153: React on Vite 8 gets the Vite plugin beside the Babel visitor; the owner
   // accepts it, hashes it for the setup prompt and removes it on uninstall.
   const viteSetup = await owned('setup-vite', async (owner, w) => {
-    write(w.local, 'package.json', JSON.stringify({ dependencies: { react: '^19.2.0' }, devDependencies: { vite: '^8.0.0', '@vitejs/plugin-react': '^6.0.0' } }))
+    write(
+      w.local,
+      'package.json',
+      JSON.stringify({
+        dependencies: { react: '^19.2.0' },
+        devDependencies: { vite: '^8.0.0', '@vitejs/plugin-react': '^6.0.0' }
+      })
+    )
     const files = helperFiles(await detect(w.local))
     const wrote = await owner.writeHelpers(w.local, files)
     const plugin = readFileSync(join(w.local, '.trezi/trezi-vite.mjs'), 'utf8')
     const removed = await owner.removeHelpers(w.local)
-    return { files, wrote, plugin, removed, left: existsSync(join(w.local, '.trezi/trezi-vite.mjs')) }
+    return {
+      files,
+      wrote,
+      plugin,
+      removed,
+      left: existsSync(join(w.local, '.trezi/trezi-vite.mjs'))
+    }
   })
   assert.equal(viteSetup.wrote.ok, true, viteSetup.wrote.error)
-  assert.deepEqual(viteSetup.wrote.helpers.map(h => h.path), ['.trezi/trezi-source.cjs', '.trezi/trezi-vite.mjs'])
+  assert.deepEqual(
+    viteSetup.wrote.helpers.map((h) => h.path),
+    ['.trezi/trezi-source.cjs', '.trezi/trezi-vite.mjs']
+  )
   assert.equal(viteSetup.plugin, viteSetup.files[1].content)
-  assert.ok(viteSetup.removed.files.includes('.trezi/trezi-vite.mjs')); assert.equal(viteSetup.left, false)
+  assert.ok(viteSetup.removed.files.includes('.trezi/trezi-vite.mjs'))
+  assert.equal(viteSetup.left, false)
 
   const created = await owned('create-project', async (owner, w) => {
     const root = join(w.base, 'New App')
     const result = await owner.createProject(root, starterFiles(root, 'react'), 'bun')
     const again = await owner.createProject(root, starterFiles(root, 'react'), 'bun')
-    return { result, again, files: readdirSync(root).sort(), log: git(root, 'log', '--format=%s'), pm: w.pm().calls }
+    return {
+      result,
+      again,
+      files: readdirSync(root).sort(),
+      log: git(root, 'log', '--format=%s'),
+      pm: w.pm().calls
+    }
   })
 
-  assert.equal(created.result.ok, true); assert.match(created.again.error, /isn't empty/); assert.deepEqual(created.pm, ['bun install'])
+  assert.equal(created.result.ok, true)
+  assert.match(created.again.error, /isn't empty/)
+  assert.deepEqual(created.pm, ['bun install'])
 
   const updated = await owned('update', async (owner, w) => {
     git(w.local, 'checkout', '-q', 'main')
-    const peer = w.peer(); commit(peer, 'release.txt', 'new release\n'); git(peer, 'push', '-q', 'origin', 'main')
+    const peer = w.peer()
+    commit(peer, 'release.txt', 'new release\n')
+    git(peer, 'push', '-q', 'origin', 'main')
     const progress = []
-    const result = await owner.update(w.local, text => progress.push(text))
-    return { result, head: git(w.local, 'rev-parse', 'HEAD') === git(w.origin, 'rev-parse', 'main'), pm: w.pm().calls, state: snapshot(w) }
+    const result = await owner.update(w.local, (text) => progress.push(text))
+    return {
+      result,
+      head: git(w.local, 'rev-parse', 'HEAD') === git(w.origin, 'rev-parse', 'main'),
+      pm: w.pm().calls,
+      state: snapshot(w)
+    }
   })
 
-  assert.deepEqual(updated.result, { ok: true }); assert.equal(updated.head, true)
+  assert.deepEqual(updated.result, { ok: true })
+  assert.equal(updated.head, true)
   assert.deepEqual(updated.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
 
   const diagnosed = await owned('diagnostics', async (owner, w) => {
     const error = "Cannot find module '@ai-sdk/xai' imported from /Users/x/chat.ts"
     const signature = signatureFor(error)
     const none = await owner.recallDiagnosis(w.local, signature)
-    await owner.rememberDiagnosis(w.local, { signature, summary: 'Missing dependency', detail: 'Install it.',
-      steps: [{ text: 'Install @ai-sdk/xai', command: 'bun add @ai-sdk/xai', scope: 'repo' }, { text: 'Restart', scope: 'host' }], seenBefore: false, status: 'proposed' })
-    await owner.rememberDiagnosis('/other/project', { signature: '1234', summary: 'Numeric key', steps: [], seenBefore: false })
+    await owner.rememberDiagnosis(w.local, {
+      signature,
+      summary: 'Missing dependency',
+      detail: 'Install it.',
+      steps: [
+        { text: 'Install @ai-sdk/xai', command: 'bun add @ai-sdk/xai', scope: 'repo' },
+        { text: 'Restart', scope: 'host' }
+      ],
+      seenBefore: false,
+      status: 'proposed'
+    })
+    await owner.rememberDiagnosis('/other/project', {
+      signature: '1234',
+      summary: 'Numeric key',
+      steps: [],
+      seenBefore: false
+    })
     const recalled = await owner.recallDiagnosis(w.local, signature)
     await owner.diagnosisStatus(w.local, signature, 'applied')
     await owner.diagnosisStatus(w.local, 'ffff', 'dismissed')
-    return { none, recalled, after: await owner.recallDiagnosis(w.local, signature), file: readFileSync(join(w.profile, 'diagnostics.json'), 'utf8') }
+    return {
+      none,
+      recalled,
+      after: await owner.recallDiagnosis(w.local, signature),
+      file: readFileSync(join(w.profile, 'diagnostics.json'), 'utf8')
+    }
   })
 
-  assert.equal(diagnosed.after.status, 'applied'); assert.equal(diagnosed.recalled.seenBefore, true)
+  assert.equal(diagnosed.after.status, 'applied')
+  assert.equal(diagnosed.recalled.seenBefore, true)
 
   const skills = await owned('skills', async (owner, w) => {
     const input = { packId: 'anthropic-frontend-design', scope: 'project', liveRoot: w.local }
@@ -270,24 +478,37 @@ try {
     return { ok, failed, refused, calls: w.pm().calls }
   })
 
-  assert.equal(skills.ok.ok, true); assert.deepEqual(skills.ok.installed, ['frontend-design']); assert.equal(skills.failed.ok, false)
-  assert.match(skills.refused.message, /not in the curated skill-pack allowlist/); assert.equal(skills.calls.length, 2)
+  assert.equal(skills.ok.ok, true)
+  assert.deepEqual(skills.ok.installed, ['frontend-design'])
+  assert.equal(skills.failed.ok, false)
+  assert.match(skills.refused.message, /not in the curated skill-pack allowlist/)
+  assert.equal(skills.calls.length, 2)
 
   const feedback = await owned('feedback', async (owner, w) => {
     const title = 'Sidebar focus'
     const body = 'Steps to reproduce…'
     const result = await owner.feedback(w.local, title, body)
     const issue = w.gh().issues[0]
-    return { result, issue: issue ? { title: issue.title, body: issue.body } : null, create: w.gh().counts?.issueCreate }
+    return {
+      result,
+      issue: issue ? { title: issue.title, body: issue.body } : null,
+      create: w.gh().counts?.issueCreate
+    }
   })
   assert.equal(feedback.result.ok, true)
   assert.deepEqual(feedback.issue, { title: 'Sidebar focus', body: 'Steps to reproduce…' })
   assert.equal(feedback.create, 1)
 
   // ───────────── durability (Swift owner) ─────────────
-  await import('./helpers/workflow-tools-checks.mjs').then(module => module.toolChecks({ world, start, log }))
-  await import('./helpers/workflow-durability.mjs').then(module => module.durability({ world, start, snapshot, git, write, commit, describe, log, fakes }))
-  console.log('WORKFLOW OWNER OK — scenarios, lost replies, crashes, failures, cancellation, restart, relaunch, drain, redaction, schema')
+  await import('./helpers/workflow-tools-checks.mjs').then((module) =>
+    module.toolChecks({ world, start, log })
+  )
+  await import('./helpers/workflow-durability.mjs').then((module) =>
+    module.durability({ world, start, snapshot, git, write, commit, describe, log, fakes })
+  )
+  console.log(
+    'WORKFLOW OWNER OK — scenarios, lost replies, crashes, failures, cancellation, restart, relaunch, drain, redaction, schema'
+  )
 } finally {
   for (const fixture of fixtures) await fixture.stop().catch(() => {})
   rmSync(scratch, { recursive: true, force: true })

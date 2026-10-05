@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { nativeCatAssets } from '../scripts/native-cat-assets.mjs'
+
 const artwork = nativeCatAssets(new URL('..', import.meta.url).pathname)
 assert.deepEqual(Object.keys(artwork).sort(), ['appear', 'idle', 'jump', 'rest', 'run', 'think'])
 assert.equal(artwork.run.length, 2)

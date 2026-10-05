@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import type { Readable, Writable } from 'node:stream'
 import { createInterface } from 'node:readline'
+import type { Readable, Writable } from 'node:stream'
 
 /**
  * Where the host's frames come from. In Trezi that is always the Swift service's
@@ -35,7 +35,7 @@ export class NativeBridge extends EventEmitter {
     this.output = transport.output
     const lines = createInterface({ input: transport.input })
     // Under the service EOF is sent only after the host's final events drain.
-    this.closed = new Promise(resolve => {
+    this.closed = new Promise((resolve) => {
       if (this.child) this.child.once('close', () => resolve())
       else lines.once('close', () => resolve())
     })
@@ -52,7 +52,8 @@ export class NativeBridge extends EventEmitter {
           this.pending.delete(message.id)
           if (message.error) request.reject(new Error(message.error))
           else request.resolve(message.value)
-        } else if (message.event === 'service-reply' || message.event === 'service-event') this.emit(message.event, message)
+        } else if (message.event === 'service-reply' || message.event === 'service-event')
+          this.emit(message.event, message)
         else this.deliver(message.event, message)
       } catch (error) {
         console.error('Invalid native host message:', error)
@@ -70,12 +71,15 @@ export class NativeBridge extends EventEmitter {
     if (this.child) this.child.once('exit', disconnected)
     else lines.once('close', disconnected)
   }
-  hold() { this.held ??= [] }
+  hold() {
+    this.held ??= []
+  }
   /** Replays held host events once every handler is registered. */
   release() {
     const held = this.held ?? []
     this.held = null
-    for (const [event, message] of held) this.emit(event, ...(message === undefined ? [] : [message]))
+    for (const [event, message] of held)
+      this.emit(event, ...(message === undefined ? [] : [message]))
   }
   private deliver(event: string, message?: unknown) {
     if (this.held) this.held.push([event, message])

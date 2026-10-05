@@ -2,26 +2,71 @@
 // once-per-kind automatic opening, collapsed gray recovery notices, the unread marker
 // and the Show Activity automatically setting.
 import assert from 'node:assert/strict'
-import { ACTIVITY_AUTO_OPEN_CHOICES, activityAutoOpen, NativeActivityController, severityOf } from '../src/native/activity-controller.ts'
-import { reportConversationRecovery, reportRepositoryRecovery, reportSourceRecovery } from '../src/native/activity-startup.ts'
+import {
+  ACTIVITY_AUTO_OPEN_CHOICES,
+  activityAutoOpen,
+  NativeActivityController,
+  severityOf
+} from '../src/native/activity-controller.ts'
+import {
+  reportConversationRecovery,
+  reportRepositoryRecovery,
+  reportSourceRecovery
+} from '../src/native/activity-startup.ts'
 import { NativePreviewSupervisor, RESTART_DELAYS } from '../src/native/preview-supervisor.ts'
 
-const flush = () => new Promise(resolve => setTimeout(resolve, 70))
+const flush = () => new Promise((resolve) => setTimeout(resolve, 70))
 const make = (mode = 'problems') => {
   const sent = []
   const settings = { mode }
-  const log = new NativeActivityController((method, value) => sent.push([method, structuredClone(value)]), text => text, () => activityAutoOpen(settings.mode))
-  return { log, sent, settings, states: () => sent.filter(([m]) => m === 'activityState').map(([, v]) => v), unread: () => sent.filter(([m]) => m === 'activityUnread').map(([, v]) => v).at(-1) }
+  const log = new NativeActivityController(
+    (method, value) => sent.push([method, structuredClone(value)]),
+    (text) => text,
+    () => activityAutoOpen(settings.mode)
+  )
+  return {
+    log,
+    sent,
+    settings,
+    states: () => sent.filter(([m]) => m === 'activityState').map(([, v]) => v),
+    unread: () =>
+      sent
+        .filter(([m]) => m === 'activityUnread')
+        .map(([, v]) => v)
+        .at(-1)
+  }
 }
-const VITE = ['', '  VITE v5.4.0  ready in 312 ms', '', '  ➜  Local:   http://localhost:5173/', '  ➜  Network: use --host to expose']
-const chat = (id, outcome = 'restored', interrupted = false) => ({ chat: id, id, project: '/p', interrupted, outcome, ...(outcome === 'restored' ? {} : { copy: `/c/${id}` }) })
+const VITE = [
+  '',
+  '  VITE v5.4.0  ready in 312 ms',
+  '',
+  '  ➜  Local:   http://localhost:5173/',
+  '  ➜  Network: use --host to expose'
+]
+const chat = (id, outcome = 'restored', interrupted = false) => ({
+  chat: id,
+  id,
+  project: '/p',
+  interrupted,
+  outcome,
+  ...(outcome === 'restored' ? {} : { copy: `/c/${id}` })
+})
 
 // Severity classification: every kind maps to info, warning or needs-action.
-assert.deepEqual(['info', 'notice', 'server', 'success', 'warning', 'error', 'needs-action'].map(severityOf),
-  ['info', 'info', 'info', 'info', 'warning', 'warning', 'needs-action'])
+assert.deepEqual(
+  ['info', 'notice', 'server', 'success', 'warning', 'error', 'needs-action'].map(severityOf),
+  ['info', 'info', 'info', 'info', 'warning', 'warning', 'needs-action']
+)
 
 // Settings: default "For problems that need me"; unknown values fall back to it.
-assert.deepEqual(ACTIVITY_AUTO_OPEN_CHOICES.map(c => [c.value, c.label]), [['never', 'Never'], ['problems', 'For problems that need me'], ['always', 'Always']])
+assert.deepEqual(
+  ACTIVITY_AUTO_OPEN_CHOICES.map((c) => [c.value, c.label]),
+  [
+    ['never', 'Never'],
+    ['problems', 'For problems that need me'],
+    ['always', 'Always']
+  ]
+)
 assert.equal(activityAutoOpen(null), 'problems')
 assert.equal(activityAutoOpen('bogus'), 'problems')
 assert.equal(activityAutoOpen('never'), 'never')
@@ -30,8 +75,28 @@ assert.equal(activityAutoOpen('never'), 'never')
 for (const mode of ['never', 'problems', 'always']) {
   const { log, states } = make(mode)
   reportConversationRecovery(log, [chat('a'), chat('b', 'restored', true), chat('c'), chat('d')])
-  reportSourceRecovery(log, { interrupted: [{ operationID: 'o', kind: 'write', root: '/p', started: '', restored: [], unchanged: [], kept: [], copies: [] }] })
-  reportRepositoryRecovery(log, { active: [], interrupted: [], recovered: [{ id: 'r', kind: 'merge', root: '/p', refs: ['refs/trezi/recovery/x'], missing: [] }], closedEarlier: 2 })
+  reportSourceRecovery(log, {
+    interrupted: [
+      {
+        operationID: 'o',
+        kind: 'write',
+        root: '/p',
+        started: '',
+        restored: [],
+        unchanged: [],
+        kept: [],
+        copies: []
+      }
+    ]
+  })
+  reportRepositoryRecovery(log, {
+    active: [],
+    interrupted: [],
+    recovered: [
+      { id: 'r', kind: 'merge', root: '/p', refs: ['refs/trezi/recovery/x'], missing: [] }
+    ],
+    closedEarlier: 2
+  })
   for (const line of VITE) log.append(line, 'server')
   await flush()
   assert.equal(log.visible, false, `${mode}: recovery notices and Vite output do not open Activity`)
@@ -43,14 +108,16 @@ for (const mode of ['never', 'problems', 'always']) {
 {
   const { log, states } = make()
   reportConversationRecovery(log, [chat('a'), chat('b', 'restored', true), chat('c'), chat('d')])
-  const restored = log.lines.filter(line => line.group === 'restored-chats')
+  const restored = log.lines.filter((line) => line.group === 'restored-chats')
   assert.equal(restored.length, 1, 'one line for four restored chats')
   assert.equal(restored[0].count, 4)
   assert.equal(restored[0].kind, 'notice', 'styled as info (gray), not red')
   assert.equal(restored[0].severity, 'info')
   assert.equal(restored[0].text.split('\n').length, 4, 'the tooltip and Copy All keep every notice')
   log.action('show')
-  const shown = states().at(-1).lines.find(line => line.group === 'restored-chats')
+  const shown = states()
+    .at(-1)
+    .lines.find((line) => line.group === 'restored-chats')
   assert.equal(shown.display, 'Restored 4 interrupted chats.')
   assert.equal(shown.kind, 'notice')
   // A single notice reads as itself; a damaged checkpoint or a kept newer copy is not collapsed.
@@ -58,11 +125,30 @@ for (const mode of ['never', 'problems', 'always']) {
   reportConversationRecovery(single.log, [chat('a'), chat('b', 'kept'), chat('c', 'damaged')])
   single.log.action('show')
   const lines = single.states().at(-1).lines
-  assert.equal(lines[0].display, 'A chat was cut off when Trezi last stopped; its conversation was restored.')
-  assert.deepEqual(lines.map(line => [line.kind, line.severity]), [['notice', 'info'], ['notice', 'info'], ['warning', 'warning']])
+  assert.equal(
+    lines[0].display,
+    'A chat was cut off when Trezi last stopped; its conversation was restored.'
+  )
+  assert.deepEqual(
+    lines.map((line) => [line.kind, line.severity]),
+    [
+      ['notice', 'info'],
+      ['notice', 'info'],
+      ['warning', 'warning']
+    ]
+  )
   // Rolled-back source operations collapse the same way.
   const source = make()
-  const op = id => ({ operationID: id, kind: 'write', root: '/p', started: '', restored: ['a'], unchanged: [], kept: [], copies: [] })
+  const op = (id) => ({
+    operationID: id,
+    kind: 'write',
+    root: '/p',
+    started: '',
+    restored: ['a'],
+    unchanged: [],
+    kept: [],
+    copies: []
+  })
   reportSourceRecovery(source.log, { interrupted: [op('1'), op('2'), op('3')] })
   assert.equal(source.log.lines.length, 1)
   assert.equal(source.log.lines[0].summary, 'Rolled back 3 interrupted source changes.')
@@ -87,7 +173,8 @@ for (const mode of ['never', 'problems', 'always']) {
   log.append('Could not open Repo again', 'needs-action', { event: 'project-open-failed' })
   assert.equal(log.visible, false)
   // Ordinary errors and warnings are logged, never opened, under the default.
-  log.append('Download failed', 'error'); log.append('Recovery ref missing', 'warning')
+  log.append('Download failed', 'error')
+  log.append('Recovery ref missing', 'warning')
   assert.equal(log.visible, false)
   assert.deepEqual([...log.opened].sort(), ['devserver-crash-loop', 'project-open-failed'])
   // An open window still comes to front once for a new kind.
@@ -102,7 +189,9 @@ for (const mode of ['never', 'problems', 'always']) {
 // Unread marker: warnings and needs-action lines while hidden; cleared once viewed.
 {
   const { log, unread } = make()
-  log.append('server line', 'server'); log.append('restored', 'notice'); log.append('done', 'success')
+  log.append('server line', 'server')
+  log.append('restored', 'notice')
+  log.append('done', 'success')
   assert.equal(unread(), undefined, 'info lines do not mark Activity')
   log.append('Download failed', 'error')
   assert.deepEqual(unread(), { count: 1, level: 'warning' })
@@ -146,13 +235,31 @@ for (const mode of ['never', 'problems', 'always']) {
 // The preview supervisor reports the crash loop it gives up on.
 {
   const timers = []
-  const clock = { now: () => 0, set: run => { timers.push(run); return timers.length }, clear() {} }
-  const workspace = { state: { activeKey: '/p', status: { kind: 'running', url: 'http://x' }, projects: [] }, changed() {}, async command() { workspace.state.status = { kind: 'error', message: 'Exited with code 1' } } }
+  const clock = {
+    now: () => 0,
+    set: (run) => {
+      timers.push(run)
+      return timers.length
+    },
+    clear() {}
+  }
+  const workspace = {
+    state: { activeKey: '/p', status: { kind: 'running', url: 'http://x' }, projects: [] },
+    changed() {},
+    async command() {
+      workspace.state.status = { kind: 'error', message: 'Exited with code 1' }
+    }
+  }
   const gaveUp = []
-  const supervisor = new NativePreviewSupervisor(workspace, clock, reason => gaveUp.push(reason))
+  const supervisor = new NativePreviewSupervisor(workspace, clock, (reason) => gaveUp.push(reason))
   supervisor.exited({ root: '/p', url: 'http://x', reason: 'Exited with code 1' })
-  for (let i = 0; i < RESTART_DELAYS.length; i++) { await timers.shift()(); await flush() }
+  for (let i = 0; i < RESTART_DELAYS.length; i++) {
+    await timers.shift()()
+    await flush()
+  }
   assert.deepEqual(gaveUp, ['Exited with code 1'], 'giving up on a crash loop is reported once')
 }
 
-console.log('Activity attention: severity, once-per-kind auto-open, collapsed recovery notices, unread marker and the setting passed')
+console.log(
+  'Activity attention: severity, once-per-kind auto-open, collapsed recovery notices, unread marker and the setting passed'
+)

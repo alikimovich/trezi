@@ -12,7 +12,15 @@
 // and it checks that the helper-created island round-trips its controls in main.
 import './helpers/with-service-owners.mjs'
 import assert from 'node:assert/strict'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,22 +29,45 @@ import { compileProviderFixture, startProviderFixture } from './helpers/provider
 const root = fileURLToPath(new URL('..', import.meta.url))
 const binary = compileProviderFixture()
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-helper-tools-')))
-const WT = join(scratch, 'project'), PROFILE = join(scratch, 'profile')
+const WT = join(scratch, 'project'),
+  PROFILE = join(scratch, 'profile')
 mkdirSync(WT)
 mkdirSync(PROFILE)
 const CODE = 'const LIGHT_X = 0;\nconst LIGHT_Y = -0.5;\n'
 writeFileSync(join(WT, 'shadow.js'), CODE)
-const CHAT = 'helper-tools-chat', URL_SHOWN = 'http://127.0.0.1:5199/helper-route'
+const CHAT = 'helper-tools-chat',
+  URL_SHOWN = 'http://127.0.0.1:5199/helper-route'
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
 
-const number = (id, anchor) => ({ id, label: id, kind: 'number', min: -1, max: 1, step: 0.01, apply: { strategy: 'literal', anchor } })
-const island = { action: 'define', engine: 'agent', manifest: { file: 'shadow.js', component: 'Card', title: 'Light', params: [number('x', 'const LIGHT_X = '), number('y', 'const LIGHT_Y = ')] }, blocks: [{ id: 'light', title: 'Light position', kind: 'point', params: ['x', 'y'] }] }
+const number = (id, anchor) => ({
+  id,
+  label: id,
+  kind: 'number',
+  min: -1,
+  max: 1,
+  step: 0.01,
+  apply: { strategy: 'literal', anchor }
+})
+const island = {
+  action: 'define',
+  engine: 'agent',
+  manifest: {
+    file: 'shadow.js',
+    component: 'Card',
+    title: 'Light',
+    params: [number('x', 'const LIGHT_X = '), number('y', 'const LIGHT_Y = ')]
+  },
+  blocks: [{ id: 'light', title: 'Light position', kind: 'point', params: ['x', 'y'] }]
+}
 
 // What each stand-in calls a tool with. A tool the session lists but this table lacks fails.
 const { SKILL_PACKS } = await import('../src/main/skill-packs.ts')
 const CALLS = {
   project_ui_catalog: {},
-  compose_project_ui: { file: 'Card.tsx', spec: { root: 'r', elements: { r: { type: 'Text', props: { text: 'hi' }, children: [] } } } },
+  compose_project_ui: {
+    file: 'Card.tsx',
+    spec: { root: 'r', elements: { r: { type: 'Text', props: { text: 'hi' }, children: [] } } }
+  },
   preview_location: {},
   preview_screenshot: {},
   preview_inspect: { selector: 'h1' },
@@ -58,16 +89,28 @@ const CALLS = {
   install_skills: { packId: SKILL_PACKS[0].id, scope: 'project' }
 }
 // Pure: computed where the provider runs. Every other tool must reach main.
-const PURE = new Set(['spring_to_css', 'check_contrast', 'fluid_clamp', 'color_scale', 'layered_shadow', 'line_height', 'list_recommended_skills'])
-const MISSING = /not available|is not running|cannot start|Gen UI is off|No project preview is open|No project preview capture|is not one of Trezi/i
-const PLAN = join(scratch, 'plan.json'), LOG = join(scratch, 'calls.log')
+const PURE = new Set([
+  'spring_to_css',
+  'check_contrast',
+  'fluid_clamp',
+  'color_scale',
+  'layered_shadow',
+  'line_height',
+  'list_recommended_skills'
+])
+const MISSING =
+  /not available|is not running|cannot start|Gen UI is off|No project preview is open|No project preview capture|is not one of Trezi/i
+const PLAN = join(scratch, 'plan.json'),
+  LOG = join(scratch, 'calls.log')
 writeFileSync(PLAN, JSON.stringify({ calls: CALLS, log: LOG }))
 
 // --- the stand-in `claude`: the SDK's stream-json control protocol, no model -------------
 // Each user turn lists the in-process `trezi` MCP server's tools (or `only a,b`) and
 // calls each through `mcp_message` control requests, as the real CLI does for SDK servers.
 const CLAUDE = join(scratch, 'claude')
-writeFileSync(CLAUDE, `#!${process.execPath}
+writeFileSync(
+  CLAUDE,
+  `#!${process.execPath}
 import { appendFileSync, readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 const args = process.argv.slice(2)
@@ -114,14 +157,17 @@ createInterface({ input: process.stdin, crlfDelay: Infinity }).on('line', (line)
     out({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1, duration_api_ms: 1, num_turns: 1, result: '', total_cost_usd: 0, usage: { input_tokens: 0, output_tokens: 0 }, ...meta })
   })
 }).on('close', () => process.exit(0))
-`)
+`
+)
 chmodSync(CLAUDE, 0o755)
 
 // --- the stand-in `codex`: each exec connects to the Trezi MCP server its --config names --
 const client = import.meta.resolve('@modelcontextprotocol/sdk/client/index.js')
 const stdio = import.meta.resolve('@modelcontextprotocol/sdk/client/stdio.js')
 const CODEX = join(scratch, 'codex')
-writeFileSync(CODEX, `#!${process.execPath}
+writeFileSync(
+  CODEX,
+  `#!${process.execPath}
 import { appendFileSync, readFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 const out = (event) => process.stdout.write(JSON.stringify(event) + '\\n')
@@ -144,10 +190,18 @@ out({ type: 'thread.started', thread_id: 'thread-' + process.pid })
 out({ type: 'turn.started' })
 out({ type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: 'TOOLS DONE' } })
 out({ type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } })
-`)
+`
+)
 chmodSync(CODEX, 0o755)
 const logged = () => {
-  try { return readFileSync(LOG, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)) } catch { return [] }
+  try {
+    return readFileSync(LOG, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+  } catch {
+    return []
+  }
 }
 
 // --- main's state: what the helper does not have ------------------------------------------
@@ -167,23 +221,52 @@ islands.register(CHAT, WT, 'helper-record', () => 1)
 let shownWidth = 800
 registerPreviewSource({
   getUrl: () => URL_SHOWN,
-  capture: async () => ({ isEmpty: () => false, getSize: () => ({ width: 10, height: 10 }), resize: () => { throw new Error('unused') }, toJPEG: () => JPEG }),
+  capture: async () => ({
+    isEmpty: () => false,
+    getSize: () => ({ width: 10, height: 10 }),
+    resize: () => {
+      throw new Error('unused')
+    },
+    toJPEG: () => JPEG
+  }),
   agent: {
     async evaluate(code) {
-      if (code.includes('__treziAgentRuntime')) return { ok: true, type: 'number', value: 2, bytes: 1, ms: 0 }
-      if (code.includes('__treziAgentInspect')) return { element: '<h1>', styles: { 'box-shadow': 'none' } }
+      if (code.includes('__treziAgentRuntime'))
+        return { ok: true, type: 'number', value: 2, bytes: 1, ms: 0 }
+      if (code.includes('__treziAgentInspect'))
+        return { element: '<h1>', styles: { 'box-shadow': 'none' } }
       if (code.includes('__treziAgentConsole')) return { total: 0, dropped: 0, entries: [] }
       return { innerWidth: shownWidth, innerHeight: 600 }
     },
     captureRect: async () => null,
-    async setViewport(width) { shownWidth = width ?? 800; return { width, zoom: 1 } }
+    async setViewport(width) {
+      shownWidth = width ?? 800
+      return { width, zoom: 1 }
+    }
   }
 })
 setProjectUiEnabled(CHAT, true)
 const installs = []
-setWorkflowOwner({ installSkills: async (input) => { installs.push(input); return { ok: true, packId: input.packId, scope: input.scope, targetDir: '', installed: [], message: `Installed ${input.packId} (main).` } } })
+setWorkflowOwner({
+  installSkills: async (input) => {
+    installs.push(input)
+    return {
+      ok: true,
+      packId: input.packId,
+      scope: input.scope,
+      targetDir: '',
+      installed: [],
+      message: `Installed ${input.packId} (main).`
+    }
+  }
+})
 const notified = []
-const view = { webContents: { isDestroyed: () => false, send: (channel, payload) => notified.push({ channel, payload }) } }
+const view = {
+  webContents: {
+    isDestroyed: () => false,
+    send: (channel, payload) => notified.push({ channel, payload })
+  }
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const until = async (condition, label, ms = 60_000) => {
@@ -194,14 +277,20 @@ const until = async (condition, label, ms = 60_000) => {
   }
 }
 /** The tool calls the owner relayed to main (authorized; main then ran them). */
-const routed = (from = 0) => fixture.events.slice(from).filter((e) => e.service === 'provider' && e.kind === 'tool').map((e) => e.tool)
+const routed = (from = 0) =>
+  fixture.events
+    .slice(from)
+    .filter((e) => e.service === 'provider' && e.kind === 'tool')
+    .map((e) => e.tool)
 const textOf = (result) => JSON.stringify(result)
 
 let fixture
 const sessions = []
 try {
   fixture = await startProviderFixture(binary, PROFILE, {
-    PROVIDER_HELPER_ARGS: [join(root, 'test/fixtures/tools-helper.mjs'), CLAUDE, CODEX].join('\u001f'),
+    PROVIDER_HELPER_ARGS: [join(root, 'test/fixtures/tools-helper.mjs'), CLAUDE, CODEX].join(
+      '\u001f'
+    ),
     PROVIDER_HELPER_PROVIDERS: 'claude,codex',
     // The helper loads both real adapters and their SDKs; a cold transpile cache is slow.
     PROVIDER_READY: '60'
@@ -210,17 +299,30 @@ try {
 
   async function chat(provider, ctx = {}) {
     const events = []
-    const s = await startProviderSession(helperProvider(provider), WT, { provider }, () => view,
-      { emitKey: CHAT, liveRoot: WT, onEvent: (e) => events.push(e), ...ctx })
+    const s = await startProviderSession(helperProvider(provider), WT, { provider }, () => view, {
+      emitKey: CHAT,
+      liveRoot: WT,
+      onEvent: (e) => events.push(e),
+      ...ctx
+    })
     sessions.push(s)
     const turn = async (text) => {
-      const start = events.length, calls = logged().length, from = fixture.events.length
+      const start = events.length,
+        calls = logged().length,
+        from = fixture.events.length
       s.send(text)
       await until(() => events.slice(start).some((e) => e.type === 'done'), `${provider}: ${text}`)
       const run = logged().slice(calls)
-      assert.equal(run.length, 1, `${provider} ran the turn: ${JSON.stringify(events.slice(start))}`)
+      assert.equal(
+        run.length,
+        1,
+        `${provider} ran the turn: ${JSON.stringify(events.slice(start))}`
+      )
       assert.ok(!run[0].crash, run[0].crash)
-      assert.ok(!events.slice(start).some((e) => e.type === 'error'), JSON.stringify(events.slice(start)))
+      assert.ok(
+        !events.slice(start).some((e) => e.type === 'error'),
+        JSON.stringify(events.slice(start))
+      )
       return { ...run[0], routed: routed(from) }
     }
     return { s, turn }
@@ -230,14 +332,28 @@ try {
   const everyTool = (run, provider) => {
     assert.ok(run.listed.length, `${provider} lists tools`)
     for (const name of run.listed) {
-      assert.ok(name in CALLS, `${provider} exposes ${name}: add it to CALLS, and to PURE if it needs nothing from main`)
-      assert.ok(PURE.has(name) || SESSION_TOOLS.includes(name), `${name} is neither pure nor a session tool main runs`)
+      assert.ok(
+        name in CALLS,
+        `${provider} exposes ${name}: add it to CALLS, and to PURE if it needs nothing from main`
+      )
+      assert.ok(
+        PURE.has(name) || SESSION_TOOLS.includes(name),
+        `${name} is neither pure nor a session tool main runs`
+      )
       const text = textOf(run.results[name])
-      assert.doesNotMatch(text, MISSING, `${provider} ${name} answered from the helper, not main: ${text}`)
+      assert.doesNotMatch(
+        text,
+        MISSING,
+        `${provider} ${name} answered from the helper, not main: ${text}`
+      )
       if (PURE.has(name)) {
         assert.ok(!run.routed.includes(name), `${provider} ${name} is pure and stays in the helper`)
         assert.notEqual(run.results[name].isError, true, `${provider} ${name}: ${text}`)
-      } else assert.ok(run.routed.includes(name), `${provider} ${name} reached main through the owner (${run.routed})`)
+      } else
+        assert.ok(
+          run.routed.includes(name),
+          `${provider} ${name} reached main through the owner (${run.routed})`
+        )
     }
   }
 
@@ -245,44 +361,106 @@ try {
   const claude = await chat('claude')
   const all = await claude.turn('call every tool')
   everyTool(all, 'claude')
-  assert.deepEqual([...all.listed].sort(), Object.keys(CALLS).filter((n) => !['workspace_state', 'prepare_conflict_resolution'].includes(n)).sort())
+  assert.deepEqual(
+    [...all.listed].sort(),
+    Object.keys(CALLS)
+      .filter((n) => !['workspace_state', 'prepare_conflict_resolution'].includes(n))
+      .sort()
+  )
   // Main's real answers.
   const made = JSON.parse(all.results.chat_island.content[0].text)
   assert.ok(made.id, `chat_island created an island: ${textOf(made)}`)
   assert.notEqual(all.results.chat_island.isError, true)
   assert.match(textOf(all.results.preview_location), /helper-route/, 'main’s preview URL')
-  assert.deepEqual(all.results.preview_screenshot.content, [{ type: 'image', data: JPEG.toString('base64'), mimeType: 'image/jpeg' }])
+  assert.deepEqual(all.results.preview_screenshot.content, [
+    { type: 'image', data: JPEG.toString('base64'), mimeType: 'image/jpeg' }
+  ])
   assert.equal(JSON.parse(all.results.open_preview.content[0].text).requested, true)
-  assert.ok(notified.some((n) => n.channel === 'preview:open' && n.payload.path === '/helper-route' && n.payload.key === CHAT), 'main navigated the preview')
-  assert.ok(notified.some((n) => n.channel === 'source:reveal' && n.payload.source === 'shadow.js:1' && n.payload.key === CHAT), 'main revealed the code')
-  assert.equal(JSON.parse(all.results.project_ui_catalog.content[0].text).engine, 'agent', 'Gen UI is on in main')
-  assert.deepEqual(installs.map((i) => [i.packId, i.scope, i.liveRoot]), [[SKILL_PACKS[0].id, 'project', WT]])
+  assert.ok(
+    notified.some(
+      (n) =>
+        n.channel === 'preview:open' && n.payload.path === '/helper-route' && n.payload.key === CHAT
+    ),
+    'main navigated the preview'
+  )
+  assert.ok(
+    notified.some(
+      (n) =>
+        n.channel === 'source:reveal' &&
+        n.payload.source === 'shadow.js:1' &&
+        n.payload.key === CHAT
+    ),
+    'main revealed the code'
+  )
+  assert.equal(
+    JSON.parse(all.results.project_ui_catalog.content[0].text).engine,
+    'agent',
+    'Gen UI is on in main'
+  )
+  assert.deepEqual(
+    installs.map((i) => [i.packId, i.scope, i.liveRoot]),
+    [[SKILL_PACKS[0].id, 'project', WT]]
+  )
   assert.match(textOf(all.results.install_skills), /\(main\)/)
 
   // The island lives in main's service, renders from there and its controls round-trip.
-  const shown = () => islands.attachments(CHAT).map((a) => a.view).find((v) => v.id === made.id)
+  const shown = () =>
+    islands
+      .attachments(CHAT)
+      .map((a) => a.view)
+      .find((v) => v.id === made.id)
   assert.ok(shown(), 'the island is attached to the chat')
   assert.equal(shown().title, 'Light')
   await islands.settle(CHAT, true)
   assert.equal(shown().status, 'ready')
-  await islands.interact({ chat: CHAT, id: made.id, revision: shown().revision, sourceRevision: shown().sourceRevision, operation: crypto.randomUUID(), action: 'commit', values: { x: 0.25, y: 0.75 } })
+  await islands.interact({
+    chat: CHAT,
+    id: made.id,
+    revision: shown().revision,
+    sourceRevision: shown().sourceRevision,
+    operation: crypto.randomUUID(),
+    action: 'commit',
+    values: { x: 0.25, y: 0.75 }
+  })
   assert.match(readFileSync(join(WT, 'shadow.js'), 'utf8'), /LIGHT_X = 0.25;\nconst LIGHT_Y = 0.75/)
-  await islands.interact({ chat: CHAT, id: made.id, revision: shown().revision, sourceRevision: shown().sourceRevision, operation: crypto.randomUUID(), action: 'undo', values: {} })
+  await islands.interact({
+    chat: CHAT,
+    id: made.id,
+    revision: shown().revision,
+    sourceRevision: shown().sourceRevision,
+    operation: crypto.randomUUID(),
+    action: 'undo',
+    values: {}
+  })
   assert.equal(readFileSync(join(WT, 'shadow.js'), 'utf8'), CODE)
-  assert.deepEqual(shown().fields.map((f) => f.value), [0, -0.5], 'the view shows the source again')
+  assert.deepEqual(
+    shown().fields.map((f) => f.value),
+    [0, -0.5],
+    'the view shows the source again'
+  )
 
   // --- grant: a background session's foreground-only tools are refused by the owner --------
   const navigations = () => notified.filter((n) => n.channel !== 'agent:event').length
-  const before = islands.sessions.get(CHAT).records.length, shownBefore = navigations()
+  const before = islands.sessions.get(CHAT).records.length,
+    shownBefore = navigations()
   const background = await chat('claude', { sessionId: 'spawn-1' })
   const refused = await background.turn('only chat_island,open_code,open_preview')
   assert.match(textOf(refused.results.chat_island), /Background edits cannot create chat islands/)
   assert.equal(refused.results.chat_island.isError, true)
-  assert.match(textOf(refused.results.open_code), /Background edits cannot navigate the user editor/)
-  assert.ok(!refused.routed.includes('chat_island') && !refused.routed.includes('open_code'), `the owner refused before main: ${refused.routed}`)
+  assert.match(
+    textOf(refused.results.open_code),
+    /Background edits cannot navigate the user editor/
+  )
+  assert.ok(
+    !refused.routed.includes('chat_island') && !refused.routed.includes('open_code'),
+    `the owner refused before main: ${refused.routed}`
+  )
   // Granted to a background session, and main applies its scope: no navigation.
   assert.deepEqual(refused.routed, ['open_preview'])
-  assert.match(textOf(refused.results.open_preview), /Background edits cannot navigate the user preview/)
+  assert.match(
+    textOf(refused.results.open_preview),
+    /Background edits cannot navigate the user preview/
+  )
   assert.equal(islands.sessions.get(CHAT).records.length, before, 'no island was created')
   assert.equal(navigations(), shownBefore, 'nothing was navigated')
 
@@ -291,15 +469,27 @@ try {
   // the stand-in's calls both go to main.
   const opened = fixture.events.length
   const codex = await chat('codex')
-  assert.deepEqual(routed(opened), ['workspace_state'], 'Codex checked its bridge against main while opening')
+  assert.deepEqual(
+    routed(opened),
+    ['workspace_state'],
+    'Codex checked its bridge against main while opening'
+  )
   const bridged = await codex.turn('call every tool')
   everyTool(bridged, 'codex')
-  assert.deepEqual([...bridged.listed].sort(), [...SESSION_TOOLS].filter((n) => n !== 'install_skills').sort())
+  assert.deepEqual(
+    [...bridged.listed].sort(),
+    [...SESSION_TOOLS].filter((n) => n !== 'install_skills').sort()
+  )
   const bridgedIsland = JSON.parse(bridged.results.chat_island.content[0].text)
-  assert.ok(bridgedIsland.id || /in progress|busy/.test(bridgedIsland.error ?? ''), textOf(bridgedIsland))
+  assert.ok(
+    bridgedIsland.id || /in progress|busy/.test(bridgedIsland.error ?? ''),
+    textOf(bridgedIsland)
+  )
   assert.match(textOf(bridged.results.preview_location), /helper-route/)
   assert.match(textOf(bridged.results.workspace_state), /live folder/)
-  console.log('PROVIDER-HELPER-TOOLS OK — Claude and Codex helper sessions reach every Trezi tool in main, under the owner’s grant')
+  console.log(
+    'PROVIDER-HELPER-TOOLS OK — Claude and Codex helper sessions reach every Trezi tool in main, under the owner’s grant'
+  )
 } finally {
   for (const s of sessions) s.shutdown()
   await fixture?.stop().catch(() => {})

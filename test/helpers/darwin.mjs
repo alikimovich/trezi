@@ -13,7 +13,8 @@ function skip(reason) {
 
 /** Call before compiling Swift that needs macOS frameworks (the service owners). */
 export function skipUnlessDarwin(what) {
-  if (process.platform !== 'darwin') skip(`${what} needs macOS and the Xcode toolchain (this is ${process.platform})`)
+  if (process.platform !== 'darwin')
+    skip(`${what} needs macOS and the Xcode toolchain (this is ${process.platform})`)
 }
 
 /** For Swift that also builds with swift-corelibs-foundation: off macOS it runs when
@@ -21,5 +22,6 @@ export function skipUnlessDarwin(what) {
 export function skipUnlessSwift(what) {
   if (process.platform === 'darwin') return
   const found = spawnSync('swiftc', ['--version'], { stdio: 'ignore' })
-  if (found.error || found.status !== 0) skip(`${what} needs a Swift toolchain (no swiftc on ${process.platform})`)
+  if (found.error || found.status !== 0)
+    skip(`${what} needs a Swift toolchain (no swiftc on ${process.platform})`)
 }

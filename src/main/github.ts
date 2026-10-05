@@ -8,9 +8,9 @@
  * readiness for the sheet. Any failure degrades to a describable state, never a throw.
  */
 import { execFile } from 'child_process'
-import { ipcMain } from '../native/platform'
 import { basename } from 'path'
 import { promisify } from 'util'
+import { ipcMain } from '../native/platform'
 import type { GithubConnectOptions, GithubStatus } from '../shared/api'
 import { sanitizeRepoName } from '../shared/github'
 import { workflowOwner } from './workflow-owner'

@@ -1,14 +1,14 @@
-import { renderJsxAttribute } from './jsx-attribute-literals'
-import { ipcMain } from '../native/platform'
 import { readFile } from 'fs/promises'
+import { ipcMain } from '../native/platform'
 import type { PropEditResult, StyleEdit, StyleEditResult } from '../shared/api'
 import { projectRelative } from '../shared/project-path'
 import { STYLE_PROPS as STYLE_PROP_LIST } from '../shared/style-props'
+import { mergeStyleObjectSource } from './inline-style'
+import { renderJsxAttribute } from './jsx-attribute-literals'
 import { classNameStringNode, commitEdit, findElementAtLine, resolveSource } from './props'
 import { type ResolvedTokenRef, resolveTokenRef, tokenClassRewrite } from './style-tokens'
-import { looksTailwind } from './tw-styles'
-import { mergeStyleObjectSource } from './inline-style'
 import { applyStyleEditSvelte } from './styles-svelte'
+import { looksTailwind } from './tw-styles'
 
 /**
  * The Styles-panel commit engine (v10). A scrub previews live via CSS injection
@@ -104,7 +104,9 @@ function committed(
   strategy: 'tailwind' | 'inline',
   wroteToken = false
 ): StyleEditResult {
-  return res.applied ? { applied: true, strategy, wroteToken } : { applied: false, error: res.error }
+  return res.applied
+    ? { applied: true, strategy, wroteToken }
+    : { applied: false, error: res.error }
 }
 
 /** The static key name of a style object entry (null for computed/spread/etc). */
@@ -126,7 +128,10 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
   if (!STYLE_PROPS.has(edit.prop)) {
     return { applied: false, error: 'Unsupported style property.' }
   }
-  if (typeof edit.value !== 'string' || !isSafeStyleValue(edit.value, edit.prop === 'box-shadow' ? 1024 : 200)) {
+  if (
+    typeof edit.value !== 'string' ||
+    !isSafeStyleValue(edit.value, edit.prop === 'box-shadow' ? 1024 : 200)
+  ) {
     return { applied: false, error: 'Invalid style value.' }
   }
   const loc = resolveSource(root, edit.source)
@@ -189,7 +194,8 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
         const next =
           code.slice(0, strNode.start) +
           (classAttr?.value?.type === 'StringLiteral'
-            ? renderJsxAttribute(rewritten, code[strNode.start]) : JSON.stringify(rewritten)) +
+            ? renderJsxAttribute(rewritten, code[strNode.start])
+            : JSON.stringify(rewritten)) +
           code.slice(strNode.end)
         return committed(
           await commitEdit(root, loc.file, code, next, key, edit.group),

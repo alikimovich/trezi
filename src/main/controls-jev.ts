@@ -1,6 +1,6 @@
-import { resolveJevKey } from './jev-credentials'
 import type { Experimental_CompositionEvaluator } from '@json-render/core'
 import { z } from 'zod'
+import { resolveJevKey } from './jev-credentials'
 import { buildCatalog } from './project-ui'
 import { JEV_MODEL } from './project-ui-jev'
 

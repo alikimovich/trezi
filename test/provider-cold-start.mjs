@@ -151,7 +151,11 @@ async function chat() {
   const errors = (list) => list.filter((e) => e.type === 'error')
   // LKM-147: "Still …" is a progress step, never a transcript status; heartbeats carry no step.
   const still = (list) => {
-    assert.deepEqual(list.filter((e) => e.type === 'status' && /^Still /.test(e.text)), [], 'no "Still …" status row')
+    assert.deepEqual(
+      list.filter((e) => e.type === 'status' && /^Still /.test(e.text)),
+      [],
+      'no "Still …" status row'
+    )
     return list.filter((e) => e.type === 'progress' && e.step).map((e) => e.step)
   }
   const beats = (list) => list.filter((e) => e.type === 'progress' && !e.step).length

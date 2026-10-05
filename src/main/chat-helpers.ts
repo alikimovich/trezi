@@ -7,7 +7,10 @@ import { editingOwner } from './editing-owner'
  * puts them in place itself. Answers the checkout, or null for a chat of another
  * project or one that runs in the live tree.
  */
-export async function syncChatHelpers(sessionKey: string, liveRoot: string): Promise<string | null> {
+export async function syncChatHelpers(
+  sessionKey: string,
+  liveRoot: string
+): Promise<string | null> {
   const st = states.get(sessionKey)
   if (!st || st.liveRoot !== liveRoot) return null
   st.lastUsed = Date.now()

@@ -1,7 +1,16 @@
 import { app } from '../native/platform'
 import { nativeSessionPath } from '../native/profile-path'
-import type { ProviderConnection, ProviderConnectionInput, ProviderLoginReport } from '../shared/api'
-import { type CatalogBackend, type CatalogModel, createModelCatalog, type ModelCatalog } from './model-catalog'
+import type {
+  ProviderConnection,
+  ProviderConnectionInput,
+  ProviderLoginReport
+} from '../shared/api'
+import {
+  type CatalogBackend,
+  type CatalogModel,
+  createModelCatalog,
+  type ModelCatalog
+} from './model-catalog'
 import { createProviderStore, type ProviderStore } from './providers-store'
 
 /**
@@ -56,7 +65,8 @@ export function setProviderDataDir(dataDir: () => string): void {
 }
 
 function dataOwner(): ProviderDataOwner {
-  if (!owner) throw new Error('Trezi’s service is not running, so provider connections cannot be changed.')
+  if (!owner)
+    throw new Error('Trezi’s service is not running, so provider connections cannot be changed.')
   return owner
 }
 
@@ -64,10 +74,12 @@ function dataOwner(): ProviderDataOwner {
 export const connectionStore = {
   list: (): ProviderConnection[] => reader().list(),
   get: (id: string): ProviderConnection | null => reader().get(id),
-  save: async (input: ProviderConnectionInput): Promise<ProviderConnection> => dataOwner().save(input),
+  save: async (input: ProviderConnectionInput): Promise<ProviderConnection> =>
+    dataOwner().save(input),
   remove: async (id: string): Promise<void> => dataOwner().remove(id),
   /** null when there is no key, it cannot be decrypted, or there is no service. */
-  secretFor: async (id: string): Promise<string | null> => (owner ? owner.secretFor(id).catch(() => null) : null)
+  secretFor: async (id: string): Promise<string | null> =>
+    owner ? owner.secretFor(id).catch(() => null) : null
 }
 
 /** Lazy for the same reason as the store: `getDataDir` isn't final until registration. */
@@ -86,8 +98,10 @@ export function modelCatalog(): ModelCatalog {
 /** The Claude subscription token and the login check (LKM-119); both need the service. */
 export const seatLogin = {
   save: (token: string): Promise<boolean> => dataOwner().saveSeatToken('claude', token),
-  hasToken: async (): Promise<boolean> => (owner ? (await owner.seatTokenStatus().catch(() => null))?.claude.hasToken === true : false),
-  check: (provider: string, root: string): Promise<ProviderLoginReport> => dataOwner().checkLogin(provider, root)
+  hasToken: async (): Promise<boolean> =>
+    owner ? (await owner.seatTokenStatus().catch(() => null))?.claude.hasToken === true : false,
+  check: (provider: string, root: string): Promise<ProviderLoginReport> =>
+    dataOwner().checkLogin(provider, root)
 }
 
 /** [] on any failure, including no service: the picker keeps its cached list. */

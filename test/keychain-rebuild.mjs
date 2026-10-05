@@ -13,7 +13,15 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -36,16 +44,42 @@ const build = (name, from = source) => {
   const dir = join(scratch, name)
   mkdirSync(dir)
   const out = join(dir, 'TreziSecrets')
-  const built = run('xcrun', ['swiftc', '-O', '-target', target, '-module-cache-path', join(dir, 'module-cache'),
-    '-suppress-warnings', from, '-o', out, '-framework', 'Security', '-framework', 'CryptoKit'], { timeout: 300_000 })
+  const built = run(
+    'xcrun',
+    [
+      'swiftc',
+      '-O',
+      '-target',
+      target,
+      '-module-cache-path',
+      join(dir, 'module-cache'),
+      '-suppress-warnings',
+      from,
+      '-o',
+      out,
+      '-framework',
+      'Security',
+      '-framework',
+      'CryptoKit'
+    ],
+    { timeout: 300_000 }
+  )
   assert.equal(built.status, 0, built.stderr)
   return out
 }
-const sha = path => createHash('sha256').update(readFileSync(path)).digest('hex')
-const cdhash = path => /CDHash=([0-9a-f]{40})/.exec(run('/usr/bin/codesign', ['-dvvv', path]).stderr)?.[1]
-const copy = (from, name) => { const path = join(scratch, name); copyFileSync(from, path); return path }
+const sha = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
+const cdhash = (path) =>
+  /CDHash=([0-9a-f]{40})/.exec(run('/usr/bin/codesign', ['-dvvv', path]).stderr)?.[1]
+const copy = (from, name) => {
+  const path = join(scratch, name)
+  copyFileSync(from, path)
+  return path
+}
 const crypto = (helper, operation, input) => {
-  const result = spawnSync(helper, ['--crypto', operation, '--keychain', keychain], { input, timeout: 20_000 })
+  const result = spawnSync(helper, ['--crypto', operation, '--keychain', keychain], {
+    input,
+    timeout: 20_000
+  })
   return { status: result.status, out: result.stdout }
 }
 
@@ -53,11 +87,15 @@ try {
   const first = build('first')
   const second = build('second build') // another folder, with a space in it
   const changedSource = join(scratch, 'Secrets.swift')
-  writeFileSync(changedSource, readFileSync(source, 'utf8').replace('usage: TreziSecrets', 'usage: TreziSecrets (changed)'))
+  writeFileSync(
+    changedSource,
+    readFileSync(source, 'utf8').replace('usage: TreziSecrets', 'usage: TreziSecrets (changed)')
+  )
   const changed = build('changed', changedSource)
   assert.equal(sha(second), sha(first), 'a rebuild from another folder is byte-identical')
   assert.notEqual(sha(changed), sha(first), 'the control build differs')
-  for (const path of [first, second, changed]) sign({ kind: 'adhoc' }, path, 'dev.trezi.secrets', run)
+  for (const path of [first, second, changed])
+    sign({ kind: 'adhoc' }, path, 'dev.trezi.secrets', run)
   assert.ok(cdhash(first), 'the helper has a code hash')
   assert.equal(cdhash(second), cdhash(first), 'a rebuild keeps the code hash')
   assert.notEqual(cdhash(changed), cdhash(first))
@@ -66,17 +104,36 @@ try {
   // A password keeps create/unlock from ever asking; a hung security agent is bounded.
   const made = run('/usr/bin/security', ['create-keychain', '-p', 'trezi-test', keychain])
   if (made.status !== 0) {
-    const reason = (made.stderr || made.stdout || (made.status === null ? 'timed out' : `exit ${made.status}`)).trim()
+    const reason = (
+      made.stderr ||
+      made.stdout ||
+      (made.status === null ? 'timed out' : `exit ${made.status}`)
+    ).trim()
     console.log(`KEYCHAIN-REBUILD rebuild-read SKIP (no temporary keychain here: ${reason})`)
   } else {
     created = true
-    assert.equal(run('/usr/bin/security', ['unlock-keychain', '-p', 'trezi-test', keychain]).status, 0)
+    assert.equal(
+      run('/usr/bin/security', ['unlock-keychain', '-p', 'trezi-test', keychain]).status,
+      0
+    )
     // build → write → rebuild (another folder) → read, never a prompt; changed code is refused.
     const sealed = crypto(copy(first, 'installed'), 'encrypt', Buffer.from('sk-rebuild'))
     assert.equal(sealed.status, 0)
-    assert.equal(crypto(second, 'decrypt', sealed.out).out.toString('utf8'), 'sk-rebuild', 'the rebuild reads with no prompt')
-    assert.equal(crypto(second, 'decrypt', sealed.out).out.toString('utf8'), 'sk-rebuild', 'and again')
-    assert.equal(crypto(changed, 'decrypt', sealed.out).status, 1, 'changed code would need an approval')
+    assert.equal(
+      crypto(second, 'decrypt', sealed.out).out.toString('utf8'),
+      'sk-rebuild',
+      'the rebuild reads with no prompt'
+    )
+    assert.equal(
+      crypto(second, 'decrypt', sealed.out).out.toString('utf8'),
+      'sk-rebuild',
+      'and again'
+    )
+    assert.equal(
+      crypto(changed, 'decrypt', sealed.out).status,
+      1,
+      'changed code would need an approval'
+    )
     console.log('KEYCHAIN-REBUILD rebuild-read PASS')
   }
   console.log('KEYCHAIN-REBUILD OK')
