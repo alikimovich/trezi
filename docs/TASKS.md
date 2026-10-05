@@ -3,6 +3,10 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Editing inspector island click-through and ghosting (LKM-162)
+
+- [x] The island's frame takes the pointer (`NativeEditingInspector` hit-test fallback, swallowed clicks and scrolls) and `PreviewWebView` (`src/native/PreviewPointer.swift`) gates WebKit's tracking areas, first-responder moves and clicks by the window's hit view.
+- [x] Opaque island surface under the controls; native smoke (`checkPointer` in `src/native/smoke-inspector-island.ts`) hit-tests field, slider and tabs, counts what reaches the page, and edits padding-top through the real field.
 ## Current Claude and Codex models (LKM-164)
 
 - [x] Bump `@anthropic-ai/claude-agent-sdk` (0.3.186 → 0.3.289) and `@openai/codex-sdk` with its `@openai/codex` CLI (0.154.0 → 0.160.1) in `package.json` and `bun.lock`; no API changes needed, backend and provider-helper bundles build.

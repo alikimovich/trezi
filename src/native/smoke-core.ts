@@ -607,7 +607,26 @@ export async function runNativeCoreSmoke(
           host,
           artifacts,
           () => serviceEvents.emit('event', 'preview:toolbar-action', 'props'),
-          () => preference('trezi:native-panel-sizes')
+          () => preference('trezi:native-panel-sizes'),
+          {
+            evaluate: page,
+            source: () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8'),
+            styles: (prop) => invoke('styles:read', [prop]),
+            select: async () => {
+              // Source edits live-reload the page, which drops the stamp set above.
+              await page(
+                `document.querySelector('#native-title').setAttribute('data-trezi-source','native-style.tsx:1:36')`
+              )
+              const layers = await invoke('layers:read'),
+                heading = layers.nodes.find((n: any) => n.id === 'native-title')
+              assert.ok(heading)
+              await send('layers:select', {
+                path: heading.path,
+                fingerprint: { tag: heading.tag, source: heading.source }
+              })
+            },
+            selectMode: (on) => invoke('preview:set-select-mode', on)
+          }
         )
       },
       cleanup: async () => {
