@@ -18,6 +18,7 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Slow tests.**
   - `workflow-owner` is split in two processes. The scenarios stay; `test/workflow-durability.mjs` runs the same file's tool and durability checks.
   - The composer-layout fixture waited one fixed 0.2 s run-loop turn for the pin and flaked under 8 workers. It now waits for the condition, at most 5 s.
+  - `island-flicker-frameworks` failed once under load: the Vite "before" run reloads the preview page on every source write, and with no frame sample in a gap it saw no swap and no mismatch. The sampler now counts reloaded documents (kept in `sessionStorage`, since a reload drops window counters) and a reload mid-drag counts as the flicker signal. The "after" checks are unchanged.
 - **Result.**
   - Manager quick verification: 87.2 s (unit tier 83.1 s, 156 PASS, 2 SKIP; before, 155 PASS, 2 SKIP plus the split).
   - Locally, warm: 55.7 s with typechecks. Cold cache: 122.1 s.
