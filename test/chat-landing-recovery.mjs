@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  abandonLanding,
   adoptSession,
   afterTurn,
   agentWorkspaceState,
@@ -16,11 +17,13 @@ import {
   initChatIsolation,
   isolatedCwd,
   isolationSnapshot,
+  landingInFlight,
   releaseChat,
   resolveParkedChat,
   retryLanding,
   sendRefusal
 } from '../src/main/chat-isolation.ts'
+import { repositoryOwner, setRepositoryOwner } from '../src/main/repository-owner.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-landing-recovery-'))
 const git = (cwd, ...args) =>
@@ -155,8 +158,97 @@ try {
   assert.equal(read(failed.root), 'export const bar = 5\n')
   assert.equal(agentWorkspaceState(failed.key).state, 'isolated')
   await releaseChat(failed.key)
+
+  // Stop (or a stall) ends the chat's wait on a landing, but the batch behind it cannot be
+  // cancelled: the chat shows it held with Retry, while the lease and the chat's chain stay
+  // held until the batch settles. A Retry meanwhile is refused, the next landing waits
+  // behind it, and whatever the batch ends as is the state: merged once, never twice.
+  const realOwner = repositoryOwner()
+  const slow = async (after) => {
+    let release
+    let entered
+    const gate = new Promise((resolve) => {
+      release = resolve
+    })
+    const reached = new Promise((resolve) => {
+      entered = resolve
+    })
+    let calls = 0
+    let gated = true
+    setRepositoryOwner(
+      new Proxy(realOwner, {
+        get(target, prop) {
+          const value = target[prop]
+          if (typeof value !== 'function') return value
+          if (prop !== 'completeTurn') return value.bind(target)
+          return async (...args) => {
+            calls++
+            if (!gated) return value.apply(target, args)
+            gated = false
+            entered()
+            await gate
+            if (after) throw after
+            return value.apply(target, args)
+          }
+        }
+      })
+    )
+    return { release, reached, calls: () => calls }
+  }
+  const quiet = async () => {
+    for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  try {
+    const drain = await fixture()
+    const hold = await slow()
+    writeFileSync(join(drain.cwd, FILE), 'export const bar = 7\n')
+    const landing = afterTurn(drain.key, 'Set bar to seven', [], 'success')
+    await hold.reached
+    assert.equal(landingInFlight(drain.key), true)
+    assert.equal(abandonLanding(drain.key, 'Stopped before the landing finished.'), true)
+    await quiet()
+    assert.equal(isolationSnapshot(drain.key).reason, 'failed', 'the chat shows the landing held')
+    assert.equal(agentWorkspaceState(drain.key).state, 'failed')
+    const early = await retryLanding(drain.key)
+    assert.equal(early.ok, false, 'a Retry while the abandoned landing runs is refused')
+    assert.match(early.error, /still finishing/)
+    const next = afterTurn(drain.key, 'Next turn', [], 'success')
+    await quiet()
+    assert.equal(hold.calls(), 1, 'the next landing waits behind the abandoned one')
+    assert.equal(read(drain.root), 'export const bar = 0\n')
+    hold.release()
+    await landing
+    await next
+    assert.equal(read(drain.root), 'export const bar = 7\n', 'the abandoned batch finished')
+    assert.deepEqual(isolationSnapshot(drain.key), { state: 'isolated', branch: drain.branch })
+    assert.equal(agentWorkspaceState(drain.key).state, 'isolated')
+    assert.equal(git(drain.root, 'rev-list', '--count', 'HEAD'), '2', 'merged exactly once')
+    assert.equal(events.at(-1).state, 'merged')
+    await releaseChat(drain.key)
+
+    // The abandoned batch fails after the chat was marked held: the real reason replaces
+    // the stall note, and Retry lands once the owner works again.
+    const late = await fixture()
+    const broke = await slow(new Error('git blew up'))
+    writeFileSync(join(late.cwd, FILE), 'export const bar = 8\n')
+    const ending = afterTurn(late.key, 'Set bar to eight', [], 'success')
+    await broke.reached
+    abandonLanding(late.key, 'Stopped before the landing finished.')
+    await quiet()
+    assert.match(isolationSnapshot(late.key).error, /Stopped before/)
+    broke.release()
+    assert.equal(await ending, null)
+    assert.match(isolationSnapshot(late.key).error, /git blew up/)
+    assert.equal(read(late.root), 'export const bar = 0\n')
+    setRepositoryOwner(realOwner)
+    assert.deepEqual(await retryLanding(late.key), { ok: true, state: 'isolated' })
+    assert.equal(read(late.root), 'export const bar = 8\n')
+    await releaseChat(late.key)
+  } finally {
+    setRepositoryOwner(realOwner)
+  }
   console.log(
-    'CHAT LANDING RECOVERY OK — provider switch after failed turns, Resolve turn, stale park Retry, failed landing Retry'
+    'CHAT LANDING RECOVERY OK — provider switch after failed turns, Resolve turn, stale park Retry, failed landing Retry, abandoned landing drained'
   )
 } finally {
   rmSync(dir, { recursive: true, force: true })

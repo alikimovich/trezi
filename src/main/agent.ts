@@ -788,7 +788,7 @@ export function registerAgentIpc(
     options: AgentOptions,
     cwd: string,
     resumeSessionId?: string,
-    prior?: Parameters<typeof resumeSummary>[0]
+    prior?: Parameters<typeof resumeSummary>[0] & { sdkCwd?: string }
   ): Promise<ProviderSession> => {
     // If the resume fails the new session starts from what the chat showed (LKM-165).
     const summary = resumeSessionId ? resumeSummary(prior) : ''
@@ -803,7 +803,8 @@ export function registerAgentIpc(
         liveRoot: root,
         onEvent: interactiveEvents(sessionKey, tracker),
         ...(resumeSessionId ? { resumeSessionId } : {}),
-        ...(summary ? { resumeSummary: summary } : {})
+        ...(summary ? { resumeSummary: summary } : {}),
+        ...(resumeSessionId && prior?.sdkCwd ? { resumeCwd: prior.sdkCwd } : {})
       })
     )
     trackers.set(s, tracker)
@@ -1070,7 +1071,10 @@ export function registerAgentIpc(
       seedFromRecord(s.record, previous, { reuseId: true })
       // A new provider session has no SDK history, even though the UI keeps it.
       if (sdkSessionId) s.record.sdkSessionId = sdkSessionId
-      else delete s.record.sdkSessionId
+      else {
+        delete s.record.sdkSessionId
+        delete s.record.sdkCwd
+      }
       s.record.endedAt = null
       try {
         await conversation().handoff(sessionKey, options, s.record, reason)

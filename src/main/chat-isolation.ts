@@ -12,7 +12,7 @@ import {
   recreateWorkspace,
   states
 } from './chat-state'
-import { LandingGuard } from './chat-watchdog'
+import { LandingEnded, LandingGuard } from './chat-watchdog'
 import {
   canReconcileText,
   completeTurn,
@@ -178,6 +178,8 @@ const landings = new LandingGuard()
 export function abandonLanding(sessionKey: string, reason: string): boolean {
   return landings.abandon(sessionKey, reason)
 }
+/** Chats whose abandoned landing is still finishing; the lease and chain stay held. */
+const draining = new Set<string>()
 /** Whether a landing of this chat is in flight. */
 export function landingInFlight(sessionKey: string): boolean {
   return landings.has(sessionKey)
@@ -217,16 +219,43 @@ export function afterTurn(
     enqueueRepoWrite(st.liveRoot, async () => {
       st.lastUsed = Date.now()
       if (st.reclaimed) return null
+      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
+      let settled: 'pending' | 'ok' | 'failed' = 'pending'
+      batch.then(
+        () => {
+          settled = 'ok'
+        },
+        () => {
+          settled = 'failed'
+        }
+      )
       try {
-        // Bounded (LKM-165): a landing that stalls, or that Stop ends, is held with Retry
-        // and frees the chain and the repository lease behind it.
-        return await landings.run(
-          sessionKey,
-          landBatch(sessionKey, st, message, turn, terminal, reconcile)
-        )
+        // Bounded (LKM-165): the chat stops waiting on a landing that stalls, or that Stop
+        // ends, and shows it held with Retry.
+        return await landings.run(sessionKey, batch)
       } catch (error) {
-        await landingFailed(sessionKey, st, error, turn)
-        return null
+        if (!(error instanceof LandingEnded)) {
+          await landingFailed(sessionKey, st, error, turn)
+          return null
+        }
+        // The batch itself cannot be cancelled and keeps writing the worktree and live
+        // tree, so the lease and this chat's chain stay held until it settles: a Retry or
+        // the next turn's landing never overlaps it. Whatever it ends as is the truth.
+        draining.add(sessionKey)
+        try {
+          await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
+          const late = await batch.then(
+            (files) => ({ files }),
+            (cause) => ({ cause })
+          )
+          if ('cause' in late) {
+            await landingFailed(sessionKey, st, late.cause, turn)
+            return null
+          }
+          return late.files
+        } finally {
+          draining.delete(sessionKey)
+        }
       }
     })
   )
@@ -309,7 +338,8 @@ async function landingFailed(
   sessionKey: string,
   st: ChatState,
   error: unknown,
-  turn: SessionTranscriptEntry[] = []
+  turn: SessionTranscriptEntry[] = [],
+  superseded: () => boolean = () => false
 ): Promise<void> {
   const reason = (error instanceof Error ? error.message : String(error)).slice(0, 500)
   // The batch's files, best effort: the checkout itself may be what failed.
@@ -317,6 +347,8 @@ async function landingFailed(
     (out) => out.split('\n').filter(Boolean),
     () => [] as string[]
   )
+  // The abandoned batch finished while this was reading: its own outcome stands.
+  if (superseded()) return
   if (changed.length) st.parkedFiles = changed
   st.parked = true
   st.landingError = reason || 'The landing failed.'
@@ -345,6 +377,12 @@ export async function retryLanding(
 ): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, state: 'isolated', error: 'That chat is no longer open.' }
+  if (draining.has(sessionKey))
+    return {
+      ok: false,
+      state: 'parked',
+      error: 'The previous landing is still finishing. Try again in a moment.'
+    }
   if (!st.parked || st.reverted || (st.interrupted && !st.landingError))
     return { ok: true, state: st.parked && !st.reverted ? 'parked' : 'isolated' }
   // Its outcome reaches the chat as the usual isolation event (merged, or the card again).

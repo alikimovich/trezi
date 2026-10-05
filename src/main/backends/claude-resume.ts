@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import type { SessionRecord } from '../../shared/api'
 
 /** The one note a recovered resume leaves in the chat (LKM-165). */
@@ -20,6 +20,26 @@ export function canonicalCwd(root: string): string {
   } catch {
     return root
   }
+}
+
+/**
+ * The cwd a session starts or resumes with. A resume uses the cwd stored with its session
+ * id (`sdkCwd` on the record), so it finds the session even if the path's spelling has
+ * changed since; but only while that is still the chat's own directory, because the
+ * agent must edit the chat's worktree. Otherwise (no stored value, a moved or different
+ * directory) it is the canonical path of `root`.
+ */
+export function sessionCwd(root: string, stored?: string): string {
+  const current = canonicalCwd(root)
+  if (!stored || stored === current) return current
+  try {
+    const a = statSync(stored)
+    const b = statSync(current)
+    if (a.isDirectory() && a.dev === b.dev && a.ino === b.ino) return stored
+  } catch {
+    /* gone: the chat's directory is the cwd */
+  }
+  return current
 }
 
 /** A resume the SDK or CLI could not honour: the session is gone, unreadable or foreign. */

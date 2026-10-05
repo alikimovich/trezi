@@ -66,7 +66,8 @@ export function runProviderHelper(
         type: 'record',
         entries,
         ...(files.length ? { filesTouched: files } : {}),
-        ...(resume ? { sdkSessionId: resume } : {})
+        ...(resume ? { sdkSessionId: resume } : {}),
+        ...(resume && record.sdkCwd ? { sdkCwd: record.sdkCwd } : {})
       })
     }
   }

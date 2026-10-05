@@ -243,15 +243,19 @@ struct ChatConversation: View {
         // offscreen row is scrolled in first; see islandRevealScroll.
         Task { @MainActor in
             await Task.yield()
+            var streak = 0
             for attempt in 1...80 {
                 guard revealGeneration == generation, model.revealRevision == request.revision else { return }
                 model.revealAttempt = attempt
                 let target = islandRevealScroll(request, positions: model.islandPositions, viewportHeight: viewportHeight)
                 proxy.scrollTo(target.id, anchor: UnitPoint(x: 0.5, y: islandRevealUnitY(target.edge, readingHeight: readingHeight, viewportHeight: viewportHeight)))
                 try? await Task.sleep(nanoseconds: 20_000_000)
-                guard revealGeneration == generation, model.revealRevision == request.revision,
-                      let frame = model.islandPositions[request.position] else { continue }
-                if islandRevealReached(request, frame: frame, readingHeight: readingHeight) {
+                guard revealGeneration == generation, model.revealRevision == request.revision else { return }
+                guard let frame = model.islandPositions[request.position] else { streak = 0; continue }
+                // Keep scrolling until the anchor holds the edge across several
+                // layouts: rows above it can still re-measure after a hit.
+                streak = islandRevealStreak(reached: islandRevealReached(request, frame: frame, readingHeight: readingHeight), streak: streak)
+                if streak >= islandRevealStableChecks {
                     model.revealAppliedRevision = request.revision
                     return
                 }

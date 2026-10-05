@@ -74,6 +74,8 @@ export interface SpawnContext {
   /** A compact summary of the chat being resumed (LKM-165): if the resume fails, the new
    *  session starts from it instead of the lost one. */
   resumeSummary?: string
+  /** The cwd stored with `resumeSessionId` (LKM-165); used while it is still the chat's directory. */
+  resumeCwd?: string
   /** The REAL project root when the session's cwd is a per-chat worktree
    *  (`isolatedCwd`). Tool callbacks that persist app state (e.g.
    *  chat-island persistence) must write under

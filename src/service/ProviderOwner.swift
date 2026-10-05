@@ -367,7 +367,7 @@ final class ProviderOwner: @unchecked Sendable {
         guard case .object(let context)? = body.value("context"), case .object? = body.value("options"),
               (body.value("options")?.utf8().count ?? 0) <= 64 * 1024 else { throw ServiceContractFailure.invalidRequest }
         let background = try body.bool("background"), chat = try body.string("chat", max: 4096)
-        let allowed: Set<String> = ["emitKey", "sessionId", "resumeSessionId", "resumeSummary", "liveRoot", "projectMemory"]
+        let allowed: Set<String> = ["emitKey", "sessionId", "resumeSessionId", "resumeSummary", "resumeCwd", "liveRoot", "projectMemory"]
         guard context.allSatisfy({ allowed.contains($0.0.string) }), context.allSatisfy({ $0.1.text != nil }),
               (body.value("context")?.utf8().count ?? 0) <= 128 * 1024 else { throw ServiceContractFailure.invalidRequest }
         let value = body.value("context")!, liveRoot = try body.path("liveRoot")

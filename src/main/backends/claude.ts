@@ -61,13 +61,7 @@ import {
   LOGIN_COMMAND_MESSAGE,
   resolveClaudeCli
 } from './claude-login'
-import {
-  canonicalCwd,
-  failureText,
-  isResumeFailure,
-  RESUME_NOTE,
-  seedPrompt
-} from './claude-resume'
+import { failureText, isResumeFailure, RESUME_NOTE, seedPrompt, sessionCwd } from './claude-resume'
 import { interruptWithEscalation } from './interrupt'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
@@ -546,7 +540,8 @@ async function startSession(
   let input = new InputStream()
   const abort = new AbortController()
   // One resolved cwd for start and resume: the SDK keys a session by it (LKM-165).
-  const cwd = canonicalCwd(root)
+  // A resume uses the cwd stored with its session id while it is still this directory.
+  const cwd = sessionCwd(root, ctx?.resumeSessionId ? ctx.resumeCwd : undefined)
   const pending = new Map<string, PendingPrompt>()
   const pendingQuestions = new Map<string, PendingQuestion>()
   // Per-session: disposed when replaced/closed; namespaces fallback permission ids.
@@ -1471,7 +1466,7 @@ async function startSession(
                 // message — this is what a later `agent:resume-session` forwards back
                 // as `options.resume`. Distinct from `ctx.sessionId` (v8 F1 spawn bookkeeping).
                 if (typeof sys.session_id === 'string' && sys.session_id) {
-                  cap.setSdkSessionId(sys.session_id)
+                  cap.setSdkSessionId(sys.session_id, cwd)
                 }
                 if (Array.isArray(sys.slash_commands)) {
                   sdkCommandNames = sys.slash_commands

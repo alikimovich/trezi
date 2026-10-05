@@ -130,9 +130,14 @@ project path was not a cause (the Swift owner works on real paths).
   keeps the same worktree and cumulative batch, and the next successful turn lands every
   held file (`test/chat-landing-recovery.mjs`).
 - A landing or turn that makes no progress cannot wedge the chat (`src/main/chat-watchdog.ts`).
-  `afterTurn` bounds the landing with `LandingGuard` (3 minutes); a timeout or Stop ends
-  the wait and parks the work as `failed` with Retry, freeing the chain and the repo
-  lease (the hung `landBatch` is abandoned, not cancelled). `TurnWatchdog` ends a turn
+  `afterTurn` bounds the chat's wait on a landing with `LandingGuard` (3 minutes); a
+  timeout or Stop ends the wait and shows the work as `failed` with Retry. The batch
+  behind it cannot be cancelled, so the repository lease and the chat's chain stay held
+  until it settles: a Retry meanwhile is refused ("still finishing"), the next landing
+  waits behind it, and whatever the batch ends as (merged, parked or a real error) is
+  the state, so it never merges twice or after the card says otherwise. A batch that
+  never settles holds its project's lease, as the Swift owner call under it would
+  anyway. `TurnWatchdog` ends a turn
   silent for 10 minutes. `agent:send` and `agent:interrupt` settle a service phase that
   Bun no longer runs, so the chat never answers "This chat is already running." for a
   turn nothing is running. A send that still meets a real turn is queued by the native

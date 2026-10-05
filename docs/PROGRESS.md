@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-165 repair 3: an island reveal must hold its edge, not touch it once
+
+- **Manager failure.** `test:native` (chat-scroll, first 440pt top reveal) failed with `Island reveal did not settle at top; revision=1, applied=1, attempts=1, frame={{32, 44.237}, {376, 16}}`. This round's changes touch no Swift chat layout; the `chat-snapshot`/`chat-controller` files named by triage only changed the activity row text. My earlier native run (chat, core) passed the same test, so this is a race in the reveal loop.
+- **Cause.** `reveal()` (`src/native/Chat.swift`) marked the revision applied on the first measurement within 8pt of the edge and stopped scrolling. The lazy stack can still re-measure rows above the target after that hit (the island's row had been unrealized), so the anchor drifted to 44pt, and the host, which checks the frame again, waited out its 2 s and failed with `applied=1, attempts=1`.
+- **Fix.** The loop now needs `islandRevealStableChecks` (3) consecutive on-edge measurements (`islandRevealStreak`, `src/native/ChatReveal.swift`); a drift resets the streak and it scrolls again (still bounded by 80 attempts). Fixture `test/fixtures/chat-reveal/main.swift` covers the streak restart and the recorded 44pt frame. `bun test/native-chat-reveal.mjs` passes. I could not reproduce the race here, so the fix is reasoned from the recorded numbers and confirmed only by the native run.
+
+## 2026-10-05 — LKM-165 repair 2: an abandoned landing never overlaps, and the resume cwd is stored
+
+- **Defect found in review.** When Stop or the 3-minute guard ended a landing, `afterTurn` returned and released the repository lease and the chat's chain while the real `landBatch` kept writing the worktree and live tree. A Retry or the next turn's landing could run beside it, and it could merge after the card said "failed".
+- **Fix (`src/main/chat-isolation.ts`).** The chat's wait still ends at once and shows the work held with Retry. The lease and the chain now stay held until the batch settles, so nothing overlaps it (the next landing queues behind it; `retryLanding` answers "still finishing" meanwhile). The batch's own outcome is then the truth: merged clears the card, a parked outcome shows the conflict card, and a late failure replaces the stall note with the real error. `landingFailed` skips its write if the batch finished while it was reading. A batch that never settles holds its project's lease, like the Swift owner call under it.
+- **Test.** `test/chat-landing-recovery.mjs` (it runs against the Swift repository owner in `test/repository-owner.mjs`; `afterTurn` has no fake owner, so the case lives there rather than in `test/chat-stuck-turn.mjs`): a gated `completeTurn` is abandoned, the chat shows failed, Retry is refused, the next landing waits (one `completeTurn` call), and after release the work merges once (two commits in the live repository) with the state clean; a second case where the abandoned batch fails late shows its real error, and Retry then lands.
+- **Resume cwd stored with the session id.** `SessionRecord.sdkCwd` is set with `sdkSessionId` (`record.ts`), relayed in the helper's `record` delta (`helper-host.ts`, `helper-session.ts`, `ProviderFrames.swift` allow-list) and returned as the `resumeCwd` context key (`startChat`, `reopen`, `ProviderOwner.swift` allow-list). `sessionCwd` (`claude-resume.ts`) resumes with it while it is still the chat's directory, else the canonical worktree path. `test/claude-cwd.mjs` asserts the stored value is the one passed on resume, and the fallbacks.
+
 ## 2026-10-05 — LKM-165 repair: stuck turns recover, and a failed Claude resume restarts itself
 
 - **Gap found in review.** Two user-approved items had been left out of the first submission, and the report did not say so.

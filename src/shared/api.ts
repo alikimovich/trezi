@@ -610,6 +610,8 @@ export interface SessionRecord {
    * affordance gates on, since it doubles as a Claude-backend marker.
    */
   sdkSessionId?: string
+  /** The resolved directory `sdkSessionId` was started in; a resume uses it (LKM-165). */
+  sdkCwd?: string
 }
 
 /** What `agent:open-project` hands back so the renderer can paint the current chat. */

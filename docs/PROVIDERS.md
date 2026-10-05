@@ -934,6 +934,13 @@ messages and changed files of the visible chat) and emits one status note, "Star
 new session; earlier context was summarized". The raw error is not shown and the turn
 completes. `resumeSummary` is a `SpawnContext` key computed host-side (`agent.ts`
 `startChat`, `helper-session.ts` `reopen`) and allow-listed in `ProviderOwner.swift`.
+The cwd is stored with the session id: the record's `sdkCwd` (set with `sdkSessionId`
+off the init message, relayed in the helper's `record` delta) goes back as the
+`resumeCwd` context key (allow-listed in `ProviderOwner.swift`; `sdkCwd` in
+`ProviderFrames.swift`), and `sessionCwd` resumes with it while it is still the chat's own
+directory (same device and inode as the worktree). A missing or different directory falls
+back to `canonicalCwd(root)`, since the agent must edit the chat's worktree. A session id
+recovered only from the provider owner after a crash carries no stored cwd.
 A session that was not resuming, or one that already completed a turn, still reports
 its errors. Sessions started under a non-canonical cwd by an older build go through the
 same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.

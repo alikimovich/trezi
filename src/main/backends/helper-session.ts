@@ -117,6 +117,7 @@ async function startHelperSession(
       if (delta.sdkSessionId && delta.sdkSessionId !== reportedResume) {
         reportedResume = delta.sdkSessionId
         record.sdkSessionId = delta.sdkSessionId
+        if (delta.sdkCwd) record.sdkCwd = delta.sdkCwd
         void owner.resume(session, delta.sdkSessionId, record.id).catch(ignore)
       }
     },
@@ -149,6 +150,9 @@ async function startHelperSession(
           ...(ctx?.sessionId ? { sessionId: ctx.sessionId } : {}),
           ...(resume ? { resumeSessionId: resume } : {}),
           ...(resume && summary ? { resumeSummary: summary } : {}),
+          ...(resume && (record.sdkCwd ?? ctx?.resumeCwd)
+            ? { resumeCwd: record.sdkCwd ?? ctx?.resumeCwd }
+            : {}),
           ...(ctx?.liveRoot ? { liveRoot: ctx.liveRoot } : {}),
           ...(ctx?.projectMemory ? { projectMemory: ctx.projectMemory } : {})
         }
