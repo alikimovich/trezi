@@ -123,7 +123,11 @@ export async function checkNativeSheets(host: NativeBridge, key: string, artifac
   await wait((state) => !state.visible)
   host.emit('menu', { action: 'feedback' })
   await wait(
-    (state) => state.visible && state.title === 'Send feedback' && state.fields.includes('body')
+    (state) =>
+      state.visible &&
+      state.title === 'Send feedback' &&
+      state.fields.includes('body') &&
+      state.fields.includes('diagnostics')
   )
   await new Promise((resolve) => setTimeout(resolve, 250))
   writeFileSync(

@@ -132,6 +132,7 @@ try {
       'chat-workspace-cleanup',
       'stop-recovery',
       'chat-landing',
+      'chat-landing-recovery',
       'setup-worktree'
     ]
     const results = await Promise.all(

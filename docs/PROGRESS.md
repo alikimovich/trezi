@@ -13,6 +13,76 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Removed element.** The preload's 600 ms layout tick (`checkSelectionGone`) treats a pick as gone when none of its elements is connected and no element carries the same source stamp (HMR swaps nodes), on two ticks in a row. It drops its own outlines and toolbar and sends the new `trezi:preview:selection-lost` (`PREVIEW_SELECTION_LOST`, relayed as `preview:selection-lost`); unlike `select-cancelled` it leaves select mode as it is.
 - **Tests.** Unit: `native-inspector` (synchronous hidden publish, stale refresh discarded), `native-context` (`clearSelections`), `native-workspace-controller` (switch heard before Opening renders, not on restart/re-select). Native (`project-switching`, group `sidebar`): selects the first project's heading through Layers, opens the island, draws the hover box, then holds the second project's `project:detect` so the app stays at "Opening …" and checks that the island is hidden with no element (`inspectorInspect.title` is "Project controls"), both chats have no chip and the old page shows no outline, toolbar or hover box; after returning, nothing is restored. Evidence: `switch-selection.json`, `switch-selection-opening.png`.
 
+## 2026-10-05 — LKM-165 repair 3: an island reveal must hold its edge, not touch it once
+
+- **Manager failure.** `test:native` (chat-scroll, first 440pt top reveal) failed with `Island reveal did not settle at top; revision=1, applied=1, attempts=1, frame={{32, 44.237}, {376, 16}}`. This round's changes touch no Swift chat layout; the `chat-snapshot`/`chat-controller` files named by triage only changed the activity row text. My earlier native run (chat, core) passed the same test, so this is a race in the reveal loop.
+- **Cause.** `reveal()` (`src/native/Chat.swift`) marked the revision applied on the first measurement within 8pt of the edge and stopped scrolling. The lazy stack can still re-measure rows above the target after that hit (the island's row had been unrealized), so the anchor drifted to 44pt, and the host, which checks the frame again, waited out its 2 s and failed with `applied=1, attempts=1`.
+- **Fix.** The loop now needs `islandRevealStableChecks` (3) consecutive on-edge measurements (`islandRevealStreak`, `src/native/ChatReveal.swift`); a drift resets the streak and it scrolls again (still bounded by 80 attempts). Fixture `test/fixtures/chat-reveal/main.swift` covers the streak restart and the recorded 44pt frame. `bun test/native-chat-reveal.mjs` passes. I could not reproduce the race here, so the fix is reasoned from the recorded numbers and confirmed only by the native run.
+
+## 2026-10-05 — LKM-165 repair 2: an abandoned landing never overlaps, and the resume cwd is stored
+
+- **Defect found in review.** When Stop or the 3-minute guard ended a landing, `afterTurn` returned and released the repository lease and the chat's chain while the real `landBatch` kept writing the worktree and live tree. A Retry or the next turn's landing could run beside it, and it could merge after the card said "failed".
+- **Fix (`src/main/chat-isolation.ts`).** The chat's wait still ends at once and shows the work held with Retry. The lease and the chain now stay held until the batch settles, so nothing overlaps it (the next landing queues behind it; `retryLanding` answers "still finishing" meanwhile). The batch's own outcome is then the truth: merged clears the card, a parked outcome shows the conflict card, and a late failure replaces the stall note with the real error. `landingFailed` skips its write if the batch finished while it was reading. A batch that never settles holds its project's lease, like the Swift owner call under it.
+- **Test.** `test/chat-landing-recovery.mjs` (it runs against the Swift repository owner in `test/repository-owner.mjs`; `afterTurn` has no fake owner, so the case lives there rather than in `test/chat-stuck-turn.mjs`): a gated `completeTurn` is abandoned, the chat shows failed, Retry is refused, the next landing waits (one `completeTurn` call), and after release the work merges once (two commits in the live repository) with the state clean; a second case where the abandoned batch fails late shows its real error, and Retry then lands.
+- **Resume cwd stored with the session id.** `SessionRecord.sdkCwd` is set with `sdkSessionId` (`record.ts`), relayed in the helper's `record` delta (`helper-host.ts`, `helper-session.ts`, `ProviderFrames.swift` allow-list) and returned as the `resumeCwd` context key (`startChat`, `reopen`, `ProviderOwner.swift` allow-list). `sessionCwd` (`claude-resume.ts`) resumes with it while it is still the chat's directory, else the canonical worktree path. `test/claude-cwd.mjs` asserts the stored value is the one passed on resume, and the fallbacks.
+
+## 2026-10-05 — LKM-165 repair: stuck turns recover, and a failed Claude resume restarts itself
+
+- **Gap found in review.** Two user-approved items had been left out of the first submission, and the report did not say so.
+  - Issue #230's chat showed "Worked for 3s" and then "Unable to send: Error: This chat is already running." with nothing running in the UI.
+  - After a restart it showed "Claude Code returned an error result: No conversation found with session ID …".
+- **Stuck turns (`src/main/chat-watchdog.ts`, `src/shared/chat-busy.ts`).**
+  - One source of truth: Bun's `runningKeys` and the service phase are reconciled. `agent:send` settles a chat the service holds but Bun does not (`releaseOwnerTurn`, one retry of `begin`), and `agent:interrupt` settles a chat that is still held after Stop (`staleChat`, `settleChat`), through the existing service ops `abort` and `landed`.
+  - `afterTurn` runs the landing inside `LandingGuard` (3 minutes without finishing). A timeout or Stop ends the wait; `landingFailed` holds the work with Retry and frees the chain and the repo lease. The hung `landBatch` itself is abandoned, not cancelled.
+  - `TurnWatchdog` (10 minutes without any event, checked every 30 s, unref'd, cleared on quit) ends a silent turn with the `STUCK_NOTE` chat note.
+  - The activity row names the step: `Chat.operation` is `landing`, `parking`, `resolving` or `waiting` (`chat-snapshot.ts` labels).
+  - A backend busy refusal is not shown. `NativeChatController.run` takes back the optimistic messages, queues the submission (LKM-151 composer queue) and shows "Finishing the previous step…" until the step ends. `drain` no longer waits on a park that came from a failed landing, matching `sendRefusal`.
+  - `test/chat-stuck-turn.mjs` (unit tier): a landing that never completes shows as running and names the landing, Stop frees it, and the next message is queued then sent, never refused; a stalled landing ends itself; a busy refusal queues.
+- **Claude resume (`src/main/backends/claude-resume.ts`).**
+  - Start and resume use one cwd, `canonicalCwd` (the realpath of the chat worktree), so the session id is found again. It is derived each time rather than stored beside the id.
+  - When a resumed session fails before completing a turn ("No conversation found", an unusable `--resume`, an `is_error` result with that text, a CLI exit), the adapter opens a new session in the same worktree and seeds the user's turn with `resumeSummary` (last 12 messages and the last 40 changed files, at most 6,000 characters), computed host-side and sent as a new context key (allow-listed in `ProviderOwner.swift`). It emits one status note, "Started a new session; earlier context was summarized", and never the raw error.
+  - `test/claude-resume.mjs` and `test/claude-cwd.mjs` (mocked SDK, `test/helpers/claude-sdk-mock.mjs`, unit tier) cover the recovery, an `is_error` result, an unresumed session still reporting its error, and the symlinked-worktree cwd.
+- **Housekeeping.** My `biome --write` over `src test` reformatted six unrelated files; I restored them by hand.
+
+## 2026-10-05 — LKM-165: long chats stay fast, and parked edits always land (issue #230)
+
+- **Root cause: edits never landed.**
+  - Failed Codex turns hold their work in the chat worktree. The live base moved on, so the next successful turn, after the switch to Claude, drift-parked.
+  - The `agent:send` guard then refused every turn on a drift-parked chat. Native always passes the chat key, so the guard also refused the Resolve card's own resolution turn. The chat could never land again.
+  - Separately, `afterTurn` swallowed landing exceptions. The chat stayed "isolated" with nothing landed and no card.
+  - Codex could not call `workspace_state`: approval-free sessions refused the tool because it was not pre-approved. So the agent guessed the edits were "pending".
+  - The symlinked project path was checked and is not a cause: the Swift owner resolves real paths.
+- **Fix.**
+  - `sendRefusal` (new `src/main/chat-status.ts`, which holds the read-only views moved out of `chat-isolation.ts`) refuses only an unresolved drift park. After Resolve stages markers, the resolution turn sends.
+  - A landing exception parks the chat with `reason: 'failed'` and its error (`landingError`, cleared by `clearPark`).
+  - The card is now "This turn’s changes didn’t land", with Discard / Retry / Resolve. Retry is `agent:retry-landing` → `retryLanding`.
+  - The queue note names all three ways out.
+  - `workspace_state` reports `lastLanding` and never says "pending".
+  - `src/main/backends/codex-mcp.ts` pre-approves every Trezi MCP tool. `test/codex-mcp-approvals.mjs` checks the generated config.
+  - `test/chat-landing-recovery.mjs` (Swift owner harness, in `test/repository-owner.mjs`) covers four cases:
+    - two failed Codex turns, then a successful Claude turn on the same worktree, landing both files;
+    - a stuck drift park that Resolve unblocks;
+    - a stale park, cleared by the user, that Retry lands;
+    - an `index.lock` landing failure that shows the failed card and lands on Retry.
+- **Root cause: the slowdown.**
+  - Every `chatState` frame (a keystroke, an attachment, a card, a stream delta, the mode switch's re-render) carried the whole transcript.
+  - `ChatView.update` then re-serialized and decoded all of it on the main thread, computed the follow signature over every message, and reassigned the snapshot, so SwiftUI re-diffed the transcript.
+  - Bun's side was only about 2 ms even at 2.4 MB.
+- **Fix.**
+  - `chatFrames` (`src/native/chat-frames.ts`) omits `messages` when they equal the last frame sent for that chat.
+  - `Chat.swift` decodes a `ChatFrame` and keeps the previous messages in that case. It skips the update entirely when only composer-owned keys changed, and compares a cheap `followHead` when the messages are kept.
+  - The shell's `select-object` renders the toolbar before awaiting the preview round trip.
+  - `test/native-long-chat-perf.mjs` (2,000 messages) holds the mode switch and attachment add under 100 ms (about 3–4 ms measured, bridge payload included). It also asserts that composer frames carry no transcript.
+- **Feedback diagnostics.**
+  - The feedback sheet has an "Include diagnostics" consent choice, off by default, with a readonly line saying what it covers.
+  - With consent, `src/main/feedback-diagnostics.ts` attaches:
+    - Bun's console output from the last hour (a bounded ring buffer, since Trezi keeps no log files and `open -a` discards the host and service stderr);
+    - `log show --last 1h` for the Trezi processes;
+    - the chat's landing state;
+    - `git status` of its worktree;
+    - a 3-second `sample` of the host when a `webViews` ping takes 250 ms or more or times out. The host now sends its pid in the `ready` event.
+  - Everything is redacted (token shapes, `key=value` secrets, URL credentials, private keys) and the home folder becomes `~`, capped at 24,000 characters. `test/feedback-diagnostics.mjs` uses injected commands, so no real `log` or `sample` runs.
+  - Bun never reads the service-private repository journal, so the "ledger state" is the chat's landing state as Bun holds it.
 ## 2026-10-05 — LKM-167: unit tier and quick verification about 4x faster
 
 - **Why.** Quick verification (typecheck, typecheck:native, unit tier) took 5-7 min. The unit tier alone took 328.6 s on the operator Mac. About 25 Swift tests each compiled their fixture with a private, cold Clang module cache, at about 25 s per compile. Only 4 workers ran, and `service-process` and `keychain-rebuild` were exclusive barriers.

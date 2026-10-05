@@ -89,6 +89,13 @@ export async function cardAction(
     case 'discard':
       if (!chat.isRunning && !chat.sending) await invoke('agent:discard-conflict', chat.chat)
       break
+    case 'landing-retry': {
+      // The outcome arrives as an isolation event: merged, or this card with the reason.
+      if (chat.isRunning || chat.sending) return
+      const result = await invoke('agent:retry-landing', chat.chat)
+      if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
+      break
+    }
     case 'setup-dismiss':
       if (chat.setup) return
       if (chat.context) chat.context.setup.dismissed = true

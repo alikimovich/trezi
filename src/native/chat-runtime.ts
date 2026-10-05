@@ -6,6 +6,7 @@ import { chatAgentSettingsFromOptions } from '../shared/chat-settings'
 import type { NativeChatSnapshot } from '../shared/native-chat-controller'
 import type { NativeBridge } from './bridge'
 import { type ChatServices, NativeChatController } from './chat-controller'
+import { chatFrames } from './chat-frames'
 import { islandPreviewPort } from './island-preview'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
 import { TurnBoundaries } from './turn-boundaries'
@@ -48,6 +49,7 @@ export function installNativeChat(
     }
     return { ...state, messages }
   }
+  const frame = chatFrames()
   nativeChat = new NativeChatController({
     restoreIslands: (key, root, recordId) =>
       islands.register(
@@ -57,7 +59,7 @@ export function installNativeChat(
         () => nativeChat.get(key).messages.filter((m) => m.role === 'user').length
       ),
     invoke: (channel, ...args) => dispatchIPC('main', { type: 'invoke', channel, args }),
-    render: (state) => host.send('chatState', { state: renderIslands(state) }),
+    render: (state) => host.send('chatState', { state: frame(renderIslands(state)) }),
     effect: (effect) => {
       if (effect.type === 'focus') host.send('composerFocus')
     },

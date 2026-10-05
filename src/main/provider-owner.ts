@@ -76,6 +76,7 @@ export interface RecordDelta {
   entries: SessionRecord['transcript']
   filesTouched?: string[]
   sdkSessionId?: string
+  sdkCwd?: string
 }
 
 /** The Bun side of a helper-hosted session: what the owner relays. */
@@ -96,6 +97,8 @@ export interface HelperStart {
     emitKey: string
     sessionId?: string
     resumeSessionId?: string
+    resumeSummary?: string
+    resumeCwd?: string
     liveRoot?: string
     projectMemory?: string
   }

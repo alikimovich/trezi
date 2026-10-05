@@ -45,6 +45,15 @@ func islandRevealScroll(_ request: IslandRevealRequest, positions: [String: CGRe
     return IslandRevealScroll(id: request.anchor, edge: request.bottom ? .readingBottom : .top)
 }
 
+/// Consecutive on-edge measurements a reveal needs before it counts as applied.
+/// The lazy stack can re-measure rows above the target after the first
+/// `scrollTo` lands (the recorded `revision=1, applied=1, attempts=1,
+/// frame={{32, 44.2}, {376, 16}}`: the anchor reached the edge once, then
+/// drifted 44pt), so one hit is not a settled reveal; drift resets the streak
+/// and the attempt loop scrolls again.
+let islandRevealStableChecks = 3
+func islandRevealStreak(reached: Bool, streak: Int) -> Int { reached ? streak + 1 : 0 }
+
 enum IslandRevealState: Equatable {
     case pending
     case settled(CGRect)
