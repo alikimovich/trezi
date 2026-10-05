@@ -298,6 +298,39 @@ await import(${JSON.stringify(CRYPTO)})`
       assert.equal(await swift.saveCatalog(backend, models), models.length > 0, `${backend} saved`)
       assert.equal(read(), file, `the recorded bytes after ${backend} (${models.length})`)
     }
+    // LKM-164: the harness stamp is stored with its entry, the other entry kept as it was.
+    const codexBefore = JSON.parse(read()).entries.codex
+    assert.equal(
+      await swift.saveCatalog('claude', [{ id: 'opus', label: 'Opus' }], 'sdk@1'),
+      true,
+      'a stamped list saved'
+    )
+    const stamped = JSON.parse(read()).entries
+    assert.deepEqual(stamped.claude, {
+      at: 1234,
+      models: [{ id: 'opus', label: 'Opus' }],
+      harness: 'sdk@1'
+    })
+    assert.deepEqual(stamped.codex, codexBefore, 'the other backend is untouched')
+    const reader = createModelCatalog({
+      baseDir: join(home, 'trezi'),
+      now: () => 1234,
+      harness: () => 'sdk@1',
+      persist: () => true
+    })
+    assert.deepEqual(reader.get('claude'), [{ id: 'opus', label: 'Opus' }], 'Bun reads it back')
+    assert.equal(reader.get('codex'), null, 'an unstamped entry is not the current harness')
+    assert.equal(
+      (
+        await f.frame('catalogSave', {
+          backend: 'claude',
+          models: [{ id: 'a', label: 'A' }],
+          harness: 7
+        })
+      ).payload.code,
+      'invalidRequest',
+      'a stamp must be text'
+    )
     // Bun's reader, handed the Swift writer (`persist`), keeps serving from memory.
     const taken = []
     const routed = createModelCatalog({
