@@ -167,6 +167,17 @@ export function serviceProjectMemory(
         const result = await request('propose', { root, content }, base.revision)
         return conflict(result) ? null : committed(root, result)
       })
+    },
+    // Undo is a save on the update's own revision, never retried: once anything
+    // else moved memory on, there is nothing left to undo.
+    restore: async (root, after, content) => {
+      valid(root, content)
+      if (!after.revision)
+        throw new ProjectMemoryError('invalidRequest', 'Undo needs the revision it reverts.')
+      return serial(async () => {
+        const result = await request('save', { root, content }, after.revision)
+        return conflict(result) ? null : committed(root, result)
+      })
     }
   }
 }

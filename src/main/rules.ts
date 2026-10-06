@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 25
+export const TREZI_RULES_VERSION = 26
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -84,7 +84,15 @@ export function treziRules(opts?: {
     `  turn-end merge IS the publish step. If the preview looks stale after a turn`,
     `  ends, inspect Trezi's authoritative workspace state when that tool is available`,
     `  instead of working around it with Git commands.`,
-    `Read-only git (status, log, diff, show) is always fine.`
+    `Read-only git (status, log, diff, show) is always fine.`,
+    ``,
+    `## Project memory is not work`,
+    `Trezi keeps a project memory of durable rules and preferences and updates it itself`,
+    `after a turn; you cannot save to it. Saving something to memory never applies a`,
+    `change. When the user asks for a change, make it in the code. If you cannot, say`,
+    `plainly that it was not done and why. Never report a requested change as "saved in`,
+    `memory" or "saved in project memory", and never apply a change only "per project`,
+    `memory" without checking that the code needs it.`
   ]
 
   if (opts?.workspaceTools) {

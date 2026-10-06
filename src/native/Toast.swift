@@ -2,16 +2,17 @@ import AppKit
 import SwiftUI
 
 /// A short confirmation inside the main window (LKM-170): never a window or a modal.
-/// It floats at the top center of the workspace, offers at most one action and
-/// dismisses itself after `seconds`; a newer toast replaces it.
+/// It floats at the top center of the workspace, offers at most two actions (the
+/// memory note's View and Undo, LKM-177) and dismisses itself after `seconds`; a
+/// newer toast replaces it.
 final class ToastModel: ObservableObject {
     @Published var id = ""
     @Published var message = ""
-    @Published var action: String?
+    @Published var actions: [String] = []
     var hide: () -> Void = {}
-    func perform() {
-        guard !id.isEmpty else { return }
-        emit(["event":"toast-action", "id":id]); hide()
+    func perform(_ index: Int = 0) {
+        guard !id.isEmpty, actions.indices.contains(index) else { return }
+        emit(["event":"toast-action", "id":id, "index":index]); hide()
     }
 }
 struct ToastContent: View {
@@ -20,9 +21,11 @@ struct ToastContent: View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityHidden(true)
             Text(model.message).font(.system(size: 13, weight: .medium))
-            if let action = model.action {
+            if !model.actions.isEmpty {
                 Text("—").foregroundStyle(.secondary).accessibilityHidden(true)
-                Button(action) { model.perform() }.buttonStyle(.link)
+                ForEach(Array(model.actions.enumerated()), id: \.offset) { index, action in
+                    Button(action) { model.perform(index) }.buttonStyle(.link)
+                }
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
@@ -46,7 +49,8 @@ final class NativeToast: NSHostingView<ToastContent> {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func show(_ state: [String: Any], in canvas: NSView) {
         guard let id = state["id"] as? String, let message = state["message"] as? String else { return }
-        model.id = id; model.message = message; model.action = state["action"] as? String
+        model.id = id; model.message = message
+        model.actions = Array((state["actions"] as? [String] ?? (state["action"] as? String).map { [$0] } ?? []).prefix(2))
         // Above everything the workspace added since (source editors, islands).
         if superview !== canvas || canvas.subviews.last !== self {
             removeFromSuperview(); canvas.addSubview(self, positioned: .above, relativeTo: nil)
@@ -77,5 +81,5 @@ final class NativeToast: NSHostingView<ToastContent> {
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) ?? (!isHidden && frame.contains(point) ? self : nil) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func scrollWheel(with event: NSEvent) {}
-    func inspect() -> [String: Any] { ["visible":!isHidden && alphaValue > 0, "message":model.message, "action":model.action ?? "", "frame":NSStringFromRect(frame), "inWindow":window != nil, "pending":timer != nil] }
+    func inspect() -> [String: Any] { ["visible":!isHidden && alphaValue > 0, "message":model.message, "action":model.actions.first ?? "", "actions":model.actions, "frame":NSStringFromRect(frame), "inWindow":window != nil, "pending":timer != nil] }
 }
