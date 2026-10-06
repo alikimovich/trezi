@@ -23,6 +23,7 @@
     "test:native-live": "bun test/native-runtime-live.mjs",
     "test:provider-live": "bun test/provider-live-parity.mjs",
     "test:native-smoke-runner": "bun test/native-smoke-runner.mjs",
+    "test:native-smoke-report": "bun test/native-smoke-report.mjs",
     "link": "bun link",
     "release": "bun scripts/release.mjs",
     "check:version": "bun scripts/check-version.mjs",

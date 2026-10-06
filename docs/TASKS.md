@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native smoke focus guard and failure lines (LKM-176)
+
+- [x] Host `smokeFocus` test command restores focus (activate, key window, at most 2 s) before and after every check; a check that failed after focus was lost during it is retried once; `focus restored` is logged.
+- [x] One `SMOKE FAIL <group>/<check>: … (expected …, actual …) [artifact: …]` line per failure, for timeouts (step and label) and host exits (code/signal, last host log lines); the launcher prints them last.
+- [x] Exit 3 with `SMOKE ENV <reason>` when every failure is an environment failure (focus not obtainable or lost, display asleep); 1 otherwise.
+- [x] `TREZI_NATIVE_SMOKE_STEAL_FOCUS` simulation, on by default in `test:native` (`chat-ready`); unit tests for formatter and runner; docs/TESTING.md.
+
 ## Fast native test builds (LKM-175)
 
 - [x] Content-addressed Swift binary cache in `~/Library/Caches/Trezi/build` (last 20 per product); a hit copies, signing still runs.

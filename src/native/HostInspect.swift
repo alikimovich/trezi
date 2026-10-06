@@ -238,6 +238,9 @@ extension Host {
             image.unlockFocus()
             let png = image.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) }
             reply(id, png?.base64EncodedString() ?? "")
+        case "smokeFocus":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in reply(id, await smokeFocus(c)) }
         case "previewInput":
             guard ephemeral, let preview = views["preview"] else { reply(id, error: "Test preview unavailable"); return true }
             if c["prepare"] as? Bool == true {

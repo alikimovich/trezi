@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import '../src/shared/rename-compat.ts'
+import { finishSmokeRun, hostLogTail, SMOKE_EXIT_ENV } from '../src/native/smoke-report.ts'
 import { spawnSync } from 'node:child_process'
 import { requireSupportedPlatform } from './requirements.mjs'
 
@@ -36,6 +37,33 @@ export function nativeServiceLaunchSpec(root, args, env, bun, testDirectory = nu
   }
 }
 
+/**
+ * The smoke run's last lines (LKM-176): Bun's `SMOKE FAIL`/`SMOKE ENV` lines from
+ * `smoke-result.json`, plus a host-exit line and the host's last log lines when the host
+ * crashed or exited without a result. Returns 0, 1 (product) or 3 (environment only).
+ */
+export function reportSmokeExit(root, testDirectory, host) {
+  let result
+  try { result = JSON.parse(readFileSync(join(testDirectory, 'smoke-result.json'), 'utf8')) } catch {}
+  let tail = [], artifact
+  const logs = join(testDirectory, 'logs')
+  const log = existsSync(logs) ? readdirSync(logs).filter(name => /^trezi-.*\.log$/.test(name)).sort().at(-1) : undefined
+  if (log) {
+    const text = readFileSync(join(logs, log), 'utf8')
+    tail = hostLogTail(text)
+    if (host.signal || host.code !== 0) {
+      const artifacts = join(root, 'test/artifacts/native')
+      mkdirSync(artifacts, { recursive: true })
+      artifact = join(artifacts, 'host-exit.log')
+      writeFileSync(artifact, text)
+    }
+  }
+  const finished = finishSmokeRun(host, result, tail, artifact)
+  if (finished.lines.length) console.error(finished.lines.join('\n'))
+  if (finished.exitCode === SMOKE_EXIT_ENV) console.error(`Native smoke: environment failure only; exit ${SMOKE_EXIT_ENV}.`)
+  return finished.exitCode
+}
+
 async function main() {
   requireSupportedPlatform()
   const args = process.argv.slice(2)
@@ -58,6 +86,7 @@ async function main() {
     const child = Bun.spawn([spec.command, ...spec.args], { cwd: root, env: spec.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal))
     process.exitCode = await child.exited
+    if (testDirectory) process.exitCode = reportSmokeExit(root, testDirectory, { code: child.exitCode, signal: child.signalCode })
   } finally {
     if (testDirectory) {
       // A failed host must not remove stores while its XPC service still drains.

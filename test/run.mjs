@@ -39,6 +39,7 @@ const UNIT = [
   'platform-owner',
   'native-visible-capture',
   'native-smoke-runner',
+  'native-smoke-report',
   'rename-compat',
   'source-stamp',
   'native-boundary',

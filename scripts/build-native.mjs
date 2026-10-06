@@ -149,6 +149,7 @@ const host = compile(
     join(root, 'src/native/ChatEnvironment.swift'),
     join(root, 'src/native/ChatReveal.swift'),
     join(root, 'src/native/ChatAcceptance.swift'),
+    join(root, 'src/native/SmokeFocus.swift'),
     join(root, 'src/native/ScrollerDrag.swift'),
     join(root, 'src/native/VisibleChatCapture.swift'),
     join(root, 'src/native/ChatIsland.swift'),

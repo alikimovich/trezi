@@ -10,6 +10,7 @@ import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
 import { checkVisibleComposer } from './smoke-composer'
+import { smokeFocusHooks } from './smoke-focus'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import { checkInspectorIsland } from './smoke-inspector-island'
@@ -17,6 +18,12 @@ import { checkChatIslands } from './smoke-islands'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkProjectSwitching } from './smoke-projects'
+import {
+  formatFailureReport,
+  SMOKE_EXIT_PRODUCT,
+  SmokeRunFailure,
+  smokeExitCode
+} from './smoke-report'
 import { captureSmokeFailure, restoreSmokeState } from './smoke-restore'
 import {
   formatSmokeSummary,
@@ -841,13 +848,20 @@ export async function runNativeCoreSmoke(
     capture: (name) => captureSmokeFailure(host, artifacts, name),
     restore: () => restoreSmokeState(host, firstProject),
     inject: parseInjectedFailures(process.env.TREZI_NATIVE_SMOKE_FAIL),
-    halted: () => (hostClosed ? 'native host (it exited)' : undefined)
+    halted: () => (hostClosed ? 'native host (it exited)' : undefined),
+    ...smokeFocusHooks(host)
   })
   console.log(formatSmokeSummary(results))
+  const failures = results.filter((r) => r.outcome === 'fail')
+  const lines = formatFailureReport(failures)
+  if (lines.length) console.log(lines.join('\n'))
   const failed = results.filter((r) => r.outcome !== 'pass')
   if (failed.length)
-    throw new Error(
-      `Native smoke: ${failed.length} of ${results.length} checks did not pass (${failed.map((r) => r.name).join(', ')})`
+    throw new SmokeRunFailure(
+      `Native smoke: ${failed.length} of ${results.length} checks did not pass (${failed.map((r) => r.name).join(', ')})`,
+      lines,
+      // Skips follow a failure or a host exit, which the launcher reports itself.
+      failures.length ? smokeExitCode(failures) : SMOKE_EXIT_PRODUCT
     )
   console.log(
     'NATIVE CORE PASS — no React/main/panel/editor WebViews; workspace, sheets, layout, native editing, streams and preview isolation.'

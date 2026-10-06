@@ -176,6 +176,73 @@ fixture list that includes a deliberately failing check. It asserts that later
 checks still run and that dependents are skipped with their reason, and it
 checks the exact summary text.
 
+### Focus guard, failure lines and exit codes (LKM-176)
+
+**Focus guard.** In a foreground run, the runner calls the host's `smokeFocus`
+test command (`src/native/SmokeFocus.swift`, test profile only) before and after
+every check. The command checks that Trezi is the active app with one of its own
+windows key (an open sheet counts). If not, or if focus was taken away since the
+last call, it activates Trezi. When no window became key it also calls
+`makeKeyAndOrderFront` on the main window. It waits at most 2 s and asks for
+activation again every 0.5 s. It never reads or changes system settings. A
+restore logs `FOCUS [smoke] <check> — focus restored before the check` or
+`… during the check`. A loss is the app resigning active (another app or a system
+dialog took focus) or the simulation. If a check fails and focus was lost during
+it, the runner runs the check's cleanup and the shared restore, logs `RETRY [smoke]
+<check> — focus was lost during the check; retrying once: <assertion>` and runs the
+check once more. If focus cannot be had within 2 s, the runner logs `WARN [smoke]
+<check> — focus not obtainable …: <reason>` and still runs the check. Background
+runs (`TREZI_NATIVE_BACKGROUND_TEST=1`) have no focus guard.
+
+**Simulated focus loss.** `TREZI_NATIVE_SMOKE_STEAL_FOCUS=<check>[,<check>]` takes
+focus away through the same test command right before the named checks' first
+attempt. An invisible 1×1 Trezi window becomes key, so the main window resigns key
+just as when another app takes focus. No other app is involved. `bun run
+test:native` sets it to `chat-ready` by default, so every native run loses focus
+once in the prelude. The later foreground checks pass only because the guard
+restored focus. The log then contains `focus taken away (simulated by the host
+test command)` and `focus restored during the check`. Set it to an empty value to
+turn the simulation off. Unknown names are rejected before anything runs.
+
+**Failure lines.** After the summary, the smoke prints one line per failed check:
+
+```text
+SMOKE FAIL <group>/<check>: <assertion message> (expected <value>, actual <value>) [artifact: <path>]
+SMOKE ENV <reason>
+```
+
+- `<group>` is the check's group from `src/native/smoke-groups.ts`. Groups are
+  joined with `+` (`islands+shadow-light`). Prelude checks report `prelude`.
+- `(expected …, actual …)` comes from an `AssertionError`'s values, compacted to
+  one line and truncated after 160 characters. It is omitted when the error has
+  no values.
+- A timed-out wait (`waitFor`/`inspectUntil` in `src/native/smoke-wait.ts`) reports
+  `timed out after <s> s at <smoke-*.ts:line> waiting for <label>`. The location is
+  the step that waited. `actual` is the last state the wait inspected.
+- `[artifact: …]` is the failure capture, `unavailable (<reason>)`, or `none`.
+- `SMOKE ENV <reason>` follows the fail lines, once for each distinct environment
+  reason.
+
+The launcher (`scripts/start-native.mjs`) receives these lines in the test
+directory's `smoke-result.json`. After the host exits, it prints them again as the
+last lines of the run. If the host exited without a result or was killed by a
+signal, the launcher adds `SMOKE FAIL host/exit: native host exited with <exit code
+N|signal S> … [artifact: test/artifacts/native/host-exit.log]` and up to 12 of the
+host's last product log lines (`  host log: …`). A failure outside any named check
+reports as `run/setup`. A run that `test/native-runtime.mjs` stopped after 300 s
+reports as `run/timeout`. Missing sidebar evidence reports as `sidebar/evidence`.
+`test/native-smoke-report.mjs` (unit tier) covers the formatter, the timeout and
+host-exit lines and the exit codes. `test/native-smoke-runner.mjs` covers restore,
+retry and classification.
+
+**Exit codes.** A failed check is an environment failure when focus was not
+obtainable before it, was lost during its last attempt, or could not be restored
+after it. The display being asleep also counts. Any other failure is a product
+failure. `bun run test:native` (and `dev:native --test`) exits **1** when any
+failure is a product failure, **3** when every failure is an environment failure,
+and 0 on a pass. Skips follow a failure or a host exit and do not change the code.
+The host and service still exit 1; the launcher maps the result to 3.
+
 `node test/native-source-window.mjs` checks the popped-out editor's initial size,
 programmatic resizing, code viewport, docking/reopening and draft retention using
 a disposable native host. It requires an existing build and writes

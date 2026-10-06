@@ -217,6 +217,177 @@ await assert.rejects(
 assert.deepEqual([...parseInjectedFailures(' composer, ,sheets ')], ['composer', 'sheets'])
 assert.deepEqual([...parseInjectedFailures(undefined)], [])
 
+// LKM-176 focus guard: a fake host whose focus the simulation takes away.
+const focusHost = () => {
+  const host = { focused: true, lost: 0, calls: [] }
+  host.hooks = {
+    capture: async (name) => `/artifacts/failure-${name}.png`,
+    restore: async (name) => {
+      host.calls.push(`restore:${name}`)
+    },
+    focus: async () => {
+      const lost = host.lost > 0
+      const restored = !host.focused || lost
+      host.lost = 0
+      if (host.unobtainable)
+        return { focused: false, restored: false, lost, reason: host.unobtainable }
+      host.focused = true
+      host.calls.push(restored ? 'focus:restored' : 'focus')
+      return { focused: true, restored, lost }
+    },
+    loseFocus: async () => {
+      host.focused = false
+      host.lost++
+      host.calls.push('lose')
+    }
+  }
+  return host
+}
+const foreground = (host, name, extra = {}) => ({
+  name,
+  run: async () => {
+    host.calls.push(`run:${name}`)
+    assert.ok(host.focused, 'Chat must be foreground')
+  },
+  ...extra
+})
+
+// Focus lost during a check: restored, retried once, passes; the log says so.
+{
+  const host = focusHost()
+  const log = []
+  const out = await runSmokeChecks(
+    [
+      foreground(host, 'visible-composer', {
+        cleanup: async () => {
+          host.calls.push('cleanup:visible-composer')
+        }
+      }),
+      foreground(host, 'after')
+    ],
+    { ...host.hooks, log: (line) => log.push(line), stealFocus: new Set(['visible-composer']) }
+  )
+  assert.deepEqual(
+    out.map((r) => [r.name, r.outcome]),
+    [
+      ['visible-composer', 'pass'],
+      ['after', 'pass']
+    ]
+  )
+  assert.deepEqual(host.calls, [
+    'focus',
+    'lose',
+    'run:visible-composer',
+    'focus:restored',
+    'cleanup:visible-composer',
+    'restore:visible-composer',
+    'focus',
+    'run:visible-composer',
+    'focus',
+    'focus',
+    'run:after',
+    'focus'
+  ])
+  assert.ok(log.includes('FOCUS [smoke] visible-composer — focus restored during the check'))
+  assert.ok(
+    log.includes(
+      'RETRY [smoke] visible-composer — focus was lost during the check; retrying once: Chat must be foreground'
+    )
+  )
+}
+
+// Focus missing before a check is restored first; the check never sees the loss.
+{
+  const host = focusHost()
+  host.focused = false
+  const log = []
+  const out = await runSmokeChecks([foreground(host, 'native-chat')], {
+    ...host.hooks,
+    log: (line) => log.push(line)
+  })
+  assert.equal(out[0].outcome, 'pass')
+  assert.ok(log.includes('FOCUS [smoke] native-chat — focus restored before the check'))
+}
+
+// Focus lost again during the retry: an environment failure, not a product failure.
+{
+  const host = focusHost()
+  const errors = console.error
+  console.error = () => {}
+  const out = await runSmokeChecks(
+    [
+      {
+        name: 'native-chat',
+        run: async () => {
+          await host.hooks.loseFocus()
+          assert.ok(host.focused, 'Chat must be foreground')
+        }
+      }
+    ],
+    { ...host.hooks, log: () => {} }
+  ).finally(() => {
+    console.error = errors
+  })
+  assert.equal(out[0].outcome, 'fail')
+  assert.equal(out[0].environment, 'focus lost during native-chat')
+  assert.equal(host.calls.filter((c) => c === 'lose').length, 2, 'retried exactly once')
+  assert.ok(formatSmokeSummary(out).includes('  environment: focus lost during native-chat'))
+}
+
+// Focus not obtainable before the check: the check still runs; its failure is environmental.
+{
+  const host = focusHost()
+  host.focused = false
+  host.unobtainable = 'display asleep'
+  const errors = console.error
+  console.error = () => {}
+  const log = []
+  const out = await runSmokeChecks(
+    [foreground(host, 'native-chat'), { name: 'pure', run: async () => {} }],
+    { ...host.hooks, log: (line) => log.push(line) }
+  ).finally(() => {
+    console.error = errors
+  })
+  assert.deepEqual(
+    out.map((r) => [r.name, r.outcome, r.environment]),
+    [
+      ['native-chat', 'fail', 'focus not obtainable before native-chat: display asleep'],
+      ['pure', 'pass', undefined]
+    ]
+  )
+  assert.ok(
+    log.includes('WARN [smoke] native-chat — focus not obtainable before the check: display asleep')
+  )
+}
+
+// A product failure with focus intact is not retried and has no environment.
+{
+  const host = focusHost()
+  const errors = console.error
+  console.error = () => {}
+  const out = await runSmokeChecks(
+    [
+      {
+        name: 'composer',
+        run: async () => {
+          host.calls.push('run:composer')
+          assert.equal(40, 60, 'Composer grows upward')
+        }
+      }
+    ],
+    { ...host.hooks, log: () => {} }
+  ).finally(() => {
+    console.error = errors
+  })
+  assert.equal(out[0].outcome, 'fail')
+  assert.equal(out[0].environment, undefined)
+  assert.equal(host.calls.filter((c) => c === 'run:composer').length, 1)
+}
+assert.throws(
+  () => validateSmokeChecks([pass('a')], new Set(), new Set(['typo'])),
+  /TREZI_NATIVE_SMOKE_STEAL_FOCUS names an unknown check: typo/
+)
+
 console.log(
-  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed.'
+  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once.'
 )

@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-176: native smoke focus guard and fixed failure lines
+
+- **Why.** Agent OS triage of 16 native failures found 5 `env_focus` ("Chat was not foreground": another app or a system dialog took focus mid-run). One more was unclassifiable because the log tail had no assertion text.
+- **Focus guard.** The new host test command `smokeFocus` (`SmokeFocus.swift`, test profile only) counts focus losses (the app resigning active, or the simulation). When focus is missing or was lost, it activates Trezi and makes a window key, waiting at most 2 s. The runner calls it before and after every foreground check. A check that failed after losing focus is cleaned up, restored and retried once. Each restore logs `FOCUS [smoke] <check> — focus restored …`. An open sheet keeps key status; nothing touches system settings.
+- **Simulation.** `TREZI_NATIVE_SMOKE_STEAL_FOCUS=<check>` makes an invisible in-process 1×1 window key before the check runs. `test:native` defaults it to `chat-ready`, so every native run proves restoration: the later foreground checks must pass.
+- **Failure lines and exit codes.** `smoke-report.ts` formats `SMOKE FAIL <group>/<check>: <message> (expected …, actual …) [artifact: …]` from assertion values. `waitFor` now throws `SmokeTimeoutError` with its label, the waiting step's `smoke-*.ts:line` and the last state. Bun prints the lines after the summary and writes `smoke-result.json`; `start-native.mjs` prints them again as the run's last lines. When the host died without a result, the launcher adds `SMOKE FAIL host/exit` with the code or signal and the host's last log lines. If every failure is an environment failure, the run prints `SMOKE ENV <reason>` and exits 3; otherwise it exits 1.
+- **Checks.** Quick passed (typecheck, typecheck:native, unit tier incl. the new `native-smoke-report` and the extended `native-smoke-runner`, lint). Native `core,chat,composer` passed 19/19 with `focus taken away (simulated …)` and `focus restored during the check` in the log. Full suite left to the manager.
+
 ## 2026-10-05 — LKM-175 repair: foreground flakiness in native acceptance
 
 - The manager's native run failed `visible-composer` ("Chat must be foreground") and then `native-chat` ("Native divider needs renderer delivery"); a later chat-scroll run failed the same way. Both were harness issues, not the build: the window lost key status or activation was deferred, and the 2 s wait in `chatAcceptance` `prepare` gave up. The divider failure was a cascade: `visible-composer` died before restoring the 440 width, the chat stayed at the 320 minimum, and the divider check's `-20, +20` steps clamp there, so it ended 20 pt wider.
