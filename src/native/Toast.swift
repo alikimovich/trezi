@@ -36,6 +36,7 @@ struct ToastContent: View {
 final class NativeToast: NSHostingView<ToastContent> {
     let model = ToastModel()
     var timer: Timer?
+    var coverChanged: (() -> Void)?
     init() {
         super.init(rootView: ToastContent(model: model))
         model.hide = { [weak self] in self?.hide() }
@@ -55,6 +56,10 @@ final class NativeToast: NSHostingView<ToastContent> {
             ])
         }
         isHidden = false; alphaValue = 1
+        invalidateIntrinsicContentSize()
+        canvas.layoutSubtreeIfNeeded()
+        layoutSubtreeIfNeeded()
+        coverChanged?()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: max(1, state["seconds"] as? Double ?? 6), repeats: false) { [weak self] _ in self?.hide() }
     }
@@ -66,7 +71,11 @@ final class NativeToast: NSHostingView<ToastContent> {
         }, completionHandler: { [weak self] in
             guard let self, self.alphaValue == 0 else { return }
             self.isHidden = true; self.model.id = ""
+            self.coverChanged?()
         })
     }
+    override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) ?? (!isHidden && frame.contains(point) ? self : nil) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func scrollWheel(with event: NSEvent) {}
     func inspect() -> [String: Any] { ["visible":!isHidden && alphaValue > 0, "message":model.message, "action":model.action ?? "", "frame":NSStringFromRect(frame), "inWindow":window != nil, "pending":timer != nil] }
 }

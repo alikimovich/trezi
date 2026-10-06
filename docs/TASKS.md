@@ -11,6 +11,18 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Chat-scroll never rebuilds (confirmed); two pacing waits removed; `[timing]` lines for both native suites.
 - [x] `TREZI_SIGN_IDENTITY=-` skips the keychain identity listing; test builds still never create an identity.
 
+## Select mode hover lost under the LKM-162 pointer gate (LKM-173)
+
+- [x] Remove `PreviewWebView`/`PreviewPointerGate`: WebKit keeps its own tracking areas and the preview is a plain `WKWebView`; no per-move window hit test.
+- [x] The host sends the page the viewport rects the island and its resize edge cover, on layout and only when changed (`src/native/PreviewCover.swift`, `native-cover` event); main forwards them on `trezi:preview:covered` and re-sends them after every load.
+- [x] The preview script shields those rects (`src/preview/native-cover.ts`): no hover box, page `:hover` or page pointer listener under the island.
+- [x] Native `checkPointer` moves through WebKit's tracking-area owners: page hovers, island does not, page hovers again; the shield matches the island; a click and wheel on the island still pick nothing.
+- [x] Repair the native inspector crash by reading page state between pointer commands; verify interact-mode CSS `:hover`, cursor and `mouseenter` on the page and their absence under the island (`core` native group passed).
+- [x] Verify hover travel before the island click and wheel, assert no pick or page scroll afterward, and restore the island after an assertion fails (`core,composer` native groups passed).
+- [x] Add the visible native toast to the page cover, refresh that cover after toast show/hide, and check the native hit target and preview shield in the settings smoke.
+- [x] Drive the island-to-page return hover through a short AppKit pointer path and confirm the inspector in two consecutive native `core` runs.
+- [x] Drive page-to-island entry through the same pointer path in select and interact modes, with native cover diagnostics on a failed clear; scoped native `core` passed.
+- [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
 ## Editing inspector follows its project (LKM-172)
 
 - [x] Hide the island, chip and preview overlays during a project switch; restore each project's selection and inspector tab only if the element still resolves on return.

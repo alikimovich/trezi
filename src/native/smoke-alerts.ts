@@ -5,6 +5,7 @@ import type { NativeSheetAction } from '../shared/native-sheet'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { NativeSheetController } from './sheets-runtime'
+import { waitFor } from './smoke-wait'
 import { NativeSupportSheets } from './support-sheets'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -102,9 +103,31 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
       toast.inWindow && toast.pending,
       'The toast is in the main window and dismisses itself'
     )
+    assert.ok(toast.hitToast, 'The native toast takes clicks across its frame')
+    assert.equal(toast.cover.length, 1, 'The visible toast covers one preview rect')
+    assert.deepEqual(toast.sentCover, toast.cover, 'The host sent the laid-out toast rect')
+    const pageCover = async () =>
+      host.request('evaluate', {
+        view: 'preview',
+        isolated: true,
+        code: `([...document.querySelector('[data-trezi-cover]')?.shadowRoot?.children ?? []].map(e => { const r = e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }))`
+      })
+    const shields = await waitFor(async () => {
+      const value = await pageCover()
+      return Array.isArray(value) && value.length === 1 && value
+    }, 'toast shield in the preview')
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      assert.ok(
+        Math.abs(shields[0][key] - toast.cover[0][key]) <= 1,
+        `toast shield ${key} matches its native frame`
+      )
     await capture('captureToast', 'feedback-toast.png')
     await host.request('toastPerform')
     await until('toastInspect', (s) => !s.visible, 'The toast action did not dismiss it')
+    await waitFor(
+      async () => (await pageCover()).length === 0,
+      'toast shield cleared after dismissal'
+    )
     await until('sheetInspect', () => opened.length === 1, 'View on GitHub did not open')
     assert.deepEqual(opened, ['https://github.com/alikimovich/trezi/issues/170'])
   } finally {

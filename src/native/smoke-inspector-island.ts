@@ -44,7 +44,7 @@ function checkOpen(state: Island, label: string) {
 
 /** The preview page, its selection's source file and select mode, for the pointer check. */
 export type IslandPage = {
-  evaluate: (code: string) => Promise<unknown>
+  evaluate: (code: string, isolated?: boolean) => Promise<unknown>
   source: () => string
   /** The selected element's computed value of one style property (`styles:read`). */
   styles: (prop: string) => Promise<unknown>
@@ -54,9 +54,9 @@ export type IslandPage = {
 }
 
 /** LKM-162: the island's fields, slider and tabs are the window's hit views; padding-top
- *  typed into its real field edits the element; and moves, a click and a wheel inside it
- *  never reach the page, even in select mode with the page first responder, while a move
- *  beside it does. */
+ *  typed into its real field edits the element; and in select mode a click and a wheel
+ *  inside it never pick. LKM-173: a move over the page hovers, over the island it does
+ *  not, and back on the page it hovers again. */
 async function checkPointer(
   island: (params?: Record<string, unknown>) => Promise<Island>,
   page: IslandPage,
@@ -117,30 +117,147 @@ async function checkPointer(
       island: await island({ pointer: true })
     })
   )
+  const heading = (await page.evaluate(`(() => {
+    const r = document.querySelector('#native-title').getBoundingClientRect();
+    return {x:r.x + Math.min(20, r.width / 2), y:r.y + r.height / 2};
+  })()`)) as { x: number; y: number }
+  const move = (
+    target: 'page' | 'island',
+    offset = 0,
+    click = false,
+    pathFromIsland = false,
+    pathFromPage = false
+  ) =>
+    island({
+      pointer: true,
+      step: 'move',
+      target,
+      x: heading.x + offset,
+      y: heading.y,
+      click,
+      pathFromIsland,
+      pathFromPage
+    })
+  const hoverBox = () =>
+    page.evaluate(
+      `(() => { const box = document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-hover]'); return !!box && box.style.display === 'block'; })()`,
+      true
+    )
   await page.selectMode(true)
   try {
-    const moves = await island({ pointer: true, step: 'moves' })
-    evidence.pointerMoves = moves
-    assert.ok(
-      moves.gates >= 1,
-      `pointer: WebKit's tracking areas are gated ${JSON.stringify(moves)}`
+    const before = await move('page')
+    await waitFor(hoverBox, 'select-mode hover over the page')
+    const over = await move('island', 0, false, false, true)
+    await waitFor(
+      async () => !(await hoverBox()),
+      'select-mode hover cleared over the island',
+      10000,
+      async () => ({
+        move: over,
+        cover: await page.evaluate(
+          `(() => {
+        const host = document.querySelector('[data-trezi-cover]');
+        const shield = host?.shadowRoot?.firstElementChild;
+        const r = shield?.getBoundingClientRect();
+        return { connected: !!host?.isConnected, rect: r && {x:r.x,y:r.y,width:r.width,height:r.height} };
+      })()`,
+          true
+        )
+      })
     )
-    for (const kind of ['move', 'enter', 'down', 'wheel'])
-      assert.equal(
-        moves.inside[kind] ?? 0,
-        0,
-        `pointer: no ${kind} inside the island reaches the page`
-      )
-    // A real pointer's moves come through WebKit's tracking areas; AppKit does not hand
-    // posted moves to the first responder here, so besideWindow is evidence only.
+    // Cross the native/page boundary with successive WebKit moves, as a pointer does.
+    const after = await move('page', 20, false, true)
+    await waitFor(hoverBox, 'select-mode hover restored over the page', 10000, async () => ({
+      move: after,
+      page: await page.evaluate(`(() => {
+        const r = document.querySelector('#native-title').getBoundingClientRect();
+        return { heading: {x:r.x,y:r.y,width:r.width,height:r.height},
+          hit: document.elementFromPoint(${heading.x + 20}, ${heading.y})?.tagName,
+          scrollY: window.scrollY };
+      })()`)
+    }))
+    const cover = (await page.evaluate(
+      `([...document.querySelector('[data-trezi-cover]')?.shadowRoot?.children ?? []].map(e => { const r=e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }))`,
+      true
+    )) as Rect[]
+    const shield = cover[0]
+    const expected = before.expectedCover[0]
     assert.ok(
-      (moves.besideTracking.move ?? 0) >= 1 && (moves.besideTracking.enter ?? 0) >= 1,
-      `pointer: a move beside the island still reaches the page ${JSON.stringify(moves)}`
+      shield &&
+        expected &&
+        (['x', 'y', 'width', 'height'] as const).every(
+          (key) => Math.abs(shield[key] - expected[key]) <= 1
+        ),
+      `pointer: the page shields the island's rect ${JSON.stringify({ cover, expected })}`
     )
-    assert.equal(moves.picks, 0, 'pointer: no element-picked message from the island')
+    assert.equal(
+      await page.evaluate(
+        `document.elementFromPoint(${expected.x + expected.width / 2}, ${expected.y + expected.height / 2})?.closest('[data-trezi-cover]') !== null`
+      ),
+      true,
+      'pointer: the browser hit target over the island is the cover shield'
+    )
+    const scrollBefore = await page.evaluate('window.scrollY')
+    await move('island', 0, true)
+    await delay(400)
+    const afterClick = await move('island')
+    assert.equal(
+      afterClick.picksTotal,
+      before.picksTotal,
+      'pointer: no element-picked message from the island click'
+    )
+    assert.equal(
+      await page.evaluate('window.scrollY'),
+      scrollBefore,
+      'pointer: island wheel does not scroll the page'
+    )
+    evidence.pointerMoves = { before, over, after, afterClick, cover }
   } finally {
     await page.selectMode(false)
   }
+  // Interact mode uses the page's own hover machinery, including CSS and mouseenter.
+  const cover = (await move('island')).expectedCover[0] as Rect
+  assert.ok(cover, 'pointer: native island has a covered preview rect')
+  await page.evaluate(`(() => {
+    const style = document.createElement('style');
+    style.textContent = '#native-title:hover, #island-hover-probe:hover { background-color: rgb(12, 34, 56) !important; cursor: pointer !important; }';
+    document.head.append(style);
+    const probe = document.createElement('div');
+    probe.id = 'island-hover-probe';
+    probe.style.cssText = 'position:fixed;left:${cover.x + cover.width / 2 - 20}px;top:${cover.y + cover.height / 2 - 20}px;width:40px;height:40px;background-color:rgb(255, 255, 255);z-index:2147483646';
+    document.body.append(probe);
+    window.__treziHoverEnter = { page: 0, island: 0 };
+    document.querySelector('#native-title').addEventListener('mouseenter', () => window.__treziHoverEnter.page++);
+    probe.addEventListener('mouseenter', () => window.__treziHoverEnter.island++);
+  })()`)
+  const interact = () =>
+    page.evaluate(`(() => {
+    const title = document.querySelector('#native-title');
+    const probe = document.querySelector('#island-hover-probe');
+    return { page: getComputedStyle(title).backgroundColor,
+      island: getComputedStyle(probe).backgroundColor,
+      cursor: getComputedStyle(title).cursor,
+      enters: window.__treziHoverEnter };
+  })()`)
+  await move('page')
+  await waitFor(async () => {
+    const state = (await interact()) as Island
+    return state.page === 'rgb(12, 34, 56)' && state.enters.page > 0 && state.cursor === 'pointer'
+  }, 'interact-mode CSS hover, cursor and mouseenter over the page')
+  const pageHover = await interact()
+  await move('island', 0, false, false, true)
+  await waitFor(async () => {
+    const state = (await interact()) as Island
+    return state.page !== 'rgb(12, 34, 56)' && state.island !== 'rgb(12, 34, 56)'
+  }, 'interact-mode hover cleared over the island')
+  const islandHover = (await interact()) as Island
+  assert.equal(
+    islandHover.enters.island,
+    0,
+    'pointer: mouseenter does not reach the page under the island'
+  )
+  evidence.interactHover = { pageHover, islandHover }
+  await page.evaluate(`document.querySelector('#island-hover-probe')?.remove()`)
 }
 
 /** LKM-122: the inspector floats over the preview's right edge; the preview keeps its
@@ -268,6 +385,7 @@ export async function checkInspectorIsland(
     await setOpen(false)
   } finally {
     await island(restore)
+    await setOpen(initial.visible)
     writeFileSync(join(artifacts, 'inspector-island.json'), JSON.stringify(evidence, null, 2))
   }
   console.log(

@@ -20,6 +20,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Product logs: every Trezi process writes redacted lifecycle lines to `~/Library/Logs/Trezi` (7 days, 20 MB a day); Help › Copy Logs for Support, Show Logs in Finder and Export Logs…, `trezi logs [--since 30m] [--follow]`, and the feedback diagnostics attach the last 30 minutes with consent.
 
 ### Fixed
+- Select mode highlights the hovered element again, and pointer moves over the preview are no longer slowed by a window hit test; the editing island still keeps hover, clicks and scrolls from reaching the page beneath it (LKM-173).
 - Preview selection coalesces pointer hover redraws to one per display frame, keeping attached chats responsive (LKM-171).
 - Unstamped elements now explain why source editing is unavailable, offer Connect and Ask the agent, and allow direct edits when one project CSS class rule can be identified (LKM-174).
 - Shadow Light drags on the iPhone Frame Shadow island no longer flicker in the live preview while the source is written once at the end of the gesture (LKM-140).

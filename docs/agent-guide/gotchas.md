@@ -15,10 +15,14 @@ and provider-seat rules are here.
   message allowlist; re-send select/style/layer state after navigation.
 - **Native views over the preview don't block WebKit's pointer by hit-testing.**
   WebKit's tracking areas deliver moves anywhere in its visible rect, and the
-  window hands it clicks an overlay left unhandled. The preview is a
-  `PreviewWebView` (`src/native/PreviewPointer.swift`) that gates these by the
-  window's hit view. Keep it, and make floating islands swallow their own clicks
-  (LKM-162).
+  window hands it clicks an overlay left unhandled. Floating islands swallow
+  their own clicks and scrolls (LKM-162). For moves, the host sends the page the
+  rects native views cover on layout (`src/native/PreviewCover.swift`), main
+  forwards them (and re-sends after each load), and the preview script shields
+  them (`src/preview/native-cover.ts`). Don't replace or gate WebKit's tracking
+  areas: that lost select-mode hover (LKM-173). Don't evaluate into the page
+  straight from the host mid-navigation either: it crashed in WebKit's executor
+  check. A new floating view over the page belongs in `previewCoverRects`.
 - **Inspect WebKit through its native Web Inspector.** There is no Electron CDP
   port. Use the native host test protocol for deterministic integration checks.
 - **In service mode the launcher reports the HOST's exit status**, and
