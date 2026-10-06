@@ -34,7 +34,18 @@ export function installNativeInspector(
       else await visualEdit(root, prompt)
     },
     () => chat.action({ chat: chat.active, action: 'setup' }),
-    () => chat.chats.get(chat.active)?.settings.provider ?? 'claude'
+    () => chat.chats.get(chat.active)?.settings.provider ?? 'claude',
+    (root) => {
+      const project = context.projects.get(root)
+      if (
+        project?.setup.lost ||
+        workspace.state.projects.find((p) => p.root === root)?.sourceSetup?.state === 'unstamped'
+      )
+        return 'Source stamps are missing after a project configuration change.'
+      if (project?.stamps === 0 && project?.canInstrument)
+        return 'This project is not connected to Trezi yet.'
+      return 'This element may come from a library or generated markup.'
+    }
   )
   // Deferred preview navigation (S12): the editing owner holds an agent's request
   // until its turn lands; this only loads it in the chat and project that asked.

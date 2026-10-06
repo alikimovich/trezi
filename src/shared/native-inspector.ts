@@ -19,6 +19,7 @@ export interface NativeInspectorState {
   generation: number
   visible: boolean
   title: string
+  notice?: { title: string; reason: string; editable: boolean }
   tab: string
   fields: NativeInspectorField[]
   actions: { id: string; label: string }[]
