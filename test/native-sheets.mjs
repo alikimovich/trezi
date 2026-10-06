@@ -102,10 +102,32 @@ sheets.present(
   { title: 'Done', detail: '', fields: [], actions: [{ id: 'cancel', label: 'Close' }] },
   async () => {}
 )
+// A field-less state is an alert sheet (LKM-170): no traffic light, so Close stays.
+assert.equal(sheets.current.state.alert, true)
+assert.deepEqual(
+  sheets.current.state.actions.map((a) => a.id),
+  ['cancel']
+)
+assert.equal(sheets.current.state.dismissible, true)
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+assert.equal(sheets.current, null)
+// A form window closes with its traffic light instead.
+sheets.present(
+  {
+    title: 'Form',
+    detail: '',
+    fields: [{ id: 'name', label: 'Name', kind: 'text', value: '' }],
+    actions: [{ id: 'cancel', label: 'Close' }]
+  },
+  async () => {}
+)
+assert.equal(sheets.current.state.alert, false)
 assert.deepEqual(sheets.current.state.actions, [])
 assert.equal(sheets.current.state.dismissible, true)
 await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
 assert.equal(sheets.current, null)
+sheets.present({ title: 'Tool', detail: '', fields: [], alert: false, actions: [] }, async () => {})
+assert.equal(sheets.current.state.alert, false, 'a caller can keep a field-less form window')
 sheets.present({ title: 'Updating', detail: '', fields: [], actions: [] }, async () => {})
 await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
 assert.ok(sheets.current, 'non-dismissible operations stay protected')

@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { dispatchIPC, serviceEvents } from './platform'
+import { checkNativeAlerts } from './smoke-alerts'
 import { preparePreviewInput } from './smoke-input'
 import { checkVisibleSettings } from './smoke-settings'
 export async function checkNativeSheets(host: NativeBridge, key: string, artifacts: string) {
@@ -13,6 +14,7 @@ export async function checkNativeSheets(host: NativeBridge, key: string, artifac
     }
     throw new Error('Native sheet did not reach expected state')
   }
+  await checkNativeAlerts(host, artifacts)
   host.emit('menu', { action: 'servers' })
   await wait((state) => state.visible && state.title === 'Running servers' && !state.busy)
   writeFileSync(

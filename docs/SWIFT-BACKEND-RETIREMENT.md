@@ -238,6 +238,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/trezi-agent-tools.ts` | helper | ProviderOwner (provider helper) | Codex tool bridge socket |
 | `src/main/worktrees.ts` | helper | RepositoryOwner | Git reads (a branch's diff, chat refs) |
 | `src/native/smoke-agent-preview.ts` | test | — | smoke fixture |
+| `src/native/smoke-alerts.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-gate.ts` | test | — | smoke fixture |
 | `src/native/smoke-composer.ts` | test | — | smoke fixture |

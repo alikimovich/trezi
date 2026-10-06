@@ -725,6 +725,9 @@ async function main() {
   host.on('sheet-action', (action) => {
     void sheetController.action(action)
   })
+  host.on('toast-action', (action) => {
+    void sheetController.toastAction(action).catch(console.error)
+  })
   const openSheet = (kind: string, key?: string) => {
     if (sheetController.current?.state.busy) return
     if (kind === 'settings')

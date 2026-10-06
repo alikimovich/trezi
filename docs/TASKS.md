@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Standard feedback confirmation and alert sheets (LKM-170)
+
+- [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.
+- [x] Failed feedback: a standard sheet with Copy details, Cancel and Retry (default) that posts the same input again (`src/native/support-sheets.ts`).
+- [x] Field-less presenter states are NSAlert-style sheets attached to the main window, sized to content, Return = default, Esc = cancel (`src/native/SheetAlert.swift`); Suggested fix and Update setup files opt in, Running servers and Git updates stay form windows.
+- [x] Native capture check `src/native/smoke-alerts.ts` (group `settings`): updates alert, feedback error sheet, Retry, toast and its action.
 ## Compact sent and composer attachment thumbnails (LKM-166)
 
 - [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.
