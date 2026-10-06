@@ -20,6 +20,30 @@ export function summarizeState(value: unknown, depth = 0): unknown {
   return value
 }
 
+/** A wait that gave up: what it waited for, where, for how long, and the last value it saw.
+ *  smoke-report turns it into the `SMOKE FAIL` line (LKM-176). */
+export class SmokeTimeoutError extends Error {
+  constructor(
+    message: string,
+    readonly label: string,
+    readonly timeout: number,
+    readonly last: unknown,
+    /** `smoke-<module>.ts:<line>` of the call that waited, when the stack names one. */
+    readonly step?: string
+  ) {
+    super(message)
+    this.name = 'SmokeTimeoutError'
+  }
+}
+
+/** The first smoke-module frame of a stack, skipping the runner and the wait helpers. */
+export function smokeFrame(stack: string | undefined): string | undefined {
+  const frame = (stack ?? '')
+    .split('\n')
+    .find((line) => /\bsmoke-(?!runner|wait|report)[\w-]+\.[tj]s:\d+/.test(line))
+  return frame?.match(/(smoke-[\w-]+\.[tj]s:\d+(?::\d+)?)/)?.[1]
+}
+
 // Results are `any`, like the inline helpers these replace: callers read host state fields.
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 export async function waitFor(
@@ -29,6 +53,8 @@ export async function waitFor(
   describe?: Describe,
   interval = 80
 ): Promise<any> {
+  // Taken before the first await: async continuations lose the caller's frames.
+  const step = smokeFrame(new Error().stack)
   const end = Date.now() + timeout
   let last: unknown
   while (Date.now() < end) {
@@ -48,7 +74,13 @@ export async function waitFor(
       detail = ` (diagnostics unavailable: ${String(error)})`
     }
   }
-  throw new Error(`Native check timed out: ${label}; ${String(last)}${detail}`)
+  throw new SmokeTimeoutError(
+    `Native check timed out: ${label}; ${String(last)}${detail}`,
+    label,
+    timeout,
+    detail ? detail.trim() : last,
+    step
+  )
 }
 
 /** Polls a host inspection until `check` passes; on timeout reports the last

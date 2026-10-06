@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { SmokeResultFile } from './smoke-report'
 
 /** The `--test` launch's disposable directory: the launcher's, or a scratch one with its profile. */
 export function smokeDirectory(): string {
@@ -37,6 +38,11 @@ export function writeSmokeProject(testDir: string): string {
 /** A scratch test directory (no launcher) is removed with the run. */
 export function removeSmokeDirectory(testDir: string): void {
   if (!process.env.TREZI_NATIVE_TEST_DIR) rmSync(testDir, { recursive: true, force: true })
+}
+
+/** The run's failure lines and exit code for the launcher, which prints them last (LKM-176). */
+export function writeSmokeResult(testDir: string, result: SmokeResultFile): void {
+  writeFileSync(join(testDir, 'smoke-result.json'), JSON.stringify(result))
 }
 
 export function saveSmokeFailure(root: string, png: string): void {

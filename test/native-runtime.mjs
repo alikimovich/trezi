@@ -4,6 +4,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseSmokeGroups } from '../src/native/smoke-groups.ts'
+import { describeFailure, formatFailureLine } from '../src/native/smoke-report.ts'
 
 function assertSidebarEvidence(dir, since) {
   const fresh = (name) => {
@@ -55,20 +56,49 @@ if (process.platform !== 'darwin') {
   // `--only=group,group` is forwarded to the smoke; see src/native/smoke-groups.ts.
   const groups = parseSmokeGroups(process.argv.slice(2))
   const started = Date.now()
-  // The -Onone test profile with the shared Swift binary cache (LKM-175).
+  // The -Onone test profile with the shared Swift binary cache (LKM-175). Every run takes
+  // focus away once during the prelude's `chat-ready` (LKM-176): the later foreground
+  // checks pass only if the runner restored it; its log shows `focus restored`.
+  // `TREZI_NATIVE_SMOKE_STEAL_FOCUS=` (empty) turns the simulation off.
   const result = spawnSync('bun', ['run', 'dev:native', '--test', ...process.argv.slice(2)], {
     cwd,
     stdio: 'inherit',
     timeout: 300000,
-    env: { ...process.env, TREZI_BUILD_PROFILE: process.env.TREZI_BUILD_PROFILE || 'test' }
+    env: {
+      ...process.env,
+      TREZI_BUILD_PROFILE: process.env.TREZI_BUILD_PROFILE || 'test',
+      TREZI_NATIVE_SMOKE_STEAL_FOCUS: process.env.TREZI_NATIVE_SMOKE_STEAL_FOCUS ?? 'chat-ready'
+    }
   })
+  if (result.error?.code === 'ETIMEDOUT')
+    console.error(
+      formatFailureLine({
+        group: 'run',
+        check: 'timeout',
+        message: 'the native build and smoke did not finish within 300 s; the launcher was stopped',
+        expected: 'exit within 300 s',
+        actual: `signal ${result.signal ?? 'none'}`
+      })
+    )
   if (result.error) throw result.error
   console.log(
     `[timing] native-runtime build and smoke: ${((Date.now() - started) / 1000).toFixed(1)} s`
   )
   // A passing smoke run must have produced fresh sidebar folder evidence for review.
   if (result.status === 0 && groups.has('sidebar'))
-    assertSidebarEvidence(join(cwd, 'test/artifacts/native'), started)
+    try {
+      assertSidebarEvidence(join(cwd, 'test/artifacts/native'), started)
+    } catch (error) {
+      console.error(
+        formatFailureLine({
+          group: 'sidebar',
+          check: 'evidence',
+          ...describeFailure(error),
+          artifact: join(cwd, 'test/artifacts/native')
+        })
+      )
+      throw error
+    }
   const host = fileURLToPath(
     new URL('../out/native/Trezi.app/Contents/MacOS/TreziHost', import.meta.url)
   )

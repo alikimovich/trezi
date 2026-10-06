@@ -94,8 +94,15 @@ import {
   removeSmokeDirectory,
   saveSmokeFailure,
   smokeDirectory,
-  writeSmokeProject
+  writeSmokeProject,
+  writeSmokeResult
 } from './smoke-fixture'
+import {
+  describeFailure,
+  formatFailureLine,
+  SMOKE_EXIT_PRODUCT,
+  SmokeRunFailure
+} from './smoke-report'
 import { serviceSource } from './source-service'
 import { NativeSupportSheets } from './support-sheets'
 import { NativeUpdateController } from './update-controller'
@@ -920,18 +927,43 @@ async function main() {
           inspectorController
         )
         process.exitCode = 0
+        writeSmokeResult(testDir!, { exitCode: 0, lines: [] })
         await cleanup()
       } catch (error) {
         process.exitCode = 1
         console.error(error)
+        let artifact: string | undefined
         try {
           saveSmokeFailure(root, await host!.request('captureShell'))
+          artifact = join(root, 'test/artifacts/native/failure.png')
           console.error('Native chat state:', await host!.request('chatInspect'))
           console.error('Native geometry:', await host!.request('layoutInspect'))
         } catch {
           /* preserve original failure */
         }
+        // A failure outside any named check (setup, selection) still ends in one fixed line.
+        const result =
+          error instanceof SmokeRunFailure
+            ? { exitCode: error.exitCode, lines: error.lines }
+            : {
+                exitCode: SMOKE_EXIT_PRODUCT,
+                lines: [
+                  formatFailureLine({
+                    group: 'run',
+                    check: 'setup',
+                    ...describeFailure(error),
+                    artifact
+                  })
+                ]
+              }
+        if (!(error instanceof SmokeRunFailure)) console.error(result.lines.join('\n'))
+        try {
+          writeSmokeResult(testDir!, result)
+        } catch {
+          /* the launcher then reports the host exit itself */
+        }
         await cleanup()
+        // The host and service exit 1 for any failure; the launcher maps the result's 3.
         process.exitCode = 1
       } finally {
         setTimeout(() => process.exit(process.exitCode || 0), 1000)
