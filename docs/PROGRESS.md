@@ -30,6 +30,30 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - The preview script lays a transparent `pointer-events:auto; cursor:default` shield per rect (`src/preview/native-cover.ts`, its own open shadow root at max z-index). WebKit's own hit test lands on it, so `onMove` sees an overlay target and drops the hover box. Window capture listeners, installed after the preload's own, stop the page's pointer listeners for events on the shield. The page's `:hover` never matches under the island either.
 - **Cost.** Nothing per move: no AppKit hit test, no JS rect math. The browser's own hit test does the work.
 - **Test.** `checkPointer` step `moves` now delivers `mouseMoved` through the owners of WebKit's own `.mouseMoved` tracking areas (the path a real pointer takes). It reads the page's hover box (`[data-trezi-hover]`) from the isolated world: beside the island → shown, over the island (5 points, plus a posted click and wheel) → hidden, beside again → shown. It also checks that the page's shield matches the rect the host laid out and that no `element-picked` was sent.
+## 2026-10-05 — LKM-171 review repair: transcript render signal and alternating hover targets
+
+- Review found two vacuous assertions: `chatInspect` had no `revision`, and 100 moves over the same heading returned early after the first. `ChatModel.messageBodyEvaluations` now counts actual SwiftUI message-row body evaluations and `chatInspect` exposes it. The fixture asserts that the count is positive and unchanged after hover and after the real preview selection click.
+- The native fixture alternates 100 moves between the heading and its parent, requires one immediate plus one frame-coalesced draw, checks the final box against the parent rect, and budgets enqueue plus the trailing draw at under 16 ms. The first native run exposed an actual selection-triggered transcript re-render. `NativeChat.update` now publishes visibility only when it changes, and `ChatLayoutModel` carries composer height separately from the transcript rows' observable model.
+- Quick verification passed (168 unit checks, lint, typechecks). Native `chat,core` passed 16/16 selected checks on retry. Foreground synthetic-chat timings: 100 moves enqueued in 1.0 ms, highlight update 0.0 ms, local selection 1.0 ms, page → host → service → Bun → host → page round trip 3.0 ms. The next-frame paint upper bound was 20.0 ms; it is not an exact paint timestamp. Exact hop stamps are in `worker-verify-5.log`.
+
+## 2026-10-05 — LKM-171 repair verified: immediate hover and traced selection
+
+- The first foreground native run measured a 20 ms first hover: scheduling every highlight at the next animation frame introduced a full-frame wait. The coalescer now draws the first target immediately and keeps later targets to one per frame. The native `chat,core` retry passed all 16 selected smoke checks, including under-16 ms WebContent hover enqueue/highlight/draw and under-50 ms local select and page → host → service → Bun → host → page timing in the rendered two-SVG, 2 KB code chat. The fixture prints exact durations and hop stamps in the verifier log (`worker-verify-6.log`); the tool response reported only its final 60 lines. The next-frame paint timestamp is reported as an upper bound, not an exact compositor timestamp.
+- Quick verification passed: all 167 unit checks, lint and typechecks. The native run was filtered to `chat,core`; the manager retains full-suite verification.
+
+## 2026-10-05 — LKM-171 review repair: real preview timing and stale hover
+
+- Pending hover frames are cancelled on mouseout, scroll and blur, so a hidden highlight cannot return on the next animation frame.
+- The sent-attachment native fixture now renders two SVGs and a >2 KB code block in the chat, dispatches 100 moves inside isolated WebContent, checks one draw and unchanged chat revision, then sends a real click. It asserts under 16 ms for hover enqueue/draw/highlight and under 50 ms for local selection and its diagnostic bridge round trip. A second frame gives a conservative pointer-to-paint upper bound.
+- Opt-in selection timing stamps page send, host receipt, XPC service acceptance, Bun dispatch start/end, host return and page receipt. They travel only on the diagnostic pick message and its acknowledgement; hover stays local to WebContent.
+- The earlier unit test is now explicitly a coalescing contract (`test/preview-hover-coalesce.mjs`), not a latency claim. The native fixture holds the latency budgets.
+
+## 2026-10-05 — LKM-171: preview hover coalescing
+
+- LKM-165 already omits unchanged transcript payloads, and LKM-166 caches decoded sent thumbnails. Preview pointer hover stays in WebContent: `onMove` draws its own overlay and sends no hover frame through the host, service or Bun. This rules out a per-hover chat snapshot update as the current cause.
+- `coalesceHover` keeps the latest element and draws once per display frame; click, leaving the page overlay and mode exit cancel stale work. `?treziPerf=1` records WebContent hover and local selection durations in the Performance timeline for on-device investigation.
+- `test/preview-hover-perf.mjs` queues 100 synthetic moves against a chat fixture with two SVG attachments and more than 2 KB of pasted code, asserts one paint and a 16 ms enqueue budget.
+- The `TreziService` binary also runs as `--guard-backend` and `--watch-group`; four processes can be the XPC service plus guardian and watchdogs. Process command lines could not be confirmed here because `ps` is blocked by the sandbox.
 ## 2026-10-05 — LKM-174 review repair: match CSS classes to the right stylesheet kind
 
 - A Vite-generated module class now searches only `*.module.css`; a plain class searches only global `.css`. This prevents a lone same-named rule in the wrong stylesheet kind from becoming an editable target. The resolver test covers both wrong-kind cases and a valid plain global class.

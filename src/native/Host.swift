@@ -235,7 +235,12 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             view?.layer?.cornerRadius = radius; view?.layer?.masksToBounds = true
             if name == "preview" { view?.autoresizingMask = radius == 0 && view?.frame.isEmpty == false ? [.width, .height] : []; previewSurface.needsDisplay = true }
         case "deliver":
-            guard let message = c["message"], let data = try? JSONSerialization.data(withJSONObject: message), let json = String(data: data, encoding: .utf8) else { return }
+            guard var message = c["message"] as? [String: Any] else { return }
+            if message["channel"] as? String == "trezi:preview:timing-ack", var args = message["args"] as? [[String: Any]], !args.isEmpty {
+                args[0]["hostReturnAt"] = Date().timeIntervalSince1970 * 1000
+                message["args"] = args
+            }
+            guard let data = try? JSONSerialization.data(withJSONObject: message), let json = String(data: data, encoding: .utf8) else { return }
             view?.evaluateJavaScript("globalThis.__treziNativeDispatch?.(\(json))", in: nil, in: name == "preview" ? world : .page) { _ in }
         case "evaluate":
             guard let view = view, let code = c["code"] as? String else { reply(id, error: "Missing evaluation target"); return }
@@ -275,7 +280,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let name = views.first(where: { $0.value === message.webView })?.key,
-              let body = message.body as? [String: Any], let data = try? JSONSerialization.data(withJSONObject: body), data.count <= 16 * 1024 * 1024 else { return }
+              var body = message.body as? [String: Any], let data = try? JSONSerialization.data(withJSONObject: body), data.count <= 16 * 1024 * 1024 else { return }
+        if var trace = body["trace"] as? [String: Any], body["channel"] as? String == "trezi:preview:element-picked" {
+            trace["hostAt"] = Date().timeIntervalSince1970 * 1000
+            body["trace"] = trace
+        }
         if body["channel"] as? String == "trezi:preview:element-picked" { previewPicks += 1 }
         // Source identity is supplied by the host, never by page-controlled JSON.
         emit(["event":"ipc", "view":name, "message":body])

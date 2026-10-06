@@ -13,6 +13,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Verify hover travel before the island click and wheel, assert no pick or page scroll afterward, and restore the island after an assertion fails (`core,composer` native groups passed).
 - [x] Add the visible native toast to the page cover, refresh that cover after toast show/hide, and check the native hit target and preview shield in the settings smoke.
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
+## Preview select slowdown with image attachments (LKM-171, issue #231)
+
+- [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.
+- [x] Add a synthetic 100-hover regression test with two SVG attachments and 2 KB of pasted code.
+- [x] Move latency assertions into the native sent-attachment fixture and stamp selection across page, host, service and Bun; cancel hover on mouseout, scroll and blur.
+- [x] Record synthetic foreground hover and select timing with rendered SVG/code chat, including bridge hops and WebContent, and enforce the 16 ms / 50 ms budgets in the native fixture.
 ## Unstamped inspector fields (LKM-174)
 
 - [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.

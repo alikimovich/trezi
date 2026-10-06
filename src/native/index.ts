@@ -301,8 +301,18 @@ async function main() {
   ipcMain.on('menu:native-edit', (_e, action) => host!.send('nativeEdit', { action }))
   ipcMain.on('menu:set-recents', (_e, recents) => host!.send('recents', { recents }))
   host.on('ipc', async ({ view, message }) => {
+    const trace =
+      view === 'preview' && message.channel === channels.PREVIEW_PICKED ? message.trace : undefined
+    if (trace) trace.bunAt = Date.now()
     try {
       const value = await dispatchIPC(view, message)
+      if (trace) {
+        trace.bunDoneAt = Date.now()
+        host!.send('deliver', {
+          view,
+          message: { type: 'event', channel: channels.PREVIEW_TIMING_ACK, args: [trace] }
+        })
+      }
       if (message.type === 'invoke')
         host!.send('deliver', {
           view,
