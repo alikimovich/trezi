@@ -99,9 +99,10 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       if (queue.queueCount === 1) break
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
+    // One row plus the reason row ("Sends when this turn finishes", LKM-169).
     if (
       queue.queueCount !== 1 ||
-      queue.queueHeight !== 34 ||
+      queue.queueHeight !== 62 ||
       queue.queueInset !== 14 ||
       Math.abs(queue.queueOverlap - 16) > 1
     )
@@ -112,6 +113,23 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       screenshot.replace('.png', '-queue-stack.png'),
       Buffer.from(await host.request('captureShell'), 'base64')
     )
+    // Edit takes the queued message back into the composer; sending queues it again.
+    await host.request('chatPerform', { action: 'queue-edit', card: queue.queue[0].id })
+    for (let i = 0; i < 100; i++) {
+      const edited = await host.request('composerInspect')
+      if (!edited.queueCount && edited.text === 'A queued native message') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const edited = await host.request('composerInspect')
+    if (edited.queueCount || edited.text !== 'A queued native message')
+      throw new Error('Editing a queued message did not return it to the composer')
+    await host.request('composerPerform', { action: 'send' })
+    for (let i = 0; i < 100; i++) {
+      queue = await host.request('composerInspect')
+      if (queue.queueCount === 1) break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    if (queue.queueCount !== 1) throw new Error('An edited message was not queued again')
     const id = queue.queue[0].id
     await host.request('chatPerform', { action: 'queue-remove', card: id })
     for (let i = 0; i < 100 && (await host.request('composerInspect')).queueCount; i++)

@@ -166,7 +166,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
         var input = state["composer"] as? [String: Any] ?? [:]
         let value = input["text"] as? String ?? ""
         let hasContext = !(input["context"] as? String ?? "").isEmpty
-        let queueHeight = ComposerQueueHost.height(count: (input["queue"] as? [Any] ?? []).count, paused: input["queuePaused"] as? Bool ?? false)
+        let queueHeight = ComposerQueueHost.height(count: (input["queue"] as? [Any] ?? []).count, paused: input["queuePaused"] as? Bool ?? false, note: input["queueNote"] as? String ?? "")
         let inset = ChatLayout.composerInset
         let composerHeight = Double(composer.preferredHeight(for: value, width: max(0, width - 2 * inset), availableHeight: max(0, height - inset), hasContext: hasContext, hasAttachments: !(input["attachments"] as? [Any] ?? []).isEmpty, queueHeight: queueHeight))
         frame = NSRect(x: x, y: y, width: width, height: max(0, height))

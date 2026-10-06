@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Messages sent while a chat needs Resolve go to the queue (LKM-169)
+
+- [x] One send rule (`src/native/chat-queue.ts`): a running turn, a landing, a park waiting for Resolve or a provider login queues the message with its reason; the queue drains when the block clears.
+- [x] A backend Resolve refusal (`RESOLVE_NEEDED`) takes the message back into the queue: no error turn, no "Worked for 0s", no duplicate.
+- [x] Queued messages can be edited (back into the composer) or removed.
+- [x] `test/chat-send-queue.mjs` (unit) covers Resolve, the refusal race, running, landing and login; the native chat smoke edits and requeues a message.
+
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
 - [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.
