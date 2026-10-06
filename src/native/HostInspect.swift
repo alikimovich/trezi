@@ -68,6 +68,17 @@ extension Host {
             if c["action"] as? String == "closeWindow" { sheets.panel?.performClose(nil) }
             else { sheets.model.perform(c["action"] as? String ?? "") }
             reply(id, true)
+        // The in-window confirmation toast (LKM-170); perform clicks its action.
+        case "toastInspect": reply(id, toast.inspect())
+        case "toastPerform": guard ephemeral else { reply(id, false); return true }; toast.model.perform(); reply(id, true)
+        case "captureToast":
+            // The workspace band around the toast, so the capture shows it in place.
+            guard !toast.isHidden, toast.superview === canvas else { reply(id, error: "No toast"); return true }
+            canvas.layoutSubtreeIfNeeded()
+            let band = NSRect(x: 0, y: toast.frame.minY - 24, width: canvas.bounds.width, height: toast.frame.height + 48).intersection(canvas.bounds)
+            guard let bitmap = canvas.bitmapImageRepForCachingDisplay(in: band) else { reply(id, error: "No toast"); return true }
+            canvas.cacheDisplay(in: band, to: bitmap)
+            reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
         case "welcomeInspect": reply(id, welcome.inspect())
         case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])
         case "dividerPerform":

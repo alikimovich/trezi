@@ -92,7 +92,7 @@ export class NativeUpdateController {
           fields: [],
           actions: [
             { id: 'cancel', label: 'Close' },
-            { id: 'retry', label: 'Retry' }
+            { id: 'retry', label: 'Retry', primary: true }
           ]
         },
         async () => this.apply()

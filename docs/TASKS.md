@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Standard feedback confirmation and alert sheets (LKM-170)
+
+- [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.
+- [x] Failed feedback: a standard sheet with Copy details, Cancel and Retry (default) that posts the same input again (`src/native/support-sheets.ts`).
+- [x] Field-less presenter states are NSAlert-style sheets attached to the main window, sized to content, Return = default, Esc = cancel (`src/native/SheetAlert.swift`); Suggested fix and Update setup files opt in, Running servers and Git updates stay form windows.
+- [x] Native capture check `src/native/smoke-alerts.ts` (group `settings`): updates alert, feedback error sheet, Retry, toast and its action.
 ## Long chat slows the app and edits never land (LKM-165, issue #230)
 
 - [x] Root cause documented: the drift-park send guard refused the Resolve turn, and landing exceptions were swallowed (`docs/WORKTREES.md`, `docs/PROGRESS.md`).

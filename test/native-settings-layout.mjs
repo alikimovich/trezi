@@ -10,6 +10,7 @@ if (process.platform !== 'darwin') {
       'SheetSections',
       'SheetSidebar',
       'SheetVerification',
+      'SheetAlert',
       'SourceList',
       'SidebarIcon'
     ].map((name) => `src/native/${name}.swift`)
