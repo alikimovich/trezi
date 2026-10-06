@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProjectEntry } from '../shared/workspace'
 import type { NativeBridge } from './bridge'
@@ -81,9 +81,7 @@ export async function checkProjectSwitching(
   await nativeWorkspace.command({ type: 'close', key: second.key })
 }
 
-/** LKM-172: the selection, its chat chip, the editing island and the page's selection and
- *  hover boxes belong to one project. A switch drops them all while "Opening …" still
- *  shows (the second project's open is held there), and coming back restores none. */
+/** LKM-172: switching hides A immediately; returning restores only a live element. */
 async function checkSwitchDropsSelection(
   host: NativeBridge,
   from: ProjectEntry,
@@ -119,10 +117,15 @@ async function checkSwitchDropsSelection(
   await send('layers:select', target)
   await waitFor(() => chips()[0], 'the picked heading as a chat chip')
   serviceEvents.emit('event', 'preview:toolbar-action', 'props')
-  evidence.selected = await waitFor(async () => {
+  const selected = await waitFor(async () => {
     const island = await host.request('inspectorInspect')
     return island.visible && island.title !== 'Project controls' && island
   }, 'the editing island open on the heading')
+  evidence.selected = selected
+  await host.request('inspectorPerform', {
+    action: { root: from.root, generation: selected.generation, action: 'tab', value: 'props' }
+  })
+  await waitFor(async () => (await host.request('inspectorInspect')).tab === 'props', 'Props tab')
   await send('layers:hover', target)
   evidence.selectedPage = await waitFor(async () => {
     const page = await overlay()
@@ -188,14 +191,95 @@ async function checkSwitchDropsSelection(
       page = await overlay()
     return (
       page.page &&
-      !island.visible &&
-      chips()[0] === null &&
-      !page.boxes &&
-      !page.toolbar && { island, page }
+      island.visible &&
+      island.title === selected.title &&
+      island.tab === 'props' &&
+      chips()[0]?.bubble?.tag === 'h1' &&
+      page.boxes > 0 &&
+      page.toolbar && { island, page }
     )
-  }, 'back in the first project, nothing restored')
+  }, 'the first project restores its element, tab and chip')
+  // Change the saved source stamp while A is inactive: the old element no longer resolves.
+  const file = join(from.root, 'index.html')
+  const originalPage = readFileSync(file, 'utf8')
+  await host.request('shellPerform', { action: 'select-row', row: `project:${to.key}` })
+  await waitFor(
+    () => nativeWorkspace.active?.key === to.key && nativeWorkspace.state.status.kind === 'running',
+    'second project reopened'
+  )
+  writeFileSync(
+    file,
+    originalPage.replace(
+      'data-trezi-source="index.html:3:1"',
+      'data-trezi-source="index.html:99:1"'
+    )
+  )
+  try {
+    await host.request('shellPerform', { action: 'select-row', row: `project:${from.key}` })
+    await waitFor(async () => {
+      if (
+        nativeWorkspace.active?.key !== from.key ||
+        nativeWorkspace.state.status.kind !== 'running'
+      )
+        return false
+      const current = await invoke('layers:read')
+      return current?.nodes?.some(
+        (node: { id: string | null; source: string | null }) =>
+          node.id === 'native-title' && node.source === 'index.html:99:1'
+      )
+    }, 'the changed heading stamp loaded in the first project')
+    // The restore check allows hydration to finish before declaring the old stamp gone.
+    await new Promise((resolve) => setTimeout(resolve, 1400))
+    evidence.removed = await waitFor(async () => {
+      if (
+        nativeWorkspace.active?.key !== from.key ||
+        nativeWorkspace.state.status.kind !== 'running'
+      )
+        return false
+      const island = await host.request('inspectorInspect')
+      return (
+        !island.visible &&
+        island.title === 'Project controls' &&
+        !island.error &&
+        chips()[0] === null &&
+        island
+      )
+    }, 'removed element quietly clears the island and chip')
+    const afterRemoval = await host.request('inspectorInspect')
+    await host.request('inspectorPerform', {
+      action: {
+        root: from.root,
+        generation: afterRemoval.generation,
+        action: 'tab',
+        value: 'styles'
+      }
+    })
+    await waitFor(
+      async () => (await host.request('inspectorInspect')).tab === 'styles',
+      'Styles tab reset'
+    )
+    const changed = await invoke('layers:read')
+    const changedHeading = changed.nodes.find(
+      (node: { id: string | null }) => node.id === 'native-title'
+    )
+    assert.ok(changedHeading)
+    await send('layers:select', {
+      path: changedHeading.path,
+      fingerprint: { tag: changedHeading.tag, source: changedHeading.source }
+    })
+    await waitFor(() => chips()[0], 'the changed heading can be selected anew')
+    assert.equal(
+      (await host.request('inspectorInspect')).tab,
+      'styles',
+      'A removed selection must not restore its old Props tab on a new pick'
+    )
+    serviceEvents.emit('event', 'preview:selection-lost')
+    await waitFor(() => chips()[0] === null, 'the new pick clears')
+  } finally {
+    writeFileSync(file, originalPage)
+  }
   writeFileSync(join(artifacts, 'switch-selection.json'), JSON.stringify(evidence, null, 2))
   console.log(
-    'Native project switch: selection, chat chip, editing island and page boxes cleared during Opening; none restored on return.'
+    'Native project switch: hidden during Opening, restored with element and tab on return, cleared when the source stamp changes.'
   )
 }

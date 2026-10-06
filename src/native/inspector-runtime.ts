@@ -1,5 +1,6 @@
 import { currentTurn } from '../main/agent'
 import { editingOwner } from '../main/editing-owner'
+import type { LayersSnapshot } from '../shared/api'
 import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
 import { projectRelative } from '../shared/project-path'
@@ -67,13 +68,23 @@ export function installNativeInspector(
   })
   const activate = workspace.services.activate
   workspace.services.activate = async (entry) => {
-    void controller.activate(entry?.root ?? '').catch(report)
+    await controller.activate(entry?.root ?? '')
     await activate(entry)
+    if (entry) void restoreSelection(entry.root).catch(report)
   }
   // LKM-172: the selection, its chat chip, the editing island and the page's selection
   // and hover boxes belong to one project and one page.
   let page = '',
     pickedOn: string | null = null
+  const pickedPages = new Map<string, string>()
+  let restoreSequence = 0
+  let switchStartedAt = 0
+  let readyRoot = ''
+  let missingTimer: ReturnType<typeof setTimeout> | null = null
+  const cancelMissing = () => {
+    if (missingTimer) clearTimeout(missingTimer)
+    missingTimer = null
+  }
   const pageOf = (url: string) => {
     try {
       const parsed = new URL(url)
@@ -83,15 +94,100 @@ export function installNativeInspector(
     }
   }
   const dropSelection = () => {
+    cancelMissing()
+    ++restoreSequence
+    const root = workspace.active?.root
+    if (root) {
+      controller.forget(root)
+      pickedPages.delete(root)
+    }
     pickedOn = null
     context.selection(null)
     void controller.select(null).catch(report)
   }
+  const restoreSelection = async (root: string) => {
+    const saved = controller.savedElement(root)
+    if (!saved || workspace.active?.root !== root || controller.state.root !== root) return
+    const status = workspace.state.status
+    if (status.kind !== 'running' || readyRoot !== root || page !== pageOf(status.url)) return
+    const savedPage = pickedPages.get(root)
+    if (savedPage && pageOf(status.url) !== savedPage) {
+      context.forgetSelection(root)
+      controller.forget(root)
+      return
+    }
+    const sequence = restoreSequence
+    const snapshot = (await workspace.services.invoke('layers:read')) as LayersSnapshot | null
+    if (
+      sequence !== restoreSequence ||
+      workspace.active?.root !== root ||
+      controller.savedElement(root) !== saved ||
+      !snapshot
+    )
+      return
+    const matches = snapshot.nodes.filter(
+      (node) => node.tag === saved.tag && node.source === saved.source && node.id === saved.id
+    )
+    if (matches.length === 1) {
+      cancelMissing()
+      const node = matches[0]
+      await send('layers:select', {
+        path: node.path,
+        fingerprint: { tag: node.tag, source: node.source }
+      })
+    } else if (
+      !snapshot.truncated &&
+      snapshot.nodes.length &&
+      matches.length === 0 &&
+      !missingTimer
+    ) {
+      // Let hydration settle before deciding that a returning element was removed.
+      missingTimer = setTimeout(() => {
+        missingTimer = null
+        if (
+          sequence !== restoreSequence ||
+          workspace.active?.root !== root ||
+          controller.savedElement(root) !== saved
+        )
+          return
+        void workspace.services
+          .invoke('layers:read')
+          .then((again: LayersSnapshot | null) => {
+            if (
+              sequence !== restoreSequence ||
+              workspace.active?.root !== root ||
+              controller.savedElement(root) !== saved ||
+              !again ||
+              again.truncated
+            )
+              return
+            if (
+              again.nodes.some(
+                (node) =>
+                  node.tag === saved.tag && node.source === saved.source && node.id === saved.id
+              )
+            )
+              void restoreSelection(root).catch(report)
+            else {
+              context.forgetSelection(root)
+              controller.forget(root)
+            }
+          })
+          .catch(report)
+      }, 1200)
+    }
+  }
   workspace.switching = () => {
+    cancelMissing()
+    const root = controller.state.root
+    if (root && pickedOn !== null) pickedPages.set(root, pickedOn)
+    ++restoreSequence
+    switchStartedAt = Date.now()
+    readyRoot = ''
     page = ''
     pickedOn = null
-    context.clearSelections()
-    controller.clear()
+    context.hideSelections()
+    controller.suspend()
     void workspace.services.invoke('preview:set-select-mode', false).catch(report)
   }
   const effect = chat.services.effect
@@ -122,13 +218,30 @@ export function installNativeInspector(
         void send('preview:clear-selected').catch(report)
       }
       page = next
+      if (root && controller.savedElement(root)) void restoreSelection(root).catch(report)
       return
+    }
+    if (channel === 'preview:readiness') {
+      if (
+        workspace.active?.root &&
+        typeof value?.documentStartedAt === 'number' &&
+        value.documentStartedAt >= switchStartedAt
+      )
+        readyRoot = workspace.active.root
+      if (workspace.active?.root) void restoreSelection(workspace.active.root).catch(report)
+    } else if (channel === 'layers:changed') {
+      if (workspace.active?.root) void restoreSelection(workspace.active.root).catch(report)
     }
     const entry = workspace.active
     if (!entry) return
     if (channel === 'preview:element-picked') {
+      cancelMissing()
       pickedOn = page
-      void controller.select(value).catch(report)
+      const root = entry.root
+      if (controller.savedElement(root)) {
+        void controller.restore(root, value).catch(report)
+        controller.forget(root)
+      } else void controller.select(value).catch(report)
     } else if (channel === 'preview:selection-lost') dropSelection()
     else if (channel === 'preview:select-cancelled') {
       context.selection(null)

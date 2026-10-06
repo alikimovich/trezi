@@ -9,7 +9,7 @@ extension Host {
             if let action = c["action"] as? String { reply(id, PreviewInspector.perform(action, on: views["preview"])) }
             else { reply(id, previewInspectorReport()) }
         case "layoutInspect": reply(id, nativeLayout.inspect())
-        case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0, "title":editingInspector.model.state?.title ?? ""])
+        case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0, "title":editingInspector.model.state?.title ?? "", "tab":editingInspector.model.state?.tab ?? ""])
         case "inspectorPerform": guard ephemeral else { return true }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"inspector-action"]) { _, new in new }); reply(id)
         case "inspectorIsland":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

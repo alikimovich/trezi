@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-172 repair: project selections return when their element still exists
+
+- The user decision supersedes the original issue's optional "restore nothing" reading. A switch now hides A's island and chip immediately, stores its element and tab in memory, then checks A's page on return. A unique matching layer restores the selection and tab; a missing source stamp clears them quietly. The native switch check covers both return paths.
+- The preceding LKM-172 entry describes the earlier implementation and its tests; its "none restored" expectation was replaced by this repair.
+- Native verification passed `project-switching` after the document-readiness gate, but the following inspector check exposed a retained snapshot after the removed-element case. Repeated readiness events had invalidated each pending missing-element timer. The timer now stays live across those events and checks the saved element again before clearing it. The native test also selects the changed element anew and checks that the old Props tab does not return. Quick verification passed before this last fix; the session's native call limit was reached, so this final revision still needs native confirmation.
+
 ## 2026-10-05 — LKM-172: the selection and the editing island belong to one project and one page
 
 - **Problem.** With an element selected and the editing island open in project A, switching to project B left A's island (A's element values) on screen through "Opening B…" and after. The inspector only reset in `services.activate`, which runs once B has opened, and it published only after its async reads. The chat chip of A stayed in A's context, so coming back restored it.

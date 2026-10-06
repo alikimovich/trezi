@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Editing inspector follows its project (LKM-172)
+
+- [x] Hide the island, chip and preview overlays during a project switch; restore each project's selection and inspector tab only if the element still resolves on return.
+- [x] Clear the selection quietly after page navigation or element removal, with native coverage for return and removal.
+
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
 - [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.
