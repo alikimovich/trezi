@@ -1,5 +1,6 @@
 import { projectKey } from '../shared/projectKey'
 import type { Revision } from '../shared/service-contract/types'
+import { withoutProvenance } from './project-memory-format'
 
 /** Project memory is intentionally small: it is injected into model context. */
 export const MAX_PROJECT_MEMORY_CHARS = 16_000
@@ -19,12 +20,22 @@ export interface ProjectMemory {
  * editor's manual save, the user's final override. `propose` is a generated
  * evaluation: it commits only if memory is still the `base` it was evaluated
  * against, and answers `null` (stale) otherwise, so it can never overwrite a
- * manual save made while the model was running.
+ * manual save made while the model was running. `restore` is Undo of an automatic
+ * update: it writes `content` (which may be empty) only while memory is still the
+ * `after` that update committed, and answers `null` when anything changed since.
  */
 export interface ProjectMemoryStore {
   get: (root: string) => Promise<ProjectMemory>
   save: (root: string, content: string) => Promise<ProjectMemory>
   propose: (root: string, base: ProjectMemory, content: string) => Promise<ProjectMemory | null>
+  restore: (root: string, after: ProjectMemory, content: string) => Promise<ProjectMemory | null>
+}
+
+/** An automatic update the owner committed: what memory was, and what it is now. */
+export interface ProjectMemoryUpdate {
+  root: string
+  before: ProjectMemory
+  after: ProjectMemory
 }
 
 export interface ProjectMemoryUpdateQueue {
@@ -53,9 +64,11 @@ export const normalizeProjectMemory = (content: string): string =>
  * one another. The owner refuses a proposal whose base is no longer current, which
  * protects a manual editor save made while a model call is in flight; the
  * evaluation retries against that new authoritative value instead of clobbering it.
+ * `updated` hears each committed change (the "Project memory updated" note).
  */
 export function createProjectMemoryUpdateQueue(
-  store: ProjectMemoryStore
+  store: ProjectMemoryStore,
+  updated?: (update: ProjectMemoryUpdate) => void
 ): ProjectMemoryUpdateQueue {
   const chains = new Map<string, Promise<void>>()
 
@@ -74,7 +87,16 @@ export function createProjectMemoryUpdateQueue(
           const before = await store.get(root)
           const next = await evaluate(before.content)
           if (next === null || next.trim() === before.content.trim()) return
-          if (await store.propose(root, before, next)) return
+          const after = await store.propose(root, before, next)
+          if (!after) continue
+          if (after.content.trim() !== before.content.trim()) {
+            try {
+              updated?.({ root, before, after })
+            } catch {
+              /* a note is never worth failing the update for */
+            }
+          }
+          return
         }
       })
       .catch(() => {
@@ -128,16 +150,21 @@ export function createProjectMemoryInjection(store: () => ProjectMemoryStore) {
   }
 }
 
-/** A bounded, clearly-delimited rules section shared by every provider. */
+/**
+ * A bounded, clearly-delimited rules section shared by every provider. Source tags
+ * stay in the stored memory; a chat sees only the rules.
+ */
 export function projectMemoryRules(content: string): string[] {
-  const memory = content.trim().slice(0, MAX_PROJECT_MEMORY_CHARS)
+  const memory = withoutProvenance(content.trim().slice(0, MAX_PROJECT_MEMORY_CHARS)).trim()
   if (!memory) return []
   return [
     '',
     '## Project memory',
-    'Trezi stores the following durable project decisions separately from this chat.',
+    'Trezi stores the following durable project rules separately from this chat.',
     'Treat them as standing context. If a current user request contradicts them, follow',
     'the current request and call out that the saved memory may need updating.',
+    'A rule here is not a change to the code: if it describes something the code does',
+    'not do yet, make the change rather than assume it is done.',
     '',
     '<project-memory>',
     memory,

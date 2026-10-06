@@ -2,9 +2,11 @@ import '../shared/rename-compat'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   conversationsClosed,
+  onProjectMemoryUpdated,
   projectHasRunningAgents,
   registerAgentIpc,
-  setProjectMemoryOwner
+  setProjectMemoryOwner,
+  undoProjectMemoryUpdate
 } from '../main/agent'
 import { AGENT_FILE_ACCESS_KEY, setAgentFileAccessSource } from '../main/agent-file-access'
 import { registerAnnotationsIpc } from '../main/annotations'
@@ -49,6 +51,7 @@ import { agentOptionsFor } from '../shared/chat-settings'
 import { environmentChanges } from '../shared/environment-changes'
 import { parsePreferredModelState, resolvePreferredSettings } from '../shared/preferred-model'
 import * as channels from '../shared/preview-channels'
+import { projectKey } from '../shared/projectKey'
 import {
   ACTIVITY_AUTO_OPEN_KEY,
   activityAutoOpen,
@@ -72,6 +75,7 @@ import { installNativeInspector } from './inspector-runtime'
 import { NativeLayersController } from './layers-controller'
 import { NativeLegacyNames } from './legacy-names'
 import { installLogSupport, notePreviewMessage } from './log-support'
+import { showProjectMemoryNote } from './memory-note'
 import { networkVolumeNote } from './network-volume-note'
 import { app, dispatchIPC, ipcMain, NativeView, serviceEvents, shell, views } from './platform'
 import { servicePlatform } from './platform-service'
@@ -784,6 +788,18 @@ async function main() {
     else if (kind === 'memory' && key)
       void sheetController.memory(key).catch((error) => workspaceController.reportError(error))
   }
+  // LKM-177: every automatic memory update or cleanup shows a note with View and Undo.
+  onProjectMemoryUpdated((update) =>
+    showProjectMemoryNote(sheetController, update, {
+      view: (root) =>
+        openSheet(
+          'memory',
+          workspaceController.state.projects.find((p) => projectKey(p.root) === projectKey(root))
+            ?.key
+        ),
+      undo: undoProjectMemoryUpdate
+    })
+  )
   host.on('menu', ({ action }) => {
     if (['new-project', 'settings', 'feedback', 'diagnose'].includes(action)) openSheet(action)
   })

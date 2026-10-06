@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-177: project memory principles, rule format, cleanup and Undo
+
+- **Why.** Real memory kept one-off change requests that were already built ("The Themer preview should show only the Home screen…") and now acted as stale constraints. In issue #230 an agent that could not edit files reported "--radius-pill: 9999px is saved in project memory", and a later chat applied it "per project memory".
+- **Prompt.** `projectMemoryEvaluationPrompt` now states the principles from `docs/MEMORY.md`: the three-question test, what to store and never store, one-line imperative rules under `## Preferences / Design rules / Constraints / Project facts / Pitfalls`, about 40 items, newer replaces older, requests become rules only when stated as general, plus a CLEANUP section and good/bad examples. The `{"memory": … | null}` protocol is unchanged.
+- **Trezi's pass** (`project-memory-evaluation.ts`, `project-memory-format.ts`). A new rule under a design heading (or written `var(--x)`) that names a CSS custom property is dropped unless `git grep --untracked` finds the token in the chat's worktree or the live checkout; a search that cannot run keeps it. Trezi, not the model, writes the source tags `<!-- added YYYY-MM-DD -->`: kept rules keep theirs, new or reworded rules get the day's date, user-typed rules stay untagged. Chats see memory without tags.
+- **Not work.** `treziRules` (v26) always carries "Project memory is not work": saving to memory applies nothing, and a requested change is never reported as "saved in memory". The memory section adds that a rule is not a change to the code.
+- **Note and Undo.** The update queue reports each committed change; the host shows "Project memory updated: +1 rule" (or "−3 rules" after a cleanup) with View and Undo. The toast now takes up to two actions (`actions`, click `index`). Undo is `store.restore`: a save on the update's own revision, never retried, so a later edit makes it a no-op that says so. It may restore an empty memory.
+- **Checks.** `test/project-memory-evaluation.mjs` (mocked evaluator): Themer items dropped and Undo restores them, `--radius-pill` stored only once the token exists, a working preference kept, a `--force` preference not mistaken for a token, tags, the note and a refused Undo, and the `git grep` search in a temporary repository. `test/memory-owner.mjs` runs Undo against the real Swift owner. `test/rules.mjs` pins v26 and the not-work section. The settings smoke shows the memory note, inspects View/Undo and clicks Undo (`memory-note-toast.png`).
+
 ## 2026-10-05 — LKM-176: native smoke focus guard and fixed failure lines
 
 - **Why.** Agent OS triage of 16 native failures found 5 `env_focus` ("Chat was not foreground": another app or a system dialog took focus mid-run). One more was unclassifiable because the log tail had no assertion text.
