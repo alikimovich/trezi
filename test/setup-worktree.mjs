@@ -63,7 +63,7 @@ setWorkflowOwner({
 })
 
 const APP =
-  'export function Card({ label }) {\n  return <button className="card">{label}</button>\n}\nexport function App() {\n  return <main><h1>Swiftly</h1><Card label="Go" /></main>\n}\n'
+  'export function Card({ label }) {\n  return <button className="card">{label}</button>\n}\nexport function App() {\n  return <main><h1>Swiftly</h1><Card label="Go" /><Avatar /></main>\n}\nimport styles from "./themer-admin/Account.module.css"\nexport function Avatar() {\n  return <img className={styles.accountAvatar} src="/avatar.png" alt="Account" />\n}\n'
 const CONFIG =
   "import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\n\nexport default defineConfig({ plugins: [react()] })\n"
 const WIRED =
@@ -95,6 +95,11 @@ try {
   )
   writeFileSync(join(root, 'vite.config.js'), CONFIG)
   writeFileSync(join(root, 'src/App.jsx'), APP)
+  mkdirSync(join(root, 'src/themer-admin'), { recursive: true })
+  writeFileSync(
+    join(root, 'src/themer-admin/Account.module.css'),
+    '.accountAvatar { width: 32px; }\n'
+  )
   git(root, 'add', '.')
   git(root, 'commit', '-qm', 'initial')
 
@@ -178,6 +183,7 @@ try {
   assert.match(out.code, /data-trezi-source="src\/App\.jsx:5:9"/)
   assert.match(out.code, /<h1 data-trezi-source="src\/App\.jsx:5:15"/)
   assert.match(out.code, /<Card data-trezi-component-source="src\/App\.jsx:5:31"/)
+  assert.match(out.code, /<img[^>]*data-trezi-source="src\/App\.jsx:9:9"/)
   assert.ok(out.map.mappings, 'a source map keeps Vite errors on the authored lines')
 
   await releaseChat(key)
