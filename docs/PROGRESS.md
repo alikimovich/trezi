@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-172 verification repair: attachment upload fixture timing
+
+- Manager quick verification reached the unrelated `platform-owner` attachment check and found an empty save path during a 3 MB chunked upload. That fixture used a one-second upload idle limit for the whole attachment suite; parallel unit load can leave more than one second between chunks, making the client correctly return an empty path after the service expires the upload.
+- The full upload now uses the service's normal idle limit. Separate disposable fixtures keep the explicit one-second expiry and four-upload capacity checks, so both refusal cases remain covered without imposing that timeout on the multi-megabyte transfer.
+
 ## 2026-10-05 — LKM-172 repair: inspector reads do not hold project activation
 
 - `NativeInspectorController.activate` hides the old island and sets the new root synchronously, then refreshes tokens and controls asynchronously. The runtime now starts that refresh without awaiting it, and reports any rejection through the existing error handler. Chat context, Git refresh and the rest of project activation can proceed while inspector reads finish; saved-element resolution still starts after project activation.
