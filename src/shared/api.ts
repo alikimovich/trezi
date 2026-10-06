@@ -1040,7 +1040,7 @@ export interface StyleReadResult {
 export interface StyleEditResult {
   applied: boolean
   /** How the edit landed: a Tailwind class rewrite or an inline-style splice. */
-  strategy?: 'tailwind' | 'inline'
+  strategy?: 'tailwind' | 'inline' | 'class-rule'
   /** True when a token REFERENCE was written (rather than the resolved value). */
   wroteToken?: boolean
   /** When not applied directly: the change needs the agent (dynamic class / expression style). */

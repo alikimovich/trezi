@@ -6,6 +6,7 @@ const calls = [],
   renders = [],
   agents = []
 let resolveWrite
+let classRule = null
 const invoke = async (channel, ...args) => {
   calls.push([channel, ...args])
   if (channel === 'props:inspect')
@@ -29,6 +30,8 @@ const invoke = async (channel, ...args) => {
   if (channel === 'controls:list' || channel === 'controls:get') return []
   if (channel === 'props:apply') return { needsAgent: true, agentPrompt: 'set count' }
   if (channel === 'styles:apply') return { applied: true }
+  if (channel === 'styles:resolve-class') return classRule
+  if (channel === 'styles:apply-class') return { applied: true }
 }
 const controller = new NativeInspectorController(
   invoke,
@@ -81,9 +84,20 @@ assert.equal(calls.length, length)
 await controller.select({ ...element, source: null })
 await action('tab', { value: 'styles' })
 assert.equal(controller.state.fields.find((f) => f.id === 'style:opacity').disabled, true)
+assert.equal(controller.state.notice.title, "Trezi can't find this element's source code.")
+assert.ok(controller.state.actions.some((a) => a.label === 'Connect project to Trezi'))
+assert.ok(controller.state.actions.some((a) => a.label === 'Ask the agent'))
 const before = calls.length
 await action('apply', { field: 'style:opacity', value: '.3' })
 assert.equal(calls.length, before)
+await action('ask-agent')
+assert.match(agents.at(-1)[1], /selected the <div>/)
+classRule = { file: 'src/themer-admin/Account.module.css', className: 'accountAvatar' }
+await controller.select({ ...element, source: null, classes: ['_accountAvatar_vc9o5_17'] })
+assert.equal(controller.state.fields.find((f) => f.id === 'style:opacity').disabled, false)
+await action('apply', { field: 'style:opacity', value: '.3' })
+assert.equal(calls.filter((c) => c[0] === 'styles:apply-class').length, 1)
+classRule = null
 await action('close')
 assert.equal(controller.state.visible, false)
 await controller.select(element)

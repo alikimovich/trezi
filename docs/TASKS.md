@@ -12,6 +12,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Repair the native inspector crash by reading page state between pointer commands; verify interact-mode CSS `:hover`, cursor and `mouseenter` on the page and their absence under the island (`core` native group passed).
 - [x] Verify hover travel before the island click and wheel, assert no pick or page scroll afterward, and restore the island after an assertion fails (`core,composer` native groups passed).
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
+## Unstamped inspector fields (LKM-174)
+
+- [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.
+- [x] Resolve one matching project CSS or CSS-module class rule for an unstamped selection; keep ambiguous matches read-only.
+- [x] Cover Vite 8 React with a CSS module and an img in the setup fixture, plus class resolution and island state tests.
 ## Messages sent while a chat needs Resolve go to the queue (LKM-169)
 
 - [x] One send rule (`src/native/chat-queue.ts`): a running turn, a landing, a park waiting for Resolve or a provider login queues the message with its reason; the queue drains when the block clears.
