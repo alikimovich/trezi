@@ -5,7 +5,7 @@ export type NativeComposerAction = { chat: string } & (
   | { action: 'key'; key: string }
   | { action: 'send' | 'context' | 'layers' }
   | { action: 'choice'; label: string; value: string }
-  | { action: 'suggestion' | 'remove'; index: number }
+  | { action: 'suggestion' | 'remove' | 'unreference'; index: number }
   | {
       action: 'files'
       files: { name: string; path: string; type: string; data: string; preview?: string }[]

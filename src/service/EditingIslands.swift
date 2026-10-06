@@ -86,6 +86,9 @@ struct EditingIslands {
             // Only a landed island survives a restart as ready; one still waiting lost its turn.
             set(&fields, "status", .string(JSText(raw["status"]?.text?.string == "ready" ? "ready" : "unavailable")))
             if raw["initial"] == nil || raw["initial"] == .null { set(&fields, "initial", .object([])) }
+            // LKM-181: an unknown user state or binding health is dropped (Bun checks the bindings again).
+            if let user = raw["user"], !userStates.contains(user.text?.string ?? "") { remove(&fields, "user") }
+            if let health = raw["health"], !healths.contains(health.text?.string ?? "") { remove(&fields, "health") }
             return .object(fields)
         }
     }
@@ -113,7 +116,7 @@ struct EditingIslands {
 
     /// Persists a composed definition. Refused when the chat closed or its turn ended.
     mutating func commit(chat: String, token: String, definition: [(JSText, JSValue)], engine: String,
-                         fallback: JSValue?, initial: JSValue) throws -> [JSValue] {
+                         fallback: JSValue?, initial: JSValue, name: String? = nil) throws -> [JSValue] {
         guard var session = sessions[chat], let composition = session.composing, composition.token == token, !composition.ended else {
             if sessions[chat]?.composing?.token == token { sessions[chat]?.composing = nil }
             throw RepositoryRefusal(.conflict, "Chat closed or turn finished during composition.")
@@ -124,6 +127,7 @@ struct EditingIslands {
         fields += [(JSText("engine"), .string(JSText(engine))), (JSText("status"), .string(JSText("waiting"))), (JSText("initial"), initial)]
         if let fallback { fields.append((JSText("fallback"), fallback)) }
         if let origin = composition.origin { fields.append((JSText("origin"), .string(JSText(origin)))) }
+        if let name { fields.append((JSText("name"), .string(JSText(name)))) }
         let record = JSValue.object(fields)
         var next = session.records
         if composition.replacing, let index = next.firstIndex(where: { $0["id"]?.text?.string == composition.id }) { next[index] = record }
@@ -173,6 +177,11 @@ struct EditingIslands {
         let expected = session.chain[source] ?? source
         if action == "reload" { return (expected, nil, nil) }
         guard record["status"]?.text?.string == "ready" else { throw RepositoryRefusal(.conflict, "Source has not landed.") }
+        // LKM-181: a disabled or hidden island writes nothing.
+        if record["user"]?.text != nil { throw RepositoryRefusal(.conflict, "This island is disabled. Enable it to edit.") }
+        if record["health"]?.text?.string == "disabled" {
+            throw RepositoryRefusal(.conflict, "The code no longer supports these controls.")
+        }
         var group: String?
         if action == "undo" {
             guard let found = session.undo[id] else { throw RepositoryRefusal(.notFound, "No edit from this island is available to undo.") }
@@ -201,6 +210,57 @@ struct EditingIslands {
         sessions[chat] = session
     }
 
+    // MARK: Status (LKM-181)
+
+    static let userStates: Set<String> = ["disabled", "hidden"]
+    static let healths: Set<String> = ["ready", "partially-disabled", "disabled"]
+
+    /// The user's Disable or Hide (`nil`: Enable or Show), kept across restarts.
+    mutating func mark(chat: String, id: String, user: String?) throws -> [JSValue] {
+        try update(chat, id) { fields in
+            if let user { Self.set(&fields, "user", .string(JSText(user))) } else { Self.remove(&fields, "user") }
+        }
+    }
+
+    /// What Bun's binding check found for this revision. Written only when it changed.
+    mutating func health(chat: String, id: String, revision: Int, health: String, reason: String?, reasons: JSValue?) throws -> [JSValue] {
+        try update(chat, id, revision: revision) { fields in
+            Self.set(&fields, "health", .string(JSText(health)))
+            if let reason { Self.set(&fields, "reason", .string(JSText(reason))) } else { Self.remove(&fields, "reason") }
+            if let reasons, reasons != .object([]) { Self.set(&fields, "reasons", reasons) } else { Self.remove(&fields, "reasons") }
+        }
+    }
+
+    /// The agent's `show`: the same island again at the end of the chat (`turn`), also when hidden.
+    mutating func show(chat: String, id: String, turn: Int) throws -> [JSValue] {
+        if sessions[chat]?.composing != nil || sessions[chat]?.running != nil {
+            throw RepositoryRefusal(.busy, "An island operation is already in progress.")
+        }
+        return try update(chat, id) { fields in
+            guard JSValue.object(fields)["status"]?.text?.string == "ready" else {
+                throw RepositoryRefusal(.conflict, "This island never activated. Use action:clone to make a new one.")
+            }
+            Self.set(&fields, "turn", .number(Double(max(1, turn))))
+            Self.remove(&fields, "user")
+        }
+    }
+
+    private mutating func update(_ chat: String, _ id: String, revision: Int? = nil,
+                                 _ change: (inout [(JSText, JSValue)]) throws -> Void) throws -> [JSValue] {
+        guard let session = sessions[chat] else { throw RepositoryRefusal(.notFound, "Island is unavailable. Reopen this chat.") }
+        guard let index = session.records.firstIndex(where: { $0["id"]?.text?.string == id }),
+              revision == nil || Self.integer(session.records[index]["revision"]) == revision,
+              case .object(var fields) = session.records[index] else {
+            throw RepositoryRefusal(.conflict, "Island changed. Reload its controls.")
+        }
+        try change(&fields)
+        if JSValue.object(fields) == session.records[index] { return session.records }
+        var next = session.records
+        next[index] = .object(fields)
+        try save(chat, next)
+        return next
+    }
+
     // MARK: Persistence
 
     private mutating func save(_ chat: String, _ records: [JSValue]) throws {
@@ -224,5 +284,10 @@ struct EditingIslands {
     static func set(_ fields: inout [(JSText, JSValue)], _ key: String, _ value: JSValue) {
         let name = JSText(key)
         if let index = fields.firstIndex(where: { $0.0 == name }) { fields[index].1 = value } else { fields.append((name, value)) }
+    }
+
+    static func remove(_ fields: inout [(JSText, JSValue)], _ key: String) {
+        let name = JSText(key)
+        fields.removeAll { $0.0 == name }
     }
 }

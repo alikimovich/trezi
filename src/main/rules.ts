@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 26
+export const TREZI_RULES_VERSION = 27
 
 export function treziRules(opts?: {
   previewTools?: boolean

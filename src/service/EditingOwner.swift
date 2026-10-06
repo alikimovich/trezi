@@ -64,8 +64,10 @@ final class EditingOwner: @unchecked Sendable {
     static let methods: [String: (required: Set<String>, optional: Set<String>)] = [
         "islandsOpen": (["chat", "root", "record"], []), "islandsClose": (["chat"], []), "islands": (["chat"], []),
         "islandDefine": (["chat", "turn"], ["origin", "id", "revision"]),
-        "islandCommit": (["chat", "token", "definition", "engine", "initial"], ["fallback"]),
+        "islandCommit": (["chat", "token", "definition", "engine", "initial"], ["fallback", "name"]),
         "islandAbort": (["chat", "token"], []), "islandSettle": (["chat", "successful"], ["turn"]),
+        "islandMark": (["chat", "id"], ["user"]), "islandShow": (["chat", "id", "turn"], ["origin"]),
+        "islandHealth": (["chat", "id", "revision", "health"], ["reason", "reasons"]),
         "islandCommand": (["chat", "id", "revision", "action", "sourceRevision"], []),
         "islandFinish": (["chat", "ticket", "ok", "last"], ["group", "revision"]),
         "navigate": (["chat", "root", "path"], ["turn"]), "navigation": (["chat", "kind"], ["turn"]),
@@ -118,7 +120,26 @@ final class EditingOwner: @unchecked Sendable {
             let fallback = body.value("fallback")
             if let fallback, fallback.text == nil { throw ServiceContractFailure.invalidRequest }
             let records = try islands.commit(chat: try Self.key(body, "chat"), token: try Self.key(body, "token"), definition: definition,
-                                             engine: engine, fallback: fallback, initial: body.value("initial")!)
+                                             engine: engine, fallback: fallback, initial: body.value("initial")!,
+                                             name: body.has("name") ? try Self.islandName(body) : nil)
+            return result(Self.object([("records", .array(records))]))
+        case "islandMark":
+            let user = body.has("user") ? try body.string("user") : nil
+            if let user, !EditingIslands.userStates.contains(user) { throw ServiceContractFailure.invalidRequest }
+            let records = try islands.mark(chat: try Self.key(body, "chat"), id: try Self.key(body, "id"), user: user)
+            return result(Self.object([("records", .array(records))]))
+        case "islandHealth":
+            let health = try body.string("health")
+            guard EditingIslands.healths.contains(health) else { throw ServiceContractFailure.invalidRequest }
+            let records = try islands.health(chat: try Self.key(body, "chat"), id: try Self.key(body, "id"),
+                revision: try Self.count(body.value("revision")), health: health,
+                reason: body.has("reason") ? try Self.line(body.value("reason")) : nil,
+                reasons: body.has("reasons") ? try Self.lines(body.value("reasons")) : nil)
+            return result(Self.object([("records", .array(records))]))
+        case "islandShow":
+            let chat = try Self.key(body, "chat")
+            _ = try origin(chat: chat, claimed: body.has("origin") ? try Self.key(body, "origin") : nil)
+            let records = try islands.show(chat: chat, id: try Self.key(body, "id"), turn: try Self.count(body.value("turn")))
             return result(Self.object([("records", .array(records))]))
         case "islandAbort":
             islands.abort(chat: try Self.key(body, "chat"), token: try Self.key(body, "token"))
@@ -264,6 +285,30 @@ final class EditingOwner: @unchecked Sendable {
     static func count(_ value: JSValue?) throws -> Int {
         guard let number = EditingIslands.integer(value), number >= 0 else { throw ServiceContractFailure.invalidRequest }
         return number
+    }
+
+    /// An island's short name, `island-<word>-<n>` (LKM-181).
+    static func islandName(_ body: Body) throws -> String {
+        let name = try body.string("name")
+        guard name.utf8.count <= 64, name.hasPrefix("island-"),
+              name.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-").contains($0) })
+        else { throw ServiceContractFailure.invalidRequest }
+        return name
+    }
+
+    /// One reason line for an island (LKM-181): text, single line, bounded.
+    static func line(_ value: JSValue?) throws -> String {
+        guard let text = value?.text?.string, !text.isEmpty, text.utf16.count <= 400, !text.contains("\n") else {
+            throw ServiceContractFailure.invalidRequest
+        }
+        return text
+    }
+
+    /// param id → reason line, at most one per param of a definition.
+    static func lines(_ value: JSValue?) throws -> JSValue {
+        guard case .object(let fields)? = value, fields.count <= 64 else { throw ServiceContractFailure.invalidRequest }
+        for (_, reason) in fields { _ = try line(reason) }
+        return .object(fields)
     }
 
     static func failure(_ error: Error) -> ServiceFailure {

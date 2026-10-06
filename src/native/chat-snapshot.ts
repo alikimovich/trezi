@@ -9,8 +9,7 @@ import type {
 } from '../shared/native-chat'
 import { providerOptions, resolveSelection } from '../shared/provider-choices'
 import { formatTokens, isEmptyUsage, type TokenUsage } from '../shared/run-stats'
-import { rankSlashMatches } from '../shared/slash-menu'
-import { parseSlashToken } from '../shared/slash-token'
+import { menuItems } from './chat-island-refs'
 import { loginCard } from './chat-login'
 import { queueNote, sendBlock } from './chat-queue'
 import { recoveryCards } from './chat-recovery'
@@ -21,10 +20,8 @@ export const permissionModes = [
   { value: 'acceptEdits', label: 'Allow edits' },
   { value: 'default', label: 'Ask always' }
 ]
-export function matches(chat: Chat) {
-  const token = parseSlashToken(chat.text, chat.caret)
-  return token && !chat.dismissed ? rankSlashMatches(chat.commands, token.query) : []
-}
+/** The composer menu: "/" commands or (LKM-181) "#" islands. */
+export const matches = menuItems
 /** Collapsed paths for every surface the chat shows; the full text stays alongside. */
 function collapse(chat: Chat, cards: NativeChatCard[], current: NativeChatActivity | null) {
   const ctx = displayContext(chat.root ? [chat.root] : [])
@@ -251,11 +248,12 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
         type: a.type,
         data: a.data
       })),
-      suggestions: matches(chat).map((command, index) => ({
-        title: `/${command.name}`,
-        description: command.description ?? '',
+      suggestions: matches(chat).map((item, index) => ({
+        title: item.title,
+        description: item.description,
         active: index === chat.menuIndex
       })),
+      references: chat.references ?? [],
       choices: [
         {
           label: 'Provider',

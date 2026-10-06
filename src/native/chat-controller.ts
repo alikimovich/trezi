@@ -16,9 +16,9 @@ import type {
 } from '../shared/native-chat-controller'
 import type { NativeComposerAction } from '../shared/native-composer'
 import { defaultChoiceFor, providerOptions, resolveSelection } from '../shared/provider-choices'
-import { parseSlashToken } from '../shared/slash-token'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
+import { menuQuery, withReferences } from './chat-island-refs'
 import { sendBlock } from './chat-queue'
 import { matches, permissionModes, snapshot } from './chat-snapshot'
 import {
@@ -297,11 +297,11 @@ export class NativeChatController {
       switch (action.action) {
         case 'input': {
           if (action.revision < chat.revision) return
-          const before = parseSlashToken(chat.text, chat.caret)?.query
+          const before = menuQuery(chat.text, chat.caret)
           chat.text = action.text
           chat.caret = action.caret
           chat.revision = action.revision
-          if (before !== parseSlashToken(chat.text, chat.caret)?.query) {
+          if (before !== menuQuery(chat.text, chat.caret)) {
             chat.menuIndex = 0
             chat.dismissed = false
           }
@@ -340,6 +340,9 @@ export class NativeChatController {
         case 'remove':
           chat.attachments = chat.attachments.filter((_, index) => index !== action.index)
           break
+        case 'unreference':
+          chat.references = chat.references?.filter((_, index) => index !== action.index)
+          break
         case 'context':
           this.clearSelection(chat)
           break
@@ -353,12 +356,10 @@ export class NativeChatController {
     this.changed(chat)
   }
   complete(chat: Chat, index: number) {
-    const item = matches(chat)[index],
-      token = parseSlashToken(chat.text, chat.caret)
-    if (!item || !token) return
-    const insert = `/${item.name} `
-    chat.text = chat.text.slice(0, token.start) + insert + chat.text.slice(chat.caret)
-    chat.caret = token.start + insert.length
+    const item = matches(chat)[index]
+    if (!item) return
+    chat.text = chat.text.slice(0, item.start) + item.insert + chat.text.slice(chat.caret)
+    chat.caret = item.start + item.insert.length
     chat.dismissed = true
     this.services.effect({ type: 'focus' })
   }
@@ -373,7 +374,7 @@ export class NativeChatController {
     if (!chat.ready || chat.switching || (!raw.trim() && !chat.attachments.length)) return
     const submission: Submission = {
       id: crypto.randomUUID(),
-      text: raw.trim(),
+      text: withReferences(chat, raw.trim()),
       attachments: chat.attachments,
       selection: chat.context?.selection ?? chat.draftSelection ?? null,
       turn: chat.context?.turn ?? {}

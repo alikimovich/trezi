@@ -57,6 +57,8 @@ export interface Chat extends NativeChatMirror {
   /** LKM-169: the selection of a queued message moved back into the composer by Edit;
    *  the next send uses it when the shell has no newer one. */
   draftSelection?: NativeChatContext['selection']
+  /** LKM-181: islands added by Copy reference (`#island-shadow-2`), shown as chips. */
+  references?: string[]
   /** The turn this chat last sent (the owner's turn id); terminal events of any other are late. */
   turn?: string
   /** The message that turn sent, for the login card's Retry. */

@@ -1,4 +1,5 @@
 import { currentTurn } from '../main/agent'
+import { IslandBindingError, islandProblem } from '../main/chat-island-bindings'
 import { ChatIslands, installChatIslands } from '../main/chat-islands'
 import { IslandOverrides } from '../main/island-overrides'
 import type { AgentEvent } from '../shared/api'
@@ -7,6 +8,7 @@ import type { NativeChatSnapshot } from '../shared/native-chat-controller'
 import type { NativeBridge } from './bridge'
 import { type ChatServices, NativeChatController } from './chat-controller'
 import { chatFrames } from './chat-frames'
+import { addReference, setIslandDirectory } from './chat-island-refs'
 import { islandPreviewPort } from './island-preview'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
 import { TurnBoundaries } from './turn-boundaries'
@@ -65,12 +67,34 @@ export function installNativeChat(
     },
     notice
   })
+  // The composer's "#" picker lists the chat's islands (LKM-181).
+  setIslandDirectory((key) =>
+    [...(islands.sessions.get(key)?.views.values() ?? [])].map(({ id, name, title, status }) => ({
+      id,
+      name,
+      title,
+      status
+    }))
+  )
   host.on('island-action', (command) => {
     if (command.chat !== nativeChat.active || !nativeChat.chats.has(command.chat)) return
     const chat = nativeChat.get(command.chat)
     void (async () => {
       try {
-        if (command.action === 'replay') {
+        if (command.action === 'reference' || command.action === 'recreate') {
+          const view = islands.sessions.get(command.chat)?.views.get(command.id)
+          if (!view) throw new IslandBindingError('This island is no longer in this chat.')
+          if (command.action === 'reference') addReference(chat, view.name)
+          else {
+            // Recreate with agent: a message the user can edit before sending.
+            const line = `Recreate ${view.name} with the current code.`
+            chat.text = chat.text.trim() ? `${line} ${chat.text}` : line
+            chat.caret = chat.text.length
+            chat.dismissed = true
+          }
+          nativeChat.changed(chat)
+          host.send('composerFocus')
+        } else if (command.action === 'replay') {
           const record = islands.sessions
             .get(command.chat)
             ?.records.find(
@@ -82,10 +106,20 @@ export function installNativeChat(
             ?.webContents.send('preview:animation-replay', record.manifest.component)
         } else await islands.interact(command)
       } catch (error) {
-        chat.error = String(error)
+        // One plain line, never exception text (LKM-181).
+        chat.error = islandProblem(error)
         nativeChat.changed(chat)
       }
     })()
+  })
+  // A file change reaches the preview as a DOM change: check the active chat's bindings again.
+  let recheck: ReturnType<typeof setTimeout> | undefined
+  serviceEvents.on('event', (channel: string) => {
+    if (channel !== 'layers:changed') return
+    clearTimeout(recheck)
+    recheck = setTimeout(() => {
+      if (nativeChat.active) void islands.refresh(nativeChat.active).catch(() => {})
+    }, 400)
   })
   const stop = nativeChat.stop.bind(nativeChat)
   nativeChat.stop = async (chat) => {
@@ -120,7 +154,7 @@ export function installNativeChat(
             void islands.settle(key, kind === 'landed', turn).catch((error) => {
               const chat = nativeChat.chats.get(key)
               if (chat) {
-                chat.error = String(error)
+                chat.error = islandProblem(error)
                 nativeChat.changed(chat)
               }
             })

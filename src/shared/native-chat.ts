@@ -75,6 +75,8 @@ export interface NativeChatState {
     context: string
     attachments: { id: string; name: string; type: string; data: string }[]
     suggestions: { title: string; description: string; active: boolean }[]
+    /** LKM-181: island references (`#island-shadow-2`) added by Copy reference. */
+    references: string[]
     choices: {
       label: string
       value: string

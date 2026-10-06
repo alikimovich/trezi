@@ -85,6 +85,14 @@ and the inspector views. Source writes are still proposals to the
 - **Restart.** A history reopened after a restart keeps `ready` islands; a `waiting`
   one lost its turn and is `unavailable`. Damaged history opens empty and is never
   rewritten until the chat defines a new island (as before).
+- **Status and user state (LKM-181).** A record may carry `name` (the stable
+  `island-…` short name, set at commit), `health`/`reason`/`reasons` (what Bun's binding
+  check found; saved by `islandHealth` only when it changed and only for the current
+  revision) and `user` (`disabled`/`hidden`, `islandMark`; null clears it). Commands on
+  a user-disabled or code-disabled island are refused with one line (Reload still
+  runs). `islandShow` moves a ready island to the current turn and clears `user`; an
+  island that never activated is refused (the agent clones it instead). Unknown
+  `user`/`health` values in a history are dropped on load.
 - **Sidecars.** Bun renders the next store (validation stays JS) and sends it with the
   SHA-256 of the bytes it read (null for "absent"). The owner commits only if the file
   still holds them, atomically, in the repository lane or the lease the calling chain
@@ -109,9 +117,10 @@ Private pipe, S01 frames, no revision, empty scope:
 | --- | --- | --- | --- |
 | `islandsOpen` / `islandsClose` / `islands` | mutation / mutation / read | `{chat, root, record}` / `{chat}` / `{chat}` | `{records}` / `{composing}` / `{records}` |
 | `islandDefine` | mutation | `{chat, turn, origin?, id?, revision?}` | `{token, id, revision, turn, replacing}` |
-| `islandCommit` / `islandAbort` | mutation | `{chat, token, definition:{manifest, blocks}, engine, initial, fallback?}` / `{chat, token}` | `{records}` / `{}` |
+| `islandCommit` / `islandAbort` | mutation | `{chat, token, definition:{manifest, blocks}, engine, initial, fallback?, name?}` / `{chat, token}` | `{records}` / `{}` |
 | `islandSettle` | mutation | `{chat, successful, turn?}` | `{records \| null, cancelled}` |
 | `islandCommand` / `islandFinish` | mutation | `{chat, id, revision, action, sourceRevision}` / `{chat, ticket, ok, last, group?, revision?}` | `{ticket, expected, group?, initial?}` / `{}` |
+| `islandMark` / `islandHealth` / `islandShow` | mutation ×3 | `{chat, id, user?}` / `{chat, id, revision, health, reason?, reasons?}` / `{chat, id, turn, origin?}` | `{records}` |
 | `navigate` / `navigation` / `navigationTake` / `navigationState` | mutation ×3 / read | `{chat, root, path, turn?}` / `{chat, kind, turn?}` / `{chat}` / `{}` | `{ready}` / `{ready}` / `{root, path} \| {path:null}` / `[…]` |
 | `sidecar` | mutation (lane) | `{root, name, expectedHash \| null, content, leases?}` | `{ok, hash}` / `{ok:false, conflict}` |
 

@@ -1440,7 +1440,7 @@ export function registerAgentIpc(
           turn?.projectUi === true && !supportsUi
             ? 'The requested project component composition mode requires Claude or Codex. Explain this limitation for UI requests.\n\n'
             : ''
-        const islandContext = await chatIslandContext(key)
+        const islandContext = await chatIslandContext(key, text)
         if (preparation.cancelled || sessions.get(key) !== session)
           throw new Error('Message cancelled before sending.')
         // A model switch: the fresh provider gets the recorded conversation, once.

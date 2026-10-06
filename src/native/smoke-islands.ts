@@ -7,6 +7,7 @@ import type { NativeBridge } from './bridge'
 import { nativeChat, nativeIslands } from './chat-runtime'
 import { serviceEvents } from './platform'
 import { parseSmokeGroups } from './smoke-groups'
+import { checkIslandStatus } from './smoke-island-status'
 import { checkShadowIsland } from './smoke-shadow-island'
 
 /** Real Swift decoding/actions and source writes; no provider or Jev network call.
@@ -158,13 +159,14 @@ document.body.append(card);
         Buffer.from(await host.request('captureShell'), 'base64')
       )
       assert.deepEqual(await host.request('webViews'), ['preview'])
+      await checkIslandStatus(host, chat.chat, result.id, file, code, artifacts, wait)
       scratch()
       await nativeIslands.refresh(chat.chat)
     }
     if (parts.shadow) await checkShadowIsland(host, fixture, artifacts)
     if (parts.islands)
       console.log(
-        'NATIVE ISLANDS PASS — Swift rendering, typed point action, source batch/Undo and landing gate; no live model calls.'
+        'NATIVE ISLANDS PASS — Swift rendering, typed point action, source batch/Undo, landing gate, disabled/hidden states; no live model calls.'
       )
   } finally {
     writeFileSync(indexFile, originalIndex)

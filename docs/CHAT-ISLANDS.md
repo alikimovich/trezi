@@ -43,6 +43,48 @@ pointer/animation coverage. Full native integration passed the island checks but
 later hit the existing style-inspector source-edit timeout. No live provider or
 Jev network call was made; pointer dragging/IME/accessibility acceptance remains.
 
+## Status, user control and references (LKM-181)
+
+- **Binding check.** `checkBindings` (`src/main/chat-island-bindings.ts`) re-reads
+  every binding on landing, after each write, on a file change (`layers:changed`,
+  debounced 400 ms, active chat) and on `read`. A binding holds while its anchor
+  occurs once in the file and a literal of the param's kind follows it, so moves
+  inside the file are followed. A token (`var(--x)` replacing a literal), a variable,
+  an expression, a second match or a removed declaration disables that field with
+  one line ("Tint is now set by the token --brand; this control can't edit it.").
+  A compound block (point, shadow) is disabled as a whole when any of its bindings
+  breaks. Writes to a broken field are refused before touching the source.
+- **Statuses.** The view's `status` is `waiting`, `ready`, `partially-disabled`,
+  `disabled` (`disabledBy: code` or `user`) or `hidden`. The record keeps the
+  lifecycle `status` (waiting/ready/unavailable, which the service still uses for
+  admission) and adds `health`, `reason`, `reasons` (param → line) and `user`
+  (`disabled`/`hidden`); Bun computes health and the Swift owner persists it
+  (`islandHealth`), so a restart shows the same state before the first read. A
+  turn that did not land shows as disabled with that reason. Island UI errors pass
+  through `islandProblem`: Trezi's own one-line refusals pass, anything else
+  (stacks, paths, errno codes) becomes a plain fallback line.
+- **User control.** The header's … menu has Disable/Enable, Hide, Show all hidden
+  islands and Copy reference (`islandMark`). User-disabled islands are read-only and
+  collapse to their title row; Enable re-validates first. A hidden island is a
+  one-line placeholder, "Hidden island: <title> — Show". A code-disabled island
+  shows its reason with Recreate with agent (drafts a message naming it) and Hide.
+- **References.** Every record has a stable short name (`island-<word>-<n>`, shown
+  as `#island-shadow-2` in the header; older records are named by position). "#" in
+  the composer lists the chat's islands, and Copy reference adds a chip whose name
+  is prepended to the sent message. A message naming an island sends the agent its
+  definition: title, file, blocks, params with anchors, values, status and reasons
+  (`islandMessageContext`, `src/main/chat-island-context.ts`).
+- **Agent ops.** `chat_island` adds `show {id}` (the same island moves to the end
+  of the chat, `islandShow`; never-activated islands must be cloned) and
+  `clone {id, rebind?}` (a new island through the normal define and landing path;
+  `rebind.params` points broken params at new anchors, `rebind.file` moves every
+  binding). `id` accepts the island id or its `#island-…` name. Defining over a
+  broken binding is refused with the reason; the agent clones instead of redefining
+  a disabled island in place.
+- Tests: `test/chat-island-status.mjs`; the islands smoke group captures
+  `chat-island-disabled.png` and `chat-island-hidden.png`
+  (`src/native/smoke-island-status.ts`).
+
 
 ## Product outcome
 
