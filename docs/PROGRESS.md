@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-169 review evidence: Resolve queue in the native window
+
+- The `native-chat` smoke now parks the chat after a completed turn, sends one message, and captures the foreground shell at 440 pt and 320 pt chat widths (`test/artifacts/native/swift-chat-resolve-{440,320}.png` with matching JSON). It asserts the Swift-rendered conflict card explains the held changes, lists the file and offers Resolve; the composer queue contains exactly one message and says “Waiting for Resolve”; the transcript contains no copy or send error. Clearing the park sends that message exactly once. The capture uses ScreenCaptureKit without OCR or system preference changes. The first narrow capture exposed clipped queue labels, so the queue now gives its text explicit width within the available row.
+
 ## 2026-10-05 — LKM-169: a message sent while a chat needs Resolve is queued, never refused
 
 - **Cause.** `submit` ran a message directly whenever no turn was running, so a drift-parked chat sent it to `agent:send`, whose `sendRefusal` threw. `run` then appended "Unable to send" to an assistant message and called `finish`, which stamped "Worked for 0s", and the optimistic user message stayed in the transcript. A drift park also set `paused`, so even a queued message did not send after Resolve.

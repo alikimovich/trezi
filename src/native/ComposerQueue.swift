@@ -24,20 +24,23 @@ struct ComposerQueue: View {
     var body: some View {
         VStack(spacing: 0) {
             if ComposerQueue.hasHeader(paused: paused, note: note) {
-                HStack {
-                    Text(note.isEmpty ? "Paused — these won't send until you choose" : note)
-                        .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
-                        .help(note)
-                    Spacer()
-                    if paused {
-                        Button("Send now") { action("queue-resume", nil) }.buttonStyle(.plain).disabled(!canSend)
-                            .help(canSend ? "Send the queued messages now" : note)
-                    }
-                }.font(.system(size: 11)).padding(.horizontal, 12).frame(height: 28)
+                GeometryReader { geometry in
+                    HStack {
+                        Text(note.isEmpty ? "Paused — these won't send until you choose" : note)
+                            .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                            .frame(width: max(0, geometry.size.width - (paused ? 100 : 24)), alignment: .leading)
+                            .help(note)
+                        if paused {
+                            Button("Send now") { action("queue-resume", nil) }.buttonStyle(.plain).disabled(!canSend)
+                                .help(canSend ? "Send the queued messages now" : note)
+                        }
+                    }.font(.system(size: 11)).padding(.horizontal, 12)
+                }.frame(height: 28)
             }
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(messages) { message in
+                        GeometryReader { geometry in
                         HStack(spacing: 8) {
                             Image(systemName: "text.line.first.and.arrowtriangle.forward")
                                 .foregroundStyle(.tertiary).accessibilityHidden(true)
@@ -46,11 +49,12 @@ struct ComposerQueue: View {
                                 Link(destination: url) {
                                     Text(message.label).lineLimit(1).truncationMode(.middle)
                                         .foregroundStyle(Color(nsColor: .linkColor))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .frame(width: max(0, geometry.size.width - (message.attachments > 0 ? 160 : 130)), alignment: .leading)
                                 }.buttonStyle(.plain)
                             } else {
                                 Text(message.label.replacingOccurrences(of: "\n", with: " "))
-                                    .lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
+                                    .lineLimit(1).truncationMode(.tail)
+                                    .frame(width: max(0, geometry.size.width - (message.attachments > 0 ? 160 : 130)), alignment: .leading)
                             }
                             if message.attachments > 0 && !message.text.isEmpty {
                                 Label("\(message.attachments)", systemImage: "paperclip").font(.system(size: 10)).foregroundStyle(.secondary)
@@ -69,8 +73,9 @@ struct ComposerQueue: View {
                                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                                 .help("Queued message actions").accessibilityLabel("Queued message actions")
                         }
-                        .font(.system(size: 13)).padding(.horizontal, 12).frame(height: 34)
+                        .font(.system(size: 13)).padding(.horizontal, 12)
                         .help(message.label)
+                        }.frame(height: 34)
                     }
                 }
             }.scrollIndicators(.automatic)

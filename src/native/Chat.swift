@@ -191,7 +191,9 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "attachmentPopover":NSApp.windows.contains { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }, "activityTokens":model.snapshot?.activity?.tokens?.label ?? "",
          "activity":model.snapshot?.activity?.label ?? "", "activityKind":model.snapshot?.activity?.kind ?? "", "activityAnimated":model.snapshot?.activity?.animated ?? false,
          "islands":model.snapshot?.messages.flatMap { $0.segments.compactMap { $0.island }.map { ["id":$0.id,"revision":$0.revision,"status":$0.status,"title":$0.title,"blocks":$0.blocks.count,"blockKinds":$0.blocks.map(\.kind),"fields":$0.fields.count,"sourceRevision":$0.sourceRevision] as [String: Any] } } ?? [],
-         "cards":model.snapshot?.cards.map(\.id) ?? [], "questionCount":model.snapshot?.questions.count ?? 0]
+         "cards":model.snapshot?.cards.map(\.id) ?? [],
+         "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "actions":$0.actions.map(\.label)] as [String: Any] } ?? [],
+         "questionCount":model.snapshot?.questions.count ?? 0]
     }
 }
 private struct BottomPosition: PreferenceKey {

@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] A backend Resolve refusal (`RESOLVE_NEEDED`) takes the message back into the queue: no error turn, no "Worked for 0s", no duplicate.
 - [x] Queued messages can be edited (back into the composer) or removed.
 - [x] `test/chat-send-queue.mjs` (unit) covers Resolve, the refusal race, running, landing and login; the native chat smoke edits and requeues a message.
+- [x] Native `chat` smoke captures a parked Resolve card and one waiting queued message at 440 pt and 320 pt, checks the rendered reason and Resolve action, then confirms the queue sends once after the park clears.
 
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
