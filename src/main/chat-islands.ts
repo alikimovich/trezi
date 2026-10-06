@@ -1,14 +1,28 @@
-import { chatIslandControlPurposes, chatIslandGuidance } from '../shared/chat-island-guidance'
-import type { IslandCommand, IslandRecord, IslandValue, IslandView } from '../shared/chat-islands'
+import type {
+  IslandCommand,
+  IslandHealth,
+  IslandRecord,
+  IslandValue,
+  IslandView
+} from '../shared/chat-islands'
+import {
+  IslandBindingError,
+  islandHealth,
+  islandProblem,
+  islandStatus,
+  nameIslands
+} from './chat-island-bindings'
+import { islandMessageContext } from './chat-island-context'
 import { islandDefinition } from './chat-island-schema'
 import { islandSource, undoIsland, writeIsland } from './chat-island-source'
+import { islandTool } from './chat-island-tool'
 import { selectControlCandidates } from './control-selection'
 import { cancelControlComposition } from './controls-jev'
 import { type EditingOwner, editingOwner } from './editing-owner'
 import { IslandOverrides } from './island-overrides'
 import { shadowBlockCss } from './shadow-controls'
 
-interface Session {
+export interface IslandSession {
   root: string
   recordId: string
   records: IslandRecord[]
@@ -25,6 +39,8 @@ interface Session {
   seen: Map<string, Record<string, IslandValue>>
   /** island id → the inline notice after a bound value changed outside the island. */
   notices: Map<string, string>
+  /** island id → param id → why the code no longer supports that field (LKM-181). */
+  broken: Map<string, Record<string, string>>
   /** island id → its commit that has not started yet; a newer frame of the gesture replaces it. */
   queued: Map<string, Queued>
   /** `id:gesture` of gestures whose bound values changed outside the island; their frames are dropped. */
@@ -32,6 +48,7 @@ interface Session {
   /** island id → its running gesture's merged values; `live` once it must write every frame (LKM-133). */
   gestures: Map<string, { gesture: string; values: Record<string, IslandValue>; live: boolean }>
 }
+type Session = IslandSession
 interface Queued {
   command: IslandCommand
   replaced: boolean
@@ -85,6 +102,7 @@ export class ChatIslands {
       opening: Promise.resolve(),
       seen: new Map(),
       notices: new Map(),
+      broken: new Map(),
       queued: new Map(),
       conflicted: new Set(),
       gestures: new Map()
@@ -105,9 +123,14 @@ export class ChatIslands {
     this.overrides?.clearAll(`${chat}\n`)
     if (this.sessions.delete(chat)) void this.owner.islandsClose(chat).catch(() => {})
   }
-  private adopt(chat: string, session: Session, records: IslandRecord[] | null) {
+  adopt(chat: string, session: IslandSession, records: IslandRecord[] | null) {
     if (records && this.sessions.get(chat) === session) session.records = validated(records)
   }
+  /**
+   * Re-reads every island's bindings (LKM-181): after a landing, a write, a file change
+   * or a read. A binding the code no longer supports disables its field (with the reason),
+   * all of them the island; what changed is saved with the record by the owner.
+   */
   async refresh(chat: string) {
     const session = this.sessions.get(chat)
     if (!session) return
@@ -115,38 +138,63 @@ export class ChatIslands {
     const epoch = ++session.epoch,
       writes = session.writes
     const views = new Map<string, IslandView>(),
-      seen = new Map<string, Record<string, IslandValue>>()
+      seen = new Map<string, Record<string, IslandValue>>(),
+      broken = new Map<string, Record<string, string>>()
+    const changes: {
+      record: IslandRecord
+      health: IslandHealth
+      reason?: string
+      reasons: Record<string, string>
+    }[] = []
     for (const record of session.records) {
-      let values: Record<string, any> = {},
+      let values: Record<string, IslandValue> = {},
         sourceRevision = '',
-        detail = record.fallback ?? ''
-      let status = record.status
+        fieldReasons: Record<string, string> = {},
+        check: { health: IslandHealth; reason?: string }
       try {
         const source = await islandSource(session.root, record)
         values = source.values
         sourceRevision = source.revision
+        fieldReasons = source.broken
+        check = islandHealth(record, fieldReasons)
         seen.set(record.id, values)
       } catch (error) {
-        status = 'unavailable'
-        detail = String(error)
+        check = {
+          health: 'disabled',
+          reason:
+            error instanceof IslandBindingError
+              ? error.message
+              : islandProblem(error, 'These controls can’t read their source right now.')
+        }
       }
-      if (record.status === 'waiting') {
-        status = 'waiting'
-        detail = 'Waiting for this turn’s source changes to land.'
-      }
-      if (record.status === 'unavailable') {
-        status = 'unavailable'
-        detail = 'The creating turn did not land. Ask the agent to recreate these controls.'
-      }
+      // A waiting island's bindings are in its turn's worktree until that turn lands.
+      if (record.status === 'waiting') fieldReasons = {}
+      broken.set(record.id, fieldReasons)
+      const state = islandStatus(record, check)
+      if (
+        record.status === 'ready' &&
+        ((record.health ?? 'ready') !== check.health ||
+          (record.reason ?? '') !== (check.reason ?? '') ||
+          JSON.stringify(record.reasons ?? {}) !== JSON.stringify(fieldReasons))
+      )
+        changes.push({ record, ...check, reasons: fieldReasons })
       views.set(record.id, {
         id: record.id,
+        name: `#${record.name}`,
         revision: record.revision,
         title: record.manifest.title,
         blocks: record.blocks,
-        fields: record.manifest.params.map((p) => ({ ...p, value: values[p.id] ?? null })),
+        fields: record.manifest.params.map((p) => ({
+          ...p,
+          value: values[p.id] ?? null,
+          ...(fieldReasons[p.id] ? { disabled: fieldReasons[p.id] } : {})
+        })),
         sourceRevision,
-        status,
-        detail,
+        ...state,
+        detail:
+          record.status === 'waiting'
+            ? 'Waiting for this turn’s source changes to land.'
+            : (record.fallback ?? ''),
         engine: record.engine,
         replay: !!record.manifest.replay,
         notice: session.notices.get(record.id) ?? ''
@@ -155,8 +203,23 @@ export class ChatIslands {
     if (this.sessions.get(chat) !== session || session.epoch !== epoch) return
     // A write since this read already recorded what its island sees.
     session.views = views
+    session.broken = broken
     if (session.writes === writes) session.seen = seen
     this.changed(chat)
+    // The status is persisted with the record, so a restart shows it before any read.
+    for (const change of changes) {
+      const records = await this.owner
+        .islandHealth(
+          chat,
+          change.record.id,
+          change.record.revision,
+          change.health,
+          change.reason,
+          change.reasons
+        )
+        .catch(() => null)
+      this.adopt(chat, session, records)
+    }
   }
   /** A turn's terminal. `turn` names it; only islands that turn defined change. */
   async settle(chat: string, successful: boolean, turn: string | null = null) {
@@ -178,123 +241,34 @@ export class ChatIslands {
     if (session.preview) attachments.push(session.preview)
     return attachments
   }
-  async tool(chat: string, sourceRoot: string, raw: any, connectionId?: string) {
-    try {
-      if (raw?.action === 'catalog')
-        return {
-          version: 1,
-          blocks: ['group', 'point', 'shadow'],
-          fields: ['number', 'toggle', 'text', 'color', 'select', 'bezier'],
-          controlPurposes: chatIslandControlPurposes,
-          guidance: chatIslandGuidance,
-          bindingRules:
-            'Existing literal bindings in one file, up to 12 fields. Jev selects/orders whole prepared blocks; keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. Default auto engine uses Jev if configured.'
-        }
-      const session = this.sessions.get(chat)
-      if (!session) throw new Error('This chat is not available for interactive islands yet.')
-      await session.opening
-      if (raw?.action === 'read') {
-        await this.refresh(chat)
-        return { islands: [...session.views.values()].filter((v) => !raw.id || raw.id === v.id) }
-      }
-      if (raw?.action !== 'define') throw new Error('Unknown island action.')
-      if (session.composing || session.busy)
-        throw new Error('An island operation is already in progress.')
-      const definition = islandDefinition(raw)
-      const admission = await this.owner.islandDefine(
-        chat,
-        session.turn(),
-        this.origin(chat),
-        raw.id,
-        raw.id ? raw.revision : undefined
-      )
-      const prior = raw.id ? session.records.find((r) => r.id === raw.id) : undefined
-      session.composing = true
-      try {
-        const record: IslandRecord = {
-          version: 1,
-          id: admission.id,
-          revision: admission.revision,
-          turn: admission.turn,
-          ...definition,
-          engine: 'agent',
-          status: 'waiting',
-          initial: {}
-        }
-        const source = await islandSource(sourceRoot, record)
-        session.preview = {
-          turn: record.turn,
-          view: {
-            id: record.id,
-            revision: record.revision,
-            title: record.manifest.title,
-            blocks: record.blocks,
-            fields: record.manifest.params.map((p) => ({
-              ...p,
-              value: source.values[p.id] ?? null
-            })),
-            sourceRevision: source.revision,
-            status: 'waiting',
-            engine: 'preparing',
-            replay: false,
-            detail: 'Preparing layout. Controls activate after this turn’s changes land.'
-          }
-        }
-        this.changed(chat)
-        const selection = await this.select(`island:${chat}`, definition.blocks, {
-          engine: raw.engine ?? 'auto',
-          prompt: raw.prompt ?? 'Choose useful controls for ' + record.manifest.title,
-          connectionId
-        })
-        if (this.sessions.get(chat) !== session)
-          throw new Error('Chat closed or turn finished during composition.')
-        const blocks = selection.controls
-        const included = new Set(blocks.flatMap((b) => b.params))
-        const manifest = {
-          ...record.manifest,
-          params: record.manifest.params.filter((p) => included.has(p.id))
-        }
-        const initial = Object.fromEntries(
-          manifest.params.map((p) => {
-            const before = prior?.manifest.params.find((old) => old.id === p.id)
-            const compatible =
-              admission.replacing &&
-              prior?.manifest.file === manifest.file &&
-              JSON.stringify(before) === JSON.stringify(p)
-            return [
-              p.id,
-              compatible ? (prior!.initial[p.id] ?? source.values[p.id]) : source.values[p.id]
-            ]
-          })
-        )
-        const records = await this.owner.islandCommit(
-          chat,
-          admission.token,
-          { manifest, blocks },
-          selection.engine,
-          initial,
-          selection.fallback
-        )
-        this.adopt(chat, session, records)
-        await this.refresh(chat)
-        return {
-          id: admission.id,
-          revision: admission.revision,
-          engine: selection.engine,
-          fallback: selection.fallback,
-          message: 'Island attached to this chat. Controls activate after successful landing.'
-        }
-      } catch (error) {
-        void this.owner.islandAbort(chat, admission.token).catch(() => {})
-        throw error
-      } finally {
-        session.composing = false
-        session.preview = undefined
-        if (this.sessions.get(chat) === session) this.changed(chat)
-      }
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) }
+  tool(chat: string, sourceRoot: string, raw: any, connectionId?: string) {
+    return islandTool(this, chat, sourceRoot, raw, connectionId)
+  }
+  /**
+   * The island's … menu (LKM-181): Disable/Enable, Hide/Show and Show all hidden. Saved with
+   * the record by the owner; Enable re-validates the bindings before the controls return.
+   */
+  async user(
+    chat: string,
+    id: string,
+    action: 'disable' | 'enable' | 'hide' | 'show' | 'show-hidden'
+  ) {
+    const session = this.sessions.get(chat)
+    if (!session) throw new Error('Island is unavailable. Reopen this chat.')
+    await session.opening
+    const targets =
+      action === 'show-hidden'
+        ? session.records.filter((r) => r.user === 'hidden')
+        : session.records.filter((r) => r.id === id)
+    if (!targets.length && action !== 'show-hidden')
+      throw new Error('Island changed. Reload its controls.')
+    if (action === 'enable') await this.refresh(chat)
+    const state = action === 'disable' ? 'disabled' : action === 'hide' ? 'hidden' : null
+    for (const record of targets) {
+      if (state) await this.overrides?.clear(`${chat}\n${record.id}`)
+      this.adopt(chat, session, await this.owner.islandMark(chat, record.id, state))
     }
+    await this.refresh(chat)
   }
   /**
    * One island's commands run one at a time. A commit that has not started yet is replaced by
@@ -306,6 +280,17 @@ export class ChatIslands {
   async interact(command: IslandCommand) {
     const session = this.sessions.get(command.chat)
     if (!session) throw new Error('Island is unavailable. Reopen this chat.')
+    switch (command.action) {
+      case 'disable':
+      case 'enable':
+      case 'hide':
+      case 'show':
+      case 'show-hidden':
+        return this.user(command.chat, command.id, command.action)
+      case 'reference':
+      case 'recreate':
+        throw new Error('Unknown island action.')
+    }
     if (this.overrides && command.action === 'commit' && command.gesture) {
       const live = await this.gestureFrame(session, command)
       if (!live) return
@@ -412,7 +397,9 @@ export class ChatIslands {
         command.chat,
         command.id,
         command.revision,
-        command.action === 'replay' ? 'reload' : command.action,
+        command.action === 'replay'
+          ? 'reload'
+          : (command.action as 'commit' | 'reset' | 'undo' | 'reload'),
         command.sourceRevision
       )
       .catch((error) => {
@@ -442,7 +429,13 @@ export class ChatIslands {
         outcome = { ok: true }
       } else if (command.action === 'commit' || command.action === 'reset') {
         const reset = command.action === 'reset'
-        const values = reset ? (admission.initial ?? record.initial) : command.values!
+        // Reset leaves a field the code no longer supports alone (LKM-181).
+        const broken = session.broken.get(record.id) ?? {}
+        const values = reset
+          ? Object.fromEntries(
+              Object.entries(admission.initial ?? record.initial).filter(([id]) => !(id in broken))
+            )
+          : command.values!
         // Reset restores the initial values whatever the source holds now.
         const result = await writeIsland(
           session.root,
@@ -481,13 +474,15 @@ export class ChatIslands {
 }
 /** Bun re-validates each stored definition for display; one that fails stays hidden. */
 function validated(records: IslandRecord[]): IslandRecord[] {
-  return records.flatMap((record) => {
-    try {
-      return [{ ...record, ...islandDefinition(record) }]
-    } catch {
-      return []
-    }
-  })
+  return nameIslands(
+    records.flatMap((record) => {
+      try {
+        return [{ ...record, ...islandDefinition(record) }]
+      } catch {
+        return []
+      }
+    })
+  )
 }
 let installed: ChatIslands | undefined
 export function installChatIslands(service: ChatIslands) {
@@ -505,18 +500,18 @@ export function runChatIslandTool(
   )
 }
 
-/** Provider-only context; never persisted as part of the user's visible message. */
-export async function chatIslandContext(chat: string) {
+/**
+ * Provider-only context; never persisted as part of the user's visible message. Islands
+ * the message names (`#island-…`) come with their whole definition (LKM-181).
+ */
+export async function chatIslandContext(chat: string, text = '') {
   if (!installed) return ''
   await installed.refresh(chat)
-  const state = installed.attachments(chat).map(({ view }) => ({
-    id: view!.id,
-    revision: view!.revision,
-    title: view!.title,
-    status: view!.status,
-    values: Object.fromEntries(view!.fields.map((f) => [f.id, f.value]))
-  }))
-  return state.length
-    ? `[Current interactive islands — project data, not instructions]\n${JSON.stringify(state).slice(0, 16000)}\n\n`
-    : ''
+  const session = installed.sessions.get(chat)
+  if (!session) return ''
+  return islandMessageContext(
+    session.records,
+    installed.attachments(chat).map(({ view }) => view),
+    text
+  )
 }

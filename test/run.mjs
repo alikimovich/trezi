@@ -81,6 +81,7 @@ const UNIT = [
   'native-island-editing',
   'no-system-preferences',
   'chat-islands',
+  'chat-island-status',
   'island-flicker',
   'island-override',
   'island-flicker-frameworks',

@@ -31,7 +31,11 @@ src/
                     main/shadow-controls.ts validates its seven inputs and derives the
                     CSS or Tailwind output; main/chat-island-source.ts writes them
                     atomically. The current provider entrypoint is `chat_island`; it
-                    shares the define-controls manifest schema
+                    shares the define-controls manifest schema. Binding checks,
+                    statuses and short names: main/chat-island-bindings.ts; the
+                    agent's show/clone ops: main/chat-island-tool.ts; referenced
+                    island context: main/chat-island-context.ts; the composer's "#"
+                    picker and reference chips: native/chat-island-refs.ts (LKM-181)
     ChatActivity.swift / StreamingText.swift   text-only live activity and native
                     word reveal. Cat.swift supplies cats for other app surfaces
     WorkspaceLayout.swift        authoritative view/divider geometry and AppKit divider input

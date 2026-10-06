@@ -1,5 +1,11 @@
 import type { ControlPanelManifest } from '../shared/api'
-import type { IslandBlock, IslandRecord, IslandValue } from '../shared/chat-islands'
+import type {
+  IslandBlock,
+  IslandHealth,
+  IslandRecord,
+  IslandUserState,
+  IslandValue
+} from '../shared/chat-islands'
 
 /**
  * The editing owner seam (S12). Under the Swift launch the service's editing
@@ -92,9 +98,24 @@ export interface EditingOwner {
     definition: { manifest: ControlPanelManifest; blocks: IslandBlock[] },
     engine: 'agent' | 'jev',
     initial: Record<string, IslandValue>,
-    fallback?: string
+    fallback?: string,
+    /** The island's stable short name (`island-shadow-2`), kept across revisions. */
+    name?: string
   ): Promise<IslandRecord[]>
   islandAbort(chat: string, token: string): Promise<void>
+  /** LKM-181: the user's Disable/Hide (`null`: Enable/Show), saved with the record. */
+  islandMark(chat: string, id: string, user: IslandUserState | null): Promise<IslandRecord[]>
+  /** LKM-181: what Bun's binding check found, saved with the record when it changed. */
+  islandHealth(
+    chat: string,
+    id: string,
+    revision: number,
+    health: IslandHealth,
+    reason?: string,
+    reasons?: Record<string, string>
+  ): Promise<IslandRecord[]>
+  /** LKM-181: the agent's `show {id}`, attaching a ready island to the current turn. */
+  islandShow(chat: string, id: string, turn: number, origin: string | null): Promise<IslandRecord[]>
   /** A turn's terminal (`turn` null: whatever the chat is doing). `records` null: chat not open. */
   islandSettle(
     chat: string,

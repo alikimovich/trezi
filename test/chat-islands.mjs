@@ -313,9 +313,10 @@ try {
   assert.equal(islands.attachments('resumed-key')[0].view.status, 'ready')
   assert.equal(
     islands.attachments('resumed-key')[1].view.status,
-    'unavailable',
+    'disabled',
     'Duplicate success must not revive failed creation'
   )
+  assert.match(islands.attachments('resumed-key')[1].view.reason, /did not land/)
   for (const blocks of [
     [{ ...request.blocks[0], params: ['x'] }],
     [{ ...request.blocks[0], params: ['x', 'unknown'] }],
@@ -331,7 +332,7 @@ try {
         manifest: { ...request.manifest, file: 'escape.js' }
       })
     ).error,
-    /escapes/
+    /outside the project/
   )
   // Queued gestures may not run after their owning chat closes.
   islands.register('queued', root, 'other-session', () => 1)

@@ -104,7 +104,7 @@ export function serviceEditing(
     islands: async (chat) => (await call('islands', { chat }, 'read')).records,
     islandDefine: (chat, turn, origin, id, revision) =>
       call('islandDefine', present({ chat, turn, origin, id, revision })),
-    islandCommit: async (chat, token, definition, engine, initial, fallback) =>
+    islandCommit: async (chat, token, definition, engine, initial, fallback, name) =>
       (
         await call(
           'islandCommit',
@@ -114,13 +114,26 @@ export function serviceEditing(
             definition: plain({ manifest: definition.manifest, blocks: definition.blocks }),
             engine,
             initial: plain(initial),
-            fallback
+            fallback,
+            name
           })
         )
       ).records,
     islandAbort: async (chat, token) => {
       await call('islandAbort', { chat, token })
     },
+    // An absent `user` clears the user's state (Enable/Show).
+    islandMark: async (chat, id, user) =>
+      (await call('islandMark', present({ chat, id, user }))).records,
+    islandHealth: async (chat, id, revision, health, reason, reasons) =>
+      (
+        await call(
+          'islandHealth',
+          present({ chat, id, revision, health, reason, reasons: reasons && plain(reasons) })
+        )
+      ).records,
+    islandShow: async (chat, id, turn, origin) =>
+      (await call('islandShow', present({ chat, id, turn, origin }))).records,
     islandSettle: (chat, turn, successful) =>
       call('islandSettle', present({ chat, turn, successful })),
     islandCommand: (chat, id, revision, action, sourceRevision) =>

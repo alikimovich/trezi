@@ -43,6 +43,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     let chips = NSStackView()
     let controls = NSStackView()
     let context = NSButton()
+    var references: [NSButton] = []
     let attachments = ComposerAttachments()
     var attachmentsHeight: NSLayoutConstraint!
     let skillList = NSScrollView()
@@ -220,6 +221,20 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     }
     @objc func send(_ sender: Any?) { if sendButton.isEnabled { emitAction("send") } }
     @objc func clearContext(_ sender: Any?) { emitAction("context") }
+    /// LKM-181: island references from Copy reference, one chip each beside the element chip.
+    private func updateReferences(_ names: [String]) {
+        guard names != references.map(\.title) else { return }
+        references.forEach { $0.removeFromSuperview() }
+        references = names.enumerated().map { index, name in
+            let chip = NSButton(title: name, target: self, action: #selector(removeReference(_:)))
+            chip.bezelStyle = .roundRect; chip.controlSize = .small; chip.lineBreakMode = .byTruncatingTail; chip.tag = index
+            chip.toolTip = "Remove reference: " + name
+            chip.widthAnchor.constraint(lessThanOrEqualToConstant: 160).isActive = true
+            chips.addArrangedSubview(chip)
+            return chip
+        }
+    }
+    @objc func removeReference(_ sender: NSButton) { emitAction("unreference", ["index":sender.tag]) }
     @objc func pick(_ sender: NSPopUpButton) {
         guard let label = pickers.first(where: { $0.value === sender })?.key,
               let value = sender.selectedItem?.representedObject as? String else { return }
@@ -337,9 +352,11 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         }
         let selected = next["context"] as? String ?? ""
         context.isHidden = selected.isEmpty; context.title = selected; context.toolTip = "Clear selected element: " + selected
+        updateReferences(next["references"] as? [String] ?? [])
         attachments.update(next["attachments"] as? [[String: Any]] ?? [])
         attachmentsHeight.constant = attachments.count > 0 ? ComposerAttachments.rowHeight : 0
-        chips.isHidden = context.isHidden; chipsHeight.constant = context.isHidden ? 0 : 22
+        let empty = context.isHidden && references.isEmpty
+        chips.isHidden = empty; chipsHeight.constant = empty ? 0 : 22
         skillEntries = next["suggestions"] as? [[String: Any]] ?? []
         rebuildSkills()
     }

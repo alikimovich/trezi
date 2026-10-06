@@ -332,6 +332,17 @@ Current values and island revisions enter the next provider turn as application
 context, separately from the visible user transcript. See [CHAT-ISLANDS.md](CHAT-ISLANDS.md)
 for the catalog, limits and verification status.
 
+Since LKM-181 (operating rules v27) every island has a stable short name
+(`#island-shadow-2`) and a status (ready, partially-disabled, disabled with a reason,
+hidden, waiting) that the context reports. A user message naming an island, typed
+with "#" or added by Copy reference, also sends that island's full definition:
+params with their anchors, values, status and reasons. `chat_island` adds
+`show {id}` (resurface the same island at the end of the chat) and
+`clone {id, rebind?}` (a new island from its definition, with broken params
+rebound to the current code). The guidance tells agents to clone rather than
+redefine a disabled island in place; a define over a broken binding is refused
+with the reason.
+
 ## Chat timing and control preparation
 
 The shared transcript captures assistant timestamps at their first streamed chunk

@@ -2,16 +2,28 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFile, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 import type { IslandRecord, IslandValue } from '../shared/chat-islands'
-import { lexLiteral, locateAnchor, renderLiteral, resolveLiteralValue } from './control-manifest'
+import { checkBindings, IslandBindingError } from './chat-island-bindings'
+import { lexLiteral, locateAnchor, renderLiteral } from './control-manifest'
 import { revertGroup } from './edit-history'
 import { jsxAttributeLiterals, renderJsxAttribute } from './jsx-attribute-literals'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { shadowOutput } from './shadow-controls'
 import { proposeEdit } from './source-commit'
 export const sourceHash = (text: string) => createHash('sha256').update(text).digest('hex')
+/**
+ * The island's file and what its bindings hold now (`checkBindings`): `values` has every
+ * binding that still holds, `broken` says why each other one cannot be edited. A problem
+ * with the file itself throws an `IslandBindingError` with one line for the island.
+ */
 export async function islandSource(root: string, record: IslandRecord) {
-  const base = await realpath(root),
-    file = await realpath(resolve(root, record.manifest.file))
+  const shown = record.manifest.file
+  let base: string, file: string
+  try {
+    base = await realpath(root)
+    file = await realpath(resolve(root, shown))
+  } catch {
+    throw new IslandBindingError(`${shown} no longer exists, so these controls can't edit it.`)
+  }
   const rel = relative(base, file)
   if (
     !rel ||
@@ -19,30 +31,30 @@ export async function islandSource(root: string, record: IslandRecord) {
     isAbsolute(rel) ||
     rel.split('/').some((p) => ['.git', '.trezi', '.praxis', '.dsgn'].includes(p))
   )
-    throw new Error('Source target escapes the project or uses metadata.')
-  const code = await readFile(file, 'utf8')
-  if (Buffer.byteLength(code) > 2_000_000) throw new Error('Source file is too large.')
+    throw new IslandBindingError(
+      `${shown} is outside the project, so these controls can't edit it.`
+    )
+  let code: string
+  try {
+    code = await readFile(file, 'utf8')
+  } catch {
+    throw new IslandBindingError(`${shown} can't be read right now.`)
+  }
+  if (Buffer.byteLength(code) > 2_000_000)
+    throw new IslandBindingError(`${shown} is too large for these controls to edit.`)
   return { file, code, ...(await sourceValues(code, file, record)), revision: sourceHash(code) }
 }
-/** The island's bound values as `code` holds them. */
+/** The island's bound values as `code` holds them, and the bindings that no longer hold. */
 async function sourceValues(code: string, file: string, record: IslandRecord) {
-  const attributes = await jsxAttributeLiterals(code, file)
-  const values: Record<string, IslandValue> = {}
-  for (const p of record.manifest.params) {
-    const loc =
-      p.apply.strategy === 'literal' ? locateAnchor(code, p.apply.anchor) : { error: 'missing' }
-    const start = 'at' in loc ? loc.at + (code.slice(loc.at).match(/^\s*/)?.[0].length ?? 0) : -1
-    const attribute = attributes.get(start)
-    const value =
-      attribute && ['text', 'color', 'select'].includes(p.kind)
-        ? attribute.value
-        : resolveLiteralValue(code, p)
-    if (value === null)
-      throw new Error(`Cannot resolve ${p.label}. Ask the agent to rebind this island.`)
-    values[p.id] = value
+  let attributes: Awaited<ReturnType<typeof jsxAttributeLiterals>>
+  try {
+    attributes = await jsxAttributeLiterals(code, file)
+  } catch {
+    throw new IslandBindingError(
+      `${record.manifest.file} doesn't parse right now; these controls wait until it does.`
+    )
   }
-  for (const block of record.blocks.filter((b) => b.kind === 'shadow')) shadowOutput(block, values)
-  return { values, attributes }
+  return checkBindings(code, file, record, attributes)
 }
 export type IslandWrite =
   | { conflict?: undefined; group: string; revision: string; values: Record<string, IslandValue> }
@@ -107,6 +119,8 @@ export function writeIsland(
     for (const [id, value] of Object.entries(values)) {
       const param = record.manifest.params.find((p) => p.id === id)
       if (!param || param.apply.strategy !== 'literal') throw new Error('Unknown binding.')
+      // A field the code no longer supports is never written (LKM-181).
+      if (id in source.broken) throw new IslandBindingError(source.broken[id])
       const loc = locateAnchor(source.code, param.apply.anchor)
       if ('error' in loc) throw new Error('Binding no longer resolves.')
       const start = loc.at + (source.code.slice(loc.at).match(/^\s*/)?.[0].length ?? 0)
