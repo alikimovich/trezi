@@ -19,6 +19,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Versioning: Settings › General and `trezi --version` show "Trezi X.Y.Z (build N, short sha)"; About Trezi shows the same; `bun run release` cuts tagged releases with this changelog.
 - Product logs: every Trezi process writes redacted lifecycle lines to `~/Library/Logs/Trezi` (7 days, 20 MB a day); Help › Copy Logs for Support, Show Logs in Finder and Export Logs…, `trezi logs [--since 30m] [--follow]`, and the feedback diagnostics attach the last 30 minutes with consent.
 - Layers follows the preview selection both ways: selecting an element in the preview, the editing island or a chat chip selects, reveals and scrolls to its row, and selecting a row selects the element; rows drag to reorder siblings with an insertion line, a one-line reason when a drop is refused, and Undo (LKM-179).
+- Movable islands: drag the editing and Layers islands by their header (open hand; header buttons and menus still click); they snap to the preview's edges and to each other, never land on each other, stay inside the preview when the window resizes, and keep their place across close and relaunch. Double-click the header, or choose Reset Position in the editing island's … menu, to put one back (LKM-180).
 
 ### Fixed
 - Select mode highlights the hovered element again, and pointer moves over the preview are no longer slowed by a window hit test; the editing island still keeps hover, clicks and scrolls from reaching the page beneath it (LKM-173).

@@ -30,7 +30,7 @@ extension Host {
         return ["visible":!layers.isHidden, "glass":layers.glass, "cornerRadius":Double(NativeEditingInspector.cornerRadius), "inset":Double(NativeEditingInspector.inset),
             "frame":box(frame), "area":box(nativeLayout.previewArea), "inspector":box(editingInspector.isHidden ? .zero : editingInspector.frame), "inspectorVisible":!editingInspector.isHidden,
             "mode":nativeLayout.layersMode, "anchor":nativeLayout.layersAnchor.map { Double($0) as Any } ?? NSNull(), "button":button.map { box($0) as Any } ?? NSNull(),
-            "size":["width":Double(nativeLayout.layersSize.width), "height":Double(nativeLayout.layersSize.height)], "custom":nativeLayout.layersOffset != nil,
+            "size":["width":Double(nativeLayout.layersSize.width), "height":Double(nativeLayout.layersSize.height)], "custom":nativeLayout.layersSpot != nil,
             "window":["width":Double(window.frame.width), "height":Double(window.frame.height)],
             "count":layers.nodes.count, "selected":layers.selectedPath.map { $0 as Any } ?? NSNull(), "selectedRow":tree.selectedRow,
             "selectedVisible":row >= 0 && tree.selectedRow == row && NSLocationInRange(row, shown),

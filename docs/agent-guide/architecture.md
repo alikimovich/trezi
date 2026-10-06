@@ -39,6 +39,10 @@ src/
                     native source, layers and property/style inspector; the Layers
                     and editing islands float over the preview (LayersLayout.swift
                     places Layers under its toolbar button, never over the other)
+    FloatingIsland.swift / IslandLayout.swift
+                    what both islands share: glass, opaque face, a header that
+                    drags them (snap, no overlap, corner-relative saved place) and
+                    a frame that keeps the pointer from the page
     Sheets.swift    New Project, memory, settings and provider forms; Bun controllers
                     own service operations. Forms use standalone titled, resizable
                     windows with traffic lights and an action bar only when needed.

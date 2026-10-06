@@ -99,8 +99,8 @@ struct EditingInspectorContent: View {
     @ObservedObject var model: InspectorModel
     var body: some View {
         if let state = model.state {
+            // The title row is the island's AppKit header (LKM-180), which also moves it.
             VStack(alignment: .leading, spacing: 10) {
-                HStack { Text(state.title).font(.headline).lineLimit(1); Spacer(); Menu { ForEach(state.actions) { action in Button(action.label) { model.send(action.id) } } } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize(); Button { model.send("close") } label: { Image(systemName: "xmark") }.buttonStyle(.plain) }
                 if let notice = state.notice {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(notice.title).font(.system(size: 12, weight: .semibold))
@@ -124,54 +124,70 @@ struct EditingInspectorContent: View {
                     // Trailing room keeps units and apply buttons clear of the overlay scroller.
                     }.id("\(state.root):\(state.generation)").padding(2).padding(.trailing, 10)
                 }
-            }.padding(14).frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Opaque under the controls (LKM-162): over an arbitrary page, clear glass let the page's
-                // text, hover boxes and selection outlines show through and ghost the fields and sliders.
-                .background(RoundedRectangle(cornerRadius: NativeEditingInspector.cornerRadius, style: .continuous).fill(Color(nsColor: .windowBackgroundColor)))
+            }.padding(.horizontal, FloatingIsland.padding).padding(.top, 4).padding(.bottom, FloatingIsland.padding).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
-/// Floats over the preview's right edge like the composer island: the same inset,
-/// corner radius and Liquid Glass edge, so opening it never narrows the preview.
-final class NativeEditingInspector: NSView {
-    // ChatLayout.composerInset and the composer's radius; literal so fixtures compile this file alone.
-    static let inset: CGFloat = 10, cornerRadius: CGFloat = 24
+/// Floats over the preview like the composer island, so opening it never narrows the
+/// preview: by default along its right edge at full height, or wherever its header was
+/// dragged (LKM-180). The face under the controls is opaque (LKM-162): over an arbitrary
+/// page, clear glass let text, hover boxes and selection outlines ghost the fields.
+final class NativeEditingInspector: FloatingIsland {
     let model: InspectorModel
     let content: NSHostingView<EditingInspectorContent>
-    private(set) var glass = false
+    let more = NSButton(image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More")!, target: nil, action: nil)
+    let close = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")!, target: nil, action: nil)
     init() {
         let model = InspectorModel(); self.model = model
         content = NSHostingView(rootView: EditingInspectorContent(model: model))
-        super.init(frame: .zero)
+        super.init(title: "")
         content.sizingOptions = []
-        let backdrop: NSView
-        if #available(macOS 26.0, *) {
-            let effect = NSGlassEffectView(); effect.style = .regular
-            effect.cornerRadius = Self.cornerRadius; effect.contentView = content
-            backdrop = effect; glass = true
-        } else {
-            let effect = NSVisualEffectView(); effect.material = .popover
-            effect.blendingMode = .withinWindow; effect.state = .followsWindowActiveState
-            effect.wantsLayer = true; effect.layer?.cornerRadius = Self.cornerRadius; effect.layer?.masksToBounds = true
-            effect.addSubview(content); backdrop = effect
-        }
-        content.frame = backdrop.bounds; content.autoresizingMask = [.width, .height]
-        backdrop.frame = bounds; backdrop.autoresizingMask = [.width, .height]; addSubview(backdrop)
-        isHidden = true
+        more.target = self; more.action = #selector(showMenu(_:)); more.toolTip = "More"
+        close.target = self; close.action = #selector(closeIsland); close.toolTip = "Close"
+        for button in [more, close] { button.isBordered = false; button.translatesAutoresizingMaskIntoConstraints = false; header.addSubview(button) }
+        content.translatesAutoresizingMaskIntoConstraints = false; face.addSubview(content)
+        let pad = Self.padding
+        NSLayoutConstraint.activate([
+            title.trailingAnchor.constraint(lessThanOrEqualTo: more.leadingAnchor, constant: -8),
+            close.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -pad), close.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            more.trailingAnchor.constraint(equalTo: close.leadingAnchor, constant: -10), more.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            content.leadingAnchor.constraint(equalTo: face.leadingAnchor), content.trailingAnchor.constraint(equalTo: face.trailingAnchor),
+            content.topAnchor.constraint(equalTo: header.bottomAnchor), content.bottomAnchor.constraint(equalTo: face.bottomAnchor)
+        ])
     }
     required init?(coder: NSCoder) { fatalError() }
-    // The island's whole frame takes the pointer (LKM-162): AppKit otherwise handed a click
-    // or scroll its glass, padding or labels left unhandled to the preview beneath.
-    override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) ?? (!isHidden && frame.contains(point) ? self : nil) }
-    override func mouseDown(with event: NSEvent) {}
-    override func rightMouseDown(with event: NSEvent) {}
-    override func otherMouseDown(with event: NSEvent) {}
-    override func scrollWheel(with event: NSEvent) {}
-    func update(_ value: [String: Any]) { guard let data = try? JSONSerialization.data(withJSONObject: value), let state = try? JSONDecoder().decode(InspectorState.self, from: data) else { return }; model.state = state; isHidden = !state.visible }
-    /// The island's frame over `area` (the preview's full, unchanged frame), or zero when closed.
-    static func frame(in area: NSRect, width preferred: CGFloat, visible: Bool) -> NSRect {
+    func update(_ value: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: value), let state = try? JSONDecoder().decode(InspectorState.self, from: data) else { return }
+        model.state = state; isHidden = !state.visible
+        title.stringValue = state.title; title.toolTip = state.title
+    }
+    @objc func closeIsland() { model.send("close") }
+    /// The element's actions, then Reset Position, which puts the island back on the right.
+    func actionMenu() -> NSMenu {
+        let menu = NSMenu()
+        for action in model.state?.actions ?? [] {
+            let item = NSMenuItem(title: action.label, action: #selector(menuAction(_:)), keyEquivalent: ""); item.target = self; item.representedObject = action.id; menu.addItem(item)
+        }
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        let item = NSMenuItem(title: "Reset Position", action: #selector(resetPosition), keyEquivalent: ""); item.target = self; menu.addItem(item)
+        return menu
+    }
+    @objc func showMenu(_ sender: NSButton) { actionMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender) }
+    @objc func menuAction(_ item: NSMenuItem) { if let id = item.representedObject as? String { model.send(id) } }
+    @objc func resetPosition() { reset?() }
+    /// The island's frame over `area` (the preview's full, unchanged frame), or zero when closed:
+    /// at `spot` when it was moved and still fits, else along the right edge.
+    static func frame(in area: NSRect, width preferred: CGFloat, visible: Bool, spot: IslandSpot? = nil) -> NSRect {
         guard visible else { return .zero }
+        if let spot, let moved = moved(in: area, width: preferred, spot: spot) { return moved }
         let width = max(0, min(preferred, area.width - 2 * inset))
         return NSRect(x: area.maxX - inset - width, y: area.minY + inset, width: width, height: max(0, area.height - 2 * inset))
+    }
+    /// The frame at `spot`, always full height (only its side and distance from that edge
+    /// move), or nil when it no longer fits the preview.
+    static func moved(in area: NSRect, width preferred: CGFloat, spot: IslandSpot) -> NSRect? {
+        let width = max(0, min(preferred, area.width - 2 * inset))
+        var moved = spot.frame(NSSize(width: width, height: max(0, area.height - 2 * inset)), in: area); moved.origin.y = area.minY + inset
+        return area.insetBy(dx: inset - 0.5, dy: inset - 0.5).contains(moved) ? moved : nil
     }
 }

@@ -18,6 +18,7 @@ import { checkInspectorIsland } from './smoke-inspector-island'
 import { checkChatIslands } from './smoke-islands'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
+import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkProjectSwitching } from './smoke-projects'
 import {
@@ -113,7 +114,8 @@ export async function runNativeCoreSmoke(
     saved: () => preference('trezi:native-panel-sizes')
   }
   let layersOriginal = '',
-    layersWindow = { width: 0, height: 0 }
+    layersWindow = { width: 0, height: 0 },
+    islandsWindow: { width: number; height: number } | undefined
   const checks: SmokeCheck[] = [
     {
       name: 'startup',
@@ -675,6 +677,17 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         if (layersOriginal)
           await restoreLayersIsland(host, layersSmoke, layersOriginal, layersWindow)
+      }
+    },
+    {
+      name: 'movable-islands',
+      dependsOn: ['open-project'],
+      run: async () => {
+        islandsWindow = (await host.request('inspectorIsland')).window
+        await checkMovableIslands(host, artifacts, layersSmoke)
+      },
+      cleanup: async () => {
+        if (islandsWindow) await restoreMovableIslands(host, layersSmoke, islandsWindow)
       }
     },
     {
