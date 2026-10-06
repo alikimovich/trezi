@@ -33,6 +33,43 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Navigation.** `preview:url-changed` to a different page (origin, path and query; the hash is ignored) than the one the element was picked on drops the selection, the chip and the island and clears the page's selection. A reload of the same page keeps it, because a source write live-reloads the page and the element re-resolves by its stamp; the Styles edit flow depends on that.
 - **Removed element.** The preload's 600 ms layout tick (`checkSelectionGone`) treats a pick as gone when none of its elements is connected and no element carries the same source stamp (HMR swaps nodes), on two ticks in a row. It drops its own outlines and toolbar and sends the new `trezi:preview:selection-lost` (`PREVIEW_SELECTION_LOST`, relayed as `preview:selection-lost`); unlike `select-cancelled` it leaves select mode as it is.
 - **Tests.** Unit: `native-inspector` (synchronous hidden publish, stale refresh discarded), `native-context` (`clearSelections`), `native-workspace-controller` (switch heard before Opening renders, not on restart/re-select). Native (`project-switching`, group `sidebar`): selects the first project's heading through Layers, opens the island, draws the hover box, then holds the second project's `project:detect` so the app stays at "Opening …" and checks that the island is hidden with no element (`inspectorInspect.title` is "Project controls"), both chats have no chip and the old page shows no outline, toolbar or hover box; after returning, nothing is restored. Evidence: `switch-selection.json`, `switch-selection-opening.png`.
+## 2026-10-05 — LKM-168 native chat gate verification repair
+
+- A failed project selection now clears its loaded chat key, including when a restart fails after the project was previously loaded. The shell also closes the chat gate for a preview error that arrives after selection, such as a dev server exit. Unit checks cover both paths; this addresses the failed-open chat-gate smoke from manager verification.
+
+## 2026-10-05 — LKM-168 native smoke after the LKM-169 merge
+
+- The Resolve queue smoke now checks that the second provider call is made exactly once and its prompt ends with the queued composer text. The real `agent:send` path prepends Trezi UI instructions even when UI composition is off; comparing the full prompt to the bare text failed before emitting the queued turn's `done` event, which left the next attachment smoke waiting behind a running turn.
+
+## 2026-10-05 — LKM-168 review repair: private output, hard cap, real turn path
+
+- The dev-server product log now records only a fixed output category and length. Raw lines still reach Activity but cannot put target source excerpts into the persisted log. Helper crash lines keep provider and exit status, not the stderr tail.
+- Bun and Swift take the same advisory lock on the UTC day file while checking the remaining bytes and appending. When the next line cannot fit with its limit marker, the marker fills the file to the exact cap. The unit test checks both writers and a shared-file race.
+- The native chat smoke stubs only the provider's outbound send. It invokes the real `agent:send` RPC and emits through the existing provider event hook, so removing either production log hook fails its start/end assertion.
+
+## 2026-10-05 — LKM-168: product logging, one folder, Copy Logs for Support, `trezi logs`
+
+- **One folder, every process.** Each process appends straight to `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log` with `O_APPEND`; `TREZI_LOG_DIR` overrides the folder.
+  - I chose direct writes over relaying lines through the service because a relay would lose the lines that matter most when the service or XPC fails.
+  - The 20 MB cap reads the shared file's size, so it holds across processes. Old days are pruned when a day file opens.
+  - Writers: `src/main/product-log.ts` (Bun backend, provider helpers, plus `preview` and `devserver` lines written on their behalf) and `src/service/ProductLog.swift` (host `app`, `service`, written on a private queue). Both are no-ops until configured, so owner tests write nothing.
+- **Events.**
+  - Turns: start, end and failure with provider and resolved model (`src/main/turn-log.ts`, hooked into `agent.ts`).
+  - Landing outcome with the Git result and landing failures (`chat-isolation.ts`); parked apply, resolve staging and discard (`chat-worktrees.ts`); worktree create, sync, remove and reclaim (`worktrees.ts`).
+  - Helpers and backend: provider helper start, exit and crash. A crash is an exit of the current session that the owner had not stopped (`ProviderOwner.exited`). Backend start and exit (`ServiceRuntime`).
+  - Preview: load, reload, failed load and web-content crash (`Host.swift`); a once-a-minute preview bridge message count (`log-support.ts`).
+  - Host and XPC: host commands slower than 250 ms (`Host.dispatch`, `HostLogs.swift`); XPC failures and lost connections (`ServiceClient`, `ServiceRuntime`).
+  - Dev server lines cut to 300 characters.
+- **Privacy.** One `redact` (token shapes, `key=value` secrets, URL credentials, private keys, home → `~`) used by the log and by the LKM-165 feedback diagnostics, mirrored in Swift. `test/product-log.mjs` checks the two writers produce identical output. Console output is deliberately not copied into the log: provider and SDK messages there can carry prompt text.
+- **Help menu and CLI.**
+  - The Help menu, the pasteboard and the save panel are native (`HostLogs.swift`, host commands `copyText` and `pickLogExport`). Bun builds the text and the zip (`src/native/log-support.ts`, `ditto`). Show Logs in Finder is native only.
+  - Export Logs… writes `Trezi Logs/trezi.log` (24 h) and `summary.txt` (version, macOS, Bun, harness versions, project framework).
+  - `trezi logs [--since 30m] [--follow]` (`bin/trezi`, `bin/trezi.mjs`).
+  - The feedback diagnostics' main part is now the last 30 minutes of the log.
+- **Tests.**
+  - The provider helper's scrubbed environment keeps `TREZI_LOG_DIR`.
+  - `scripts/start-native.mjs` sends `--test` runs to `<test dir>/logs`, and the unit runner gives each test its own log folder.
+  - New `test/product-log.mjs` (unit). The native chat smoke (`src/native/smoke-logs.ts`) checks a turn's start and end lines and that host, service and backend share the run's folder. The smoke's stubbed send calls the same `turn-log` functions `agent.ts` calls, because no real provider runs in the smoke.
 ## 2026-10-05 — LKM-171 review repair: transcript render signal and alternating hover targets
 
 - Review found two vacuous assertions: `chatInspect` had no `revision`, and 100 moves over the same heading returned early after the first. `ChatModel.messageBodyEvaluations` now counts actual SwiftUI message-row body evaluations and `chatInspect` exposes it. The fixture asserts that the count is positive and unchanged after hover and after the real preview selection click.

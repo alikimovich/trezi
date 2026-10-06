@@ -370,6 +370,7 @@ export class NativeWorkspaceController {
     } catch (error) {
       if (current()) {
         this.state.status = { kind: 'error', message: String(error) }
+        this.state.loadedKey = null
         this.changed()
       }
       return
@@ -484,6 +485,7 @@ export class NativeWorkspaceController {
     } catch (error) {
       if (!current()) return
       this.state.status = { kind: 'error', message: String(error) }
+      this.state.loadedKey = null
       this.changed()
       this.openFailed?.(entry.name, String(error))
       // A failed open shows the error and Retry, not the chat (`loadedKey` stays unset);

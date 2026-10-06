@@ -27,6 +27,7 @@ import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
 import { enqueueRepoWrite } from './repo-write-queue'
+import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
@@ -293,6 +294,7 @@ async function landBatch(
       /* preserve the recovery branch and surface the fallback */
     }
   }
+  logLanding(sessionKey, st.wt.branch, outcome, terminal, reconcileFiles)
   const at = Date.now()
   if (outcome.outcome === 'merged') {
     await landTurn(sessionKey, st, outcome, turnNo, message)
@@ -342,6 +344,7 @@ async function landingFailed(
   superseded: () => boolean = () => false
 ): Promise<void> {
   const reason = (error instanceof Error ? error.message : String(error)).slice(0, 500)
+  logLandingFailed(sessionKey, st.wt.branch, reason)
   // The batch's files, best effort: the checkout itself may be what failed.
   const changed = await gitOut(st.wt.path, ['diff', '--name-only', st.wt.baseSha]).then(
     (out) => out.split('\n').filter(Boolean),

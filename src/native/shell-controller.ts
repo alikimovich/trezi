@@ -93,7 +93,7 @@ export class NativeShellController {
       previewStatus: status,
       rows,
       project: active?.key ?? null,
-      chatReady: !!active && ws.loadedKey === active.key,
+      chatReady: !!active && ws.loadedKey === active.key && status.kind !== 'error',
       selected: active ? `chat:${active.activeSessionKey}` : null,
       homeState: {
         visible: !active,

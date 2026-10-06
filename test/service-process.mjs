@@ -264,6 +264,7 @@ try {
       [
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
+        'src/service/ProductLog.swift',
         'src/service/LedgerStore.swift',
         'src/service/OperationLedger.swift',
         'src/service/PreferencesFile.swift',
@@ -336,6 +337,7 @@ try {
       [
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
+        'src/service/ProductLog.swift',
         'src/native/ServiceClient.swift',
         'test/fixtures/service-process/XPCFixture.swift'
       ],
@@ -358,6 +360,7 @@ try {
         'INTRUDER',
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
+        'src/service/ProductLog.swift',
         'src/native/ServiceClient.swift',
         'test/fixtures/service-process/XPCFixture.swift'
       ],

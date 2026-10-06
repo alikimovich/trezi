@@ -7,6 +7,17 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Hide the island, chip and preview overlays during a project switch; restore each project's selection and inspector tab only if the element still resolves on return.
 - [x] Clear the selection quietly after page navigation or element removal, with native coverage for return and removal.
+## Product logging: one log folder, Copy Logs for Support, trezi logs (LKM-168)
+
+- [x] Repair the failed-open native chat gate: clear the loaded chat on selection failure and hide it when a loaded preview enters error.
+- [x] After merging LKM-169, verify the Resolve queue's real provider prompt by its queued-text suffix and exact call count in the native chat smoke.
+- [x] Review repair: omit arbitrary dev-server output and helper stderr, lock the shared size check, and make the native turn check use `agent:send` and the provider event hook.
+- [x] One folder, `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log`, 7 days, 20 MB a day; `app`, `service`, `backend`, `helper`, `preview` and `devserver` lines (`src/main/product-log.ts`, `src/service/ProductLog.swift`).
+- [x] Turn start/end/error with provider and resolved model, landing/parking/resolve with the Git result, worktree create/remove, helper start/exit/crash, preview load/reload/crash, slow host commands (>250 ms), XPC errors.
+- [x] Redaction of secrets and `~` paths, identical in Bun and Swift (`test/product-log.mjs`).
+- [x] Help › Copy Logs for Support, Show Logs in Finder, Export Logs… (`src/native/HostLogs.swift`, `src/native/log-support.ts`); `trezi logs [--since] [--follow]`.
+- [x] Feedback diagnostics attach the last 30 minutes with consent; `docs/agent-guide/logs.md`.
+- [x] Native chat smoke checks a turn's start and end lines in the test run's own log folder (`src/native/smoke-logs.ts`).
 ## Preview select slowdown with image attachments (LKM-171, issue #231)
 
 - [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.

@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
-// `trezi --update`: pull, reinstall and rebuild this checkout. The `trezi` command
-// itself is the shell script beside this file (bin/trezi), which runs this with the
-// Bun on PATH or the one bundled into Trezi.app. Any other arguments are handed to
-// bin/trezi, for installs whose `trezi` link still points here.
+// `trezi --update`: pull, reinstall and rebuild this checkout, and `trezi logs`. The
+// `trezi` command itself is the shell script beside this file (bin/trezi), which runs
+// this with the Bun on PATH or the one bundled into Trezi.app. Any other arguments are
+// handed to bin/trezi, for installs whose `trezi` link still points here.
 import { execFileSync, spawnSync } from 'node:child_process'
-import { realpathSync } from 'node:fs'
+import { closeSync, openSync, readSync, realpathSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { requireSupportedPlatform } from '../scripts/requirements.mjs'
@@ -123,10 +123,76 @@ function update() {
   process.exit(0)
 }
 
+/**
+ * `trezi logs [--since 30m] [--follow]` (LKM-168): prints Trezi's product log, every
+ * process's lines in time order, from ~/Library/Logs/Trezi (TREZI_LOG_DIR overrides
+ * it). `--follow` keeps printing new lines until interrupted; it returns the stop.
+ */
+export async function logs(args, { env = process.env, out = (text) => process.stdout.write(text), err = (text) => process.stderr.write(text), now = Date.now, interval = 500 } = {}) {
+  // Loaded here: `--update` must run from a checkout that has only bin/ and scripts/.
+  const { logDirectory, logFileName, parseSince, readLogs } = await import('../src/main/product-log.ts')
+  let since = 30 * 60_000
+  let window = '30m'
+  let follow = false
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === '--follow' || arg === '-f') follow = true
+    else if (arg === '--since' || arg.startsWith('--since=')) {
+      window = arg === '--since' ? (args[++i] ?? '') : arg.slice(8)
+      since = parseSince(window)
+    } else throw new Error(`Unknown option for trezi logs: ${arg}\nUsage: trezi logs [--since 30m] [--follow]`)
+  }
+  const dir = logDirectory(env)
+  const lines = readLogs(dir, since, now())
+  if (lines.length) out(`${lines.join('\n')}\n`)
+  else err(`No Trezi log lines in the last ${window}. Logs are in ${dir}.\n`)
+  return follow ? followLogs(dir, out, { now, interval, fileName: logFileName }) : null
+}
+
+/** Prints lines appended to today's file (and the next day's) from now on. */
+export function followLogs(dir, out, { now = Date.now, interval = 500, fileName }) {
+  let name = fileName(now())
+  const size = (file) => statSync(join(dir, file), { throwIfNoEntry: false })?.size ?? 0
+  let offset = size(name)
+  let partial = ''
+  const timer = setInterval(() => {
+    const current = fileName(now())
+    if (current !== name) {
+      name = current
+      offset = 0
+      partial = ''
+    }
+    const length = size(name)
+    if (length < offset) offset = 0
+    if (length === offset) return
+    const fd = openSync(join(dir, name), 'r')
+    try {
+      const buffer = Buffer.alloc(length - offset)
+      readSync(fd, buffer, 0, buffer.length, offset)
+      offset = length
+      const text = partial + buffer.toString('utf8')
+      const end = text.lastIndexOf('\n')
+      partial = text.slice(end + 1)
+      if (end >= 0) out(text.slice(0, end + 1))
+    } finally {
+      closeSync(fd)
+    }
+  }, interval)
+  return () => clearInterval(timer)
+}
+
 function main() {
   const args = process.argv.slice(2)
   // --no-launch (older in-app updaters pass it) is accepted and ignored.
   if (args[0] === '--update' || args[0] === 'update') return update()
+  if (args[0] === 'logs') {
+    return logs(args.slice(1)).then(
+      (stop) => {
+        if (stop) for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stop(); process.exit(0) })
+      },
+      (error) => { console.error(error.message); process.exitCode = 1 }
+    )
+  }
   const result = spawnSync(join(repoRoot, 'bin/trezi'), args, { stdio: 'inherit' })
   process.exit(result.status ?? 1)
 }

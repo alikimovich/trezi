@@ -31,6 +31,7 @@ import { registerGitRemoteIpc } from '../main/git-remote'
 import { registerGithubIpc } from '../main/github'
 import { type PlatformOwner, setPlatformOwner } from '../main/platform-owner'
 import { type PreviewState, registerPreviewIpc } from '../main/preview-ipc'
+import { initProductLog, productLog } from '../main/product-log'
 import { setDependencyInstaller } from '../main/project-dependencies'
 import { readProjectIcon } from '../main/project-icon'
 import { registerPropsIpc } from '../main/props'
@@ -58,6 +59,7 @@ import {
   reportRepositoryRecovery,
   reportSourceRecovery
 } from './activity-startup'
+import { appVersion } from './app-version'
 import { NativeBridge, setBridge } from './bridge'
 import { installNativeChat } from './chat-runtime'
 import { NativeContextController } from './context-controller'
@@ -69,6 +71,7 @@ import { NativeGitController } from './git-controller'
 import { installNativeInspector } from './inspector-runtime'
 import { NativeLayersController } from './layers-controller'
 import { NativeLegacyNames } from './legacy-names'
+import { installLogSupport, notePreviewMessage } from './log-support'
 import { networkVolumeNote } from './network-volume-note'
 import { app, dispatchIPC, ipcMain, NativeView, serviceEvents, shell, views } from './platform'
 import { servicePlatform } from './platform-service'
@@ -111,6 +114,8 @@ async function main() {
     )
   // stdout is the service's frame pipe: logs go to stderr.
   console.log = console.info = console.debug = (...args) => console.error(...args)
+  initProductLog('backend')
+  productLog.info('lifecycle', 'Backend started', { version: appVersion(), pid: process.pid })
   const testing = process.argv.includes('--test')
   const testDir = testing ? smokeDirectory() : null
   if (testDir) process.env.TREZI_USER_DATA = join(testDir, 'profile')
@@ -306,6 +311,7 @@ async function main() {
     if (trace) trace.bunAt = Date.now()
     try {
       const value = await dispatchIPC(view, message)
+      if (view === 'preview') notePreviewMessage(message.channel)
       if (trace) {
         trace.bunDoneAt = Date.now()
         host!.send('deliver', {
@@ -325,6 +331,7 @@ async function main() {
         })
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error)
+      if (view === 'preview') notePreviewMessage(message?.channel, true)
       if (message?.type === 'invoke')
         host!.send('deliver', {
           view,
@@ -584,6 +591,11 @@ async function main() {
     shellController!.schedule()
     host!.send('recents', { recents: state.recents })
   }
+  installLogSupport(
+    host,
+    (text, kind) => activityController.append(text, kind),
+    () => workspaceController.active?.root ?? null
+  )
   host.on('menu', ({ action }) => {
     const root = workspaceController.active?.root
     if (action === 'toggle-chat') void shellController!.action({ action: 'expand' })

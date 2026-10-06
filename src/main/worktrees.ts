@@ -4,6 +4,7 @@ import { readdir } from 'fs/promises'
 import { promisify } from 'util'
 import { editingOwner } from './editing-owner'
 import { normalizeBranchName } from './git'
+import { productLog } from './product-log'
 import { type RemoveIntent, repositoryOwner } from './repository-owner'
 import { provisionDependencies } from './worktree-dependencies'
 
@@ -90,9 +91,11 @@ export async function createWorktree(
     await editingOwner().syncSetupHelpers(repoRoot, wt.path)
     await provisionDependencies(repoRoot, wt.path)
   } catch (error) {
+    productLog.error('worktree', 'Worktree setup failed', { id, branch, error: msg(error) })
     await owner.removeWorktree(wt, false, 'abandon').catch(() => {})
     throw error
   }
+  productLog.info('worktree', 'Worktree created', { id, branch: wt.branch, path: wt.path })
   return wt
 }
 
@@ -254,14 +257,12 @@ export async function removeWorktree(
   wt: Worktree,
   opts: { keepBranch?: boolean; intent?: RemoveIntent } = {}
 ): Promise<void> {
+  const intent = opts.intent ?? (opts.keepBranch ? 'release' : 'abandon')
   try {
-    await repositoryOwner().removeWorktree(
-      { ...wt, repoRoot },
-      !!opts.keepBranch,
-      opts.intent ?? (opts.keepBranch ? 'release' : 'abandon')
-    )
-  } catch {
-    /* never throws */
+    await repositoryOwner().removeWorktree({ ...wt, repoRoot }, !!opts.keepBranch, intent)
+    productLog.info('worktree', 'Worktree removed', { id: wt.id, branch: wt.branch, intent })
+  } catch (error) {
+    productLog.warn('worktree', 'Worktree removal failed', { id: wt.id, intent, error: msg(error) })
   }
 }
 
@@ -275,7 +276,9 @@ export async function reclaimWorktree(
   wt: Worktree
 ): Promise<{ removed: boolean; dirty: boolean; ref: string | null }> {
   try {
-    return await repositoryOwner().reclaimWorktree({ ...wt, repoRoot })
+    const result = await repositoryOwner().reclaimWorktree({ ...wt, repoRoot })
+    productLog.info('worktree', 'Idle worktree reclaimed', { id: wt.id, ...result })
+    return result
   } catch {
     return { removed: false, dirty: false, ref: null }
   }
