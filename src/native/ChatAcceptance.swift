@@ -19,8 +19,13 @@ extension Host {
         if command["prepare"] as? Bool == true {
             NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
             window.acceptsMouseMovedEvents = true
-            // Activation completes on a later run-loop turn; still fail if denied.
-            for _ in 0..<40 where !(window.isKeyWindow && NSApp.isActive) {
+            // Activation completes on a later run-loop turn, and the system may defer it
+            // while another app (the previous host exiting, a shared desktop) holds focus:
+            // ask again every half second. Still fail if it is denied for 5 s.
+            for attempt in 0..<100 where !(window.isKeyWindow && NSApp.isActive) {
+                if attempt > 0, attempt % 10 == 0 {
+                    NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+                }
                 try await Task.sleep(nanoseconds: 50_000_000)
             }
         }

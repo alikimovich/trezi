@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-175 repair: foreground flakiness in native acceptance
+
+- The manager's native run failed `visible-composer` ("Chat must be foreground") and then `native-chat` ("Native divider needs renderer delivery"); a later chat-scroll run failed the same way. Both were harness issues, not the build: the window lost key status or activation was deferred, and the 2 s wait in `chatAcceptance` `prepare` gave up. The divider failure was a cascade: `visible-composer` died before restoring the 440 width, the chat stayed at the 320 minimum, and the divider check's `-20, +20` steps clamp there, so it ended 20 pt wider.
+- `smoke-composer.ts` now passes `prepare: true` on the per-pass and restoring `chatAcceptance` width calls (the restore always runs). `smoke-chat.ts` steps away from the minimum first (`+20, -20` below 340). `ChatAcceptance.swift` re-requests activation every 0.5 s for up to 5 s instead of one request and a 2 s wait. Activation is still required; nothing was relaxed.
+
 ## 2026-10-05 — LKM-175: fast native test builds
 
 - **Why it was slow.** Every verification compiled all three Swift products one after another with `-O` in a fresh worktree whose Clang module cache (`out/native/module-cache`) was empty. The Swift driver ran one frontend at a time without `-j`, even though `-O` is not whole-module here.
