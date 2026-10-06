@@ -42,6 +42,18 @@ export interface ChatState {
   lastUsed: number
   /** Idle cleanup removed the checkout; the next turn recreates it at the same path. */
   reclaimed: boolean
+  /** LKM-165: the last landing threw. The work is held (parked) with this reason until
+   *  Retry, Resolve, Discard or a later turn lands it; `clearPark` clears it. */
+  landingError?: string
+  /** LKM-165: what the last landing attempt did, for the agent's `workspace_state`. */
+  lastLanding?: LandingResult
+}
+
+export interface LandingResult {
+  outcome: 'merged' | 'parked' | 'unchanged' | 'failed'
+  files: string[]
+  at: number
+  error?: string
 }
 
 interface Deps {
@@ -75,7 +87,8 @@ export function emitIsolation(
   files?: string[],
   group?: string,
   revertable?: boolean,
-  reason?: 'interrupted' | 'reverted'
+  reason?: 'interrupted' | 'reverted' | 'failed',
+  error?: string
 ): void {
   // Guard a destroyed webContents: this fires from async turn lifecycle hooks,
   // which can land after the renderer process is killed (OS display sleep).
@@ -89,6 +102,7 @@ export function emitIsolation(
       ...(group ? { group } : {}),
       ...(revertable !== undefined ? { revertable } : {}),
       ...(reason ? { reason } : {}),
+      ...(error ? { error } : {}),
       projectKey: sessionKey
     } satisfies AgentEvent)
 }

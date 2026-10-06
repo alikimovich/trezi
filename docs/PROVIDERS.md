@@ -198,9 +198,13 @@ the turn instead of silently dropping inline controls and preview tools. This ch
 does not call a model. These session-scoped tools are not installed into separate
 Codex or Claude application chats.
 
-The SDK session explicitly allows the validated `open_preview`, `open_code` navigation and `chat_island` tools via
-its per-tool approval configuration, matching Claude's in-process allowlist. Other
-MCP tools and shell approval policy keep their existing configuration.
+The SDK session pre-approves every Trezi tool (navigation, `chat_island`, preview,
+UI catalog, `workspace_state` and `prepare_conflict_resolution`) via its per-tool
+approval configuration, matching Claude's in-process allowlist. Sessions run with
+approvals disabled, so a tool left out is refused outright: before LKM-165,
+`workspace_state` was, and Codex reported "requires approval, but this session
+disables approvals". `test/codex-mcp-approvals.mjs` pins the list. Other MCP tools
+and shell approval policy keep their existing configuration.
 
 Trezi's Codex sessions (chat turns and the project-memory pass) run only the MCP
 servers Trezi passes. The CLI merges `--config` tables into the user's
@@ -917,6 +921,29 @@ through the source, the preview URL and capture, navigation, Gen UI and the inst
 It also checks that a background session's `chat_island` and `open_code` are refused
 by the owner before main. The Codex half needs a Unix-socket listen, which some
 sandboxes forbid.
+
+## Claude resume recovery (LKM-165)
+
+Start and resume pass the Claude SDK one cwd, `canonicalCwd(root)` in
+`src/main/backends/claude-resume.ts` (the realpath of the chat worktree), so a session id
+written under a symlinked path is found again. If a resumed session fails before it
+completes a turn ("No conversation found with session ID", an unusable `--resume`, an
+`is_error` result with that text, the CLI exiting), the adapter recovers once: it opens a
+new session in the same worktree, seeds the user's turn with `resumeSummary` (the last
+messages and changed files of the visible chat) and emits one status note, "Started a
+new session; earlier context was summarized". The raw error is not shown and the turn
+completes. `resumeSummary` is a `SpawnContext` key computed host-side (`agent.ts`
+`startChat`, `helper-session.ts` `reopen`) and allow-listed in `ProviderOwner.swift`.
+The cwd is stored with the session id: the record's `sdkCwd` (set with `sdkSessionId`
+off the init message, relayed in the helper's `record` delta) goes back as the
+`resumeCwd` context key (allow-listed in `ProviderOwner.swift`; `sdkCwd` in
+`ProviderFrames.swift`), and `sessionCwd` resumes with it while it is still the chat's own
+directory (same device and inode as the worktree). A missing or different directory falls
+back to `canonicalCwd(root)`, since the agent must edit the chat's worktree. A session id
+recovered only from the provider owner after a crash carries no stored cwd.
+A session that was not resuming, or one that already completed a turn, still reports
+its errors. Sessions started under a non-canonical cwd by an older build go through the
+same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.
 
 ## Agent file access (LKM-163)
 

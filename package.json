@@ -34,6 +34,7 @@
     "typecheck": "bun run typecheck:node && bun run typecheck:preview",
     "test:prbody": "bun test/pr-body.mjs",
     "test:feedback-body": "bun test/feedback-body.mjs",
+    "test:feedback-diagnostics": "bun test/feedback-diagnostics.mjs",
     "test:slash-token": "bun test/slash-token.mjs",
     "test:skills": "bun test/skills-discovery.mjs",
     "test:github-connect": "bun test/github-connect.mjs",

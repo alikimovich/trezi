@@ -123,6 +123,8 @@ async function main() {
   let pickedRoot = fixture || (requestedProject ? resolve(requestedProject) : null)
   const root = resolve(__dirname, '../..')
   let host: NativeBridge | undefined
+  /** The host's pid from its ready event, for the feedback diagnostics' `sample`. */
+  let hostPid: number | null = null
   let runtime: ProjectRuntime | undefined
   let cleaning: Promise<void> | undefined
   const cleanup = (): Promise<void> => {
@@ -271,7 +273,10 @@ async function main() {
   registerSetupIpc()
   registerDiagnoseIpc()
   registerSimulatorIpc(() => window)
-  registerFeedbackIpc(() => window)
+  registerFeedbackIpc(
+    () => window,
+    () => (host ? { pid: hostPid, ping: () => host!.request('webViews', {}, 2000) } : null)
+  )
   registerGitRemoteIpc(ipcMain, projectHasRunningAgents)
   ipcMain.handle('project:pick', () => {
     if (pickedRoot) {
@@ -851,7 +856,8 @@ async function main() {
     if (attached) void openRequested(root)
     else openRequests.push(root)
   })
-  host.once('ready', async () => {
+  host.once('ready', async (message?: { pid?: unknown }) => {
+    if (typeof message?.pid === 'number') hostPid = message.pid
     host!.send('preferences', { values: preferences.snapshot() })
     host!.send('layoutWidth', { width: Number(preferences.get('trezi:native-chat-width')) || 440 })
     try {

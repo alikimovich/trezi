@@ -13,7 +13,9 @@ const workspace = {
 }
 const chat = {
   active: 'chat',
-  chats: new Map([['chat', { messages: [{ role: 'user', text: 'Private conversation' }] }]]),
+  chats: new Map([
+    ['chat', { root: '/a', messages: [{ role: 'user', text: 'Private conversation' }] }]
+  ]),
   command: async (command) => seeded.push(command)
 }
 const sheets = new NativeSheetController(
@@ -45,15 +47,23 @@ const support = new NativeSupportSheets(
 )
 await support.feedback()
 assert.ok(sheets.current.state.fields.some((f) => f.kind === 'image'))
+// LKM-165: diagnostics need explicit consent, which defaults to off and says what it covers.
+const consent = sheets.current.state.fields.find((f) => f.id === 'diagnostics')
+assert.equal(consent?.kind, 'choice')
+assert.equal(consent.value, 'no')
+assert.match(
+  sheets.current.state.fields.find((f) => f.id === 'diagnostics-detail').value,
+  /logs from the last hour.*landing state.*git status.*3-second sample.*Secrets are removed.*~/s
+)
 const id = sheets.current.state.id
 await sheets.action({
   id,
   action: 'send',
-  values: { body: 'Bug', screenshot: 'no', conversation: 'no' }
+  values: { body: 'Bug', screenshot: 'no', conversation: 'no', diagnostics: 'no' }
 })
 assert.deepEqual(calls.at(-1), [
   'feedback:submit',
-  { body: 'Bug', screenshot: null, conversation: null }
+  { body: 'Bug', screenshot: null, conversation: null, diagnostics: false, chat: null }
 ])
 // Success closes the form and shows a toast, not a "Feedback sent" window.
 assert.equal(sheets.current, null)
@@ -103,6 +113,14 @@ alert = sheets.current.state
 await sheets.action({ id: alert.id, action: 'cancel', values: {} })
 assert.equal(sheets.current, null, 'Esc cancels the error alert')
 
+await support.feedback()
+await sheets.action({
+  id: sheets.current.state.id,
+  action: 'send',
+  values: { body: 'Slow', screenshot: 'no', conversation: 'no', diagnostics: 'yes' }
+})
+assert.deepEqual(calls.at(-1)[1].diagnostics, true)
+assert.deepEqual(calls.at(-1)[1].chat, { key: 'chat', root: '/a' })
 support.diagnose('a')
 assert.equal(sheets.current.state.alert, true, 'Preview problem is an alert')
 assert.deepEqual(

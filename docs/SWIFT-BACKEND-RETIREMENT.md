@@ -228,6 +228,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/chat-park.ts` | helper | RepositoryOwner | Git reads (diff, show, status) |
 | `src/main/chat-workspaces.ts` | helper | RepositoryOwner | `du` and `git rev-parse` reads (LKM-136 usage, old-name folders' repositories) |
 | `src/main/chat-worktrees.ts` | helper | RepositoryOwner | `git show` reads of the live checkout |
+| `src/main/feedback-diagnostics.ts` | helper | PlatformOwner | opt-in feedback diagnostics reads: `git status`, `log show`, `sample` of the host (LKM-165) |
 | `src/main/file-tree.ts` | helper | SourceOwner | `git ls-files` read |
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |

@@ -16,13 +16,16 @@ import type {
   WorkspaceSnapshot
 } from '../shared/api'
 import { backgroundAgentOptions } from '../shared/background-model'
+import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
 import { projectKey } from '../shared/projectKey'
 import { type ProviderSession, pickProvider } from './backends'
+import { resumeSummary } from './backends/claude-resume'
 import { handoffPrompt } from './backends/conversation-handoff'
 import { seedFromRecord } from './backends/record'
 import type { SpawnContext } from './backends/types'
 import { chatIslandContext } from './chat-islands'
 import {
+  abandonLanding,
   adoptSession,
   afterTurn,
   applyParkedBranch,
@@ -35,12 +38,16 @@ import {
   initChatIsolation,
   isolatedCwd,
   isolationSnapshot,
+  landingInFlight,
   liveChatWorktreeIds,
   releaseChat,
   resolveParkedChat,
+  retryLanding,
+  sendRefusal,
   showParkedChat
 } from './chat-isolation'
 import { TurnTracker } from './chat-turns'
+import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
   cleanUpWorkspacesNow,
   initChatWorkspaces,
@@ -207,6 +214,10 @@ const opening = new Map<string, Promise<OpenProjectResult>>()
 // so it can't outlive its session.
 const runningKeys = new Set<string>()
 const preparingTurns = new Map<string, { cancelled: boolean }>()
+// LKM-165: when each running chat last made progress, and the turn the owner admitted
+// last, so a turn that stops making progress can be ended in both places.
+const watchdog = new TurnWatchdog()
+const turnIds = new Map<string, string>()
 // Each provider session's sends in order: which turn (and run of it) an event belongs to.
 const trackers = new WeakMap<ProviderSession, TurnTracker>()
 // A model switch's recorded conversation, sent once with the next turn when the owner
@@ -311,6 +322,7 @@ function evaluateProjectMemory(sessionKey: string): void {
 const interactiveEvents =
   (sessionKey: string, tracker: TurnTracker) =>
   (e: AgentEvent): void => {
+    watchdog.touch(sessionKey)
     if (e.type === 'permission-request')
       void conversation()
         .register(sessionKey, e.request.id, 'permission', e.request.toolName)
@@ -775,8 +787,11 @@ export function registerAgentIpc(
     sessionKey: string,
     options: AgentOptions,
     cwd: string,
-    resumeSessionId?: string
+    resumeSessionId?: string,
+    prior?: Parameters<typeof resumeSummary>[0] & { sdkCwd?: string }
   ): Promise<ProviderSession> => {
+    // If the resume fails the new session starts from what the chat showed (LKM-165).
+    const summary = resumeSessionId ? resumeSummary(prior) : ''
     const tracker = new TurnTracker()
     const s = await startProviderSession(
       pickProvider(options),
@@ -787,7 +802,9 @@ export function registerAgentIpc(
         emitKey: sessionKey,
         liveRoot: root,
         onEvent: interactiveEvents(sessionKey, tracker),
-        ...(resumeSessionId ? { resumeSessionId } : {})
+        ...(resumeSessionId ? { resumeSessionId } : {}),
+        ...(summary ? { resumeSummary: summary } : {}),
+        ...(resumeSessionId && prior?.sdkCwd ? { resumeCwd: prior.sdkCwd } : {})
       })
     )
     trackers.set(s, tracker)
@@ -866,7 +883,7 @@ export function registerAgentIpc(
       const cwd = await isolatedCwd(root, key)
       let s: ProviderSession
       try {
-        s = await startChat(root, key, options, cwd, resumeSessionId)
+        s = await startChat(root, key, options, cwd, resumeSessionId, priorCurrent ?? undefined)
       } catch (err) {
         // A stale Claude resume id shouldn't block opening the project — fall
         // back to a fresh provider thread and still paint the saved transcript.
@@ -1054,7 +1071,10 @@ export function registerAgentIpc(
       seedFromRecord(s.record, previous, { reuseId: true })
       // A new provider session has no SDK history, even though the UI keeps it.
       if (sdkSessionId) s.record.sdkSessionId = sdkSessionId
-      else delete s.record.sdkSessionId
+      else {
+        delete s.record.sdkSessionId
+        delete s.record.sdkCwd
+      }
       s.record.endedAt = null
       try {
         await conversation().handoff(sessionKey, options, s.record, reason)
@@ -1143,7 +1163,7 @@ export function registerAgentIpc(
         // resumed chat under main's defaults ('default' = ask for every edit) while
         // the renderer's toolbar still showed the chat's own mode.
         const opts: AgentOptions = { ...options, provider: 'claude' }
-        const s = await startChat(root, sessionKey, opts, cwd, rec.sdkSessionId)
+        const s = await startChat(root, sessionKey, opts, cwd, rec.sdkSessionId, rec)
         adoptSession(sessionKey, s.record, root)
         // Seed the fresh live record with the resumed chat's on-disk history. The
         // SDK resumes the conversation context and the renderer paints the past
@@ -1313,7 +1333,9 @@ export function registerAgentIpc(
       const key = requestedKey ?? activeKey
       const session = key ? sessions.get(key) : null
       if (requestedKey && !session) throw new Error('This chat is closed.')
-      if (key && runningKeys.has(key)) throw new Error('This chat is already running.')
+      // The chat is busy: the caller queues the message (and the watchdog bounds the wait).
+      if (key && staleChat(key, STALE_SEND_MS)) await settleChat(key, STUCK_NOTE)
+      if (key && runningKeys.has(key)) throw new Error(CHAT_BUSY)
       if (!session || !key) {
         safeSend(getWindow, 'agent:event', {
           type: 'error',
@@ -1323,15 +1345,24 @@ export function registerAgentIpc(
       }
       const id =
         typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
+      const admit = () => conversation().begin(key, id)
       try {
-        await conversation().begin(key, id)
+        await admit().catch(async (error) => {
+          // The owner still holds a turn this process no longer runs (a landing that
+          // ended without its release): free it once, then admit the message (LKM-165).
+          if (!(error instanceof ConversationError && error.code === 'busy')) throw error
+          if (runningKeys.has(key) || preparingTurns.has(key) || !(await releaseOwnerTurn(key)))
+            throw error
+          await admit()
+        })
       } catch (error) {
-        if (error instanceof ConversationError && error.code === 'busy')
-          throw new Error('This chat is already running.')
+        if (error instanceof ConversationError && error.code === 'busy') throw new Error(CHAT_BUSY)
         if (error instanceof ConversationError && error.code === 'notFound')
           throw new Error('This chat is closed.')
         throw error
       }
+      turnIds.set(key, id)
+      watchdog.touch(key)
       const preparation = { cancelled: false }
       preparingTurns.set(key, preparation)
       const note = images?.length ? `${text} [${images.length} image(s) attached]`.trim() : text
@@ -1346,11 +1377,10 @@ export function registerAgentIpc(
         await beforeTurn(key, text)
         if (preparation.cancelled) throw new Error('Message cancelled before sending.')
         if (sessions.get(key) !== session) throw new Error('This chat is closed.')
-        // A stopped turn's hold is not a conflict: the next turn continues on top of it.
-        const parked = requestedKey ? isolationSnapshot(requestedKey) : undefined
-        if (parked?.state === 'parked' && parked.reason !== 'interrupted') {
-          throw new Error('Resolve this chat’s conflicting changes before sending queued messages.')
-        }
+        // Only an unresolved drift park refuses; a stopped or failed-landing hold and
+        // the Resolve card's own turn continue on top of it (LKM-165).
+        const refusal = requestedKey ? sendRefusal(requestedKey) : null
+        if (refusal) throw new Error(refusal)
         const entry = { role: 'user' as const, text: note, at: Date.now() }
         const { handoff } = await conversation()
           .send(key, id, entry)
@@ -1383,6 +1413,7 @@ export function registerAgentIpc(
         const history = handoff ? (handoffHistory.get(key) ?? []) : []
         if (handoff) handoffHistory.delete(key)
         trackers.get(session)?.push(id, 0)
+        watchdog.touch(key)
         session.send(
           handoffPrompt(
             history,
@@ -1594,6 +1625,14 @@ export function registerAgentIpc(
     return discardParkedChat(sessionKey)
   })
 
+  // LKM-165 landing card — "Retry": land the held batch again; the outcome reaches the
+  // chat as the usual isolation event.
+  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey) =>
+    sessionKey
+      ? retryLanding(sessionKey)
+      : { ok: false, state: 'isolated' as const, error: 'no-session' }
+  )
+
   // LKM-151 post-Stop card: revert (undoable), undo that revert, or keep the stopped
   // turn's held work. "Ask agent to finish" is an ordinary turn from the renderer.
   ipcMain.handle('agent:revert-stopped', async (_e, sessionKey = activeKey) =>
@@ -1701,9 +1740,62 @@ export function registerAgentIpc(
     return { projects: [...byProject.values()], activeRoot }
   })
 
-  ipcMain.handle('agent:interrupt', async (_e, requestedKey?: string) => {
+  // The owner's turn for a chat this process no longer runs: end it so the chat takes
+  // the next message. Safe when the owner already moved on (a stale turn changes nothing).
+  const releaseOwnerTurn = async (key: string): Promise<boolean> => {
+    const turn = turnIds.get(key)
+    if (!turn) return false
+    const aborted = await conversation()
+      .abort(key, turn)
+      .catch(() => false)
+    const landed = await conversation()
+      .landed(key, turn, Date.now())
+      .then((result) => result.landed)
+      .catch(() => false)
+    return aborted || landed
+  }
+  // A chat that shows running with nothing in flight: no provider turn, no landing, and
+  // no progress for `quietMs`. Nothing will ever end its running state by itself.
+  const staleChat = (sessionKey: string, quietMs: number): boolean => {
+    const live = sessions.get(sessionKey)
+    return (
+      !!live &&
+      runningKeys.has(sessionKey) &&
+      !trackers.get(live)?.current &&
+      !landingInFlight(sessionKey) &&
+      watchdog.quietFor(sessionKey) >= quietMs
+    )
+  }
+  // Both halves of the running state end together: this process's mirror and the owner's
+  // phase. The chat is told in its own transcript and its UI leaves "running" (LKM-165).
+  const settleChat = async (sessionKey: string, note: string): Promise<void> => {
+    await releaseOwnerTurn(sessionKey)
+    runningKeys.delete(sessionKey)
+    preparingTurns.delete(sessionKey)
+    watchdog.forget(sessionKey)
+    const session = sessions.get(sessionKey)
+    const turn = turnIds.get(sessionKey)
+    session?.emit({ type: 'status', text: note })
+    session?.emit({ type: 'landing-finished', ...(turn ? { turn } : {}) })
+  }
+  // A running chat with no progress for the limit: stop its provider turn and its
+  // landing the way Stop does, then settle whatever those left behind.
+  const endStuckTurns = async (): Promise<void> => {
+    for (const sessionKey of watchdog.stuck([...runningKeys])) {
+      if (!sessions.has(sessionKey)) continue
+      await interruptChat(sessionKey).catch(() => {})
+      if (runningKeys.has(sessionKey)) await settleChat(sessionKey, STUCK_NOTE)
+    }
+  }
+  const stuckTimer = setInterval(() => void endStuckTurns(), WATCHDOG_INTERVAL_MS)
+  stuckTimer.unref?.()
+  app.on('before-quit', () => clearInterval(stuckTimer))
+  ipcMain.handle('agent:interrupt', (_e, requestedKey?: string) => interruptChat(requestedKey))
+  const interruptChat = async (requestedKey?: string): Promise<void> => {
     const sessionKey = requestedKey === undefined ? activeKey : requestedKey
     if (sessionKey) cancelProjectUi(sessionKey)
+    // A landing in flight ends here: its work stays held (Retry) and the chat is free.
+    if (sessionKey) abandonLanding(sessionKey, 'Stopped before the landing finished.')
     const preparation = sessionKey ? preparingTurns.get(sessionKey) : undefined
     if (preparation) preparation.cancelled = true
     // The owner marks the turn cancelled: it lands as failed and never continues.
@@ -1737,7 +1829,10 @@ export function registerAgentIpc(
     if (outcome && typeof outcome === 'object' && outcome.hardStopped) {
       await restartChatSession(root, sessionKey, session.options, 'restart')
     }
-  })
+    // Stop on a chat that shows running with nothing in flight (no provider turn, no
+    // landing, quiet for a while): settle it, so Stop is never a dead end (LKM-165).
+    if (staleChat(sessionKey, STALE_STOP_MS)) await settleChat(sessionKey, STUCK_NOTE)
+  }
 
   // Don't leave any backend subprocess running after trezi quits. Each chat is closed
   // through the owner (its record saved, its checkpoint dropped); `conversationsClosed`

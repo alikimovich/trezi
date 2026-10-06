@@ -1,5 +1,8 @@
 import type { Diagnosis, FeedbackInput, FeedbackResult } from '../shared/api'
 import type { NativeSheetController } from './sheets-runtime'
+/** What the diagnostics consent covers (gathered by src/main/feedback-diagnostics.ts). */
+export const DIAGNOSTICS_CONSENT =
+  'App, service and helper logs from the last hour, this chat’s landing state, the git status of its worktree, and a 3-second sample of the app if it is busy. Secrets are removed and your home folder is shortened to ~.'
 export class NativeSupportSheets {
   constructor(
     readonly sheets: NativeSheetController,
@@ -70,7 +73,24 @@ export class NativeSupportSheets {
                   value: conversation
                 }
               ]
-            : [])
+            : []),
+          // LKM-165: diagnostics are attached only with this explicit consent.
+          {
+            id: 'diagnostics',
+            label: 'Include diagnostics',
+            kind: 'choice',
+            value: 'no',
+            choices: [
+              { value: 'yes', label: 'Include' },
+              { value: 'no', label: 'Do not include' }
+            ]
+          },
+          {
+            id: 'diagnostics-detail',
+            label: 'Diagnostics',
+            kind: 'readonly',
+            value: DIAGNOSTICS_CONSENT
+          }
         ],
         actions: [
           { id: 'cancel', label: 'Cancel' },
@@ -82,7 +102,12 @@ export class NativeSupportSheets {
         const input = {
           body: action.values.body,
           screenshot: action.values.screenshot === 'yes' ? screenshot : null,
-          conversation: action.values.conversation === 'yes' ? conversation : null
+          conversation: action.values.conversation === 'yes' ? conversation : null,
+          diagnostics: action.values.diagnostics === 'yes',
+          chat:
+            action.values.diagnostics === 'yes' && chat
+              ? { key: this.sheets.chat.active, root: chat.root }
+              : null
         }
         const error = await this.submit(input, action.id)
         if (this.sheets.current?.state.id !== action.id) return
