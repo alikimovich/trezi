@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview select slowdown with image attachments (LKM-171, issue #231)
+
+- [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.
+- [x] Add a synthetic 100-hover regression test with two SVG attachments and 2 KB of pasted code.
+- [x] Move latency assertions into the native sent-attachment fixture and stamp selection across page, host, service and Bun; cancel hover on mouseout, scroll and blur.
+- [x] Record synthetic foreground hover and select timing with rendered SVG/code chat, including bridge hops and WebContent, and enforce the 16 ms / 50 ms budgets in the native fixture.
 ## Unstamped inspector fields (LKM-174)
 
 - [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.
