@@ -82,7 +82,7 @@ export class NativeReviewController {
                 'This removes the saved messages from history. It does not change your project files.',
               fields: [],
               actions: [
-                { id: 'back', label: 'Back' },
+                { id: 'back', label: 'Back', cancel: true },
                 { id: 'delete', label: 'Delete chat', primary: true, destructive: true }
               ]
             },
@@ -115,7 +115,7 @@ export class NativeReviewController {
                 'Delete the saved branch and chat history. Any changes already applied to your project will stay.',
               fields: [],
               actions: [
-                { id: 'back', label: 'Back' },
+                { id: 'back', label: 'Back', cancel: true },
                 { id: 'discard', label: 'Discard', primary: true, destructive: true }
               ]
             },
