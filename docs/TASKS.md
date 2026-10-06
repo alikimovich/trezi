@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Product logging: one log folder, Copy Logs for Support, trezi logs (LKM-168)
 
+- [x] Repair the failed-open native chat gate: clear the loaded chat on selection failure and hide it when a loaded preview enters error.
 - [x] After merging LKM-169, verify the Resolve queue's real provider prompt by its queued-text suffix and exact call count in the native chat smoke.
 - [x] Review repair: omit arbitrary dev-server output and helper stderr, lock the shared size check, and make the native turn check use `agent:send` and the provider event hook.
 - [x] One folder, `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log`, 7 days, 20 MB a day; `app`, `service`, `backend`, `helper`, `preview` and `devserver` lines (`src/main/product-log.ts`, `src/service/ProductLog.swift`).

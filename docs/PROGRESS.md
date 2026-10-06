@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-168 native chat gate verification repair
+
+- A failed project selection now clears its loaded chat key, including when a restart fails after the project was previously loaded. The shell also closes the chat gate for a preview error that arrives after selection, such as a dev server exit. Unit checks cover both paths; this addresses the failed-open chat-gate smoke from manager verification.
+
 ## 2026-10-05 — LKM-168 native smoke after the LKM-169 merge
 
 - The Resolve queue smoke now checks that the second provider call is made exactly once and its prompt ends with the queued composer text. The real `agent:send` path prepends Trezi UI instructions even when UI composition is off; comparing the full prompt to the bare text failed before emitting the queued turn's `done` event, which left the next attachment smoke waiting behind a running turn.
