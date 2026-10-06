@@ -60,6 +60,7 @@ import {
   PREVIEW_TOGGLE_SELECT as TOGGLE_SELECT,
   PREVIEW_TOOLBAR_ACTION as TOOLBAR_ACTION
 } from '../shared/preview-channels'
+import { coalesceHover } from './coalesce-hover'
 import { installDragReorder } from './drag-reorder'
 import { buildLayersSnapshot, type LayerFingerprint, resolveLayerElement } from './layers'
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
@@ -76,6 +77,20 @@ type CommentMode = 'comment' | 'annotate' | null
 // isolated world and can't see the page's `window`, but `location` is shared.
 // Phase 2/3 add the simulator-specific overlay separately.
 const IS_SIM_BRIDGE = typeof location !== 'undefined' && /[?&]treziSim=1\b/.test(location.search)
+// Opt-in timing for a real preview session; the Performance timeline can be
+// inspected in WebContent without filling it during normal pointer movement.
+const previewTimings = {
+  enabled: typeof location !== 'undefined' && /[?&]treziPerf=1\b/.test(location.search),
+  hover: [] as number[],
+  hoverWork: [] as number[],
+  hoverPaintUpperBound: [] as number[],
+  select: [] as number[],
+  roundTrip: [] as number[],
+  hops: [] as Array<Record<string, number>>
+}
+;(
+  globalThis as typeof globalThis & { __treziPreviewTimings: typeof previewTimings }
+).__treziPreviewTimings = previewTimings
 
 /** Computed styles worth surfacing in the inspector + Styles panel: the v1
  *  longhand set (curated, not the whole CSSOM). Longhands, not shorthands, so
@@ -696,6 +711,24 @@ function drawOverlay(el: Element): void {
   chipSize(overlayLabel, r)
 }
 
+// Hover has no host/Bun/XPC hop. Coalesce WebContent's layout reads and writes.
+const hover = coalesceHover(({ el, at }: { el: Element; at: number }) => {
+  if (!el.isConnected || (!active && !commentMode) || editing || commenting) return
+  const start = performance.now()
+  drawOverlay(el)
+  drawMeasure(el)
+  if (previewTimings.enabled) {
+    const end = performance.now()
+    previewTimings.hover.push(end - at)
+    previewTimings.hoverWork.push(end - start)
+    performance.measure('trezi.preview.hover', { start: at, end })
+    // WebKit paints after this callback and before the next animation frame.
+    // The latter timestamp bounds pointer-to-paint without claiming an exact
+    // compositor timestamp that JavaScript cannot observe.
+    requestAnimationFrame(() => previewTimings.hoverPaintUpperBound.push(performance.now() - at))
+  }
+})
+
 // ---- Alt/Option spacing measurement ----------------------------------------
 
 // Figma's measurement red. Deliberately not the blue of select/hover — the
@@ -1209,6 +1242,7 @@ function onMove(e: MouseEvent): void {
   }
   if (editing || commenting) return // frozen while editing / composing
   if (!active && !commentMode) return
+  const altChanged = altHeld !== e.altKey
   altHeld = e.altKey
   const el = e.target as Element | null
   if (!el || isOverlay(el)) {
@@ -1216,16 +1250,18 @@ function onMove(e: MouseEvent): void {
     // leaving the last-crossed element lit under the toolbar reads as if IT
     // were selected. The persistent selection outlines are a separate layer.
     lastHovered = null
+    hover.clear()
     hideOverlay()
     clearMeasure()
     return
   }
+  if (el === lastHovered && !altChanged) return
   lastHovered = el
-  drawOverlay(el)
-  drawMeasure(el)
+  hover.move({ el, at: performance.now() })
 }
 
 function onClick(e: MouseEvent): void {
+  const selectStart = previewTimings.enabled ? performance.now() : 0
   if (threeD.active()) return
   if (editing) return
   // Only genuine user input acts — a hostile page can dispatch synthetic clicks
@@ -1238,6 +1274,7 @@ function onClick(e: MouseEvent): void {
     e.preventDefault()
     e.stopPropagation()
     lastHovered = null
+    hover.clear()
     hideOverlay()
     clearMeasure()
     const group = e.shiftKey
@@ -1259,6 +1296,11 @@ function onClick(e: MouseEvent): void {
     resetInput()
     showToolbar(target)
     setSelectionHighlight(target, e.shiftKey ? group : undefined)
+    if (previewTimings.enabled) {
+      const end = performance.now()
+      previewTimings.select.push(end - selectStart)
+      performance.measure('trezi.preview.select', { start: selectStart, end })
+    }
   } else if (commentMode) {
     e.preventDefault()
     e.stopPropagation()
@@ -1642,6 +1684,8 @@ function setActive(next: boolean): void {
     ensureOverlay()
     document.documentElement.style.cursor = 'crosshair'
   } else {
+    hover.clear()
+    lastHovered = null
     // Disarming mid-edit (toolbar toggle / project re-open): discard the edit so
     // it can't strand the element or commit against a stale source.
     if (editing) endEdit()
@@ -1822,11 +1866,16 @@ if (!IS_SIM_BRIDGE) {
   // rather than leave it stuck on when focus comes back.
   window.addEventListener('blur', () => {
     altHeld = false
+    hover.clear()
+    lastHovered = null
+    hideOverlay()
     clearMeasure()
   })
   window.addEventListener(
     'scroll',
     () => {
+      hover.clear()
+      lastHovered = null
       if (commenting) {
         drawOverlay(commenting) // keep the highlight tracking the frozen el
       } else if (active || commentMode) {
@@ -1855,6 +1904,7 @@ if (!IS_SIM_BRIDGE) {
     (e: MouseEvent) => {
       if (e.relatedTarget || commenting) return
       lastHovered = null
+      hover.clear()
       hideOverlay()
       clearMeasure()
     },

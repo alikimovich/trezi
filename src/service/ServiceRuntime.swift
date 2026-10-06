@@ -217,9 +217,16 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
             switch frame.kind {
             case .legacy:
                 guard let payload = frame.payload,
-                      let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                      var object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
                       object["event"] is String else { throw ServiceContractFailure.invalidRequest }
-                var line = payload; line.append(10)
+                var forward = payload
+                if object["event"] as? String == "ipc", var message = object["message"] as? [String: Any],
+                   message["channel"] as? String == "trezi:preview:element-picked", var trace = message["trace"] as? [String: Any] {
+                    trace["serviceAt"] = Date().timeIntervalSince1970 * 1000
+                    message["trace"] = trace; object["message"] = message
+                    forward = (try? JSONSerialization.data(withJSONObject: object)) ?? payload
+                }
+                var line = forward; line.append(10)
                 guard let input = child?.input else { throw ServiceContractFailure.unavailable }
                 // Accepted in order; exit/EOF (not a write error) decides the lifecycle.
                 writer.async { try? input.write(contentsOf: line) }

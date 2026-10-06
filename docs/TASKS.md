@@ -14,6 +14,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Help › Copy Logs for Support, Show Logs in Finder, Export Logs… (`src/native/HostLogs.swift`, `src/native/log-support.ts`); `trezi logs [--since] [--follow]`.
 - [x] Feedback diagnostics attach the last 30 minutes with consent; `docs/agent-guide/logs.md`.
 - [x] Native chat smoke checks a turn's start and end lines in the test run's own log folder (`src/native/smoke-logs.ts`).
+## Preview select slowdown with image attachments (LKM-171, issue #231)
+
+- [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.
+- [x] Add a synthetic 100-hover regression test with two SVG attachments and 2 KB of pasted code.
+- [x] Move latency assertions into the native sent-attachment fixture and stamp selection across page, host, service and Bun; cancel hover on mouseout, scroll and blur.
+- [x] Record synthetic foreground hover and select timing with rendered SVG/code chat, including bridge hops and WebContent, and enforce the 16 ms / 50 ms budgets in the native fixture.
 ## Unstamped inspector fields (LKM-174)
 
 - [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.
