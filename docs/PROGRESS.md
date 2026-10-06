@@ -2,6 +2,30 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-168: product logging, one folder, Copy Logs for Support, `trezi logs`
+
+- **One folder, every process.** Each process appends straight to `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log` with `O_APPEND`; `TREZI_LOG_DIR` overrides the folder.
+  - I chose direct writes over relaying lines through the service because a relay would lose the lines that matter most when the service or XPC fails.
+  - The 20 MB cap reads the shared file's size, so it holds across processes. Old days are pruned when a day file opens.
+  - Writers: `src/main/product-log.ts` (Bun backend, provider helpers, plus `preview` and `devserver` lines written on their behalf) and `src/service/ProductLog.swift` (host `app`, `service`, written on a private queue). Both are no-ops until configured, so owner tests write nothing.
+- **Events.**
+  - Turns: start, end and failure with provider and resolved model (`src/main/turn-log.ts`, hooked into `agent.ts`).
+  - Landing outcome with the Git result and landing failures (`chat-isolation.ts`); parked apply, resolve staging and discard (`chat-worktrees.ts`); worktree create, sync, remove and reclaim (`worktrees.ts`).
+  - Helpers and backend: provider helper start, exit and crash. A crash is an exit of the current session that the owner had not stopped (`ProviderOwner.exited`). Backend start and exit (`ServiceRuntime`).
+  - Preview: load, reload, failed load and web-content crash (`Host.swift`); a once-a-minute preview bridge message count (`log-support.ts`).
+  - Host and XPC: host commands slower than 250 ms (`Host.dispatch`, `HostLogs.swift`); XPC failures and lost connections (`ServiceClient`, `ServiceRuntime`).
+  - Dev server lines cut to 300 characters.
+- **Privacy.** One `redact` (token shapes, `key=value` secrets, URL credentials, private keys, home → `~`) used by the log and by the LKM-165 feedback diagnostics, mirrored in Swift. `test/product-log.mjs` checks the two writers produce identical output. Console output is deliberately not copied into the log: provider and SDK messages there can carry prompt text.
+- **Help menu and CLI.**
+  - The Help menu, the pasteboard and the save panel are native (`HostLogs.swift`, host commands `copyText` and `pickLogExport`). Bun builds the text and the zip (`src/native/log-support.ts`, `ditto`). Show Logs in Finder is native only.
+  - Export Logs… writes `Trezi Logs/trezi.log` (24 h) and `summary.txt` (version, macOS, Bun, harness versions, project framework).
+  - `trezi logs [--since 30m] [--follow]` (`bin/trezi`, `bin/trezi.mjs`).
+  - The feedback diagnostics' main part is now the last 30 minutes of the log.
+- **Tests.**
+  - The provider helper's scrubbed environment keeps `TREZI_LOG_DIR`.
+  - `scripts/start-native.mjs` sends `--test` runs to `<test dir>/logs`, and the unit runner gives each test its own log folder.
+  - New `test/product-log.mjs` (unit). The native chat smoke (`src/native/smoke-logs.ts`) checks a turn's start and end lines and that host, service and backend share the run's folder. The smoke's stubbed send calls the same `turn-log` functions `agent.ts` calls, because no real provider runs in the smoke.
+
 ## 2026-10-05 — LKM-165 repair 3: an island reveal must hold its edge, not touch it once
 
 - **Manager failure.** `test:native` (chat-scroll, first 440pt top reveal) failed with `Island reveal did not settle at top; revision=1, applied=1, attempts=1, frame={{32, 44.237}, {376, 16}}`. This round's changes touch no Swift chat layout; the `chat-snapshot`/`chat-controller` files named by triage only changed the activity row text. My earlier native run (chat, core) passed the same test, so this is a race in the reveal loop.

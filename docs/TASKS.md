@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Product logging: one log folder, Copy Logs for Support, trezi logs (LKM-168)
+
+- [x] One folder, `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log`, 7 days, 20 MB a day; `app`, `service`, `backend`, `helper`, `preview` and `devserver` lines (`src/main/product-log.ts`, `src/service/ProductLog.swift`).
+- [x] Turn start/end/error with provider and resolved model, landing/parking/resolve with the Git result, worktree create/remove, helper start/exit/crash, preview load/reload/crash, slow host commands (>250 ms), XPC errors.
+- [x] Redaction of secrets and `~` paths, identical in Bun and Swift (`test/product-log.mjs`).
+- [x] Help › Copy Logs for Support, Show Logs in Finder, Export Logs… (`src/native/HostLogs.swift`, `src/native/log-support.ts`); `trezi logs [--since] [--follow]`.
+- [x] Feedback diagnostics attach the last 30 minutes with consent; `docs/agent-guide/logs.md`.
+- [x] Native chat smoke checks a turn's start and end lines in the test run's own log folder (`src/native/smoke-logs.ts`).
+
 ## Long chat slows the app and edits never land (LKM-165, issue #230)
 
 - [x] Root cause documented: the drift-park send guard refused the Resolve turn, and landing exceptions were swallowed (`docs/WORKTREES.md`, `docs/PROGRESS.md`).

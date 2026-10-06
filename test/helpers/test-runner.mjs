@@ -84,7 +84,8 @@ export async function runCommand({
       cwd,
       detached: process.platform !== 'win32',
       stdio: ['ignore', fd, fd],
-      env: { ...process.env, TREZI_USER_DATA: profile }
+      // A test's product log stays in its own profile, never ~/Library/Logs/Trezi.
+      env: { ...process.env, TREZI_USER_DATA: profile, TREZI_LOG_DIR: join(profile, 'logs') }
     })
     signal?.addEventListener('abort', abort, { once: true })
     if (signal?.aborted) abort()

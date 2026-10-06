@@ -2,7 +2,7 @@ import type { Diagnosis } from '../shared/api'
 import type { NativeSheetController } from './sheets-runtime'
 /** What the diagnostics consent covers (gathered by src/main/feedback-diagnostics.ts). */
 export const DIAGNOSTICS_CONSENT =
-  'App, service and helper logs from the last hour, this chat’s landing state, the git status of its worktree, and a 3-second sample of the app if it is busy. Secrets are removed and your home folder is shortened to ~.'
+  'The last 30 minutes of Trezi’s logs (Help → Show Logs in Finder), the system log from the last hour, this chat’s landing state, the git status of its worktree, and a 3-second sample of the app if it is busy. Secrets are removed and your home folder is shortened to ~.'
 export class NativeSupportSheets {
   constructor(
     readonly sheets: NativeSheetController,

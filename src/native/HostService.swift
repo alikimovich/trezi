@@ -27,11 +27,14 @@ extension Host {
                 earlyServiceFrames.removeAll()
                 client.start(onReady: { emit(["event": "ready", "pid": Int(getpid())]) }, onMessage: { [weak self] data in
                     guard let command = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-                    self?.command(command)
+                    self?.dispatch(command)
                 }, onFailure: { [weak self] message in
                     fputs("\(message)\n", stderr); self?.serviceFailed = true; self?.terminateHost()
                 })
-            } catch { fputs("Service launch failed: \(error)\n", stderr); serviceFailed = true; terminateHost() }
+            } catch {
+                fputs("Service launch failed: \(error)\n", stderr); ProductLog.error("xpc", "Service launch failed: \(error)")
+                serviceFailed = true; terminateHost()
+            }
 
     }
     // `open -a Trezi <folder>`, `trezi <folder>`, or a folder dropped on the Dock icon:
@@ -46,6 +49,7 @@ extension Host {
     // NSApp.terminate exits the process itself; a failure status must be applied here.
     func applicationWillTerminate(_ notification: Notification) {
         let status = serviceFailed ? 1 : exitStatus
+        ProductLog.info("lifecycle", "App quit status=\(status)"); ProductLog.flush()
         if status != 0 { fflush(stdout); fflush(stderr); exit(status) }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

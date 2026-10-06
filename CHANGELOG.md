@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Inspector island: element controls open from chat, show authored fields by default and apply live to the source, with one Undo per gesture.
 - Editor toolbar and a popped-out source editor with a file tree.
 - Versioning: Settings › General and `trezi --version` show "Trezi X.Y.Z (build N, short sha)"; About Trezi shows the same; `bun run release` cuts tagged releases with this changelog.
+- Product logs: every Trezi process writes redacted lifecycle lines to `~/Library/Logs/Trezi` (7 days, 20 MB a day); Help › Copy Logs for Support, Show Logs in Finder and Export Logs…, `trezi logs [--since 30m] [--follow]`, and the feedback diagnostics attach the last 30 minutes with consent.
 
 ### Fixed
 - Shadow Light drags on the iPhone Frame Shadow island no longer flicker in the live preview while the source is written once at the end of the gesture (LKM-140).

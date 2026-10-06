@@ -36,6 +36,8 @@ try {
   const test = nativeServiceLaunchSpec('/checkout', ['--test'], env, '/bun', directory)
   assert.equal(test.profile, join(directory, 'profile'))
   assert.equal(test.env.TREZI_NATIVE_TEST_DIR, directory)
+  assert.equal(test.env.TREZI_LOG_DIR, join(directory, 'logs'))
+  assert.equal(current.env.TREZI_LOG_DIR, env.TREZI_LOG_DIR)
   assert.equal(test.args[1], 'ephemeral')
   // The default profile comes from the service, which makes the `Praxis Native` alias.
   assert.throws(() => defaultProfile(join(directory, 'no-build'), directory), /run bun run build/)

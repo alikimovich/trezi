@@ -1,7 +1,10 @@
 import { writeFileSync } from 'node:fs'
+import { logTurnEvent, logTurnStart } from '../main/turn-log'
+import type { AgentOptions } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { serviceEvents, views } from './platform'
+import { checkProductLog } from './smoke-logs'
 import { nativeWorkspace } from './workspace-runtime'
 
 /** Deterministic stream/card coverage without calling a paid provider. */
@@ -24,9 +27,12 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   const priorError = nativeWorkspace.state.error
   const originalInvoke = nativeChat.services.invoke
   const sent: unknown[][] = []
+  // The stub stands in for the provider: it logs the turn as agent:send would (LKM-168).
+  const turn = 'smoke-turn'
   nativeChat.services.invoke = async (channel, ...args) => {
     if (channel === 'agent:send') {
       sent.push(args)
+      logTurnStart(state.chat, turn, { provider: 'claude', model: 'fixture' } as AgentOptions)
       return
     }
     return originalInvoke(channel, ...args)
@@ -140,6 +146,7 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     send({ type: 'permission-resolved', id: 'beam-wait' })
     await wait((state) => state.activityKind === 'writing')
     send({ type: 'done', landingPending: true })
+    logTurnEvent(state.chat, { type: 'done', turn })
     await wait((state) => state.activityKind === 'applying')
     if ((await host.request('composerInspect')).buttonBeam)
       throw new Error('Landing retained thinking beam')
@@ -202,6 +209,7 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     })
     await wait((state) => !state.cards.includes('other-chat-permission'))
     send({ type: 'permission-resolved', id: 'other-chat-permission' })
+    await checkProductLog(state.chat, turn)
   } finally {
     nativeChat.services.invoke = originalInvoke
   }

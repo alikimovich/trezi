@@ -126,15 +126,22 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                     environment["TREZI_SERVICE_EXECUTABLE"] = CommandLine.arguments[0]
                     environment["TREZI_USER_DATA"] = requested.profile
                     launch = requested
+                    // LKM-168: the product log, in the folder the host's launch environment names.
+                    ProductLog.configure(process: "service", environment: requested.environment)
+                    ProductLog.info("lifecycle", "Service started pid=\(getpid())")
                     do {
                         child = try supervisor.start(executable: requested.bun,
                             arguments: [requested.backend] + requested.arguments, environment: environment,
                             profileDescriptor: exclusion?.guardDescriptor, guardianExecutable: CommandLine.arguments[0],
                             diagnostics: session.diagnostics?.fileDescriptor) { [weak self] status in
                             guard let self else { return }
+                            if status == 0 { ProductLog.info("backend", "Backend exited status=0") }
+                            else { ProductLog.error("backend", "Backend exited status=\(status)") }
                             self.queue.async { self.stop(backendStatus: status == 0 ? 0 : 1) }
                         }
+                        ProductLog.info("backend", "Backend started pid=\(child?.pid ?? 0)")
                     } catch {
+                        ProductLog.error("backend", "Backend failed to start: \(error)")
                         launch = nil; ledger = nil; exclusion?.release(); exclusion = nil
                         throw ServiceContractFailure.unavailable
                     }
@@ -236,6 +243,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
             case .hello: break
             }
         } catch {
+            ProductLog.warn("xpc", "Request \(frame.kind) refused: \(error)")
             answer(error as? ServiceContractFailure ?? .ioFailure)
         }
     }
@@ -304,6 +312,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         }
         session.waits.removeAll()
         guard active === session else { return }
+        ProductLog.warn("xpc", "App connection lost; stopping in 5 s unless it reconnects")
         active = nil; generation += 1
         let expected = generation
         queue.asyncAfter(deadline: .now() + 5) { [weak self] in
@@ -316,6 +325,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
     func stop(backendStatus: Int32 = 1, completion: (() -> Void)? = nil) {
         guard !stopping else { completion?(); return }
         stopping = true
+        ProductLog.info("lifecycle", "Service stopping backendStatus=\(backendStatus)")
         // No owner switch: retain every store and let Bun finish its existing shutdown.
         // Let accepted host frames (final persisted state) reach Bun before EOF; bounded.
         let drained = DispatchSemaphore(value: 0)
@@ -364,7 +374,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         }
         completion?()
         active?.deliver(Data("{\"method\":\"serviceStopped\",\"status\":\(backendStatus)}".utf8))
-        queue.asyncAfter(deadline: .now() + 0.1) { exit(0) }
+        queue.asyncAfter(deadline: .now() + 0.1) { ProductLog.flush(); exit(0) }
     }
 }
 

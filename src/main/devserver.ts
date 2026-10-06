@@ -2,6 +2,7 @@ import type { NativeView } from '../native/platform'
 import type { ProjectRuntime } from '../native/runtime-service'
 import { registerServiceDevServer } from './devserver-service'
 import { editingOwner } from './editing-owner'
+import { DEVSERVER_LINE, productLog, truncate } from './product-log'
 import type { RpcHandlerRegistry } from './rpc-router'
 
 /**
@@ -37,11 +38,15 @@ export function registerDevServerIpc(
   // The window can outlive its webContents (display sleep / GPU loss), so guard
   // isDestroyed() or `.send()` throws for a late log line.
   registerServiceDevServer(router, runtime, (line) => {
+    // The product log keeps each output line tagged and cut short (LKM-168).
+    if (line.trim())
+      productLog.info('output', truncate(line, DEVSERVER_LINE), undefined, 'devserver')
     const wc = getWindow()?.webContents
     if (wc && !wc.isDestroyed()) wc.send('devserver:log', line)
   })
   // A ready server that ended by itself: the preview restarts it (LKM-146).
   runtime.onExit((root, url, reason) => {
+    productLog.warn('lifecycle', 'Dev server exited', { root, reason }, 'devserver')
     const wc = getWindow()?.webContents
     if (wc && !wc.isDestroyed()) wc.send('devserver:exit', { root, url, reason })
   })
