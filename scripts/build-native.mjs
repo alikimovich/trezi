@@ -173,6 +173,8 @@ const host = compile(
     join(root, 'src/native/SourceEditor.swift'),
     join(root, 'src/native/SourceFileTree.swift'),
     join(root, 'src/native/Layers.swift'),
+    join(root, 'src/native/LayersLayout.swift'),
+    join(root, 'src/native/LayersVerification.swift'),
     join(root, 'src/native/EditingInspector.swift'),
     join(root, 'src/native/InspectorIslandVerification.swift'),
     join(root, 'src/native/PreviewPlatform.swift'),

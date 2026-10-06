@@ -392,11 +392,23 @@ async function main() {
     void preferences.set('trezi:native-chat-width', String(width)).catch(reportPreferences)
   })
   host.on('native-layout-sizes', (sizes) => {
-    if (['source', 'layers', 'inspector'].every((key) => Number.isFinite(sizes[key])))
+    // `layers` was the docked panel's height; it is now the Layers island's (LKM-179),
+    // with its width and, once dragged, its offset from the preview's top-right corner.
+    if (
+      ['source', 'layers', 'layersWidth', 'inspector'].every((key) => Number.isFinite(sizes[key]))
+    )
       void preferences
         .set(
           'trezi:native-panel-sizes',
-          JSON.stringify({ source: sizes.source, layers: sizes.layers, inspector: sizes.inspector })
+          JSON.stringify({
+            source: sizes.source,
+            layers: sizes.layers,
+            layersWidth: sizes.layersWidth,
+            inspector: sizes.inspector,
+            ...(Number.isFinite(sizes.layersX) && Number.isFinite(sizes.layersY)
+              ? { layersX: sizes.layersX, layersY: sizes.layersY }
+              : {})
+          })
         )
         .catch(reportPreferences)
   })
@@ -585,6 +597,8 @@ async function main() {
     openSource,
     (error) => activityController.append(String(error), 'error')
   )
+  // LKM-179: the Layers tree selects and reveals whatever the preview has selected.
+  inspectorController.onElement = (element) => layersController.selected(element)
   const sheetController = new NativeSheetController(host!, workspaceController, chatController)
   const gitController = new NativeGitController(
     sheetController,

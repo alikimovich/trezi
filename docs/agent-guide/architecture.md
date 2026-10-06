@@ -36,7 +36,9 @@ src/
                     word reveal. Cat.swift supplies cats for other app surfaces
     WorkspaceLayout.swift        authoritative view/divider geometry and AppKit divider input
     SourceEditor.swift / Layers.swift / EditingInspector.swift
-                    native source, layers and property/style inspector
+                    native source, layers and property/style inspector; the Layers
+                    and editing islands float over the preview (LayersLayout.swift
+                    places Layers under its toolbar button, never over the other)
     Sheets.swift    New Project, memory, settings and provider forms; Bun controllers
                     own service operations. Forms use standalone titled, resizable
                     windows with traffic lights and an action bar only when needed.

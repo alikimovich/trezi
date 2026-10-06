@@ -149,3 +149,20 @@ export function resolveLayerElement(path: number[], fingerprint: LayerFingerprin
   if ((src || null) !== (fingerprint.source || null)) return null
   return el
 }
+
+/**
+ * `el`'s child-index path from `document.body`, the handle a Layers row has (LKM-179):
+ * a picked element carries it so the tree can select its row. Null outside the body or
+ * deeper than the tree walks.
+ */
+export function layerPathOf(el: Element): number[] | null {
+  const path: number[] = []
+  let node: Element = el
+  while (node !== document.body) {
+    const parent = node.parentElement
+    if (!parent || path.length > MAX_DEPTH) return null
+    path.unshift(elIndex(node))
+    node = parent
+  }
+  return path
+}

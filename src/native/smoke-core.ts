@@ -16,6 +16,7 @@ import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import { checkInspectorIsland } from './smoke-inspector-island'
 import { checkChatIslands } from './smoke-islands'
+import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkProjectSwitching } from './smoke-projects'
@@ -102,6 +103,17 @@ export async function runNativeCoreSmoke(
     for (let i = 0; i < 10 && (await host.request('composerInspect')).attachments.length; i++)
       await host.request('composerPerform', { remove: 0 })
   }
+  const layersSmoke: LayersSmoke = {
+    fixture,
+    invoke,
+    send,
+    evaluate: page,
+    props: () => serviceEvents.emit('event', 'preview:toolbar-action', 'props'),
+    cancel: () => serviceEvents.emit('event', 'preview:select-cancelled'),
+    saved: () => preference('trezi:native-panel-sizes')
+  }
+  let layersOriginal = '',
+    layersWindow = { width: 0, height: 0 }
   const checks: SmokeCheck[] = [
     {
       name: 'startup',
@@ -650,6 +662,19 @@ export async function runNativeCoreSmoke(
           await host.request('inspectorPerform', {
             action: { root: fixture, generation: state.generation, action: 'close' }
           })
+      }
+    },
+    {
+      name: 'layers-island',
+      dependsOn: ['open-project'],
+      run: async () => {
+        layersOriginal = readFileSync(join(fixture, 'index.html'), 'utf8')
+        layersWindow = (await host.request('inspectorIsland')).window
+        await checkLayersIsland(host, artifacts, layersSmoke)
+      },
+      cleanup: async () => {
+        if (layersOriginal)
+          await restoreLayersIsland(host, layersSmoke, layersOriginal, layersWindow)
       }
     },
     {
