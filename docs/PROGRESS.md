@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173 repair 2: isolate hover travel from island click and wheel
+
+- **Manager failure.** The full native suite timed out when hover returned from the island to the page; the later visible-composer capture also failed after the inspector check left the island open. The hover fixture had posted a click and wheel during the island leg, before checking pointer return. Those queued events could run during the return move. A scoped native run had passed once, so the test order was timing-dependent.
+- **Test repair.** `checkPointer` now checks page → island → page hover first. It then posts the island click and wheel and checks the cumulative element-pick count and that the page did not scroll. The inspector fixture restores the island's initial open state in `finally`, including after an assertion fails, so later checks get their intended layout. A return-hover timeout now reports the heading geometry, hit target, scroll position and move result.
+- **Verification.** Manager quick passed (167 unit checks and typechecks). Native `core,composer` passed: 17 checks, 0 failed, 0 skipped, including the inspector and visible-composer checks. The foreground `inspector-island-default-open.png` was inspected.
+
 ## 2026-10-05 — LKM-173 repair: pointer verification survives navigation and covers interact mode
 
 - **Manager failure.** The full native run exited 139 at the inspector check. Its pointer command evaluated JavaScript through WebKit's Swift async overlay while the fixture could reload. The repair removes JavaScript evaluation from that command; the existing test bridge reads the page between one-move commands.

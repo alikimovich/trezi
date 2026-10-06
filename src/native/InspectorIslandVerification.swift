@@ -111,7 +111,7 @@ extension Host {
                     if let wheel = NSEvent(cgEvent: cg) { NSApp.postEvent(wheel, atStart: false) }
                 }
             }
-            return ["point":["x":Double(point.x), "y":Double(point.y)], "owners":owners.map { String(describing: type(of: $0)) }, "picks":previewPicks - picks,
+            return ["point":["x":Double(point.x), "y":Double(point.y)], "owners":owners.map { String(describing: type(of: $0)) }, "picks":previewPicks - picks, "picksTotal":previewPicks,
                     "expectedCover":previewCoverRects(), "firstResponder":window.firstResponder === preview]
         case "edit":
             guard let field, let value = c["value"] as? String else { throw NSError(domain: "InspectorIsland", code: 3, userInfo: [NSLocalizedDescriptionKey: "No padding-top field"]) }

@@ -121,14 +121,14 @@ async function checkPointer(
     const r = document.querySelector('#native-title').getBoundingClientRect();
     return {x:r.x + Math.min(20, r.width / 2), y:r.y + r.height / 2};
   })()`)) as { x: number; y: number }
-  const move = (target: 'page' | 'island', offset = 0) =>
+  const move = (target: 'page' | 'island', offset = 0, click = false) =>
     island({
       pointer: true,
       step: 'move',
       target,
       x: heading.x + offset,
       y: heading.y,
-      click: target === 'island'
+      click
     })
   const hoverBox = () =>
     page.evaluate(
@@ -144,7 +144,15 @@ async function checkPointer(
     // A real return gesture lands at a new coordinate; reusing the exact point can
     // be coalesced by WebKit when the island move was handled by AppKit.
     const after = await move('page', 4)
-    await waitFor(hoverBox, 'select-mode hover restored over the page')
+    await waitFor(hoverBox, 'select-mode hover restored over the page', 10000, async () => ({
+      move: after,
+      page: await page.evaluate(`(() => {
+        const r = document.querySelector('#native-title').getBoundingClientRect();
+        return { heading: {x:r.x,y:r.y,width:r.width,height:r.height},
+          hit: document.elementFromPoint(${heading.x + 4}, ${heading.y})?.tagName,
+          scrollY: window.scrollY };
+      })()`)
+    }))
     const cover = (await page.evaluate(
       `([...document.querySelector('[data-trezi-cover]')?.shadowRoot?.children ?? []].map(e => { const r=e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }))`,
       true
@@ -166,8 +174,21 @@ async function checkPointer(
       true,
       'pointer: the browser hit target over the island is the cover shield'
     )
-    assert.equal(over.picks + after.picks, 0, 'pointer: no element-picked message from the island')
-    evidence.pointerMoves = { before, over, after, cover }
+    const scrollBefore = await page.evaluate('window.scrollY')
+    await move('island', 0, true)
+    await delay(400)
+    const afterClick = await move('island')
+    assert.equal(
+      afterClick.picksTotal,
+      before.picksTotal,
+      'pointer: no element-picked message from the island click'
+    )
+    assert.equal(
+      await page.evaluate('window.scrollY'),
+      scrollBefore,
+      'pointer: island wheel does not scroll the page'
+    )
+    evidence.pointerMoves = { before, over, after, afterClick, cover }
   } finally {
     await page.selectMode(false)
   }
@@ -341,6 +362,7 @@ export async function checkInspectorIsland(
     await setOpen(false)
   } finally {
     await island(restore)
+    await setOpen(initial.visible)
     writeFileSync(join(artifacts, 'inspector-island.json'), JSON.stringify(evidence, null, 2))
   }
   console.log(

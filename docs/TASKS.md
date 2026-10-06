@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The preview script shields those rects (`src/preview/native-cover.ts`): no hover box, page `:hover` or page pointer listener under the island.
 - [x] Native `checkPointer` moves through WebKit's tracking-area owners: page hovers, island does not, page hovers again; the shield matches the island; a click and wheel on the island still pick nothing.
 - [x] Repair the native inspector crash by reading page state between pointer commands; verify interact-mode CSS `:hover`, cursor and `mouseenter` on the page and their absence under the island (`core` native group passed).
+- [x] Verify hover travel before the island click and wheel, assert no pick or page scroll afterward, and restore the island after an assertion fails (`core,composer` native groups passed).
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
 ## Messages sent while a chat needs Resolve go to the queue (LKM-169)
 
