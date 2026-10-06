@@ -47,6 +47,7 @@ import {
   PREVIEW_HIDE_SCROLLBARS,
   PREVIEW_MOVE_NODE,
   PREVIEW_READINESS as READINESS,
+  PREVIEW_SELECTION_LOST as SELECTION_LOST,
   PREVIEW_SET_COMMENT_MODE as SET_COMMENT_MODE,
   PREVIEW_SET_FRAME as SET_FRAME,
   PREVIEW_SET_MODE as SET_MODE,
@@ -543,6 +544,44 @@ function positionSelection(): void {
       badge.style.display = 'none'
     }
   }
+}
+
+/**
+ * LKM-172: a selection whose elements all left the page, with no element carrying
+ * the same source stamp (HMR swaps nodes), is dropped here and main clears the chat
+ * chip and the editing island. It takes two misses in a row on the 600 ms cadence,
+ * so a re-render that removes a node and adds it back keeps the selection.
+ */
+let selectionMisses = 0
+
+function checkSelectionGone(): void {
+  const alive = (el: Element): boolean => {
+    if (el.isConnected) return true
+    const src = findSource(el) // attributes survive on detached nodes
+    if (!src) return false
+    try {
+      return !!document.querySelector(sourceSelector(src))
+    } catch {
+      return false
+    }
+  }
+  if (
+    !pickedElements.length ||
+    editing ||
+    commenting ||
+    threeD.active() ||
+    pickedElements.some(alive)
+  ) {
+    selectionMisses = 0
+    return
+  }
+  if (++selectionMisses < 2) return
+  selectionMisses = 0
+  selectedEl = null
+  hideToolbar()
+  setSelectionHighlight(null)
+  clearMeasure()
+  ipcRenderer.send(SELECTION_LOST)
 }
 
 /** Anchor the toolbar just under the selected element (above if no room). */
@@ -1926,6 +1965,7 @@ if (!IS_SIM_BRIDGE) {
     if (pinDots.size) positionPins()
     // Selection outlines track layout changes (async content, HMR) the same way.
     if (selEls.length) positionSelection()
+    checkSelectionGone()
     if (measureTarget) refreshMeasure()
   }, 600)
   window.addEventListener('pagehide', () => {

@@ -26,6 +26,7 @@ interface ProjectContext {
 }
 export class NativeContextController {
   readonly projects = new Map<string, ProjectContext>()
+  private readonly hiddenSelections = new Set<string>()
   /** How long a restarted preview may take to show its first stamp before setup fails. */
   verifyGraceMs = 3500
   private readonly treziLog = new Map<string, string>()
@@ -60,7 +61,7 @@ export class NativeContextController {
     return {
       chat: key,
       root,
-      selection: state.selection,
+      selection: root && !this.hiddenSelections.has(root) ? state.selection : null,
       setup: { ...state.setup },
       tokens: { ...state.tokens },
       notes: state.notes,
@@ -76,8 +77,6 @@ export class NativeContextController {
       }
   }
   async activate(entry: ProjectEntry | null) {
-    const old = this.chat.chats.get(this.chat.active)?.context?.root
-    if (old !== entry?.root && entry) this.project(entry.root).selection = null
     await this.chat.command({
       type: 'context',
       context: this.context(entry?.root ?? null, entry?.activeSessionKey ?? '')
@@ -176,6 +175,7 @@ export class NativeContextController {
   selection(element: SelectedElement | null) {
     const root = this.workspace.active?.root
     if (!root) return
+    this.hiddenSelections.delete(root)
     const group = element ? (element.selectionGroup ?? [element]) : []
     this.project(root).selection =
       element && group.length
@@ -188,6 +188,22 @@ export class NativeContextController {
                 : selectionForBubble(element)
           }
         : null
+    this.changed(root)
+  }
+  /** Hide chips until the returning page confirms the saved element still exists. */
+  hideSelections() {
+    for (const root of this.projects.keys()) {
+      this.hiddenSelections.add(root)
+      this.changed(root)
+    }
+  }
+  revealSelection(root: string) {
+    this.hiddenSelections.delete(root)
+    this.changed(root)
+  }
+  forgetSelection(root: string) {
+    this.project(root).selection = null
+    this.hiddenSelections.delete(root)
     this.changed(root)
   }
   readiness(info: { stamps: number; documentStartedAt?: number }) {

@@ -3,6 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import type { NativeContextController } from './context-controller'
+import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkNativeChat } from './smoke-chat'
@@ -39,7 +41,9 @@ export async function runNativeCoreSmoke(
   host: NativeBridge,
   fixture: string,
   root: string,
-  preference: (key: string) => string | null
+  preference: (key: string) => string | null,
+  context: NativeContextController,
+  inspector: NativeInspectorController
 ) {
   const invoke = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'invoke', channel, args })
@@ -404,7 +408,7 @@ export async function runNativeCoreSmoke(
       name: 'project-switching',
       dependsOn: ['chat-ready'],
       run: async () => {
-        await checkProjectSwitching(host, fixture, artifacts)
+        await checkProjectSwitching(host, fixture, artifacts, context, inspector)
         assert.equal(
           (await host.request('composerInspect')).readyBeam,
           false,

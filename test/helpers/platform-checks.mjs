@@ -170,8 +170,7 @@ export async function checkAttachments({ fixture, scratch, log, rejects }) {
   log('attachments: chunked, hash-checked uploads; file names and pruning')
   const profile = join(scratch, 'attach-profile')
   const f = await fixture(profile, {
-    PLATFORM_ATTACH_MAX: String(4 * 1024 * 1024),
-    PLATFORM_ATTACH_IDLE: '1'
+    PLATFORM_ATTACH_MAX: String(4 * 1024 * 1024)
   })
   const owner = f.owner()
   const image = randomBytes(3 * 1024 * 1024 + 17)
@@ -260,11 +259,25 @@ export async function checkAttachments({ fixture, scratch, log, rejects }) {
       .code,
     'invalidRequest'
   )
-  const idle = await open(Buffer.from('xyz'))
+  // Keep the expiry clock separate from the multi-megabyte transfer above. A one-second
+  // idle limit can elapse between chunks when the unit tier runs several fixtures at once.
+  const idleFixture = await fixture(join(scratch, 'attach-idle-profile'), {
+    PLATFORM_ATTACH_IDLE: '1'
+  })
+  const idleRaw = (method, body) => idleFixture.frame(method, body)
+  const idleOpen = async (bytes) =>
+    (
+      await idleRaw('attachmentOpen', {
+        mediaType: 'image/gif',
+        bytes: bytes.length,
+        sha256: sha(bytes)
+      })
+    ).payload.upload
+  const idle = await idleOpen(Buffer.from('xyz'))
   await new Promise((resolve) => setTimeout(resolve, 1300))
   assert.equal(
     (
-      await raw('attachmentChunk', {
+      await idleRaw('attachmentChunk', {
         upload: idle,
         offset: 0,
         data: Buffer.from('xyz').toString('base64')
@@ -273,11 +286,22 @@ export async function checkAttachments({ fixture, scratch, log, rejects }) {
     'notFound',
     'an idle upload expires'
   )
+  await idleFixture.stop()
+  const capacityFixture = await fixture(join(scratch, 'attach-capacity-profile'))
+  const capacityRaw = (method, body) => capacityFixture.frame(method, body)
+  const capacityOpen = async (bytes) =>
+    (
+      await capacityRaw('attachmentOpen', {
+        mediaType: 'image/gif',
+        bytes: bytes.length,
+        sha256: sha(bytes)
+      })
+    ).payload.upload
   const many = []
-  for (let i = 0; i < 4; i++) many.push(await open(Buffer.from(`n${i}`)))
+  for (let i = 0; i < 4; i++) many.push(await capacityOpen(Buffer.from(`n${i}`)))
   assert.equal(
     (
-      await raw('attachmentOpen', {
+      await capacityRaw('attachmentOpen', {
         mediaType: 'image/png',
         bytes: 1,
         sha256: sha(Buffer.from('z'))
@@ -285,6 +309,7 @@ export async function checkAttachments({ fixture, scratch, log, rejects }) {
     ).payload.code,
     'busy'
   )
+  await capacityFixture.stop()
   assert.equal(readdirSync(folder).length, before, 'no refused upload wrote a file')
 
   // Pruning: regular files older than seven days; links are never followed or removed.
@@ -299,7 +324,6 @@ export async function checkAttachments({ fixture, scratch, log, rejects }) {
   const eightDays = (Date.now() - 8 * 24 * 3600 * 1000) / 1000
   utimesSync(old, eightDays, eightDays)
   utimesSync(target, eightDays, eightDays)
-  await new Promise((resolve) => setTimeout(resolve, 1100))
   assert.ok(
     await owner.saveAttachment(
       { mediaType: 'image/jpeg', data: Buffer.from('jpeg').toString('base64') },
