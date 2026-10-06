@@ -152,6 +152,7 @@ extension Host {
             }
         case "composerInspect":
             var inspected = composer.inspect()
+            inspected["queueNote"] = composer.state["queueNote"] ?? ""
             // Send lives in the shared controls row, not directly in the form bubble.
             inspected["sendInsideForm"] = composer.sendButton.isDescendant(of: composer.content)
             let clip = composer.scroll.contentSize
@@ -204,6 +205,14 @@ extension Host {
             }
         case "previewSurfaceInspect": reply(id, previewSurface.inspect())
         case "shellPerform": reply(id, shell.perform(c["action"] as? String ?? "", id: c["row"] as? String))
+        case "captureVisibleShell":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do {
+                    let content = window.contentView?.superview ?? shell.split.view
+                    reply(id, try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false))
+                } catch { reply(id, error: error.localizedDescription) }
+            }
         case "captureShell", "captureShellImage":
             let content = window.contentView?.superview ?? shell.split.view
             guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { reply(id, error: "Shell capture unavailable"); return true }

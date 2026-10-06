@@ -7,6 +7,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Hide the island, chip and preview overlays during a project switch; restore each project's selection and inspector tab only if the element still resolves on return.
 - [x] Clear the selection quietly after page navigation or element removal, with native coverage for return and removal.
+## Messages sent while a chat needs Resolve go to the queue (LKM-169)
+
+- [x] One send rule (`src/native/chat-queue.ts`): a running turn, a landing, a park waiting for Resolve or a provider login queues the message with its reason; the queue drains when the block clears.
+- [x] A backend Resolve refusal (`RESOLVE_NEEDED`) takes the message back into the queue: no error turn, no "Worked for 0s", no duplicate.
+- [x] Queued messages can be edited (back into the composer) or removed.
+- [x] `test/chat-send-queue.mjs` (unit) covers Resolve, the refusal race, running, landing and login; the native chat smoke edits and requeues a message.
+- [x] Native `chat` smoke captures a parked Resolve card and one waiting queued message at 440 pt and 320 pt, checks the rendered reason and Resolve action, then confirms the queue sends once after the park clears.
 
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
