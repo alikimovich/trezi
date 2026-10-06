@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-175: fast native test builds
+
+- **Why it was slow.** Every verification compiled all three Swift products one after another with `-O` in a fresh worktree whose Clang module cache (`out/native/module-cache`) was empty. The Swift driver ran one frontend at a time without `-j`, even though `-O` is not whole-module here.
+- **Binary cache.** `scripts/native-swift.mjs` keys each product on its sorted repo-relative source names and bytes, its flags (profile, target, frameworks), `swiftc --version` and the SDK version/build. The unsigned binary is stored in `~/Library/Caches/Trezi/build/<product>/<hash>`, the last 20 per product. A hit removes the old output and copies the cached binary in its place, so the kernel never sees new bytes written over a signed binary it may have cached. Bun bundling and signing still run. `TREZI_BUILD_CACHE=<dir|off>` overrides the location. A cache that cannot be created is reported once, then the build compiles.
+- **Test profile.** `TREZI_BUILD_PROFILE=test` uses `-Onone -no-whole-module-optimization -j<cores>`. `bun run test:native`, `test/native-runtime.mjs` and `dev:native --test` set it. `bun run build`/`dev` keep exactly `-O`. TreziSecrets always compiles release, so its bytes and Keychain approval don't depend on the profile. `-enable-batch-mode` was tried and dropped: with Swift 6.3 its frontends returned success without writing objects, and the link failed on every `.o`.
+- **Parallel, shared module cache.** The three swiftc runs and the three esbuild bundles start together (`Promise.allSettled`). Each swiftc has a private temp folder under `out/native/swift-tmp/` and prints its output as one block. The module cache is `~/Library/Caches/Trezi/module-cache`. Each step prints `[build] <step>: <s> s (cache hit|compiled …)`, then the total; the native suites print `[timing]` lines.
+- **Chat-scroll.** It never built: `--require-build` only fails when the host native-runtime just built is missing. So there was no second build to skip. Its 68.9 s is mostly foreground captures and deliberate time-point samples. The 80 ms pause before each visibility poll and the fixed 1.2 s timer-tick wait (now a poll) were removed.
+- **Keychain.** `TREZI_SIGN_IDENTITY=-` now returns ad hoc before `security find-identity` runs, so a test build with it touches no keychain. Test builds still never create an identity.
+
+| Build (12-core operator Mac, agent sandbox) | Before | After, test profile | After, release |
+| --- | --- | --- | --- |
+| Cold: fresh `out/`, empty caches | 154 s | 45.8 s | 92.0 s |
+| Warm, no Swift change (fresh or same worktree) | 121 s same worktree, 154 s fresh | 0.4 s | 0.4 s |
+| One Swift file changed (`src/native/Toast.swift`) | 114 s | 6.0 s | — |
+| `ServiceContract.swift` changed (host and service) | — | 9.1 s | — |
+| Manager native verification, all groups + chat-scroll | ~8 min (issue) | 231 s (build 72.7 s with empty caches on a loaded machine, smoke 88 s, chat-scroll 68.9 s) | — |
+
+- **Checks.** `test/native-build-cache.mjs` (unit tier) covers the key, pruning, hit/miss, the unusable-cache fallback and the profile wiring, using a stand-in compiler. The signing test asserts that `-` makes no keychain call. Quick verification passed with 170 unit checks. Native verification passed for all seven groups (24/24 smoke checks) plus chat-scroll.
+
 ## 2026-10-05 — LKM-171 review repair: transcript render signal and alternating hover targets
 
 - Review found two vacuous assertions: `chatInspect` had no `revision`, and 100 moves over the same heading returned early after the first. `ChatModel.messageBodyEvaluations` now counts actual SwiftUI message-row body evaluations and `chatInspect` exposes it. The fixture asserts that the count is positive and unchanged after hover and after the real preview selection click.

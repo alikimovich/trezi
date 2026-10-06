@@ -115,6 +115,8 @@ export function signingIdentity({ env = process.env, keychain = loginKeychain(),
   }
   try {
     const override = env.TREZI_SIGN_IDENTITY?.trim()
+    // Ad hoc needs no identity: don't even list the keychain's (LKM-175).
+    if (override === '-') return { kind: 'adhoc' }
     const chosen = pickIdentity(listIdentities({ run }), override)
     if (chosen) return chosen
     if (override) return fallback(`no code-signing identity "${override}"`)

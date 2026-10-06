@@ -24,7 +24,10 @@ bun run test:native
 turns; those require explicit authorization and credentials. The native-runtime test
 builds the app; focused native checks reuse that build and skip when unavailable.
 `bun run test:native` runs native-runtime and then native-chat-scroll with
-`--require-build`, so a missing host there fails instead of skipping.
+`--require-build`, so a missing host there fails instead of skipping. Chat-scroll
+never builds; it runs the host native-runtime just built. Native test builds use the
+fast test profile and a shared Swift binary cache, see
+[Native build speed](#native-build-speed-lkm-175).
 Electron/Playwright application tests were removed when the runtime was retired.
 Their historical coverage is not claimed as native parity.
 
@@ -78,6 +81,63 @@ Measured on the operator Mac (12 cores, 8 workers), 2026-10-05:
 The remaining long tests are runtime, not compile: `workflow-durability` (client
 deadlines after injected crashes), the composer and settings layout fixtures
 (run-loop turns), and the repository, platform and preferences owners.
+
+### Native build speed (LKM-175)
+
+`scripts/build-native.mjs` compiles through `scripts/native-swift.mjs`:
+
+- **Binary cache.** Each Swift product (TreziService, TreziHost, TreziSecrets) is
+  keyed by its sorted source names (repo-relative) and bytes, its flags (profile,
+  target, frameworks), `xcrun swiftc --version` and the SDK version/build. A hit copies
+  the unsigned binary to the bundle instead of compiling; Bun bundling and signing run
+  after it as before. The cache is `~/Library/Caches/Trezi/build/<product>/<hash>`,
+  the 20 most recently used entries per product, shared by every worktree. Most
+  tickets touch no Swift, so their builds compile nothing.
+- **Module cache.** `~/Library/Caches/Trezi/module-cache`, also shared, so the
+  AppKit/SwiftUI Clang modules (about 20 s per compile when cold) are built once.
+- **Profiles.** `TREZI_BUILD_PROFILE=release` (default; `bun run build`, `bun run
+  dev`) keeps `-O`. `TREZI_BUILD_PROFILE=test` compiles with `-Onone`,
+  `-no-whole-module-optimization` and `-j<cores>`. `bun run test:native`,
+  `test/native-runtime.mjs` and `bun run dev:native --test` select it. A test build
+  says "(test profile, -Onone)" in its last line; run `bun run build` before using
+  that app for real. TreziSecrets is always compiled release, so its bytes (and the
+  Keychain approval tied to them) are the same in both profiles. `-enable-batch-mode`
+  is not used: with Swift 6.3 its frontends exit without writing their objects.
+- **Parallel steps.** The three swiftc products and the esbuild bundles run at
+  the same time. Each swiftc gets a private temporary folder under
+  `out/native/swift-tmp/`, and its compiler output prints in one block when it ends.
+- **Timing lines.** Every step prints `[build] <step>: <s> s (cache hit … | compiled
+  <profile> <flag>)`, then `[build] total`. native-runtime and native-chat-scroll print
+  `[timing]` lines with their own durations.
+- **Overrides.** `TREZI_BUILD_CACHE=<dir>` moves both caches; `TREZI_BUILD_CACHE=off`
+  compiles every product and keeps the module cache in `out/native/module-cache`. A
+  cache folder that cannot be created is reported once and the build compiles without
+  it. Delete `~/Library/Caches/Trezi` any time.
+- **Signing.** Unchanged: test builds use `TREZI_SIGN_IDENTITY` when set and never
+  create an identity. `TREZI_SIGN_IDENTITY=-` no longer even lists the keychain's
+  identities.
+
+`test/native-build-cache.mjs` (unit tier) covers the key, pruning, hits, misses, the
+unusable-cache fallback and the profile wiring with a stand-in compiler.
+
+Build timings, 12-core operator Mac, measured in the agent sandbox on 2026-10-05:
+
+| Build | Before | After (test profile) | After (release) |
+| --- | --- | --- | --- |
+| Cold: fresh `out/`, empty module and binary caches | 154 s | 45.8 s | 92.0 s |
+| Fresh worktree, warm caches, no Swift change | 154 s (module cache lived in `out/`) | 0.4 s | 0.4 s (hit) |
+| Same worktree, no Swift change | 121 s | 0.4 s | 0.4 s (hit) |
+| One host Swift file changed (`Toast.swift`) | 114 s | 6.0 s | not measured |
+| `ServiceContract.swift` changed (host and service) | not measured (same full recompile) | 9.1 s | not measured |
+
+Manager native verification (all seven smoke groups, then chat-scroll), 2026-10-05:
+231 s in total, against about 8 min before. The build took 72.7 s, its first run
+with an empty `~/Library/Caches/Trezi` while other worktrees were busy. The smoke and
+direct-launch checks took 88 s and chat-scroll 68.9 s. Chat-scroll time is mostly
+foreground captures and deliberate time-point samples: send-visibility samples at
++60/200/500 ms, and acceptance waits 1.6 s for the overlay scroller to hide. Its
+fixed waits that only paced a poll were removed: the 80 ms pause before each
+visibility poll, and the 1.2 s timer-tick sleep, which now polls for the next second.
 
 ### Native smoke summary
 

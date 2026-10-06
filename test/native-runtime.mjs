@@ -55,12 +55,17 @@ if (process.platform !== 'darwin') {
   // `--only=group,group` is forwarded to the smoke; see src/native/smoke-groups.ts.
   const groups = parseSmokeGroups(process.argv.slice(2))
   const started = Date.now()
+  // The -Onone test profile with the shared Swift binary cache (LKM-175).
   const result = spawnSync('bun', ['run', 'dev:native', '--test', ...process.argv.slice(2)], {
     cwd,
     stdio: 'inherit',
-    timeout: 300000
+    timeout: 300000,
+    env: { ...process.env, TREZI_BUILD_PROFILE: process.env.TREZI_BUILD_PROFILE || 'test' }
   })
   if (result.error) throw result.error
+  console.log(
+    `[timing] native-runtime build and smoke: ${((Date.now() - started) / 1000).toFixed(1)} s`
+  )
   // A passing smoke run must have produced fresh sidebar folder evidence for review.
   if (result.status === 0 && groups.has('sidebar'))
     assertSidebarEvidence(join(cwd, 'test/artifacts/native'), started)

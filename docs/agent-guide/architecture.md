@@ -97,6 +97,8 @@ scripts/build-native.mjs  bundles services and preview, compiles Swift and check
                   the app does not depend on Electron or the retired React renderer;
                   stamps the version (scripts/version.mjs) into the plists
                   (scripts/service-info.mjs) and bundles
+scripts/native-swift.mjs  the build's Swift compiles: shared binary and module caches
+                  in ~/Library/Caches/Trezi, release (-O) and test (-Onone) profiles
 scripts/release.mjs  `bun run release <major|minor|patch>`: bump, CHANGELOG, commit, tag
 test/             hand-rolled .mjs tests + fixtures/ + artifacts/ (PNGs, gitignored)
 docs/             TASKS (next) / PROGRESS (log + rationale) / DESIGN (stamp spec)

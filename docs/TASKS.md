@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Fast native test builds (LKM-175)
+
+- [x] Content-addressed Swift binary cache in `~/Library/Caches/Trezi/build` (last 20 per product); a hit copies, signing still runs.
+- [x] `TREZI_BUILD_PROFILE=test` (-Onone, no WMO, -j<cores>) from test:native, native-runtime and `dev:native --test`; release stays -O.
+- [x] Swift products and esbuild bundles in parallel; shared module cache; a timing line per step.
+- [x] Chat-scroll never rebuilds (confirmed); two pacing waits removed; `[timing]` lines for both native suites.
+- [x] `TREZI_SIGN_IDENTITY=-` skips the keychain identity listing; test builds still never create an identity.
+
 ## Preview select slowdown with image attachments (LKM-171, issue #231)
 
 - [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.
