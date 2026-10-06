@@ -88,18 +88,32 @@ extension Host {
                 let y = CGFloat(c["y"] as? Double ?? 20) * scale
                 point = preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
             }
-            guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else {
-                throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not make mouse move"])
-            }
-            window.sendEvent(event)
             // The window's first-responder path alone does not deliver a synthetic move to
             // WebKit. A real pointer also enters WebKit's own tracking areas; use their owners
             // without replacing the areas or evaluating JavaScript inside this command.
-            preview.mouseMoved(with: event)
             let owners = preview.trackingAreas.filter { $0.options.contains(.mouseMoved) }.compactMap { $0.owner as? NSObject }
-            for owner in owners where owner.responds(to: #selector(NSResponder.mouseMoved(with:))) {
-                owner.perform(#selector(NSResponder.mouseMoved(with:)), with: event)
+            func moved(_ location: NSPoint) throws -> NSEvent {
+                guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else {
+                    throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not make mouse move"])
+                }
+                window.sendEvent(event)
+                preview.mouseMoved(with: event)
+                for owner in owners where owner.responds(to: #selector(NSResponder.mouseMoved(with:))) {
+                    owner.perform(#selector(NSResponder.mouseMoved(with:)), with: event)
+                }
+                return event
             }
+            // Re-enter along a short pointer path. One teleported event back to a point four
+            // pixels from the prior page point can be coalesced by WebKit under a busy smoke run.
+            if c["pathFromIsland"] as? Bool == true {
+                let from = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
+                for step in 1..<12 {
+                    let t = CGFloat(step) / 12
+                    _ = try moved(NSPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t))
+                    try await Task.sleep(nanoseconds: 16_000_000)
+                }
+            }
+            let event = try moved(point)
             if c["click"] as? Bool == true {
                 post(.leftMouseDown, point); post(.leftMouseUp, point)
                 // Keep LKM-162's wheel ownership check with the click-through check.

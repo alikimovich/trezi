@@ -121,14 +121,15 @@ async function checkPointer(
     const r = document.querySelector('#native-title').getBoundingClientRect();
     return {x:r.x + Math.min(20, r.width / 2), y:r.y + r.height / 2};
   })()`)) as { x: number; y: number }
-  const move = (target: 'page' | 'island', offset = 0, click = false) =>
+  const move = (target: 'page' | 'island', offset = 0, click = false, pathFromIsland = false) =>
     island({
       pointer: true,
       step: 'move',
       target,
       x: heading.x + offset,
       y: heading.y,
-      click
+      click,
+      pathFromIsland
     })
   const hoverBox = () =>
     page.evaluate(
@@ -141,15 +142,14 @@ async function checkPointer(
     await waitFor(hoverBox, 'select-mode hover over the page')
     const over = await move('island')
     await waitFor(async () => !(await hoverBox()), 'select-mode hover cleared over the island')
-    // A real return gesture lands at a new coordinate; reusing the exact point can
-    // be coalesced by WebKit when the island move was handled by AppKit.
-    const after = await move('page', 4)
+    // Cross the native/page boundary with successive WebKit moves, as a pointer does.
+    const after = await move('page', 20, false, true)
     await waitFor(hoverBox, 'select-mode hover restored over the page', 10000, async () => ({
       move: after,
       page: await page.evaluate(`(() => {
         const r = document.querySelector('#native-title').getBoundingClientRect();
         return { heading: {x:r.x,y:r.y,width:r.width,height:r.height},
-          hit: document.elementFromPoint(${heading.x + 4}, ${heading.y})?.tagName,
+          hit: document.elementFromPoint(${heading.x + 20}, ${heading.y})?.tagName,
           scrollY: window.scrollY };
       })()`)
     }))

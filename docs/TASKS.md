@@ -12,6 +12,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Repair the native inspector crash by reading page state between pointer commands; verify interact-mode CSS `:hover`, cursor and `mouseenter` on the page and their absence under the island (`core` native group passed).
 - [x] Verify hover travel before the island click and wheel, assert no pick or page scroll afterward, and restore the island after an assertion fails (`core,composer` native groups passed).
 - [x] Add the visible native toast to the page cover, refresh that cover after toast show/hide, and check the native hit target and preview shield in the settings smoke.
+- [x] Drive the island-to-page return hover through a short AppKit pointer path and confirm the inspector in two consecutive native `core` runs.
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
 ## Editing inspector follows its project (LKM-172)
 

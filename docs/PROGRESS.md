@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173 repair 3: return hover follows the pointer path
+
+- **Manager failure.** The full native run again timed out on select-mode hover returning from the island. The heading was the page hit target (`H1`) and scrollY was 0, but one synthetic move to a point only four pixels from the earlier page point did not reliably produce a new WebKit hover update under the full smoke load.
+- **Fixture repair.** The test broker's optional return gesture now sends 12 AppKit mouse moves from the island toward a new point on the heading, spaced one frame apart. Each move still goes through WebKit's own tracking-area owner; the page assertion still reads the real isolated-world hover box, and the island click, wheel and interact-mode checks remain. Production pointer handling is unchanged.
+- **Verification.** Quick passed (169 unit checks, lint and typechecks). Two consecutive native `core` runs on the same code passed 14/14 checks with no skips. The manager retains the full-suite run.
+
 ## 2026-10-05 — LKM-173 review repair: cover the native toast over the preview
 
 - **Review gap.** The replacement for LKM-162's pointer gate covered the editing island and resize edge but omitted `NativeToast`, which floats above the preview. WebKit could still hover the page behind a visible toast.
