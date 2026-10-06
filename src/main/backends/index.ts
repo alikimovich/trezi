@@ -62,8 +62,6 @@ export function pickProvider(options: AgentOptions): ModelProvider {
       return helperProvider('codex')
     case 'gemini':
       return helperProvider(geminiEnabled() ? 'gemini' : 'claude')
-    case 'claude':
-    case undefined:
     default:
       return helperProvider('claude')
   }

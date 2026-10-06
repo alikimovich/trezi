@@ -1,8 +1,9 @@
-import { execFile } from 'child_process'
-import { lstat, readFile } from 'fs/promises'
-import { join } from 'path'
-import { promisify } from 'util'
+import { execFile } from 'node:child_process'
+import { lstat, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { editingOwner } from './editing-owner'
+import { productLog } from './product-log'
 import { repositoryOwner } from './repository-owner'
 import { provisionDependencies } from './worktree-dependencies'
 import { createWorktree, type Worktree } from './worktrees'
@@ -82,6 +83,7 @@ export function createChatWorktree(
 export async function syncFromLive(liveRoot: string, wt: Worktree): Promise<{ synced: boolean }> {
   await editingOwner().syncSetupHelpers(liveRoot, wt.path)
   const { synced, baseSha } = await repositoryOwner().syncWorktree({ ...wt, repoRoot: liveRoot })
+  if (synced) productLog.info('worktree', 'Worktree synced from the live tree', { worktree: wt.id })
   wt.baseSha = baseSha
   await provisionDependencies(liveRoot, wt.path)
   return { synced }
@@ -152,7 +154,16 @@ export interface ApplyOutcome {
  * advances the fork point and unparks.
  */
 export async function applyParked(liveRoot: string, wt: Worktree): Promise<ApplyOutcome> {
-  return repositoryOwner().applyParked({ ...wt, repoRoot: liveRoot })
+  const result = await repositoryOwner().applyParked({ ...wt, repoRoot: liveRoot })
+  const { ok, conflict, error } = result
+  productLog.info('parking', 'Parked work applied', {
+    worktree: wt.id,
+    ok,
+    conflict,
+    files: result.files.length,
+    error
+  })
+  return result
 }
 
 export interface ResolvePrep {
@@ -183,6 +194,12 @@ export async function stageResolve(liveRoot: string, wt: Worktree): Promise<Reso
     repoRoot: liveRoot
   })
   wt.baseSha = baseSha
+  productLog.info('resolve', 'Resolve staged', {
+    worktree: wt.id,
+    clean,
+    conflicted: conflicted.length,
+    files: files.length
+  })
   return { conflicted, files, clean }
 }
 
@@ -194,5 +211,12 @@ export async function stageResolve(liveRoot: string, wt: Worktree): Promise<Reso
 export async function discardParked(wt: Worktree): Promise<void> {
   return repositoryOwner()
     .discardParked(wt)
-    .catch(() => {})
+    .then(
+      () => productLog.info('parking', 'Parked work discarded', { worktree: wt.id }),
+      (error) =>
+        productLog.warn('parking', 'Discarding parked work failed', {
+          worktree: wt.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
+    )
 }

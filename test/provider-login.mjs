@@ -283,7 +283,9 @@ try {
     const fake = await names('fake')
     assert.ok(
       !fake.includes('CLAUDE_CODE_OAUTH_TOKEN') &&
-        !fake.some((n) => n.startsWith('TREZI_') && n !== 'TREZI_PROVIDER_HELPER'),
+        !fake.some(
+          (n) => n.startsWith('TREZI_') && n !== 'TREZI_PROVIDER_HELPER' && n !== 'TREZI_LOG_DIR'
+        ),
       'no other helper does'
     )
     const report = await data.checkLogin('claude', WT)

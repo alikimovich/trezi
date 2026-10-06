@@ -232,12 +232,14 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/file-tree.ts` | helper | SourceOwner | `git ls-files` read |
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |
+| `src/main/product-log.ts` | helper | PlatformOwner | appends and prunes the product log day files in `~/Library/Logs/Trezi` (LKM-168) |
 | `src/main/publish-description.ts` | helper | WorkflowOwner | scratch directory for the description run |
 | `src/main/publish-scope.ts` | helper | WorkflowOwner | Git reads |
 | `src/main/publish.ts` | helper | WorkflowOwner | Git reads (work tree, branch) |
 | `src/main/scaffold.ts` | helper | WorkflowOwner | `bun --version` probe |
 | `src/main/trezi-agent-tools.ts` | helper | ProviderOwner (provider helper) | Codex tool bridge socket |
 | `src/main/worktrees.ts` | helper | RepositoryOwner | Git reads (a branch's diff, chat refs) |
+| `src/native/log-support.ts` | helper | PlatformOwner | Export Logs… zip (`ditto`) of a temporary folder and a `sw_vers` read (LKM-168) |
 | `src/native/smoke-agent-preview.ts` | test | — | smoke fixture |
 | `src/native/smoke-alerts.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat.ts` | test | — | smoke fixture |

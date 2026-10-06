@@ -81,6 +81,7 @@ import { enqueueRepoWrite } from './repo-write-queue'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
+import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
 import { workflowOwner } from './workflow-owner'
 import {
   applyBranchToWorkingTree,
@@ -333,6 +334,7 @@ const interactiveEvents =
         .catch(() => {})
     const at = e.turn ? null : tracker.attribute(e)
     if (at) e.turn = at.turn
+    if (e.type === 'model') logTurnEvent(sessionKey, e)
     if (e.type === 'status') scheduleCheckpoint(sessionKey)
     if (e.type !== 'done' && e.type !== 'error') return
     // Backends forward this same tagged event after the hook. Keep the UI busy
@@ -346,6 +348,7 @@ const interactiveEvents =
       }
       e.landingPending = at.first || runningKeys.has(sessionKey)
     }
+    logTurnEvent(sessionKey, e)
     const session = sessions.get(sessionKey)
     if (!at || !session || trackers.get(session) !== tracker) return
     session.finalize()
@@ -1414,6 +1417,7 @@ export function registerAgentIpc(
         if (handoff) handoffHistory.delete(key)
         trackers.get(session)?.push(id, 0)
         watchdog.touch(key)
+        logTurnStart(key, id, session.options)
         session.send(
           handoffPrompt(
             history,
@@ -1422,6 +1426,7 @@ export function registerAgentIpc(
           images
         )
       } catch (error) {
+        logTurnNotSent(key, id, error)
         runningKeys.delete(key)
         preparingTurns.delete(key)
         await conversation()
@@ -1872,4 +1877,21 @@ export function registerAgentIpc(
     // the next launch's crash recovery, never committed/removed during the quit race.
     dropAll()
   })
+}
+
+/** Native smoke only: replace the provider's send while keeping the real agent:send
+ * RPC, turn tracker and provider event hook. No subscription call is made. */
+export function stubAgentSendForSmoke(chat: string, send: ProviderSession['send']) {
+  if (!process.argv.includes('--test'))
+    throw new Error('Provider stub is only available in native tests.')
+  const session = sessions.get(chat)
+  if (!session) throw new Error('Native smoke chat has no provider session.')
+  const original = session.send
+  session.send = send
+  return {
+    emit: (event: AgentEvent) => session.emit(event),
+    restore: () => {
+      session.send = original
+    }
+  }
 }

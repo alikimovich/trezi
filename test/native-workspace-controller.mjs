@@ -154,8 +154,19 @@ assert.ok(!controller.state.projects.some((p) => p.key === '/slow'))
 failed = true
 await controller.open('/failure')
 assert.equal(controller.state.status.kind, 'error')
+assert.equal(controller.state.loadedKey, null)
 assert.equal(active.at(-1), '/failure')
 assert.ok(projects.has('/failure'), 'failed preview must retain repair chat')
+await controller.close('/failure')
+// A restart keeps the loaded chat during its busy phase, but a failed restart
+// must hide that chat once the error replaces the preview.
+failed = false
+await controller.open('/failure')
+assert.equal(controller.state.loadedKey, '/failure')
+failed = true
+await controller.command({ type: 'restart', key: '/failure' })
+assert.equal(controller.state.status.kind, 'error')
+assert.equal(controller.state.loadedKey, null)
 await controller.close('/failure')
 assert.equal(controller.state.activeKey, '/two')
 assert.equal(JSON.parse(saved()).activeKey, '/two')

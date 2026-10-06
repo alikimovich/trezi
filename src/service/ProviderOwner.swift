@@ -424,9 +424,18 @@ final class ProviderOwner: @unchecked Sendable {
         for (call, pending) in toolCalls where pending.session == session.id { toolCalls[call] = nil }
         session.tools = 0
         session.approvals = [:]
-        guard sessions[session.id] === session else { return }
         let code = ProcessGroup.exitCode(status).map { "status \($0)" } ?? "signal \(status & 0x7f)"
         let detail = tail.split(separator: "\n").last.map { ": \($0.prefix(300))" } ?? ""
+        // LKM-168: a helper that ends while its session is current and not stopping crashed.
+        let current = sessions[session.id] === session
+        if current && session.phase != .stopped {
+            // stderr can contain user prompts, source excerpts or secrets. It is
+            // kept for the immediate UI error, never persisted in the product log.
+            ProductLog.error("provider", "Provider helper crashed provider=\(session.provider) \(code)", chat: session.chat)
+        } else {
+            ProductLog.info("provider", "Provider helper exited provider=\(session.provider) \(code)", chat: session.chat)
+        }
+        guard current else { return }
         if let opening = session.opening {
             session.opening = nil
             sessions[session.id] = nil
