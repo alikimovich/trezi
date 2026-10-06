@@ -40,9 +40,14 @@ private extension ChatSnapshot {
         }
     }
 }
+final class ChatLayoutModel: ObservableObject {
+    @Published var composerHeight: CGFloat = 0
+}
 final class ChatModel: ObservableObject {
     let cat = CatAnimator()
     @Published var snapshot: ChatSnapshot?
+    /// Verification: actual SwiftUI transcript row body evaluations, independent of snapshots.
+    var messageBodyEvaluations = 0
     @Published var revision = 0
     @Published var controlInteraction = 0
     @Published var followRevision = 0
@@ -55,7 +60,11 @@ final class ChatModel: ObservableObject {
     var revealAttempt = 0
     var latestSettleAttempts = 0  // diagnostics (ChatLatestSettle)
     @Published var visible = false
-    @Published var composerHeight: CGFloat = 0
+    let layout = ChatLayoutModel()
+    var composerHeight: CGFloat {
+        get { layout.composerHeight }
+        set { layout.composerHeight = newValue }
+    }
     var messageFrames: [String: CGRect] = [:]
     var islandPositions: [String: CGRect] = [:]
     /// Response footers and their token counters (`<id>-tokens`), for inspection.
@@ -113,10 +122,10 @@ final class NativeChat: NSHostingView<ChatConversation> {
     let latestButton = ChatLatestButton()
     private var latestObservers: Set<AnyCancellable> = []
     init() {
-        super.init(rootView: ChatConversation(model: model)); isHidden = true; sizingOptions = []
+        super.init(rootView: ChatConversation(model: model, layout: model.layout)); isHidden = true; sizingOptions = []
         latestButton.onPress = { [weak self] in self?.model.pressLatest() }
         // @Published fires before the value changes; place on the next turn.
-        model.$showsLatest.combineLatest(model.$composerHeight)
+        model.$showsLatest.combineLatest(model.layout.$composerHeight)
             .sink { [weak self] _ in DispatchQueue.main.async { self?.layoutLatestButton() } }
             .store(in: &latestObservers)
     }
@@ -135,7 +144,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
     func update(_ state: [String: Any], composer: NativeComposer) {
         lastState = state
         isHidden = !(state["visible"] as? Bool ?? false)
-        model.visible = !isHidden
+        if model.visible != !isHidden { model.visible = !isHidden }
         // A frame that only moved the composer (text, attachments) or the column leaves
         // the conversation alone: no decode of the kept transcript, no SwiftUI pass.
         var conversation = state
@@ -183,7 +192,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
     }
     func inspect() -> [String: Any] {
         let tail = model.snapshot?.messages.suffix(3).map { ["id":$0.id, "frame":NSStringFromRect(model.messageFrames[$0.id] ?? .zero)] } ?? []
-        return ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "tailFrames":tail,
+        return ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "tailFrames":tail,
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
          "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
          "footerFrames":model.footerFrames.mapValues { NSStringFromRect($0) }, "revealedActions":model.revealedActions, "messageFrames":model.messageFrames.mapValues { NSStringFromRect($0) },
@@ -223,6 +232,7 @@ private struct LatestClearanceMask: View {
 }
 struct ChatConversation: View {
     @ObservedObject var model: ChatModel
+    @ObservedObject var layout: ChatLayoutModel
     @ObservedObject var system = ChatSystemEnvironment.shared
     @State private var follows = true
     @State private var sticky: String?
@@ -382,7 +392,7 @@ struct ChatConversation: View {
                     // Metric-only changes: the probe pins from settled AppKit bounds.
                     .onAppear { viewportHeight = viewport.size.height }
                     .onChange(of: viewport.size) { size in viewportHeight = size.height; if follows { pinRequest += 1 } }
-                    .onChange(of: model.composerHeight) { _ in if follows { pinRequest += 1 } }
+                    .onChange(of: layout.composerHeight) { _ in if follows { pinRequest += 1 } }
                     .onChange(of: model.revealRevision) { _ in
                         follows = false; sticky = nil
                         reveal(proxy, readingHeight: readingHeight, viewportHeight: viewport.size.height)
@@ -412,7 +422,8 @@ private struct NativeMessageRow: View {
     /// Copy/Revert stay laid out and focusable; hover or keyboard focus shows them (LKM-145).
     private var revealsActions: Bool { (model.hoverOverride.map { $0 == message.id } ?? hovered) || focusedAction != nil }
     var body: some View {
-        HStack(alignment: .top) {
+        model.messageBodyEvaluations += 1
+        return HStack(alignment: .top) {
             if message.role == "user" { Spacer(minLength: 30) }
             VStack(alignment: .leading, spacing: 14) {
                 if !running, let elapsed = message.workedMs {
