@@ -110,6 +110,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         sheets = NativeSheets(parent: window); activity.parent = window; downloads.parent = window
         activityIndicator.install(in: shell.sidebar.view)
         nativeLayout = WorkspaceLayout(host: self)
+        toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
         canvas.changed = { [weak self] in self?.nativeLayout.layout() }
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         installMenus()

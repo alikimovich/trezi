@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173 review repair: cover the native toast over the preview
+
+- **Review gap.** The replacement for LKM-162's pointer gate covered the editing island and resize edge but omitted `NativeToast`, which floats above the preview. WebKit could still hover the page behind a visible toast.
+- **Fix.** `previewCoverRects` includes the toast. The toast resolves its constraint frame and reports a cover change when shown, then reports again when its fade finishes and it becomes hidden. Its frame hit test keeps transparent padding native-owned while preserving `NSHostingView`'s button handling.
+- **Evidence.** The settings smoke now checks the toast's native hit target, the sent rect against the preview shield, and removal of that shield after dismissal. Quick verification passed (168 unit checks and typechecks). Native settings verification was unavailable: the shared desktop lock stayed busy for 600 seconds, so manager verification remains pending.
+
 ## 2026-10-05 — LKM-173 repair 2: isolate hover travel from island click and wheel
 
 - **Manager failure.** The full native suite timed out when hover returned from the island to the page; the later visible-composer capture also failed after the inspector check left the island open. The hover fixture had posted a click and wheel during the island leg, before checking pointer return. Those queued events could run during the return move. A scoped native run had passed once, so the test order was timing-dependent.

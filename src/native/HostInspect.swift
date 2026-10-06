@@ -69,7 +69,11 @@ extension Host {
             else { sheets.model.perform(c["action"] as? String ?? "") }
             reply(id, true)
         // The in-window confirmation toast (LKM-170); perform clicks its action.
-        case "toastInspect": reply(id, toast.inspect())
+        case "toastInspect":
+            let point = NSPoint(x: toast.frame.midX, y: toast.frame.midY)
+            let hit = canvas.hitTest(canvas.convert(point, to: canvas.superview))
+            reply(id, toast.inspect().merging(["cover":previewCoverRects(), "sentCover":previewCover,
+                                               "hitToast":hit === toast || hit?.isDescendant(of: toast) == true]) { _, new in new })
         case "toastPerform": guard ephemeral else { reply(id, false); return true }; toast.model.perform(); reply(id, true)
         case "captureToast":
             // The workspace band around the toast, so the capture shows it in place.
