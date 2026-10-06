@@ -7,7 +7,8 @@ struct InspectorField: Decodable, Identifiable {
     let disabled: Bool?, detail: String?, options: [String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
-struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool }
+struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
+struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice? }
 final class InspectorModel: ObservableObject {
     @Published var state: InspectorState?
     func send(_ action: String, field: String? = nil, value: String? = nil) {
@@ -100,6 +101,17 @@ struct EditingInspectorContent: View {
         if let state = model.state {
             VStack(alignment: .leading, spacing: 10) {
                 HStack { Text(state.title).font(.headline).lineLimit(1); Spacer(); Menu { ForEach(state.actions) { action in Button(action.label) { model.send(action.id) } } } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize(); Button { model.send("close") } label: { Image(systemName: "xmark") }.buttonStyle(.plain) }
+                if let notice = state.notice {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(notice.title).font(.system(size: 12, weight: .semibold))
+                        Text(notice.reason).font(.caption).foregroundStyle(.secondary)
+                        if notice.editable { Text("A unique CSS class rule can still be edited.").font(.caption).foregroundStyle(.secondary) }
+                        HStack {
+                            Button("Connect project to Trezi") { model.send("setup") }
+                            Button("Ask the agent") { model.send("ask-agent") }
+                        }.font(.caption)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
                 Picker("Inspector section", selection: Binding(get: { state.tab }, set: { model.send("tab", value: $0) })) { Text("Props").tag("props"); Text("Styles").tag("styles"); Text("Custom").tag("custom") }.pickerStyle(.segmented).labelsHidden()
                 if state.busy { ProgressView().controlSize(.small) }
                 if !state.error.isEmpty { Text(state.error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }

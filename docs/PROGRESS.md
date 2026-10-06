@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-174 review repair: match CSS classes to the right stylesheet kind
+
+- A Vite-generated module class now searches only `*.module.css`; a plain class searches only global `.css`. This prevents a lone same-named rule in the wrong stylesheet kind from becoming an editable target. The resolver test covers both wrong-kind cases and a valid plain global class.
+
+## 2026-10-05 — LKM-174: unstamped inspector explanation and CSS class fallback
+
+- An element without a source stamp now shows the missing-source explanation, a reason from project readiness, and visible Connect project to Trezi / Ask the agent actions above the style values. The first uses the existing setup flow; the second places the selected element in the composer.
+- For an unstamped element, the Styles tab resolves a unique matching class rule in project CSS or CSS modules (including Vite's `_accountAvatar_vc9o5_17` naming). It re-resolves before writing through the source owner, so a newly ambiguous rule cannot receive an edit. Unresolved fields remain read-only.
+- The Vite 8 React setup fixtures now include `src/themer-admin`, a CSS module and an `img`; unit coverage checks that the JSX stamp is emitted, while the existing context test covers the no-stamp Connect card. The test Mac's actual project and config were not available in this worktree, so its specific missing-stamp cause remains unverified.
 ## 2026-10-05 — LKM-169 review evidence: Resolve queue in the native window
 
 - The `native-chat` smoke now parks the chat after a completed turn, sends one message, and captures the foreground shell at 440 pt and 320 pt chat widths (`test/artifacts/native/swift-chat-resolve-{440,320}.png` with matching JSON). It asserts the Swift-rendered conflict card explains the held changes, lists the file and offers Resolve; the composer queue contains exactly one message and says “Waiting for Resolve”; the transcript contains no copy or send error. Clearing the park sends that message exactly once. The capture uses ScreenCaptureKit without OCR or system preference changes. The first narrow capture exposed clipped queue labels, so the queue now gives its text explicit width within the available row.

@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Unstamped inspector fields (LKM-174)
+
+- [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.
+- [x] Resolve one matching project CSS or CSS-module class rule for an unstamped selection; keep ambiguous matches read-only.
+- [x] Cover Vite 8 React with a CSS module and an img in the setup fixture, plus class resolution and island state tests.
 ## Messages sent while a chat needs Resolve go to the queue (LKM-169)
 
 - [x] One send rule (`src/native/chat-queue.ts`): a running turn, a landing, a park waiting for Resolve or a provider login queues the message with its reason; the queue drains when the block clears.
