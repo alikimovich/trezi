@@ -32,9 +32,7 @@ export async function checkProductLog(chat: string, turn: string) {
     ['info', 'backend', 'Backend started']
   ].filter(([level, process, text]) => !has(lines, level, process, text))
   if (
-    !turnLines.some((line) =>
-      / info backend chat .*Turn started provider=claude model=fixture/.test(line)
-    )
+    !turnLines.some((line) => / info backend chat .*Turn started provider=claude model=/.test(line))
   )
     missing.push(['info', 'backend', 'Turn started'])
   if (!turnLines.some((line) => / info backend chat .*Turn ended /.test(line)))

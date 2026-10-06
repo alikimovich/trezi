@@ -1878,3 +1878,20 @@ export function registerAgentIpc(
     dropAll()
   })
 }
+
+/** Native smoke only: replace the provider's send while keeping the real agent:send
+ * RPC, turn tracker and provider event hook. No subscription call is made. */
+export function stubAgentSendForSmoke(chat: string, send: ProviderSession['send']) {
+  if (!process.argv.includes('--test'))
+    throw new Error('Provider stub is only available in native tests.')
+  const session = sessions.get(chat)
+  if (!session) throw new Error('Native smoke chat has no provider session.')
+  const original = session.send
+  session.send = send
+  return {
+    emit: (event: AgentEvent) => session.emit(event),
+    restore: () => {
+      session.send = original
+    }
+  }
+}

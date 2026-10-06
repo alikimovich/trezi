@@ -9,9 +9,8 @@ process writes to one folder, so a support report or a bug hunt reads one timeli
 - One file per UTC day: `trezi-YYYY-MM-DD.log`. Files are kept for 7 days and pruned
   when a day's file opens. A day's file stops at 20 MB with one "Daily log limit
   reached" line.
-- Every process opens the day file with `O_APPEND`, so lines never tear. The size cap
-  reads the shared file, so it holds across processes. Logging never throws or blocks
-  the main thread: the Swift writer uses a private queue.
+- Every process opens the day file with `O_APPEND` and locks it across the size
+  check and append. Logging never throws; the Swift writer uses a private queue.
 
 ## Writers
 
@@ -22,7 +21,7 @@ process writes to one folder, so a support report or a bug hunt reads one timeli
 | `backend` | `src/main/product-log.ts` | `initProductLog('backend')` in `src/native/index.ts` |
 | `helper` | `src/main/product-log.ts` | `src/main/backends/provider-helper-entry.ts` |
 | `preview` | backend, on the bridge's behalf | a once-a-minute message count from `src/native/log-support.ts` |
-| `devserver` | backend, on the dev server's behalf | `src/main/devserver.ts`, lines cut to 300 characters |
+| `devserver` | backend, on the dev server's behalf | `src/main/devserver.ts`, fixed output categories and lengths |
 
 Until a process configures its writer every call is a no-op. Owner and unit tests
 therefore write nothing. The provider helper's scrubbed environment keeps
@@ -48,7 +47,8 @@ Lifecycle facts only:
   model (`src/main/turn-log.ts`);
 - landing, parking and resolve steps, with the Git result;
 - worktree create, sync and remove;
-- provider helper start, exit and crash, and backend start and exit;
+- provider helper start, exit and crash with status, and backend start and exit;
+- target dev server output category and length (the raw line stays in Activity);
 - preview load, reload, load failure and web-content crash;
 - host commands that hold the main thread for more than 250 ms;
 - XPC errors and lost connections;
@@ -57,7 +57,7 @@ Lifecycle facts only:
 **Never logged:** prompts, replies, file contents, secrets, API keys or tokens. Every
 line passes through `redact` (`product-log.ts` / `ProductLog.redact`). It removes
 known token shapes, `key=value` secrets, URL credentials and private keys, and shortens
-the home folder to `~`. Console output is not copied into the log. Add a new pattern to
+the home folder to `~`. Console output and helper stderr are not copied into the log. Add a new pattern to
 both writers and to `test/product-log.mjs`.
 
 ## Reading the log

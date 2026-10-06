@@ -1,3 +1,4 @@
+import { dlopen } from 'bun:ffi'
 import {
   closeSync,
   fstatSync,
@@ -28,11 +29,17 @@ export const LOG_KEEP_DAYS = 7
 export const LOG_DAY_BYTES = 20 * 1024 * 1024
 /** The longest message kept; a dev server line is shorter (`DEVSERVER_LINE`). */
 export const LOG_MESSAGE_LIMIT = 1000
-export const DEVSERVER_LINE = 300
 const DAY = 24 * 60 * 60_000
 const FILE = /^trezi-(\d{4}-\d{2}-\d{2})\.log$/
 /** A line starts with its ISO time, e.g. `2026-10-05T21:52:43.463Z`. */
 const STAMP = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z) /
+// The Swift writer takes the same advisory lock on the day file. Keep the size
+// check and append in one critical section across the host, service and Bun.
+const flock = dlopen('/usr/lib/libSystem.B.dylib', {
+  flock: { args: ['i32', 'i32'], returns: 'i32' }
+}).symbols.flock
+const LOCK_EX = 2
+const LOCK_UN = 8
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 /** `chat` and `turn` lead the line; every other field follows the message as `key=value`. */
@@ -144,9 +151,8 @@ export interface LogWriterOptions {
 }
 
 /**
- * Appends one process's lines. Every process opens the day's file with O_APPEND, so
- * lines from different processes never tear; the size check reads the shared file, so
- * the 20 MB cap holds across them. A write that fails is dropped: logging never throws.
+ * Appends one process's lines. A shared advisory lock makes the size check and
+ * append atomic across writers. A write that fails is dropped: logging never throws.
  */
 export class LogWriter {
   private fd = -1
@@ -164,21 +170,27 @@ export class LogWriter {
       if (name !== this.day) this.open(name, at)
       if (this.fd < 0) return
       const max = this.options.maxBytes ?? LOG_DAY_BYTES
-      const size = fstatSync(this.fd).size
-      if (size >= max) return
       const line = this.format({ at, level, process: this.options.process, area, message, fields })
-      writeSync(this.fd, line)
-      if (size + Buffer.byteLength(line) >= max)
-        writeSync(
-          this.fd,
-          this.format({
-            at,
-            level: 'warn',
-            process: this.options.process,
-            area: 'log',
-            message: `Daily log limit reached (${max} bytes); later lines today are dropped.`
-          })
-        )
+      const marker = this.format({
+        at,
+        level: 'warn',
+        process: this.options.process,
+        area: 'log',
+        message: `Daily log limit reached (${max} bytes); later lines today are dropped.`
+      })
+      if (flock(this.fd, LOCK_EX) !== 0) return
+      try {
+        const size = fstatSync(this.fd).size
+        if (size >= max) return
+        const remaining = max - size
+        const markerBytes = Buffer.byteLength(marker)
+        if (Buffer.byteLength(line) + markerBytes <= remaining) writeSync(this.fd, line)
+        else if (markerBytes <= remaining)
+          // Fill the day file exactly once, so later writers cannot add a marker.
+          writeSync(this.fd, `${marker.trimEnd()}${' '.repeat(remaining - markerBytes)}\n`)
+      } finally {
+        flock(this.fd, LOCK_UN)
+      }
     } catch {}
   }
 

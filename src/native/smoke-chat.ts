@@ -1,9 +1,9 @@
 import { writeFileSync } from 'node:fs'
-import { logTurnEvent, logTurnStart } from '../main/turn-log'
-import type { AgentOptions } from '../shared/api'
+import { stubAgentSendForSmoke } from '../main/agent'
+import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
-import { serviceEvents, views } from './platform'
+import { serviceEvents } from './platform'
 import { checkProductLog } from './smoke-logs'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -20,21 +20,20 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   const state = await wait((state) => state.visible && state.chat)
   if (JSON.stringify(await host.request('webViews')) !== JSON.stringify(['preview']))
     throw new Error('Unexpected application WebView')
-  const send = (event: object) =>
-    views.get('main')!.webContents.send('agent:event', { ...event, projectKey: state.chat })
   // Disable renderer event delivery: Swift input, streaming and queues must
   // continue through Bun without the web UI participating.
   const priorError = nativeWorkspace.state.error
   const originalInvoke = nativeChat.services.invoke
   const sent: unknown[][] = []
-  // The stub stands in for the provider: it logs the turn as agent:send would (LKM-168).
-  const turn = 'smoke-turn'
+  let turn = ''
+  // The actual agent:send RPC and its provider event hook own the log lines.
+  // Only the provider's outbound send is stubbed; no paid provider call occurs.
+  const provider = stubAgentSendForSmoke(state.chat, (...args) => {
+    sent.push(args)
+  })
+  const send = (event: object) => provider.emit(event as AgentEvent)
   nativeChat.services.invoke = async (channel, ...args) => {
-    if (channel === 'agent:send') {
-      sent.push(args)
-      logTurnStart(state.chat, turn, { provider: 'claude', model: 'fixture' } as AgentOptions)
-      return
-    }
+    if (channel === 'agent:send') turn = String(args[4])
     return originalInvoke(channel, ...args)
   }
   try {
@@ -67,7 +66,11 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
           message.role === 'user' && message.text === 'Render this conversation in Swift.'
       )
     )
-    if (sent.length !== 1) throw new Error('Native Send did not reach Bun service')
+    // The UI publishes the optimistic message before agent:send finishes its
+    // worktree and conversation preparation. Wait for the provider seam itself.
+    for (let i = 0; i < 200 && sent.length !== 1; i++)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    if (sent.length !== 1) throw new Error('Native Send did not reach the provider stub')
     if (nativeChat.get(state.chat).context?.selection)
       throw new Error('Native Send did not clear selection context')
     if (nativeWorkspace.state.error !== priorError)
@@ -146,7 +149,6 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     send({ type: 'permission-resolved', id: 'beam-wait' })
     await wait((state) => state.activityKind === 'writing')
     send({ type: 'done', landingPending: true })
-    logTurnEvent(state.chat, { type: 'done', turn })
     await wait((state) => state.activityKind === 'applying')
     if ((await host.request('composerInspect')).buttonBeam)
       throw new Error('Landing retained thinking beam')
@@ -212,6 +214,9 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     await checkProductLog(state.chat, turn)
   } finally {
     nativeChat.services.invoke = originalInvoke
+    // If preparation failed before send, retain the stub until this test process
+    // exits: a late agent:send must never escape to a real provider subscription.
+    if (sent.length) provider.restore()
   }
   console.log(
     'Swift/Bun chat without an application WebView: Send, queue, streamed Markdown, permissions and questions passed.'

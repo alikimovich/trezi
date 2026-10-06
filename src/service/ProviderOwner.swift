@@ -429,7 +429,9 @@ final class ProviderOwner: @unchecked Sendable {
         // LKM-168: a helper that ends while its session is current and not stopping crashed.
         let current = sessions[session.id] === session
         if current && session.phase != .stopped {
-            ProductLog.error("provider", "Provider helper crashed provider=\(session.provider) \(code)\(detail.prefix(200))", chat: session.chat)
+            // stderr can contain user prompts, source excerpts or secrets. It is
+            // kept for the immediate UI error, never persisted in the product log.
+            ProductLog.error("provider", "Provider helper crashed provider=\(session.provider) \(code)", chat: session.chat)
         } else {
             ProductLog.info("provider", "Provider helper exited provider=\(session.provider) \(code)", chat: session.chat)
         }

@@ -5,7 +5,7 @@
 // Export Logs build their text and zip from the same lines. Everything writes into a
 // temporary folder: nothing touches ~/Library/Logs/Trezi.
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import {
   appendFileSync,
   existsSync,
@@ -20,6 +20,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { followLogs, logs } from '../bin/trezi.mjs'
+import { registerDevServerIpc } from '../src/main/devserver.ts'
 import {
   formatLogLine,
   initProductLog,
@@ -125,7 +126,7 @@ try {
   const [swiftFile] = readdirSync(swiftDir)
   assert.match(swiftFile, /^trezi-\d{4}-\d{2}-\d{2}\.log$/)
   const swiftText = readFileSync(join(swiftDir, swiftFile), 'utf8')
-  assert.ok(statSync(join(swiftDir, swiftFile)).size < 4096 + 400)
+  assert.equal(statSync(join(swiftDir, swiftFile)).size, 4096)
   assert.match(swiftText, / warn service log Daily log limit reached/)
   assert.ok(!swiftText.includes('sk-ant-'))
   assert.ok(!swiftText.includes(homedir()))
@@ -177,9 +178,28 @@ try {
   clock = AT
   for (let i = 0; i < 50; i++) writer.write('info', 'chat', `line ${i} ${'y'.repeat(40)}`)
   const capped = readFileSync(join(dir, 'trezi-2025-10-05.log'), 'utf8')
-  assert.ok(Buffer.byteLength(capped) < 1500 + 300)
+  assert.equal(Buffer.byteLength(capped), 1500)
   assert.equal(capped.match(/Daily log limit reached/g)?.length, 1)
   writer.close()
+
+  // Two Bun/Swift processes share one day file and the same hard cap.
+  const shared = join(temp, 'shared')
+  const child = spawn(
+    'bun',
+    [
+      '-e',
+      `import {LogWriter} from './src/main/product-log.ts'; const w=new LogWriter({dir:process.argv[1],process:'backend',maxBytes:4096}); for(let i=0;i<200;i++) w.write('info','chat','line '+i+' '+ 'x'.repeat(40)); w.close()`,
+      shared
+    ],
+    { cwd: join(import.meta.dir, '..'), stdio: 'ignore' }
+  )
+  runFixture(fixture, ['write', shared, '200', '4096'])
+  const childExit = await new Promise((resolve) => child.on('exit', resolve))
+  assert.equal(childExit, 0)
+  const sharedText = readFileSync(join(shared, logFileName(Date.now())), 'utf8')
+  assert.equal(Buffer.byteLength(sharedText), 4096)
+  assert.equal(sharedText.match(/Daily log limit reached/g)?.length, 1)
+  assert.ok(sharedText.endsWith('\n'))
 
   // Reading: the window across day files, every process, sorted by time.
   const read = join(temp, 'read')
@@ -257,6 +277,16 @@ try {
   logTurnStart('chat-a', 'turn-2', {})
   logTurnEvent('chat-a', { type: 'error', turn: 'turn-2', message: `failed with ${SECRETS[0]}` })
   productLog.info('output', 'ready on http://localhost:3000', undefined, 'devserver')
+  let output = (_root, _line) => {}
+  const runtime = {
+    onLog: (callback) => {
+      output = callback
+    },
+    onExit: () => {}
+  }
+  registerDevServerIpc(() => null, { handle: () => {} }, runtime)
+  const privateOutput = 'error: source excerpt const password = secret-file-content-123'
+  output('/repo', privateOutput)
   notePreviewMessage('preview:picked')
   notePreviewMessage('preview:picked')
   notePreviewMessage('agent:send', true)
@@ -283,6 +313,8 @@ try {
     / error backend chat chat=chat-a turn=turn-2 Turn failed .*error="failed with \[redacted\]"/
   )
   assert.match(text, / info devserver output ready on http:\/\/localhost:3000/)
+  assert.match(text, / info devserver output Dev server output kind=error chars=\d+/)
+  assert.ok(!text.includes('secret-file-content-123'))
   assert.match(
     text,
     / warn preview bridge Preview messages total=3 refused=1 channels=preview:picked:2,agent:send:1/

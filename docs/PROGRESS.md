@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-168 review repair: private output, hard cap, real turn path
+
+- The dev-server product log now records only a fixed output category and length. Raw lines still reach Activity but cannot put target source excerpts into the persisted log. Helper crash lines keep provider and exit status, not the stderr tail.
+- Bun and Swift take the same advisory lock on the UTC day file while checking the remaining bytes and appending. When the next line cannot fit with its limit marker, the marker fills the file to the exact cap. The unit test checks both writers and a shared-file race.
+- The native chat smoke stubs only the provider's outbound send. It invokes the real `agent:send` RPC and emits through the existing provider event hook, so removing either production log hook fails its start/end assertion.
+
 ## 2026-10-05 — LKM-168: product logging, one folder, Copy Logs for Support, `trezi logs`
 
 - **One folder, every process.** Each process appends straight to `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log` with `O_APPEND`; `TREZI_LOG_DIR` overrides the folder.

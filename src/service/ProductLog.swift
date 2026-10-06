@@ -7,7 +7,7 @@ import Darwin
 /// A line is `<ISO time> <level> <process> <area> [chat=<id>] [turn=<id>] <message>`,
 /// redacted and with the home folder shortened to `~`. Until `configure` every call is
 /// a no-op, so owner tests write nothing. Writes run on a private queue (never the main
-/// thread) with O_APPEND, so the processes' lines never tear; logging never fails.
+/// thread) with an advisory lock shared with Bun; logging never fails.
 enum ProductLog {
     static let keepDays = 7
     static let dayBytes: Int64 = 20 * 1024 * 1024
@@ -71,13 +71,20 @@ enum ProductLog {
             prune(directory: folder, now: at)
         }
         guard descriptor >= 0 else { return }
+        guard flock(descriptor, LOCK_EX) == 0 else { return }
+        defer { _ = flock(descriptor, LOCK_UN) }
         var info = stat()
         guard fstat(descriptor, &info) == 0, Int64(info.st_size) < limit else { return }
         let text = line(level: level, process: tag, area: area, message: message, chat: chat, turn: turn, at: at, home: home) + "\n"
-        put(text)
-        if Int64(info.st_size) + Int64(text.utf8.count) >= limit {
-            put(line(level: "warn", process: tag, area: "log", message: "Daily log limit reached (\(limit) bytes); later lines today are dropped.",
-                     chat: nil, turn: nil, at: at, home: home) + "\n")
+        let marker = line(level: "warn", process: tag, area: "log", message: "Daily log limit reached (\(limit) bytes); later lines today are dropped.",
+                          chat: nil, turn: nil, at: at, home: home) + "\n"
+        let remaining = limit - Int64(info.st_size)
+        let markerBytes = Int64(marker.utf8.count)
+        if Int64(text.utf8.count) + markerBytes <= remaining {
+            put(text)
+        } else if markerBytes <= remaining {
+            // Fill to the cap so another writer cannot append a second marker.
+            put(String(marker.dropLast()) + String(repeating: " ", count: Int(remaining - markerBytes)) + "\n")
         }
     }
 

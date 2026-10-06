@@ -14,7 +14,7 @@ case "redact":
     let data = try! JSONSerialization.data(withJSONObject: ["texts": texts, "line": line])
     print(String(decoding: data, as: UTF8.self))
 case "write":
-    ProductLog.configure(process: "service", environment: ["TREZI_LOG_DIR": args[1]], maxBytes: 4096)
+    ProductLog.configure(process: "service", environment: ["TREZI_LOG_DIR": args[1]], maxBytes: Int64(args.dropFirst(3).first ?? "4096") ?? 4096)
     for index in 0..<(Int(args[2]) ?? 1) {
         ProductLog.info("provider", "Helper started \(index) in \(ProductLog.accountHome)/dev/app with key=sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWx")
     }
