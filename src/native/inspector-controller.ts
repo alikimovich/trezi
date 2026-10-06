@@ -43,6 +43,10 @@ export class NativeInspectorController {
   classRule: { file: string; className: string } | null = null
   readonly bindings = new Map<string, Binding>()
   private sequence = 0
+  private readonly saved = new Map<
+    string,
+    { element: SelectedElement; tab: NativeInspectorState['tab']; visible: boolean }
+  >()
   private reconciles = new Map<string, ReturnType<typeof setTimeout>>()
   private clearReconciles() {
     for (const timer of this.reconciles.values()) clearTimeout(timer)
@@ -100,13 +104,50 @@ export class NativeInspectorController {
     this.render({ ...this.state, fields: [...this.state.fields], actions: [...this.state.actions] })
   }
   async activate(root: string) {
-    this.clearReconciles()
+    this.clear()
     this.state.root = root
+    await this.refresh()
+  }
+  /** The old project's island is hidden synchronously; its view state stays in memory. */
+  suspend() {
+    if (this.state.root && this.element)
+      this.saved.set(this.state.root, {
+        element: this.element,
+        tab: this.state.tab,
+        visible: this.state.visible
+      })
+    this.clear()
+  }
+  savedElement(root: string) {
+    return this.saved.get(root)?.element ?? null
+  }
+  forget(root: string) {
+    this.saved.delete(root)
+  }
+  async restore(root: string, element: SelectedElement) {
+    const saved = this.saved.get(root)
+    if (!saved || root !== this.state.root) return
+    this.state.tab = saved.tab
+    this.state.visible = saved.visible
+    await this.select(element)
+  }
+  /** LKM-172: the selection and the island belong to one project and one page. Drops both
+   *  and publishes the hidden island now; a refresh still in flight is discarded. */
+  clear() {
+    this.clearReconciles()
+    ++this.sequence
+    ++this.state.generation
     this.requestedFile = null
     this.element = null
+    this.inspection = null
+    this.styles = null
+    this.controls = []
     this.state.visible = false
-    ++this.state.generation
-    await this.refresh()
+    this.state.busy = false
+    this.state.error = ''
+    this.build()
+    this.publish()
+    void this.send('styles:clear-preview', {}).catch(() => {})
   }
   async select(element: SelectedElement | null) {
     this.clearReconciles()

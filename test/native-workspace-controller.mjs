@@ -119,12 +119,26 @@ assert.equal(controller.active.activeSessionKey, '/one')
 await assert.rejects(controller.command({ type: 'chat', key: '/one', session: '/other' }))
 await controller.command({ type: 'close-chat', key: '/one', session: second })
 assert.deepEqual(controller.active.sessionKeys, ['/one'])
+// LKM-172: a switch to another project is heard before "Opening …" renders; a restart
+// or a re-select of the loaded project is not a switch.
+const switches = []
+controller.switching = (key) => switches.push([key, renders.at(-1)?.status.kind])
+await controller.command({ type: 'restart', key: '/one' })
+await controller.select('/one')
+assert.deepEqual(switches, [], 'Restarting or re-selecting the loaded project is no switch')
 slow = gate()
 const opening = controller.open('/slow')
 await tick()
 await controller.open('/two')
 slow.resolve()
 await opening
+assert.deepEqual(
+  switches.map(([key]) => key),
+  ['/slow', '/two'],
+  'Each switch to another project is heard'
+)
+assert.equal(switches[0][1], 'running', 'The switch is heard before Opening renders')
+controller.switching = undefined
 assert.equal(controller.state.activeKey, '/two')
 assert.equal(active.at(-1), '/two')
 assert.equal(controller.state.status.name, 'two')
@@ -140,8 +154,19 @@ assert.ok(!controller.state.projects.some((p) => p.key === '/slow'))
 failed = true
 await controller.open('/failure')
 assert.equal(controller.state.status.kind, 'error')
+assert.equal(controller.state.loadedKey, null)
 assert.equal(active.at(-1), '/failure')
 assert.ok(projects.has('/failure'), 'failed preview must retain repair chat')
+await controller.close('/failure')
+// A restart keeps the loaded chat during its busy phase, but a failed restart
+// must hide that chat once the error replaces the preview.
+failed = false
+await controller.open('/failure')
+assert.equal(controller.state.loadedKey, '/failure')
+failed = true
+await controller.command({ type: 'restart', key: '/failure' })
+assert.equal(controller.state.status.kind, 'error')
+assert.equal(controller.state.loadedKey, null)
 await controller.close('/failure')
 assert.equal(controller.state.activeKey, '/two')
 assert.equal(JSON.parse(saved()).activeKey, '/two')

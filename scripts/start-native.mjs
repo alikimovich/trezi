@@ -30,7 +30,8 @@ export function nativeServiceLaunchSpec(root, args, env, bun, testDirectory = nu
   return {
     command: join(out, 'Trezi.app/Contents/MacOS/TreziHost'),
     args: [out, testDirectory ? 'ephemeral' : 'persistent', '--service', '--bun', bun, '--backend', join(out, 'Trezi.app/Contents/Resources/backend/index.cjs'), '--profile', profile, '--', ...args],
-    env: { ...env, TREZI_USER_DATA: profile, ...(testDirectory ? { TREZI_NATIVE_TEST_DIR: testDirectory } : {}) },
+    // A test run logs into its disposable folder, never ~/Library/Logs/Trezi (LKM-168).
+    env: { ...env, TREZI_USER_DATA: profile, ...(testDirectory ? { TREZI_NATIVE_TEST_DIR: testDirectory, TREZI_LOG_DIR: join(testDirectory, 'logs') } : {}) },
     profile
   }
 }

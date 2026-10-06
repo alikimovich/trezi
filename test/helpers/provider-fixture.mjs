@@ -14,6 +14,7 @@ import { swiftBuild } from './swift-build.mjs'
 const root = fileURLToPath(new URL('../..', import.meta.url))
 export const SOURCES = [
   'ServiceContract',
+  'ProductLog',
   'LedgerStore',
   'OperationLedger',
   'PreferencesFile',

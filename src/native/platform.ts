@@ -38,6 +38,7 @@ export const ipcMain = Object.assign(new EventEmitter(), {
 export const previewSendChannels = new Set([
   channels.PREVIEW_PICKED,
   channels.PREVIEW_CANCELLED,
+  channels.PREVIEW_SELECTION_LOST,
   channels.PREVIEW_TOGGLE_SELECT,
   channels.PREVIEW_TOOLBAR_ACTION,
   channels.PREVIEW_READINESS,

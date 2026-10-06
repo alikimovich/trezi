@@ -57,6 +57,7 @@ extension ProviderOwner {
                     owner.queue.async { owner.exited(session, status: status, tail: tail) }
                 })
         } catch {
+            ProductLog.error("provider", "Provider helper \(session.provider) could not start: \(error)", chat: session.chat)
             session.opening = nil
             sessions[session.id] = nil
             answer(frame, .failed(PreferencesOwner.fail(.unavailable, "The provider helper could not start: \(error).")))
@@ -64,6 +65,7 @@ extension ProviderOwner {
             return
         }
         if let identity = helper.identity { options.journal?.add(identity) }
+        ProductLog.info("provider", "Provider helper started provider=\(session.provider) pid=\(helper.identity?.pgid ?? 0) session=\(session.id.prefix(8))\(session.background ? " background" : "")", chat: session.chat)
         session.helper = helper
         session.launchedAt = Self.clock()
         helper.write(open)

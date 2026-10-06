@@ -61,7 +61,9 @@ final class ProviderHelperProcess: @unchecked Sendable {
     static let baseVariables: Set<String> = ["HOME", "PATH", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "NODE_ENV",
         // Proxy and CA settings, which every provider CLI honours.
         "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "no_proxy", "all_proxy",
-        "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR"]
+        "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+        // Where the helper writes its product-log lines (LKM-168); tests point it at their run folder.
+        "TREZI_LOG_DIR"]
     /// Per provider, what a user sets on purpose: exact names, then prefixes. A whole
     /// `CLAUDE_*`/`CODEX_*` prefix is not allowed (LKM-124): a Trezi started from a Claude
     /// Code or Codex session inherits that session's runtime variables, and

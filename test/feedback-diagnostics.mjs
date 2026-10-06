@@ -3,6 +3,9 @@
 // host is sampled only when its main thread is slow. No real `log`, `sample` or
 // provider call runs: commands are injected.
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   BUSY_MS,
   captureConsole,
@@ -47,13 +50,27 @@ assert.ok(clean.includes('https://user:[redacted]@example.com/repo.git'))
 captureConsole()
 console.error(`provider failed: token=${SECRETS[1]} in ${HOME}/dev/app`)
 
+const START = Date.parse('2020-01-01T12:00:00.000Z')
+const logDir = mkdtempSync(join(tmpdir(), 'trezi-feedback-log-'))
+writeFileSync(
+  join(logDir, 'trezi-2020-01-01.log'),
+  [
+    '2020-01-01T11:00:00.000Z info backend chat Too old',
+    '2020-01-01T11:50:00.000Z info app lifecycle App started',
+    '2020-01-01T11:55:00.000Z info backend chat chat=chat-1 turn=t1 Turn started provider=claude',
+    ''
+  ].join('\n')
+)
+process.on('exit', () => rmSync(logDir, { recursive: true, force: true }))
+
 function sources(pingMs, output = {}) {
   const calls = []
-  let clock = 1_000_000
+  let clock = START
   return {
     calls,
     value: {
       home: HOME,
+      logDir,
       hostPid: 4242,
       chat: { key: 'chat-1', root: `${HOME}/dev/app` },
       now: () => clock,
@@ -94,8 +111,14 @@ assert.deepEqual(
 )
 assert.match(
   text,
-  /## Backend log \(last hour\)\n.*error: provider failed: token=\[redacted\] in ~\/dev\/app/
+  /## Backend console \(last hour\)\n.*error: provider failed: token=\[redacted\] in ~\/dev\/app/
 )
+// LKM-168: the product log's last 30 minutes, from every process; older lines stay out.
+assert.match(
+  text,
+  /## Trezi log \(last 30 minutes\)\n.*info app lifecycle App started\n.*info backend chat chat=chat-1 turn=t1 Turn started/
+)
+assert.ok(!text.includes('Too old'), 'lines older than 30 minutes are left out')
 assert.match(
   text,
   /## System log, Trezi processes \(last hour\)\nTreziHost: Authorization: Bearer \[redacted\]/

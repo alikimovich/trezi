@@ -140,6 +140,7 @@ final class ServiceClient: NSObject, TreziServiceEvents {
         guard connection === channel else { return }
         connection = nil; ready = false
         guard !stopped, !failed else { return }
+        ProductLog.warn("xpc", "Service connection lost (attempt \(attempts), \(pending.count) pending)")
         if !pending.isEmpty { fail("Service disconnected with an uncertain request; no replay attempted"); return }
         guard attempts < 3 else { fail("Service reconnect failed"); return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.connect() }
@@ -147,6 +148,7 @@ final class ServiceClient: NSObject, TreziServiceEvents {
     private func fail(_ message: String) {
         guard !stopped, !failed, !serviceEnded else { return }
         failed = true; ready = false
+        ProductLog.error("xpc", message)
         onFailure?(message)
     }
 }

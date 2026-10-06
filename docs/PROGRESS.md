@@ -21,6 +21,74 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - **Checks.** `test/native-build-cache.mjs` (unit tier) covers the key, pruning, hit/miss, the unusable-cache fallback and the profile wiring, using a stand-in compiler. The signing test asserts that `-` makes no keychain call. Quick verification passed with 170 unit checks. Native verification passed for all seven groups (24/24 smoke checks) plus chat-scroll.
 
+## 2026-10-05 — LKM-172 verification repair: attachment upload fixture timing
+
+- Manager quick verification reached the unrelated `platform-owner` attachment check and found an empty save path during a 3 MB chunked upload. That fixture used a one-second upload idle limit for the whole attachment suite; parallel unit load can leave more than one second between chunks, making the client correctly return an empty path after the service expires the upload.
+- The full upload now uses the service's normal idle limit. Separate disposable fixtures keep the explicit one-second expiry and four-upload capacity checks, so both refusal cases remain covered without imposing that timeout on the multi-megabyte transfer.
+
+## 2026-10-05 — LKM-172 repair: inspector reads do not hold project activation
+
+- `NativeInspectorController.activate` hides the old island and sets the new root synchronously, then refreshes tokens and controls asynchronously. The runtime now starts that refresh without awaiting it, and reports any rejection through the existing error handler. Chat context, Git refresh and the rest of project activation can proceed while inspector reads finish; saved-element resolution still starts after project activation.
+
+## 2026-10-05 — LKM-172 repair: a new pick cannot consume an invalid snapshot
+
+- Manager native verification found that after A's source stamp changed while B was active, selecting the changed element could still restore A's old Props tab. The later core inspector check then also saw Props rather than Styles. The visible island and chip were hidden, but the saved inspector snapshot had not yet been discarded.
+- The returning preview now uses its readiness URL as well as document start time to identify A's loaded page, even when a separate URL-change callback is absent. An inspector snapshot is applied only to the matching element-picked event requested by restore; an ordinary new pick discards that snapshot. The native switch check waits until both the inspector snapshot and stored composer selection are empty before picking the changed element anew.
+- Verification: agentos quick passed (167 unit checks, lint and typechecks); native `core,sidebar` passed 16/16 checks, including `project-switching` and the following inspector check. The Opening capture shows no inspector island.
+
+## 2026-10-05 — LKM-172 repair: project selections return when their element still exists
+
+- The user decision supersedes the original issue's optional "restore nothing" reading. A switch now hides A's island and chip immediately, stores its element and tab in memory, then checks A's page on return. A unique matching layer restores the selection and tab; a missing source stamp clears them quietly. The native switch check covers both return paths.
+- The preceding LKM-172 entry describes the earlier implementation and its tests; its "none restored" expectation was replaced by this repair.
+- Native verification passed `project-switching` after the document-readiness gate, but the following inspector check exposed a retained snapshot after the removed-element case. Repeated readiness events had invalidated each pending missing-element timer. The timer now stays live across those events and checks the saved element again before clearing it. The native test also selects the changed element anew and checks that the old Props tab does not return. Quick verification passed before this last fix; the session's native call limit was reached, so this final revision still needs native confirmation.
+
+## 2026-10-05 — LKM-172: the selection and the editing island belong to one project and one page
+
+- **Problem.** With an element selected and the editing island open in project A, switching to project B left A's island (A's element values) on screen through "Opening B…" and after. The inspector only reset in `services.activate`, which runs once B has opened, and it published only after its async reads. The chat chip of A stayed in A's context, so coming back restored it.
+- **Project switch.** `NativeWorkspaceController.switching` is called at the start of `select()` for any project other than the loaded one (a restart or a re-select of the loaded project is not a switch), before "Opening …" renders. `inspector-runtime.ts` then:
+  - calls `NativeInspectorController.clear()`, which drops the element, discards any refresh in flight, publishes the hidden island synchronously and clears live style previews (`activate` uses it too);
+  - calls `NativeContextController.clearSelections()`, so no project keeps a chip and returning restores nothing (the issue's preferred option);
+  - turns select mode off (`preview:set-select-mode false`), which drops the old page's selection outlines, toolbar and hover box.
+- **Navigation.** `preview:url-changed` to a different page (origin, path and query; the hash is ignored) than the one the element was picked on drops the selection, the chip and the island and clears the page's selection. A reload of the same page keeps it, because a source write live-reloads the page and the element re-resolves by its stamp; the Styles edit flow depends on that.
+- **Removed element.** The preload's 600 ms layout tick (`checkSelectionGone`) treats a pick as gone when none of its elements is connected and no element carries the same source stamp (HMR swaps nodes), on two ticks in a row. It drops its own outlines and toolbar and sends the new `trezi:preview:selection-lost` (`PREVIEW_SELECTION_LOST`, relayed as `preview:selection-lost`); unlike `select-cancelled` it leaves select mode as it is.
+- **Tests.** Unit: `native-inspector` (synchronous hidden publish, stale refresh discarded), `native-context` (`clearSelections`), `native-workspace-controller` (switch heard before Opening renders, not on restart/re-select). Native (`project-switching`, group `sidebar`): selects the first project's heading through Layers, opens the island, draws the hover box, then holds the second project's `project:detect` so the app stays at "Opening …" and checks that the island is hidden with no element (`inspectorInspect.title` is "Project controls"), both chats have no chip and the old page shows no outline, toolbar or hover box; after returning, nothing is restored. Evidence: `switch-selection.json`, `switch-selection-opening.png`.
+## 2026-10-05 — LKM-168 native chat gate verification repair
+
+- A failed project selection now clears its loaded chat key, including when a restart fails after the project was previously loaded. The shell also closes the chat gate for a preview error that arrives after selection, such as a dev server exit. Unit checks cover both paths; this addresses the failed-open chat-gate smoke from manager verification.
+
+## 2026-10-05 — LKM-168 native smoke after the LKM-169 merge
+
+- The Resolve queue smoke now checks that the second provider call is made exactly once and its prompt ends with the queued composer text. The real `agent:send` path prepends Trezi UI instructions even when UI composition is off; comparing the full prompt to the bare text failed before emitting the queued turn's `done` event, which left the next attachment smoke waiting behind a running turn.
+
+## 2026-10-05 — LKM-168 review repair: private output, hard cap, real turn path
+
+- The dev-server product log now records only a fixed output category and length. Raw lines still reach Activity but cannot put target source excerpts into the persisted log. Helper crash lines keep provider and exit status, not the stderr tail.
+- Bun and Swift take the same advisory lock on the UTC day file while checking the remaining bytes and appending. When the next line cannot fit with its limit marker, the marker fills the file to the exact cap. The unit test checks both writers and a shared-file race.
+- The native chat smoke stubs only the provider's outbound send. It invokes the real `agent:send` RPC and emits through the existing provider event hook, so removing either production log hook fails its start/end assertion.
+
+## 2026-10-05 — LKM-168: product logging, one folder, Copy Logs for Support, `trezi logs`
+
+- **One folder, every process.** Each process appends straight to `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log` with `O_APPEND`; `TREZI_LOG_DIR` overrides the folder.
+  - I chose direct writes over relaying lines through the service because a relay would lose the lines that matter most when the service or XPC fails.
+  - The 20 MB cap reads the shared file's size, so it holds across processes. Old days are pruned when a day file opens.
+  - Writers: `src/main/product-log.ts` (Bun backend, provider helpers, plus `preview` and `devserver` lines written on their behalf) and `src/service/ProductLog.swift` (host `app`, `service`, written on a private queue). Both are no-ops until configured, so owner tests write nothing.
+- **Events.**
+  - Turns: start, end and failure with provider and resolved model (`src/main/turn-log.ts`, hooked into `agent.ts`).
+  - Landing outcome with the Git result and landing failures (`chat-isolation.ts`); parked apply, resolve staging and discard (`chat-worktrees.ts`); worktree create, sync, remove and reclaim (`worktrees.ts`).
+  - Helpers and backend: provider helper start, exit and crash. A crash is an exit of the current session that the owner had not stopped (`ProviderOwner.exited`). Backend start and exit (`ServiceRuntime`).
+  - Preview: load, reload, failed load and web-content crash (`Host.swift`); a once-a-minute preview bridge message count (`log-support.ts`).
+  - Host and XPC: host commands slower than 250 ms (`Host.dispatch`, `HostLogs.swift`); XPC failures and lost connections (`ServiceClient`, `ServiceRuntime`).
+  - Dev server lines cut to 300 characters.
+- **Privacy.** One `redact` (token shapes, `key=value` secrets, URL credentials, private keys, home → `~`) used by the log and by the LKM-165 feedback diagnostics, mirrored in Swift. `test/product-log.mjs` checks the two writers produce identical output. Console output is deliberately not copied into the log: provider and SDK messages there can carry prompt text.
+- **Help menu and CLI.**
+  - The Help menu, the pasteboard and the save panel are native (`HostLogs.swift`, host commands `copyText` and `pickLogExport`). Bun builds the text and the zip (`src/native/log-support.ts`, `ditto`). Show Logs in Finder is native only.
+  - Export Logs… writes `Trezi Logs/trezi.log` (24 h) and `summary.txt` (version, macOS, Bun, harness versions, project framework).
+  - `trezi logs [--since 30m] [--follow]` (`bin/trezi`, `bin/trezi.mjs`).
+  - The feedback diagnostics' main part is now the last 30 minutes of the log.
+- **Tests.**
+  - The provider helper's scrubbed environment keeps `TREZI_LOG_DIR`.
+  - `scripts/start-native.mjs` sends `--test` runs to `<test dir>/logs`, and the unit runner gives each test its own log folder.
+  - New `test/product-log.mjs` (unit). The native chat smoke (`src/native/smoke-logs.ts`) checks a turn's start and end lines and that host, service and backend share the run's folder. The smoke's stubbed send calls the same `turn-log` functions `agent.ts` calls, because no real provider runs in the smoke.
 ## 2026-10-05 — LKM-171 review repair: transcript render signal and alternating hover targets
 
 - Review found two vacuous assertions: `chatInspect` had no `revision`, and 100 moves over the same heading returned early after the first. `ChatModel.messageBodyEvaluations` now counts actual SwiftUI message-row body evaluations and `chatInspect` exposes it. The fixture asserts that the count is positive and unchanged after hover and after the real preview selection click.

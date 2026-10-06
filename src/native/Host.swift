@@ -86,6 +86,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         return view
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        startProductLog()
         if let path = Bundle.main.path(forResource: "Trezi", ofType: "icns"), let icon = NSImage(contentsOfFile: path) { NSApp.applicationIconImage = icon }
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 860), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Trezi"; window.minSize = NSSize(width: 850, height: 550)
@@ -117,7 +118,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
           DispatchQueue.global().async { [weak self] in
             while let line = readLine() {
                 guard let data = line.data(using: .utf8), let c = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                DispatchQueue.main.async { self?.command(c) }
+                DispatchQueue.main.async { self?.dispatch(c) }
             }
             DispatchQueue.main.async { self?.terminateHost() }
         }
@@ -213,8 +214,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "load":
             guard let raw = c["url"] as? String, let url = URL(string: raw), let view = view else { return }
             targets[name] = url
+            ProductLog.info("preview", "Preview load \(Host.logURL(url))")
             view.load(URLRequest(url: url))
         case "reload":
+            ProductLog.info("preview", "Preview reload \(Host.logURL(view?.url))")
             view?.reload()
             reply(id)
         case "bounds":
@@ -272,7 +275,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "quit":
             if let status = c["status"] as? Int, status != 0 { exitStatus = 1 }
             terminateHost()
-        default: if !testBroker(c, id: id) { reply(id, error: "Unsupported native host command") }
+        default: if !logCommand(c, id: id) && !testBroker(c, id: id) { reply(id, error: "Unsupported native host command") }
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -288,15 +291,18 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let name = views.first(where: { $0.value === webView })?.key else { return }
+        ProductLog.info("preview", "Preview loaded \(Host.logURL(webView.url))")
         emit(["event":"loaded", "view":name, "url":webView.url?.absoluteString ?? ""])
     }
     var recentCrashes: [TimeInterval] = []
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        ProductLog.warn("preview", "Preview load failed: \(error.localizedDescription)")
         emit(["event":"load-error", "view":views.first(where: { $0.value === webView })?.key ?? "", "message":error.localizedDescription])
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         let now = Date.timeIntervalSinceReferenceDate
         recentCrashes = recentCrashes.filter { now - $0 < 30 }; recentCrashes.append(now)
+        ProductLog.error("preview", "Preview web content process crashed (\(recentCrashes.count) in 30 s)\(recentCrashes.count <= 2 ? "; reloading" : "")")
         if recentCrashes.count <= 2 { webView.reload() }
         else { emit(["event":"load-error", "view":"preview", "message":"The preview stopped repeatedly. Use Run to restart it, or inspect the activity log."]) }
     }

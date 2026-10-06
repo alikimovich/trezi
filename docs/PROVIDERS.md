@@ -594,7 +594,8 @@ is an explicit list per provider, not a prefix:
   certificate variables and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
 - Codex: `OPENAI_*`, `CODEX_HOME`, `CODEX_API_KEY`, `CODEX_CA_CERTIFICATE`.
 - Every helper: proxy (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY`, lower case
-  too) and CA (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `SSL_CERT_DIR`) variables.
+  too) and CA (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `SSL_CERT_DIR`) variables, and
+  `TREZI_LOG_DIR` (where the helper writes its product-log lines, LKM-168).
 
 Any other `CLAUDE*`/`CODEX*` name is dropped, including `CLAUDE_CODE_SIMPLE`. Gemini is
 unchanged (`GEMINI_*`, `GOOGLE_*`). The Settings token still overrides

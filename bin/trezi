@@ -3,7 +3,7 @@
 # install.sh links it as ~/.local/bin/trezi. The app
 # finds its own bundled Bun, backend and profile (src/native/HostLaunch.swift); this
 # script only builds a missing app, opens it (with a folder as the project), and hands
-# --update to bin/trezi.mjs.
+# --update and logs to bin/trezi.mjs.
 set -eu
 
 self=$0
@@ -22,6 +22,8 @@ Usage: trezi [folder | option]
   trezi .             Open the current folder as a project
   trezi <folder>      Open that folder as a project
   trezi --update      Pull the latest Trezi, reinstall and rebuild
+  trezi logs [--since 30m] [--follow]
+                      Print Trezi's logs (~/Library/Logs/Trezi), newest last
   trezi --help        Show this help
   trezi --version     Print the installed version
 EOF
@@ -72,6 +74,10 @@ case "${1-}" in
     shift
     bun=$(bun_path)
     exec "$bun" "$root/bin/trezi.mjs" --update "$@" ;;
+  logs)
+    shift
+    bun=$(bun_path)
+    exec "$bun" "$root/bin/trezi.mjs" logs "$@" ;;
   --help|-h) usage ;;
   --version|-v) print_version ;;
   --project)

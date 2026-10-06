@@ -53,7 +53,7 @@ assert.equal(consent?.kind, 'choice')
 assert.equal(consent.value, 'no')
 assert.match(
   sheets.current.state.fields.find((f) => f.id === 'diagnostics-detail').value,
-  /logs from the last hour.*landing state.*git status.*3-second sample.*Secrets are removed.*~/s
+  /logs.*system log from the last hour.*landing state.*git status.*3-second sample.*Secrets are removed.*~/s
 )
 const id = sheets.current.state.id
 await sheets.action({

@@ -19,6 +19,7 @@ const workspace = {
   state: {
     projects: [active],
     status: { kind: 'running' },
+    loadedKey: 'a',
     recents: [],
     history: { a: [{ id: 'old', title: 'Older chat', transcript: [] }] }
   },
@@ -42,6 +43,13 @@ const shell = new NativeShellController(
 shell.render()
 assert.equal(renders.at(-1).rows[0].children[0].title, 'Working chat')
 assert.equal(renders.at(-1).rows[0].children[1].title, 'Older chat')
+assert.equal(renders.at(-1).chatReady, true)
+// A ready dev server can exit after selection marked the project loaded.
+// The error view must still close the chat gate until recovery.
+workspace.state.status = { kind: 'error', message: 'The dev server exited' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, false)
+workspace.state.status = { kind: 'running' }
 await shell.action({ action: 'device' })
 assert.equal(active.viewport, 'mobile')
 await shell.action({ action: 'expand' })

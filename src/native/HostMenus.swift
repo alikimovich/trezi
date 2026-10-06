@@ -43,6 +43,7 @@ extension Host {
         let activityItem = NSMenuItem(title: "Activity", action: #selector(menuAction(_:)), keyEquivalent: "l"); activityItem.target = self; activityItem.representedObject = "activity"; windows.addItem(activityItem)
         activityIndicator.menuItem = activityItem
         NSApp.windowsMenu = windows
+        installHelpMenu(menu)
         NSApp.mainMenu = menu
     }
     /// The standard panel reads "Version 0.1.0 (build N, <short sha>)" from the Info.plist the build stamps (LKM-143).

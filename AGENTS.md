@@ -1,13 +1,12 @@
 # AGENTS.md — working guide for Trezi
 
-The canonical guide for every coding agent (Claude, Cursor, Codex). `CLAUDE.md` only
-imports this file. Details live in `docs/agent-guide/` and are linked below; every
-rule there is as binding as the ones here.
+Coding agent guide. `CLAUDE.md` imports this file. Linked pages in
+`docs/agent-guide/` also bind.
 
 ## What Trezi is
 
-A native macOS app: an AI chat on the left (Swift/AppKit/SwiftUI) that edits a user's
-repo, with that repo's dev server live-previewed on the right in system WebKit. A
+A native macOS app: an AI chat on the left (Swift/AppKit/SwiftUI) edits a user's
+repo, with its dev server previewed on the right in system WebKit. A
 separate Swift XPC service holds the profile lock, the operation ledger and every
 domain writer; retained JS (controllers, source parsers, provider adapters, the
 latter in supervised helpers) runs on the Bun bundled into `Trezi.app`.
@@ -86,6 +85,8 @@ Use **Bun**, not npm/yarn (Node 22 remains for tooling). Native builds need macO
   [backend-map](docs/agent-guide/backend-map.md)
 - `src/preview/` — isolated WKContentWorld instrumentation of the user's page, the
   only WebKit view. `src/shared/api.ts` — every cross-process type.
+- Product log: processes write redacted lifecycle lines to `~/Library/Logs/Trezi`.
+  Never log prompts, file contents or secrets. [logs](docs/agent-guide/logs.md)
 - Tree, lifecycle, trust boundaries, design rationale:
   [architecture](docs/agent-guide/architecture.md). Per-domain docs: the
   `SWIFT-BACKEND-*` files in `docs/`.
@@ -144,4 +145,3 @@ and every file that carries one is listed in one place:
 enforces that list. Projects that still use the old setup names are migrated once
 on open: automatically on a clean Git tree, otherwise only after the user confirms.
 The migration never commits.
-

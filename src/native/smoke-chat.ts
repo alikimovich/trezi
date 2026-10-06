@@ -1,8 +1,11 @@
 import { writeFileSync } from 'node:fs'
+import { stubAgentSendForSmoke } from '../main/agent'
+import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
-import { serviceEvents, views } from './platform'
+import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
+import { checkProductLog } from './smoke-logs'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -19,18 +22,20 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   const state = await wait((state) => state.visible && state.chat)
   if (JSON.stringify(await host.request('webViews')) !== JSON.stringify(['preview']))
     throw new Error('Unexpected application WebView')
-  const send = (event: object) =>
-    views.get('main')!.webContents.send('agent:event', { ...event, projectKey: state.chat })
   // Disable renderer event delivery: Swift input, streaming and queues must
   // continue through Bun without the web UI participating.
   const priorError = nativeWorkspace.state.error
   const originalInvoke = nativeChat.services.invoke
   const sent: unknown[][] = []
+  let turn = ''
+  // The actual agent:send RPC and its provider event hook own the log lines.
+  // Only the provider's outbound send is stubbed; no paid provider call occurs.
+  const provider = stubAgentSendForSmoke(state.chat, (...args) => {
+    sent.push(args)
+  })
+  const send = (event: object) => provider.emit(event as AgentEvent)
   nativeChat.services.invoke = async (channel, ...args) => {
-    if (channel === 'agent:send') {
-      sent.push(args)
-      return
-    }
+    if (channel === 'agent:send') turn = String(args[4])
     return originalInvoke(channel, ...args)
   }
   try {
@@ -63,7 +68,11 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
           message.role === 'user' && message.text === 'Render this conversation in Swift.'
       )
     )
-    if (sent.length !== 1) throw new Error('Native Send did not reach Bun service')
+    // The UI publishes the optimistic message before agent:send finishes its
+    // worktree and conversation preparation. Wait for the provider seam itself.
+    for (let i = 0; i < 200 && sent.length !== 1; i++)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    if (sent.length !== 1) throw new Error('Native Send did not reach the provider stub')
     if (nativeChat.get(state.chat).context?.selection)
       throw new Error('Native Send did not clear selection context')
     if (nativeWorkspace.state.error !== priorError)
@@ -222,8 +231,9 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     })
     await wait((state) => !state.cards.includes('other-chat-permission'))
     send({ type: 'permission-resolved', id: 'other-chat-permission' })
+    await checkProductLog(state.chat, turn)
     // LKM-169: a drift park is visible together with the waiting queue, at both
-    // supported chat widths. The service is intercepted above, so no provider runs.
+    // supported chat widths. The provider send is stubbed above.
     send({ type: 'isolation', state: 'parked', files: ['src/native/fixture.ts'] })
     await wait((current) => current.cards.includes('conflict'))
     const parkedText = 'Send this after Resolve'
@@ -302,12 +312,20 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       group: 'native-resolve'
     })
     await waitFor(() => sent.slice().length === 2, 'queued Resolve message sent')
-    if (sent.slice().length !== 2 || sent[1][0] !== parkedText)
+    // agent:send prepends Trezi instructions; the submitted text remains the suffix.
+    if (
+      sent.slice().length !== 2 ||
+      typeof sent[1][0] !== 'string' ||
+      !sent[1][0].endsWith(parkedText)
+    )
       throw new Error('Queued Resolve message did not send exactly once after the park cleared')
     send({ type: 'done' })
     await wait((current) => !current.activity)
   } finally {
     nativeChat.services.invoke = originalInvoke
+    // If preparation failed before send, retain the stub until this test process
+    // exits: a late agent:send must never escape to a real provider subscription.
+    if (sent.length) provider.restore()
   }
   console.log(
     'Swift/Bun chat without an application WebView: Send, queue, streamed Markdown, permissions and questions passed.'

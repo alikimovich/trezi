@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Inspector island: element controls open from chat, show authored fields by default and apply live to the source, with one Undo per gesture.
 - Editor toolbar and a popped-out source editor with a file tree.
 - Versioning: Settings › General and `trezi --version` show "Trezi X.Y.Z (build N, short sha)"; About Trezi shows the same; `bun run release` cuts tagged releases with this changelog.
+- Product logs: every Trezi process writes redacted lifecycle lines to `~/Library/Logs/Trezi` (7 days, 20 MB a day); Help › Copy Logs for Support, Show Logs in Finder and Export Logs…, `trezi logs [--since 30m] [--follow]`, and the feedback diagnostics attach the last 30 minutes with consent.
 
 ### Fixed
 - Preview selection coalesces pointer hover redraws to one per display frame, keeping attached chats responsive (LKM-171).
@@ -37,6 +38,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Image and SVG attachments in a sent message no longer render as huge images that push the text down: they show as compact thumbnails in a wrapping row (transparent images on a checkerboard), name the file on hover and open a larger preview on click; composer attachments use the same compact tiles (LKM-166).
 - SVG and other non-image or oversized attachments no longer fail the turn (“The pasted images are not supported or too large.”): the agent gets the original's path plus a 512 px PNG preview for an SVG, other files by path, oversized images downscaled, and a note for anything that could not be attached (LKM-166).
 - The editing inspector island takes every click, scroll and hover inside its frame: the preview beneath no longer hovers or selects through it, and its controls sit on an opaque surface instead of showing the page through (LKM-162).
+- The editing inspector island, selected element chip and preview overlays hide immediately when switching projects; returning restores the element and inspector tab only when it still exists. Navigation and removed elements clear the selection quietly (LKM-172).
 - Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 
 ### Changed

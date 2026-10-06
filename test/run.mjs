@@ -111,6 +111,7 @@ const UNIT = [
   'pr-body',
   'feedback-body',
   'feedback-diagnostics',
+  'product-log',
   'publish-message',
   'publish-description',
   'slash-token',

@@ -1,21 +1,24 @@
 import { execFile } from 'node:child_process'
-import { homedir } from 'node:os'
 import { states } from './chat-state'
 import { agentWorkspaceEvidence } from './chat-status'
+import { productLogDirectory, readLogs, redact } from './product-log'
 
 /**
  * LKM-165: the diagnostics the feedback sheet attaches only with the user's consent.
- * Trezi keeps no log files (the host and service write to stderr, which `open -a`
- * discards), so "logs" are Bun's own console output from the last hour, held in a
- * bounded ring buffer, plus the unified log for the Trezi processes. The chat part is
- * its landing state as Bun sees it and `git status` of its worktree; Bun never reads
- * the service's private repository journal. When the host's main thread is slow to
- * answer a ping, a 3-second `sample` of it shows where it was stuck.
+ * LKM-168: the main part is the last 30 minutes of Trezi's product log (every process,
+ * `product-log.ts`). Bun's own console output from the last hour (a bounded ring
+ * buffer; `open -a` discards stderr) and the unified log for the Trezi processes are
+ * kept beside it. The chat part is its landing state as Bun sees it and `git status`
+ * of its worktree; Bun never reads the service's private repository journal. When the
+ * host's main thread is slow to answer a ping, a 3-second `sample` of it shows where
+ * it was stuck.
  *
  * Everything passes through `redact`: known token shapes and `key=value` secrets are
  * removed and the home folder is shortened to `~`.
  */
 
+/** How much of the product log the feedback attaches. */
+export const FEEDBACK_LOG_WINDOW = 30 * 60_000
 const HOUR = 60 * 60_000
 const LOG_LINES = 4000
 /** A ping slower than this means the host's main thread was busy. */
@@ -62,28 +65,7 @@ export function recentLogs(now = Date.now()) {
     .map((l) => `${new Date(l.at).toISOString()} ${l.text}`)
 }
 
-const SECRETS: [RegExp, string][] = [
-  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted key]'],
-  [/\bsk-[A-Za-z0-9_-]{16,}/g, '[redacted]'],
-  [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, '[redacted]'],
-  [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, '[redacted]'],
-  [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '[redacted]'],
-  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '[redacted]'],
-  [/(\bbearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1[redacted]'],
-  [/(\/\/[^/\s:@]+:)[^@\s/]+@/g, '$1[redacted]@'],
-  [
-    /((?:api[_-]?key|access[_-]?key|secret|token|password|passwd|authorization|credential|cookie)[A-Za-z_-]*["']?\s*[:=]\s*["']?(?:(?:bearer|basic)\s+)?)[^\s"',;&]+/gi,
-    '$1[redacted]'
-  ]
-]
-
-/** Removes secrets and shortens the home folder to `~`. */
-export function redact(text: string, home = homedir()) {
-  let out = text
-  for (const [pattern, replacement] of SECRETS) out = out.replace(pattern, replacement)
-  if (home && home !== '/') out = out.split(home).join('~')
-  return out
-}
+export { redact }
 
 export interface DiagnosticsSources {
   /** The chat the sheet was opened over, when there is one. */
@@ -95,7 +77,11 @@ export interface DiagnosticsSources {
   hostPid?: number | null
   now?: () => number
   home?: string
+  /** The product log folder (tests); the process's own otherwise. */
+  logDir?: string
 }
+
+const PRODUCT_LOG_CHARS = 9000
 
 function execRun(command: string, args: string[], timeout: number) {
   return new Promise<string>((resolve, reject) =>
@@ -179,12 +165,16 @@ export async function gatherDiagnostics(sources: DiagnosticsSources = {}) {
     ['show', '--last', '1h', '--style', 'compact', '--predicate', 'process BEGINSWITH "Trezi"'],
     20_000
   ).then(
-    (out) => `## System log, Trezi processes (last hour)\n${tail(out.trim() || '(none)', 6000)}`,
+    (out) => `## System log, Trezi processes (last hour)\n${tail(out.trim() || '(none)', 4000)}`,
     (error) => `## System log, Trezi processes (last hour)\n${failed(error)}`
   )
   for (const part of await Promise.all([sample, landing, status])) if (part) sections.push(part)
+  const product = readLogs(sources.logDir ?? productLogDirectory(), FEEDBACK_LOG_WINDOW, now())
+  sections.push(
+    `## Trezi log (last 30 minutes)\n${tail(product.join('\n') || '(none)', PRODUCT_LOG_CHARS)}`
+  )
   const own = recentLogs(now()).join('\n')
-  sections.push(`## Backend log (last hour)\n${tail(own || '(none)', 6000)}`)
+  sections.push(`## Backend console (last hour)\n${tail(own || '(none)', 4000)}`)
   sections.push(await system)
   return head(redact(sections.join('\n\n'), sources.home), DIAGNOSTICS_LIMIT)
 }
