@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { NativeSheetAction, NativeSheetState } from '../shared/native-sheet'
+import type { NativeSheetAction, NativeSheetState, NativeToastState } from '../shared/native-sheet'
 import type { NativeBridge } from './bridge'
 import type { NativeChatController } from './chat-controller'
 import { dispatchIPC } from './platform'
@@ -30,13 +30,16 @@ export class NativeSheetController {
   ) {
     this.generation++
     if (this.current) this.host.send('sheetClose', { id: this.current.state.id })
+    const alert = state.alert ?? (!state.sections && !state.autosave && state.fields.length === 0)
     const value: NonNullable<NativeSheetController['current']> = {
       state: {
         ...state,
+        alert,
         dismissible: state.dismissible ?? (state.actions.length > 0 || !!state.autosave),
-        actions: state.actions.filter(
-          (action) => !(action.id === 'cancel' && action.label === 'Close')
-        ),
+        // A form window closes with its traffic light; an alert sheet has none, so it keeps Close.
+        actions: alert
+          ? state.actions
+          : state.actions.filter((action) => !(action.id === 'cancel' && action.label === 'Close')),
         id: randomUUID(),
         busy: false
       },
@@ -63,6 +66,20 @@ export class NativeSheetController {
     this.generation++
     if (this.current) this.host.send('sheetClose', { id: this.current.state.id })
     this.current = null
+  }
+  toastCurrent: { id: string; run?: () => Promise<unknown> } | null = null
+  /** A non-blocking confirmation in the main window; a newer one replaces it. */
+  toast(message: string, action?: { label: string; run: () => Promise<unknown> }, seconds = 6) {
+    const id = randomUUID()
+    this.toastCurrent = { id, run: action?.run }
+    const state: NativeToastState = { id, message, action: action?.label, seconds }
+    this.host.send('toastState', { state })
+  }
+  async toastAction(action: { id: string }) {
+    const toast = this.toastCurrent
+    if (!toast || toast.id !== action.id) return
+    this.toastCurrent = null
+    await toast.run?.()
   }
   /** Re-send the open sheet after its state changed in place (same window and ID). */
   refresh() {

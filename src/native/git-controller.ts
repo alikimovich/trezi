@@ -206,6 +206,8 @@ export class NativeGitController {
     this.sheets.present(
       {
         title: 'Git updates',
+        // A tool window whether or not the project has remotes, not an alert.
+        alert: false,
         detail: `Current branch: ${status.current ?? 'No branch selected'}. ${status.remotes.length ? 'Choose a remote branch. Pull merges it into your current branch; switching opens that branch instead.' : 'Connect this project to a Git remote to get updates.'}`,
         fields: status.remotes.length
           ? [

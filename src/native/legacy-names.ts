@@ -24,6 +24,7 @@ export class NativeLegacyNames {
     this.sheets.present(
       {
         title: 'Update setup files?',
+        alert: true,
         detail: `${root}\n\nThis project has setup files from an earlier Trezi version. They still work. Updating renames them to the current names. The project has uncommitted changes, so Trezi asks first; nothing is committed.`,
         fields: [
           {
