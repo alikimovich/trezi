@@ -63,6 +63,9 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
   `shadow-light`, `sidebar`, `settings`, `chat`, `composer`. An unknown name fails
   before the build; no flag runs every group, which acceptance still requires.
   Groups are defined in `src/native/smoke-groups.ts`.
+- Native test builds use the `-Onone` test profile and a shared Swift binary cache, so
+  a ticket that does not touch Swift compiles nothing (LKM-175). `bun run build`
+  stays `-O`. Details: `docs/TESTING.md`, "Native build speed".
 - `test/docs-links.mjs` (unit tier) fails CI if an anchored path (`src/…`, `docs/…`,
   `test/…`, …) referenced in `AGENTS.md`, `CLAUDE.md`, `README.md` or
   `docs/agent-guide/*.md` no longer exists.

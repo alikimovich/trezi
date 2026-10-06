@@ -41,7 +41,9 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   try {
     const before = await host.request('layoutInspect')
     if (!before.native) throw new Error('Native layout unavailable')
-    for (const delta of [-20, 20]) {
+    // The chat width is clamped to 320...520: step away from the minimum first so a
+    // narrow starting width still returns to where it began.
+    for (const delta of before.width >= 340 ? [-20, 20] : [20, -20]) {
       await host.request('dividerPerform', { delta })
       await new Promise((resolve) => setTimeout(resolve, 80))
     }

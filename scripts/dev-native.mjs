@@ -51,8 +51,11 @@ console.log('Building Trezi (Bun + system WebKit)…')
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 const build = Bun.spawn([process.execPath, 'scripts/build-native.mjs'], {
   cwd,
-  // A test build signs with an existing identity but never adds one to the keychain.
-  env: args.includes('--test') ? { ...process.env, TREZI_SIGN_CREATE: '0' } : process.env,
+  // A test build signs with an existing identity but never adds one to the keychain, and
+  // compiles the fast -Onone test profile unless TREZI_BUILD_PROFILE says otherwise (LKM-175).
+  env: args.includes('--test')
+    ? { ...process.env, TREZI_SIGN_CREATE: '0', TREZI_BUILD_PROFILE: process.env.TREZI_BUILD_PROFILE || 'test' }
+    : process.env,
   stdout: 'inherit',
   stderr: 'inherit'
 })

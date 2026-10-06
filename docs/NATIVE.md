@@ -84,7 +84,9 @@ compiles and ad-hoc signs the Swift host, bundled XPC service and rollback guard
 and copies native image/cat assets. It removes stale
 `out/native/renderer` and `preload.js` from older hybrid builds. The build audits
 its dependency graph against application renderer/React imports and records
-`out/native/build-inputs.json`. There is no Vite/Tailwind application build or
+`out/native/build-inputs.json`. The Swift products and bundles build in parallel,
+and unchanged Swift is copied from a shared binary cache (`scripts/native-swift.mjs`,
+LKM-175; see `docs/TESTING.md`). There is no Vite/Tailwind application build or
 loopback renderer asset server in native mode. `TREZI_NATIVE_PORT` is obsolete.
 
 The native platform (`src/native/platform.ts`) is imported directly by backend

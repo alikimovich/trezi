@@ -2,6 +2,30 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-175 repair: foreground flakiness in native acceptance
+
+- The manager's native run failed `visible-composer` ("Chat must be foreground") and then `native-chat` ("Native divider needs renderer delivery"); a later chat-scroll run failed the same way. Both were harness issues, not the build: the window lost key status or activation was deferred, and the 2 s wait in `chatAcceptance` `prepare` gave up. The divider failure was a cascade: `visible-composer` died before restoring the 440 width, the chat stayed at the 320 minimum, and the divider check's `-20, +20` steps clamp there, so it ended 20 pt wider.
+- `smoke-composer.ts` now passes `prepare: true` on the per-pass and restoring `chatAcceptance` width calls (the restore always runs). `smoke-chat.ts` steps away from the minimum first (`+20, -20` below 340). `ChatAcceptance.swift` re-requests activation every 0.5 s for up to 5 s instead of one request and a 2 s wait. Activation is still required; nothing was relaxed.
+
+## 2026-10-05 — LKM-175: fast native test builds
+
+- **Why it was slow.** Every verification compiled all three Swift products one after another with `-O` in a fresh worktree whose Clang module cache (`out/native/module-cache`) was empty. The Swift driver ran one frontend at a time without `-j`, even though `-O` is not whole-module here.
+- **Binary cache.** `scripts/native-swift.mjs` keys each product on its sorted repo-relative source names and bytes, its flags (profile, target, frameworks), `swiftc --version` and the SDK version/build. The unsigned binary is stored in `~/Library/Caches/Trezi/build/<product>/<hash>`, the last 20 per product. A hit removes the old output and copies the cached binary in its place, so the kernel never sees new bytes written over a signed binary it may have cached. Bun bundling and signing still run. `TREZI_BUILD_CACHE=<dir|off>` overrides the location. A cache that cannot be created is reported once, then the build compiles.
+- **Test profile.** `TREZI_BUILD_PROFILE=test` uses `-Onone -no-whole-module-optimization -j<cores>`. `bun run test:native`, `test/native-runtime.mjs` and `dev:native --test` set it. `bun run build`/`dev` keep exactly `-O`. TreziSecrets always compiles release, so its bytes and Keychain approval don't depend on the profile. `-enable-batch-mode` was tried and dropped: with Swift 6.3 its frontends returned success without writing objects, and the link failed on every `.o`.
+- **Parallel, shared module cache.** The three swiftc runs and the three esbuild bundles start together (`Promise.allSettled`). Each swiftc has a private temp folder under `out/native/swift-tmp/` and prints its output as one block. The module cache is `~/Library/Caches/Trezi/module-cache`. Each step prints `[build] <step>: <s> s (cache hit|compiled …)`, then the total; the native suites print `[timing]` lines.
+- **Chat-scroll.** It never built: `--require-build` only fails when the host native-runtime just built is missing. So there was no second build to skip. Its 68.9 s is mostly foreground captures and deliberate time-point samples. The 80 ms pause before each visibility poll and the fixed 1.2 s timer-tick wait (now a poll) were removed.
+- **Keychain.** `TREZI_SIGN_IDENTITY=-` now returns ad hoc before `security find-identity` runs, so a test build with it touches no keychain. Test builds still never create an identity.
+
+| Build (12-core operator Mac, agent sandbox) | Before | After, test profile | After, release |
+| --- | --- | --- | --- |
+| Cold: fresh `out/`, empty caches | 154 s | 45.8 s | 92.0 s |
+| Warm, no Swift change (fresh or same worktree) | 121 s same worktree, 154 s fresh | 0.4 s | 0.4 s |
+| One Swift file changed (`src/native/Toast.swift`) | 114 s | 6.0 s | — |
+| `ServiceContract.swift` changed (host and service) | — | 9.1 s | — |
+| Manager native verification, all groups + chat-scroll | ~8 min (issue) | 231 s (build 72.7 s with empty caches on a loaded machine, smoke 88 s, chat-scroll 68.9 s) | — |
+
+- **Checks.** `test/native-build-cache.mjs` (unit tier) covers the key, pruning, hit/miss, the unusable-cache fallback and the profile wiring, using a stand-in compiler. The signing test asserts that `-` makes no keychain call. Quick verification passed with 170 unit checks. Native verification passed for all seven groups (24/24 smoke checks) plus chat-scroll.
+
 ## 2026-10-05 — LKM-173 repair 4: island entry follows the native pointer path
 
 - **Full-suite failure.** The manager's native run timed out clearing select-mode hover over the island, while the unchanged `core` group passed. The page-to-island fixture sent one synthetic jump; its return leg already traversed a short path because WebKit can coalesce a single move under load. The failure capture did not expose the page's event target.

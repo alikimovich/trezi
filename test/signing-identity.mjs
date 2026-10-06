@@ -190,11 +190,12 @@ for (const [label, setup, extra, reason] of [
     )
 }
 {
-  // TREZI_SIGN_IDENTITY=- is a deliberate ad hoc build: no warning, nothing created.
+  // TREZI_SIGN_IDENTITY=- is a deliberate ad hoc build: no warning, nothing created,
+  // and no keychain query at all (LKM-175).
   const w = world()
   assert.deepEqual(choose(w, { env: { TREZI_SIGN_IDENTITY: '-' } }), { kind: 'adhoc' })
   assert.deepEqual(w.warnings, [])
-  assert.ok(!w.calls.includes('openssl req'))
+  assert.deepEqual(w.calls, [])
 }
 {
   // A stand-in that throws still ends in one warning, never an exception.

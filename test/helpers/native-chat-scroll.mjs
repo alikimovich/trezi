@@ -116,7 +116,6 @@ try {
         revision: lines * 2 + 1
       }
       send()
-      await delay(80)
       await visible(id)
       if (history === 8 && lines === 8) await capture('sending')
       // Replace the standalone thinking row with a growing streamed response.
@@ -389,7 +388,7 @@ try {
     }
     const same = (a, b) =>
       ['x', 'y', 'width', 'height'].every((key) => Math.abs(a[key] - b[key]) <= 0.5)
-    const runningFooter = (label, line, tokens = tool.tokens.label) =>
+    const runningFooter = (label, line, tokens = tool.tokens.label, settled) =>
       footer(
         label,
         (state, frames) =>
@@ -397,7 +396,8 @@ try {
           state.activityTokens === tokens &&
           frames[`${answer.id}-tokens`] &&
           state.statusLines?.length === 1 &&
-          line.test(state.statusLines[0])
+          line.test(state.statusLines[0]),
+        settled
       )
     host.send('chatState', { state: turn })
     await foreground(`progress-${width}-layout`, { width, hoverMessage: '' })
@@ -429,12 +429,13 @@ try {
       history.length > 0 && history.every(([, frame]) => Math.abs(frame.height - 28) <= 0.5),
       `${width}pt: history footers are 28 pt ${JSON.stringify(running.footers)}`
     )
-    // The timer ticks from the host's own clock: no new snapshot is sent.
-    await delay(1200)
+    // The timer ticks from the host's own clock: no new snapshot is sent. Poll for the
+    // next second (about 3 s at most) instead of a fixed 1.2 s wait (LKM-175).
     const ticked = await runningFooter(
       `${width}pt timer ticks`,
       /^Running bun test · 1:[2-5]\d$/,
-      tool.tokens.label
+      tool.tokens.label,
+      (result) => result.statusLines[0] !== running.statusLines[0]
     )
     assert.notEqual(
       ticked.statusLines[0],

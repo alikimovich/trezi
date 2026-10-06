@@ -8,8 +8,13 @@ import { buildInfo, versionLabel } from './version.mjs'
 import { build as bundle } from 'esbuild'
 import { MIN_MACOS, requireSupportedPlatform } from './requirements.mjs'
 import { describeSigner, designatedRequirement, sign, signingIdentity, signWithFallback } from './signing.mjs'
+import { buildProfile, swiftBuilder } from './native-swift.mjs'
 
 requireSupportedPlatform({ sdk: true })
+// LKM-175: `release` (-O) unless TREZI_BUILD_PROFILE=test; see scripts/native-swift.mjs.
+const profile = buildProfile()
+const buildStarted = performance.now()
+const seconds = since => `${((performance.now() - since) / 1000).toFixed(1)} s`
 const target = `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macosx${MIN_MACOS}`
 const root = fileURLToPath(new URL('../', import.meta.url))
 const out = join(root, 'out/native')
@@ -34,45 +39,50 @@ copyFileSync(join(root, 'build/icon.icns'), join(contents, 'Resources/Trezi.icns
 writeFileSync(join(contents, 'Resources/cat.json'), JSON.stringify(nativeCatAssets(root)))
 const device = readFileSync(join(root, 'src/shared/iphone-frame.ts'), 'utf8').match(/FRAME_DATA_URI =\s*'([^']+)'/)[1]
 writeFileSync(join(out, 'device.png'), Buffer.from(device.split(',')[1], 'base64'))
-const backend = await bundle({
-  metafile: true,
-  entryPoints: [join(root, 'src/native/index.ts')],
-  outfile: join(backendDir, 'index.cjs'),
-  bundle: true,
-  platform: 'node',
-  target: 'es2022',
-  format: 'cjs',
-  packages: 'external',
-  sourcemap: true,
-  ...outDirname
-})
-await bundle({
-  entryPoints: [join(root, 'src/main/backends/provider-helper-entry.ts')],
-  outfile: join(backendDir, 'provider-helper.cjs'),
-  bundle: true,
-  platform: 'node',
-  target: 'es2022',
-  format: 'cjs',
-  packages: 'external',
-  sourcemap: true,
-  ...outDirname
-})
-const inputs = Object.keys(backend.metafile.inputs)
-const externalImports = Object.values(backend.metafile.outputs).flatMap(output => output.imports).filter(item => item.external).map(item => item.path)
-if (inputs.some(path => /src\/renderer\//.test(path)) || externalImports.some(path => /^(electron|electron-vite|react|react-dom|@codemirror)(\/|$)/.test(path))) throw new Error('Native build unexpectedly depends on a retired application runtime')
-writeFileSync(join(out, 'build-inputs.json'), JSON.stringify({ inputs, externalImports }, null, 2))
-for (const [input, output] of [
-  ['src/preview/preload.ts', 'preview.js']
-]) {
-  await bundle({
-    entryPoints: [join(root, input)],
-    outfile: join(out, output),
-    bundle: true,
-    platform: 'browser',
-    target: 'safari16.4',
-    format: 'iife'
-  })
-}
+// The esbuild bundles run next to the Swift compiles below (LKM-175).
+const bundles = (async () => {
+  const started = performance.now()
+  const [backend] = await Promise.all([
+    bundle({
+      metafile: true,
+      entryPoints: [join(root, 'src/native/index.ts')],
+      outfile: join(backendDir, 'index.cjs'),
+      bundle: true,
+      platform: 'node',
+      target: 'es2022',
+      format: 'cjs',
+      packages: 'external',
+      sourcemap: true,
+      ...outDirname
+    }),
+    bundle({
+      entryPoints: [join(root, 'src/main/backends/provider-helper-entry.ts')],
+      outfile: join(backendDir, 'provider-helper.cjs'),
+      bundle: true,
+      platform: 'node',
+      target: 'es2022',
+      format: 'cjs',
+      packages: 'external',
+      sourcemap: true,
+      ...outDirname
+    }),
+    ...[['src/preview/preload.ts', 'preview.js']].map(([input, output]) =>
+      bundle({
+        entryPoints: [join(root, input)],
+        outfile: join(out, output),
+        bundle: true,
+        platform: 'browser',
+        target: 'safari16.4',
+        format: 'iife'
+      })
+    )
+  ])
+  const inputs = Object.keys(backend.metafile.inputs)
+  const externalImports = Object.values(backend.metafile.outputs).flatMap(output => output.imports).filter(item => item.external).map(item => item.path)
+  if (inputs.some(path => /src\/renderer\//.test(path)) || externalImports.some(path => /^(electron|electron-vite|react|react-dom|@codemirror)(\/|$)/.test(path))) throw new Error('Native build unexpectedly depends on a retired application runtime')
+  writeFileSync(join(out, 'build-inputs.json'), JSON.stringify({ inputs, externalImports }, null, 2))
+  console.log(`[build] JS bundles: ${seconds(started)}`)
+})()
 // Remove stale application UI artifacts from earlier hybrid builds.
 rmSync(join(out, 'renderer'), { recursive: true, force: true })
 rmSync(join(out, 'preload.js'), { force: true })
@@ -88,24 +98,20 @@ writeFileSync(join(contents, 'Info.plist'), appInfoPlist(info))
 const serviceContents = join(contents, 'XPCServices/dev.trezi.service.xpc/Contents')
 mkdirSync(join(serviceContents, 'MacOS'), { recursive: true })
 writeFileSync(join(serviceContents, 'Info.plist'), serviceInfoPlist(info))
-const serviceResult = Bun.spawnSync([
-  'xcrun', 'swiftc', '-O', '-target', target,
-  '-module-cache-path', join(out, 'module-cache'),
+writeFileSync(join(out, 'main.swift'), readFileSync(join(root, 'src/native/Host.swift')))
+// The three Swift products compile in parallel, each from the binary cache when its
+// sources, flags and toolchain are unchanged (LKM-175).
+const compile = swiftBuilder({ root, target, profile })
+const service = compile('TreziService', [
   ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryCleanup', 'RepositoryMerge', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
   '-o', join(serviceContents, 'MacOS/TreziService'), '-framework', 'Foundation', '-framework', 'Security', '-framework', 'CoreServices'
-], { stdout: 'inherit', stderr: 'inherit' })
-if (serviceResult.exitCode) process.exit(serviceResult.exitCode)
-copyFileSync(join(serviceContents, 'MacOS/TreziService'), join(out, 'TreziService'))
-writeFileSync(join(out, 'main.swift'), readFileSync(join(root, 'src/native/Host.swift')))
-const result = Bun.spawnSync(
+]).then(built => {
+  copyFileSync(join(serviceContents, 'MacOS/TreziService'), join(out, 'TreziService'))
+  return built
+})
+const host = compile(
+  'TreziHost',
   [
-    'xcrun',
-    'swiftc',
-    '-O',
-    '-target',
-    target,
-    '-module-cache-path',
-    join(out, 'module-cache'),
     join(out, 'main.swift'),
     join(root, 'src/service/ServiceContract.swift'),
     join(root, 'src/service/ServiceXPC.swift'),
@@ -185,22 +191,27 @@ const result = Bun.spawnSync(
     'CryptoKit',
     '-framework',
     'AVKit'
-  ],
-  { stdout: 'inherit', stderr: 'inherit' }
+  ]
 )
-if (result.exitCode) process.exit(result.exitCode)
 // The Keychain helper is its own small executable (src/native/Secrets.swift) so that it
 // compiles to the same bytes on every rebuild and keeps the user's Keychain approval.
-const secrets = Bun.spawnSync([
-  'xcrun', 'swiftc', '-O', '-target', target, '-module-cache-path', join(out, 'module-cache'),
+// It is always the release build, so a test build produces the same bytes too.
+const secrets = compile('TreziSecrets', [
   '-suppress-warnings', join(root, 'src/native/Secrets.swift'), '-o', join(contents, 'Helpers/TreziSecrets'), '-framework', 'Security', '-framework', 'CryptoKit'
-], { stdout: 'inherit', stderr: 'inherit' })
-if (secrets.exitCode) process.exit(secrets.exitCode)
+], { profile: 'release' })
+const steps = await Promise.allSettled([bundles, service, host, secrets])
+rmSync(join(out, 'swift-tmp'), { recursive: true, force: true })
+const failed = steps.find(step => step.status === 'rejected')
+if (failed) {
+  if (!(failed.reason?.code > 0)) console.error(failed.reason)
+  process.exit(failed.reason?.code > 0 ? failed.reason.code : 1)
+}
 // One stable identity for every piece (LKM-137), so Keychain and privacy grants survive
 // rebuilds. Test builds use an existing identity but never create one.
 // A chosen identity that cannot sign (locked login keychain over SSH, denied key access, a
 // deleted certificate) re-signs every piece ad hoc with the one warning: a build that
 // worked before identities still works.
+const signStarted = performance.now()
 let signer
 try {
   signer = signWithFallback(signingIdentity({ create: process.env.TREZI_SIGN_CREATE !== '0' }), current => {
@@ -216,9 +227,11 @@ try {
   console.error(error.message)
   process.exit(1)
 }
+console.log(`[build] Bun copy and signing: ${seconds(signStarted)}`)
 console.log(`Signed Trezi: ${describeSigner(signer)}${designatedRequirement(signer, 'dev.praxis.native') ? `, ${designatedRequirement(signer, 'dev.praxis.native')}` : ''}`)
 if (/require\(["']electron["']\)/.test(readFileSync(join(backendDir, 'index.cjs'), 'utf8')))
   throw new Error('Native backend still imports Electron')
+console.log(`[build] total: ${seconds(buildStarted)} (${profile} profile)`)
 console.log(
-  `Built ${label}: Swift/AppKit UI, Bun services (bundled Bun), isolated WebKit project preview. Start it with open -a Trezi or trezi.`
+  `Built ${label}${profile === 'release' ? '' : ` (${profile} profile, -Onone)`}: Swift/AppKit UI, Bun services (bundled Bun), isolated WebKit project preview. Start it with open -a Trezi or trezi.`
 )

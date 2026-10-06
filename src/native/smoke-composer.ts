@@ -9,11 +9,14 @@ export async function checkVisibleComposer(host: NativeBridge, fixture: string, 
   const initial = await host.request('chatAcceptance', { prepare: true })
   try {
     for (const width of [440, 320]) {
-      await host.request('chatAcceptance', { width })
+      // Re-activate before each pass: the window may lose key status between passes
+      // (a loaded or shared desktop), and `chatAcceptance` fails without foreground.
+      await host.request('chatAcceptance', { prepare: true, width })
       await checkComposerAtWidth(host, fixture, artifacts, width)
     }
   } finally {
-    await host.request('chatAcceptance', { width: initial.chatWidth })
+    // Always restore the width, even after a failure, so later checks start from it.
+    await host.request('chatAcceptance', { prepare: true, width: initial.chatWidth })
   }
 }
 

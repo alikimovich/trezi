@@ -138,6 +138,7 @@ const UNIT = [
   'retirement-census',
   'distribution',
   'signing-identity',
+  'native-build-cache',
   'keychain-migration',
   'keychain-rebuild',
   'install-update',

@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Fast native test builds (LKM-175)
+
+- [x] Content-addressed Swift binary cache in `~/Library/Caches/Trezi/build` (last 20 per product); a hit copies, signing still runs.
+- [x] `TREZI_BUILD_PROFILE=test` (-Onone, no WMO, -j<cores>) from test:native, native-runtime and `dev:native --test`; release stays -O.
+- [x] Swift products and esbuild bundles in parallel; shared module cache; a timing line per step.
+- [x] Chat-scroll never rebuilds (confirmed); two pacing waits removed; `[timing]` lines for both native suites.
+- [x] `TREZI_SIGN_IDENTITY=-` skips the keychain identity listing; test builds still never create an identity.
+
 ## Select mode hover lost under the LKM-162 pointer gate (LKM-173)
 
 - [x] Remove `PreviewWebView`/`PreviewPointerGate`: WebKit keeps its own tracking areas and the preview is a plain `WKWebView`; no per-move window hit test.
