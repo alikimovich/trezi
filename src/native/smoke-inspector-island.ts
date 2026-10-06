@@ -44,7 +44,7 @@ function checkOpen(state: Island, label: string) {
 
 /** The preview page, its selection's source file and select mode, for the pointer check. */
 export type IslandPage = {
-  evaluate: (code: string) => Promise<unknown>
+  evaluate: (code: string, isolated?: boolean) => Promise<unknown>
   source: () => string
   /** The selected element's computed value of one style property (`styles:read`). */
   styles: (prop: string) => Promise<unknown>
@@ -117,31 +117,103 @@ async function checkPointer(
       island: await island({ pointer: true })
     })
   )
+  const heading = (await page.evaluate(`(() => {
+    const r = document.querySelector('#native-title').getBoundingClientRect();
+    return {x:r.x + Math.min(20, r.width / 2), y:r.y + r.height / 2};
+  })()`)) as { x: number; y: number }
+  const move = (target: 'page' | 'island', offset = 0) =>
+    island({
+      pointer: true,
+      step: 'move',
+      target,
+      x: heading.x + offset,
+      y: heading.y,
+      click: target === 'island'
+    })
+  const hoverBox = () =>
+    page.evaluate(
+      `(() => { const box = document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-hover]'); return !!box && box.style.display === 'block'; })()`,
+      true
+    )
   await page.selectMode(true)
   try {
-    // LKM-173: moves arrive through WebKit's own tracking areas, as a real pointer's do.
-    const moves = await island({ pointer: true, step: 'moves' })
-    evidence.pointerMoves = moves
-    const detail = JSON.stringify(moves)
-    assert.ok(moves.owners.length >= 1, `pointer: WebKit owns its tracking areas ${detail}`)
-    assert.ok(moves.before, `pointer: a move over the page shows the hover box ${detail}`)
-    assert.ok(!moves.island, `pointer: no hover box while the pointer is over the island ${detail}`)
-    assert.ok(moves.after, `pointer: back on the page, the hover box shows again ${detail}`)
-    // The page shields the island's rect (CSS px) the host laid out, sent on layout only.
-    const shield = moves.cover[0]
-    const expected = moves.expectedCover[0]
+    const before = await move('page')
+    await waitFor(hoverBox, 'select-mode hover over the page')
+    const over = await move('island')
+    await waitFor(async () => !(await hoverBox()), 'select-mode hover cleared over the island')
+    // A real return gesture lands at a new coordinate; reusing the exact point can
+    // be coalesced by WebKit when the island move was handled by AppKit.
+    const after = await move('page', 4)
+    await waitFor(hoverBox, 'select-mode hover restored over the page')
+    const cover = (await page.evaluate(
+      `([...document.querySelector('[data-trezi-cover]')?.shadowRoot?.children ?? []].map(e => { const r=e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }))`,
+      true
+    )) as Rect[]
+    const shield = cover[0]
+    const expected = before.expectedCover[0]
     assert.ok(
       shield &&
         expected &&
         (['x', 'y', 'width', 'height'] as const).every(
           (key) => Math.abs(shield[key] - expected[key]) <= 1
         ),
-      `pointer: the page shields the island's rect ${detail}`
+      `pointer: the page shields the island's rect ${JSON.stringify({ cover, expected })}`
     )
-    assert.equal(moves.picks, 0, 'pointer: no element-picked message from the island')
+    assert.equal(
+      await page.evaluate(
+        `document.elementFromPoint(${expected.x + expected.width / 2}, ${expected.y + expected.height / 2})?.closest('[data-trezi-cover]') !== null`
+      ),
+      true,
+      'pointer: the browser hit target over the island is the cover shield'
+    )
+    assert.equal(over.picks + after.picks, 0, 'pointer: no element-picked message from the island')
+    evidence.pointerMoves = { before, over, after, cover }
   } finally {
     await page.selectMode(false)
   }
+  // Interact mode uses the page's own hover machinery, including CSS and mouseenter.
+  const cover = (await move('island')).expectedCover[0] as Rect
+  assert.ok(cover, 'pointer: native island has a covered preview rect')
+  await page.evaluate(`(() => {
+    const style = document.createElement('style');
+    style.textContent = '#native-title:hover, #island-hover-probe:hover { background-color: rgb(12, 34, 56) !important; cursor: pointer !important; }';
+    document.head.append(style);
+    const probe = document.createElement('div');
+    probe.id = 'island-hover-probe';
+    probe.style.cssText = 'position:fixed;left:${cover.x + cover.width / 2 - 20}px;top:${cover.y + cover.height / 2 - 20}px;width:40px;height:40px;background-color:rgb(255, 255, 255);z-index:2147483646';
+    document.body.append(probe);
+    window.__treziHoverEnter = { page: 0, island: 0 };
+    document.querySelector('#native-title').addEventListener('mouseenter', () => window.__treziHoverEnter.page++);
+    probe.addEventListener('mouseenter', () => window.__treziHoverEnter.island++);
+  })()`)
+  const interact = () =>
+    page.evaluate(`(() => {
+    const title = document.querySelector('#native-title');
+    const probe = document.querySelector('#island-hover-probe');
+    return { page: getComputedStyle(title).backgroundColor,
+      island: getComputedStyle(probe).backgroundColor,
+      cursor: getComputedStyle(title).cursor,
+      enters: window.__treziHoverEnter };
+  })()`)
+  await move('page')
+  await waitFor(async () => {
+    const state = (await interact()) as Island
+    return state.page === 'rgb(12, 34, 56)' && state.enters.page > 0 && state.cursor === 'pointer'
+  }, 'interact-mode CSS hover, cursor and mouseenter over the page')
+  const pageHover = await interact()
+  await move('island')
+  await waitFor(async () => {
+    const state = (await interact()) as Island
+    return state.page !== 'rgb(12, 34, 56)' && state.island !== 'rgb(12, 34, 56)'
+  }, 'interact-mode hover cleared over the island')
+  const islandHover = (await interact()) as Island
+  assert.equal(
+    islandHover.enters.island,
+    0,
+    'pointer: mouseenter does not reach the page under the island'
+  )
+  evidence.interactHover = { pageHover, islandHover }
+  await page.evaluate(`document.querySelector('#island-hover-probe')?.remove()`)
 }
 
 /** LKM-122: the inspector floats over the preview's right edge; the preview keeps its

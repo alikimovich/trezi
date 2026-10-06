@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The host sends the page the viewport rects the island and its resize edge cover, on layout and only when changed (`src/native/PreviewCover.swift`, `native-cover` event); main forwards them on `trezi:preview:covered` and re-sends them after every load.
 - [x] The preview script shields those rects (`src/preview/native-cover.ts`): no hover box, page `:hover` or page pointer listener under the island.
 - [x] Native `checkPointer` moves through WebKit's tracking-area owners: page hovers, island does not, page hovers again; the shield matches the island; a click and wheel on the island still pick nothing.
+- [x] Repair the native inspector crash by reading page state between pointer commands; verify interact-mode CSS `:hover`, cursor and `mouseenter` on the page and their absence under the island (`core` native group passed).
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
 
 ## Standard feedback confirmation and alert sheets (LKM-170)

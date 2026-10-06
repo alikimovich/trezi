@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173 repair: pointer verification survives navigation and covers interact mode
+
+- **Manager failure.** The full native run exited 139 at the inspector check. Its pointer command evaluated JavaScript through WebKit's Swift async overlay while the fixture could reload. The repair removes JavaScript evaluation from that command; the existing test bridge reads the page between one-move commands.
+- **Event path.** A synthetic move sent only through `NSWindow.sendEvent` did not reach WebKit's hover handler. The test now also delivers it to WebKit's own tracking-area owners, without replacing any area. It moves to a new coordinate on returning from the island, matching a real pointer gesture and avoiding WebKit coalescing a repeated point.
+- **Coverage.** The native `core` inspector check now asserts page → island → page select hover, shield hit target and rectangle, no click-through pick, and interact-mode CSS `:hover`, cursor and `mouseenter` on the page with neither hover nor handler over the island. Manager quick passed (166 unit checks and typechecks); native `core` passed (14 checks, 0 failed, 0 skipped). Full suite remains for manager verification.
+
 ## 2026-10-05 — LKM-173: select mode hover restored; the island is shielded in the page
 
 - **Regression.** Build 835 (with LKM-162): select mode picked on click but never highlighted on hover, and the tool felt slow. LKM-162's `PreviewWebView` replaced WebKit's tracking areas with `PreviewPointerGate` replacements and ran a full-window `hitTest` on every move. WebKit's moves now arrived through a foreign owner, and the hover was lost.
