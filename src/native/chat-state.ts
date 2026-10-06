@@ -54,6 +54,9 @@ export interface Chat extends NativeChatMirror {
   setup: boolean
   awaitingLanding: boolean
   context?: NativeChatContext
+  /** LKM-169: the selection of a queued message moved back into the composer by Edit;
+   *  the next send uses it when the shell has no newer one. */
+  draftSelection?: NativeChatContext['selection']
   /** The turn this chat last sent (the owner's turn id); terminal events of any other are late. */
   turn?: string
   /** The message that turn sent, for the login card's Retry. */
@@ -318,7 +321,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
         }
       // A stopped turn's message keeps its hover Revert: it drops the held work.
       if (chat.stopped === 'held' && last) last.revertGroup = `${STOPPED_GROUP}${chat.chat}`
-      if (event.state === 'parked') chat.paused = true
+      // A park waiting for Resolve blocks the queue by itself and releases it once it
+      // clears (`chat-queue.ts`, LKM-169); a stopped or failed one pauses it.
+      if (event.state === 'parked' && (chat.stopped || chat.landingError)) chat.paused = true
       if (event.state === 'parked' && chat.isRunning && chat.phase === 'applying')
         chat.operation = 'parking'
       break
