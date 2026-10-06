@@ -149,8 +149,9 @@ const error = state.cards.find((card) => card.id === 'error')
 assert.equal(error.detail, `Could not apply ${TEMPORARY_PATCH}`)
 assert.equal(error.fullDetail, chat.error, 'Copy keeps the full path')
 const conflict = state.cards.find((card) => card.id === 'conflict')
-assert.equal(conflict.detail, 'src/App.tsx\nsrc/b.ts')
-assert.equal(conflict.fullDetail, chat.isolationFiles.join('\n'))
+const held = 'The project changed under them, so Trezi held them instead of overwriting.'
+assert.equal(conflict.detail, `${held}\nsrc/App.tsx\nsrc/b.ts`)
+assert.equal(conflict.fullDetail, [held, ...chat.isolationFiles].join('\n'))
 assert.equal(
   state.cards.find((card) => card.id === 'tokens'),
   undefined

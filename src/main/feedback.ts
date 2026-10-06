@@ -1,6 +1,7 @@
 import { app, ipcMain, type NativeView } from '../native/platform'
 import type { FeedbackInput, FeedbackResult } from '../shared/api'
 import { buildFeedbackBody, buildFeedbackTitle } from '../shared/feedback-body'
+import { captureConsole, gatherDiagnostics, redact } from './feedback-diagnostics'
 import { workflowOwner } from './workflow-owner'
 
 /**
@@ -12,7 +13,8 @@ import { workflowOwner } from './workflow-owner'
  *
  * GitHub exposes no API/gh way to upload an image attachment, so an opted-in
  * screenshot rides along inside the issue body as a downscaled base64 data URI
- * (see feedback-body.ts) rather than a rendered attachment.
+ * (see feedback-body.ts) rather than a rendered attachment. Opted-in diagnostics
+ * (LKM-165) are gathered and redacted by feedback-diagnostics.ts.
  */
 
 /** Downscale + re-encode a full-window capture so its data URI stays small. */
@@ -32,15 +34,33 @@ async function captureWindow(win: NativeView | null): Promise<string | null> {
   }
 }
 
-async function submitFeedback(repoRoot: string, input: FeedbackInput): Promise<FeedbackResult> {
+/** The host's pid and a main-thread round trip, for the diagnostics' busy check. */
+export interface FeedbackHost {
+  pid: number | null
+  ping(): Promise<unknown>
+}
+
+async function submitFeedback(
+  repoRoot: string,
+  input: FeedbackInput,
+  host: FeedbackHost | null
+): Promise<FeedbackResult> {
   const body = (input.body ?? '').trim()
   if (!body) return { ok: false, error: 'Please describe your feedback first.' }
 
   const title = buildFeedbackTitle(body)
+  const diagnostics = input.diagnostics
+    ? await gatherDiagnostics({
+        chat: input.chat ?? null,
+        ping: host ? () => host.ping() : undefined,
+        hostPid: host?.pid ?? null
+      }).catch((error) => `Diagnostics could not be gathered: ${redact(String(error))}`)
+    : null
   const issueBody = buildFeedbackBody({
     body,
     conversation: input.conversation ?? null,
-    screenshot: input.screenshot ?? null
+    screenshot: input.screenshot ?? null,
+    diagnostics
   })
   try {
     return await workflowOwner().feedback(repoRoot, title, issueBody)
@@ -51,10 +71,17 @@ async function submitFeedback(repoRoot: string, input: FeedbackInput): Promise<F
 
 /**
  * Register the feedback IPC. `getWindow` yields the main window (for the
- * screenshot capture); the issue is filed against Trezi's own checkout.
+ * screenshot capture), `getHost` the host for the diagnostics' busy check; the
+ * issue is filed against Trezi's own checkout.
  */
-export function registerFeedbackIpc(getWindow: () => NativeView | null): void {
+export function registerFeedbackIpc(
+  getWindow: () => NativeView | null,
+  getHost: () => FeedbackHost | null = () => null
+): void {
   const repoRoot = app.getAppPath()
+  captureConsole()
   ipcMain.handle('feedback:capture', () => captureWindow(getWindow()))
-  ipcMain.handle('feedback:submit', (_e, input: FeedbackInput) => submitFeedback(repoRoot, input))
+  ipcMain.handle('feedback:submit', (_e, input: FeedbackInput) =>
+    submitFeedback(repoRoot, input, getHost())
+  )
 }

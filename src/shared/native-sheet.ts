@@ -31,7 +31,17 @@ export interface NativeSheetState {
     primary?: boolean
     destructive?: boolean
     section?: string
+    /** Alerts: the action Esc sends instead of `cancel` (a "Back" or "Not now"). */
+    cancel?: boolean
+    /** The host copies this text to the clipboard before sending the action. */
+    copy?: string
   }[]
+  /**
+   * An NSAlert-style sheet attached to the main window (app icon, bold title,
+   * informative detail, right-aligned buttons) instead of a form window. The
+   * presenter sets it for field-less states unless a caller decides otherwise.
+   */
+  alert?: boolean
   /** Present: a source-list sidebar window; fields and actions render in their section's pane. */
   sections?: NativeSheetSection[]
   /** The section shown when the window opens. */
@@ -40,6 +50,14 @@ export interface NativeSheetState {
   dismissible?: boolean
   busy: boolean
   message?: string
+}
+/** A short confirmation inside the main window that dismisses itself after `seconds`. */
+export interface NativeToastState {
+  id: string
+  message: string
+  /** The label of its one action; the host reports a click as `toast-action`. */
+  action?: string
+  seconds: number
 }
 /** `section` is the pane selected when the action was sent; `section` alone just selects it. */
 export interface NativeSheetAction {

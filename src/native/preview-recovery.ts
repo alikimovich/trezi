@@ -15,6 +15,8 @@ export class NativePreviewRecovery {
         {
           title: 'Running servers',
           detail: `${entry.root}\n\n${message}`,
+          // A tool window whose server list comes and goes, not an alert.
+          alert: false,
           fields: servers.length
             ? [
                 {

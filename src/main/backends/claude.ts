@@ -61,6 +61,7 @@ import {
   LOGIN_COMMAND_MESSAGE,
   resolveClaudeCli
 } from './claude-login'
+import { failureText, isResumeFailure, RESUME_NOTE, seedPrompt, sessionCwd } from './claude-resume'
 import { interruptWithEscalation } from './interrupt'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
@@ -535,8 +536,12 @@ async function startSession(
   // `${key}#…`) would otherwise get a history record no rail lookup can ever find.
   const cap = createRecordCapture(root, key)
   const { query, createSdkMcpServer, tool } = await loadSdk()
-  const input = new InputStream()
+  // Replaced when a failed resume starts a new session (`recoverResume`).
+  let input = new InputStream()
   const abort = new AbortController()
+  // One resolved cwd for start and resume: the SDK keys a session by it (LKM-165).
+  // A resume uses the cwd stored with its session id while it is still this directory.
+  const cwd = sessionCwd(root, ctx?.resumeSessionId ? ctx.resumeCwd : undefined)
   const pending = new Map<string, PendingPrompt>()
   const pendingQuestions = new Map<string, PendingQuestion>()
   // Per-session: disposed when replaced/closed; namespaces fallback permission ids.
@@ -1139,178 +1144,202 @@ async function startSession(
     }
   }
   const spawned = Date.now()
-  const q: Query = query({
-    prompt: input,
-    options: {
-      cwd: root,
-      ...(executable ? { pathToClaudeCodeExecutable: executable } : {}),
-      settingSources: ['user', 'project', 'local'],
-      // The repo's CLAUDE.md + skills load via settingSources; Trezi's own
-      // operating rules (v8 R) are appended to the Claude Code preset, with the
-      // preview-tools section (Claude alone can call the in-process trezi tools).
-      systemPrompt: {
-        type: 'preset',
-        preset: 'claude_code',
-        append: treziRules({ previewTools: true, projectMemory: ctx?.projectMemory })
-      },
-      // The trezi MCP server (preview_location / preview_screenshot / chat_island /
-      // spring_to_css / check_contrast / fluid_clamp / color_scale / layered_shadow /
-      // line_height / list_recommended_skills / install_skills). All but install_skills
-      // are auto-allowed here so they never surface a permission card (canUseTool also
-      // short-circuits them, belt-and-suspenders) — main validates everything
-      // chat_island persists, and install_skills prompts (writes files + network).
-      mcpServers: { trezi: previewServer },
-      // LKM-138: none of the user's own plugins or MCP servers unless Settings allows them.
-      ...claudeIsolationOptions(root, options.claudeUserPlugins === true),
-      allowedTools: [...TREZI_TOOL_NAMES],
-      // The bundled Trezi skill plugin (only when present in this build).
-      ...(existsSync(PLUGIN_PATH)
-        ? { plugins: [{ type: 'local' as const, path: PLUGIN_PATH }] }
-        : {}),
-      includePartialMessages: true,
-      permissionMode: options.permissionMode ?? 'default',
-      allowDangerouslySkipPermissions: true,
-      abortController: abort,
-      ...(options.model ? { model: options.model } : {}),
-      ...(options.effort ? { effort: options.effort as 'low' | 'medium' | 'high' } : {}),
-      // v9 resume: reload a past conversation's context (the record's captured
-      // sdkSessionId) instead of starting fresh. Absent for the default open/new-chat path.
-      ...(ctx?.resumeSessionId ? { resume: ctx.resumeSessionId } : {}),
-      // LKM-151: a worktree chat never edits the live checkout by absolute path, in any
-      // permission mode (hooks run before bypass/auto approvals; canUseTool does not).
-      // LKM-156: nor names it in a Bash command.
-      hooks: {
-        PreToolUse: [
-          {
-            hooks: [
-              async (input) => {
-                const pre = input as { tool_name?: string; tool_input?: unknown }
-                const denied = liveCheckoutEdit(
-                  pre.tool_name ?? '',
-                  pre.tool_input,
-                  root,
-                  ctx?.liveRoot ?? root
-                )
-                return denied
-                  ? {
-                      hookSpecificOutput: {
-                        hookEventName: 'PreToolUse' as const,
-                        permissionDecision: 'deny' as const,
-                        permissionDecisionReason: denied.reason
+  const open = (resumeId: string | undefined): Query =>
+    query({
+      prompt: input,
+      options: {
+        cwd,
+        ...(executable ? { pathToClaudeCodeExecutable: executable } : {}),
+        settingSources: ['user', 'project', 'local'],
+        // The repo's CLAUDE.md + skills load via settingSources; Trezi's own
+        // operating rules (v8 R) are appended to the Claude Code preset, with the
+        // preview-tools section (Claude alone can call the in-process trezi tools).
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          append: treziRules({ previewTools: true, projectMemory: ctx?.projectMemory })
+        },
+        // The trezi MCP server (preview_location / preview_screenshot / chat_island /
+        // spring_to_css / check_contrast / fluid_clamp / color_scale / layered_shadow /
+        // line_height / list_recommended_skills / install_skills). All but install_skills
+        // are auto-allowed here so they never surface a permission card (canUseTool also
+        // short-circuits them, belt-and-suspenders) — main validates everything
+        // chat_island persists, and install_skills prompts (writes files + network).
+        mcpServers: { trezi: previewServer },
+        // LKM-138: none of the user's own plugins or MCP servers unless Settings allows them.
+        ...claudeIsolationOptions(root, options.claudeUserPlugins === true),
+        allowedTools: [...TREZI_TOOL_NAMES],
+        // The bundled Trezi skill plugin (only when present in this build).
+        ...(existsSync(PLUGIN_PATH)
+          ? { plugins: [{ type: 'local' as const, path: PLUGIN_PATH }] }
+          : {}),
+        includePartialMessages: true,
+        permissionMode: options.permissionMode ?? 'default',
+        allowDangerouslySkipPermissions: true,
+        abortController: abort,
+        ...(options.model ? { model: options.model } : {}),
+        ...(options.effort ? { effort: options.effort as 'low' | 'medium' | 'high' } : {}),
+        // v9 resume: reload a past conversation's context (the record's captured
+        // sdkSessionId) instead of starting fresh. Absent for the default open/new-chat path.
+        ...(resumeId ? { resume: resumeId } : {}),
+        // LKM-151: a worktree chat never edits the live checkout by absolute path, in any
+        // permission mode (hooks run before bypass/auto approvals; canUseTool does not).
+        // LKM-156: nor names it in a Bash command.
+        hooks: {
+          PreToolUse: [
+            {
+              hooks: [
+                async (input) => {
+                  const pre = input as { tool_name?: string; tool_input?: unknown }
+                  const denied = liveCheckoutEdit(
+                    pre.tool_name ?? '',
+                    pre.tool_input,
+                    root,
+                    ctx?.liveRoot ?? root
+                  )
+                  return denied
+                    ? {
+                        hookSpecificOutput: {
+                          hookEventName: 'PreToolUse' as const,
+                          permissionDecision: 'deny' as const,
+                          permissionDecisionReason: denied.reason
+                        }
                       }
-                    }
-                  : { continue: true }
+                    : { continue: true }
+                }
+              ]
+            }
+          ]
+        },
+        canUseTool: async (toolName, toolInput, opts) => {
+          // The provider owner decides (S10); the adapter only settles the SDK callback.
+          // An owner that cannot answer fails closed.
+          const verdict: PermissionVerdict = ctx?.grant
+            ? await providerOwner()
+                .permission(ctx.grant, toolName, toolInput)
+                .catch(() => ({
+                  decision: 'deny' as const,
+                  message: 'Trezi could not check this permission.'
+                }))
+            : decidePermission(toolName, permissionTarget(toolName, toolInput), {
+                live: true,
+                background: !!ctx?.sessionId,
+                root,
+                liveRoot: ctx?.liveRoot ?? root,
+                profile: ''
+              })
+          // The agent asking the user a question isn't a permission decision — surface
+          // it as an interactive multiple-choice card and feed the answer back as the
+          // tool result (it never shows an approve/deny card).
+          if (verdict.decision === 'question') {
+            const questions = parseQuestions(toolInput)
+            if (questions.length === 0) {
+              return { behavior: 'deny', message: 'The question had no answerable options.' }
+            }
+            if (disposed || abort.signal.aborted || opts.signal.aborted) {
+              return { behavior: 'deny', message: 'Session no longer active.' }
+            }
+            const id = opts.toolUseID || `${key}:q${++permCounter}`
+            const request: QuestionRequest = { id, questions, sessionKey: emitKey }
+            return await new Promise((resolve) => {
+              const cleanup = (): void => {
+                pendingQuestions.delete(id)
+                opts.signal.removeEventListener('abort', onAbort)
               }
-            ]
-          }
-        ]
-      },
-      canUseTool: async (toolName, toolInput, opts) => {
-        // The provider owner decides (S10); the adapter only settles the SDK callback.
-        // An owner that cannot answer fails closed.
-        const verdict: PermissionVerdict = ctx?.grant
-          ? await providerOwner()
-              .permission(ctx.grant, toolName, toolInput)
-              .catch(() => ({
-                decision: 'deny' as const,
-                message: 'Trezi could not check this permission.'
-              }))
-          : decidePermission(toolName, permissionTarget(toolName, toolInput), {
-              live: true,
-              background: !!ctx?.sessionId,
-              root,
-              liveRoot: ctx?.liveRoot ?? root,
-              profile: ''
+              const onAbort = (): void => {
+                cleanup()
+                emit({ type: 'question-resolved', id })
+                resolve({ behavior: 'deny', message: 'Interrupted.' })
+              }
+              pendingQuestions.set(id, {
+                settle: (answers) => {
+                  cleanup()
+                  resolve({
+                    behavior: 'deny',
+                    message: answers
+                      ? formatAnswers(questions, answers)
+                      : 'The user dismissed the question without answering.'
+                  })
+                }
+              })
+              opts.signal.addEventListener('abort', onAbort, { once: true })
+              emit({ type: 'question-request', request })
             })
-        // The agent asking the user a question isn't a permission decision — surface
-        // it as an interactive multiple-choice card and feed the answer back as the
-        // tool result (it never shows an approve/deny card).
-        if (verdict.decision === 'question') {
-          const questions = parseQuestions(toolInput)
-          if (questions.length === 0) {
-            return { behavior: 'deny', message: 'The question had no answerable options.' }
           }
+          // Trezi's own tools (also in allowedTools) and read-only tools are allowed
+          // without a prompt; the .trezi/ sidecar and Trezi's own data are denied.
+          if (verdict.decision === 'allow') {
+            emit({ type: 'status', text: describeTool(toolName, toolInput) })
+            return { behavior: 'allow', updatedInput: toolInput }
+          }
+          if (verdict.decision === 'deny') return { behavior: 'deny', message: verdict.message }
           if (disposed || abort.signal.aborted || opts.signal.aborted) {
             return { behavior: 'deny', message: 'Session no longer active.' }
           }
-          const id = opts.toolUseID || `${key}:q${++permCounter}`
-          const request: QuestionRequest = { id, questions, sessionKey: emitKey }
+          // In `auto` mode the SDK's classifier auto-approves routine tools without
+          // calling this hook; a call reaching here is one the classifier flagged as
+          // risky (the 'ask' path). Surface an approve/deny card so the user decides —
+          // this is the only prompt in auto mode, for genuinely dangerous ops.
+          emit({ type: 'status', text: describeTool(toolName, toolInput) })
+          const id = opts.toolUseID || `${key}:perm${++permCounter}`
+          const request: PermissionRequest = {
+            id,
+            toolName,
+            title: opts.title || `Allow ${toolName}?`,
+            ...(opts.displayName ? { displayName: opts.displayName } : {}),
+            ...(toolDetail(toolName, toolInput)
+              ? { detail: toolDetail(toolName, toolInput)! }
+              : {}),
+            sessionKey: emitKey
+          }
           return await new Promise((resolve) => {
             const cleanup = (): void => {
-              pendingQuestions.delete(id)
+              pending.delete(id)
               opts.signal.removeEventListener('abort', onAbort)
             }
             const onAbort = (): void => {
               cleanup()
-              emit({ type: 'question-resolved', id })
+              emit({ type: 'permission-resolved', id })
               resolve({ behavior: 'deny', message: 'Interrupted.' })
             }
-            pendingQuestions.set(id, {
-              settle: (answers) => {
+            pending.set(id, {
+              toolName,
+              settle: (behavior) => {
                 cleanup()
-                resolve({
-                  behavior: 'deny',
-                  message: answers
-                    ? formatAnswers(questions, answers)
-                    : 'The user dismissed the question without answering.'
-                })
+                resolve(
+                  behavior === 'allow'
+                    ? { behavior: 'allow', updatedInput: toolInput }
+                    : { behavior: 'deny', message: 'Denied by the user in Trezi.' }
+                )
               }
             })
             opts.signal.addEventListener('abort', onAbort, { once: true })
-            emit({ type: 'question-request', request })
+            emit({ type: 'permission-request', request })
           })
         }
-        // Trezi's own tools (also in allowedTools) and read-only tools are allowed
-        // without a prompt; the .trezi/ sidecar and Trezi's own data are denied.
-        if (verdict.decision === 'allow') {
-          emit({ type: 'status', text: describeTool(toolName, toolInput) })
-          return { behavior: 'allow', updatedInput: toolInput }
-        }
-        if (verdict.decision === 'deny') return { behavior: 'deny', message: verdict.message }
-        if (disposed || abort.signal.aborted || opts.signal.aborted) {
-          return { behavior: 'deny', message: 'Session no longer active.' }
-        }
-        // In `auto` mode the SDK's classifier auto-approves routine tools without
-        // calling this hook; a call reaching here is one the classifier flagged as
-        // risky (the 'ask' path). Surface an approve/deny card so the user decides —
-        // this is the only prompt in auto mode, for genuinely dangerous ops.
-        emit({ type: 'status', text: describeTool(toolName, toolInput) })
-        const id = opts.toolUseID || `${key}:perm${++permCounter}`
-        const request: PermissionRequest = {
-          id,
-          toolName,
-          title: opts.title || `Allow ${toolName}?`,
-          ...(opts.displayName ? { displayName: opts.displayName } : {}),
-          ...(toolDetail(toolName, toolInput) ? { detail: toolDetail(toolName, toolInput)! } : {}),
-          sessionKey: emitKey
-        }
-        return await new Promise((resolve) => {
-          const cleanup = (): void => {
-            pending.delete(id)
-            opts.signal.removeEventListener('abort', onAbort)
-          }
-          const onAbort = (): void => {
-            cleanup()
-            emit({ type: 'permission-resolved', id })
-            resolve({ behavior: 'deny', message: 'Interrupted.' })
-          }
-          pending.set(id, {
-            toolName,
-            settle: (behavior) => {
-              cleanup()
-              resolve(
-                behavior === 'allow'
-                  ? { behavior: 'allow', updatedInput: toolInput }
-                  : { behavior: 'deny', message: 'Denied by the user in Trezi.' }
-              )
-            }
-          })
-          opts.signal.addEventListener('abort', onAbort, { once: true })
-          emit({ type: 'permission-request', request })
-        })
       }
-    }
-  })
+    })
+  let q: Query = open(ctx?.resumeSessionId)
+  // A resumed query that has not completed a turn yet: its failure is a failed resume.
+  let resuming = !!ctx?.resumeSessionId
+  // The user's turn in flight, replayed into the new session when the resume fails.
+  let inflight: { text: string; images?: ImageAttachment[] } | null = null
+  // The new session still needs its summary seed (the failure came before any message).
+  let needSeed = false
+  const seed = (text: string, images?: ImageAttachment[]): void => {
+    needSeed = false
+    emit({ type: 'status', text: RESUME_NOTE })
+    input.push(seedPrompt(ctx?.resumeSummary ?? '', text), images)
+  }
+  /** A resume the SDK refused: a new session in the same worktree takes the turn. */
+  const recoverResume = (): void => {
+    resuming = false
+    input.close()
+    input = new InputStream()
+    q = open(undefined)
+    if (inflight) seed(inflight.text, inflight.images)
+    else needSeed = true
+  }
 
   // The "/" menu (LKM-54): project skills — the opened repo's
   // `.claude/skills/**/SKILL.md`, discovered + described here in main so the
@@ -1415,110 +1444,137 @@ async function startSession(
     // the streamed text, thinking and tool input in between (LKM-147).
     const usage = streamUsage((delta) => emit({ type: 'usage', ...delta }))
     const reportUsage = (raw: unknown): void => usage.report(raw)
-    try {
-      for await (const msg of q) {
-        cliStarted()
-        switch (msg.type) {
-          case 'system': {
-            const sys = msg as {
-              subtype?: string
-              slash_commands?: string[]
-              session_id?: string
-              model?: string
-            }
-            // The turn's session began, or the CLI reports work (a request, a retry,
-            // thinking) before any output: the owner keeps waiting (LKM-135).
-            if (sys.subtype === 'init') phase('init')
-            else progress()
-            if (sys.subtype === 'init') {
-              // v9 resume: capture the SDK's own resumable session id off the init
-              // message — this is what a later `agent:resume-session` forwards back
-              // as `options.resume`. Distinct from `ctx.sessionId` (v8 F1 spawn bookkeeping).
-              if (typeof sys.session_id === 'string' && sys.session_id) {
-                cap.setSdkSessionId(sys.session_id)
+    // One pass per query: a failed resume starts a new session and the loop reads it.
+    for (;;) {
+      try {
+        for await (const msg of q) {
+          cliStarted()
+          switch (msg.type) {
+            case 'system': {
+              const sys = msg as {
+                subtype?: string
+                slash_commands?: string[]
+                session_id?: string
+                model?: string
               }
-              if (Array.isArray(sys.slash_commands)) {
-                sdkCommandNames = sys.slash_commands
-                emitCommands()
-              }
-              // What the picker's alias resolved to, for the chat to show (LKM-164).
-              const model = typeof sys.model === 'string' ? sys.model.trim() : ''
-              if (model && model.length <= 256) emit({ type: 'model', model })
-            }
-            break
-          }
-          case 'stream_event': {
-            const ev = (
-              msg as {
-                event?: {
-                  type?: string
-                  message?: unknown
-                  usage?: unknown
-                  delta?: Record<string, unknown>
+              // The turn's session began, or the CLI reports work (a request, a retry,
+              // thinking) before any output: the owner keeps waiting (LKM-135).
+              if (sys.subtype === 'init') phase('init')
+              else progress()
+              if (sys.subtype === 'init') {
+                // v9 resume: capture the SDK's own resumable session id off the init
+                // message — this is what a later `agent:resume-session` forwards back
+                // as `options.resume`. Distinct from `ctx.sessionId` (v8 F1 spawn bookkeeping).
+                if (typeof sys.session_id === 'string' && sys.session_id) {
+                  cap.setSdkSessionId(sys.session_id, cwd)
                 }
+                if (Array.isArray(sys.slash_commands)) {
+                  sdkCommandNames = sys.slash_commands
+                  emitCommands()
+                }
+                // What the picker's alias resolved to, for the chat to show (LKM-164).
+                const model = typeof sys.model === 'string' ? sys.model.trim() : ''
+                if (model && model.length <= 256) emit({ type: 'model', model })
               }
-            ).event
-            if (ev?.type === 'message_start') {
-              // A new request — its counters start from zero again.
-              usage.start()
-              reportUsage((ev.message as { usage?: unknown } | undefined)?.usage)
-            } else if (ev?.type === 'message_delta') {
-              reportUsage(ev.usage)
-            } else {
-              usage.streamed(streamedChars(ev))
-            }
-            const text = textDelta(msg)
-            if (text) {
-              streamedText = true
-              cap.appendAssistant(text)
-              emit({ type: 'delta', text })
-            }
-            break
-          }
-          case 'assistant': {
-            // The final, authoritative usage for this request — a no-op delta
-            // when the stream events above already reported all of it.
-            reportUsage((msg.message as { usage?: unknown }).usage)
-            // "Not logged in · Please run /login" is the CLI's, not the model's: a login
-            // card, never assistant text (LKM-119).
-            if (isAuthFailure(msg as never)) {
-              const said = msg.message.content
-                .map((block) => (block.type === 'text' ? block.text : ''))
-                .join(' ')
-                .trim()
-              emit({ type: 'error', code: 'auth', message: said || 'Claude is not logged in.' })
-              authFailed = true
-              forgetClaudeCli()
               break
             }
-            for (const block of msg.message.content) {
-              if (block.type === 'text' && !streamedText) {
-                cap.appendAssistant(block.text)
-                emit({ type: 'delta', text: block.text })
-              } else if (block.type === 'tool_use') {
-                // Capture in the assistant stream (not canUseTool) so tools are
-                // recorded even under bypassPermissions, where canUseTool is skipped.
-                cap.noteTool(block.name, block.input)
-                emit({ type: 'status', text: describeTool(block.name, block.input) })
+            case 'stream_event': {
+              const ev = (
+                msg as {
+                  event?: {
+                    type?: string
+                    message?: unknown
+                    usage?: unknown
+                    delta?: Record<string, unknown>
+                  }
+                }
+              ).event
+              if (ev?.type === 'message_start') {
+                // A new request — its counters start from zero again.
+                usage.start()
+                reportUsage((ev.message as { usage?: unknown } | undefined)?.usage)
+              } else if (ev?.type === 'message_delta') {
+                reportUsage(ev.usage)
+              } else {
+                usage.streamed(streamedChars(ev))
               }
+              const text = textDelta(msg)
+              if (text) {
+                streamedText = true
+                cap.appendAssistant(text)
+                emit({ type: 'delta', text })
+              }
+              break
             }
-            break
-          }
-          case 'result': {
-            if (hardStopped) break // the force-stop already finalized and sent `done`
-            cap.finalize()
-            emit({ type: 'done' })
-            streamedText = false
-            authFailed = false
-            break
+            case 'assistant': {
+              // The final, authoritative usage for this request — a no-op delta
+              // when the stream events above already reported all of it.
+              reportUsage((msg.message as { usage?: unknown }).usage)
+              // "Not logged in · Please run /login" is the CLI's, not the model's: a login
+              // card, never assistant text (LKM-119).
+              if (isAuthFailure(msg as never)) {
+                const said = msg.message.content
+                  .map((block) => (block.type === 'text' ? block.text : ''))
+                  .join(' ')
+                  .trim()
+                emit({ type: 'error', code: 'auth', message: said || 'Claude is not logged in.' })
+                authFailed = true
+                forgetClaudeCli()
+                break
+              }
+              for (const block of msg.message.content) {
+                if (block.type === 'text' && !streamedText) {
+                  cap.appendAssistant(block.text)
+                  emit({ type: 'delta', text: block.text })
+                } else if (block.type === 'tool_use') {
+                  // Capture in the assistant stream (not canUseTool) so tools are
+                  // recorded even under bypassPermissions, where canUseTool is skipped.
+                  cap.noteTool(block.name, block.input)
+                  emit({ type: 'status', text: describeTool(block.name, block.input) })
+                }
+              }
+              break
+            }
+            case 'result': {
+              if (hardStopped) break // the force-stop already finalized and sent `done`
+              // The CLI answered a resume with "No conversation found": not a turn.
+              if (
+                resuming &&
+                (msg as { is_error?: boolean }).is_error &&
+                isResumeFailure(failureText(msg))
+              )
+                throw new Error(failureText(msg))
+              resuming = false
+              inflight = null
+              cap.finalize()
+              emit({ type: 'done' })
+              streamedText = false
+              authFailed = false
+              break
+            }
           }
         }
+      } catch (err) {
+        // A resume that fails recovers once, before any turn completed on it: never the
+        // raw error, the user's turn runs on a new session seeded with a summary.
+        if (
+          resuming &&
+          !authFailed &&
+          !hardStopped &&
+          !abort.signal.aborted &&
+          !disposed &&
+          isResumeFailure(failureText(err))
+        ) {
+          recoverResume()
+          streamedText = false
+          continue
+        }
+        if (authFailed) emit({ type: 'done' })
+        else if (!abort.signal.aborted) {
+          emit({ type: 'error', message: err instanceof Error ? err.message : String(err) })
+        }
       }
-    } catch (err) {
-      if (authFailed) emit({ type: 'done' })
-      else if (!abort.signal.aborted) {
-        emit({ type: 'error', message: err instanceof Error ? err.message : String(err) })
-      }
+      break
     }
   })()
 
@@ -1533,7 +1589,10 @@ async function startSession(
         emit({ type: 'done' })
         return
       }
-      input.push(withSkillReferences(text, availablePortableSkills()), images)
+      const prompt = withSkillReferences(text, availablePortableSkills())
+      inflight = { text: prompt, images }
+      if (needSeed) seed(prompt, images)
+      else input.push(prompt, images)
     },
     pending,
     pendingQuestions,

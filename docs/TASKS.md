@@ -11,6 +11,22 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Native `checkPointer` moves through WebKit's tracking-area owners: page hovers, island does not, page hovers again; the shield matches the island; a click and wheel on the island still pick nothing.
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
 
+## Standard feedback confirmation and alert sheets (LKM-170)
+
+- [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.
+- [x] Failed feedback: a standard sheet with Copy details, Cancel and Retry (default) that posts the same input again (`src/native/support-sheets.ts`).
+- [x] Field-less presenter states are NSAlert-style sheets attached to the main window, sized to content, Return = default, Esc = cancel (`src/native/SheetAlert.swift`); Suggested fix and Update setup files opt in, Running servers and Git updates stay form windows.
+- [x] Native capture check `src/native/smoke-alerts.ts` (group `settings`): updates alert, feedback error sheet, Retry, toast and its action.
+## Long chat slows the app and edits never land (LKM-165, issue #230)
+
+- [x] Root cause documented: the drift-park send guard refused the Resolve turn, and landing exceptions were swallowed (`docs/WORKTREES.md`, `docs/PROGRESS.md`).
+- [x] A Codex→Claude chat lands after failed Codex turns; stale and stuck parks recover (`test/chat-landing-recovery.mjs`).
+- [x] An unlandable turn shows Retry/Resolve/Discard with its reason; `workspace_state` never reports "pending".
+- [x] Unchanged transcripts are not re-sent or re-decoded; mode switch and attachment add stay under 100 ms at 2,000 messages (`test/native-long-chat-perf.mjs`).
+- [x] Trezi MCP tools pre-approved for Codex (`test/codex-mcp-approvals.mjs`).
+- [x] Feedback sheet diagnostics consent; redacted bundle with `~` paths (`test/feedback-diagnostics.mjs`, `test/native-support-sheets.mjs`).
+- [x] "Already running" is never a dead end: Bun and the service agree on what runs, the activity row names it and Stop works, a stuck turn or landing ends on its own with a note, and a message sent meanwhile is queued (`test/chat-stuck-turn.mjs`).
+- [x] A failed Claude resume recovers: one canonical cwd for start and resume, a new session seeded with a chat summary and one note, no raw error (`test/claude-resume.mjs`, `test/claude-cwd.mjs`).
 ## Compact sent and composer attachment thumbnails (LKM-166)
 
 - [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.

@@ -105,6 +105,7 @@ export function clearPark(st: ChatState): void {
   st.reverted = false
   st.parkedFiles = []
   st.resolvingFiles = null
+  st.landingError = undefined
   dropParkRecord(st)
 }
 

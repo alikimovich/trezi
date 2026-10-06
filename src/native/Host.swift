@@ -33,6 +33,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let downloads = PreviewDownloads()
     let activity = NativeActivity()
     let activityIndicator = ActivityIndicator()
+    let toast = NativeToast()
     var sourceEditors: [String: NativeSourceEditor] = [:]
     var sourceRoot = ""
     var dockedSource: NativeSourceEditor? { sourceEditors[sourceRoot].flatMap { $0.state["visible"] as? Bool == true && $0.state["popped"] as? Bool != true ? $0 : nil } }
@@ -122,7 +123,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
             DispatchQueue.main.async { self?.terminateHost() }
         }
-          emit(["event":"ready"])
+          emit(["event":"ready", "pid": Int(getpid())])
         }
     }
     // Menus: `HostMenus.swift`. Test-broker commands: `HostInspect.swift` (LKM-160).
@@ -193,6 +194,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "activityUnread": activityIndicator.update(count: c["count"] as? Int ?? 0, level: c["level"] as? String ?? "info")
         case "sheetState": sheets.update(c["state"] as? [String: Any] ?? [:])
         case "sheetClose": sheets.close(c["id"] as? String ?? "")
+        case "toastState": toast.show(c["state"] as? [String: Any] ?? [:], in: canvas)
         case "composerState": composer.update(c["state"] as? [String: Any] ?? [:])
         case "composerFocus": window.makeFirstResponder(composer.text)
         case "shellState":

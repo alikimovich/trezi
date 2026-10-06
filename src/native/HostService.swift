@@ -25,7 +25,7 @@ extension Host {
                 }
                 for frame in earlyServiceFrames { client.send(frame) }
                 earlyServiceFrames.removeAll()
-                client.start(onReady: { emit(["event": "ready"]) }, onMessage: { [weak self] data in
+                client.start(onReady: { emit(["event": "ready", "pid": Int(getpid())]) }, onMessage: { [weak self] data in
                     guard let command = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
                     self?.command(command)
                 }, onFailure: { [weak self] message in

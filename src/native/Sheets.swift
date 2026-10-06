@@ -4,9 +4,9 @@ import SwiftUI
 struct SheetChoice: Decodable, Identifiable { let value: String; let label: String; var id: String { value } }
 struct SheetFieldCondition: Decodable { let field: String; let value: String }
 struct SheetField: Decodable, Identifiable { let id: String; let label: String; let kind: String; let value: String; let choices: [SheetChoice]?; let help: String?; let visibleWhen: SheetFieldCondition?; let section: String?; let draft: Bool?; let placeholder: String? }
-struct SheetAction: Decodable, Identifiable { let id: String; let label: String; let primary: Bool?; let destructive: Bool?; let section: String? }
+struct SheetAction: Decodable, Identifiable { let id: String; let label: String; let primary: Bool?; let destructive: Bool?; let section: String?; let cancel: Bool?; let copy: String? }
 struct SheetSection: Decodable, Identifiable { let id: String; let label: String; let symbol: String; let detail: String? }
-struct SheetState: Decodable { let id: String; let title: String; let detail: String; let fields: [SheetField]; let actions: [SheetAction]; let busy: Bool; let autosave: Bool?; let dismissible: Bool?; let message: String?; let sections: [SheetSection]?; let section: String? }
+struct SheetState: Decodable { let id: String; let title: String; let detail: String; let fields: [SheetField]; let actions: [SheetAction]; let busy: Bool; let autosave: Bool?; let dismissible: Bool?; let message: String?; let sections: [SheetSection]?; let section: String?; let alert: Bool? }
 final class SheetModel: ObservableObject {
     @Published var state: SheetState?
     @Published var filters: [String: String] = [:]
@@ -33,6 +33,9 @@ final class SheetModel: ObservableObject {
     func perform(_ action: String) {
         guard let state, !state.busy || action == "cancel" else { return }
         if action == "cancel" && !(state.dismissible ?? !state.actions.isEmpty) { return }
+        if let text = state.actions.first(where: { $0.id == action })?.copy, !state.busy {
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+        }
         var event: [String: Any] = ["event":"sheet-action", "id":state.id, "action":action, "values":values]
         if let section { event["section"] = section }
         emit(event)
@@ -131,10 +134,25 @@ final class NativeSheets: NSObject, NSWindowDelegate {
     func update(_ raw: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: raw), let state = try? JSONDecoder().decode(SheetState.self, from: data) else { return }
         model.update(state)
-        // A sectioned window and a plain form have different window content; never reuse one for the other.
-        if let panel, (state.sections != nil) != (panel.contentViewController is SheetSplit) {
+        let alert = state.alert == true && state.sections == nil
+        // A sectioned window, a plain form and an alert have different window content; never reuse one for another.
+        if let panel, (state.sections != nil) != (panel.contentViewController is SheetSplit) || alert != (panel is SheetAlertPanel) {
             (panel.contentViewController as? SheetSplit)?.detach()
+            if let parent = panel.sheetParent { parent.endSheet(panel) }
             panel.orderOut(nil); self.panel = nil
+        }
+        if alert {
+            // An alert attaches to the main window as a sheet (LKM-170): no title bar, traffic lights or spare space.
+            let sheet = panel as? SheetAlertPanel ?? SheetAlertPanel(model: model)
+            sheet.cancel = { [weak self] in self?.model.perform(SheetAlertRoles(self?.model.state?.actions ?? []).escape) }
+            sheet.fit()
+            if panel == nil {
+                panel = sheet
+                if let parent, parent.isVisible { parent.beginSheet(sheet) } else { sheet.center(); sheet.makeKeyAndOrderFront(nil) }
+            }
+            // SwiftUI lays the new state out on the next pass; fit again once it has.
+            DispatchQueue.main.async { [weak sheet] in sheet?.fit() }
+            return
         }
         if panel == nil {
             let large = state.fields.contains { ["multiline", "multichoice", "readonly", "image"].contains($0.kind) }
@@ -169,6 +187,7 @@ final class NativeSheets: NSObject, NSWindowDelegate {
     func close(_ id: String) {
         guard model.state?.id == id else { return }
         (panel?.contentViewController as? SheetSplit)?.detach()
+        if let panel, let parent = panel.sheetParent { parent.endSheet(panel) }
         panel?.close()
         panel = nil; model.state = nil; model.values = [:]; model.filters = [:]; model.section = nil
         parent?.makeKeyAndOrderFront(nil)
@@ -178,5 +197,8 @@ final class NativeSheets: NSObject, NSWindowDelegate {
         model.perform("cancel")
         return false // Bun owns dismissal, including stale-action and busy-operation guards.
     }
-    func inspect() -> [String: Any] { ["visible":panel?.isVisible ?? false, "attached":panel?.sheetParent != nil, "closable":panel?.styleMask.contains(.closable) ?? false, "resizable":panel?.styleMask.contains(.resizable) ?? false, "id":model.state?.id ?? "", "title":model.state?.title ?? "", "windowTitle":panel?.title ?? "", "busy":model.state?.busy ?? false, "fields":model.state?.fields.map(\.id) ?? [], "section":model.section ?? "", "actions":model.state?.actions.map(\.id) ?? []] }
+    func inspect() -> [String: Any] {
+        let roles = SheetAlertRoles(model.state?.actions ?? [])
+        return ["alert":panel is SheetAlertPanel, "titled":panel.map { $0.sheetParent == nil && $0.styleMask.contains(.titled) } ?? false, "width":panel?.frame.width ?? 0, "height":panel?.contentView?.frame.height ?? 0, "frameHeight":panel?.frame.height ?? 0, "contentHeight":(panel as? SheetAlertPanel)?.idealHeight ?? panel?.contentViewController?.view.fittingSize.height ?? 0, "defaultAction":roles.defaultAction?.id ?? "", "cancelAction":roles.escape, "detail":model.state?.detail ?? "", "message":model.state?.message ?? "", "visible":panel?.isVisible ?? false, "attached":panel?.sheetParent != nil, "closable":panel?.styleMask.contains(.closable) ?? false, "resizable":panel?.styleMask.contains(.resizable) ?? false, "id":model.state?.id ?? "", "title":model.state?.title ?? "", "windowTitle":panel?.title ?? "", "busy":model.state?.busy ?? false, "fields":model.state?.fields.map(\.id) ?? [], "section":model.section ?? "", "actions":model.state?.actions.map(\.id) ?? []]
+    }
 }
