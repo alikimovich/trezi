@@ -12,13 +12,13 @@ export interface ClassRule {
 const skipped = new Set(['node_modules', '.git', '.trezi', 'dist', 'build', 'out'])
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-// Vite's default CSS-module name is _localName_hash_line. A plain class may
-// also come from project CSS. Never guess from an arbitrary hashed-looking name.
-function localNames(classes: string[]): string[] {
-  return classes.flatMap((name) => {
+// Vite's default CSS-module name is _localName_hash_line. Only a CSS module
+// can produce that runtime class; plain classes can only match global CSS.
+function localNames(classes: string[]): { name: string; module: boolean }[] {
+  return classes.flatMap<{ name: string; module: boolean }>((name) => {
     if (!/^[A-Za-z_][\w-]*$/.test(name)) return []
     const vite = /^_([A-Za-z_][\w-]*)_[a-zA-Z0-9]{5,}_\d+$/.exec(name)
-    return vite ? [vite[1]] : [name]
+    return vite ? [{ name: vite[1], module: true }] : [{ name, module: false }]
   })
 }
 
@@ -47,12 +47,15 @@ function ruleSpans(css: string, name: string): { start: number; end: number }[] 
 
 export async function resolveClassRule(root: string, classes: string[]): Promise<ClassRule | null> {
   if (!Array.isArray(classes) || classes.length > 40) return null
-  const names = new Set(localNames(classes))
-  if (!names.size) return null
+  const names = localNames(classes)
+  if (!names.length) return null
   const matches: ClassRule[] = []
   for (const file of await cssFiles(root)) {
+    const module = file.endsWith('.module.css')
+    const candidates = names.filter((candidate) => candidate.module === module)
+    if (!candidates.length) continue
     const css = await readFile(file, 'utf8')
-    for (const name of names) {
+    for (const { name } of candidates) {
       for (const _ of ruleSpans(css, name))
         matches.push({ file: relative(root, file), className: name })
     }

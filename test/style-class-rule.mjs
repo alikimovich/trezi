@@ -41,6 +41,22 @@ try {
   )
   assert.equal(await resolveClassRule(root, ['_unknown_vc9o5_17']), null)
   assert.equal(await resolveClassRule(root, ['../../outside']), null)
+  writeFileSync(join(root, 'src/global.css'), '.globalOnly { color: red; }\n')
+  assert.equal(
+    await resolveClassRule(root, ['_globalOnly_vc9o5_17']),
+    null,
+    'a hashed module class cannot match a global stylesheet'
+  )
+  writeFileSync(join(root, 'src/ModuleOnly.module.css'), '.moduleOnly { color: red; }\n')
+  assert.equal(
+    await resolveClassRule(root, ['moduleOnly']),
+    null,
+    'a plain class cannot match a CSS module'
+  )
+  assert.deepEqual(await resolveClassRule(root, ['globalOnly']), {
+    file: 'src/global.css',
+    className: 'globalOnly'
+  })
 } finally {
   rmSync(root, { recursive: true, force: true })
 }

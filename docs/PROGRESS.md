@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-174 review repair: match CSS classes to the right stylesheet kind
+
+- A Vite-generated module class now searches only `*.module.css`; a plain class searches only global `.css`. This prevents a lone same-named rule in the wrong stylesheet kind from becoming an editable target. The resolver test covers both wrong-kind cases and a valid plain global class.
+
 ## 2026-10-05 — LKM-174: unstamped inspector explanation and CSS class fallback
 
 - An element without a source stamp now shows the missing-source explanation, a reason from project readiness, and visible Connect project to Trezi / Ask the agent actions above the style values. The first uses the existing setup flow; the second places the selected element in the composer.
