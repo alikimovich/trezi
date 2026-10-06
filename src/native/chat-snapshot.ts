@@ -12,7 +12,8 @@ import { formatTokens, isEmptyUsage, type TokenUsage } from '../shared/run-stats
 import { rankSlashMatches } from '../shared/slash-menu'
 import { parseSlashToken } from '../shared/slash-token'
 import { loginCard } from './chat-login'
-import { queueNote, recoveryCards } from './chat-recovery'
+import { queueNote, sendBlock } from './chat-queue'
+import { recoveryCards } from './chat-recovery'
 import type { Chat } from './chat-state'
 import { displayContext } from './display-paths'
 export const permissionModes = [
@@ -242,8 +243,8 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
       enabled:
         chat.ready &&
         (stop || (!chat.switching && (!!chat.text.trim() || !!chat.attachments.length))),
-      sendLabel: stop ? 'Stop' : chat.isRunning ? 'Queue message' : 'Send message',
-      context: context?.selection?.label ?? '',
+      sendLabel: stop ? 'Stop' : sendBlock(chat) ? 'Queue message' : 'Send message',
+      context: (context?.selection ?? chat.draftSelection)?.label ?? '',
       attachments: chat.attachments.map((a) => ({
         id: a.id,
         name: a.name || 'Image',

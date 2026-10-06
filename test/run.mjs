@@ -67,6 +67,7 @@ const UNIT = [
   'chat-attachments',
   'stop-recovery-ui',
   'chat-stuck-turn',
+  'chat-send-queue',
   'live-write-guard',
   'agent-file-access',
   'project-path',

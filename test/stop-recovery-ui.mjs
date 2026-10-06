@@ -367,7 +367,7 @@ chat.isRunning = false
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
 assert.ok(card('conflict'))
 assert.equal(renders.at(-1).composer.queueCanSend, false)
-assert.match(renders.at(-1).composer.queueNote, /retry, resolve or discard the held changes/)
+assert.match(renders.at(-1).composer.queueNote, /^Waiting for Resolve/)
 assert.match(card('conflict').title, /didn’t land/)
 assert.deepEqual(
   card('conflict').actions.map((a) => a.action),
