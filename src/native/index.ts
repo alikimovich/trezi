@@ -393,10 +393,12 @@ async function main() {
   })
   host.on('native-layout-sizes', (sizes) => {
     // `layers` was the docked panel's height; it is now the Layers island's (LKM-179),
-    // with its width and, once dragged, its offset from the preview's top-right corner.
-    if (
-      ['source', 'layers', 'layersWidth', 'inspector'].every((key) => Number.isFinite(sizes[key]))
-    )
+    // with its width and, once dragged, its offset from the preview's nearest corner
+    // (LKM-180: `layersCorner`, absent for top-right). A dragged editing island keeps
+    // `inspectorX` from its side (`inspectorCorner`).
+    const finite = (key: string) => Number.isFinite(sizes[key])
+    const corner = (key: string) => (finite(key) ? { [key]: sizes[key] } : {})
+    if (['source', 'layers', 'layersWidth', 'inspector'].every(finite))
       void preferences
         .set(
           'trezi:native-panel-sizes',
@@ -405,8 +407,11 @@ async function main() {
             layers: sizes.layers,
             layersWidth: sizes.layersWidth,
             inspector: sizes.inspector,
-            ...(Number.isFinite(sizes.layersX) && Number.isFinite(sizes.layersY)
-              ? { layersX: sizes.layersX, layersY: sizes.layersY }
+            ...(finite('layersX') && finite('layersY')
+              ? { layersX: sizes.layersX, layersY: sizes.layersY, ...corner('layersCorner') }
+              : {}),
+            ...(finite('inspectorX')
+              ? { inspectorX: sizes.inspectorX, ...corner('inspectorCorner') }
               : {})
           })
         )

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Movable islands (LKM-180)
+
+- [x] One shared island (`FloatingIsland.swift`): glass, opaque face, AppKit header that drags (open/closed hand), header controls never start a drag, double-click resets, whole frame keeps the pointer from the page.
+- [x] Snap to preview edges and the other island (8 pt), no overlap on drop, kept inside on resize by corner, default when it no longer fits (`IslandLayout.swift`).
+- [x] Position saved per island in `trezi:native-panel-sizes` (`inspectorX`/`inspectorCorner`, `layersCorner`) and restored on reopen; Reset Position in the editing island's … menu.
+- [x] `movable-islands` smoke check (group `core`) with light/dark captures; CHANGELOG line.
+
 ## Native smoke focus guard and failure lines (LKM-176)
 
 - [x] Host `smokeFocus` test command restores focus (activate, key window, at most 2 s) before and after every check; a check that failed after focus was lost during it is retried once; `focus restored` is logged.

@@ -18,42 +18,27 @@ final class LayerOutline: NSOutlineView {
     override func mouseMoved(with event: NSEvent) { hovered?(row(at: convert(event.locationInWindow, from: nil))) }
     override func mouseExited(with event: NSEvent) { hovered?(-1) }
 }
-/// Drags the island by its header; a double-click puts it back under the Layers button.
-final class LayersHeader: NSView {
-    var dragged: ((CGSize, Bool) -> Void)?, reset: (() -> Void)?
-    private var start: NSPoint?
-    private func point(_ event: NSEvent) -> NSPoint? { window?.contentView.map { $0.convert(event.locationInWindow, from: nil) } }
-    override func mouseDown(with event: NSEvent) { if event.clickCount == 2 { start = nil; reset?() } else { start = point(event) } }
-    override func mouseDragged(with event: NSEvent) { if let start, let p = point(event) { dragged?(CGSize(width: p.x - start.x, height: p.y - start.y), false) } }
-    override func mouseUp(with event: NSEvent) { if let start, let p = point(event) { dragged?(CGSize(width: p.x - start.x, height: p.y - start.y), true) }; start = nil }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
-}
-/// The island's opaque face: like the editing island (LKM-162), the page must not show through rows.
-final class LayersFace: NSView {
-    override func draw(_ dirtyRect: NSRect) { NSColor.windowBackgroundColor.setFill(); NSBezierPath(roundedRect: bounds, xRadius: NativeEditingInspector.cornerRadius, yRadius: NativeEditingInspector.cornerRadius).fill() }
-}
-/// The Layers island (LKM-179): floats over the preview like the editing island, with the
-/// same glass, radius and inset. Its rows follow the preview's selection, select and hover
+/// The Layers island (LKM-179): a `FloatingIsland` like the editing island, moved by its
+/// header and sized by a thin rim. Its rows follow the preview's selection, select and hover
 /// page elements, and reorder them in the source by drag.
-final class NativeLayers: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate {
+final class NativeLayers: FloatingIsland, NSOutlineViewDataSource, NSOutlineViewDelegate {
     enum Edge { case left, right, bottom }
     static let edge: CGFloat = 5
-    let tree = LayerOutline(), title = NSTextField(labelWithString: "Layers"), status = NSTextField(labelWithString: ""), notice = NSTextField(labelWithString: "")
-    let scroll = NSScrollView(), header = LayersHeader(), face = LayersFace()
+    let tree = LayerOutline(), status = NSTextField(labelWithString: ""), notice = NSTextField(labelWithString: "")
+    let scroll = NSScrollView()
     var root = "", roots: [LayerItem] = [], nodes: [LayerItem] = [], dragged: LayerItem?
     var signature = "", updating = false
     /// The selected row's path as last applied or clicked; nil when nothing is selected.
     private(set) var selectedPath: [Int]?
     /// Row clicks sent to the preview; programmatic selections never add one (no echo).
     private(set) var selectionsSent = 0
-    private(set) var glass = false
     private var stateNotice = ""
-    /// The island's new frame in its superview while its header or an edge is dragged.
-    var moved: ((NSRect, Bool) -> Void)?, resized: ((NSRect, Set<Edge>, Bool) -> Void)?, reset: (() -> Void)?
-    private var resizing: (edges: Set<Edge>, start: NSPoint, frame: NSRect)?, moving: NSRect?
-    override var isFlipped: Bool { true }
+    /// The island's new frame in its superview while an edge is dragged.
+    var resized: ((NSRect, Set<Edge>, Bool) -> Void)?
+    private var resizing: (edges: Set<Edge>, start: NSPoint, frame: NSRect)?
     init() {
-        super.init(frame: .zero); isHidden = true
+        super.init(title: "Layers")
+        header.margin = Self.edge
         let close = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close Layers")!, target: self, action: #selector(closeLayers)); close.isBordered = false; close.toolTip = "Close Layers"
         let refresh = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh Layers")!, target: self, action: #selector(refreshLayers)); refresh.isBordered = false; refresh.toolTip = "Refresh Layers"
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("layer")); tree.addTableColumn(column); tree.outlineTableColumn = column; tree.headerView = nil; tree.rowHeight = 22; tree.indentationPerLevel = 12; tree.dataSource = self; tree.delegate = self
@@ -61,32 +46,14 @@ final class NativeLayers: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate
         tree.registerForDraggedTypes([.string]); tree.setDraggingSourceOperationMask(.move, forLocal: true)
         tree.hovered = { [weak self] row in guard let self else { return }; self.send("hover", (row >= 0 ? self.tree.item(atRow: row) as? LayerItem : nil).map { ["path":$0.path] } ?? [:]) }
         scroll.documentView = tree; scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
         status.font = .systemFont(ofSize: 11); status.textColor = .secondaryLabelColor; status.lineBreakMode = .byTruncatingTail
         status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         notice.font = .systemFont(ofSize: 11); notice.textColor = .secondaryLabelColor; notice.lineBreakMode = .byTruncatingTail; notice.isHidden = true
         notice.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        header.dragged = { [weak self] delta, ended in guard let self else { return }; let from = self.moving ?? self.frame; self.moving = ended ? nil : from; self.moved?(from.offsetBy(dx: delta.width, dy: delta.height), ended) }
-        header.reset = { [weak self] in self?.reset?() }
-        for view in [title, status, refresh, close] { view.translatesAutoresizingMaskIntoConstraints = false; header.addSubview(view) }
-        for view in [header, scroll, notice] { view.translatesAutoresizingMaskIntoConstraints = false; face.addSubview(view) }
-        let backdrop: NSView
-        if #available(macOS 26.0, *) {
-            let effect = NSGlassEffectView(); effect.style = .regular
-            effect.cornerRadius = NativeEditingInspector.cornerRadius; effect.contentView = face
-            backdrop = effect; glass = true
-        } else {
-            let effect = NSVisualEffectView(); effect.material = .popover
-            effect.blendingMode = .withinWindow; effect.state = .followsWindowActiveState
-            effect.wantsLayer = true; effect.layer?.cornerRadius = NativeEditingInspector.cornerRadius; effect.layer?.masksToBounds = true
-            effect.addSubview(face); backdrop = effect
-        }
-        face.frame = backdrop.bounds; face.autoresizingMask = [.width, .height]
-        backdrop.frame = bounds; backdrop.autoresizingMask = [.width, .height]; addSubview(backdrop)
-        let pad: CGFloat = 14
+        for view in [status, refresh, close] { view.translatesAutoresizingMaskIntoConstraints = false; header.addSubview(view) }
+        for view in [scroll, notice] { view.translatesAutoresizingMaskIntoConstraints = false; face.addSubview(view) }
+        let pad = Self.padding
         NSLayoutConstraint.activate([
-            header.leadingAnchor.constraint(equalTo: face.leadingAnchor), header.trailingAnchor.constraint(equalTo: face.trailingAnchor), header.topAnchor.constraint(equalTo: face.topAnchor), header.heightAnchor.constraint(equalToConstant: 40),
-            title.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: pad), title.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             status.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: 6), status.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor), status.trailingAnchor.constraint(lessThanOrEqualTo: refresh.leadingAnchor, constant: -8),
             close.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -pad), close.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             refresh.trailingAnchor.constraint(equalTo: close.leadingAnchor, constant: -10), refresh.centerYAnchor.constraint(equalTo: header.centerYAnchor),
@@ -100,7 +67,7 @@ final class NativeLayers: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, frame.contains(point) else { return nil }
         if !edges(at: convert(point, from: superview)).isEmpty { return self }
-        return super.hitTest(point) ?? self
+        return super.hitTest(point)
     }
     func edges(at point: NSPoint) -> Set<Edge> {
         var edges = Set<Edge>()
@@ -128,9 +95,6 @@ final class NativeLayers: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate
         if drag.edges.contains(.bottom) { next.size.height += dy }
         resized?(next, drag.edges, ended)
     }
-    override func rightMouseDown(with event: NSEvent) {}
-    override func otherMouseDown(with event: NSEvent) {}
-    override func scrollWheel(with event: NSEvent) {}
     func send(_ action: String, _ data: [String: Any] = [:]) { emit(data.merging(["event":"layers-action", "root":root, "action":action]) { _, new in new }) }
     @objc func closeLayers() { send("close") }
     @objc func refreshLayers() { send("refresh") }
