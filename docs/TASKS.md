@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview select slowdown with image attachments (LKM-171, issue #231)
+
+- [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.
+- [x] Add a synthetic 100-hover regression test with two SVG attachments and 2 KB of pasted code.
+- [ ] Record end-to-end hover and select timings on a foreground affected chat, including bridge hops and WebContent, and confirm the 16 ms / 50 ms budgets.
+
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
 - [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.

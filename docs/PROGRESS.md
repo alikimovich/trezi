@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-171: preview hover coalescing
+
+- LKM-165 already omits unchanged transcript payloads, and LKM-166 caches decoded sent thumbnails. Preview pointer hover stays in WebContent: `onMove` draws its own overlay and sends no hover frame through the host, service or Bun. This rules out a per-hover chat snapshot update as the current cause.
+- `coalesceHover` keeps the latest element and draws once per display frame; click, leaving the page overlay and mode exit cancel stale work. `?treziPerf=1` records WebContent hover and local selection durations in the Performance timeline for on-device investigation.
+- `test/preview-hover-perf.mjs` queues 100 synthetic moves against a chat fixture with two SVG attachments and more than 2 KB of pasted code, asserts one paint and a 16 ms enqueue budget.
+- The `TreziService` binary also runs as `--guard-backend` and `--watch-group`; four processes can be the XPC service plus guardian and watchdogs. Process command lines could not be confirmed here because `ps` is blocked by the sandbox.
+
 ## 2026-10-05 — LKM-170: feedback toast and standard alert sheets
 
 - **Problem.** After Send feedback, the generic presenter opened a titled, resizable "Feedback sent" window (traffic lights, empty body, a lone "View issue" button). Every field-less sheet (updates, preview problem, delete and restart confirmations) used that same form window.
