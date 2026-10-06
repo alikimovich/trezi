@@ -18,6 +18,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Editor toolbar and a popped-out source editor with a file tree.
 - Versioning: Settings › General and `trezi --version` show "Trezi X.Y.Z (build N, short sha)"; About Trezi shows the same; `bun run release` cuts tagged releases with this changelog.
 - Product logs: every Trezi process writes redacted lifecycle lines to `~/Library/Logs/Trezi` (7 days, 20 MB a day); Help › Copy Logs for Support, Show Logs in Finder and Export Logs…, `trezi logs [--since 30m] [--follow]`, and the feedback diagnostics attach the last 30 minutes with consent.
+- Layers follows the preview selection both ways: selecting an element in the preview, the editing island or a chat chip selects, reveals and scrolls to its row, and selecting a row selects the element; rows drag to reorder siblings with an insertion line, a one-line reason when a drop is refused, and Undo (LKM-179).
 
 ### Fixed
 - Select mode highlights the hovered element again, and pointer moves over the preview are no longer slowed by a window hit test; the editing island still keeps hover, clicks and scrolls from reaching the page beneath it (LKM-173).
@@ -43,6 +44,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Codex chats work again when the project or the chat's workspace path contains a symlink (for example an upgraded profile's `Trezi Native` folder) instead of refusing every file command (LKM-163).
 
 ### Changed
+- Layers is a floating island under the toolbar's Layers button instead of a panel docked over the chat: it sits beside or above the editing island without covering it, moves by its header, resizes from its edges and remembers its place and size (LKM-179).
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.
 - Renamed the app to Trezi; projects that use the earlier setup names are migrated once on open.
 - Project memory keeps only durable rules a future chat could not learn from the code (preferences, design rules, constraints, project facts, pitfalls), each dated; one-off requests are no longer stored and existing ones are cleaned up, a design token becomes a rule only once it exists in the code, agents no longer report a requested change as "saved in memory", and each automatic update shows "Project memory updated: +1 rule" with View and Undo (LKM-177).

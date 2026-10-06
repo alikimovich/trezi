@@ -29,6 +29,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var chatReady = false
     /// What the chat gate shows in the header, merged into `shellInspect`.
     func gateInspect() -> [String: Any] { ["chatReady":chatReady, "chatHeaderContentVisible":!chatActions.isHidden || !chatTitle.isHidden] }
+    /// A toolbar button's frame in window coordinates, e.g. to hang the Layers island under it.
+    func toolbarButtonFrame(_ key: String) -> NSRect? {
+        toolbar?.items.compactMap { $0 as? MomentaryToolbarGroup }.lazy.compactMap { $0.segmentFrame(key) }.first
+    }
     var toolbar: NSToolbar!
     private var toolbarLayout: ToolbarLayout!
     weak var window: NSWindow?

@@ -69,6 +69,12 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
         control.sendAction(control.action, to: control.target)
         return true
     }
+    /// A segment's frame in window coordinates; nil while the group is not in the window.
+    func segmentFrame(_ identifier: String) -> NSRect? {
+        guard let index = subitems.firstIndex(where: { $0.itemIdentifier.rawValue == identifier }), control.window != nil, !subitems.isEmpty else { return nil }
+        let width = control.bounds.width / CGFloat(subitems.count)
+        return control.convert(NSRect(x: control.bounds.minX + width * CGFloat(index), y: control.bounds.minY, width: width, height: control.bounds.height), to: nil)
+    }
     @objc private func activate(_ sender: NSSegmentedControl) {
         let index = sender.selectedSegment
         guard subitems.indices.contains(index) else { return }

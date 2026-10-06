@@ -10,8 +10,15 @@ final class WorkspaceLayout {
     var previewVisible = false
     /// A temporary CSS width from `preview_viewport` (LKM-138); it replaces the bezel.
     var viewportWidth: CGFloat?
-    let sourceDivider = NativePanelDivider(), layersDivider = NativePanelDivider(), inspectorDivider = NativePanelDivider()
-    var sourceHeight: CGFloat = 380, layersHeight: CGFloat = 260, inspectorWidth: CGFloat = 300
+    let sourceDivider = NativePanelDivider(), inspectorDivider = NativePanelDivider()
+    var sourceHeight: CGFloat = 380, inspectorWidth: CGFloat = 300
+    /// The Layers island's size and, once its header was dragged, its top-right corner
+    /// relative to the preview's (LKM-179); nil hangs it under the Layers button.
+    var layersSize = LayersPlacement.standard, layersOffset: NSPoint?
+    /// How the island was last placed: hidden, anchored, beside, stacked or custom.
+    private(set) var layersMode = "hidden"
+    /// The Layers button's centre in canvas coordinates when the island was last placed.
+    private(set) var layersAnchor: CGFloat?
     let device = NSImageView()
     private var animation: Timer?
     private var layingOut = false
@@ -22,9 +29,11 @@ final class WorkspaceLayout {
     private(set) var previewArea = NSRect.zero
     init(host: Host) {
         self.host = host
-        for divider in [sourceDivider, layersDivider, inspectorDivider] { divider.isHidden = true; host.canvas.addSubview(divider) }
+        for divider in [sourceDivider, inspectorDivider] { divider.isHidden = true; host.canvas.addSubview(divider) }
         sourceDivider.changed = { [weak self] delta in guard let self else { return }; self.sourceHeight = max(160, min((self.host?.canvas.bounds.height ?? 700) * 0.8, self.sourceHeight + delta)); self.layout(); self.saveSizes() }
-        layersDivider.changed = { [weak self] delta in guard let self else { return }; self.layersHeight = max(100, min((self.host?.canvas.bounds.height ?? 700) * 0.7, self.layersHeight - delta)); self.layout(); self.saveSizes() }
+        host.layers.moved = { [weak self] frame, ended in self?.moveLayers(frame, ended: ended) }
+        host.layers.resized = { [weak self] frame, edges, ended in self?.resizeLayers(frame, edges: edges, ended: ended) }
+        host.layers.reset = { [weak self] in guard let self else { return }; self.layersOffset = nil; self.layout(); self.saveSizes() }
         inspectorDivider.vertical = true
         inspectorDivider.changed = { [weak self] delta in guard let self else { return }; self.inspectorWidth = max(220, min(500, self.inspectorWidth - delta)); self.layout(); self.saveSizes() }
         device.image = NSImage(contentsOfFile: host.directory + "/device.png")
@@ -32,9 +41,42 @@ final class WorkspaceLayout {
         device.isHidden = true
         host.canvas.addSubview(device, positioned: .below, relativeTo: host.views["preview"])
     }
-    func saveSizes() { emit(["event":"native-layout-sizes", "source":Double(sourceHeight), "layers":Double(layersHeight), "inspector":Double(inspectorWidth)]) }
+    func saveSizes() {
+        var sizes: [String: Any] = ["event":"native-layout-sizes", "source":Double(sourceHeight), "layers":Double(layersSize.height), "layersWidth":Double(layersSize.width), "inspector":Double(inspectorWidth)]
+        if let layersOffset { sizes["layersX"] = Double(layersOffset.x); sizes["layersY"] = Double(layersOffset.y) }
+        emit(sizes)
+    }
     func restoreSizes(_ values: [String: Double]) {
-        sourceHeight = min(1500, max(160, values["source"] ?? 380)); layersHeight = min(1500, max(100, values["layers"] ?? 260)); inspectorWidth = min(500, max(220, values["inspector"] ?? 300)); layout()
+        sourceHeight = min(1500, max(160, values["source"] ?? 380)); inspectorWidth = min(500, max(220, values["inspector"] ?? 300))
+        // A docked panel's saved `layers` height (before LKM-179) becomes the island's height.
+        layersSize = NSSize(width: min(800, max(LayersPlacement.minimum.width, values["layersWidth"] ?? LayersPlacement.standard.width)), height: min(1500, max(LayersPlacement.minimum.height, values["layers"] ?? LayersPlacement.standard.height)))
+        layersOffset = values["layersX"].flatMap { x in values["layersY"].map { NSPoint(x: x, y: $0) } }
+        layout()
+    }
+    /// Where a dragged island may go: inside the preview, left of an open editing island.
+    private func layersRegion() -> NSRect {
+        guard let host else { return .zero }
+        let inspector = NativeEditingInspector.frame(in: previewArea, width: inspectorWidth, visible: !host.editingInspector.isHidden)
+        return LayersPlacement.region(inner: previewArea.insetBy(dx: NativeEditingInspector.inset, dy: NativeEditingInspector.inset), inspector: inspector)
+    }
+    func moveLayers(_ frame: NSRect, ended: Bool) {
+        guard layersMode != "stacked", layersMode != "hidden" else { return }
+        let next = LayersPlacement.clamp(frame, to: layersRegion())
+        layersOffset = NSPoint(x: next.maxX - previewArea.maxX, y: next.minY - previewArea.minY)
+        layout(); if ended { saveSizes() }
+    }
+    func resizeLayers(_ frame: NSRect, edges: Set<NativeLayers.Edge>, ended: Bool) {
+        guard let host, layersMode != "hidden" else { return }
+        let region = layersRegion(), current = host.layers.frame
+        let width = max(LayersPlacement.minimum.width, min(frame.width, edges.contains(.left) ? current.maxX - region.minX : region.maxX - current.minX))
+        let height = max(LayersPlacement.minimum.height, min(frame.height, region.maxY - current.minY))
+        layersSize = NSSize(width: layersMode == "stacked" ? layersSize.width : width, height: height)
+        // A resized island stays where it is instead of re-centring under the button.
+        if layersMode != "stacked" {
+            let x = edges.contains(.left) ? current.maxX - width : current.minX
+            layersOffset = NSPoint(x: x + width - previewArea.maxX, y: current.minY - previewArea.minY)
+        }
+        layout(); if ended { saveSizes() }
     }
     func width() -> CGFloat { min(desiredWidth, max(320, min(760, (host?.canvas.bounds.width ?? 1080) - 624))) }
     func update(_ state: [String: Any]) {
@@ -66,11 +108,10 @@ final class WorkspaceLayout {
     func nativeChatState() -> [String: Any] {
         guard let host else { return chatState }
         var state = chatState
-        let top: CGFloat = host.layers.isHidden ? 0 : min(layersHeight, host.canvas.bounds.height * 0.7)
         let full = width(), shown = full * fraction
         let visible = chatReady && shown > 60 && host.canvas.bounds.height > 30
         state["visible"] = visible
-        state["bounds"] = ["x":0.0, "y":Double(top), "width":Double(full), "height":Double(max(0, host.canvas.bounds.height - top))]
+        state["bounds"] = ["x":0.0, "y":0.0, "width":Double(full), "height":Double(host.canvas.bounds.height)]
         return state
     }
     /// The selected project finished opening. Before that (opening, failed open) the
@@ -83,8 +124,6 @@ final class WorkspaceLayout {
         let leading: CGFloat = shellState["project"] is String ? width() * fraction : 0
         host.shell.setChatGeometry(leading)
         let state = nativeChatState()
-        host.layers.frame = NSRect(x: 0, y: 0, width: leading, height: host.layers.isHidden ? 0 : min(layersHeight, bounds.height * 0.7))
-        host.canvas.addSubview(host.layers, positioned: .above, relativeTo: host.chatColumn)
         host.chat.place(state, composer: host.composer)
         host.chat.isHidden = !(state["visible"] as? Bool ?? false)
         host.composer.isHidden = host.chat.isHidden
@@ -109,8 +148,14 @@ final class WorkspaceLayout {
         var page = available
         previewArea = available
         // The inspector floats over the preview, so opening it never reflows the page.
-        let island = NativeEditingInspector.frame(in: available, width: inspectorWidth, visible: !host.editingInspector.isHidden)
+        var island = NativeEditingInspector.frame(in: available, width: inspectorWidth, visible: !host.editingInspector.isHidden)
+        // The Layers island hangs under its toolbar button and never covers the editing island.
+        layersAnchor = host.shell.toolbarButtonFrame("layers").map { host.canvas.convert(NSPoint(x: $0.midX, y: $0.midY), from: nil).x }
+        let placed = LayersPlacement.frames(area: available, size: layersSize, offset: layersOffset, anchor: layersAnchor, visible: !host.layers.isHidden, inspector: island)
+        if placed.reset { layersOffset = nil }
+        layersMode = placed.mode; island = placed.inspector
         host.editingInspector.frame = island
+        if host.layers.frame != placed.layers { host.layers.frame = placed.layers; host.window.invalidateCursorRects(for: host.layers) }
         let mobile = viewportWidth == nil && shellState["viewport"] as? String == "mobile"
         var zoom: CGFloat = 1
         if let width = viewportWidth { (page, zoom) = PreviewAgent.frame(width: width, in: available) }
@@ -131,11 +176,10 @@ final class WorkspaceLayout {
             preview.isHidden = !shown || page.width <= 0 || page.height <= 0
         }
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
-        layersDivider.isHidden = host.layers.isHidden; layersDivider.frame = NSRect(x: 0, y: host.layers.frame.maxY - 3, width: leading, height: 6)
         // Straddles the island's left edge below and above its rounded corners.
         let corner = min(NativeEditingInspector.cornerRadius, island.height / 2)
         inspectorDivider.isHidden = island.width == 0; inspectorDivider.frame = NSRect(x: island.minX - 3, y: island.minY + corner, width: 6, height: max(0, island.height - 2 * corner))
-        for divider in [sourceDivider, layersDivider, inspectorDivider] { host.canvas.addSubview(divider, positioned: .above, relativeTo: nil); divider.window?.invalidateCursorRects(for: divider) }
+        for divider in [sourceDivider, inspectorDivider] { host.canvas.addSubview(divider, positioned: .above, relativeTo: nil); divider.window?.invalidateCursorRects(for: divider) }
         // The isolated preview owns the single readout, using CSS viewport pixels.
         host.previewSurface.needsDisplay = true
         // The page shields what the island covers; sent here, on change, never per pointer move.

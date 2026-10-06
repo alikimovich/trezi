@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 /// Test-only (ephemeral profile) checks for the floating inspector island: window
 /// resizes, a left-edge drag, hit targets around the island and its own scrolling.
@@ -78,49 +79,10 @@ extension Host {
             for _ in 0..<40 where !(window.isKeyWindow && NSApp.isActive) { try await Task.sleep(nanoseconds: 50_000_000) }
             guard window.isKeyWindow, NSApp.isActive else { throw NSError(domain: "InspectorIsland", code: 4, userInfo: [NSLocalizedDescriptionKey: "Window must be foreground"]) }
             let picks = previewPicks
-            window.makeFirstResponder(preview)
-            let scale = max(preview.pageZoom * preview.magnification, 0.01)
-            let point: NSPoint
-            if c["target"] as? String == "island" {
-                point = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
-            } else {
-                let x = CGFloat(c["x"] as? Double ?? 20) * scale
-                let y = CGFloat(c["y"] as? Double ?? 20) * scale
-                point = preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
-            }
-            // The window's first-responder path alone does not deliver a synthetic move to
-            // WebKit. A real pointer also enters WebKit's own tracking areas; use their owners
-            // without replacing the areas or evaluating JavaScript inside this command.
-            let owners = preview.trackingAreas.filter { $0.options.contains(.mouseMoved) }.compactMap { $0.owner as? NSObject }
-            func moved(_ location: NSPoint) throws -> NSEvent {
-                guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else {
-                    throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not make mouse move"])
-                }
-                window.sendEvent(event)
-                preview.mouseMoved(with: event)
-                for owner in owners where owner.responds(to: #selector(NSResponder.mouseMoved(with:))) {
-                    owner.perform(#selector(NSResponder.mouseMoved(with:)), with: event)
-                }
-                return event
-            }
-            // A real pointer crosses the page/island boundary. One synthetic jump in
-            // either direction can be coalesced by WebKit during a busy smoke run.
-            if c["pathFromIsland"] as? Bool == true || c["pathFromPage"] as? Bool == true {
-                let from: NSPoint
-                if c["pathFromIsland"] as? Bool == true {
-                    from = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
-                } else {
-                    let x = CGFloat(c["x"] as? Double ?? 20) * scale
-                    let y = CGFloat(c["y"] as? Double ?? 20) * scale
-                    from = preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
-                }
-                for step in 1..<12 {
-                    let t = CGFloat(step) / 12
-                    _ = try moved(NSPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t))
-                    try await Task.sleep(nanoseconds: 16_000_000)
-                }
-            }
-            let event = try moved(point)
+            let page = previewWindowPoint(preview, c)
+            let point = c["target"] as? String == "island" ? canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil) : page
+            let from = c["pathFromIsland"] as? Bool == true ? canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil) : c["pathFromPage"] as? Bool == true ? page : nil
+            let (event, owners) = try await movePointer(over: preview, to: point, from: from)
             if c["click"] as? Bool == true {
                 post(.leftMouseDown, point); post(.leftMouseUp, point)
                 // Keep LKM-162's wheel ownership check with the click-through check.
@@ -154,6 +116,40 @@ extension Host {
             }
             return ["tab":state.tab, "error":state.error, "busy":state.busy, "generation":state.generation, "fields":state.fields.count, "island":rect(island), "controls":["field":probe(field), "slider":probe(slider), "tabs":probe(tabs)]]
         }
+    }
+    /// The page point `x`,`y` (CSS pixels, default 20,20) in window coordinates.
+    func previewWindowPoint(_ preview: WKWebView, _ c: [String: Any]) -> NSPoint {
+        let scale = max(preview.pageZoom * preview.magnification, 0.01)
+        let x = CGFloat(c["x"] as? Double ?? 20) * scale, y = CGFloat(c["y"] as? Double ?? 20) * scale
+        return preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
+    }
+    /// Sends a window mouse move to `point`, crossing from `from` in small steps like a real
+    /// pointer (a single synthetic jump can be coalesced by WebKit during a busy smoke run).
+    @MainActor func movePointer(over preview: NSView, to point: NSPoint, from: NSPoint?) async throws -> (NSEvent, [NSObject]) {
+        window.makeFirstResponder(preview)
+        // The window's first-responder path alone does not deliver a synthetic move to
+        // WebKit. A real pointer also enters WebKit's own tracking areas; use their owners
+        // without replacing the areas or evaluating JavaScript inside this command.
+        let owners = preview.trackingAreas.filter { $0.options.contains(.mouseMoved) }.compactMap { $0.owner as? NSObject }
+        func moved(_ location: NSPoint) throws -> NSEvent {
+            guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else {
+                throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not make mouse move"])
+            }
+            window.sendEvent(event)
+            preview.mouseMoved(with: event)
+            for owner in owners where owner.responds(to: #selector(NSResponder.mouseMoved(with:))) {
+                owner.perform(#selector(NSResponder.mouseMoved(with:)), with: event)
+            }
+            return event
+        }
+        if let from {
+            for step in 1..<12 {
+                let t = CGFloat(step) / 12
+                _ = try moved(NSPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t))
+                try await Task.sleep(nanoseconds: 16_000_000)
+            }
+        }
+        return (try moved(point), owners)
     }
     private func descendants(of view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants(of: $0) } }
     private func rect(_ r: NSRect) -> [String: Double] { ["x":Double(r.minX), "y":Double(r.minY), "width":Double(r.width), "height":Double(r.height)] }

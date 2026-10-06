@@ -16,7 +16,13 @@ extension Host {
             if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await captureInspectorIsland()) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["pointer"] as? Bool == true { Task { @MainActor in do { reply(id, try await verifyInspectorPointer(c)) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, verifyInspectorIsland(c)) }
-        case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count])
+        case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count, "frame":NSStringFromRect(layers.frame), "selected":layers.selectedPath.map { $0 as Any } ?? NSNull()])
+        case "layersIsland":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            if let dark = c["capture"] as? String { Task { @MainActor in do { reply(id, try await captureLayersIsland(dark: dark == "dark")) } catch { reply(id, error: error.localizedDescription) } } }
+            else if c["pointer"] as? Bool == true { Task { @MainActor in do { reply(id, try await layersPointer(c)) } catch { reply(id, error: error.localizedDescription) } } }
+            else if c["action"] is String { reply(id, performLayers(c)) }
+            else { reply(id, verifyLayersIsland(c)) }
         case "sourceInspect":
             let editor = sourceEditors[c["root"] as? String ?? sourceRoot]
             reply(id, ["native":true, "visible":editor?.state["visible"] as? Bool ?? false, "source":editor?.source ?? "", "text":editor?.code.string ?? "", "popped":editor?.popout?.isVisible ?? false, "dirty":editor?.state["dirty"] as? Bool ?? false, "error":editor?.state["error"] as? String ?? "", "width":editor?.bounds.width ?? 0, "height":editor?.bounds.height ?? 0, "viewportHeight":editor?.scroll.contentSize.height ?? 0, "minHeight":editor?.popout?.contentMinSize.height ?? 0, "maxHeight":editor?.popout?.contentMaxSize.height ?? 0])

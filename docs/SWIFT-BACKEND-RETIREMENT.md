@@ -251,6 +251,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-fixture.ts` | test | — | `--test` project and failure capture |
 | `src/native/smoke-inspector-island.ts` | test | — | smoke fixture |
 | `src/native/smoke-islands.ts` | test | — | smoke fixture |
+| `src/native/smoke-layers.ts` | test | — | smoke fixture |
 | `src/native/smoke-legacy-project.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-inspector.ts` | test | — | smoke fixture |
 | `src/native/smoke-projects.ts` | test | — | smoke fixture |

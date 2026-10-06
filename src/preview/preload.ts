@@ -64,7 +64,12 @@ import {
 } from '../shared/preview-channels'
 import { coalesceHover } from './coalesce-hover'
 import { installDragReorder } from './drag-reorder'
-import { buildLayersSnapshot, type LayerFingerprint, resolveLayerElement } from './layers'
+import {
+  buildLayersSnapshot,
+  type LayerFingerprint,
+  layerPathOf,
+  resolveLayerElement
+} from './layers'
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
 import { createNativeCover } from './native-cover'
 import { specifiedValues, varRefName } from './style-provenance'
@@ -965,7 +970,8 @@ function describe(el: Element): SelectedElement {
     componentSource: (findComponentSource(el) ?? '').slice(0, 256) || null,
     text: rawText ? rawText.slice(0, 120) : null,
     rect: { x: r.x, y: r.y, width: r.width, height: r.height },
-    styles
+    styles,
+    layerPath: layerPathOf(el)
   }
 }
 

@@ -706,6 +706,9 @@ export interface SelectedElement {
   text: string | null
   rect: Bounds
   styles: Record<string, string>
+  /** The element's `LayerNode.path` when it was picked, so Layers can select its row
+   *  (LKM-179). Absent on picks that don't come from the page's DOM. */
+  layerPath?: number[] | null
 }
 
 /**

@@ -2,7 +2,7 @@ import AppKit
 import WebKit
 
 /// The preview's native cover (LKM-173). AppKit gives the views that float over the page
-/// (the editing island, its resize edge and the toast) their clicks and scrolls, but WebKit's own
+/// (the editing and Layers islands, the resize edge and the toast) their clicks and scrolls, but WebKit's own
 /// tracking areas still hand the page every pointer move in its frame. So the page is told
 /// which of its viewport rects those views cover, in CSS pixels, and lays a shield there
 /// (`src/preview/native-cover.ts`): no hover box, `:hover` or page listener sees a pointer
@@ -12,7 +12,7 @@ extension Host {
     func previewCoverRects() -> [[String: Double]] {
         guard let preview = views["preview"], !preview.isHidden, preview.superview === canvas else { return [] }
         let scale = max(preview.pageZoom * preview.magnification, 0.01)
-        let floating: [NSView] = [editingInspector, nativeLayout?.inspectorDivider, toast].compactMap { $0 }
+        let floating: [NSView] = [editingInspector, layers, nativeLayout?.inspectorDivider, toast].compactMap { $0 }
         return floating.compactMap { view in
             guard !view.isHidden, view.superview === canvas else { return nil }
             let r = preview.convert(view.frame, from: canvas).intersection(preview.bounds)

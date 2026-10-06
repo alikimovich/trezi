@@ -36,6 +36,8 @@ export class NativeInspectorController {
   requestedFile: string | null = null
   linked = new Set<string>()
   element: SelectedElement | null = null
+  /** Every selection change, null when cleared; Layers follows it (LKM-179). */
+  onElement: (element: SelectedElement | null) => void = () => {}
   inspection: PropInspection | null = null
   controls: ResolvedControlPanel[] = []
   tokens: TokenSet | null = null
@@ -139,6 +141,7 @@ export class NativeInspectorController {
     ++this.state.generation
     this.requestedFile = null
     this.element = null
+    this.onElement(null)
     this.inspection = null
     this.styles = null
     this.controls = []
@@ -154,6 +157,7 @@ export class NativeInspectorController {
     await this.send('styles:clear-preview', {})
     this.state.busy = false
     this.element = element
+    this.onElement(element)
     this.state.visible = this.state.visible && !!element
     ++this.state.generation
     this.inspection = null
