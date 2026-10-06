@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Add a synthetic 100-hover regression test with two SVG attachments and 2 KB of pasted code.
 - [x] Move latency assertions into the native sent-attachment fixture and stamp selection across page, host, service and Bun; cancel hover on mouseout, scroll and blur.
 - [x] Record synthetic foreground hover and select timing with rendered SVG/code chat, including bridge hops and WebContent, and enforce the 16 ms / 50 ms budgets in the native fixture.
+## Unstamped inspector fields (LKM-174)
+
+- [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.
+- [x] Resolve one matching project CSS or CSS-module class rule for an unstamped selection; keep ambiguous matches read-only.
+- [x] Cover Vite 8 React with a CSS module and an img in the setup fixture, plus class resolution and island state tests.
 ## Messages sent while a chat needs Resolve go to the queue (LKM-169)
 
 - [x] One send rule (`src/native/chat-queue.ts`): a running turn, a landing, a park waiting for Resolve or a provider login queues the message with its reason; the queue drains when the block clears.

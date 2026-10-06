@@ -12,6 +12,7 @@ import type {
   NativeInspectorField,
   NativeInspectorState
 } from '../shared/native-inspector'
+import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
 
 type Binding = {
@@ -39,6 +40,7 @@ export class NativeInspectorController {
   controls: ResolvedControlPanel[] = []
   tokens: TokenSet | null = null
   styles: StyleReadResult | null = null
+  classRule: { file: string; className: string } | null = null
   readonly bindings = new Map<string, Binding>()
   private sequence = 0
   private reconciles = new Map<string, ReturnType<typeof setTimeout>>()
@@ -90,7 +92,9 @@ export class NativeInspectorController {
     readonly render: (state: NativeInspectorState) => void,
     readonly agent: (root: string, prompt: string, submit?: boolean) => Promise<void>,
     readonly setup: () => Promise<void>,
-    readonly provider: () => string = () => 'claude'
+    readonly provider: () => string = () => 'claude',
+    readonly setupReason: (root: string) => string = () =>
+      'This element may come from a library or generated markup.'
   ) {}
   publish() {
     this.render({ ...this.state, fields: [...this.state.fields], actions: [...this.state.actions] })
@@ -113,6 +117,7 @@ export class NativeInspectorController {
     ++this.state.generation
     this.inspection = null
     this.styles = null
+    this.classRule = null
     this.controls = []
     this.state.error = ''
     this.build()
@@ -138,11 +143,15 @@ export class NativeInspectorController {
         : Promise.resolve(null),
       element ? this.invoke('styles:read', Object.keys(STYLE_PROP_META)) : Promise.resolve(null),
       this.invoke('tokens:detect', root),
-      this.invoke('controls:list', root)
+      this.invoke('controls:list', root),
+      element && !element.source
+        ? this.invoke('styles:resolve-class', root, element.classes)
+        : Promise.resolve(null)
     ])
     if (generation !== this.sequence || root !== this.state.root || element !== this.element) return
     this.inspection = results[0].status === 'fulfilled' ? results[0].value : null
     this.styles = results[1].status === 'fulfilled' ? results[1].value : null
+    this.classRule = results[4].status === 'fulfilled' ? results[4].value : null
     this.tokens = results[2].status === 'fulfilled' ? results[2].value : null
     const manifests = results[3].status === 'fulfilled' ? results[3].value : []
     const animationFiles = manifests
@@ -162,6 +171,14 @@ export class NativeInspectorController {
       inspection = this.inspection
     this.bindings.clear()
     this.state.fields = []
+    this.state.notice =
+      element && !element.source
+        ? {
+            title: "Trezi can't find this element's source code.",
+            reason: this.setupReason(root),
+            editable: !!this.classRule
+          }
+        : undefined
     this.state.actions = [
       { id: 'refresh', label: 'Refresh' },
       { id: 'close', label: 'Close' }
@@ -189,7 +206,10 @@ export class NativeInspectorController {
     if (element?.componentSource)
       this.state.actions.unshift({ id: 'owner', label: 'Inspect owning component' })
     if (element && !element.source)
-      this.state.actions.unshift({ id: 'setup', label: 'Set up editing' })
+      this.state.actions.unshift(
+        { id: 'setup', label: 'Connect project to Trezi' },
+        { id: 'ask-agent', label: 'Ask the agent' }
+      )
     if (this.state.tab === 'props' && element) {
       if (!inspection?.hasSchema)
         add({
@@ -261,15 +281,19 @@ export class NativeInspectorController {
           const group = crypto.randomUUID(),
             changed: { prop: string; value: string }[] = []
           for (const target of targets()) {
-            const result = await this.invoke('styles:apply', root, {
-              source: element.source,
-              prop: target,
-              value: cssValue(value),
-              classes: element.classes,
-              authored: this.styles?.specified[target],
-              token,
-              group
-            })
+            const result = await this.invoke(
+              element.source ? 'styles:apply' : 'styles:apply-class',
+              root,
+              {
+                source: element.source ?? '',
+                prop: target,
+                value: cssValue(value),
+                classes: element.classes,
+                authored: this.styles?.specified[target],
+                token,
+                group
+              }
+            )
             if (!result.applied) return result
             changed.push({ prop: target, value: cssValue(value) })
           }
@@ -282,7 +306,7 @@ export class NativeInspectorController {
             group: meta.group,
             kind: meta.control,
             value: meta.control === 'number' ? String(numericValue(prop, values) ?? value) : value,
-            disabled: !element.source || meta.control === 'readonly',
+            disabled: (!element.source && !this.classRule) || meta.control === 'readonly',
             min: meta.min,
             max: meta.max,
             step: meta.step,
@@ -441,6 +465,10 @@ export class NativeInspectorController {
       }
       if (action.action === 'setup') {
         await this.setup()
+        return
+      }
+      if (action.action === 'ask-agent' && this.element) {
+        await this.agent(root, describeSelectionForPrompt(this.element, root))
         return
       }
       if (action.action === 'controls' || action.action === 'animation') {

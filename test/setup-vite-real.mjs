@@ -11,7 +11,7 @@ import { REACT_HELPER_CONTENT } from '../src/main/setup-react.ts'
 import { VITE_HELPER_CONTENT } from '../src/main/setup-vite.ts'
 
 const APP =
-  'export function Card({ label }) {\n  return <button className="card">{label}</button>\n}\nexport default function App() {\n  return <main><h1>Swiftly</h1><Card label="Go" /></main>\n}\n'
+  'export function Card({ label }) {\n  return <button className="card">{label}</button>\n}\nexport default function App() {\n  return <main><h1>Swiftly</h1><Card label="Go" /><Avatar /></main>\n}\nimport styles from "./themer-admin/Account.module.css"\nexport function Avatar() {\n  return <img className={styles.accountAvatar} src="/avatar.png" alt="Account" />\n}\n'
 const CONFIG =
   "import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\nimport trezi from './.trezi/trezi-vite.mjs'\n\nexport default defineConfig({ plugins: [trezi(), react()] })\n"
 // Exits by itself: closing a middleware-mode server can leave a promise no handle settles.
@@ -37,7 +37,7 @@ try {
     ['^8.0.0', '^6.0.0']
   ]) {
     const root = join(dir, `vite-${vite.replace(/\D/g, '')}`)
-    mkdirSync(join(root, 'src'), { recursive: true })
+    mkdirSync(join(root, 'src/themer-admin'), { recursive: true })
     mkdirSync(join(root, '.trezi'))
     writeFileSync(
       join(root, 'package.json'),
@@ -51,6 +51,10 @@ try {
     )
     writeFileSync(join(root, 'vite.config.mjs'), CONFIG)
     writeFileSync(join(root, 'src/App.jsx'), APP)
+    writeFileSync(
+      join(root, 'src/themer-admin/Account.module.css'),
+      '.accountAvatar { width: 32px; }\n'
+    )
     writeFileSync(join(root, '.trezi/trezi-source.cjs'), REACT_HELPER_CONTENT)
     writeFileSync(join(root, '.trezi/trezi-vite.mjs'), VITE_HELPER_CONTENT)
     writeFileSync(join(root, 'driver.mjs'), DRIVER)
@@ -95,6 +99,11 @@ try {
       )
     }
     assert.match(code, /data-trezi-component-source["']?\s*:\s*["']src\/App\.jsx:5:31["']/)
+    assert.match(
+      code,
+      /data-trezi-source["']?\s*:\s*["']src\/App\.jsx:9:9["']/,
+      'img in CSS-module component is stamped'
+    )
     assert.doesNotMatch(run.stderr, /\[trezi-source\]/, 'the plugin reported no problem')
     console.log(`Vite ${version}: the React fixture's modules carry data-trezi-source`)
   }
