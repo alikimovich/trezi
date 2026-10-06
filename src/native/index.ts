@@ -370,6 +370,12 @@ async function main() {
   host.on('native-layout-frame', ({ frame }) => {
     void dispatchIPC('main', { type: 'send', channel: 'preview:set-bounds', args: [frame] })
   })
+  // LKM-173: viewport rects native views cover; the preview shields them. Re-sent on load.
+  let previewCover: unknown[] = []
+  host.on('native-cover', ({ rects }) => {
+    previewCover = Array.isArray(rects) ? rects : []
+    previewView.webContents.send(channels.PREVIEW_COVERED, previewCover)
+  })
   const chatController = installNativeChat(
     host!,
     mainView,
@@ -817,6 +823,7 @@ async function main() {
     previewView.webContents.send(channels.PREVIEW_SET_PINS, state.pins)
     previewView.webContents.send(channels.PREVIEW_SET_STATUS, state.statusText)
     previewView.webContents.send(channels.LAYERS_SET_WATCH, state.layersWatch)
+    previewView.webContents.send(channels.PREVIEW_COVERED, previewCover)
     if (url !== 'about:blank') send('preview:url-changed', url)
   })
   host.on('closed', async () => {

@@ -123,7 +123,7 @@ const result = Bun.spawnSync(
     join(root, 'src/native/SidebarIcon.swift'),
     join(root, 'src/native/SourceList.swift'),
     join(root, 'src/native/PreviewSurface.swift'),
-    join(root, 'src/native/PreviewPointer.swift'),
+    join(root, 'src/native/PreviewCover.swift'),
     join(root, 'src/native/PreviewAgent.swift'),
     join(root, 'src/native/ToolbarLayout.swift'),
     join(root, 'src/native/ToolbarAddress.swift'),

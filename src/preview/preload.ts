@@ -43,6 +43,7 @@ import {
   LAYERS_SET_WATCH,
   PREVIEW_PICKED as PICKED,
   PREVIEW_PIN_CLICK as PIN_CLICK,
+  PREVIEW_COVERED,
   PREVIEW_HIDE_SCROLLBARS,
   PREVIEW_MOVE_NODE,
   PREVIEW_READINESS as READINESS,
@@ -63,6 +64,7 @@ import {
 import { installDragReorder } from './drag-reorder'
 import { buildLayersSnapshot, type LayerFingerprint, resolveLayerElement } from './layers'
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
+import { createNativeCover } from './native-cover'
 import { specifiedValues, varRefName } from './style-provenance'
 import { createThreeDInspector } from './three-d'
 import { createViewportReadout } from './viewport-readout'
@@ -112,6 +114,8 @@ const TRACKED_STYLES = [
 
 let active = false
 let overlayHost: HTMLDivElement | null = null
+// The page under native views floating over the preview (LKM-173).
+const nativeCover = createNativeCover()
 let overlayBox: HTMLDivElement | null = null
 let overlayLabel: HTMLDivElement | null = null
 let pinsLayer: HTMLDivElement | null = null
@@ -201,6 +205,8 @@ function ensureOverlay(): void {
     'position:fixed;pointer-events:none;box-sizing:border-box;' +
     'border:2px solid #2563eb;border-radius:3px;background:rgba(37,99,235,0.08);' +
     'transition:all 60ms ease-out;display:none;'
+  // The hover box; the island pointer verification reads it.
+  box.setAttribute('data-trezi-hover', '')
 
   const label = makeChip()
 
@@ -623,6 +629,7 @@ function isOverlay(el: Element | null): boolean {
   return (
     !!el &&
     (!!el.closest(CONTROL_OVERLAY_SELECTOR) ||
+      nativeCover.contains(el) ||
       (!!overlayHost && (el === overlayHost || overlayHost.contains(el))))
   )
 }
@@ -1860,6 +1867,10 @@ if (!IS_SIM_BRIDGE) {
     },
     true
   )
+  // After the listeners above, which see the shield as overlay and drop the hover box.
+  nativeCover.install()
+  // Main sends them on every load and whenever the host's layout changes them.
+  ipcRenderer.on(PREVIEW_COVERED, (_e, rects: unknown) => nativeCover.set(rects))
   // Pins track layout changes (hot-reload, async content) on a light cadence.
   const pinTimer = setInterval(() => {
     if (pinDots.size) positionPins()

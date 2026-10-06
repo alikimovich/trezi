@@ -37,6 +37,9 @@ export const PREVIEW_COMMENT = 'trezi:preview:comment' // → main (submitted)
 export const PREVIEW_HIDE_SCROLLBARS = 'trezi:preview:hide-scrollbars' // → preload (native mobile preview)
 export const PREVIEW_SET_FRAME = 'trezi:preview:set-frame' // → preload (mobile bezel)
 export const PREVIEW_SET_STATUS = 'trezi:preview:set-status' // → preload (launch pill)
+// Viewport rects native views float over (LKM-173): the host reports them on layout
+// (`native-cover`), main forwards them and re-sends them after every load.
+export const PREVIEW_COVERED = 'trezi:preview:covered' // → preload ({x,y,width,height}[])
 
 // ── Styles tab ─────────────────────────────────────────────────────────────
 export const STYLES_PREVIEW = 'styles:preview' // → preload ({prop, value})

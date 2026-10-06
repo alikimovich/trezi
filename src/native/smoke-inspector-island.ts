@@ -54,9 +54,9 @@ export type IslandPage = {
 }
 
 /** LKM-162: the island's fields, slider and tabs are the window's hit views; padding-top
- *  typed into its real field edits the element; and moves, a click and a wheel inside it
- *  never reach the page, even in select mode with the page first responder, while a move
- *  beside it does. */
+ *  typed into its real field edits the element; and in select mode a click and a wheel
+ *  inside it never pick. LKM-173: a move over the page hovers, over the island it does
+ *  not, and back on the page it hovers again. */
 async function checkPointer(
   island: (params?: Record<string, unknown>) => Promise<Island>,
   page: IslandPage,
@@ -119,23 +119,24 @@ async function checkPointer(
   )
   await page.selectMode(true)
   try {
+    // LKM-173: moves arrive through WebKit's own tracking areas, as a real pointer's do.
     const moves = await island({ pointer: true, step: 'moves' })
     evidence.pointerMoves = moves
+    const detail = JSON.stringify(moves)
+    assert.ok(moves.owners.length >= 1, `pointer: WebKit owns its tracking areas ${detail}`)
+    assert.ok(moves.before, `pointer: a move over the page shows the hover box ${detail}`)
+    assert.ok(!moves.island, `pointer: no hover box while the pointer is over the island ${detail}`)
+    assert.ok(moves.after, `pointer: back on the page, the hover box shows again ${detail}`)
+    // The page shields the island's rect (CSS px) the host laid out, sent on layout only.
+    const shield = moves.cover[0]
+    const expected = moves.expectedCover[0]
     assert.ok(
-      moves.gates >= 1,
-      `pointer: WebKit's tracking areas are gated ${JSON.stringify(moves)}`
-    )
-    for (const kind of ['move', 'enter', 'down', 'wheel'])
-      assert.equal(
-        moves.inside[kind] ?? 0,
-        0,
-        `pointer: no ${kind} inside the island reaches the page`
-      )
-    // A real pointer's moves come through WebKit's tracking areas; AppKit does not hand
-    // posted moves to the first responder here, so besideWindow is evidence only.
-    assert.ok(
-      (moves.besideTracking.move ?? 0) >= 1 && (moves.besideTracking.enter ?? 0) >= 1,
-      `pointer: a move beside the island still reaches the page ${JSON.stringify(moves)}`
+      shield &&
+        expected &&
+        (['x', 'y', 'width', 'height'] as const).every(
+          (key) => Math.abs(shield[key] - expected[key]) <= 1
+        ),
+      `pointer: the page shields the island's rect ${detail}`
     )
     assert.equal(moves.picks, 0, 'pointer: no element-picked message from the island')
   } finally {

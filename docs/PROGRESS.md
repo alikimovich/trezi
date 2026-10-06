@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173: select mode hover restored; the island is shielded in the page
+
+- **Regression.** Build 835 (with LKM-162): select mode picked on click but never highlighted on hover, and the tool felt slow. LKM-162's `PreviewWebView` replaced WebKit's tracking areas with `PreviewPointerGate` replacements and ran a full-window `hitTest` on every move. WebKit's moves now arrived through a foreign owner, and the hover was lost.
+- **Fix.** Removed `src/native/PreviewPointer.swift`; the preview is a plain `WKWebView` again and WebKit keeps its own tracking areas.
+  - Clicks and scrolls: unchanged from LKM-162. `NativeEditingInspector` hit-tests its frame to itself and swallows them.
+  - Moves: `Host.previewCoverRects` (`src/native/PreviewCover.swift`) converts the island's and its resize edge's frames to the page's viewport in CSS px (pageZoom × magnification). `WorkspaceLayout.layout()` emits them to main (`native-cover`) only when they change. Main forwards them on `trezi:preview:covered` and re-sends the last ones on every `loaded`.
+  - Why through main: a first version had Swift evaluate the rects into the page itself, answering a document-start request from the preload. Two native runs crashed TreziHost with SIGSEGV in `swift_task_isMainExecutorImpl` under WebKit's Swift `evaluateJavaScript` overlay, at a source edit that reloads the page. Main's `deliver` path is the one every other preview message already takes.
+  - The preview script lays a transparent `pointer-events:auto; cursor:default` shield per rect (`src/preview/native-cover.ts`, its own open shadow root at max z-index). WebKit's own hit test lands on it, so `onMove` sees an overlay target and drops the hover box. Window capture listeners, installed after the preload's own, stop the page's pointer listeners for events on the shield. The page's `:hover` never matches under the island either.
+- **Cost.** Nothing per move: no AppKit hit test, no JS rect math. The browser's own hit test does the work.
+- **Test.** `checkPointer` step `moves` now delivers `mouseMoved` through the owners of WebKit's own `.mouseMoved` tracking areas (the path a real pointer takes). It reads the page's hover box (`[data-trezi-hover]`) from the isolated world: beside the island → shown, over the island (5 points, plus a posted click and wheel) → hidden, beside again → shown. It also checks that the page's shield matches the rect the host laid out and that no `element-picked` was sent.
+
 ## 2026-10-05 — LKM-167: unit tier and quick verification about 4x faster
 
 - **Why.** Quick verification (typecheck, typecheck:native, unit tier) took 5-7 min. The unit tier alone took 328.6 s on the operator Mac. About 25 Swift tests each compiled their fixture with a private, cold Clang module cache, at about 25 s per compile. Only 4 workers ran, and `service-process` and `keychain-rebuild` were exclusive barriers.

@@ -138,6 +138,8 @@ final class WorkspaceLayout {
         for divider in [sourceDivider, layersDivider, inspectorDivider] { host.canvas.addSubview(divider, positioned: .above, relativeTo: nil); divider.window?.invalidateCursorRects(for: divider) }
         // The isolated preview owns the single readout, using CSS viewport pixels.
         host.previewSurface.needsDisplay = true
+        // The page shields what the island covers; sent here, on change, never per pointer move.
+        host.sendPreviewCover()
         if page != lastFrame || leading != lastLeading {
             lastFrame = page; lastLeading = leading
             emit(["event":"native-layout-frame", "frame":["x":Double(page.minX), "y":Double(page.minY), "width":Double(page.width), "height":Double(page.height), "radius":mobile ? Double(page.width * 0.12) : 0, "leading":Double(leading)]])

@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Select mode hover lost under the LKM-162 pointer gate (LKM-173)
+
+- [x] Remove `PreviewWebView`/`PreviewPointerGate`: WebKit keeps its own tracking areas and the preview is a plain `WKWebView`; no per-move window hit test.
+- [x] The host sends the page the viewport rects the island and its resize edge cover, on layout and only when changed (`src/native/PreviewCover.swift`, `native-cover` event); main forwards them on `trezi:preview:covered` and re-sends them after every load.
+- [x] The preview script shields those rects (`src/preview/native-cover.ts`): no hover box, page `:hover` or page pointer listener under the island.
+- [x] Native `checkPointer` moves through WebKit's tracking-area owners: page hovers, island does not, page hovers again; the shield matches the island; a click and wheel on the island still pick nothing.
+- [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
+
 ## Compact sent and composer attachment thumbnails (LKM-166)
 
 - [x] Sent bubble: 72 pt aspect-fit thumbnails in a wrapping row (`src/native/ChatAttachments.swift`), checkerboard behind transparent SVG/PNG, the name on hover, a larger preview on click.

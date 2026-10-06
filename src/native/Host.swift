@@ -48,6 +48,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var recentMenu = NSMenu(title: "Open Recent")
     /// Element picks the page reported; the island pointer verification reads it.
     var previewPicks = 0
+    /// The page's viewport rects native views cover, as last sent (`PreviewCover.swift`).
+    var previewCover: [[String: Double]] = []
     let world = WKContentWorld.world(name: "TreziPreview")
     let directory: String
     let ephemeral: Bool
@@ -72,8 +74,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         let script = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
         // Selection must intercept input before the project's capture listeners.
         config.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: contentWorld))
-        // Gated so the page never takes the pointer from a native view floating over it (LKM-162).
-        let view = PreviewWebView(frame: .zero, configuration: config)
+        // WebKit keeps its own tracking areas; the page shields what native views cover (LKM-173).
+        let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self; view.uiDelegate = self; view.isInspectable = true
         views[id] = view; canvas.addSubview(view)
         canvas.addSubview(inspectorSlot, positioned: .above, relativeTo: view); PreviewInspector.confine(view, to: inspectorSlot)
