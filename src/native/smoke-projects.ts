@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import type { ProjectEntry } from '../shared/workspace'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import type { NativeContextController } from './context-controller'
+import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkVisibleSidebar } from './smoke-sidebar'
 import { waitFor } from './smoke-wait'
@@ -13,7 +15,9 @@ import { nativeWorkspace } from './workspace-runtime'
 export async function checkProjectSwitching(
   host: NativeBridge,
   fixture: string,
-  artifacts: string
+  artifacts: string,
+  context: NativeContextController,
+  inspector: NativeInspectorController
 ) {
   const first = nativeWorkspace.active!
   const secondRoot = join(fixture, '../Folder Beta')
@@ -77,7 +81,7 @@ export async function checkProjectSwitching(
     await new Promise((resolve) => setTimeout(resolve, 80))
   }
   assert.ok(restored, 'Restore original project/chat/preview after sidebar checks')
-  await checkSwitchDropsSelection(host, first, second, artifacts)
+  await checkSwitchDropsSelection(host, first, second, artifacts, context, inspector)
   await nativeWorkspace.command({ type: 'close', key: second.key })
 }
 
@@ -86,7 +90,9 @@ async function checkSwitchDropsSelection(
   host: NativeBridge,
   from: ProjectEntry,
   to: ProjectEntry,
-  artifacts: string
+  artifacts: string,
+  context: NativeContextController,
+  inspector: NativeInspectorController
 ) {
   const invoke = (channel: string, ...args: unknown[]) =>
     dispatchIPC('main', { type: 'invoke', channel, args })
@@ -158,6 +164,7 @@ async function checkSwitchDropsSelection(
       return (
         !island.visible &&
         island.title === 'Project controls' &&
+        inspector.element === null &&
         chips().every((chip) => chip === null) &&
         page.page &&
         !page.boxes &&
@@ -194,6 +201,7 @@ async function checkSwitchDropsSelection(
       island.visible &&
       island.title === selected.title &&
       island.tab === 'props' &&
+      inspector.element?.source === heading.source &&
       chips()[0]?.bubble?.tag === 'h1' &&
       page.boxes > 0 &&
       page.toolbar && { island, page }
@@ -228,8 +236,6 @@ async function checkSwitchDropsSelection(
           node.id === 'native-title' && node.source === 'index.html:99:1'
       )
     }, 'the changed heading stamp loaded in the first project')
-    // The restore check allows hydration to finish before declaring the old stamp gone.
-    await new Promise((resolve) => setTimeout(resolve, 1400))
     evidence.removed = await waitFor(async () => {
       if (
         nativeWorkspace.active?.key !== from.key ||
@@ -241,6 +247,8 @@ async function checkSwitchDropsSelection(
         !island.visible &&
         island.title === 'Project controls' &&
         !island.error &&
+        inspector.savedElement(from.root) === null &&
+        context.projects.get(from.root)?.selection === null &&
         chips()[0] === null &&
         island
       )

@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-172 repair: a new pick cannot consume an invalid snapshot
+
+- Manager native verification found that after A's source stamp changed while B was active, selecting the changed element could still restore A's old Props tab. The later core inspector check then also saw Props rather than Styles. The visible island and chip were hidden, but the saved inspector snapshot had not yet been discarded.
+- The returning preview now uses its readiness URL as well as document start time to identify A's loaded page, even when a separate URL-change callback is absent. An inspector snapshot is applied only to the matching element-picked event requested by restore; an ordinary new pick discards that snapshot. The native switch check waits until both the inspector snapshot and stored composer selection are empty before picking the changed element anew.
+- Verification: agentos quick passed (167 unit checks, lint and typechecks); native `core,sidebar` passed 16/16 checks, including `project-switching` and the following inspector check. The Opening capture shows no inspector island.
+
 ## 2026-10-05 — LKM-172 repair: project selections return when their element still exists
 
 - The user decision supersedes the original issue's optional "restore nothing" reading. A switch now hides A's island and chip immediately, stores its element and tab in memory, then checks A's page on return. A unique matching layer restores the selection and tab; a missing source stamp clears them quietly. The native switch check covers both return paths.

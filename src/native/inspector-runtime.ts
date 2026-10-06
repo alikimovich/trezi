@@ -1,6 +1,6 @@
 import { currentTurn } from '../main/agent'
 import { editingOwner } from '../main/editing-owner'
-import type { LayersSnapshot } from '../shared/api'
+import type { LayersSnapshot, SelectedElement } from '../shared/api'
 import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
 import { projectRelative } from '../shared/project-path'
@@ -80,6 +80,7 @@ export function installNativeInspector(
   let restoreSequence = 0
   let switchStartedAt = 0
   let readyRoot = ''
+  let restorePick: { root: string; saved: SelectedElement; sequence: number } | null = null
   let missingTimer: ReturnType<typeof setTimeout> | null = null
   const cancelMissing = () => {
     if (missingTimer) clearTimeout(missingTimer)
@@ -96,6 +97,7 @@ export function installNativeInspector(
   const dropSelection = () => {
     cancelMissing()
     ++restoreSequence
+    restorePick = null
     const root = workspace.active?.root
     if (root) {
       controller.forget(root)
@@ -131,6 +133,7 @@ export function installNativeInspector(
     if (matches.length === 1) {
       cancelMissing()
       const node = matches[0]
+      restorePick = { root, saved, sequence }
       await send('layers:select', {
         path: node.path,
         fingerprint: { tag: node.tag, source: node.source }
@@ -179,6 +182,7 @@ export function installNativeInspector(
   }
   workspace.switching = () => {
     cancelMissing()
+    restorePick = null
     const root = controller.state.root
     if (root && pickedOn !== null) pickedPages.set(root, pickedOn)
     ++restoreSequence
@@ -225,9 +229,14 @@ export function installNativeInspector(
       if (
         workspace.active?.root &&
         typeof value?.documentStartedAt === 'number' &&
-        value.documentStartedAt >= switchStartedAt
-      )
+        value.documentStartedAt >= switchStartedAt &&
+        typeof value.url === 'string' &&
+        workspace.state.status.kind === 'running' &&
+        pageOf(value.url) === pageOf(workspace.state.status.url)
+      ) {
         readyRoot = workspace.active.root
+        page = pageOf(value.url)
+      }
       if (workspace.active?.root) void restoreSelection(workspace.active.root).catch(report)
     } else if (channel === 'layers:changed') {
       if (workspace.active?.root) void restoreSelection(workspace.active.root).catch(report)
@@ -238,10 +247,24 @@ export function installNativeInspector(
       cancelMissing()
       pickedOn = page
       const root = entry.root
-      if (controller.savedElement(root)) {
+      const saved = controller.savedElement(root)
+      const restore = restorePick
+      restorePick = null
+      if (
+        saved &&
+        restore?.root === root &&
+        restore.saved === saved &&
+        restore.sequence === restoreSequence &&
+        value.tag === saved.tag &&
+        value.source === saved.source &&
+        value.id === saved.id
+      ) {
         void controller.restore(root, value).catch(report)
         controller.forget(root)
-      } else void controller.select(value).catch(report)
+      } else {
+        controller.forget(root)
+        void controller.select(value).catch(report)
+      }
     } else if (channel === 'preview:selection-lost') dropSelection()
     else if (channel === 'preview:select-cancelled') {
       context.selection(null)
