@@ -2,6 +2,46 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173 repair 4: island entry follows the native pointer path
+
+- **Full-suite failure.** The manager's native run timed out clearing select-mode hover over the island, while the unchanged `core` group passed. The page-to-island fixture sent one synthetic jump; its return leg already traversed a short path because WebKit can coalesce a single move under load. The failure capture did not expose the page's event target.
+- **Fixture repair.** The entry leg now sends the same frame-spaced AppKit moves through the window and WebKit's own tracking-area owners, in both select and interact modes. The existing assertions still require the page hover box to clear, CSS `:hover` and `mouseenter` to stay off the covered island, and clicks and wheels not to reach the page. An entry timeout now records the shield's connected state and rectangle beside the native move report.
+- **Verification.** Quick passed (170 unit checks, lint and typechecks). Native `core` passed 14/14 checks with no skips on the changed tree. The manager's full native suite remains the acceptance gate.
+
+## 2026-10-05 — LKM-173 repair 3: return hover follows the pointer path
+
+- **Manager failure.** The full native run again timed out on select-mode hover returning from the island. The heading was the page hit target (`H1`) and scrollY was 0, but one synthetic move to a point only four pixels from the earlier page point did not reliably produce a new WebKit hover update under the full smoke load.
+- **Fixture repair.** The test broker's optional return gesture now sends 12 AppKit mouse moves from the island toward a new point on the heading, spaced one frame apart. Each move still goes through WebKit's own tracking-area owner; the page assertion still reads the real isolated-world hover box, and the island click, wheel and interact-mode checks remain. Production pointer handling is unchanged.
+- **Verification.** Quick passed (169 unit checks, lint and typechecks). Two consecutive native `core` runs on the same code passed 14/14 checks with no skips. The manager retains the full-suite run.
+
+## 2026-10-05 — LKM-173 review repair: cover the native toast over the preview
+
+- **Review gap.** The replacement for LKM-162's pointer gate covered the editing island and resize edge but omitted `NativeToast`, which floats above the preview. WebKit could still hover the page behind a visible toast.
+- **Fix.** `previewCoverRects` includes the toast. The toast resolves its constraint frame and reports a cover change when shown, then reports again when its fade finishes and it becomes hidden. Its frame hit test keeps transparent padding native-owned while preserving `NSHostingView`'s button handling.
+- **Evidence.** The settings smoke now checks the toast's native hit target, the sent rect against the preview shield, and removal of that shield after dismissal. Quick verification passed (168 unit checks and typechecks). Native settings verification was unavailable: the shared desktop lock stayed busy for 600 seconds, so manager verification remains pending.
+
+## 2026-10-05 — LKM-173 repair 2: isolate hover travel from island click and wheel
+
+- **Manager failure.** The full native suite timed out when hover returned from the island to the page; the later visible-composer capture also failed after the inspector check left the island open. The hover fixture had posted a click and wheel during the island leg, before checking pointer return. Those queued events could run during the return move. A scoped native run had passed once, so the test order was timing-dependent.
+- **Test repair.** `checkPointer` now checks page → island → page hover first. It then posts the island click and wheel and checks the cumulative element-pick count and that the page did not scroll. The inspector fixture restores the island's initial open state in `finally`, including after an assertion fails, so later checks get their intended layout. A return-hover timeout now reports the heading geometry, hit target, scroll position and move result.
+- **Verification.** Manager quick passed (167 unit checks and typechecks). Native `core,composer` passed: 17 checks, 0 failed, 0 skipped, including the inspector and visible-composer checks. The foreground `inspector-island-default-open.png` was inspected.
+
+## 2026-10-05 — LKM-173 repair: pointer verification survives navigation and covers interact mode
+
+- **Manager failure.** The full native run exited 139 at the inspector check. Its pointer command evaluated JavaScript through WebKit's Swift async overlay while the fixture could reload. The repair removes JavaScript evaluation from that command; the existing test bridge reads the page between one-move commands.
+- **Event path.** A synthetic move sent only through `NSWindow.sendEvent` did not reach WebKit's hover handler. The test now also delivers it to WebKit's own tracking-area owners, without replacing any area. It moves to a new coordinate on returning from the island, matching a real pointer gesture and avoiding WebKit coalescing a repeated point.
+- **Coverage.** The native `core` inspector check now asserts page → island → page select hover, shield hit target and rectangle, no click-through pick, and interact-mode CSS `:hover`, cursor and `mouseenter` on the page with neither hover nor handler over the island. Manager quick passed (166 unit checks and typechecks); native `core` passed (14 checks, 0 failed, 0 skipped). Full suite remains for manager verification.
+
+## 2026-10-05 — LKM-173: select mode hover restored; the island is shielded in the page
+
+- **Regression.** Build 835 (with LKM-162): select mode picked on click but never highlighted on hover, and the tool felt slow. LKM-162's `PreviewWebView` replaced WebKit's tracking areas with `PreviewPointerGate` replacements and ran a full-window `hitTest` on every move. WebKit's moves now arrived through a foreign owner, and the hover was lost.
+- **Fix.** Removed `src/native/PreviewPointer.swift`; the preview is a plain `WKWebView` again and WebKit keeps its own tracking areas.
+  - Clicks and scrolls: unchanged from LKM-162. `NativeEditingInspector` hit-tests its frame to itself and swallows them.
+  - Moves: `Host.previewCoverRects` (`src/native/PreviewCover.swift`) converts the island's and its resize edge's frames to the page's viewport in CSS px (pageZoom × magnification). `WorkspaceLayout.layout()` emits them to main (`native-cover`) only when they change. Main forwards them on `trezi:preview:covered` and re-sends the last ones on every `loaded`.
+  - Why through main: a first version had Swift evaluate the rects into the page itself, answering a document-start request from the preload. Two native runs crashed TreziHost with SIGSEGV in `swift_task_isMainExecutorImpl` under WebKit's Swift `evaluateJavaScript` overlay, at a source edit that reloads the page. Main's `deliver` path is the one every other preview message already takes.
+  - The preview script lays a transparent `pointer-events:auto; cursor:default` shield per rect (`src/preview/native-cover.ts`, its own open shadow root at max z-index). WebKit's own hit test lands on it, so `onMove` sees an overlay target and drops the hover box. Window capture listeners, installed after the preload's own, stop the page's pointer listeners for events on the shield. The page's `:hover` never matches under the island either.
+- **Cost.** Nothing per move: no AppKit hit test, no JS rect math. The browser's own hit test does the work.
+- **Test.** `checkPointer` step `moves` now delivers `mouseMoved` through the owners of WebKit's own `.mouseMoved` tracking areas (the path a real pointer takes). It reads the page's hover box (`[data-trezi-hover]`) from the isolated world: beside the island → shown, over the island (5 points, plus a posted click and wheel) → hidden, beside again → shown. It also checks that the page's shield matches the rect the host laid out and that no `element-picked` was sent.
 ## 2026-10-05 — LKM-172 verification repair: attachment upload fixture timing
 
 - Manager quick verification reached the unrelated `platform-owner` attachment check and found an empty save path during a 3 MB chunked upload. That fixture used a one-second upload idle limit for the whole attachment suite; parallel unit load can leave more than one second between chunks, making the client correctly return an empty path after the service expires the upload.

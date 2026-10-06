@@ -49,13 +49,13 @@ extension Host {
     }
     /// LKM-162: the open island owns the pointer over its whole frame. With no `step` it switches
     /// to Styles, brings padding-top into view and hit-tests that field, its slider and the tabs
-    /// as the window does. "moves" posts moves and a click inside the island, feeds WebKit's
-    /// tracking areas the same moves, then moves beside the island, counting what reached the
-    /// page each time. "edit" clicks padding-top and submits `value` through its field editor.
+    /// as the window does. "move" (LKM-173) sends one window mouse move over the page or
+    /// island; the caller reads the page between moves. "edit" clicks padding-top and submits `value`
+    /// through its field editor.
     @MainActor func verifyInspectorPointer(_ c: [String: Any]) async throws -> [String: Any] {
         NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
         window.contentView?.superview?.layoutSubtreeIfNeeded(); nativeLayout.layout(); editingInspector.layoutSubtreeIfNeeded()
-        guard let preview = views["preview"] as? PreviewWebView, let state = editingInspector.model.state, !editingInspector.isHidden else {
+        guard let preview = views["preview"], let state = editingInspector.model.state, !editingInspector.isHidden else {
             throw NSError(domain: "InspectorIsland", code: 2, userInfo: [NSLocalizedDescriptionKey: "Open the island over the preview first"])
         }
         if state.tab != "styles" { editingInspector.model.send("tab", value: "styles"); return ["tab":state.tab] }
@@ -74,47 +74,66 @@ extension Host {
         }
         let settle = { try await Task.sleep(nanoseconds: 400_000_000) }
         switch c["step"] as? String {
-        case "moves":
-            // Posted moves reach the first responder only in the active key window that accepts them.
+        case "move":
             for _ in 0..<40 where !(window.isKeyWindow && NSApp.isActive) { try await Task.sleep(nanoseconds: 50_000_000) }
             guard window.isKeyWindow, NSApp.isActive else { throw NSError(domain: "InspectorIsland", code: 4, userInfo: [NSLocalizedDescriptionKey: "Window must be foreground"]) }
-            let accepts = window.acceptsMouseMovedEvents
-            window.acceptsMouseMovedEvents = true
-            defer { window.acceptsMouseMovedEvents = accepts }
             let picks = previewPicks
-            // The preview as first responder gets every window mouse move: the strictest case.
-            window.makeFirstResponder(preview); preview.delivered = [:]
-            let inside = [NSPoint(x: island.minX + 10, y: island.midY), NSPoint(x: island.midX, y: island.maxY - 6)].map { canvas.convert($0, to: nil) } + [field, slider, tabs].compactMap { $0.map(center) }
-            func moved(_ point: NSPoint) -> NSEvent? {
-                NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)
+            window.makeFirstResponder(preview)
+            let scale = max(preview.pageZoom * preview.magnification, 0.01)
+            let point: NSPoint
+            if c["target"] as? String == "island" {
+                point = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
+            } else {
+                let x = CGFloat(c["x"] as? Double ?? 20) * scale
+                let y = CGFloat(c["y"] as? Double ?? 20) * scale
+                point = preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
             }
-            for point in inside { post(.mouseMoved, point) }
-            // A click and a wheel on the island's bare padding, which AppKit used to hand to the page.
-            post(.leftMouseDown, inside[0]); post(.leftMouseUp, inside[0])
-            // As ChatAcceptance: a window event's CGEvent retyped as a precise wheel event.
-            if let cg = moved(inside[0])?.cgEvent {
-                cg.type = .scrollWheel
-                cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
-                cg.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: -1); cg.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: -40)
-                if let wheel = NSEvent(cgEvent: cg) { NSApp.postEvent(wheel, atStart: false) }
+            // The window's first-responder path alone does not deliver a synthetic move to
+            // WebKit. A real pointer also enters WebKit's own tracking areas; use their owners
+            // without replacing the areas or evaluating JavaScript inside this command.
+            let owners = preview.trackingAreas.filter { $0.options.contains(.mouseMoved) }.compactMap { $0.owner as? NSObject }
+            func moved(_ location: NSPoint) throws -> NSEvent {
+                guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else {
+                    throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not make mouse move"])
+                }
+                window.sendEvent(event)
+                preview.mouseMoved(with: event)
+                for owner in owners where owner.responds(to: #selector(NSResponder.mouseMoved(with:))) {
+                    owner.perform(#selector(NSResponder.mouseMoved(with:)), with: event)
+                }
+                return event
             }
-            // What WebKit's tracking areas see as a real pointer moves.
-            let gates = preview.trackingAreas.compactMap { $0.owner as? PreviewPointerGate }
-            func track(_ points: [NSPoint]) { for gate in gates { for event in points.compactMap(moved) { gate.mouseEntered(with: event); gate.mouseMoved(with: event) } } }
-            track(inside)
-            try await settle()
-            let reached = preview.delivered
-            // Beside the island the page still gets moves. Posted moves are counted apart from
-            // the tracking areas' (the window may not route them to the first responder).
-            window.makeFirstResponder(preview); preview.delivered = [:]
-            let besideCanvas = island.minX - preview.frame.minX >= 40 ? NSPoint(x: island.minX - 16, y: island.midY) : NSPoint(x: island.midX, y: island.minY - NativeEditingInspector.inset / 2)
-            let beside = [canvas.convert(besideCanvas, to: nil), canvas.convert(NSPoint(x: besideCanvas.x - 4, y: besideCanvas.y), to: nil)]
-            for point in beside { post(.mouseMoved, point) }
-            try await settle()
-            let besideWindow = preview.delivered
-            preview.delivered = [:]; track(beside)
-            return ["inside":reached, "besideWindow":besideWindow, "besideTracking":preview.delivered, "points":inside.count, "gates":gates.count, "picks":previewPicks - picks,
-                    "firstResponder":window.firstResponder === preview]
+            // A real pointer crosses the page/island boundary. One synthetic jump in
+            // either direction can be coalesced by WebKit during a busy smoke run.
+            if c["pathFromIsland"] as? Bool == true || c["pathFromPage"] as? Bool == true {
+                let from: NSPoint
+                if c["pathFromIsland"] as? Bool == true {
+                    from = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
+                } else {
+                    let x = CGFloat(c["x"] as? Double ?? 20) * scale
+                    let y = CGFloat(c["y"] as? Double ?? 20) * scale
+                    from = preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
+                }
+                for step in 1..<12 {
+                    let t = CGFloat(step) / 12
+                    _ = try moved(NSPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t))
+                    try await Task.sleep(nanoseconds: 16_000_000)
+                }
+            }
+            let event = try moved(point)
+            if c["click"] as? Bool == true {
+                post(.leftMouseDown, point); post(.leftMouseUp, point)
+                // Keep LKM-162's wheel ownership check with the click-through check.
+                if let cg = event.cgEvent {
+                    cg.type = .scrollWheel
+                    cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+                    cg.setIntegerValueField(.scrollWheelEventDeltaAxis1, value: -1)
+                    cg.setIntegerValueField(.scrollWheelEventPointDeltaAxis1, value: -40)
+                    if let wheel = NSEvent(cgEvent: cg) { NSApp.postEvent(wheel, atStart: false) }
+                }
+            }
+            return ["point":["x":Double(point.x), "y":Double(point.y)], "owners":owners.map { String(describing: type(of: $0)) }, "picks":previewPicks - picks, "picksTotal":previewPicks,
+                    "expectedCover":previewCoverRects(), "firstResponder":window.firstResponder === preview]
         case "edit":
             guard let field, let value = c["value"] as? String else { throw NSError(domain: "InspectorIsland", code: 3, userInfo: [NSLocalizedDescriptionKey: "No padding-top field"]) }
             post(.leftMouseDown, center(field)); post(.leftMouseUp, center(field))

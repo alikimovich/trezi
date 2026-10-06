@@ -49,7 +49,8 @@ export async function runNativeCoreSmoke(
     dispatchIPC('main', { type: 'invoke', channel, args })
   const send = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'send', channel, args })
-  const page = (code: string) => host.request('evaluate', { view: 'preview', code })
+  const page = (code: string, isolated = false) =>
+    host.request('evaluate', { view: 'preview', code, isolated })
   // Timeouts report the last inspected state (composer waits add the Bun-side
   // chat inputs to `enabled`/attachments/text), not just the predicate's `false`.
   const chatContext = () => {
