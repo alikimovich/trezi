@@ -1,4 +1,4 @@
-/** Keep the newest pointer target and run its layout work once per display frame. */
+/** Draw the first target now; keep only the newest subsequent target per frame. */
 export function coalesceHover<T>(
   draw: (target: T) => void,
   schedule: (callback: FrameRequestCallback) => number = requestAnimationFrame,
@@ -6,21 +6,34 @@ export function coalesceHover<T>(
 ): { move: (target: T) => void; clear: () => void } {
   let frame = 0
   let latest: T | undefined
+  let painted: T | undefined
+  const flush = () => {
+    frame = 0
+    const target = latest
+    latest = undefined
+    if (target === undefined || target === painted) {
+      painted = undefined
+      return
+    }
+    painted = target
+    draw(target)
+    frame = schedule(flush)
+  }
   return {
     move(target) {
-      latest = target
-      if (frame) return
-      frame = schedule(() => {
-        frame = 0
-        const target = latest
-        latest = undefined
-        if (target !== undefined) draw(target)
-      })
+      if (frame) {
+        latest = target
+        return
+      }
+      painted = target
+      draw(target)
+      frame = schedule(flush)
     },
     clear() {
       if (frame) cancel(frame)
       frame = 0
       latest = undefined
+      painted = undefined
     }
   }
 }

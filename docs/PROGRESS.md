@@ -2,6 +2,18 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-171 repair verified: immediate hover and traced selection
+
+- The first foreground native run measured a 20 ms first hover: scheduling every highlight at the next animation frame introduced a full-frame wait. The coalescer now draws the first target immediately and keeps later targets to one per frame. The native `chat,core` retry passed all 16 selected smoke checks, including under-16 ms WebContent hover enqueue/highlight/draw and under-50 ms local select and page → host → service → Bun → host → page timing in the rendered two-SVG, 2 KB code chat. The fixture prints exact durations and hop stamps in the verifier log (`worker-verify-6.log`); the tool response reported only its final 60 lines. The next-frame paint timestamp is reported as an upper bound, not an exact compositor timestamp.
+- Quick verification passed: all 167 unit checks, lint and typechecks. The native run was filtered to `chat,core`; the manager retains full-suite verification.
+
+## 2026-10-05 — LKM-171 review repair: real preview timing and stale hover
+
+- Pending hover frames are cancelled on mouseout, scroll and blur, so a hidden highlight cannot return on the next animation frame.
+- The sent-attachment native fixture now renders two SVGs and a >2 KB code block in the chat, dispatches 100 moves inside isolated WebContent, checks one draw and unchanged chat revision, then sends a real click. It asserts under 16 ms for hover enqueue/draw/highlight and under 50 ms for local selection and its diagnostic bridge round trip. A second frame gives a conservative pointer-to-paint upper bound.
+- Opt-in selection timing stamps page send, host receipt, XPC service acceptance, Bun dispatch start/end, host return and page receipt. They travel only on the diagnostic pick message and its acknowledgement; hover stays local to WebContent.
+- The earlier unit test is now explicitly a coalescing contract (`test/preview-hover-coalesce.mjs`), not a latency claim. The native fixture holds the latency budgets.
+
 ## 2026-10-05 — LKM-171: preview hover coalescing
 
 - LKM-165 already omits unchanged transcript payloads, and LKM-166 caches decoded sent thumbnails. Preview pointer hover stays in WebContent: `onMove` draws its own overlay and sends no hover frame through the host, service or Bun. This rules out a per-hover chat snapshot update as the current cause.

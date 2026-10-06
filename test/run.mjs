@@ -64,7 +64,7 @@ const UNIT = [
   'native-settings-evidence',
   'native-chat-controller',
   'native-long-chat-perf',
-  'preview-hover-perf',
+  'preview-hover-coalesce',
   'chat-attachments',
   'stop-recovery-ui',
   'chat-stuck-turn',

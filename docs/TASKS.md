@@ -7,7 +7,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.
 - [x] Add a synthetic 100-hover regression test with two SVG attachments and 2 KB of pasted code.
-- [ ] Record end-to-end hover and select timings on a foreground affected chat, including bridge hops and WebContent, and confirm the 16 ms / 50 ms budgets.
+- [x] Move latency assertions into the native sent-attachment fixture and stamp selection across page, host, service and Bun; cancel hover on mouseout, scroll and blur.
+- [x] Record synthetic foreground hover and select timing with rendered SVG/code chat, including bridge hops and WebContent, and enforce the 16 ms / 50 ms budgets in the native fixture.
 
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
