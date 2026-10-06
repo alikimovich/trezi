@@ -103,10 +103,17 @@ extension Host {
                 }
                 return event
             }
-            // Re-enter along a short pointer path. One teleported event back to a point four
-            // pixels from the prior page point can be coalesced by WebKit under a busy smoke run.
-            if c["pathFromIsland"] as? Bool == true {
-                let from = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
+            // A real pointer crosses the page/island boundary. One synthetic jump in
+            // either direction can be coalesced by WebKit during a busy smoke run.
+            if c["pathFromIsland"] as? Bool == true || c["pathFromPage"] as? Bool == true {
+                let from: NSPoint
+                if c["pathFromIsland"] as? Bool == true {
+                    from = canvas.convert(NSPoint(x: island.midX, y: island.midY), to: nil)
+                } else {
+                    let x = CGFloat(c["x"] as? Double ?? 20) * scale
+                    let y = CGFloat(c["y"] as? Double ?? 20) * scale
+                    from = preview.convert(NSPoint(x: x, y: preview.isFlipped ? y : preview.bounds.height - y), to: nil)
+                }
                 for step in 1..<12 {
                     let t = CGFloat(step) / 12
                     _ = try moved(NSPoint(x: from.x + (point.x - from.x) * t, y: from.y + (point.y - from.y) * t))

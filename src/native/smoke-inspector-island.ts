@@ -121,7 +121,13 @@ async function checkPointer(
     const r = document.querySelector('#native-title').getBoundingClientRect();
     return {x:r.x + Math.min(20, r.width / 2), y:r.y + r.height / 2};
   })()`)) as { x: number; y: number }
-  const move = (target: 'page' | 'island', offset = 0, click = false, pathFromIsland = false) =>
+  const move = (
+    target: 'page' | 'island',
+    offset = 0,
+    click = false,
+    pathFromIsland = false,
+    pathFromPage = false
+  ) =>
     island({
       pointer: true,
       step: 'move',
@@ -129,7 +135,8 @@ async function checkPointer(
       x: heading.x + offset,
       y: heading.y,
       click,
-      pathFromIsland
+      pathFromIsland,
+      pathFromPage
     })
   const hoverBox = () =>
     page.evaluate(
@@ -140,8 +147,24 @@ async function checkPointer(
   try {
     const before = await move('page')
     await waitFor(hoverBox, 'select-mode hover over the page')
-    const over = await move('island')
-    await waitFor(async () => !(await hoverBox()), 'select-mode hover cleared over the island')
+    const over = await move('island', 0, false, false, true)
+    await waitFor(
+      async () => !(await hoverBox()),
+      'select-mode hover cleared over the island',
+      10000,
+      async () => ({
+        move: over,
+        cover: await page.evaluate(
+          `(() => {
+        const host = document.querySelector('[data-trezi-cover]');
+        const shield = host?.shadowRoot?.firstElementChild;
+        const r = shield?.getBoundingClientRect();
+        return { connected: !!host?.isConnected, rect: r && {x:r.x,y:r.y,width:r.width,height:r.height} };
+      })()`,
+          true
+        )
+      })
+    )
     // Cross the native/page boundary with successive WebKit moves, as a pointer does.
     const after = await move('page', 20, false, true)
     await waitFor(hoverBox, 'select-mode hover restored over the page', 10000, async () => ({
@@ -222,7 +245,7 @@ async function checkPointer(
     return state.page === 'rgb(12, 34, 56)' && state.enters.page > 0 && state.cursor === 'pointer'
   }, 'interact-mode CSS hover, cursor and mouseenter over the page')
   const pageHover = await interact()
-  await move('island')
+  await move('island', 0, false, false, true)
   await waitFor(async () => {
     const state = (await interact()) as Island
     return state.page !== 'rgb(12, 34, 56)' && state.island !== 'rgb(12, 34, 56)'

@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-173 repair 4: island entry follows the native pointer path
+
+- **Full-suite failure.** The manager's native run timed out clearing select-mode hover over the island, while the unchanged `core` group passed. The page-to-island fixture sent one synthetic jump; its return leg already traversed a short path because WebKit can coalesce a single move under load. The failure capture did not expose the page's event target.
+- **Fixture repair.** The entry leg now sends the same frame-spaced AppKit moves through the window and WebKit's own tracking-area owners, in both select and interact modes. The existing assertions still require the page hover box to clear, CSS `:hover` and `mouseenter` to stay off the covered island, and clicks and wheels not to reach the page. An entry timeout now records the shield's connected state and rectangle beside the native move report.
+- **Verification.** Quick passed (170 unit checks, lint and typechecks). Native `core` passed 14/14 checks with no skips on the changed tree. The manager's full native suite remains the acceptance gate.
+
 ## 2026-10-05 — LKM-173 repair 3: return hover follows the pointer path
 
 - **Manager failure.** The full native run again timed out on select-mode hover returning from the island. The heading was the page hit target (`H1`) and scrollY was 0, but one synthetic move to a point only four pixels from the earlier page point did not reliably produce a new WebKit hover update under the full smoke load.

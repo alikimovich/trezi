@@ -13,6 +13,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Verify hover travel before the island click and wheel, assert no pick or page scroll afterward, and restore the island after an assertion fails (`core,composer` native groups passed).
 - [x] Add the visible native toast to the page cover, refresh that cover after toast show/hide, and check the native hit target and preview shield in the settings smoke.
 - [x] Drive the island-to-page return hover through a short AppKit pointer path and confirm the inspector in two consecutive native `core` runs.
+- [x] Drive page-to-island entry through the same pointer path in select and interact modes, with native cover diagnostics on a failed clear; scoped native `core` passed.
 - [ ] Operator: on a real Mac, hover in select mode around and over the open island (real pointer, real cursor).
 ## Editing inspector follows its project (LKM-172)
 
