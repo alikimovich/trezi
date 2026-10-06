@@ -119,12 +119,26 @@ assert.equal(controller.active.activeSessionKey, '/one')
 await assert.rejects(controller.command({ type: 'chat', key: '/one', session: '/other' }))
 await controller.command({ type: 'close-chat', key: '/one', session: second })
 assert.deepEqual(controller.active.sessionKeys, ['/one'])
+// LKM-172: a switch to another project is heard before "Opening …" renders; a restart
+// or a re-select of the loaded project is not a switch.
+const switches = []
+controller.switching = (key) => switches.push([key, renders.at(-1)?.status.kind])
+await controller.command({ type: 'restart', key: '/one' })
+await controller.select('/one')
+assert.deepEqual(switches, [], 'Restarting or re-selecting the loaded project is no switch')
 slow = gate()
 const opening = controller.open('/slow')
 await tick()
 await controller.open('/two')
 slow.resolve()
 await opening
+assert.deepEqual(
+  switches.map(([key]) => key),
+  ['/slow', '/two'],
+  'Each switch to another project is heard'
+)
+assert.equal(switches[0][1], 'running', 'The switch is heard before Opening renders')
+controller.switching = undefined
 assert.equal(controller.state.activeKey, '/two')
 assert.equal(active.at(-1), '/two')
 assert.equal(controller.state.status.name, 'two')

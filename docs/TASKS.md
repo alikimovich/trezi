@@ -3,6 +3,10 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Editing inspector follows its project (LKM-172)
+
+- [x] Hide the island, chip and preview overlays during a project switch; restore each project's selection and inspector tab only if the element still resolves on return.
+- [x] Clear the selection quietly after page navigation or element removal, with native coverage for return and removal.
 ## Preview select slowdown with image attachments (LKM-171, issue #231)
 
 - [x] Confirm LKM-165 transcript suppression and LKM-166 thumbnail caching; trace hover in WebContent and coalesce its redraw to one per frame.

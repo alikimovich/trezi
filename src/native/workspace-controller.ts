@@ -90,6 +90,9 @@ export class NativeWorkspaceController {
   openFailed?: (name: string, message: string) => void
   /** Hears the active project's dev server being restarted (LKM-157 re-checks its stamps). */
   restarted?: (root: string) => void
+  /** Hears a switch to another project start, before "Opening …" renders (LKM-172 drops
+   *  the element selection, the editing island and the page's selection overlays). */
+  switching?: (key: string) => void
   /** Rendered only: a failing store must not be retried by its own error report. */
   reportError(error: unknown) {
     this.state.error = String(error)
@@ -354,7 +357,10 @@ export class NativeWorkspaceController {
       intent = ++this.intent
     this.state.status = { kind: 'busy', label: 'Opening ' + entry.name + '…' }
     // Another project hides the chat until it has opened; a restart of this one keeps it.
-    if (this.state.loadedKey !== key) this.state.loadedKey = null
+    if (this.state.loadedKey !== key) {
+      this.state.loadedKey = null
+      this.switching?.(key)
+    }
     this.changed()
     const current = () =>
       this.intent === intent && !this.closing.has(key) && this.state.projects.includes(entry)

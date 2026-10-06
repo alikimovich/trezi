@@ -36,6 +36,7 @@ import {
   PREVIEW_PICKED,
   PREVIEW_PIN_CLICK,
   PREVIEW_READINESS,
+  PREVIEW_SELECTION_LOST,
   PREVIEW_SET_COMMENT_MODE,
   PREVIEW_SET_FRAME,
   PREVIEW_SET_MODE,
@@ -254,6 +255,11 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     if (!fromPreview(e)) return
     state.selectMode = false
     sendToMain('preview:select-cancelled')
+  })
+  // The selected element left the page; select mode stays as it was (LKM-172).
+  ipcMain.on(PREVIEW_SELECTION_LOST, (e) => {
+    if (!fromPreview(e)) return
+    sendToMain('preview:selection-lost')
   })
 
   // Selection-toolbar actions that need the renderer (code drawer / delete turn);
