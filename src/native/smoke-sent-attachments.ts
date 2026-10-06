@@ -198,18 +198,24 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
     const originalText = message.text
     message.text = `\`\`\`svg\n${'<path d="M0 0h24v24H0z"/>'.repeat(90)}\n\`\`\``
     nativeChat.changed(chat)
-    const chatBeforeHover = await inspectUntil(
+    await inspectUntil(
       (m) => host.request(m),
       'chatInspect',
       (s) => ids.every((id) => s.attachmentFrames[id])
     )
     await host.request('shellPerform', { action: 'select-object' })
+    const chatBeforeHover = await host.request('chatInspect')
+    assert.ok(
+      chatBeforeHover.messageBodyEvaluations > 0,
+      'chatInspect reports actual transcript row body evaluations'
+    )
     const evaluate = (code: string) =>
       host.request('evaluate', { view: 'preview', isolated: true, code })
     const hoverTiming = await evaluate(`(async () => {
       const target = document.querySelector('#native-title');
+      const alternate = target?.parentElement;
       const metrics = globalThis.__treziPreviewTimings;
-      if (!target || !metrics) throw new Error('Preview timing fixture missing');
+      if (!target || !alternate || !metrics) throw new Error('Preview timing fixture missing');
       const box = document.querySelector('[data-trezi-overlay]')?.shadowRoot?.children[1];
       target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
       window.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
@@ -223,13 +229,22 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
       metrics.hoverPaintUpperBound.length = 0;
       metrics.select.length = 0; metrics.roundTrip.length = 0; metrics.hops.length = 0;
       const start = performance.now();
-      for (let i = 0; i < 100; i++) target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      for (let i = 0; i < 100; i++) (i % 2 ? alternate : target).dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
       const enqueue = performance.now() - start;
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      return { enqueue, hover: metrics.hover, work: metrics.hoverWork, paintUpperBound: metrics.hoverPaintUpperBound, visible: box?.style.display };
+      const rect = alternate.getBoundingClientRect();
+      return { enqueue, hover: metrics.hover, work: metrics.hoverWork, paintUpperBound: metrics.hoverPaintUpperBound,
+        visible: box?.style.display, finalTarget: Math.abs(parseFloat(box?.style.left ?? 'NaN') - rect.left) < 1
+          && Math.abs(parseFloat(box?.style.top ?? 'NaN') - rect.top) < 1
+          && Math.abs(parseFloat(box?.style.width ?? 'NaN') - rect.width) < 1 };
     })()`)
-    assert.equal(hoverTiming.hover.length, 1, `100 moves coalesce: ${JSON.stringify(hoverTiming)}`)
+    assert.equal(
+      hoverTiming.hover.length,
+      2,
+      `100 alternating moves coalesce into two draws: ${JSON.stringify(hoverTiming)}`
+    )
     assert.equal(hoverTiming.visible, 'block', 'hover highlight is drawn in WebContent')
+    assert.ok(hoverTiming.finalTarget, 'the final highlight matches the last pointer target')
     assert.ok(
       hoverTiming.enqueue < 16,
       `100 moves blocked WebContent for ${hoverTiming.enqueue} ms`
@@ -239,10 +254,14 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
       hoverTiming.work[0] < 16,
       `Hover draw blocked WebContent for ${hoverTiming.work[0]} ms`
     )
+    assert.ok(
+      hoverTiming.enqueue + hoverTiming.work[1] < 16,
+      `100 hovers and their final draw blocked WebContent for ${hoverTiming.enqueue + hoverTiming.work[1]} ms`
+    )
     const chatAfterHover = await host.request('chatInspect')
     assert.equal(
-      chatAfterHover.revision,
-      chatBeforeHover.revision,
+      chatAfterHover.messageBodyEvaluations,
+      chatBeforeHover.messageBodyEvaluations,
       'preview hover does not render the transcript'
     )
     await preparePreviewInput(host)
@@ -267,6 +286,12 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
     assert.ok(
       selectionTiming.roundTrip[0] < 50,
       `Selection bridge took ${selectionTiming.roundTrip[0]} ms`
+    )
+    const chatAfterSelection = await host.request('chatInspect')
+    assert.equal(
+      chatAfterSelection.messageBodyEvaluations,
+      chatBeforeHover.messageBodyEvaluations,
+      'preview selection does not render the transcript'
     )
     const hops = selectionTiming.hops[0]
     for (const stamp of ['pageAt', 'hostAt', 'serviceAt', 'bunAt', 'bunDoneAt', 'hostReturnAt'])

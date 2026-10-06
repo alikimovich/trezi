@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-171 review repair: transcript render signal and alternating hover targets
+
+- Review found two vacuous assertions: `chatInspect` had no `revision`, and 100 moves over the same heading returned early after the first. `ChatModel.messageBodyEvaluations` now counts actual SwiftUI message-row body evaluations and `chatInspect` exposes it. The fixture asserts that the count is positive and unchanged after hover and after the real preview selection click.
+- The native fixture alternates 100 moves between the heading and its parent, requires one immediate plus one frame-coalesced draw, checks the final box against the parent rect, and budgets enqueue plus the trailing draw at under 16 ms. The first native run exposed an actual selection-triggered transcript re-render. `NativeChat.update` now publishes visibility only when it changes, and `ChatLayoutModel` carries composer height separately from the transcript rows' observable model.
+- Quick verification passed (168 unit checks, lint, typechecks). Native `chat,core` passed 16/16 selected checks on retry. Foreground synthetic-chat timings: 100 moves enqueued in 1.0 ms, highlight update 0.0 ms, local selection 1.0 ms, page → host → service → Bun → host → page round trip 3.0 ms. The next-frame paint upper bound was 20.0 ms; it is not an exact paint timestamp. Exact hop stamps are in `worker-verify-5.log`.
+
 ## 2026-10-05 — LKM-171 repair verified: immediate hover and traced selection
 
 - The first foreground native run measured a 20 ms first hover: scheduling every highlight at the next animation frame introduced a full-frame wait. The coalescer now draws the first target immediately and keeps later targets to one per frame. The native `chat,core` retry passed all 16 selected smoke checks, including under-16 ms WebContent hover enqueue/highlight/draw and under-50 ms local select and page → host → service → Bun → host → page timing in the rendered two-SVG, 2 KB code chat. The fixture prints exact durations and hop stamps in the verifier log (`worker-verify-6.log`); the tool response reported only its final 60 lines. The next-frame paint timestamp is reported as an upper bound, not an exact compositor timestamp.
