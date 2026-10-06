@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-169 review evidence: Resolve queue in the native window
+
+- The `native-chat` smoke now parks the chat after a completed turn, sends one message, and captures the foreground shell at 440 pt and 320 pt chat widths (`test/artifacts/native/swift-chat-resolve-{440,320}.png` with matching JSON). It asserts the Swift-rendered conflict card explains the held changes, lists the file and offers Resolve; the composer queue contains exactly one message and says “Waiting for Resolve”; the transcript contains no copy or send error. Clearing the park sends that message exactly once. The capture uses ScreenCaptureKit without OCR or system preference changes. The first narrow capture exposed clipped queue labels, so the queue now gives its text explicit width within the available row.
+
+## 2026-10-05 — LKM-169: a message sent while a chat needs Resolve is queued, never refused
+
+- **Cause.** `submit` ran a message directly whenever no turn was running, so a drift-parked chat sent it to `agent:send`, whose `sendRefusal` threw. `run` then appended "Unable to send" to an assistant message and called `finish`, which stamped "Worked for 0s", and the optimistic user message stayed in the transcript. A drift park also set `paused`, so even a queued message did not send after Resolve.
+- **One send rule.** `sendBlock` (`src/native/chat-queue.ts`) names what keeps a message from sending: `running`, `landing` (phase applying), `resolve` (a drift park, same test as the backend's `sendRefusal`) or `login` (the login card). `submit` queues while any block holds, and `drain` waits for none. The composer queue shows the reason in a row above the queued messages: "Sends when this turn finishes", "Sends after this turn’s changes land", "Waiting for Resolve — sends once the held changes land", "Waiting for sign-in — sends after Retry on the login card". Send now appears only for a paused queue. The send button says "Queue message" while blocked.
+- **Resolve.** A drift park no longer pauses the queue; it blocks it until an isolation event clears the park, and that event now drains the queue (after the resolution turn lands, a clean Resolve, Retry or Discard). Resolve, Discard and Retry also lift an earlier pause. A stopped or failed-landing park still pauses as before.
+- **Refusal race.** If the backend refuses with `RESOLVE_NEEDED` (`src/shared/chat-busy.ts`, now shared with `sendRefusal`) before the park event arrives, `run` takes back the optimistic messages, puts the submission back at the head of the queue and marks the chat parked. There is no error turn, no worked time and no duplicate.
+- **Edit.** A queued message has Edit (pencil and menu item, `queue-edit`). It moves the text back into the composer ahead of any draft, with its attachments, and its selection is kept in `draftSelection` until the next send or until the chip is cleared.
+- **Tests.** `test/chat-send-queue.mjs` (unit tier) covers five cases: Resolve with edit, remove, Send now refused and in-order sends after the resolution turn lands; a clean Resolve; the refusal race then Discard; a running turn and its landing; and login with Retry. `test/stop-recovery-ui.mjs` expects the new Resolve note. `src/native/smoke-chat.ts` (group `chat`) edits a queued message back into the composer and queues it again. It also expects the 62 pt queue height (one row plus the reason row).
+
 ## 2026-10-05 — LKM-170: feedback toast and standard alert sheets
 
 - **Problem.** After Send feedback, the generic presenter opened a titled, resizable "Feedback sent" window (traffic lights, empty body, a lone "View issue" button). Every field-less sheet (updates, preview problem, delete and restart confirmations) used that same form window.

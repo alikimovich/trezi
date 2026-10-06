@@ -1,3 +1,4 @@
+import { RESOLVE_NEEDED } from '../shared/chat-busy'
 import { gitOut } from './chat-park'
 import { type LandingResult, states } from './chat-state'
 import { previewEvidence } from './preview-evidence'
@@ -43,7 +44,7 @@ export function sendRefusal(sessionKey: string): string | null {
   const st = states.get(sessionKey)
   if (!st?.parked || st.reverted || st.interrupted || st.landingError || st.resolvingFiles)
     return null
-  return 'This chat’s last changes didn’t land because the project changed under them. Choose Resolve, Retry or Discard on the card first.'
+  return RESOLVE_NEEDED
 }
 
 /** Authoritative state exposed to the chat's Trezi MCP tools. Unlike `git status`

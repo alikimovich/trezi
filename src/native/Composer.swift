@@ -285,8 +285,9 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         state = next; isHidden = !(next["visible"] as? Bool ?? false)
         let queue = next["queue"] as? [[String: Any]] ?? []
         let queuePaused = next["queuePaused"] as? Bool ?? false
-        queuedMessages.update(queue, paused: queuePaused, note: next["queueNote"] as? String ?? "", canSend: next["queueCanSend"] as? Bool ?? true)
-        formTop.constant = ComposerQueueHost.height(count: queue.count, paused: queuePaused)
+        let queueNote = next["queueNote"] as? String ?? ""
+        queuedMessages.update(queue, paused: queuePaused, note: queueNote, canSend: next["queueCanSend"] as? Bool ?? true)
+        formTop.constant = ComposerQueueHost.height(count: queue.count, paused: queuePaused, note: queueNote)
         if let b = next["bounds"] as? [String: Double], let x = b["x"], let y = b["y"], let width = b["width"], let height = b["height"], [x,y,width,height].allSatisfy({ $0.isFinite && abs($0) < 100000 }) {
             frame = NSRect(x: x, y: y, width: max(0, width), height: max(0, height))
         }
