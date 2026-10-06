@@ -2,6 +2,7 @@ import type { NativeChatAction } from '../shared/native-chat'
 import { setupPrompt } from '../shared/setup-prompt'
 import type { NativeChatController } from './chat-controller'
 import { loginAction } from './chat-login'
+import { editQueued } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
 import { assistant, begin, type Chat } from './chat-state'
 
@@ -48,6 +49,10 @@ export async function cardAction(
     case 'queue-remove':
       chat.queue = chat.queue.filter((q) => `queued-${q.id}` !== action.id)
       break
+    case 'queue-edit':
+      editQueued(chat, action.id)
+      effect({ type: 'focus' })
+      break
     case 'queue-resume':
       chat.paused = false
       void controller.drain(chat)
@@ -72,8 +77,11 @@ export async function cardAction(
       message.revertGroup = undefined
       break
     }
+    // Resolve, Discard and Retry are the user's way out: the queue follows once the held
+    // changes land or go (the isolation event drains it, LKM-169).
     case 'resolve': {
       if (chat.isRunning || chat.sending) return
+      chat.paused = false
       const result = await invoke('agent:resolve-conflict', chat.chat)
       if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
       if (result.prompt && result.conflicted.length)
@@ -87,11 +95,14 @@ export async function cardAction(
       break
     }
     case 'discard':
-      if (!chat.isRunning && !chat.sending) await invoke('agent:discard-conflict', chat.chat)
+      if (chat.isRunning || chat.sending) return
+      chat.paused = false
+      await invoke('agent:discard-conflict', chat.chat)
       break
     case 'landing-retry': {
       // The outcome arrives as an isolation event: merged, or this card with the reason.
       if (chat.isRunning || chat.sending) return
+      chat.paused = false
       const result = await invoke('agent:retry-landing', chat.chat)
       if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
       break

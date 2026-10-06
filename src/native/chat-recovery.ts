@@ -8,7 +8,7 @@ import { type Chat, STOPPED_GROUP } from './chat-state'
  *    turn), keep it, or ask the agent to finish it.
  *  - A dev-server compile/parse error in a file the last landed turn touched offers
  *    "Revert last turn" and "Fix with agent".
- *  - A paused queue says why it is not sending and can be sent now.
+ *  - A paused queue says why it is not sending and can be sent now (`chat-queue.ts`).
  */
 
 const FINISH_PROMPT =
@@ -62,22 +62,6 @@ export function recoveryCards(chat: Chat): NativeChatCard[] {
       ]
     })
   return cards
-}
-
-/** Whether a paused queue will send, in words, and whether "Send now" can. */
-export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolean } {
-  if (!chat.paused) return { queueNote: '', queueCanSend: true }
-  if (chat.isolation === 'parked' && chat.stopped !== 'held')
-    return {
-      queueNote: 'Waiting — retry, resolve or discard the held changes to send these',
-      queueCanSend: false
-    }
-  if (chat.stopped === 'held')
-    return {
-      queueNote: 'Paused after Stop — not sent; Send now continues the held work',
-      queueCanSend: true
-    }
-  return { queueNote: 'Paused — these won’t send until you choose', queueCanSend: true }
 }
 
 /** A recovery card action; false when `action` is not one. */
