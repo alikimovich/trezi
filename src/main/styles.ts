@@ -6,6 +6,7 @@ import { STYLE_PROPS as STYLE_PROP_LIST } from '../shared/style-props'
 import { mergeStyleObjectSource } from './inline-style'
 import { renderJsxAttribute } from './jsx-attribute-literals'
 import { classNameStringNode, commitEdit, findElementAtLine, resolveSource } from './props'
+import { applyClassRule, resolveClassRule } from './style-class-rule'
 import { type ResolvedTokenRef, resolveTokenRef, tokenClassRewrite } from './style-tokens'
 import { applyStyleEditSvelte } from './styles-svelte'
 import { looksTailwind } from './tw-styles'
@@ -251,4 +252,10 @@ export function registerStylesIpc(): void {
   // No sender check (matches props:*); path safety comes from resolveSource's
   // within-root containment + the allowlist/value validation above.
   ipcMain.handle('styles:apply', (_e, root: string, edit: StyleEdit) => applyStyleEdit(root, edit))
+  ipcMain.handle('styles:resolve-class', (_e, root: string, classes: string[]) =>
+    resolveClassRule(root, classes)
+  )
+  ipcMain.handle('styles:apply-class', (_e, root: string, edit: StyleEdit) =>
+    applyClassRule(root, edit.classes, edit.prop, edit.value, edit.group)
+  )
 }

@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Unstamped inspector fields (LKM-174)
+
+- [x] Explain missing source links in the island, with Connect project to Trezi and Ask the agent actions.
+- [x] Resolve one matching project CSS or CSS-module class rule for an unstamped selection; keep ambiguous matches read-only.
+- [x] Cover Vite 8 React with a CSS module and an img in the setup fixture, plus class resolution and island state tests.
+
 ## Standard feedback confirmation and alert sheets (LKM-170)
 
 - [x] Sent feedback: an auto-dismissing "Feedback sent — View on GitHub" toast in the main window (`src/native/Toast.swift`, `NativeSheetController.toast`), no "Feedback sent" window.

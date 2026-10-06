@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-174: unstamped inspector explanation and CSS class fallback
+
+- An element without a source stamp now shows the missing-source explanation, a reason from project readiness, and visible Connect project to Trezi / Ask the agent actions above the style values. The first uses the existing setup flow; the second places the selected element in the composer.
+- For an unstamped element, the Styles tab resolves a unique matching class rule in project CSS or CSS modules (including Vite's `_accountAvatar_vc9o5_17` naming). It re-resolves before writing through the source owner, so a newly ambiguous rule cannot receive an edit. Unresolved fields remain read-only.
+- The Vite 8 React setup fixtures now include `src/themer-admin`, a CSS module and an `img`; unit coverage checks that the JSX stamp is emitted, while the existing context test covers the no-stamp Connect card. The test Mac's actual project and config were not available in this worktree, so its specific missing-stamp cause remains unverified.
+
 ## 2026-10-05 — LKM-170: feedback toast and standard alert sheets
 
 - **Problem.** After Send feedback, the generic presenter opened a titled, resizable "Feedback sent" window (traffic lights, empty body, a lone "View issue" button). Every field-less sheet (updates, preview problem, delete and restart confirmations) used that same form window.

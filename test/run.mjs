@@ -84,6 +84,7 @@ const UNIT = [
   'native-context',
   'native-updates',
   'native-inspector',
+  'style-class-rule',
   'native-slider-ticks',
   'native-layers',
   'native-editor',
