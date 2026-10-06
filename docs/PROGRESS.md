@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-172 repair: inspector reads do not hold project activation
+
+- `NativeInspectorController.activate` hides the old island and sets the new root synchronously, then refreshes tokens and controls asynchronously. The runtime now starts that refresh without awaiting it, and reports any rejection through the existing error handler. Chat context, Git refresh and the rest of project activation can proceed while inspector reads finish; saved-element resolution still starts after project activation.
+
 ## 2026-10-05 — LKM-172 repair: a new pick cannot consume an invalid snapshot
 
 - Manager native verification found that after A's source stamp changed while B was active, selecting the changed element could still restore A's old Props tab. The later core inspector check then also saw Props rather than Styles. The visible island and chip were hidden, but the saved inspector snapshot had not yet been discarded.

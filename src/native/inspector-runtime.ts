@@ -68,7 +68,7 @@ export function installNativeInspector(
   })
   const activate = workspace.services.activate
   workspace.services.activate = async (entry) => {
-    await controller.activate(entry?.root ?? '')
+    void controller.activate(entry?.root ?? '').catch(report)
     await activate(entry)
     if (entry) void restoreSelection(entry.root).catch(report)
   }
