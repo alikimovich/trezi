@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Product logging: one log folder, Copy Logs for Support, trezi logs (LKM-168)
 
+- [x] After merging LKM-169, verify the Resolve queue's real provider prompt by its queued-text suffix and exact call count in the native chat smoke.
 - [x] Review repair: omit arbitrary dev-server output and helper stderr, lock the shared size check, and make the native turn check use `agent:send` and the provider event hook.
 - [x] One folder, `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log`, 7 days, 20 MB a day; `app`, `service`, `backend`, `helper`, `preview` and `devserver` lines (`src/main/product-log.ts`, `src/service/ProductLog.swift`).
 - [x] Turn start/end/error with provider and resolved model, landing/parking/resolve with the Git result, worktree create/remove, helper start/exit/crash, preview load/reload/crash, slow host commands (>250 ms), XPC errors.

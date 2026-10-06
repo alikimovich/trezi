@@ -312,7 +312,12 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       group: 'native-resolve'
     })
     await waitFor(() => sent.slice().length === 2, 'queued Resolve message sent')
-    if (sent.slice().length !== 2 || sent[1][0] !== parkedText)
+    // agent:send prepends Trezi instructions; the submitted text remains the suffix.
+    if (
+      sent.slice().length !== 2 ||
+      typeof sent[1][0] !== 'string' ||
+      !sent[1][0].endsWith(parkedText)
+    )
       throw new Error('Queued Resolve message did not send exactly once after the park cleared')
     send({ type: 'done' })
     await wait((current) => !current.activity)

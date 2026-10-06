@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-05 — LKM-168 native smoke after the LKM-169 merge
+
+- The Resolve queue smoke now checks that the second provider call is made exactly once and its prompt ends with the queued composer text. The real `agent:send` path prepends Trezi UI instructions even when UI composition is off; comparing the full prompt to the bare text failed before emitting the queued turn's `done` event, which left the next attachment smoke waiting behind a running turn.
+
 ## 2026-10-05 — LKM-168 review repair: private output, hard cap, real turn path
 
 - The dev-server product log now records only a fixed output category and length. Raw lines still reach Activity but cannot put target source excerpts into the persisted log. Helper crash lines keep provider and exit status, not the stderr tail.
