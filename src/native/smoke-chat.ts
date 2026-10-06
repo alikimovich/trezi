@@ -2,6 +2,8 @@ import { writeFileSync } from 'node:fs'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { serviceEvents, views } from './platform'
+import { preparePreviewInput } from './smoke-input'
+import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
 /** Deterministic stream/card coverage without calling a paid provider. */
@@ -99,9 +101,10 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       if (queue.queueCount === 1) break
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
+    // One row plus the reason row ("Sends when this turn finishes", LKM-169).
     if (
       queue.queueCount !== 1 ||
-      queue.queueHeight !== 34 ||
+      queue.queueHeight !== 62 ||
       queue.queueInset !== 14 ||
       Math.abs(queue.queueOverlap - 16) > 1
     )
@@ -112,6 +115,23 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       screenshot.replace('.png', '-queue-stack.png'),
       Buffer.from(await host.request('captureShell'), 'base64')
     )
+    // Edit takes the queued message back into the composer; sending queues it again.
+    await host.request('chatPerform', { action: 'queue-edit', card: queue.queue[0].id })
+    for (let i = 0; i < 100; i++) {
+      const edited = await host.request('composerInspect')
+      if (!edited.queueCount && edited.text === 'A queued native message') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const edited = await host.request('composerInspect')
+    if (edited.queueCount || edited.text !== 'A queued native message')
+      throw new Error('Editing a queued message did not return it to the composer')
+    await host.request('composerPerform', { action: 'send' })
+    for (let i = 0; i < 100; i++) {
+      queue = await host.request('composerInspect')
+      if (queue.queueCount === 1) break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    if (queue.queueCount !== 1) throw new Error('An edited message was not queued again')
     const id = queue.queue[0].id
     await host.request('chatPerform', { action: 'queue-remove', card: id })
     for (let i = 0; i < 100 && (await host.request('composerInspect')).queueCount; i++)
@@ -202,6 +222,90 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     })
     await wait((state) => !state.cards.includes('other-chat-permission'))
     send({ type: 'permission-resolved', id: 'other-chat-permission' })
+    // LKM-169: a drift park is visible together with the waiting queue, at both
+    // supported chat widths. The service is intercepted above, so no provider runs.
+    send({ type: 'isolation', state: 'parked', files: ['src/native/fixture.ts'] })
+    await wait((current) => current.cards.includes('conflict'))
+    const parkedText = 'Send this after Resolve'
+    await host.request('composerPerform', { text: parkedText })
+    await inspectUntil(
+      (method) => host.request(method),
+      'composerInspect',
+      (value) => value.text === parkedText
+    )
+    await host.request('composerPerform', { action: 'send' })
+    const captureResolve = async (width: number) => {
+      const current = await wait((value) => value.cards.includes('conflict'))
+      const composer = await inspectUntil(
+        (method) => host.request(method),
+        'composerInspect',
+        (value) => value.queueCount === 1 && value.queueNote.startsWith('Waiting for Resolve')
+      )
+      const card = current.cardStates.find((value: any) => value.id === 'conflict')
+      const layout = await host.request('layoutInspect')
+      if (Math.abs(layout.width - width) > 1)
+        throw new Error(`Resolve chat width: ${layout.width}, wanted ${width}`)
+      if (
+        composer.queueCount !== 1 ||
+        composer.queue[0].text !== parkedText ||
+        !composer.queueNote.startsWith('Waiting for Resolve') ||
+        composer.queueHeight !== 62
+      )
+        throw new Error(`Resolve queue is not visibly waiting: ${JSON.stringify(composer)}`)
+      if (
+        !card?.detail?.includes('project changed under them') ||
+        !card.detail.includes('src/native/fixture.ts') ||
+        !card.actions.includes('Resolve')
+      )
+        throw new Error(`Resolve card lacks reason or action: ${JSON.stringify(card)}`)
+      if (
+        current.messages.some(
+          (message: any) =>
+            message.text.includes(parkedText) ||
+            message.text.includes('Unable to send') ||
+            message.text.includes('Worked for 0s')
+        )
+      )
+        throw new Error('Parked message duplicated or refused in the transcript')
+      if (sent.length !== 1) throw new Error('Parked message reached the provider')
+      await preparePreviewInput(host, true)
+      const capture = await host.request('captureVisibleShell')
+      const path = screenshot.replace('.png', `-resolve-${width}.png`)
+      writeFileSync(path, Buffer.from(capture.png, 'base64'))
+      writeFileSync(
+        screenshot.replace('.png', `-resolve-${width}.json`),
+        JSON.stringify(
+          {
+            path,
+            width: layout.width,
+            queue: composer.queue,
+            queueNote: composer.queueNote,
+            card,
+            transcript: current.messages
+          },
+          null,
+          2
+        )
+      )
+    }
+    await captureResolve(440)
+    await host.request('dividerPerform', { delta: -120 })
+    try {
+      await captureResolve(320)
+    } finally {
+      await host.request('dividerPerform', { delta: 120 })
+    }
+    send({
+      type: 'isolation',
+      state: 'merged',
+      files: ['src/native/fixture.ts'],
+      group: 'native-resolve'
+    })
+    await waitFor(() => sent.slice().length === 2, 'queued Resolve message sent')
+    if (sent.slice().length !== 2 || sent[1][0] !== parkedText)
+      throw new Error('Queued Resolve message did not send exactly once after the park cleared')
+    send({ type: 'done' })
+    await wait((current) => !current.activity)
   } finally {
     nativeChat.services.invoke = originalInvoke
   }

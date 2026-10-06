@@ -1,5 +1,5 @@
 import type { AgentEvent, ModelChoice, WorkspaceSnapshot } from '../shared/api'
-import { isChatBusy } from '../shared/chat-busy'
+import { isChatBusy, isResolveNeeded } from '../shared/chat-busy'
 import {
   agentOptionsFor,
   type ChatAgentSettings,
@@ -19,6 +19,7 @@ import { defaultChoiceFor, providerOptions, resolveSelection } from '../shared/p
 import { parseSlashToken } from '../shared/slash-token'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
+import { sendBlock } from './chat-queue'
 import { matches, permissionModes, snapshot } from './chat-snapshot'
 import {
   append,
@@ -267,8 +268,13 @@ export class NativeChatController {
           setTimeout(() => this.changed(chat), 33)
         )
     } else this.changed(chat)
-    // Let paired terminal/error/isolation events settle before draining.
-    if (event.type === 'done' || event.type === 'landing-finished')
+    // Let paired terminal/error/isolation events settle before draining. A park that
+    // clears (Resolve, Retry or Discard landed) releases the queue too (LKM-169).
+    if (
+      event.type === 'done' ||
+      event.type === 'landing-finished' ||
+      (event.type === 'isolation' && event.state !== 'parked')
+    )
       queueMicrotask(() => void this.drain(chat))
   }
   async composer(action: NativeComposerAction) {
@@ -344,6 +350,7 @@ export class NativeChatController {
     this.services.effect({ type: 'focus' })
   }
   clearSelection(chat: Chat) {
+    chat.draftSelection = undefined
     const prompt = chat.context?.selection?.prompt
     if (chat.context) chat.context.selection = null
     this.services.effect({ type: 'selection-clear', chat: chat.chat, prompt })
@@ -355,7 +362,7 @@ export class NativeChatController {
       id: crypto.randomUUID(),
       text: raw.trim(),
       attachments: chat.attachments,
-      selection: chat.context?.selection ?? null,
+      selection: chat.context?.selection ?? chat.draftSelection ?? null,
       turn: chat.context?.turn ?? {}
     }
     chat.text = ''
@@ -363,7 +370,8 @@ export class NativeChatController {
     chat.attachments = []
     chat.dismissed = true
     this.clearSelection(chat)
-    if (chat.isRunning || chat.sending || chat.queue.length) chat.queue.push(submission)
+    // Anything that blocks sending queues the message with its reason (LKM-169).
+    if (sendBlock(chat) || chat.queue.length) chat.queue.push(submission)
     else {
       chat.paused = false
       void this.run(chat, submission)
@@ -427,17 +435,29 @@ export class NativeChatController {
     } catch (error) {
       // The backend still holds a turn this chat did not know about: the message waits
       // in the queue, never refused, and the chat shows what is running (LKM-165).
-      if (isChatBusy(error) && cancellation === chat.cancellation) {
+      // A chat the backend holds for Resolve (its park event may still be on the way)
+      // queues the same way, with no error turn or duplicate (LKM-169).
+      const resolve = isResolveNeeded(error)
+      if ((resolve || isChatBusy(error)) && cancellation === chat.cancellation) {
         chat.messages = chat.messages.filter((m) => m.id !== userMessage && m.id !== reply)
         chat.queue.unshift(submission)
         chat.streamingId = null
         chat.turn = undefined
         chat.last = undefined
         chat.turnStartedAt = null
-        chat.isRunning = true
-        chat.phase = 'applying'
-        chat.operation = 'waiting'
         chat.aliveAt = Date.now()
+        if (resolve) {
+          chat.isRunning = false
+          chat.phase = 'thinking'
+          chat.operation = undefined
+          chat.isolation = 'parked'
+          chat.stopped = undefined
+          chat.landingError = undefined
+        } else {
+          chat.isRunning = true
+          chat.phase = 'applying'
+          chat.operation = 'waiting'
+        }
       } else {
         chat.paused = true
         append(chat, `\n\nUnable to send: ${String(error)}`)
@@ -450,16 +470,9 @@ export class NativeChatController {
     }
   }
   async drain(chat: Chat) {
-    // A stopped turn's hold, and a landing that failed or was ended, are no conflict: the
-    // next message continues on top of them (the backend's `sendRefusal` agrees).
-    if (
-      this.chats.get(chat.chat) !== chat ||
-      chat.isRunning ||
-      chat.sending ||
-      chat.paused ||
-      (chat.isolation === 'parked' && chat.stopped !== 'held' && !chat.landingError)
-    )
-      return
+    // Sends the next queued message once nothing blocks it (`sendBlock`): a stopped
+    // turn's hold or a failed landing is no block, a park waiting for Resolve is.
+    if (this.chats.get(chat.chat) !== chat || chat.paused || sendBlock(chat)) return
     const next = chat.queue.shift()
     if (next) await this.run(chat, next)
   }
