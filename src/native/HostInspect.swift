@@ -74,7 +74,7 @@ extension Host {
             let hit = canvas.hitTest(canvas.convert(point, to: canvas.superview))
             reply(id, toast.inspect().merging(["cover":previewCoverRects(), "sentCover":previewCover,
                                                "hitToast":hit === toast || hit?.isDescendant(of: toast) == true]) { _, new in new })
-        case "toastPerform": guard ephemeral else { reply(id, false); return true }; toast.model.perform(); reply(id, true)
+        case "toastPerform": guard ephemeral else { reply(id, false); return true }; toast.model.perform(c["index"] as? Int ?? 0); reply(id, true)
         case "captureToast":
             // The workspace band around the toast, so the capture shows it in place.
             guard !toast.isHidden, toast.superview === canvas else { reply(id, error: "No toast"); return true }

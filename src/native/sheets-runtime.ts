@@ -6,6 +6,8 @@ import { dispatchIPC } from './platform'
 import { SheetAutosave } from './sheet-autosave'
 import type { NativeWorkspaceController } from './workspace-controller'
 
+type ToastAction = { label: string; run: () => Promise<unknown> }
+
 /** Trusted app sheets use fixed operations, never renderer-supplied IPC names. */
 export class NativeSheetController {
   generation = 0
@@ -67,19 +69,27 @@ export class NativeSheetController {
     if (this.current) this.host.send('sheetClose', { id: this.current.state.id })
     this.current = null
   }
-  toastCurrent: { id: string; run?: () => Promise<unknown> } | null = null
-  /** A non-blocking confirmation in the main window; a newer one replaces it. */
-  toast(message: string, action?: { label: string; run: () => Promise<unknown> }, seconds = 6) {
+  toastCurrent: { id: string; runs: (() => Promise<unknown>)[] } | null = null
+  /** A non-blocking confirmation in the main window, with up to two actions; a newer one replaces it. */
+  toast(message: string, action?: ToastAction | ToastAction[], seconds = 6) {
     const id = randomUUID()
-    this.toastCurrent = { id, run: action?.run }
-    const state: NativeToastState = { id, message, action: action?.label, seconds }
+    const actions = (Array.isArray(action) ? action : action ? [action] : []).slice(0, 2)
+    this.toastCurrent = { id, runs: actions.map((a) => a.run) }
+    const labels = actions.map((a) => a.label)
+    const state: NativeToastState = {
+      id,
+      message,
+      action: labels[0],
+      ...(labels.length > 1 ? { actions: labels } : {}),
+      seconds
+    }
     this.host.send('toastState', { state })
   }
-  async toastAction(action: { id: string }) {
+  async toastAction(action: { id: string; index?: number }) {
     const toast = this.toastCurrent
     if (!toast || toast.id !== action.id) return
     this.toastCurrent = null
-    await toast.run?.()
+    await toast.runs[action.index ?? 0]?.()
   }
   /** Re-send the open sheet after its state changed in place (same window and ID). */
   refresh() {

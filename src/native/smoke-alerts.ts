@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { NativeSheetAction } from '../shared/native-sheet'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { showProjectMemoryNote } from './memory-note'
 import { NativeSheetController } from './sheets-runtime'
 import { waitFor } from './smoke-wait'
 import { NativeSupportSheets } from './support-sheets'
@@ -73,7 +74,7 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
     async (url) => opened.push(url)
   )
   const onSheet = (action: NativeSheetAction) => void sheets.action(action)
-  const onToast = (action: { id: string }) => void sheets.toastAction(action)
+  const onToast = (action: { id: string; index?: number }) => void sheets.toastAction(action)
   host.on('sheet-action', onSheet)
   host.on('toast-action', onToast)
   try {
@@ -130,6 +131,42 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
     )
     await until('sheetInspect', () => opened.length === 1, 'View on GitHub did not open')
     assert.deepEqual(opened, ['https://github.com/alikimovich/trezi/issues/170'])
+
+    // LKM-177: the memory note after an automatic update offers View and Undo; Undo is
+    // stubbed, so the profile's memory is untouched.
+    const undone: string[] = []
+    const memory = (content: string, digest: string) => ({ content, digest, updatedAt: 0 })
+    showProjectMemoryNote(
+      sheets,
+      {
+        root: '/smoke/project',
+        before: memory('- Answer briefly.', 'a'),
+        after: memory('- Answer briefly.\n- Check the mobile width after UI changes.', 'b')
+      },
+      {
+        view: () => {},
+        undo: async (update) => {
+          undone.push(update.before.content)
+          return memory(update.before.content, 'c')
+        }
+      }
+    )
+    const note = await until(
+      'toastInspect',
+      (s) => s.visible && s.message === 'Project memory updated: +1 rule',
+      'Memory note did not show'
+    )
+    assert.deepEqual(note.actions, ['View', 'Undo'], 'The memory note offers View and Undo')
+    assert.ok(note.hitToast && note.pending, 'The memory note takes clicks and dismisses itself')
+    await capture('captureToast', 'memory-note-toast.png')
+    await host.request('toastPerform', { index: 1 })
+    await until('toastInspect', () => undone.length === 1, 'Undo did not run')
+    assert.deepEqual(undone, ['- Answer briefly.'], 'Undo restores the memory before the update')
+    await until(
+      'toastInspect',
+      (s) => s.visible && s.message === 'Project memory change undone',
+      'Undo did not confirm itself'
+    )
   } finally {
     host.off('sheet-action', onSheet)
     host.off('toast-action', onToast)

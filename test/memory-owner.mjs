@@ -681,6 +681,23 @@ try {
       'a stale proposal resolves null'
     )
     assert.equal((await store.get(alpha)).content, '- Manual only')
+
+    // Undo of an automatic update (LKM-177): only on the update's own revision, and it may empty memory.
+    const undoBase = await store.get(alpha)
+    const learned = await store.propose(alpha, undoBase, '- Manual only\n- Learned')
+    assert.ok(learned, 'the automatic update commits')
+    const undone = await store.restore(alpha, learned, '')
+    assert.equal(undone?.content, '', 'undo restores the earlier memory, even when it was empty')
+    await store.save(alpha, '- Manual only')
+    const relearned = await store.propose(alpha, await store.get(alpha), '- Manual only\n- Again')
+    await store.save(alpha, '- Edited after the update')
+    assert.equal(
+      await store.restore(alpha, relearned, '- Manual only'),
+      null,
+      'undo after a later edit is refused'
+    )
+    assert.equal((await store.get(alpha)).content, '- Edited after the update')
+    await store.save(alpha, '- Manual only')
     await queue.enqueue(alpha, async () => {
       throw new Error('model unavailable')
     })

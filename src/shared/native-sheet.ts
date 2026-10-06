@@ -55,8 +55,10 @@ export interface NativeSheetState {
 export interface NativeToastState {
   id: string
   message: string
-  /** The label of its one action; the host reports a click as `toast-action`. */
+  /** The label of its first action; the host reports a click as `toast-action`. */
   action?: string
+  /** Every action label when there are two (View, Undo); a click reports its `index`. */
+  actions?: string[]
   seconds: number
 }
 /** `section` is the pane selected when the action was sent; `section` alone just selects it. */

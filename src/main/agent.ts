@@ -71,8 +71,10 @@ import {
   createProjectMemoryUpdateQueue,
   ProjectMemoryError,
   type ProjectMemoryStore,
+  type ProjectMemoryUpdate,
   type ProjectMemoryUpdateQueue
 } from './project-memory'
+import { refineProjectMemory } from './project-memory-evaluation'
 import { cancelProjectUi, projectUiInstructions, setProjectUiEnabled } from './project-ui'
 import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
@@ -136,7 +138,8 @@ const noMemoryOwner = async (): Promise<never> => {
 let memoryOwner: (dir: string) => ProjectMemoryStore = () => ({
   get: noMemoryOwner,
   save: noMemoryOwner,
-  propose: noMemoryOwner
+  propose: noMemoryOwner,
+  restore: noMemoryOwner
 })
 export function setProjectMemoryOwner(owner: (dir: string) => ProjectMemoryStore): void {
   memoryOwner = owner
@@ -147,7 +150,20 @@ let _memoryStore: ProjectMemoryStore | null = null
 const memoryStore = (): ProjectMemoryStore => (_memoryStore ??= memoryOwner(dataDir()))
 let _memoryUpdateQueue: ProjectMemoryUpdateQueue | null = null
 const memoryUpdateQueue = (): ProjectMemoryUpdateQueue =>
-  (_memoryUpdateQueue ??= createProjectMemoryUpdateQueue(memoryStore()))
+  (_memoryUpdateQueue ??= createProjectMemoryUpdateQueue(memoryStore(), (update) => {
+    for (const listener of memoryUpdateListeners) listener(update)
+  }))
+const memoryUpdateListeners = new Set<(update: ProjectMemoryUpdate) => void>()
+/** Hears every automatic memory update the owner committed (the native note). */
+export function onProjectMemoryUpdated(
+  listener: (update: ProjectMemoryUpdate) => void
+): () => void {
+  memoryUpdateListeners.add(listener)
+  return () => memoryUpdateListeners.delete(listener)
+}
+/** Undo an automatic update; `null` when memory changed since, so nothing was undone. */
+export const undoProjectMemoryUpdate = (update: ProjectMemoryUpdate) =>
+  memoryStore().restore(update.root, update.after, update.before.content)
 
 /** The memory version already present in each live provider's context. */
 const memoryInjection = createProjectMemoryInjection(memoryStore)
@@ -307,8 +323,12 @@ function evaluateProjectMemory(sessionKey: string): void {
   if (!evaluate) return
   const root = session.record.projectRoot
   const options = { ...session.options }
-  void memoryUpdateQueue().enqueue(root, (currentMemory) =>
-    evaluate(currentMemory, transcript, options)
+  // The chat's worktree and the live checkout: a token the turn added is in one of them.
+  const roots = [session.root, root]
+  void memoryUpdateQueue().enqueue(root, async (currentMemory) =>
+    refineProjectMemory(currentMemory, await evaluate(currentMemory, transcript, options), {
+      roots
+    })
   )
 }
 

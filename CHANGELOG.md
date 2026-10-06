@@ -45,6 +45,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.
 - Renamed the app to Trezi; projects that use the earlier setup names are migrated once on open.
+- Project memory keeps only durable rules a future chat could not learn from the code (preferences, design rules, constraints, project facts, pitfalls), each dated; one-off requests are no longer stored and existing ones are cleaned up, a design token becomes a rule only once it exists in the code, agents no longer report a requested change as "saved in memory", and each automatic update shows "Project memory updated: +1 rule" with View and Undo (LKM-177).
 - Builds sign Trezi with a stable local identity when possible so Keychain “Always Allow” and privacy grants survive rebuilds; after updating, approve the Keychain once more, then not again.
 - Connection keys and the subscription token are encrypted through `Contents/Helpers/TreziSecrets`; the master key lives in `dev.trezi.native.secrets`, migrated once from the earlier item name.
 - Chat: the token counter only shows while a turn runs, on its own line under the status; Copy/Revert under a response appear on hover or keyboard focus, without moving the layout.

@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 25, 'version bumped to 25')
+assert(TREZI_RULES_VERSION === 26, 'version bumped to 26')
 assert(r.includes(`v${TREZI_RULES_VERSION}`), 'rules carry the version marker')
 assert(r.includes('before scaffolding or'), 'new projects ask about unresolved setup choices')
 assert(r.includes('after these files successfully land'), 'environment refresh follows landing')
@@ -54,6 +54,19 @@ const withMemory = treziRules({ projectMemory: '- Use trezi/master as integratio
 assert(/project memory/i.test(withMemory), 'memory: durable context section present')
 assert(/Use trezi\/master as integration/.test(withMemory), 'memory: saved decision injected')
 assert(!/<project-memory>/.test(r), 'memory: empty default adds no section')
+// LKM-177: memory never stands in for the requested change, with or without memory.
+assert(/## Project memory is not work/.test(r), 'memory: not-work section is always present')
+assert(
+  /Never report a requested change as "saved in\s+memory"/.test(r),
+  'memory: forbids reporting a change as saved in memory'
+)
+assert(/never applies a\s+change/.test(r), 'memory: saving to memory applies nothing')
+assert(
+  !treziRules({ projectMemory: '- Answer briefly. <!-- added 2026-10-06 -->' }).includes(
+    'added 2026-10-06'
+  ),
+  'memory: source tags stay out of chat context'
+)
 
 // R3 — preview tools appear only when a provider opts into observation.
 // Generic/Gemini prompts do not advertise them.
