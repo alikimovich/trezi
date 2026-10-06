@@ -353,7 +353,8 @@ export type AgentEvent = (
   /** A detached background spawn finished — drop its working rail row. `branch`
    *  is null when it auto-applied onto the working tree, else the durable review
    *  branch. Comments can use `summary` + `files` for a parent-chat notification;
-   *  automatic edit origins deliberately remain out of the transcript. */
+   *  automatic edit origins deliberately remain out of the transcript. `label` is
+   *  the comment's own text, one line (LKM-178): the collapsed result row names it. */
   | {
       type: 'spawn-finished'
       outcome?: 'applied' | 'review' | 'failed' | 'cancelled' | 'no-change'
@@ -361,6 +362,7 @@ export type AgentEvent = (
       origin?: BackgroundSpawnOrigin
       summary?: string
       files?: string[]
+      label?: string
     }
   /** Main starts one bounded reconciliation turn in the originating chat. */
   | { type: 'reconciliation-started' }

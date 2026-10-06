@@ -181,22 +181,30 @@ export class NativeChatController {
           const outcome = event.outcome
           const title =
             outcome === 'applied'
-              ? 'Comment applied.'
+              ? 'Comment applied'
               : outcome === 'cancelled'
-                ? 'Comment cancelled.'
+                ? 'Comment cancelled'
                 : outcome === 'failed'
-                  ? 'Comment failed.'
+                  ? 'Comment failed'
                   : outcome === 'no-change'
-                    ? 'Comment finished without changes.'
+                    ? 'Comment finished without changes'
                     : event.branch
-                      ? 'Comment finished — changes are ready for review.'
-                      : 'Comment finished without a confirmed result.'
+                      ? 'Comment finished — changes are ready for review'
+                      : 'Comment finished without a confirmed result'
+          const partial =
+            event.branch && (outcome === 'failed' || outcome === 'cancelled')
+              ? 'Partial changes are saved for review.'
+              : ''
           const text =
-            title +
-            (event.branch && (outcome === 'failed' || outcome === 'cancelled')
-              ? ' Partial changes are saved for review.'
-              : '') +
+            `${title}.` +
+            (partial ? ` ${partial}` : '') +
             (event.summary ? `\n\n${event.summary}` : '')
+          // LKM-178: collapsed to one line naming the comment; an event without its
+          // text (an older Bun, a spawn that never started) names the summary's first line.
+          const line = (event.label ?? event.summary ?? '')
+            .split('\n')
+            .map((l) => l.trim())
+            .find(Boolean)
           chat.messages.push({
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -204,6 +212,11 @@ export class NativeChatController {
             text,
             statuses: [],
             segments: [{ kind: 'text', text }],
+            comment: {
+              title,
+              line: line ?? '',
+              detail: [partial, event.summary ?? ''].filter(Boolean).join('\n\n')
+            },
             ...(outcome === 'applied' ? { revertGroup: `comment:${event.sessionId}` } : {})
           })
           if (chat.chat !== this.active) chat.needsReview = true

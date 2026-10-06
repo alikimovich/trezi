@@ -20,6 +20,9 @@ export interface NativeChatMessage {
   }[]
   selection?: { tag: string; ident: string; source: string | null }
   revertGroup?: string
+  /** A comment agent's result (LKM-178): shown collapsed as "<title>: <line>", where
+   *  `line` names the comment; `detail` (partial-changes note and summary) on expand. */
+  comment?: { title: string; line: string; detail: string }
   /** Tokens this assistant turn's model calls reported (cached is part of input). */
   usage?: { input: number; output: number; cached: number }
 }

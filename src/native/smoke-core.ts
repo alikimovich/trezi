@@ -9,6 +9,7 @@ import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
+import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
 import { smokeFocusHooks } from './smoke-focus'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
@@ -756,6 +757,13 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         await host.request('chatAttachmentPreview', { attachment: null })
         await clearComposer()
+      }
+    },
+    {
+      name: 'comment-rows',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkCommentRows(host, artifacts)
       }
     },
     {

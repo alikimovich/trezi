@@ -18,6 +18,7 @@ import type {
 import { backgroundAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
 import { projectKey } from '../shared/projectKey'
+import { oneLine } from '../shared/selection-context'
 import { type ProviderSession, pickProvider } from './backends'
 import { resumeSummary } from './backends/claude-resume'
 import { handoffPrompt } from './backends/conversation-handoff'
@@ -409,6 +410,7 @@ interface Spawn {
   parentRoot: string
   text: string
   origin: BackgroundSpawnOrigin
+  label?: string
   cancelled?: boolean
   finalizing?: boolean
   error?: string
@@ -426,6 +428,8 @@ interface QueuedSpawn {
   text: string
   options: AgentOptions
   origin: BackgroundSpawnOrigin
+  /** The comment's own text, one line, for the parent chat's result row (LKM-178). */
+  label?: string
 }
 const queuedSpawns = new Map<string, QueuedSpawn>()
 // Admitted by the owner but still creating their worktree + session (not yet in `spawns`).
@@ -522,6 +526,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
   if (!spawn || spawn.finalizing) return
   spawn.finalizing = true
   const { session, wt, parentSessionKey, parentRoot, text, origin } = spawn
+  const label = spawn.label ? { label: spawn.label } : {}
   await enqueueRepoWrite(parentRoot, async () => {
     try {
       closeSession(session) // finalize + persist the record (removed below if we auto-apply)
@@ -566,6 +571,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           branch: null,
           origin,
           ...(summary ? { summary } : {}),
+          ...label,
           outcome: 'applied',
           files: auto.edits.map((e) => basename(e.file))
         } satisfies AgentEvent)
@@ -587,6 +593,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           branch: committed ? wt.branch : null,
           origin,
           ...(summary ? { summary } : {}),
+          ...label,
           outcome: spawn.cancelled
             ? 'cancelled'
             : status === 'error'
@@ -606,6 +613,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         sessionId: id,
         branch: wt.branch,
         origin,
+        ...label,
         outcome: 'failed',
         summary:
           'Could not finish saving the background edit. Its worktree has been kept for recovery.'
@@ -658,6 +666,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       sessionId: q.id,
       branch: null,
       origin: q.origin,
+      ...(q.label ? { label: q.label } : {}),
       outcome: 'failed'
     } satisfies AgentEvent)
     void admitNext(q.id)
@@ -700,7 +709,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       parentSessionKey: q.parentSessionKey,
       parentRoot: q.root,
       text: q.text,
-      origin: q.origin
+      origin: q.origin,
+      label: q.label
     })
     releaseSlot()
     s.send(q.text)
@@ -719,6 +729,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       sessionId: q.id,
       branch: null,
       origin: q.origin,
+      ...(q.label ? { label: q.label } : {}),
       outcome: 'failed'
     } satisfies AgentEvent)
     void admitNext(q.id)
@@ -1501,7 +1512,8 @@ export function registerAgentIpc(
       text: string,
       requestedParentSessionKey: string,
       options: AgentOptions = {},
-      requestedOrigin: BackgroundSpawnOrigin = 'comment'
+      requestedOrigin: BackgroundSpawnOrigin = 'comment',
+      requestedLabel?: string
     ) => {
       // Worktrees need a repo TOP LEVEL — a non-repo (or subdir) falls back to chat.
       if (!(await isRepoRoot(root))) return { ok: false, reason: 'not-a-repo' }
@@ -1519,6 +1531,8 @@ export function registerAgentIpc(
       // the established comment UX instead of creating an unhandled event variant.
       const origin: BackgroundSpawnOrigin =
         requestedOrigin === 'text-edit' ? 'text-edit' : 'comment'
+      const label =
+        typeof requestedLabel === 'string' ? oneLine(requestedLabel, 300) || undefined : undefined
       // Stable id assigned up front so the rail row survives a queued→running flip.
       const id = randomUUID().slice(0, 8)
       const q: QueuedSpawn = {
@@ -1528,7 +1542,8 @@ export function registerAgentIpc(
         parentSessionKey,
         text,
         options: backgroundAgentOptions(options, origin),
-        origin
+        origin,
+        label
       }
       // Held before the owner answers, so a slot freed meanwhile can start it.
       queuedSpawns.set(id, q)
@@ -1570,6 +1585,7 @@ export function registerAgentIpc(
         sessionId: id,
         branch: null,
         origin: q.origin,
+        ...(q.label ? { label: q.label } : {}),
         outcome: 'cancelled'
       } satisfies AgentEvent)
       return

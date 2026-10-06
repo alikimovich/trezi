@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-178: collapsed comment result rows
+
+- **Why.** A finished preview comment posted "Comment applied." plus the agent's whole summary as an ordinary assistant message, which dominated the chat.
+- **Data.** `agent:spawn-comment` takes an optional sixth argument, the comment's one-line label (the comment text, else `<tag>`), sanitised with `oneLine` and capped at 300. It rides on the queued spawn and every `spawn-finished` emit as `label`. The chat controller keeps `text` unchanged (Copy) and adds `comment: { title, line, detail }`: the title without its period, `line` = label or else the summary's first non-empty line (older events, spawns that never started), `detail` = partial-changes note + summary. These messages are in-memory only (never in the transcript), so there is no persisted legacy shape.
+- **UI.** `ChatCommentRow.swift`: one line "<title>: <line>" (title medium, line secondary, tail-truncated) with a chevron; the whole line is the toggle. Expanded shows the detail as Markdown and Copy/Revert (`ChatActionButtonStyle`, now internal). The bubble is full chat-column width, radius 14 like the user bubble, filled with `.quaternary.opacity(0.5)` (the user bubble's semantic fill at half strength). Expansion is `ChatModel.expandedComments`, per message and per session.
+- **Test.** New `comment-rows` smoke check (group `chat`, `smoke-comment-rows.ts`) posts all five outcomes (one without a label) through `nativeChat.event`, then the test-only `chatCommentRows` host command forces the window's own appearance (never the system's), toggles rows through the same `toggleComment` a click uses, captures the foreground chat and samples each bubble's fill against the chat background and a reference user bubble. It asserts single-line equal collapsed heights (including a long comment), expansion/collapse per row, and 2 ≤ fill contrast < user-bubble contrast in light and dark. Captures: `comment-rows-{light,dark}-{collapsed,expanded}.png`.
 ## 2026-10-06 — LKM-177: project memory principles, rule format, cleanup and Undo
 
 - **Why.** Real memory kept one-off change requests that were already built ("The Themer preview should show only the Home screen…") and now acted as stale constraints. In issue #230 an agent that could not edit files reported "--radius-pill: 9999px is saved in project memory", and a later chat applied it "per project memory".

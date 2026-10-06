@@ -96,7 +96,15 @@ for (const group of NATIVE_SMOKE_GROUPS) {
 }
 assert.deepEqual(
   selectSmokeChecks(names, parseSmokeGroups(['--only=chat'])).map((c) => c.name),
-  ['startup', 'open-project', 'chat-ready', 'native-chat', 'sent-attachments', 'final-shell']
+  [
+    'startup',
+    'open-project',
+    'chat-ready',
+    'native-chat',
+    'sent-attachments',
+    'comment-rows',
+    'final-shell'
+  ]
 )
 for (const group of ['islands', 'shadow-light'])
   assert.ok(
@@ -114,7 +122,7 @@ assert.deepEqual(notices, [], 'A full run prints no filter notice')
 selectSmokeChecks(names, parseSmokeGroups(['--only=chat']), (line) => notices.push(line))
 assert.match(
   notices.join(),
-  /^NATIVE SMOKE FILTERED \(--only=chat\): running 6 of \d+ checks.*not full-suite acceptance/
+  /^NATIVE SMOKE FILTERED \(--only=chat\): running 7 of \d+ checks.*not full-suite acceptance/
 )
 console.log(
   'Native smoke check selection: every check classified, prelude kept, dependencies satisfied for each group.'
