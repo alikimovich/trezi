@@ -144,6 +144,8 @@ const host = compile(
     join(root, 'src/native/ComposerQueue.swift'),
     join(root, 'src/native/ComposerBeam.swift'),
     join(root, 'src/native/Chat.swift'),
+    join(root, 'src/native/ChatCommentRow.swift'),
+    join(root, 'src/native/ChatCommentCapture.swift'),
     join(root, 'src/native/ChatScrollStyle.swift'),
     join(root, 'src/native/ChatLatestButton.swift'),
     join(root, 'src/native/ChatEnvironment.swift'),

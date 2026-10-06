@@ -329,7 +329,9 @@ export function installNativeInspector(
             prompt,
             parent,
             backgroundAgentOptions(current ? agentOptionsFor(current.settings) : {}, 'comment'),
-            'comment'
+            'comment',
+            // The result row names the comment by its text, or by the element (LKM-178).
+            oneLine(value.text, 300) || `<${oneLine(value.el.tag, 32)}>`
           )
           .then((result) => {
             if (!result.ok && ['not-a-repo', 'unsupported-backend'].includes(result.reason))

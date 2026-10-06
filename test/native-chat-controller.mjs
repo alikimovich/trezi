@@ -575,7 +575,44 @@ for (const [outcome, branch, expected] of [
   const message = controller.get('a').messages.at(-1)
   assert.equal(message.text, expected)
   assert.equal(message.revertGroup, outcome === 'applied' ? 'comment:outcome-test' : undefined)
+  assert.equal(`${message.comment.title}.`, expected.split('. ')[0].replace(/\.?$/, '.'))
+  assert.equal(message.comment.line, '')
 }
+// LKM-178: the collapsed row names the comment by its text; without it (older events),
+// by the summary's first line. The detail holds the partial-changes note and summary.
+controller.event({
+  type: 'spawn-finished',
+  projectKey: 'a',
+  sessionId: 'labelled',
+  outcome: 'failed',
+  branch: 'trezi/comment-labelled',
+  origin: 'comment',
+  label: 'Make the heading blue',
+  summary: 'Edited the heading.\nThe build failed.'
+})
+assert.deepEqual(controller.get('a').messages.at(-1).comment, {
+  title: 'Comment failed',
+  line: 'Make the heading blue',
+  detail: 'Partial changes are saved for review.\n\nEdited the heading.\nThe build failed.'
+})
+controller.event({
+  type: 'spawn-finished',
+  projectKey: 'a',
+  sessionId: 'unlabelled',
+  outcome: 'no-change',
+  branch: null,
+  origin: 'comment',
+  summary: '\n  The button is already blue.  \nNothing changed.'
+})
+assert.deepEqual(controller.get('a').messages.at(-1).comment, {
+  title: 'Comment finished without changes',
+  line: 'The button is already blue.',
+  detail: '\n  The button is already blue.  \nNothing changed.'
+})
+assert.equal(
+  controller.get('a').messages.at(-1).text,
+  'Comment finished without changes.\n\n\n  The button is already blue.  \nNothing changed.'
+)
 
 // Timing belongs to a turn, not the lifetime of a chat; waits/landing are included.
 const {
