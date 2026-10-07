@@ -116,10 +116,18 @@ export function treziRules(opts?: {
     `  preview and check the Home tab"), or "Trezi will <do X> automatically when <Y>",`,
     `  and only when that is true (after publish_update: "Trezi updates PR #12 when this`,
     `  turn lands").`,
-    `Trezi checks the preview by itself after a turn lands (a screenshot and console errors)`,
-    `and posts the result in this chat, so a visual check that waits for landing is not`,
-    `pending and needs nothing from the user. Never ask the user to report back so you can`,
-    `continue.`,
+    ...(opts?.background
+      ? [
+          `Trezi does not check the preview after a background agent lands, and the user is not`,
+          `watching: a visual check you cannot make yourself is a user action, so name it`,
+          `exactly ("Open the preview and check the Home tab") in your final message.`
+        ]
+      : [
+          `Trezi checks the preview by itself after a turn lands (a screenshot and console errors)`,
+          `and posts the result in this chat, so a visual check that waits for landing is not`,
+          `pending and needs nothing from the user.`
+        ]),
+    `Never ask the user to report back so you can continue.`,
     ``,
     `## Releases and version bumps`,
     `When the user asks for a version bump or a release and the project has a publish`,
@@ -284,7 +292,7 @@ export function treziRules(opts?: {
   }
 
   lines.push(
-    ...(previewObservation ? previewVerification : agentBrowserVerification),
+    ...(previewObservation ? previewVerification : agentBrowserVerification)(!!opts?.background),
     ...noDevTools
   )
 
@@ -292,7 +300,7 @@ export function treziRules(opts?: {
 }
 
 /** LKM-138: with the preview tools, Trezi's own WebKit preview is where agents look. */
-const previewVerification = [
+const previewVerification = (background: boolean) => [
   ``,
   `## Required visual verification in the Trezi preview`,
   `For web UI changes, visual verification, responsive testing, or inspecting styles,`,
@@ -306,8 +314,7 @@ const previewVerification = [
   `\`preview_screenshot\` before finishing.`,
   `Private worktree edits may not be served until Trezi lands the turn: if the preview`,
   `still shows older code, never report verification as passed, and do not bypass Trezi's`,
-  `worktree/landing lifecycle to make it visible. Do not call it pending either: Trezi`,
-  `checks the preview after landing and posts the result in this chat.`,
+  `worktree/landing lifecycle to make it visible. ${landingOwner(background)}`,
   `Before finishing, report the route, sizes, and what you checked, and any blockers.`,
   ``,
   `Use \`agent-browser\` only for scripted multi-step interactions the preview tools`,
@@ -319,7 +326,13 @@ const previewVerification = [
   `start another dev server), and close only your own session.`
 ]
 
-const agentBrowserVerification = [
+/** Who owns a visual check that waits for landing: Trezi after a chat turn, the user after a background agent. */
+const landingOwner = (background: boolean) =>
+  background
+    ? `Do not call it pending either: Trezi does not check after a background agent lands, so name the user action ("Open the preview and check <what>").`
+    : `Do not call it pending either: Trezi checks the preview after landing and posts the result in this chat.`
+
+const agentBrowserVerification = (background: boolean) => [
   ``,
   `## Required browser verification with agent-browser`,
   `For web UI changes, visual verification, responsive testing, or browser interaction,`,
@@ -338,8 +351,7 @@ const agentBrowserVerification = [
   `dev server or attach to the user's browser. Check that the page contains the change`,
   `being tested. Private worktree edits may not be served until Trezi lands the turn:`,
   `if the preview still shows older code, never report verification as passed, and do`,
-  `not bypass Trezi's worktree/landing lifecycle to make it visible. Do not call it`,
-  `pending either: Trezi checks the preview after landing and posts the result in this chat.`,
+  `not bypass Trezi's worktree/landing lifecycle to make it visible. ${landingOwner(background)}`,
   `Use \`open <url>\`, \`snapshot\`, \`get text|html|styles|value <sel>\`, \`console\`,`,
   `\`errors\`, \`eval <js>\`, \`click <sel>\`, and \`screenshot <path>\` as appropriate.`,
   `Exercise the changed interaction and inspect screenshots of the affected UI.`,

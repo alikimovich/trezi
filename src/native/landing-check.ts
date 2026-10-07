@@ -1,7 +1,8 @@
-import { capturePreview, getPreviewUrl, previewAgentHost } from '../main/preview-state'
+import { getPreviewUrl, previewAgentHost } from '../main/preview-state'
 import { environmentChanges } from '../shared/environment-changes'
 import type { NativeLandingCheck } from '../shared/native-chat'
 import type { NativeChatMirror } from '../shared/native-chat-controller'
+import { views } from './platform'
 
 /**
  * LKM-195: a turn's edits reach the preview only when Trezi lands them, after the agent
@@ -33,8 +34,8 @@ export const LANDING_CHECK = {
   /** Errors listed in the row; the line still counts all of them. */
   shownErrors: 3,
   errorChars: 200,
-  /** A larger capture is left out rather than carried in every chat frame. */
-  thumbnailBytes: 256 * 1024
+  /** The row keeps its thumbnail in every chat frame: a 160 px JPEG, never a larger capture. */
+  thumbnailBytes: 48 * 1024
 }
 
 const origin = (url: string) => {
@@ -163,11 +164,8 @@ export function previewLandingHost(server: (root: string) => string | null): Lan
       )) as { entries?: { text: string; at: number }[] } | null
       return Array.isArray(read?.entries) ? read.entries : null
     },
-    capture: async () => {
-      const image = await capturePreview()
-      if (!image || image.isEmpty()) return null
-      return image.toJPEG(70).toString('base64') || null
-    },
+    // The row shows 64x40 pt: Swift scales the frame to 160 px, not the agent's 900 px.
+    capture: async () => (await views.get('preview')?.webContents.captureThumbnail()) || null,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: Date.now
   }

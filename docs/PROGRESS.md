@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-195 repair: no false owner for background agents, small thumbnail
+
+- **Background agents.** The check skips background landings (`sessionId`), yet rules v31 told every agent that Trezi checks after landing. `treziRules({ background: true })` now says Trezi does not check and the visual check is a user action to name ("Open the preview and check the Home tab"): the "Trezi checks…" sentences in the ownerless section and in both verification blocks are for chat turns only (`landingOwner` in `src/main/rules.ts`). `test/rules.mjs` asserts the background variants make no such claim (with or without preview tools) and name the user action.
+- **Thumbnail.** The row now carries a 160 px wide JPEG (quality 0.6, tens of KB) from a new `thumbnail` option of the host's `capture` request (`Host.swift`, `NativeView.webContents.captureThumbnail`), instead of the agent's 900 px frame; `LANDING_CHECK.thumbnailBytes` is 48 KB. Rows stay in `chat.messages`, so every chat frame no longer carries and decodes the large capture.
+
 ## 2026-10-07 — LKM-195: no ownerless pending items; Trezi checks the preview after landing
 
 - **Why.** Replies ended with "visual verification remains pending" or "v0.2.8 still needs tagging. Tell me when it's there and I'll tag it." The user could not tell whether something was still running or whether they had to act.

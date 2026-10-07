@@ -131,6 +131,8 @@ export class NativeView {
       height: number
     }) => Promise<NativeImage>
     setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
+    /** A small JPEG (base64, at most 160 px wide) of the current frame, for chat rows. */
+    captureThumbnail: () => Promise<string>
   }
   constructor(readonly id: string) {
     views.set(id, this)
@@ -175,6 +177,8 @@ export class NativeView {
         ),
       captureRect: async (rect) =>
         new NativeImage(await bridge().request('capture', { view: id, rect })),
+      captureThumbnail: async () =>
+        (await bridge().request('capture', { view: id, thumbnail: true })).jpeg,
       setViewport: (width) => bridge().request('previewViewport', { view: id, width })
     }
   }

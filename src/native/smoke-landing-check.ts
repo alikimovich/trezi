@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { capturePreview } from '../main/preview-state'
 import type { NativeBridge } from './bridge'
 import { nativeChat, postLandingCheck } from './chat-runtime'
-import { LANDING_CHECK, type LandingCheckHost, LandingChecks } from './landing-check'
+import {
+  LANDING_CHECK,
+  type LandingCheckHost,
+  LandingChecks,
+  previewLandingHost
+} from './landing-check'
 import { inspectUntil } from './smoke-wait'
 
 const rect = (value: string) => {
@@ -22,8 +26,11 @@ const FALLBACK =
 export async function checkLandingChecks(host: NativeBridge, artifacts: string) {
   const chat = nativeChat.get(nativeChat.active)
   const kept = chat.messages.length
-  const image = await capturePreview()
-  const jpeg = image && !image.isEmpty() ? image.toJPEG(70).toString('base64') : ''
+  const jpeg = (await previewLandingHost(() => SERVER).capture()) ?? ''
+  assert.ok(
+    !jpeg || jpeg.length * 0.75 <= LANDING_CHECK.thumbnailBytes,
+    `The preview thumbnail is small (${Math.round((jpeg.length * 0.75) / 1024)} KB)`
+  )
   const landings: { errors: { text: string; at: number }[]; server: string | null }[] = [
     { errors: [], server: SERVER },
     {

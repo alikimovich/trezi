@@ -38,12 +38,6 @@ for (const rules of [r, treziRules({ previewTools: true }), treziRules({ backgro
     /Never ask the user to report back so you can\s+continue/.test(rules),
     'R-owner: no "tell me when it is there"'
   )
-  assert(
-    /Trezi checks the preview by itself after a turn lands \(a screenshot and console errors\)/.test(
-      rules
-    ),
-    'R-owner: the post-landing check owns a visual check that waits for landing'
-  )
   // Releases: end to end with the Git/publish tools; questions only for real decisions.
   assert(/## Releases and version bumps/.test(rules), 'R-release: section present')
   assert(
@@ -62,6 +56,41 @@ for (const rules of [r, treziRules({ previewTools: true }), treziRules({ backgro
   assert(/never "tell me when it's merged and I'll tag it"/.test(rules), 'R-release: no handoff')
   assert(!/report verification as pending/.test(rules), 'R-owner: no "pending" verification')
 }
+// The automatic post-landing check exists for chat turns only: background landings get none,
+// so a claim that Trezi checks would leave their visual check with a false owner.
+const AUTO_CHECK = /Trezi checks the preview by itself after a turn lands/
+for (const rules of [r, treziRules({ previewTools: true })])
+  assert(
+    AUTO_CHECK.test(rules) &&
+      /a screenshot and console errors\)\s+and posts the result/.test(rules),
+    'R-owner: the post-landing check owns a visual check that waits for landing'
+  )
+for (const rules of [
+  treziRules({ background: true }),
+  treziRules({ background: true, previewTools: true }),
+  treziRules({ background: true, previewObservationTools: true })
+]) {
+  assert(!AUTO_CHECK.test(rules), 'R-owner: background agents are not promised the check')
+  assert(!/Trezi checks the preview after landing/.test(rules), 'R-owner: no automatic claim')
+  assert(!/posts the result in this chat/.test(rules), 'R-owner: no chat row promised')
+  assert(
+    /Trezi does not check the preview after a background agent lands/.test(rules) &&
+      /Open the preview and check the Home tab/.test(rules),
+    'R-owner: background agents name the user action for a visual check'
+  )
+}
+assert(
+  /Do not call it pending either: Trezi does not check after a background agent lands/.test(
+    treziRules({ background: true, previewTools: true })
+  ),
+  'R-owner: background preview verification names a user action'
+)
+assert(
+  /Do not call it pending either: Trezi does not check after a background agent lands/.test(
+    treziRules({ background: true })
+  ),
+  'R-owner: background browser verification names a user action'
+)
 // LKM-193: background agents ask only for the user's own choices, else default and say so.
 assert(!/## Background agents/.test(r), 'R-bg: interactive chats get no background section')
 const bg = treziRules({ background: true })
