@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
+import type { DependencyIssue } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { currentAgentGitAccess } from './agent-git-access'
 import {
@@ -173,13 +174,18 @@ function recreateReclaimed(st: ChatState): Promise<void> {
  * between-turn edits. Queued on the chat's chain so it waits out any in-flight
  * post-`done` merge. Skipped while parked (never merge live drift into unmerged work).
  * A checkout idle cleanup removed is recreated first, at the same path and id.
- * Awaited by `agent:send` before `session.send`.
+ * Awaited by `agent:send` before `session.send`. Resolves to what keeps the checkout's
+ * dependencies from installing (conflict markers, a failed install), which the turn
+ * reports instead of being refused (LKM-194); null when there is nothing to report.
  */
-export async function beforeTurn(sessionKey: string, _text: string): Promise<void> {
+export async function beforeTurn(
+  sessionKey: string,
+  _text: string
+): Promise<DependencyIssue | null> {
   const st = states.get(sessionKey)
-  if (!st) return
+  if (!st) return null
   st.lastUsed = Date.now()
-  await onChain(st, async () => {
+  return onChain(st, async () => {
     await recreateWorkspace(st)
     await settleReverted(st)
     // LKM-196: a park whose work is already live (or whose batch went missing) is
@@ -187,8 +193,11 @@ export async function beforeTurn(sessionKey: string, _text: string): Promise<voi
     await reconcileParkOnChain(sessionKey, st, 'turn-start', true)
     // Helpers live under excluded `.trezi/` paths, so a parked chat gets them too
     // without looking changed (LKM-153: a stopped chat ran setup without them).
-    if (st.parked) return editingOwner().syncSetupHelpers(st.liveRoot, st.wt.path)
-    await syncFromLive(st.liveRoot, st.wt)
+    if (st.parked) {
+      await editingOwner().syncSetupHelpers(st.liveRoot, st.wt.path)
+      return null
+    }
+    return (await syncFromLive(st.liveRoot, st.wt)).dependencies
   })
 }
 

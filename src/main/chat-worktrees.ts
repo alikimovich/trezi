@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process'
 import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import type { DependencyIssue } from '../shared/dependency-issue'
+import { DependencyConflictError, hasConflictMarkers, markerConflict } from './conflict-markers'
 import { editingOwner } from './editing-owner'
 import { productLog } from './product-log'
 import { repositoryOwner } from './repository-owner'
@@ -53,9 +55,7 @@ export async function conflictMarkerFiles(wt: Worktree, files: string[]): Promis
     } catch {
       continue
     }
-    if (/^<<<<<<< .+$/m.test(text) && /^=======$/m.test(text) && /^>>>>>>> .+$/m.test(text)) {
-      marked.push(rel)
-    }
+    if (hasConflictMarkers(text)) marked.push(rel)
   }
   return marked
 }
@@ -86,20 +86,44 @@ export function createChatWorktree(
  * `wt.baseSha` in place to the new fork point. `backgroundInstall` (a spare taken by a
  * new chat, LKM-182) leaves a needed install running; an install already running in
  * the checkout is never awaited or restarted here.
+ *
+ * LKM-194: dependencies never fail the sync. Synced conflict markers (manifests skip
+ * the install) and a failed install come back as `dependencies` for the turn to report.
  */
 export async function syncFromLive(
   liveRoot: string,
   wt: Worktree,
-  opts: { backgroundInstall?: boolean } = {}
-): Promise<{ synced: boolean }> {
+  opts: { backgroundInstall?: boolean; install?: (checkout: string) => Promise<void> } = {}
+): Promise<{ synced: boolean; dependencies: DependencyIssue | null }> {
   await editingOwner().syncSetupHelpers(liveRoot, wt.path)
   const { synced, baseSha } = await repositoryOwner().syncWorktree({ ...wt, repoRoot: liveRoot })
   if (synced) productLog.info('worktree', 'Worktree synced from the live tree', { worktree: wt.id })
   wt.baseSha = baseSha
-  await provisionDependencies(liveRoot, wt.path, undefined, {
-    background: opts.backgroundInstall || dependenciesInstalling(wt.path)
-  })
-  return { synced }
+  const conflict = await markerConflict(wt.path)
+  let install: string | undefined
+  try {
+    await provisionDependencies(liveRoot, wt.path, opts.install, {
+      background: opts.backgroundInstall || dependenciesInstalling(wt.path)
+    })
+  } catch (error) {
+    if (!(error instanceof DependencyConflictError)) {
+      install = error instanceof Error ? error.message : String(error)
+      productLog.warn('worktree', 'Dependencies not installed; the turn starts anyway', {
+        worktree: wt.id
+      })
+    } else install = error.message
+  }
+  if (conflict)
+    productLog.warn('worktree', 'Synced files carry conflict markers', {
+      worktree: wt.id,
+      files: conflict.files.length,
+      manifests: conflict.manifests
+    })
+  const dependencies =
+    conflict || install
+      ? { ...(conflict ? { conflict } : {}), ...(install ? { install } : {}) }
+      : null
+  return { synced, dependencies }
 }
 
 export interface TurnOutcome {

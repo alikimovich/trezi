@@ -591,9 +591,57 @@ try {
     'runtime-only symlink does not block conflict preparation'
   )
 
+  // repo16 — LKM-194: a live package.json with unresolved conflict markers (a publish
+  // reconcile left them) syncs into the chat; the turn's sync reports the conflict with
+  // the version facts and never runs the install. A failing install is reported too.
+  const repo16 = makeRepo('repo16', {
+    'package.json': '{\n  "name": "shop",\n  "version": "0.2.6"\n}\n'
+  })
+  const wt16 = await createChatWorktree(repo16, 'chatsixteen', worktreesDir)
+  writeFileSync(
+    join(repo16, 'package.json'),
+    '{\n  "name": "shop",\n<<<<<<< HEAD\n  "version": "0.2.7"\n=======\n  "version": "0.2.8"\n>>>>>>> origin/trezi/main\n}\n'
+  )
+  let installs16 = 0
+  const counting = async () => {
+    installs16++
+  }
+  const s16 = await syncFromLive(repo16, wt16, { install: counting })
+  const c16 = s16.dependencies?.conflict
+  ok(s16.synced, 'repo16 the marked package.json syncs into the chat worktree')
+  ok(installs16 === 0, `no install is attempted on a marked manifest: ${installs16}`)
+  ok(
+    c16?.files.join() === 'package.json' && c16.manifests && c16.line === 3,
+    `the sync reports the manifest conflict: ${JSON.stringify(s16.dependencies)}`
+  )
+  ok(
+    c16?.version?.ours === '0.2.7' &&
+      c16.version.theirs === '0.2.8' &&
+      c16.version.keep === '0.2.8',
+    `the version conflict offers the higher SemVer: ${JSON.stringify(c16?.version)}`
+  )
+  // Resolved live: the conflict clears and the changed manifest installs again.
+  writeFileSync(join(repo16, 'package.json'), '{\n  "name": "shop",\n  "version": "0.2.8"\n}\n')
+  const r16 = await syncFromLive(repo16, wt16, { install: counting })
+  ok(
+    r16.dependencies === null && installs16 === 1,
+    `resolved: ${JSON.stringify(r16)} ${installs16}`
+  )
+  // An install that fails never fails the sync: the reason comes back for the turn.
+  writeFileSync(join(repo16, 'package.json'), '{\n  "name": "shop",\n  "version": "0.2.9"\n}\n')
+  const f16 = await syncFromLive(repo16, wt16, {
+    install: async () => {
+      throw new Error('bun install exited with code 1')
+    }
+  })
+  ok(
+    f16.dependencies?.install === 'bun install exited with code 1' && !f16.dependencies.conflict,
+    `a failed install is reported, not thrown: ${JSON.stringify(f16.dependencies)}`
+  )
+
   if (failed === 0)
     console.log(
-      'CHAT-WORKTREES OK — isolation/resolve/artifact-filter/temp-index/marker-safety/runtime-symlink/dirty-prepare'
+      'CHAT-WORKTREES OK — isolation/resolve/artifact-filter/temp-index/marker-safety/runtime-symlink/dirty-prepare/dependency-conflicts'
     )
   else console.error(`CHAT-WORKTREES: ${failed} assertion(s) failed`)
   process.exitCode = failed === 0 ? 0 : 1

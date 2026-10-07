@@ -24,6 +24,12 @@ listed string. Removing a shim needs a tested migration.
 | The one-time project migration (below) | `src/service/EditingLegacyNames.swift` |
 | This list | `docs/agent-guide/legacy-names.md`, `test/legacy-names-audit.mjs` |
 
+A path such as `~/Library/Application Support/Praxis Native/praxis/worktrees/<id>`
+in tool output (for example a `bun install` error from a chat worktree) is expected
+on a profile created before the rename. It does not mean a stale build. The profile
+alias row above keeps that directory in place. `Trezi Native` and `trezi` are aliases
+to it, and Git and package managers print the resolved path (checked in LKM-194).
+
 ## Retired
 
 These have no read path:
