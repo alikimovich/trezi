@@ -24,6 +24,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 - Chat island problems are one plain sentence instead of exception text, and an island whose turn did not land shows as Disabled with that reason; hidden and disabled islands stay that way across relaunch (LKM-181).
+- New chat opens at once with the composer focused: its workspace (a prewarmed spare when one is ready), dependencies and provider are prepared in the background, and a message sent before they are ready waits, showing "Preparing workspace…" after 300 ms (LKM-182).
 
 ### Fixed
 - Select mode highlights the hovered element again, and pointer moves over the preview are no longer slowed by a window hit test; the editing island still keeps hover, clicks and scrolls from reaching the page beneath it (LKM-173).

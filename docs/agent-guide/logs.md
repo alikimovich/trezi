@@ -47,6 +47,11 @@ Lifecycle facts only:
   model (`src/main/turn-log.ts`);
 - landing, parking and resolve steps, with the Git result;
 - worktree create, sync and remove;
+- New chat timing (LKM-182): `New chat composer ready` with each step's ms
+  (`src/native/workspace-controller.ts`), then `New chat workspace ready`, `New chat
+  provider started`, `New chat registered`, `New chat ready` and `New chat first send`
+  (wait and age) from `src/main/agent.ts`, the spare's ready/taken/removed lines and
+  background dependency installs;
 - provider helper start, exit and crash with status, and backend start and exit;
 - target dev server output category and length (the raw line stays in Activity);
 - preview load, reload, load failure and web-content crash;

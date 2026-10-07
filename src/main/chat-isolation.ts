@@ -4,6 +4,7 @@ import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
+import { spareWorktreeIds, takeSpare } from './chat-spare'
 import {
   type ChatState,
   chatDeps,
@@ -29,6 +30,7 @@ import { commitLiveTurn } from './live-commit'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
+import { dependencyInstall } from './worktree-dependencies'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
 export { handleReclaimed, hasParkRecord } from './chat-park'
@@ -94,7 +96,19 @@ export async function isolatedCwd(liveRoot: string, sessionKey: string): Promise
   try {
     const id = randomUUID().slice(0, 8)
     const dir = deps.worktreesDir()
+    // LKM-182: the project's prewarmed spare, brought up to the live tree on take.
+    const spare = await takeSpare(liveRoot)
     const wt = await enqueueRepoWrite(liveRoot, async () => {
+      if (spare) {
+        const synced = await syncFromLive(liveRoot, spare, { backgroundInstall: true }).catch(
+          async () => {
+            // The sync may have started an install in the checkout: let it settle first.
+            await dependencyInstall(spare.path)
+            await removeWorktree(liveRoot, spare, { intent: 'abandon' }).catch(() => {})
+          }
+        )
+        if (synced) return spare
+      }
       const created = await createChatWorktree(liveRoot, id, dir)
       await retireWorktreeBranch(created)
       return created
@@ -401,7 +415,7 @@ export async function retryLanding(
  *  skip set must include these so a crash-recovery sweep never reclaims a live chat's
  *  checkout (the global worktrees dir is shared across projects). */
 export function liveChatWorktreeIds(): string[] {
-  return [...states.values()].map((s) => s.wt.id)
+  return [...states.values()].map((s) => s.wt.id).concat(spareWorktreeIds())
 }
 
 /** Every open chat with a worktree (the idle sweep's candidates). */
@@ -485,6 +499,8 @@ export async function releaseChat(
           upsertParkRecord(st, outcome.files)
         }
       }
+      // A new-chat background install (LKM-182) may still be writing node_modules here.
+      await dependencyInstall(st.wt.path)
       await removeWorktree(st.liveRoot, st.wt, {
         keepBranch: st.parked,
         intent: st.parked ? 'release' : 'landed'

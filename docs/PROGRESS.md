@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
+
+- `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.
+
+## 2026-10-06 — LKM-182: New chat opens instantly
+
+- **Why.** `agent:new-chat` created the chat's worktree, synced and provisioned its dependencies and started the provider before returning, so New chat waited for Git (and on a large project for seconds) before the composer appeared.
+- **Pending chats.** `agent:new-chat` now registers a pending chat (`chat-pending.ts`) and returns; the snapshot lists it, the native workspace controller shows it and focuses the composer (`focusComposer`). `prepareChat` builds checkout → provider → registration in the background and honours a close at every step. Send, restart, rename and permission changes wait for it; the send shows "Preparing workspace…" after 300 ms and Stop cancels the wait.
+- **Spare.** `chat-spare.ts` keeps one prewarmed detached chat worktree per open repository project (after open when it has chats, and after each new chat is ready). `isolatedCwd` takes it and syncs it from live; orphan recovery treats it as live; project close removes it unused, with no recovery ref.
+- **Dependencies.** The new-chat path keeps the copy-on-write `node_modules` clone but runs a needed install in the background, deduplicated (`dependenciesInstalling`, `dependencyInstall`); the turn prompt tells the agent not to run commands needing `node_modules` until it finishes. This is a prompt notice, not a tool gate.
+- **Timing.** Product-log lines for each step (`New chat composer ready` with snapshot/created/listed/active/shown ms, workspace/provider/registered/ready, first send wait). Measured here with a stub provider and the Swift repository owner, three runs each. Before = the `isolatedCwd` that New chat awaited; after = composer ready, with the spare take done in the background:
+  - small (20 files, 50 in `node_modules`): before 195–216 ms; after 2–3 ms (spare take 146–156 ms);
+  - large (6,000 files, 8,000 in `node_modules`): before 0.90–1.30 s; after 2–3 ms (spare take 0.31–0.44 s).
+  - Real provider start time came on top of "before" and is now off the path too; it was not measured (no live provider calls).
+- **Tests.** New `test/chat-new-instant.mjs` (unit): with worktree creation slowed to 3 s, New chat gives a ready, focused composer in < 100 ms with no provider started; the first send shows "Preparing workspace…", waits, and lands in the chat's worktree; the next chat takes the synced spare; a pending chat closed at once starts nothing and leaves no worktree; project close removes the spare and every chat worktree. New Git suite `test/chat-spare.mjs` (through the Swift owner). `setup-next.mjs` covers the background install; `conversation-owner.mjs` waits for the second chat's provider.
+
 ## 2026-10-06 — LKM-181: chat islands disable, hide and references
 
 - **Why.** An island kept offering controls after the code moved on (a literal became a token, a declaration was deleted). The only signal was raw exception text, and there was no way to put an island aside or point the agent at one.

@@ -443,6 +443,8 @@ try {
     assert.notEqual(p1.cwd, repo, 'a repository chat runs in its own worktree')
     const second = await invoke('agent:new-chat', repo, { provider: 'claude' })
     assert.equal(second.ok, true)
+    // LKM-182: the new chat's provider starts in the background.
+    await until(() => providers.length === opened + 2, 'second chat provider')
     const key2 = second.sessionKey,
       p2 = providers.at(-1)
     await controller.command({ type: 'context', context: context(key2) })

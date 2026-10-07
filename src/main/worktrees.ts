@@ -70,13 +70,21 @@ export interface Worktree {
  * interactive agent's uncommitted WIP (tracked + untracked). The service snapshots and
  * adds the worktree in the repository's lane and links .env; node_modules is the
  * worktree's own (a copy-on-write clone or an install, `provisionDependencies`).
+ * `backgroundInstall` (chats, LKM-182) returns once the clone is done; a needed install
+ * keeps running in the background.
  */
 export async function createWorktree(
   repoRoot: string,
   worktreesDir: string,
-  opts: { label?: string; id?: string; branchName?: (id: string) => string } = {}
+  opts: {
+    label?: string
+    id?: string
+    branchName?: (id: string) => string
+    backgroundInstall?: boolean
+  } = {}
 ): Promise<Worktree> {
   const owner = repositoryOwner()
+  const started = Date.now()
   // The id may be assigned up front (so a queued spawn's rail row keeps a stable id
   // before its worktree exists); otherwise generate one.
   const id = opts.id ?? randomUUID().slice(0, 8)
@@ -89,13 +97,20 @@ export async function createWorktree(
   })
   try {
     await editingOwner().syncSetupHelpers(repoRoot, wt.path)
-    await provisionDependencies(repoRoot, wt.path)
+    await provisionDependencies(repoRoot, wt.path, undefined, {
+      background: !!opts.backgroundInstall
+    })
   } catch (error) {
     productLog.error('worktree', 'Worktree setup failed', { id, branch, error: msg(error) })
     await owner.removeWorktree(wt, false, 'abandon').catch(() => {})
     throw error
   }
-  productLog.info('worktree', 'Worktree created', { id, branch: wt.branch, path: wt.path })
+  productLog.info('worktree', 'Worktree created', {
+    id,
+    branch: wt.branch,
+    path: wt.path,
+    ms: Date.now() - started
+  })
   return wt
 }
 
