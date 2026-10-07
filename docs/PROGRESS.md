@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-187 repair: `sheets` smoke "did not reach expected state"
+
+- **Failure.** The manager's `test:native` failed `sheets` (group `settings`) with a bare "Native sheet did not reach expected state"; the capture showed only the "Project memory change undone" toast left by the alerts check. Everything else, including `publish-progress`, passed. LKM-187 does not touch the sheets or the alerts smoke.
+- **Cause (not proven).** The wait names no check, so the failing step is unknown. The first wait after the alerts, for the "Running servers" sheet to stop being busy, depends on the service's `lsof`/`ps` scan and had a fixed 4 s budget, which a loaded machine can exceed.
+- **Change.** `smoke-sheets.ts`: `wait` takes a timeout (default 4 s, unchanged), the "Running servers" wait gets 20 s, and a timeout now reports the check's source and the last `sheetInspect` state. No assertion was removed or loosened.
+- **Checks.** Quick passed. Native `settings` passed twice in a row (6/6 plus `native-chat-scroll`). Full suite left to the manager.
+
+## 2026-10-06 — LKM-187 repair: chat-gate "retry loads the project" diagnosis
+
+- **Failure.** The manager's `test:native` failed once in `chat-gate` (group `sidebar`): "retry loads the project did not settle", status `Dev server exited (code 1) before printing a URL`. Nothing in LKM-187 touches the chat gate, the workspace controller or the runtime owner.
+- **Reproduction.** Not reproduced: the `sidebar` group passed on three native runs after the change (the third run's later `native-chat-scroll` step failed with the known foreground-focus environment error, after the smoke itself passed 6/6). The root cause of the one failure is therefore not proven; it looks like Retry running before the failed open had settled on the project, or the custom command (`sleep 8; exit 1`) being run again.
+- **Change.** `smoke-chat-gate.ts` asserts that the failed project is still active before Retry and the "retry loads the project" wait now reports `activeKey`, the project key, `launchSpec`, `url`, the status view kind, status and the Activity tail when it times out. No check was weakened; the next occurrence names its cause.
+
 ## 2026-10-06 — LKM-187: Publish shows progress
 
 - **Why.** After clicking Publish nothing changed until the whole workflow returned, which can take a minute (sync, push, `gh pr create`, merge, cleanup). There was no way to tell it was running, no cancel, and a failure only reached the Activity log.
