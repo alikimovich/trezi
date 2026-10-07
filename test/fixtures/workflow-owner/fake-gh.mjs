@@ -68,7 +68,17 @@ if (group === 'pr' && action === 'merge') {
   const tree = git(pr.remote, 'merge-tree', '--write-tree', `refs/heads/${pr.base}`, `refs/heads/${pr.head}`)
   const commit = git(pr.remote, 'commit-tree', tree.split('\n')[0], '-p', `refs/heads/${pr.base}`, '-m', flag('--subject') ?? pr.title)
   git(pr.remote, 'update-ref', `refs/heads/${pr.base}`, commit)
-  if (args.includes('--delete-branch')) git(pr.remote, 'update-ref', '-d', `refs/heads/${pr.head}`)
+  if (args.includes('--delete-branch')) {
+    // Like the real gh: the local checkout moves to the base (fast-forward pull) and the
+    // head branch is force-deleted locally, then on GitHub.
+    const cwd = process.cwd()
+    if (git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD') === pr.head) {
+      git(cwd, 'checkout', pr.base)
+      try { git(cwd, 'pull', '--ff-only', 'origin', pr.base) } catch {}
+    }
+    try { git(cwd, 'branch', '-D', pr.head); count('deleteLocalBranch') } catch {}
+    git(pr.remote, 'update-ref', '-d', `refs/heads/${pr.head}`)
+  }
   pr.state = 'MERGED'; pr.mergeSubject = flag('--subject'); count('prMerge')
   if (fault('pr-merge-lost')) fail('HTTP 504: Gateway Timeout')
   done(`Squashed and merged pull request #${pr.number}`)

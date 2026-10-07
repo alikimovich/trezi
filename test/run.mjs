@@ -36,6 +36,7 @@ const UNIT = [
   'editing-owner',
   'workflow-owner',
   'workflow-durability',
+  'branch-safety',
   'platform-owner',
   'native-visible-capture',
   'native-smoke-runner',

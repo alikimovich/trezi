@@ -287,6 +287,7 @@ try {
         'src/service/RepositoryJournal.swift',
         'src/service/RepositoryEffects.swift',
         'src/service/RepositoryLanding.swift',
+        'src/service/RepositoryBranches.swift',
         'src/service/RepositoryCleanup.swift',
         'src/service/RepositoryMerge.swift',
         'src/service/RepositoryOwner.swift',

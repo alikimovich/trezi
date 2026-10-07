@@ -396,6 +396,43 @@ Implementation: the workflow owner, `src/service/WorkflowPublish.swift` (since L
 the only one; the Bun twin `publish-reconcile.ts` was removed). Regression coverage:
 `test/workflow-owner.mjs`.
 
+### Branch rules (LKM-185)
+
+- **One branch.** Landings always go to the branch the live checkout has checked out,
+  the preview serves that checkout, and the toolbar shows that branch. Only an explicit
+  user action (the branch menu, Git updates → Switch) switches, deletes or recreates it.
+- **Merge without `--delete-branch`.** `gh pr merge --delete-branch`, run in the live
+  checkout, checks out the base and force-deletes the work branch locally, including any
+  landing that arrived while the PR description was written. Trezi merges without it
+  and then deletes the remote branch itself, with a lease on the pushed head.
+- **Cleanup keeps the work branch.** After the merge, Trezi fetches with `--prune` (no
+  stale `origin/<branch>` is left behind to recreate the branch from) and fast-forwards
+  the local base only when that is a fast-forward. The work branch fast-forwards to the
+  merged base when that contains it, or else merges it (a squash merge never contains
+  it). Both tips are recorded below `refs/trezi/recovery/` first. If the merge does not
+  apply cleanly, it is aborted and the branch stays as it was. The result then carries
+  a `notice` that offers Git updates → Pull. Nothing checks out, deletes or recreates a
+  branch, so the old `recoverShip` fallback, which re-checked-out the branch by name, is
+  gone. Git's DWIM checkout of a deleted branch creates it from the stale
+  remote-tracking ref (reflog `branch: Created from refs/remotes/origin/…`), which is
+  how earlier landings became unreachable.
+- **Ensure never hides landings.** The open-time `git:ensure` and publish's heal call
+  `switchBranch` onto `trezi/<base>`. If that branch already exists and lacks the
+  checkout's commits, the repository owner either fast-forwards it to HEAD (old tip at
+  a recovery ref) or, when it diverged, refuses and stays put
+  (`joinBranch`, `src/service/RepositoryBranches.swift`).
+- **Recovery on open.** Once per project per launch, `strandedLandings` lists other
+  local branches holding landed chat commits (committer `trezi@local`, `trezi/chat-*`
+  and `trezi/comment-*` excluded) whose changes the checkout lacks. A squash or
+  cherry-pick already in the checkout is skipped through `git merge-tree`. One notice
+  reads "N earlier chat changes are on branch main, not on trezi/main" and offers
+  **Bring them back** and **Ignore**. Bring them back runs `restoreLandings`: recovery
+  refs for both tips, then a `--no-ff` merge. A conflict stays in the checkout for
+  per-file resolution. Ignore is remembered per branch tip
+  (`trezi:stranded-landings-ignored`). UI: `src/native/stranded-landings.ts`. Coverage:
+  `test/branch-safety.mjs` reproduces the reported sequence, and it fails on the old
+  cleanup.
+
 Model/provider changes keep the selected chat's worktree and require confirmation
 when the chat contains messages. The replacement session receives a one-time
 recorded conversation handoff on its next turn; sibling chats are untouched.

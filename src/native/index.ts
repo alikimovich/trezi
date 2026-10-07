@@ -108,6 +108,7 @@ import {
   SmokeRunFailure
 } from './smoke-report'
 import { serviceSource } from './source-service'
+import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
 import { NativeUpdateController } from './update-controller'
 import { serviceWorkflows } from './workflow-service'
@@ -552,7 +553,24 @@ async function main() {
     if (channel === 'source:reveal' && value.root === workspaceController.active?.root)
       openSource(`${value.source}:${value.startLine}`)
   })
+  // LKM-185: chat changes an older publish left on another branch, once per project.
+  const strandedNotice = strandedLandingsNotice({
+    sheets: {
+      toast: (message, actions, seconds) => sheetController.toast(message, actions, seconds)
+    },
+    owner: () => repository,
+    preferences,
+    log: (text, kind) => activityController.append(text, kind),
+    restored: async (root, files) => {
+      await gitController.refresh(root)
+      const entry = workspaceController.state.projects.find((p) => p.root === root)
+      if (entry && files.length) await workspaceController.refreshEnvironment(entry.key, files)
+    }
+  })
   workspaceController.services.activate = async (entry) => {
+    void strandedNotice(entry?.root).catch((error) =>
+      activityController.append(String(error), 'error')
+    )
     host!.send('sourceActive', { root: entry?.root ?? '' })
     void layersController.activate(entry?.root ?? '')
     if (shellController) {

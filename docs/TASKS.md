@@ -9,6 +9,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Used for every landing (turn, reconcile, resolve, Keep, parked apply, chat release); a re-squash after a park describes the combined diff.
 - [x] Publish PR title/body summarise the branch's commits; tests (mocked model, timeout, no prompt, combined diff, trailers, PR), CHANGELOG line, docs/WORKTREES.md.
 
+## Landed chat commits never become unreachable (LKM-185)
+
+- [x] One branch rule in the repository owner: automatic switches (`git:ensure`, publish heal) never move the live checkout onto a branch lacking its commits; a behind branch fast-forwards with a recovery ref, a diverged one is refused (`joinBranch`).
+- [x] Publish merges without `gh --delete-branch`, deletes the remote branch with a lease, keeps the work branch (fast-forward or merge of the merged base, recovery refs first, a notice instead when it does not merge cleanly), and no longer recreates a branch by name (`recoverShip` removed).
+- [x] Recovery on open: "N earlier chat changes are on branch X, not on Y" with Bring them back (`restoreLandings`, normal conflict flow) and Ignore (`strandedLandings`, `src/native/stranded-landings.ts`).
+- [x] `test/branch-safety.mjs` (unit; fails on the old cleanup), `fake-gh` does the real `--delete-branch` local effects; CHANGELOG, `docs/WORKTREES.md` branch rules.
 ## Branch menu aligned with the address (LKM-184)
 
 - [x] `BranchPopUpButton`/`BranchPopUpCell` (`ToolbarAddress.swift`): the branch title starts on the address text's left edge; the chevron follows it, tail truncation and the frame-sized click target kept.
