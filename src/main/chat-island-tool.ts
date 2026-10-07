@@ -4,11 +4,12 @@ import {
   ISLAND_RECOVERY,
   type IslandBlocker,
   type IslandReadiness,
-  type IslandRecord
+  type IslandRecord,
+  type IslandValue
 } from '../shared/chat-islands'
-import { newIslandName } from './chat-island-bindings'
+import { IslandBindingError, newIslandName } from './chat-island-bindings'
 import { cloneDefinition, findIsland } from './chat-island-context'
-import { islandDefinition } from './chat-island-schema'
+import { islandDefinition, islandProblems } from './chat-island-schema'
 import { islandSource } from './chat-island-source'
 import type { ChatIslands, IslandSession } from './chat-islands'
 
@@ -37,8 +38,18 @@ export async function islandTool(
         controlPurposes: chatIslandControlPurposes,
         guidance: chatIslandGuidance,
         bindingRules:
-          'Existing literal bindings in one file, up to 12 fields. Jev selects/orders whole prepared blocks; keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. Default auto engine uses Jev if configured. A binding that is no longer a literal of its kind disables its field; show {id} resurfaces an island, clone {id, rebind?} makes a new one from it.'
+          'Literal bindings in one file, up to 12 fields. define {planned:true} reserves a pending island before the literals exist: the definition is validated at once and its bindings are planned; it activates after this turn lands and every binding resolves, otherwise it shows why with Recreate. Without planned, every binding must already resolve. Jev selects/orders whole prepared blocks; keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. Default auto engine uses Jev if configured. A binding that is no longer a literal of its kind disables its field; show {id} resurfaces an island, clone {id, rebind?} makes a new one from it.'
       }
+    // The definition is checked before anything waits, reserves or edits (LKM-201).
+    if (raw?.action === 'define') {
+      const problems = islandProblems(raw)
+      if (problems.length)
+        return {
+          error: `The island definition is invalid; nothing was reserved. Fix every problem and call define again: ${problems.join(' | ')}`,
+          code: 'invalid_definition',
+          problems
+        }
+    }
     // A chat whose session is missing (a new chat's workspace was still being prepared)
     // registers it here, waiting for the workspace (LKM-199).
     const attached = await islands.attach(chat)
@@ -60,7 +71,8 @@ export async function islandTool(
       return await defineIsland(islands, chat, session, sourceRoot, {
         ...cloneDefinition(record, raw.rebind),
         action: 'define',
-        engine: 'agent'
+        engine: 'agent',
+        planned: raw.planned === true
       })
     }
     if (raw?.action !== 'define') throw new Error('Unknown island action.')
@@ -114,6 +126,8 @@ async function defineIsland(
   if (session.composing || session.busy)
     throw new Error('An island operation is already in progress.')
   const definition = islandDefinition(raw)
+  // LKM-201: the bindings are declared before the source has them.
+  const planned = raw.planned === true
   const admission = await islands.owner.islandDefine(
     chat,
     session.turn(),
@@ -139,14 +153,30 @@ async function defineIsland(
       engine: 'agent',
       status: 'waiting',
       initial: {},
-      name
+      name,
+      ...(planned ? { planned } : {})
     }
-    const source = await islandSource(sourceRoot, record)
+    const source = await islandSource(sourceRoot, record).catch((error) => {
+      // A planned island's file may not exist (or parse) until this turn's edits.
+      if (!planned || !(error instanceof IslandBindingError) || !error.fixable) throw error
+      return {
+        values: {} as Record<string, IslandValue>,
+        broken: {} as Record<string, string>,
+        revision: '',
+        missing: true
+      }
+    })
     const failing = Object.values(source.broken)
-    if (failing.length)
+    if (failing.length && !planned)
       throw new Error(
-        `${failing[0].replace(/; this control.*$/, '')}. Bind a literal of its kind, or pass rebind.`
+        `${failing[0].replace(/; this control.*$/, '')}. Bind a literal of its kind, pass rebind, or define with planned:true and add the literal in this turn.`
       )
+    const bindings = Object.fromEntries(
+      definition.manifest.params.map((p) => [
+        p.id,
+        'missing' in source || p.id in source.broken ? 'planned' : 'resolved'
+      ])
+    )
     session.preview = {
       turn: record.turn,
       view: {
@@ -160,7 +190,9 @@ async function defineIsland(
         status: 'waiting',
         engine: 'preparing',
         replay: false,
-        detail: 'Preparing layout. Controls activate after this turn’s changes land.'
+        detail: planned
+          ? 'Preparing layout. Its bindings are planned; controls activate after this turn lands and every binding resolves.'
+          : 'Preparing layout. Controls activate after this turn’s changes land.'
       }
     }
     islands.changed(chat)
@@ -178,16 +210,17 @@ async function defineIsland(
       params: record.manifest.params.filter((p) => included.has(p.id))
     }
     const initial = Object.fromEntries(
-      manifest.params.map((p) => {
+      manifest.params.flatMap((p) => {
         const before = prior?.manifest.params.find((old) => old.id === p.id)
         const compatible =
           admission.replacing &&
           prior?.manifest.file === manifest.file &&
           JSON.stringify(before) === JSON.stringify(p)
-        return [
-          p.id,
-          compatible ? (prior!.initial[p.id] ?? source.values[p.id]) : source.values[p.id]
-        ]
+        const value = compatible
+          ? (prior!.initial[p.id] ?? source.values[p.id])
+          : source.values[p.id]
+        // A planned binding has no value yet; activation records the landed one.
+        return value === undefined ? [] : [[p.id, value]]
       })
     )
     const records = await islands.owner.islandCommit(
@@ -197,7 +230,8 @@ async function defineIsland(
       selection.engine,
       initial,
       selection.fallback,
-      name
+      name,
+      planned
     )
     islands.adopt(chat, session, records)
     await islands.refresh(chat)
@@ -207,7 +241,14 @@ async function defineIsland(
       revision: admission.revision,
       engine: selection.engine,
       fallback: selection.fallback,
-      message: 'Island attached to this chat. Controls activate after successful landing.'
+      ...(planned
+        ? {
+            status: 'pending',
+            bindings: Object.fromEntries(manifest.params.map((p) => [p.id, bindings[p.id]])),
+            message:
+              'Pending island reserved and validated. Add the planned literals in this turn; it activates after the turn lands and every binding resolves, otherwise it shows the reason with Recreate.'
+          }
+        : { message: 'Island attached to this chat. Controls activate after successful landing.' })
     }
   } catch (error) {
     void islands.owner.islandAbort(chat, admission.token).catch(() => {})

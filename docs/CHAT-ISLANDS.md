@@ -85,6 +85,35 @@ Jev network call was made; pointer dragging/IME/accessibility acceptance remains
   `chat-island-disabled.png` and `chat-island-hidden.png`
   (`src/native/smoke-island-status.ts`).
 
+## Pending islands with planned bindings (LKM-201)
+
+- **Define early.** `define {planned: true}` reserves an island before the agent adds
+  the literals it binds. Every `define` is validated first, before the tool waits for
+  the workspace or reserves anything: `islandProblems` (`src/main/chat-island-schema.ts`)
+  lists every problem (manifest fields, each param, each block), returned as
+  `{error, code: 'invalid_definition', problems}`. A planned definition's bindings are
+  not required to resolve, and its file may not exist (or parse) yet; the answer has
+  `status: 'pending'` and `bindings` (param → `resolved` | `planned`). Without
+  `planned`, an unresolved binding is still refused, and the refusal names `planned:true`.
+- **Activation.** The record carries `planned: true` (`islandCommit`). When its turn
+  lands the owner makes it `ready`, but it stays inactive: the next binding check
+  (`refresh`, run by `settle`) activates it only when every binding resolves in the live
+  source (`islandActivate` stores the landed values as `initial` and drops the flag).
+  Until then the owner refuses its commands and `show`.
+- **Failure.** A planned island whose bindings do not all resolve is disabled as a
+  whole (`plannedFailure`): "These controls never activated: Lift is not in card.js."
+  A turn that does not land shows the existing "did not land" reason. Both are
+  code-disabled with a reason, so the island shows Recreate with agent; the agent
+  clones it (`clone {id, planned?}`). A later edit that adds the literals still
+  activates it.
+- **Guidance.** Rules v35 and the catalog guidance order the work: catalog readiness
+  first, then the preview identity ("Preview page:" names this project's server),
+  only the code that computes the values, then an early planned define before any
+  source edit.
+- Tests: `test/chat-island-pending.mjs` (immediate validation without a workspace,
+  pending → active with landed initial values and a write, pending → failed for an
+  unresolved binding, an unlanded turn and a file that never appears), `test/rules.mjs`.
+
 
 ## Product outcome
 
