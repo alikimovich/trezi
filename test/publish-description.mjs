@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  describedCommitSubjects,
   generatePublishDescription,
   parsePublishDescription
 } from '../src/main/publish-description.ts'
@@ -20,7 +21,18 @@ try {
   git('update-ref', 'refs/remotes/origin/main', 'HEAD')
   git('checkout', '-b', 'feature')
   writeFileSync(join(root, 'app.js'), 'export const size = 2\n')
-  git('commit', '-am', 'PRIVATE CHAT PROMPT do it for me')
+  // A pre-LKM-189 landing commit: its subject was the user's prompt.
+  git('commit', '-am', 'PRIVATE CHAT PROMPT do it for me', '-m', 'Trezi turn 1 (trezi/chat-x).')
+  // A described landing commit (LKM-189) is summarised.
+  writeFileSync(join(root, 'size.js'), 'export const max = 9\n')
+  git('add', '.')
+  git(
+    'commit',
+    '-m',
+    'Add a maximum size constant',
+    '-m',
+    '- Export max from size.js\n\nTrezi-Turn: 2\nTrezi-Chat: trezi/chat-x'
+  )
   // A remote reconciliation's committed changes must also be described.
   writeFileSync(join(root, 'remote.js'), 'export const reconciled = true\n')
   git('add', '.')
@@ -37,6 +49,17 @@ try {
   assert.ok(prompt.includes('+export const reconciled = true'))
   assert.ok(!prompt.includes('PRIVATE CHAT PROMPT'))
   assert.ok(!prompt.includes('PRIVATE UNPUBLISHED EDIT'))
+  // The PR summarises the commits: described and the user's own, not prompt subjects.
+  assert.ok(prompt.includes('Commits:\n'), prompt)
+  assert.ok(prompt.includes('- Add a maximum size constant'), prompt)
+  assert.ok(prompt.includes('- Reconciled remote contribution'), prompt)
+  assert.ok(!prompt.includes('Trezi-Turn'), 'trailers stay out of the summary input')
+  assert.deepEqual(
+    describedCommitSubjects(
+      'make it blue\x1fTrezi turn 3 (trezi/chat-a).\x1e\nAdd a footer\x1f- x\n\nTrezi-Turn: 4\x1e'
+    ),
+    ['Add a footer']
+  )
   await assert.rejects(
     generatePublishDescription(root, 'main', 'feature', async () => {
       throw new Error('offline')

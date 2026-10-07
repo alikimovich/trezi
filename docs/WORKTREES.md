@@ -275,6 +275,34 @@ Implementation: `src/main/repo-write-queue.ts`, `src/main/chat-isolation.ts` (wi
 Regression coverage: `test/chat-worktrees.mjs`, `test/live-commit.mjs`,
 `test/chat-isolation.mjs`, `test/turn-terminal.mjs`.
 
+### Landing commit messages (LKM-189)
+
+A landing's commit message describes the change, never the user's prompt. Before the
+chat branch is squashed, `src/main/chat-commit.ts` reads the worktree's diff against
+`baseSha` (file list, diff stat and an excerpt of at most 8,000 characters, new files
+included; `src/main/commit-message.ts`) and gives it, with the agent's final reply, to
+the chat's provider as a tool-less one-shot on its background model (Haiku for Claude,
+`gpt-6-sol` low effort for Codex, the connection's own model otherwise —
+`describeAgentOptions`). The prompt never contains the user's message.
+
+- The answer must be an imperative subject of at most 72 characters plus 3–6 bullets.
+  An echo of the prompt, "[Attached files]", chatter or an error is rejected.
+- The model has 3 s. On timeout, refusal or no provider the message is built from the
+  files: "Update key-tile.tsx, home.tsx and bottom-bar.tsx" (Add/Remove when every file
+  was added/deleted), one bullet per file and a "Changed areas" line.
+- If at least 3 of the last 20 non-merge subjects (and 60%) use Conventional Commits,
+  the subject does too (`chore:` when the model gave no type).
+- The same message is used for the chat branch's squash commit and the live commit.
+  Parked turns never advance `baseSha`, so a re-squash describes the combined diff.
+- `Trezi-Turn` and `Trezi-Chat` (the chat branch) are Git trailers at the end of the
+  body, never in the subject.
+- Publish's PR title and body summarise the branch's commit subjects, checked against
+  the diff; legacy prompt-subject commits (body "Trezi turn N …") are left out of that list.
+
+Coverage: `test/commit-message.mjs` (mocked model, timeout, refusals, conventions,
+combined diff, trailers), `test/live-commit.mjs` (re-squash after a park),
+`test/chat-landing.mjs`, `test/publish-description.mjs`.
+
 ## Chat workspace cleanup
 
 Each open chat's checkout lives in the profile's `worktrees/` folder (LKM-136). They
@@ -367,6 +395,43 @@ chooses ours/theirs across the repository.
 Implementation: the workflow owner, `src/service/WorkflowPublish.swift` (since LKM-111
 the only one; the Bun twin `publish-reconcile.ts` was removed). Regression coverage:
 `test/workflow-owner.mjs`.
+
+### Branch rules (LKM-185)
+
+- **One branch.** Landings always go to the branch the live checkout has checked out,
+  the preview serves that checkout, and the toolbar shows that branch. Only an explicit
+  user action (the branch menu, Git updates → Switch) switches, deletes or recreates it.
+- **Merge without `--delete-branch`.** `gh pr merge --delete-branch`, run in the live
+  checkout, checks out the base and force-deletes the work branch locally, including any
+  landing that arrived while the PR description was written. Trezi merges without it
+  and then deletes the remote branch itself, with a lease on the pushed head.
+- **Cleanup keeps the work branch.** After the merge, Trezi fetches with `--prune` (no
+  stale `origin/<branch>` is left behind to recreate the branch from) and fast-forwards
+  the local base only when that is a fast-forward. The work branch fast-forwards to the
+  merged base when that contains it, or else merges it (a squash merge never contains
+  it). Both tips are recorded below `refs/trezi/recovery/` first. If the merge does not
+  apply cleanly, it is aborted and the branch stays as it was. The result then carries
+  a `notice` that offers Git updates → Pull. Nothing checks out, deletes or recreates a
+  branch, so the old `recoverShip` fallback, which re-checked-out the branch by name, is
+  gone. Git's DWIM checkout of a deleted branch creates it from the stale
+  remote-tracking ref (reflog `branch: Created from refs/remotes/origin/…`), which is
+  how earlier landings became unreachable.
+- **Ensure never hides landings.** The open-time `git:ensure` and publish's heal call
+  `switchBranch` onto `trezi/<base>`. If that branch already exists and lacks the
+  checkout's commits, the repository owner either fast-forwards it to HEAD (old tip at
+  a recovery ref) or, when it diverged, refuses and stays put
+  (`joinBranch`, `src/service/RepositoryBranches.swift`).
+- **Recovery on open.** Once per project per launch, `strandedLandings` lists other
+  local branches holding landed chat commits (committer `trezi@local`, `trezi/chat-*`
+  and `trezi/comment-*` excluded) whose changes the checkout lacks. A squash or
+  cherry-pick already in the checkout is skipped through `git merge-tree`. One notice
+  reads "N earlier chat changes are on branch main, not on trezi/main" and offers
+  **Bring them back** and **Ignore**. Bring them back runs `restoreLandings`: recovery
+  refs for both tips, then a `--no-ff` merge. A conflict stays in the checkout for
+  per-file resolution. Ignore is remembered per branch tip
+  (`trezi:stranded-landings-ignored`). UI: `src/native/stranded-landings.ts`. Coverage:
+  `test/branch-safety.mjs` reproduces the reported sequence, and it fails on the old
+  cleanup.
 
 Model/provider changes keep the selected chat's worktree and require confirmation
 when the chat contains messages. The replacement session receives a one-time

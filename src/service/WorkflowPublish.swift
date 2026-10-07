@@ -57,13 +57,13 @@ struct WorkflowPublish {
                                                  at: WorkflowJournal.now()))
                 try remember([("branch", Self.text(branch)), ("base", Self.text(prior.param("base") ?? base)), ("head", Self.text(priorHead))])
                 let url = pr.receipt["url"]?.text?.string ?? ""
+                var notice: String?
                 do {
-                    if prior.step("cleanup")?.state != "done" { try cleanup(branch: branch, base: prior.param("base") ?? base, head: priorHead) }
+                    if prior.step("cleanup")?.state != "done" { notice = try cleanup(branch: branch, base: prior.param("base") ?? base, head: priorHead) }
                 } catch {
-                    recoverShip(branch)
                     return WorkflowContext.fail(WorkflowContext.lines(error, 4))
                 }
-                return .done(Self.published(branch: branch, url: url))
+                return .done(Self.published(branch: branch, url: url, notice: notice))
             }
         }
         do {
@@ -73,7 +73,10 @@ struct WorkflowPublish {
             if !staged.isEmpty { try context.run(["commit", "-m", "Prepare project changes for publishing"]) }
             try context.done("commit", [("committed", .bool(!staged.isEmpty))])
             let ahead = (try? context.run(["rev-list", "--count", "\(base)..\(branch)"])) ?? "0"
-            if staged.isEmpty && ahead == "0" { return WorkflowContext.fail("Nothing to publish — no changes since \(base).") }
+            // A branch synced with a squash-merged base is ahead by commits that change nothing.
+            if staged.isEmpty && (ahead == "0" || context.succeeds(["diff", "--quiet", base, branch])) {
+                return WorkflowContext.fail("Nothing to publish — no changes since \(base).")
+            }
             try context.begin("push")
             let pushed = try pushReconciled(branch)
             if !pushed.ok {
@@ -88,7 +91,6 @@ struct WorkflowPublish {
         } catch let cancel as WorkflowCancelled {
             throw cancel
         } catch {
-            recoverShip(branch)
             return WorkflowContext.fail(WorkflowContext.lines(error, 4))
         }
     }
@@ -98,7 +100,6 @@ struct WorkflowPublish {
             throw ServiceContractFailure.invalidRequest
         }
         if let error = record.param("describeError") {
-            recoverShip(branch)
             return WorkflowContext.fail(String(error.split(separator: "\n", omittingEmptySubsequences: false).prefix(4).joined(separator: "\n")))
         }
         let title = record.param("prTitle") ?? "", body = record.param("prBody") ?? ""
@@ -128,41 +129,59 @@ struct WorkflowPublish {
             if let number, state(of: String(number)) == "MERGED" {
                 try context.done("merge", [("adopted", .bool(true))])
             } else {
-                try gh(["pr", "merge", branch, "--squash", "--delete-branch", "--subject",
+                // No --delete-branch: gh would switch the live checkout to the base and
+                // force-delete the work branch with any landing that arrived meanwhile.
+                try gh(["pr", "merge", branch, "--squash", "--subject",
                         number.map { "\(title) (#\($0))" } ?? title, "--body", body])
                 context.fault("publish.merge")
                 try context.done("merge", [("adopted", .bool(false))])
             }
-            try cleanup(branch: branch, base: base, head: head)
-            return .done(Self.published(branch: branch, url: url))
+            let notice = try cleanup(branch: branch, base: base, head: head)
+            return .done(Self.published(branch: branch, url: url, notice: notice))
         } catch let cancel as WorkflowCancelled {
             throw cancel
         } catch {
-            recoverShip(branch)
             return WorkflowContext.fail(WorkflowContext.lines(error, 4))
         }
     }
 
-    /// Update the local base and start a fresh work branch. Skipped when the work
-    /// branch moved since it was pushed (a landing arrived meanwhile): nothing on it
-    /// is deleted, the user stays on it.
-    private func cleanup(branch: String, base: String, head: String) throws {
+    /// After the merge the live checkout stays on `branch`, which keeps every landed
+    /// commit (LKM-185); nothing here checks out, deletes or recreates a branch. The
+    /// merged remote branch is deleted only while it is still at the pushed `head`.
+    /// `branch` fast-forwards to the merged base when that includes it, else merges it
+    /// with both tips kept at recovery refs; an overlap keeps `branch` as it was and
+    /// answers a notice that offers the sync instead.
+    private func cleanup(branch: String, base: String, head: String) throws -> String? {
         try context.begin("cleanup")
-        if let tip = context.git.revision(root, "refs/heads/\(branch)"), tip != head {
+        _ = try? context.run(["push", "--force-with-lease=refs/heads/\(branch):\(head)", "origin", "--delete", branch])
+        let merged = "refs/remotes/origin/\(base)"
+        guard context.currentBranch() == branch, (try? context.run(["fetch", "--prune", "origin"])) != nil,
+              let target = context.git.revision(root, merged) else {
             try context.done("cleanup", [("skipped", .bool(true))])
-            return
+            return nil
         }
-        try context.run(["checkout", base])
-        try context.run(["pull", "--ff-only", "origin", base])
-        _ = try? context.run(["branch", "-D", branch])
-        try context.run(["checkout", "-b", branch])
-        try context.done("cleanup", [("skipped", .bool(false))])
-    }
-
-    /// Put the user back on their work branch (check it out, else recreate it).
-    private func recoverShip(_ branch: String) {
-        guard let now = try? context.run(["rev-parse", "--abbrev-ref", "HEAD"]), now != branch else { return }
-        if (try? context.run(["checkout", branch])) == nil { _ = try? context.run(["checkout", "-b", branch]) }
+        if let local = context.git.revision(root, "refs/heads/\(base)"), local != target,
+           context.succeeds(["merge-base", "--is-ancestor", local, target]) {
+            _ = try? context.run(["branch", "-f", base, target])
+        }
+        var action = "up-to-date", refs: [String] = [], notice: String?
+        if !context.succeeds(["merge-base", "--is-ancestor", target, "HEAD"]) {
+            refs = try recoveryRefs(branch, remote: merged)
+            let fastForward = context.succeeds(["merge-base", "--is-ancestor", "HEAD", target])
+            do {
+                try context.run(fastForward ? ["merge", "--ff-only", target]
+                    : ["merge", "--no-ff", "--no-edit", "-m", "Sync \(branch) with the merged \(base)", target])
+                action = fastForward ? "fast-forwarded" : "merged"
+            } catch {
+                if context.succeeds(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]) { _ = try? context.run(["merge", "--abort"]) }
+                action = "kept"
+                notice = "Published. Trezi couldn't merge the updated \(base) into \(branch) cleanly, so \(branch) was kept as it was "
+                    + "(every chat change is still on it). Open Git updates and pull origin/\(base) when you are ready."
+            }
+        }
+        try context.done("cleanup", [("skipped", .bool(false)), ("action", Self.text(action)),
+                                     ("recoveryRefs", RepositoryOwner.strings(refs))])
+        return notice
     }
 
     // MARK: Handoff (notes → a new branch and PR)
@@ -428,9 +447,10 @@ struct WorkflowPublish {
         [("url", text(url)), ("number", number.map { .number(Double($0)) } ?? .null), ("reused", .bool(reused))]
     }
 
-    static func published(branch: String, url: String) -> JSValue {
+    static func published(branch: String, url: String, notice: String? = nil) -> JSValue {
         var fields: [(String, JSValue)] = [("ok", .bool(true)), ("branch", text(branch))]
         if !url.isEmpty { fields.append(("url", text(url))) }
+        if let notice { fields.append(("notice", text(notice))) }
         return WorkflowOwner.object(fields)
     }
 

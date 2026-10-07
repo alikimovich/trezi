@@ -8,6 +8,45 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Fix.** The mask, `ChatModel.latestClearHeight` and `ChatLatestButton.fade`/`clearHeight` are gone; history scrolls under the composer and the button exactly as when the button is hidden. `ChatLatestButton` keeps its NSButton tracking, size and place but draws no opaque circle: a backdrop subview (`NSGlassEffectView` like the composer, `NSVisualEffectView` `.popover` with the old shadow before macOS 26) holds the chevron, a custom cell tints it while pressed, and `hitTest` returns the button for every point of its circle, so the text under it is never clicked.
 - **Tests.** The acceptance checks drop the masked-band assertions and require the backdrop, `latestButtonHit == ChatLatestButton` and, in new `acceptance-{440,320}-scrolled-up-{light,dark}` captures (window appearance forced), more than 40 text pixels beside the button between `gap` above it and the composer top (`latestBandInk`, computed in `ChatAcceptance` from the capture); the old mask left that band empty. The composer-layout fixture checks the backdrop and hit-tests three off-centre points in the circle.
 
+## 2026-10-06 — LKM-189: landing commit messages describe the change
+
+- **Why.** A landing commit's subject was the user's prompt (capped at 72 chars), so `git log` read as chat text, sometimes with "[Attached files]", and the PR description started from the first prompt.
+- **Message.** `chat-commit.ts` builds it before the squash from the worktree diff against `baseSha` (`changeEvidence`: name-status, stat, bounded `-U2` excerpt plus new files) and the final reply, and asks the chat's provider through a new optional `ModelProvider.complete` one-shot (tool-less Claude `query` with no setting sources; Codex thread) on the background model (`describeAgentOptions`). `parseCommitMessage` rejects prompt echoes, chatter, attachments, long subjects and bullet-less answers. A 3 s deadline aborts the call and falls back to `fallbackCommitMessage` ("Update a, b and c", bullets, changed areas). The same text is the branch commit and the live commit; trailers `Trezi-Turn`/`Trezi-Chat` replace the old "Trezi turn N (branch)." body. Conventional Commits are followed when >= 3 of the last 20 subjects (60%) use them.
+- **Re-squash.** Parked turns don't advance `baseSha`, so the next landing's evidence is the combined diff; `test/live-commit.mjs` 10b checks the model sees both turns and no prompt.
+- **Publish.** `generatePublishDescription` now gives the model the branch's commit subjects (`describedCommitSubjects` drops legacy prompt-subject commits) and asks it to summarise them against the diff.
+- **Tests.** New `test/commit-message.mjs` (unit); updated chat-landing, live-commit, stop-recovery, auto-reconciliation, conversation-owner and publish-description expectations. No real provider call was made, so the 3 s budget for Haiku/Sol is unmeasured; a slow model simply falls back.
+
+## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
+
+- **Why.** After a publish, landed chat commits were unreachable from `trezi/main`. Its reflog said `branch: Created from refs/remotes/origin/trezi/main`, which is Git's DWIM `checkout <branch>` after the local branch was deleted while a stale remote-tracking ref survived.
+  - In Trezi that checkout was `WorkflowPublish.recoverShip`.
+  - Three things set it up:
+    - `gh pr merge --delete-branch`, run in the live checkout, checks out the base and `branch -D`s the work branch, including a landing made while the description was written;
+    - the deletion on GitHub leaves the tracking ref stale;
+    - the old cleanup (`checkout base` → `pull --ff-only` → `branch -D` → `checkout -b`) fails on a diverged base and falls into `recoverShip`.
+  - Separately, the open-time `git:ensure` / publish heal switched a checkout that was left on main onto an existing stale `trezi/main`.
+  - The exact original timeline is not known. The test reproduces these mechanisms.
+- **Publish** (`WorkflowPublish.swift`):
+  - The merge runs without `--delete-branch`. Cleanup deletes the remote branch itself (`push --force-with-lease=refs/heads/B:<pushed head> --delete`) and fetches with `--prune`.
+  - It fast-forwards the local base only when that is a fast-forward, and never checks out, deletes or recreates a branch.
+  - The work branch fast-forwards to the merged base or merges it (`Sync … with the merged …`), with recovery refs for both tips first. If that merge fails, it is aborted, the branch is kept and the result carries a `notice` (logged as a warning).
+  - `recoverShip` is gone.
+  - "Nothing to publish" also covers a branch whose tree equals the base, which is what a squash-synced branch looks like.
+- **Repository owner** (`RepositoryBranches.swift`):
+  - `switchBranch` onto an existing branch fast-forwards it to HEAD (old tip at a recovery ref) or, when it diverged, refuses and stays (`joinBranch`).
+  - New read `strandedLandings`: other local branches with commits by `trezi@local` (not chat or comment worktree branches) that HEAD lacks, skipping ones whose merge would change nothing (`merge-tree --write-tree`).
+  - New mutation `restoreLandings` (intent `restore`): recovery refs for both tips, then a `--no-ff` merge. A conflict is left for per-file resolution.
+- **UI.** `src/native/stranded-landings.ts` runs once per project per launch from activation. It shows a 30 s toast with Bring them back and Ignore; Ignore is stored per tip in `trezi:stranded-landings-ignored`. After a merge it refreshes the branch label and the environment.
+- **Tests.**
+  - New `test/branch-safety.mjs` (unit) runs the real Swift owners with `fake-gh`, which now does real gh's local `--delete-branch` effects. It covers:
+    - a landing during describe;
+    - the same with the merge reply lost and a landing between attempts;
+    - an overlapping base;
+    - ensure refuse and fast-forward;
+    - the reported state (landings on main, `trezi/main` recreated by DWIM), found by the notice and merged back;
+    - a conflict, Ignore, and a cherry-picked change that is not listed.
+  - Against the old `WorkflowPublish.swift` its first scenario fails: both landings are unreachable.
+  - `workflow-durability` now expects the kept, synced branch instead of a reset to main.
 ## 2026-10-06 — LKM-184: branch menu aligned with the address text
 
 - **Cause.** The borderless pull-down's alignment rect starts 5 pt inside its frame (the stack view puts that edge on the address's), but its stock cell draws the title at x = 8, 3 pt further right; squeezed, it moves the title by varying amounts (measured 3–8 pt depending on width). The address field's text starts on its own alignment edge (frame −2 pt plus the cell's 2 pt padding).
