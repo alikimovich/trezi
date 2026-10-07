@@ -10,7 +10,7 @@ struct ChatMessage: Decodable, Identifiable {
     let id: String; let role: String; let text: String; let segments: [ChatSegment]
     let at: Double?; let workedMs: Double?
     let attachments: [ChatAttachment]?; let selection: ChatSelection?; let revertGroup: String?
-    let comment: ChatComment?
+    let comment: ChatComment?; let landingCheck: ChatLandingCheck?
 }
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool? }
 struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo? }
@@ -202,6 +202,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
          "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
          "comments":model.snapshot?.messages.compactMap { m in m.comment.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
+         "landingChecks":model.snapshot?.messages.compactMap { m in m.landingCheck.map { ["id":m.id, "status":$0.status, "line":$0.line, "errors":$0.errors, "thumbnail":$0.thumbnail != nil] as [String: Any] } } ?? [],
          "footerFrames":model.footerFrames.mapValues { NSStringFromRect($0) }, "revealedActions":model.revealedActions, "messageFrames":model.messageFrames.mapValues { NSStringFromRect($0) },
          "statusLines":model.statusLines, "attachmentFrames":model.attachmentFrames.mapValues { NSStringFromRect($0) }, "attachmentPreview":model.attachmentPreview ?? "",
          "attachmentPopover":NSApp.windows.contains { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }, "activityTokens":model.snapshot?.activity?.tokens?.label ?? "",
@@ -293,6 +294,7 @@ struct ChatConversation: View {
             ForEach(snapshot.messages) { message in
                 Group {
                     if let comment = message.comment { ChatCommentRow(message: message, comment: comment, model: model) }
+                    else if let check = message.landingCheck { ChatLandingCheckRow(message: message, check: check) }
                     else {
                         NativeMessageRow(message: message, running: snapshot.running && message.id == snapshot.streamingId, activity: message.id == snapshot.streamingId ? snapshot.activity : nil,
                                          latest: message.id == snapshot.messages.last?.id, model: model)

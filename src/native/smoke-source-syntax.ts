@@ -74,7 +74,12 @@ export async function checkSourceSyntax(host: NativeBridge, fixture: string, art
   console.log(
     `Native syntax typing (3,000-line TSX): p95 ${p95.toFixed(2)} ms, worst ${worst.toFixed(2)} ms, highlighted ${typed.highlighted}/${typed.revision}`
   )
-  assert.ok(p95 < 16, `Main-thread work per keystroke p95 ${p95.toFixed(2)} ms ≥ 16 ms`)
+  // The threshold is unchanged; a failure carries every keystroke's cost (warm-up included),
+  // so a few slow ones (load on the machine) tell apart from a uniformly slower editor.
+  assert.ok(
+    p95 < 16,
+    `Main-thread work per keystroke p95 ${p95.toFixed(2)} ms ≥ 16 ms (per keystroke ms: ${typed.keystrokes.map((ms: number) => ms.toFixed(1)).join(' ')})`
+  )
   assert.equal(typed.highlighted, typed.revision, 'The last keystroke is highlighted')
   const after = await verify({ probes: expected })
   assert.ok(

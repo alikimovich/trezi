@@ -260,6 +260,15 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "capture":
             if c["rect"] != nil && PreviewAgent.snapshot(for: c, view: view) == nil { reply(id, error: "The element is outside the visible preview"); return }
             view?.takeSnapshot(with: PreviewAgent.snapshot(for: c, view: view)) { image, error in
+                if c["thumbnail"] as? Bool == true {
+                    // LKM-195: a chat row's thumbnail, 160 px wide at most (tens of KB), not the agent frame.
+                    guard let image = image, image.size.width > 0 else { self.reply(id, error: error?.localizedDescription ?? "Snapshot unavailable"); return }
+                    let width = min(160, image.size.width), height = max(1, image.size.height * width / image.size.width)
+                    let small = NSImage(size: NSSize(width: width, height: height)); small.lockFocus(); image.draw(in: NSRect(x: 0, y: 0, width: width, height: height)); small.unlockFocus()
+                    let jpeg = small.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0)?.representation(using: .jpeg, properties: [.compressionFactor: 0.6]) } ?? Data()
+                    self.reply(id, ["jpeg": jpeg.base64EncodedString(), "width": Int(width), "height": Int(height)])
+                    return
+                }
                 guard let image = image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else { self.reply(id, error: error?.localizedDescription ?? "Snapshot unavailable"); return }
                 let width = min(900, image.size.width), height = image.size.height * width / image.size.width
                 let small = NSImage(size: NSSize(width: width, height: height)); small.lockFocus(); image.draw(in: NSRect(x: 0, y: 0, width: width, height: height)); small.unlockFocus()

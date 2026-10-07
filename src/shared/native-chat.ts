@@ -23,8 +23,20 @@ export interface NativeChatMessage {
   /** A comment agent's result (LKM-178): shown collapsed as "<title>: <line>", where
    *  `line` names the comment; `detail` (partial-changes note and summary) on expand. */
   comment?: { title: string; line: string; detail: string }
+  /** Trezi's own check of the preview after a turn landed (LKM-195), one compact row. */
+  landingCheck?: NativeLandingCheck
   /** Tokens this assistant turn's model calls reported (cached is part of input). */
   usage?: { input: number; output: number; cached: number }
+}
+
+/** `clean`: no console errors since the landing; `errors`: some (page text, untrusted,
+ *  shown to the user only); `unchecked`: the preview could not be checked, with why. */
+export interface NativeLandingCheck {
+  status: 'clean' | 'errors' | 'unchecked'
+  line: string
+  errors: string[]
+  /** A `data:image/jpeg;base64,` capture of the preview after the landing. */
+  thumbnail?: string
 }
 
 export interface NativeChatCard {
