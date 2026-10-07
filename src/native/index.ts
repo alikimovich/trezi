@@ -65,6 +65,7 @@ import {
 } from './activity-startup'
 import { appVersion } from './app-version'
 import { NativeBridge, setBridge } from './bridge'
+import { agentAttention } from './chat-agent-card'
 import { installNativeChat } from './chat-runtime'
 import { NativeContextController } from './context-controller'
 import { serviceConversation } from './conversation-service'
@@ -601,12 +602,17 @@ async function main() {
   chatController.services.effect = (effect) => {
     void contextController.effect(effect).catch((error) => workspaceController.reportError(error))
     if (effect.type === 'layers') void layersController.toggle()
+    else if (effect.type === 'source') openSource(effect.source)
     else projectEffect(effect)
   }
   serviceEvents.on('event', (channel, value) => {
     if (channel === 'preview:element-picked') contextController.selection(value)
     else if (channel === 'preview:readiness') contextController.readiness(value)
     else if (channel === 'agent:event') {
+      // LKM-193: a background agent waiting for an answer is the attention-worthy event.
+      const attention = agentAttention(value)
+      if (attention)
+        activityController.append(attention, 'needs-action', { event: 'background-question' })
       const files =
         value.type === 'isolation' && value.state === 'merged'
           ? value.files
@@ -624,7 +630,8 @@ async function main() {
   })
   serviceEvents.on('command', (channel, args, result) => {
     if (channel === 'agent:spawn-comment' && result?.ok)
-      contextController.queued(args[2], result.spawnId, args[1].slice(0, 70), !!result.queued)
+      // The whole request: the card collapses it at a word and expands on click (LKM-193).
+      contextController.queued(args[2], result.spawnId, String(args[1]), !!result.queued)
     if (channel === 'annotations:add' || channel === 'annotations:remove')
       void contextController.notes(args[0]).catch((error) => workspaceController.reportError(error))
     if (channel === 'agent:close-project') contextController.projects.delete(args[0])

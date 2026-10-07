@@ -32,6 +32,7 @@ export class NativeContextController {
   private readonly treziLog = new Map<string, string>()
   readonly spawns = new Map<string, NativeChatContext['spawns']>()
   private readonly finishedSpawns = new Set<string>()
+  private readonly spawnPins = new Map<string, { root: string; selector: string }>()
   constructor(
     readonly workspace: NativeWorkspaceController,
     readonly chat: NativeChatController,
@@ -85,8 +86,7 @@ export class NativeContextController {
     const state = this.project(entry.root)
     if (!state.loading) state.loading = this.load(entry.root)
     await state.loading
-    if (this.workspace.active?.root === entry.root)
-      await this.send('preview:set-annotations', state.pins)
+    await this.showPins(entry.root)
   }
   private async load(root: string) {
     const state = this.project(root),
@@ -323,7 +323,7 @@ export class NativeContextController {
     if (this.projects.get(root) !== state || read !== state.notesRead) return
     this.setNotes(state, notes)
     this.changed(root)
-    if (this.workspace.active?.root === root) await this.send('preview:set-annotations', state.pins)
+    await this.showPins(root)
   }
   private setNotes(state: ProjectContext, notes: Annotation[]) {
     state.notes = notes.map((n) => ({ id: n.id, text: n.text }))
@@ -351,15 +351,46 @@ export class NativeContextController {
           status: 'running'
         }
       ]
-    else if (event.type === 'spawn-finished') list = list.filter((s) => s.id !== event.sessionId)
-    else if (event.type === 'status' || event.type === 'error')
+    else if (event.type === 'spawn-finished') {
+      list = list.filter((s) => s.id !== event.sessionId)
+      this.spawnPins.delete(event.sessionId)
+    } else if (event.type === 'status' || event.type === 'error')
       list = list.map((s) =>
         s.id === event.sessionId
           ? { ...s, activity: event.type === 'status' ? event.text : event.message }
           : s
       )
+    // LKM-193: the question waits on the agent's card; the chat is flagged when hidden.
+    else if (event.type === 'question-request') {
+      list = list.map((s) => (s.id === event.sessionId ? { ...s, question: event.request } : s))
+      const chat = this.chat.chats.get(event.projectKey)
+      if (chat && chat.chat !== this.chat.active) chat.needsReview = true
+    } else if (event.type === 'question-resolved')
+      list = list.map((s) =>
+        s.id === event.sessionId && s.question?.id === event.id ? { ...s, question: undefined } : s
+      )
     this.spawns.set(event.projectKey, list)
     const root = this.chat.chats.get(event.projectKey)?.context?.root
     if (root) this.changed(root)
+    if (root && (event.type.startsWith('question-') || event.type === 'spawn-finished'))
+      void this.showPins(root)
+  }
+  /** The element a comment agent was started from, for its "?" pin while it asks. */
+  spawnPin(id: string, root: string, selector: string) {
+    if (!this.finishedSpawns.has(id)) this.spawnPins.set(id, { root, selector })
+  }
+  /** Annotation pins plus a "?" pin on each comment whose agent waits for an answer. */
+  private pins(root: string) {
+    const waiting = new Set(
+      [...this.spawns.values()].flatMap((list) => list.filter((s) => s.question).map((s) => s.id))
+    )
+    const asking = [...this.spawnPins]
+      .filter(([id, pin]) => pin.root === root && waiting.has(id))
+      .map(([id, pin]) => ({ id: `spawn:${id}`, selector: pin.selector, label: '?' }))
+    return [...this.project(root).pins, ...asking]
+  }
+  private async showPins(root: string) {
+    if (this.workspace.active?.root === root)
+      await this.send('preview:set-annotations', this.pins(root))
   }
 }

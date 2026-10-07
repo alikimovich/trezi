@@ -12,6 +12,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `test/syntax-highlight.mjs` (unit) and the `source-syntax` smoke check (group `core`): TSX categories, under 16 ms per keystroke on 3,000 lines, light/dark captures.
 - [x] Install `shiki@^3` (3.23.0, installed by the operator) and confirm the Shiki halves of both tests; categories tuned against real scopes.
 - [x] Shiki ships inside `Trezi.app` (`backend/syntax/`, `scripts/syntax-bundle.mjs`) and loads outside the checkout (`test/syntax-bundle.mjs`); bundle size and startup recorded in PROGRESS.
+## Background agent questions on the card (LKM-193)
+
+- [x] A spawn's `question-request` reaches its card (`chat-agent-card.ts`, `ChatAgentCard.swift`) and renders with `NativeQuestionCard`; the answer settles the spawn's own pending question through `agent:respond-question`; Cancel dismisses a waiting question.
+- [x] Attention: the card scrolls into view once per new question, Activity gets a needs-action line, and the comment's preview pin shows "?".
+- [x] Card content: the whole request on click (preview cut at a word), the file:line editor link, and Queued / Running / Waiting for your answer. Done and Failed stay the comment result rows.
+- [x] Background rules (v29): ask only when the choice is truly the user's, otherwise choose a default and name it.
+- [x] Unit `chat-agent-card` and `comment-agents`; native `agent-question` smoke check (group `chat`) captures light and dark; CHANGELOG line.
+
 ## Agents resolve merge conflicts (LKM-188)
 
 - [x] Repository-owner Git tools fetch and merge the publish base, leave conflict markers, and continue or abort with recovery refs; a resolved merge keeps both parents when landed.

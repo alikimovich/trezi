@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurnOptions } from './api'
+import type { AgentEvent, AgentTurnOptions, QuestionRequest } from './api'
 import type { ChatAgentSettings } from './chat-settings'
 import type { NativeChatMessage, NativeChatState } from './native-chat'
 
@@ -23,7 +23,16 @@ export interface NativeChatContext {
   }
   tokens: { needed: boolean; dismissed: boolean }
   notes: { id: string; text: string }[]
-  spawns: { id: string; label: string; status: string; activity?: string }[]
+  spawns: NativeSpawn[]
+}
+/** A background agent of the chat. `label` is its whole request; `question` the one it
+ *  waits on (LKM-193), answered on its card. */
+export interface NativeSpawn {
+  id: string
+  label: string
+  status: string
+  activity?: string
+  question?: QuestionRequest
 }
 export interface NativeChatLayout {
   visible: boolean
@@ -55,6 +64,8 @@ export type NativeChatEffect =
     }
   | { type: 'tokens'; root: string }
   | { type: 'notes'; root: string }
+  /** Show a `file:line[:column]` of the active project in the editor (LKM-193). */
+  | { type: 'source'; source: string }
   | { type: 'layers' | 'focus' | 'history' }
 export type NativeChatCommand =
   | { type: 'attach' }

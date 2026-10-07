@@ -140,7 +140,8 @@ const nativeCover = createNativeCover()
 let overlayBox: HTMLDivElement | null = null
 let overlayLabel: HTMLDivElement | null = null
 let pinsLayer: HTMLDivElement | null = null
-let annotationPins: { id: string; selector: string }[] = []
+// `label` marks a comment whose background agent waits for an answer ("?", LKM-193).
+let annotationPins: { id: string; selector: string; label?: string }[] = []
 
 // Inline-comment state. `commentMode` is the armed whole-page mode (armed from
 // the renderer via setCommentMode). `commenting` is the element the OPEN inline
@@ -639,14 +640,17 @@ function buildPins(): void {
   if (!pinsLayer) return
   pinsLayer.textContent = ''
   pinDots.clear()
-  annotationPins.forEach((pin, i) => {
+  let note = 0
+  for (const pin of annotationPins) {
+    const asking = typeof pin.label === 'string'
     const dot = document.createElement('div')
     dot.style.cssText =
       'position:fixed;pointer-events:auto;cursor:default;width:18px;height:18px;' +
       'display:none;align-items:center;justify-content:center;border-radius:50%;' +
-      'background:#f59e0b;color:#fff;font:700 10px/1 ui-monospace,Menlo,sans-serif;' +
+      `background:${asking ? '#0a84ff' : '#f59e0b'};color:#fff;font:700 10px/1 ui-monospace,Menlo,sans-serif;` +
       'box-shadow:0 1px 3px rgba(0,0,0,0.3);transform:translate(-50%,-50%);'
-    dot.textContent = String(i + 1)
+    dot.textContent = asking ? String(pin.label).slice(0, 2) : String(++note)
+    if (asking) dot.title = 'A background agent needs your answer in the chat'
     dot.addEventListener('click', (e) => {
       e.preventDefault()
       e.stopPropagation()
@@ -654,7 +658,7 @@ function buildPins(): void {
     })
     pinsLayer!.appendChild(dot)
     pinDots.set(pin.id, { selector: pin.selector, dot })
-  })
+  }
   positionPins()
 }
 
@@ -2009,7 +2013,7 @@ if (!IS_SIM_BRIDGE) {
     setActive(next)
   })
   ipcRenderer.on(SET_COMMENT_MODE, (_e, m: CommentMode) => setCommentMode(m, true))
-  ipcRenderer.on(SET_PINS, (_e, pins: { id: string; selector: string }[]) => {
+  ipcRenderer.on(SET_PINS, (_e, pins: typeof annotationPins) => {
     annotationPins = Array.isArray(pins) ? pins : []
     buildPins()
   })

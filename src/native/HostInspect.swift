@@ -158,6 +158,12 @@ extension Host {
                 do { reply(id, try await verifyCommentRows(c)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
+        case "chatAgentCard":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await verifyAgentCard(c)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "chatText":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in

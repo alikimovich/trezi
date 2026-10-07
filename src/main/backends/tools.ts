@@ -61,6 +61,8 @@ export function toolDetail(_name: string, input: unknown): string | undefined {
 }
 
 export function describeTool(name: string, input: unknown): string {
+  // The question itself is shown as a card; its status never names the raw tool (LKM-193).
+  if (name === 'AskUserQuestion') return 'Asking you a question'
   const detail = toolDetail(name, input)
   return detail ? `${name} · ${detail}` : name
 }
