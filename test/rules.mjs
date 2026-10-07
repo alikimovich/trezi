@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 31, 'version bumped to 31')
+assert(TREZI_RULES_VERSION === 32, 'version bumped to 32')
 // LKM-196: open_preview reports the real load; only a deferred open is "requested".
 assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
 // LKM-195: no ownerless pending items; finish the step, name the user action, or a true
