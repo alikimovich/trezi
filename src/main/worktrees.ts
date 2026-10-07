@@ -97,9 +97,15 @@ export async function createWorktree(
   })
   try {
     await editingOwner().syncSetupHelpers(repoRoot, wt.path)
+    // LKM-194: an agent can still read and edit without dependencies; never fail on them.
     await provisionDependencies(repoRoot, wt.path, undefined, {
       background: !!opts.backgroundInstall
-    })
+    }).catch((error) =>
+      productLog.warn('worktree', 'Worktree dependencies not installed', {
+        id,
+        error: msg(error)
+      })
+    )
   } catch (error) {
     productLog.error('worktree', 'Worktree setup failed', { id, branch, error: msg(error) })
     await owner.removeWorktree(wt, false, 'abandon').catch(() => {})

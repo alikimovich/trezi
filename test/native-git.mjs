@@ -48,12 +48,16 @@ const invoke = async (channel, ...args) => {
       await new Promise((resolve) => {
         release = resolve
       })
+    if (conflict === 'existing')
+      return { ok: false, error: 'Merge conflict', conflictFiles: ['app.ts'], recoveryRefs: [] }
     return conflict
       ? {
           ok: false,
-          error: 'Merge conflict',
-          conflictFiles: ['app.ts'],
-          recoveryRefs: ['recovery/a']
+          error: 'Publish stopped because local and remote changes overlap in 1 file.',
+          conflictFiles: ['package.json'],
+          recoveryRefs: ['recovery/a'],
+          branch: 'trezi/main',
+          versionConflict: { local: '0.2.8', remote: '0.2.7' }
         }
       : { ok: true, branch, url: 'https://example.com/pr' }
   }
@@ -143,9 +147,10 @@ await git.publish('a')
 assert.equal(lastToast().action, 'View on GitHub')
 await sheets.toastAction({ id: lastToast().id })
 assert.deepEqual(opened, ['https://example.com/pr'])
-conflict = true
+// Unmerged files the checkout already had (no recovery refs): the failure sheet.
+conflict = 'existing'
 await git.publish('a')
-assert.match(logs.at(-1)[0], /recovery\/a/)
+assert.match(logs.at(-1)[0], /app\.ts/)
 assert.equal(sheets.current.state.title, 'Couldn’t create the pull request')
 assert.match(sheets.current.state.detail, /app\.ts/)
 assert.deepEqual(
@@ -157,6 +162,27 @@ await sheets.action({ id: sheets.current.state.id, action: 'retry', values: {} }
 await tick()
 assert.equal(calls.filter((c) => c[0] === 'publish:ship').length, ships + 1, 'Retry publishes')
 assert.equal(sheets.current.state.title, 'Couldn’t create the pull request')
+sheets.close()
+// LKM-194: a reconcile conflict left the checkout clean (recovery refs hold both tips):
+// the Resolve card offers the higher version and the agent merges the remote branch.
+conflict = true
+workspace.active = b
+await git.publish('a')
+assert.match(logs.at(-1)[0], /recovery\/a/)
+assert.equal(sheets.current.state.title, 'Publish has merge conflicts')
+assert.match(sheets.current.state.detail, /package\.json/)
+assert.match(sheets.current.state.detail, /0\.2\.8 here, 0\.2\.7 on GitHub\): keep 0\.2\.8/)
+assert.deepEqual(
+  sheets.current.state.actions.map((action) => action.label),
+  ['Later', 'Resolve with agent']
+)
+await sheets.action({ id: sheets.current.state.id, action: 'resolve', values: {} })
+assert.equal(calls.at(-1)[0], 'resolve-turn')
+assert.equal(calls.at(-1)[1], 'chat-a', 'Resolve turn uses the published project’s chat')
+assert.match(calls.at(-1)[2], /git_sync_base with ref origin\/trezi\/main/)
+assert.match(calls.at(-1)[2], /keep 0\.2\.8 \(the higher SemVer\)/)
+assert.match(calls.at(-1)[2], /Recovery refs: recovery\/a/)
+assert.equal(workspace.active.key, 'a')
 sheets.close()
 conflict = false
 prConflict = true

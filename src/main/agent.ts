@@ -17,6 +17,7 @@ import type {
 } from '../shared/api'
 import { backgroundAgentOptions, describeAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
+import { dependencyNotice } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
 import { type ProviderSession, pickProvider } from './backends'
@@ -1547,7 +1548,8 @@ export function registerAgentIpc(
       // (serialized behind the chat's chain — waits out any in-flight merge). No-op for
       // a non-isolated chat.
       try {
-        await beforeTurn(key, text)
+        // LKM-194: dependencies that cannot install are reported, never a refusal.
+        const dependencies = await beforeTurn(key, text)
         if (preparation.cancelled) throw new Error('Message cancelled before sending.')
         if (sessions.get(key) !== session) throw new Error('This chat is closed.')
         // Only an unresolved drift park refuses; a stopped or failed-landing hold and
@@ -1586,9 +1588,16 @@ export function registerAgentIpc(
         const history = handoff ? (handoffHistory.get(key) ?? []) : []
         if (handoff) handoffHistory.delete(key)
         // LKM-182: a new chat's dependency install may still be running.
-        const installNotice = dependenciesInstalling(session.root)
-          ? 'Dependencies are still installing in this workspace: read and edit files, but do not run commands that need node_modules until it finishes.\n\n'
-          : ''
+        const installNotice = dependencies
+          ? dependencyNotice(dependencies)
+          : dependenciesInstalling(session.root)
+            ? 'Dependencies are still installing in this workspace: read and edit files, but do not run commands that need node_modules until it finishes.\n\n'
+            : ''
+        safeSend(getWindow, 'agent:event', {
+          type: 'dependencies',
+          issue: dependencies,
+          projectKey: key
+        } satisfies AgentEvent)
         trackers.get(session)?.push(id, 0)
         watchdog.touch(key)
         logTurnStart(key, id, session.options)

@@ -1,3 +1,4 @@
+import { DependencyConflictError, manifestMarkers } from './conflict-markers'
 import { editingOwner } from './editing-owner'
 import { productLog } from './product-log'
 import { installProjectDependencies } from './project-dependencies'
@@ -25,7 +26,10 @@ export function dependencyInstall(checkout: string): Promise<void> | undefined {
  *
  * `background` (LKM-182, the new-chat path): the clone still happens here, but an
  * install that is needed starts and is not awaited, so a chat can show and its turn can
- * start while it runs. While one runs in a checkout, later calls leave it alone. */
+ * start while it runs. While one runs in a checkout, later calls leave it alone.
+ *
+ * A manifest or lockfile with unresolved conflict markers is never installed: the call
+ * rejects with `DependencyConflictError` instead, in either mode (LKM-194). */
 export async function provisionDependencies(
   liveRoot: string,
   checkout: string,
@@ -41,6 +45,9 @@ export async function provisionDependencies(
   const owner = editingOwner()
   // Empty/uninstalled projects are provisioned by their ordinary setup turn.
   if (!(await owner.dependencyState(liveRoot, checkout))) return
+  // LKM-194: a manifest with conflict markers cannot parse; installing only fails.
+  const marked = await manifestMarkers(checkout)
+  if (marked.length) throw new DependencyConflictError(marked)
   const job = (async () => {
     await install(checkout)
     await owner.markDependencies(liveRoot, checkout)

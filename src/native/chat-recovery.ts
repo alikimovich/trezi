@@ -1,3 +1,4 @@
+import { conflictTitle, fixInstallPrompt, resolveConflictPrompt } from '../shared/dependency-issue'
 import type { NativeChatCard } from '../shared/native-chat'
 import type { NativeChatController } from './chat-controller'
 import { type Chat, STOPPED_GROUP } from './chat-state'
@@ -61,7 +62,50 @@ export function recoveryCards(chat: Chat): NativeChatCard[] {
         { label: 'Fix with agent', action: 'preview-fix', disabled: busy }
       ]
     })
+  cards.push(...dependencyCards(chat, busy))
   return cards
+}
+
+/** LKM-194: the turn started without dependencies; say why and offer the way out. */
+function dependencyCards(chat: Chat, busy: boolean): NativeChatCard[] {
+  const issue = chat.dependencies
+  const conflict = issue?.conflict
+  if (conflict) {
+    const version = conflict.version
+    return [
+      {
+        id: 'dependency-conflict',
+        title: conflictTitle(conflict),
+        detail: [
+          'Unresolved Git conflict markers came in from the project.',
+          conflict.manifests ? 'Dependencies were not installed.' : '',
+          version
+            ? `Both sides changed the version (${version.ours} and ${version.theirs}): keep ${version.keep}, the higher one.`
+            : '',
+          conflict.files.length > 1 ? conflict.files.join('\n') : ''
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        actions: [
+          { label: 'Show conflict', action: 'dependency-show' },
+          { label: 'Resolve with agent', action: 'dependency-resolve', disabled: busy }
+        ]
+      }
+    ]
+  }
+  if (issue?.install)
+    return [
+      {
+        id: 'dependency-install',
+        title: 'Dependencies aren’t installed',
+        detail: issue.install,
+        actions: [
+          { label: 'Dismiss', action: 'dependency-dismiss' },
+          { label: 'Fix with agent', action: 'dependency-fix', disabled: busy }
+        ]
+      }
+    ]
+  return []
 }
 
 /** A recovery card action; false when `action` is not one. */
@@ -132,6 +176,32 @@ export async function recoveryAction(
       await follow(fixPrompt(error))
       return true
     }
+    case 'dependency-show': {
+      const conflict = chat.dependencies?.conflict
+      if (conflict)
+        controller.services.effect({
+          type: 'source',
+          source: `${conflict.files[0]}:${conflict.line}`
+        })
+      return true
+    }
+    case 'dependency-resolve':
+    case 'dependency-fix': {
+      const issue = chat.dependencies
+      if (busy || !issue) return true
+      const prompt = issue.conflict
+        ? resolveConflictPrompt(issue.conflict)
+        : issue.install
+          ? fixInstallPrompt(issue.install)
+          : null
+      if (!prompt) return true
+      chat.paused = false
+      await follow(prompt)
+      return true
+    }
+    case 'dependency-dismiss':
+      chat.dependencies = undefined
+      return true
     case 'revert': {
       // The hover Revert of a stopped turn's message drops its held work.
       const message = chat.messages.find((m) => m.id === id)
