@@ -115,8 +115,10 @@ struct EditingIslands {
     }
 
     /// Persists a composed definition. Refused when the chat closed or its turn ended.
+    /// `planned` (LKM-201): its bindings were declared before the source had them; it stays
+    /// inactive after landing until Bun reports every binding resolved (`activate`).
     mutating func commit(chat: String, token: String, definition: [(JSText, JSValue)], engine: String,
-                         fallback: JSValue?, initial: JSValue, name: String? = nil) throws -> [JSValue] {
+                         fallback: JSValue?, initial: JSValue, name: String? = nil, planned: Bool = false) throws -> [JSValue] {
         guard var session = sessions[chat], let composition = session.composing, composition.token == token, !composition.ended else {
             if sessions[chat]?.composing?.token == token { sessions[chat]?.composing = nil }
             throw RepositoryRefusal(.conflict, "Chat closed or turn finished during composition.")
@@ -128,6 +130,7 @@ struct EditingIslands {
         if let fallback { fields.append((JSText("fallback"), fallback)) }
         if let origin = composition.origin { fields.append((JSText("origin"), .string(JSText(origin)))) }
         if let name { fields.append((JSText("name"), .string(JSText(name)))) }
+        if planned { fields.append((JSText("planned"), .bool(true))) }
         let record = JSValue.object(fields)
         var next = session.records
         if composition.replacing, let index = next.firstIndex(where: { $0["id"]?.text?.string == composition.id }) { next[index] = record }
@@ -177,6 +180,7 @@ struct EditingIslands {
         let expected = session.chain[source] ?? source
         if action == "reload" { return (expected, nil, nil) }
         guard record["status"]?.text?.string == "ready" else { throw RepositoryRefusal(.conflict, "Source has not landed.") }
+        if record["planned"] == .bool(true) { throw RepositoryRefusal(.conflict, "These controls activate once their planned bindings resolve.") }
         // LKM-181: a disabled or hidden island writes nothing.
         if record["user"]?.text != nil { throw RepositoryRefusal(.conflict, "This island is disabled. Enable it to edit.") }
         if record["health"]?.text?.string == "disabled" {
@@ -231,13 +235,28 @@ struct EditingIslands {
         }
     }
 
+    /// LKM-201: a landed planned island whose bindings all resolved. Its initial values are
+    /// what the landed source holds; from now on it is an ordinary island. A record that is
+    /// not planned (already activated) is left as it is.
+    mutating func activate(chat: String, id: String, revision: Int, initial: JSValue) throws -> [JSValue] {
+        try update(chat, id, revision: revision) { fields in
+            let record = JSValue.object(fields)
+            guard record["planned"] == .bool(true) else { return }
+            guard record["status"]?.text?.string == "ready" else { throw RepositoryRefusal(.conflict, "Source has not landed.") }
+            Self.set(&fields, "initial", initial)
+            Self.set(&fields, "health", .string(JSText("ready")))
+            Self.remove(&fields, "planned"); Self.remove(&fields, "reason"); Self.remove(&fields, "reasons")
+        }
+    }
+
     /// The agent's `show`: the same island again at the end of the chat (`turn`), also when hidden.
     mutating func show(chat: String, id: String, turn: Int) throws -> [JSValue] {
         if sessions[chat]?.composing != nil || sessions[chat]?.running != nil {
             throw RepositoryRefusal(.busy, "An island operation is already in progress.")
         }
         return try update(chat, id) { fields in
-            guard JSValue.object(fields)["status"]?.text?.string == "ready" else {
+            let record = JSValue.object(fields)
+            guard record["status"]?.text?.string == "ready", record["planned"] != .bool(true) else {
                 throw RepositoryRefusal(.conflict, "This island never activated. Use action:clone to make a new one.")
             }
             Self.set(&fields, "turn", .number(Double(max(1, turn))))

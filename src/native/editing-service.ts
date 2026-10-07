@@ -104,7 +104,7 @@ export function serviceEditing(
     islands: async (chat) => (await call('islands', { chat }, 'read')).records,
     islandDefine: (chat, turn, origin, id, revision) =>
       call('islandDefine', present({ chat, turn, origin, id, revision })),
-    islandCommit: async (chat, token, definition, engine, initial, fallback, name) =>
+    islandCommit: async (chat, token, definition, engine, initial, fallback, name, planned) =>
       (
         await call(
           'islandCommit',
@@ -115,10 +115,13 @@ export function serviceEditing(
             engine,
             initial: plain(initial),
             fallback,
-            name
+            name,
+            planned: planned || undefined
           })
         )
       ).records,
+    islandActivate: async (chat, id, revision, initial) =>
+      (await call('islandActivate', { chat, id, revision, initial: plain(initial) })).records,
     islandAbort: async (chat, token) => {
       await call('islandAbort', { chat, token })
     },

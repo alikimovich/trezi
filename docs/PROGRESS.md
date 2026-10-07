@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-201: pending islands with planned bindings
+
+- **Why.** `define` read the bindings from the worktree and refused any that did not resolve, so an agent had to finish its source edits before the island existed, and definition mistakes surfaced only at the end of the turn.
+- **Validation first.** Every `define` runs `islandProblems` before it attaches, waits or reserves: all problems at once (manifest fields, each param, each block; a block naming a bad param is reported with the param only), as `{error, code: 'invalid_definition', problems}`.
+- **Planned.** `define {planned:true}` (also on `clone`) skips the resolve check; a missing or unparsable file is allowed (`IslandBindingError.fixable`), anything outside the project is not. The answer lists `bindings` as `resolved`/`planned`. The record stores `planned: true` (Swift `commit`), and `initial` holds only the values that resolved.
+- **Activation.** Landing makes the record `ready` as before; the owner still refuses commands and `show` while it is planned. `refresh` activates it when every binding resolves in the live source (`islandActivate`: landed values become `initial`), otherwise disables it as a whole with `plannedFailure` ("These controls never activated: Lift is not in card.js."), saved through `islandHealth`. All-or-nothing, because the agent promised every binding; a later edit that adds the literals still activates it. An unlanded turn keeps the existing "did not land" reason. Both show Recreate with agent.
+- **Guidance.** Rules v35 and `chatIslandGuidance`: catalog readiness, then preview identity, then only the relevant code, then an early planned define before editing source. The MCP schema gains `planned`.
+- **Tests.** Unit `chat-island-pending` on the real Swift editing owner. `trezi-agent-tools` cannot listen on its Unix socket in the worker sandbox.
+
 ## 2026-10-07 — LKM-199 repair: island readiness and reason codes
 
 - **Why.** The first LKM-199 pass collapsed every "no session" outcome into "This chat is closed", which is wrong for a failed preparation or a project that is not a Git repository, and the agent had no way to ask whether a chat could host islands. The recorded scope addition asks for readiness plus a reason code and recovery step.

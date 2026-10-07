@@ -11,7 +11,9 @@ import {
   islandHealth,
   islandProblem,
   islandStatus,
-  nameIslands
+  nameIslands,
+  plannedFailure,
+  plannedLine
 } from './chat-island-bindings'
 import { islandMessageContext } from './chat-island-context'
 import { islandDefinition } from './chat-island-schema'
@@ -220,11 +222,14 @@ export class ChatIslands {
       reason?: string
       reasons: Record<string, string>
     }[] = []
+    /** Landed planned islands whose bindings all resolve now (LKM-201). */
+    const activations: { record: IslandRecord; values: Record<string, IslandValue> }[] = []
     for (const record of session.records) {
       let values: Record<string, IslandValue> = {},
         sourceRevision = '',
         fieldReasons: Record<string, string> = {},
         check: { health: IslandHealth; reason?: string }
+      const planned = record.planned && record.status === 'ready'
       try {
         const source = await islandSource(session.root, record)
         values = source.values
@@ -232,14 +237,21 @@ export class ChatIslands {
         fieldReasons = source.broken
         check = islandHealth(record, fieldReasons)
         seen.set(record.id, values)
-      } catch (error) {
-        check = {
-          health: 'disabled',
-          reason:
-            error instanceof IslandBindingError
-              ? error.message
-              : islandProblem(error, 'These controls can’t read their source right now.')
+        if (planned && !Object.keys(fieldReasons).length) activations.push({ record, values })
+        else if (planned) {
+          fieldReasons = Object.fromEntries(
+            Object.entries(fieldReasons).map(([id, line]) => [id, plannedLine(line)])
+          )
+          check = plannedFailure(record, fieldReasons)
         }
+      } catch (error) {
+        const problem =
+          error instanceof IslandBindingError
+            ? error.message
+            : islandProblem(error, 'These controls can’t read their source right now.')
+        check = planned
+          ? plannedFailure(record, {}, problem)
+          : { health: 'disabled', reason: problem }
       }
       // A waiting island's bindings are in its turn's worktree until that turn lands.
       if (record.status === 'waiting') fieldReasons = {}
@@ -267,7 +279,9 @@ export class ChatIslands {
         ...state,
         detail:
           record.status === 'waiting'
-            ? 'Waiting for this turn’s source changes to land.'
+            ? record.planned
+              ? 'Pending: its bindings are planned. Controls activate after this turn lands and every binding resolves.'
+              : 'Waiting for this turn’s source changes to land.'
             : (record.fallback ?? ''),
         engine: record.engine,
         replay: !!record.manifest.replay,
@@ -280,6 +294,13 @@ export class ChatIslands {
     session.broken = broken
     if (session.writes === writes) session.seen = seen
     this.changed(chat)
+    // A landed planned island becomes an ordinary one, its landed values as `initial`.
+    for (const { record, values } of activations)
+      this.adopt(
+        chat,
+        session,
+        await this.owner.islandActivate(chat, record.id, record.revision, values).catch(() => null)
+      )
     // The status is persisted with the record, so a restart shows it before any read.
     for (const change of changes) {
       const records = await this.owner

@@ -64,7 +64,8 @@ final class EditingOwner: @unchecked Sendable {
     static let methods: [String: (required: Set<String>, optional: Set<String>)] = [
         "islandsOpen": (["chat", "root", "record"], []), "islandsClose": (["chat"], []), "islands": (["chat"], []),
         "islandDefine": (["chat", "turn"], ["origin", "id", "revision"]),
-        "islandCommit": (["chat", "token", "definition", "engine", "initial"], ["fallback", "name"]),
+        "islandCommit": (["chat", "token", "definition", "engine", "initial"], ["fallback", "name", "planned"]),
+        "islandActivate": (["chat", "id", "revision", "initial"], []),
         "islandAbort": (["chat", "token"], []), "islandSettle": (["chat", "successful"], ["turn"]),
         "islandMark": (["chat", "id"], ["user"]), "islandShow": (["chat", "id", "turn"], ["origin"]),
         "islandHealth": (["chat", "id", "revision", "health"], ["reason", "reasons"]),
@@ -121,7 +122,13 @@ final class EditingOwner: @unchecked Sendable {
             if let fallback, fallback.text == nil { throw ServiceContractFailure.invalidRequest }
             let records = try islands.commit(chat: try Self.key(body, "chat"), token: try Self.key(body, "token"), definition: definition,
                                              engine: engine, fallback: fallback, initial: body.value("initial")!,
-                                             name: body.has("name") ? try Self.islandName(body) : nil)
+                                             name: body.has("name") ? try Self.islandName(body) : nil,
+                                             planned: body.has("planned") ? try body.bool("planned") : false)
+            return result(Self.object([("records", .array(records))]))
+        case "islandActivate":
+            guard case .object? = body.value("initial") else { throw ServiceContractFailure.invalidRequest }
+            let records = try islands.activate(chat: try Self.key(body, "chat"), id: try Self.key(body, "id"),
+                revision: try Self.count(body.value("revision")), initial: body.value("initial")!)
             return result(Self.object([("records", .array(records))]))
         case "islandMark":
             let user = body.has("user") ? try body.string("user") : nil
