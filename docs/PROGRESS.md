@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-184: branch menu aligned with the address text
+
+- **Cause.** The borderless pull-down's alignment rect starts 5 pt inside its frame (the stack view puts that edge on the address's), but its stock cell draws the title at x = 8, 3 pt further right; squeezed, it moves the title by varying amounts (measured 3–8 pt depending on width). The address field's text starts on its own alignment edge (frame −2 pt plus the cell's 2 pt padding).
+- **Fix.** `BranchPopUpButton` (`ToolbarAddress.swift`) uses `BranchPopUpCell`, whose `titleRect`/`drawTitle` start the title at the alignment edge at every width, keeping the stock 16 pt for the chevron. The control's intrinsic width is 3 pt narrower, so at its natural size the chevron stays the same ~4 pt after the title and the frame (the click target) keeps its size. Tail truncation is unchanged; squeezed, the title gets the room the stock cell gave it.
+- **Test.** `toolbarInspect` adds `titleAlignment()`: both controls are drawn at 8x, the first inked column found and the first glyph's side bearing subtracted (bold "h" vs regular "t"), giving text origins in window x, plus the title–chevron gap. The `toolbar-address` check requires |dx| <= 0.5 pt and a 1–6.5 pt gap (16 when truncated) at all three widths, and at the wide and default widths forces the window's own appearance (`window-appearance`, never the system's) for `toolbar-{wide,default}-{light,dark}.png`. Standalone AppKit measurement: dx 0.04–0.07 pt (was 3 pt).
+
 ## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
 
 - `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.
