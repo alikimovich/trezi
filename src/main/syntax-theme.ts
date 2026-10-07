@@ -46,11 +46,23 @@ const RULES: [SyntaxCategory, string[]][] = [
       'keyword.control.import',
       'keyword.control.export',
       'keyword.control.from',
+      'meta.special punctuation.definition.keyword.svelte',
       'punctuation.definition.list.begin.markdown'
     ]
   ],
-  // Operators stay plain, as in Xcode; punctuation takes its parent's category.
-  ['plain', ['keyword.operator', 'meta.embedded', 'variable.parameter', 'invalid']],
+  // Operators (and `=>`) and Swift parameter labels stay plain, as in Xcode; other
+  // punctuation takes its parent's category.
+  [
+    'plain',
+    [
+      'keyword.operator',
+      'storage.type.function.arrow',
+      'meta.embedded',
+      'variable.parameter',
+      'invalid',
+      'meta.parameter-clause.swift entity.name.function.swift'
+    ]
+  ],
   [
     'string',
     [
@@ -61,7 +73,10 @@ const RULES: [SyntaxCategory, string[]][] = [
       'markup.raw'
     ]
   ],
-  ['number', ['constant.numeric', 'constant.character', 'constant.character.escape']],
+  [
+    'number',
+    ['constant.numeric', 'constant.character', 'constant.character.escape', 'keyword.other.unit']
+  ],
   [
     'regex',
     [
@@ -135,7 +150,17 @@ const RULES: [SyntaxCategory, string[]][] = [
     ]
   ],
   ['tag', ['entity.name.tag', 'punctuation.definition.tag']],
-  ['attribute', ['entity.other.attribute-name', 'entity.other.attribute-name.class.css']],
+  // Svelte directives (`on:click`, `class:x`) read as one attribute, like Vue's `@click`.
+  [
+    'attribute',
+    [
+      'entity.other.attribute-name',
+      'entity.other.attribute-name.class.css',
+      'meta.directive keyword.control.svelte',
+      'meta.directive punctuation.definition.keyword.svelte',
+      'meta.directive entity.name.type.svelte'
+    ]
+  ],
   [
     'preprocessor',
     [
@@ -150,8 +175,6 @@ const RULES: [SyntaxCategory, string[]][] = [
       'meta.attribute.swift',
       'storage.type.attribute.swift',
       'meta.directive.vue',
-      'keyword.control.svelte',
-      'punctuation.definition.keyword.svelte',
       'keyword.other.important'
     ]
   ],
@@ -162,8 +185,7 @@ const RULES: [SyntaxCategory, string[]][] = [
       'constant.other.color',
       'support.constant.property-value',
       'constant.other',
-      'variable.other.enummember',
-      'keyword.other.unit'
+      'variable.other.enummember'
     ]
   ],
   [

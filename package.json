@@ -102,6 +102,7 @@
     "test:turn-terminal": "bun test/turn-terminal.mjs",
     "test:file-tree": "bun test/file-tree.mjs",
     "test:syntax-highlight": "bun test/syntax-highlight.mjs",
+    "test:syntax-bundle": "bun test/syntax-bundle.mjs",
     "test:media-types": "bun test/media-types.mjs",
     "test:rules": "bun test/rules.mjs",
     "test:tw-classes": "bun test/tw-classes.mjs",

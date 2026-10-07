@@ -10,7 +10,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Visible lines plus 100 first, then the rest; per-line grammar state for incremental edits; the 500 KB cut-off is gone.
 - [x] Xcode-like dynamic light/dark colours (`SourceSyntax.swift`), no re-tokenization on an appearance change.
 - [x] `test/syntax-highlight.mjs` (unit) and the `source-syntax` smoke check (group `core`): TSX categories, under 16 ms per keystroke on 3,000 lines, light/dark captures.
-- [ ] Install `shiki@^3` (`bun add shiki@^3`; the worker sandbox had no registry access) and confirm the Shiki halves of both tests.
+- [x] Install `shiki@^3` (3.23.0, installed by the operator) and confirm the Shiki halves of both tests; categories tuned against real scopes.
+- [x] Shiki ships inside `Trezi.app` (`backend/syntax/`, `scripts/syntax-bundle.mjs`) and loads outside the checkout (`test/syntax-bundle.mjs`); bundle size and startup recorded in PROGRESS.
 ## Agents resolve merge conflicts (LKM-188)
 
 - [x] Repository-owner Git tools fetch and merge the publish base, leave conflict markers, and continue or abort with recovery refs; a resolved merge keeps both parents when landed.

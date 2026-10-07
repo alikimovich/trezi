@@ -357,27 +357,118 @@ const expect = (runs, expected, label) => {
     'Swift'
   )
 }
-for (const [language, text, sample] of [
-  ['json', '{ "name": "trezi", "n": 1 }', ['"name"', 'property']],
-  ['markdown', '# Title\n\nSome **bold** text', ['Title', 'heading']],
-  ['yaml', 'name: ci\non: [push]', ['name', 'property']],
-  ['shellscript', 'echo "hi" # note', ['# note', 'comment']],
-  ['html', '<a href="x">y</a>', ['href', 'attribute']],
-  ['svelte', '<script>let a = 1</script>\n{#if a}<p>{a}</p>{/if}', ['let', 'keyword']],
+// Rules tuned against real Shiki scopes: `=>` and Swift argument labels stay plain, CSS
+// units colour with their number, Svelte directives read as one attribute.
+{
+  const exact = (runs, text) => runs.filter(([t]) => t === text).map(([, k]) => k)
+  const tsx = (await highlight('tsx', 'const f = (a: number) => a * 2')).runs
+  assert.ok(
+    tsx.every(([t]) => !t.includes('=>')),
+    `=> is plain: ${JSON.stringify(tsx)}`
+  )
+  const swift = (await highlight('swift', 'func moved(by delta: Double) {}')).runs
+  assert.ok(
+    swift.every(([t]) => !/\b(by|delta)\b/.test(t)),
+    `labels are plain: ${JSON.stringify(swift)}`
+  )
+  const css = (await highlight('css', 'a {\n  margin: 4px 1.5em;\n}')).runs
+  assert.deepEqual(exact(css, '4px'), ['number'], JSON.stringify(css))
+  assert.deepEqual(exact(css, '1.5em'), ['number'])
+}
+for (const [language, text, expected] of [
+  [
+    'json',
+    '{ "name": "trezi", "n": 1, "ok": true }',
+    [
+      ['"name"', 'property'],
+      ['"trezi"', 'string'],
+      ['1', 'number'],
+      ['true', 'keyword']
+    ]
+  ],
+  [
+    'markdown',
+    '# Title\n\nSome **bold** and _it_ with `code` and [link](http://x).\n> quote',
+    [
+      ['Title', 'heading'],
+      ['**bold**', 'strong'],
+      ['_it_', 'emphasis'],
+      ['`code`', 'string'],
+      ['link', 'link'],
+      ['> quote', 'comment']
+    ]
+  ],
+  [
+    'yaml',
+    'name: ci\njobs:\n  build: # c\n    run: "bun test"',
+    [
+      ['name', 'property'],
+      ['ci', 'string'],
+      ['# c', 'comment'],
+      ['"bun test"', 'string']
+    ]
+  ],
+  [
+    'shellscript',
+    'for f in *.ts; do echo "hi $f"; done # note',
+    [
+      ['for', 'keyword'],
+      ['echo', 'function'],
+      ['"hi $f"', 'string'],
+      ['# note', 'comment']
+    ]
+  ],
+  [
+    'html',
+    '<a href="x">y &amp; z</a>\n<script>\n  const a = 1\n</script>\n<style>\n  p { color: red }\n</style>',
+    [
+      ['<a', 'tag'],
+      ['href', 'attribute'],
+      ['"x"', 'string'],
+      ['const', 'keyword'],
+      ['color', 'property'],
+      ['red', 'constant']
+    ]
+  ],
+  [
+    'svelte',
+    '<script>\n  let a = 1\n</script>\n\n{#if a}<p class:x={a} on:click={go}>{a}</p>{/if}',
+    [
+      ['let', 'keyword'],
+      ['#if', 'keyword'],
+      ['/if', 'keyword'],
+      ['<p', 'tag'],
+      ['class:x', 'attribute'],
+      ['on:click', 'attribute']
+    ]
+  ],
   [
     'vue',
-    '<template><p :title="a">{{ a }}</p></template>\n<script setup>const a = 1</script>',
-    ['const', 'keyword']
+    '<template>\n  <p :title="a" @click="go">{{ a }}</p>\n</template>\n<script setup>\nconst a = 1\n</script>',
+    [
+      ['<p', 'tag'],
+      [':title', 'attribute'],
+      ['@click', 'attribute'],
+      ['const', 'keyword']
+    ]
   ],
-  ['scss', '$gap: 4px;\n.a { margin: $gap; }', ['margin', 'property']],
-  ['jsonc', '// c\n{ "a": 1 }', ['// c', 'comment']],
-  ['mdx', '# Hi\n\nimport X from "./x"', ['Hi', 'heading']],
-  ['javascript', 'const a = 1', ['const', 'keyword']],
-  ['jsx', 'const a = <b>x</b>', ['b', 'tag']],
-  ['typescript', 'type A = number', ['type', 'keyword']]
+  [
+    'scss',
+    '$gap: 4px;\n@mixin m($a) { padding: $a; }\n.a { margin: $gap; }',
+    [
+      ['margin', 'property'],
+      ['4px', 'number'],
+      ['@mixin', 'preprocessor']
+    ]
+  ],
+  ['jsonc', '// c\n{ "a": 1 }', [['// c', 'comment']]],
+  ['mdx', '# Hi\n\nimport X from "./x"', [['Hi', 'heading']]],
+  ['javascript', 'const a = 1', [['const', 'keyword']]],
+  ['jsx', 'const a = <b>x</b>', [['b', 'tag']]],
+  ['typescript', 'type A = number', [['type', 'keyword']]]
 ]) {
   const { runs } = await highlight(language, text)
-  expect(runs, [sample], language)
+  expect(runs, expected, language)
 }
 
 // Typing cost on a 3,000-line TSX file: the first full pass, then one keystroke's re-tokenization.

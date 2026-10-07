@@ -2,6 +2,38 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-183: real Shiki, shipped in the app, sizes and startup
+
+- **Shiki installed.** The operator added `shiki@^3` (3.23.0) to package.json/bun.lock, so the "Still blocked"/"Open" notes in the two entries below no longer apply. Both tests now run against real Shiki and neither skips.
+- **Categories tuned against real scopes.** Several rules were adjusted after comparing with Shiki's actual scopes:
+  - `=>` and Swift argument labels (`by` in `moved(by delta:)`) are plain.
+  - CSS/SCSS units (`4px`) take the number colour.
+  - Svelte directives (`on:click`, `class:x`) are one attribute, like Vue's `@click`.
+  - Svelte `{#if}`/`{/if}` are keywords.
+  - Embedded-expression braces (JSX `{}`, `${}`, Svelte `{}`, Swift `\(`) keep the one embedded colour.
+  - `test/syntax-highlight.mjs` asserts these rules and now has multi-line HTML/Svelte/Vue samples. A one-line `<script>…</script>` never closes in those grammars, so the rest of the line parsed as JS. It also asserts several categories per language for JSON, Markdown, YAML, shell, HTML (with `<script>`/`<style>`), Svelte, Vue and SCSS.
+- **Shiki was resolving from the checkout.** The backend's packages are external (LKM-111), so the built `index.cjs` reached `shiki/*` through the checkout's `node_modules`. A copy of the built backend outside the checkout failed with `Cannot find module 'shiki/core'`; without `--no-install`, Bun even tried to auto-install it.
+- **The fix.** `scripts/syntax-bundle.mjs` builds `src/main/syntax-shiki-bundle.ts` into `Resources/backend/syntax/` as its own ESM bundle, split into one lazy chunk per grammar plus the WASM. It contains Shiki core, the Oniguruma engine and only the editor's grammars. The CJS backend finds it through `TREZI_SYNTAX_BUNDLE`, which the build banner sets to `join(__dirname, "syntax/shiki.mjs")`. Unbuilt runs load the source module instead.
+- **Build checks.** `build-native.mjs` fails if the backend bundle imports or inlines `shiki`/`@shikijs`. `buildSyntaxBundle` fails if the Shiki bundle has any non-`node:` external import.
+- **The new unit test.** `test/syntax-bundle.mjs` builds the bundle and the loader the same way into a temp folder outside the checkout. It highlights TSX there in a child `bun --no-install` and asserts that grammars stay lazy and that unused grammars and themes are not shipped.
+- **Proof against the built app.** After `bun run build`, `Trezi.app` was copied to `/tmp/claude/trezi-app-copy`. Loading its `backend/syntax/shiki.mjs` with `--no-install` returned TSX tokens. Only `tsx` was loaded, after an import of 9 ms, 10.4 ms to create the WASM engine and 4.1 ms for the TSX grammar.
+- **Bundle size.**
+  - **Before.** Shiki was not shipped, and the backend did not reference it.
+  - **After, backend.** `index.cjs` gains about 23.6 KB of LKM-183 code (`syntax-*.ts`, controller, smoke fixture), measured from the esbuild metafile. It has no Shiki code and no static Shiki import.
+  - **After, Shiki bundle.** The app gains `backend/syntax/` at 1.9 MB on disk, against an 83 MB test-profile app. Its parts:
+    - `shiki.mjs` entry: 113 KB (core and engine glue, no grammar).
+    - WASM chunk: 622 KB (the base64-inlined 467 KB `onig.wasm`).
+    - 22 grammar modules in 23 chunks (tsx 176 KB, jsx 178 KB, mdx 136 KB, swift 88 KB, markdown 59 KB, shared JS/TS/CSS/HTML chunks 175–181 KB, yaml 11 KB, …).
+  - **Grammars.** typescript, tsx, javascript, jsx, css, scss, postcss, html, html-derivative, json, jsonc, markdown, markdown-vue, mdx, svelte, vue and its three injection grammars, swift, yaml and shellscript.
+  - **Themes.** None of Shiki's bundled themes ship; the only theme is the generated category theme. For scale, `node_modules/@shikijs/langs` is 9.8 MB and `@shikijs/themes` is 1.8 MB.
+- **Startup.**
+  - **Cold start.** App start loads nothing: `loadCore` runs with the first highlighted document, and each grammar loads with its first file.
+  - **First highlight.** The first TSX tokenizer in a fresh Bun outside the checkout takes 57 ms in `test/syntax-bundle.mjs` (import, WASM engine and TSX grammar).
+  - **Full pass and typing.** A full 3,000-line TSX pass takes 131–145 ms of Bun time, in 8 ms slices. Keystroke re-tokenization has a p95 of 0.27–0.33 ms (unit).
+- **Native results.** `core` passed 18/18, including `source-syntax` on the test-profile (`-Onone`) build.
+  - Typing 40 keystrokes on the 3,000-line TSX file, the main-thread time per keystroke (insert, display, state update and highlight apply) had a p95 of 14.73 ms and a worst of 18.32 ms. Every highlight was applied: 41 of 41 revisions.
+  - `source-syntax-light.png` and `-dark.png` show real colours.
+
 ## 2026-10-06 — LKM-183 repair: Shiki is required, tests no longer skip
 
 - **Review finding.** `shiki` was not a dependency, so the editor showed plain text (`highlighted -1/41`) and the tests passed by skipping. The unit test and the `source-syntax` smoke check now fail when Shiki cannot load, and the smoke check also asserts `highlighted` reaches the final revision, that the probe categories are still shown after typing, and that the p95 includes applying highlights.

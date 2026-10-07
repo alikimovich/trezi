@@ -5,12 +5,14 @@ import { SYNTAX_THEME, syntaxCategoryOf } from './syntax-theme'
 /**
  * Shiki for the code editor (LKM-183): TextMate grammars on the Oniguruma engine, the
  * same tokenizer VS Code runs. Nothing loads at app start. The engine (WASM) loads with
- * the first highlighted file and each grammar with its first file; Shiki's
- * `bundledLanguages` entries are lazy `import()`s, so only used grammars are read.
+ * the first highlighted file and each grammar with its first file.
  *
- * Shiki is ESM-only and the backend is CJS (dynamic `import()`, like parse5). Only the
+ * Shiki comes from `syntax-shiki-bundle.ts`: from source when run unbuilt, and in the
+ * app from its own ESM bundle inside `Resources/backend/syntax/` (`TREZI_SYNTAX_BUNDLE`,
+ * set by `scripts/build-native.mjs`), so it never resolves from the checkout. Only the
  * surface used here is typed.
  */
+declare const TREZI_SYNTAX_BUNDLE: string | undefined
 type Grammar = {
   tokenizeLine2(
     line: string,
@@ -28,28 +30,27 @@ type Core = { highlighter: Highlighter; languages: Record<string, unknown>; cate
 const FOREGROUND_MASK = 0b00000000_11111111_10000000_00000000
 const FOREGROUND_OFFSET = 15
 
-// biome-ignore lint/suspicious/noExplicitAny: module namespaces typed at the use site
+/** The Shiki module: the app's own bundle when built, the source module otherwise. */
+export const SYNTAX_SHIKI_MODULE =
+  typeof TREZI_SYNTAX_BUNDLE === 'string' ? TREZI_SYNTAX_BUNDLE : './syntax-shiki-bundle.ts'
+// A variable specifier keeps esbuild from inlining Shiki into the CJS backend bundle.
+// biome-ignore lint/suspicious/noExplicitAny: module namespace typed at the use site
 const load = (specifier: string): Promise<any> => import(specifier)
 let core: Promise<Core> | undefined
 const tokenizers = new Map<SyntaxLanguage, Promise<SyntaxTokenizer | null>>()
 
 function loadCore(): Promise<Core> {
   core ??= (async () => {
-    const [{ createHighlighterCore }, { createOnigurumaEngine }, langs] = await Promise.all([
-      load('shiki/core'),
-      load('shiki/engine/oniguruma'),
-      load('shiki/langs').catch(() => load('shiki'))
-    ])
-    const bundledLanguages: Record<string, unknown> = langs.bundledLanguages
-    const highlighter: Highlighter = await createHighlighterCore({
+    const shiki = await load(SYNTAX_SHIKI_MODULE)
+    const highlighter: Highlighter = await shiki.createHighlighterCore({
       themes: [SYNTAX_THEME],
       langs: [],
-      engine: createOnigurumaEngine(load('shiki/wasm'))
+      engine: shiki.createOnigurumaEngine(shiki.loadWasm())
     })
     const { colorMap } = highlighter.setTheme(SYNTAX_THEME.name)
     return {
       highlighter,
-      languages: bundledLanguages,
+      languages: shiki.languages,
       categories: Int8Array.from(colorMap, syntaxCategoryOf)
     }
   })()
