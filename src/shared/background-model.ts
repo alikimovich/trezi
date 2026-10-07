@@ -12,3 +12,13 @@ export function backgroundAgentOptions(
   if (!options.provider || options.provider === 'claude') return { ...options, model: 'sonnet' }
   return { ...options }
 }
+
+/** Landing commit messages (LKM-189) use the provider's small fast model with low
+ * effort; a connection keeps its exact model, as for comments. */
+export function describeAgentOptions(options: AgentOptions): AgentOptions {
+  if (options.connectionId) return { ...options }
+  if (options.provider === 'codex') return { ...options, model: 'gpt-6-sol', effort: 'low' }
+  if (!options.provider || options.provider === 'claude')
+    return { ...options, model: 'haiku', effort: undefined }
+  return { ...options }
+}

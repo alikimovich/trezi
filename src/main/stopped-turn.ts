@@ -51,7 +51,7 @@ export async function keepStoppedTurn(sessionKey: string): Promise<StoppedTurnRe
   const hold = stoppedHold(sessionKey)
   if (!hold || hold.reverted) return { ...nothingHeld }
   try {
-    const landed = await landStoppedTurn(sessionKey, 'Keep partial changes from a stopped turn')
+    const landed = await landStoppedTurn(sessionKey)
     return landed ? { ok: true, ...landed } : { ...nothingHeld }
   } catch (error) {
     return { ok: false, files: [], error: error instanceof Error ? error.message : String(error) }

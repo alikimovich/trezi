@@ -1692,6 +1692,50 @@ async function generateTitle(
   }
 }
 
+/** One-shot, tool-less completion (`ModelProvider.complete`), ended by `signal`. */
+async function complete(
+  prompt: string,
+  options: AgentOptions,
+  signal: AbortSignal
+): Promise<string | null> {
+  const abort = new AbortController()
+  const stop = (): void => abort.abort()
+  signal.addEventListener('abort', stop, { once: true })
+  try {
+    if (signal.aborted) return null
+    const { query } = await loadSdk()
+    let out = ''
+    const q = query({
+      prompt,
+      options: {
+        settingSources: [],
+        strictMcpConfig: true,
+        allowedTools: [],
+        includePartialMessages: false,
+        permissionMode: 'default',
+        abortController: abort,
+        maxTurns: 1,
+        canUseTool: async () => ({ behavior: 'deny', message: 'This completion uses no tools.' }),
+        ...(options.model ? { model: options.model } : {})
+      }
+    })
+    for await (const msg of q) {
+      if (msg.type === 'assistant') {
+        for (const block of msg.message.content) {
+          if (block.type === 'text') out += block.text
+        }
+      } else if (msg.type === 'result') {
+        break
+      }
+    }
+    return out.trim() || null
+  } catch {
+    return null
+  } finally {
+    signal.removeEventListener('abort', stop)
+  }
+}
+
 /** Tool-free post-turn distillation into the one shared project memory. */
 async function updateProjectMemory(
   currentMemory: string,
@@ -1745,6 +1789,7 @@ export const claudeProvider: ModelProvider = {
   supportsSpawn: true,
   startSession,
   generateTitle,
+  complete,
   updateProjectMemory,
   checkLogin: checkClaudeLogin
 }

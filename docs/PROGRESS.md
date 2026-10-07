@@ -7,6 +7,13 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Why.** "Sends when this turn finishes" / "Sends after this turn's changes land" above a queued message only restated the obvious (user request).
 - **Change.** `BLOCK_NOTES` in `src/native/chat-queue.ts` maps `running` and `landing` to `''`; `queueCanSend` stays false while blocked. `ComposerQueue.hasHeader` already drops the 28 pt header for an empty note on an unpaused queue, so the box is one 34 pt row. Resolve, sign-in, paused and landing-error notes are unchanged.
 - **Tests.** `test/chat-send-queue.mjs` expects an empty note while running and landing. `smoke-chat` expects `queueNote === ''` and `queueHeight` 34 before the `-queue-stack` capture; the Resolve check keeps 62.
+## 2026-10-06 — LKM-189: landing commit messages describe the change
+
+- **Why.** A landing commit's subject was the user's prompt (capped at 72 chars), so `git log` read as chat text, sometimes with "[Attached files]", and the PR description started from the first prompt.
+- **Message.** `chat-commit.ts` builds it before the squash from the worktree diff against `baseSha` (`changeEvidence`: name-status, stat, bounded `-U2` excerpt plus new files) and the final reply, and asks the chat's provider through a new optional `ModelProvider.complete` one-shot (tool-less Claude `query` with no setting sources; Codex thread) on the background model (`describeAgentOptions`). `parseCommitMessage` rejects prompt echoes, chatter, attachments, long subjects and bullet-less answers. A 3 s deadline aborts the call and falls back to `fallbackCommitMessage` ("Update a, b and c", bullets, changed areas). The same text is the branch commit and the live commit; trailers `Trezi-Turn`/`Trezi-Chat` replace the old "Trezi turn N (branch)." body. Conventional Commits are followed when >= 3 of the last 20 subjects (60%) use them.
+- **Re-squash.** Parked turns don't advance `baseSha`, so the next landing's evidence is the combined diff; `test/live-commit.mjs` 10b checks the model sees both turns and no prompt.
+- **Publish.** `generatePublishDescription` now gives the model the branch's commit subjects (`describedCommitSubjects` drops legacy prompt-subject commits) and asks it to summarise them against the diff.
+- **Tests.** New `test/commit-message.mjs` (unit); updated chat-landing, live-commit, stop-recovery, auto-reconciliation, conversation-owner and publish-description expectations. No real provider call was made, so the 3 s budget for Haiku/Sol is unmeasured; a slow model simply falls back.
 
 ## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
 

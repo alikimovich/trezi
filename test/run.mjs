@@ -118,6 +118,7 @@ const UNIT = [
   'product-log',
   'publish-message',
   'publish-description',
+  'commit-message',
   'slash-token',
   'skills-discovery',
   'provider-skills',

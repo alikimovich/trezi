@@ -57,7 +57,7 @@ try {
   assert.equal(await afterTurn(clean.key, 'edit', [], 'success', true), null)
   assert.equal(readFileSync(join(clean.root, 'a.txt'), 'utf8'), 'CHAT\ntwo\nthree\nfour\nLIVE\n')
   assert.equal(git(clean.root, 'diff', '--cached', '--name-only'), 'other.txt')
-  assert.equal(git(clean.root, 'log', '-1', '--format=%s'), 'edit')
+  assert.equal(git(clean.root, 'log', '-1', '--format=%s'), 'Update a.txt')
   assert(!events.some((e) => e.state === 'parked'))
   assert.equal(isolationSnapshot(clean.key).state, 'isolated')
   await beforeTurn(clean.key, 'next')
