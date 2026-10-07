@@ -6,6 +6,7 @@ import { nativeChat } from './chat-runtime'
 import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
+import { checkQueueGeometry } from './smoke-queue'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -113,14 +114,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     // One row and no reason row: a running turn is the normal wait (LKM-191).
-    if (
-      queue.queueCount !== 1 ||
-      queue.queueNote !== '' ||
-      queue.queueHeight !== 34 ||
-      queue.queueInset !== 14 ||
-      Math.abs(queue.queueOverlap - 16) > 1
-    )
-      throw new Error('Composer queue stack geometry incorrect')
+    if (queue.queueNote !== '') throw new Error('A running turn gave the queue a note')
+    queue = await checkQueueGeometry(host, screenshot, '1', 1, false)
     if ((await host.request('chatInspect')).cards.some((id: string) => id.startsWith('queued-')))
       throw new Error('Queue duplicated in conversation')
     writeFileSync(
@@ -144,8 +139,18 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     if (queue.queueCount !== 1) throw new Error('An edited message was not queued again')
-    const id = queue.queue[0].id
-    await host.request('chatPerform', { action: 'queue-remove', card: id })
+    for (const text of ['A second queued message', 'A third queued message']) {
+      await host.request('composerPerform', { text })
+      await inspectUntil(
+        (method) => host.request(method),
+        'composerInspect',
+        (value) => value.text === text
+      )
+      await host.request('composerPerform', { action: 'send' })
+    }
+    queue = await checkQueueGeometry(host, screenshot, '3', 3, false)
+    for (const { id } of queue.queue)
+      await host.request('chatPerform', { action: 'queue-remove', card: id })
     for (let i = 0; i < 100 && (await host.request('composerInspect')).queueCount; i++)
       await new Promise((resolve) => setTimeout(resolve, 50))
     if ((await host.request('composerInspect')).queueCount)
@@ -261,10 +266,10 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       if (
         composer.queueCount !== 1 ||
         composer.queue[0].text !== parkedText ||
-        !composer.queueNote.startsWith('Waiting for Resolve') ||
-        composer.queueHeight !== 62
+        !composer.queueNote.startsWith('Waiting for Resolve')
       )
         throw new Error(`Resolve queue is not visibly waiting: ${JSON.stringify(composer)}`)
+      await checkQueueGeometry(host, screenshot, `note-${width}`, 1, true)
       if (
         !card?.detail?.includes('project changed under them') ||
         !card.detail.includes('src/native/fixture.ts') ||

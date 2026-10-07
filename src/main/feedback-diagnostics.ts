@@ -101,6 +101,43 @@ const tail = (text: string, max: number) =>
 const failed = (error: unknown) =>
   `unavailable: ${error instanceof Error ? error.message : String(error)}`
 
+/**
+ * LKM-199: the unified log of Trezi's processes and subsystems, errors and faults only;
+ * every level buried the useful lines under system frameworks' routine output.
+ */
+export const SYSTEM_LOG_PREDICATE =
+  '(process BEGINSWITH "Trezi" OR subsystem BEGINSWITH "dev.trezi") AND (messageType == error OR messageType == fault)'
+export const SYSTEM_LOG_LINES = 200
+/** `log show --style compact` lines: `2026-10-07 13:54:15.323 F  TreziHost[…] message`. */
+const LOG_STAMP = /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+ /
+
+/**
+ * The newest `max` lines of `log show` output, its header dropped and a run of the same
+ * message (the time aside) collapsed into its first line with a repeat count.
+ */
+export function systemLogLines(out: string, max = SYSTEM_LOG_LINES) {
+  const lines: string[] = []
+  let previous = ''
+  let repeats = 0
+  const flush = () => {
+    if (repeats) lines[lines.length - 1] += ` (repeated ${repeats} more times)`
+    repeats = 0
+  }
+  for (const line of out.split('\n')) {
+    if (!LOG_STAMP.test(line)) continue
+    const message = line.replace(LOG_STAMP, '')
+    if (message === previous) {
+      repeats++
+      continue
+    }
+    flush()
+    previous = message
+    lines.push(line)
+  }
+  flush()
+  return lines.slice(-max)
+}
+
 /** The redacted plain-text diagnostics section, at most `DIAGNOSTICS_LIMIT` characters. */
 export async function gatherDiagnostics(sources: DiagnosticsSources = {}) {
   const run = sources.run ?? execRun
@@ -162,11 +199,12 @@ export async function gatherDiagnostics(sources: DiagnosticsSources = {}) {
     : null
   const system = run(
     '/usr/bin/log',
-    ['show', '--last', '1h', '--style', 'compact', '--predicate', 'process BEGINSWITH "Trezi"'],
+    ['show', '--last', '1h', '--style', 'compact', '--predicate', SYSTEM_LOG_PREDICATE],
     20_000
   ).then(
-    (out) => `## System log, Trezi processes (last hour)\n${tail(out.trim() || '(none)', 4000)}`,
-    (error) => `## System log, Trezi processes (last hour)\n${failed(error)}`
+    (out) =>
+      `## System log, Trezi errors and faults (last hour)\n${tail(systemLogLines(out).join('\n') || '(none)', 4000)}`,
+    (error) => `## System log, Trezi errors and faults (last hour)\n${failed(error)}`
   )
   for (const part of await Promise.all([sample, landing, status])) if (part) sections.push(part)
   const product = readLogs(sources.logDir ?? productLogDirectory(), FEEDBACK_LOG_WINDOW, now())

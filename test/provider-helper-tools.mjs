@@ -93,7 +93,16 @@ const CALLS = {
   layered_shadow: { elevation: 3 },
   line_height: { fontSizePx: 16 },
   list_recommended_skills: {},
-  install_skills: { packId: SKILL_PACKS[0].id, scope: 'project' }
+  install_skills: { packId: SKILL_PACKS[0].id, scope: 'project' },
+  ask_user: {
+    questions: [
+      {
+        question: 'Which light?',
+        header: 'Light',
+        options: [{ label: 'Warm' }, { label: 'Cool' }]
+      }
+    ]
+  }
 }
 // Pure: computed where the provider runs. Every other tool must reach main.
 const PURE = new Set([
@@ -371,7 +380,8 @@ try {
   assert.deepEqual(
     [...all.listed].sort(),
     Object.keys(CALLS)
-      .filter((n) => !['workspace_state', 'prepare_conflict_resolution'].includes(n))
+      // Claude asks with its own AskUserQuestion, not ask_user (LKM-199).
+      .filter((n) => !['workspace_state', 'prepare_conflict_resolution', 'ask_user'].includes(n))
       .sort()
   )
   // Main's real answers.
@@ -380,7 +390,9 @@ try {
   assert.notEqual(all.results.chat_island.isError, true)
   assert.match(textOf(all.results.preview_location), /helper-route/, 'main’s preview URL')
   assert.deepEqual(all.results.preview_screenshot.content, [
-    { type: 'image', data: JPEG.toString('base64'), mimeType: 'image/jpeg' }
+    { type: 'image', data: JPEG.toString('base64'), mimeType: 'image/jpeg' },
+    // LKM-199: every preview answer names the page it describes.
+    { type: 'text', text: `Preview page: ${URL_SHOWN} (port 5199, route /helper-route).` }
   ])
   assert.equal(JSON.parse(all.results.open_preview.content[0].text).requested, true)
   assert.ok(
@@ -493,6 +505,13 @@ try {
     textOf(bridgedIsland)
   )
   assert.match(textOf(bridged.results.preview_location), /helper-route/)
+  // LKM-199: Codex asks through ask_user; main shows the same question card as Claude's.
+  assert.match(textOf(bridged.results.ask_user), /End your turn now/)
+  const card = notified.find(
+    (n) => n.channel === 'agent:event' && n.payload.type === 'question-request'
+  )
+  assert.equal(card?.payload.request.sessionKey, CHAT)
+  assert.equal(card?.payload.request.questions[0].options[1].label, 'Cool')
   assert.match(textOf(bridged.results.workspace_state), /live folder/)
   console.log(
     'PROVIDER-HELPER-TOOLS OK — Claude and Codex helper sessions reach every Trezi tool in main, under the owner’s grant'

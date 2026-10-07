@@ -24,7 +24,8 @@ export const TREZI_AGENT_ACTIONS = [
   'preview_console',
   'preview_viewport',
   'project_ui_catalog',
-  'compose_project_ui'
+  'compose_project_ui',
+  'ask_user'
 ] as const
 export type TreziAgentToolAction = (typeof TREZI_AGENT_ACTIONS)[number]
 

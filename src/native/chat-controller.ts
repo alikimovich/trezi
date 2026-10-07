@@ -37,6 +37,7 @@ import {
 } from './chat-state'
 
 export interface ChatServices {
+  /** Registers the chat's island session; `recordId` is empty while a new chat is prepared. */
   restoreIslands?: (chat: string, root: string, recordId: string) => void
   invoke: (channel: string, ...args: any[]) => Promise<any>
   render: (state: NativeChatSnapshot) => void
@@ -120,7 +121,8 @@ export class NativeChatController {
           chat.stopped && [...chat.messages].reverse().find((m) => m.role === 'assistant')
         if (stoppedMessage) stoppedMessage.revertGroup = `${STOPPED_GROUP}${chat.chat}`
       }
-      if (live.record.id) this.services.restoreIslands?.(chat.chat, chat.root, live.record.id)
+      // A new chat still being prepared has no record id yet; its islands wait for it.
+      this.services.restoreIslands?.(chat.chat, chat.root, live.record.id)
       chat.ready = true
       this.settingsChanged(chat)
       this.changed(chat)

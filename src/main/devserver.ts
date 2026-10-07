@@ -1,5 +1,6 @@
 import type { NativeView } from '../native/platform'
 import type { ProjectRuntime } from '../native/runtime-service'
+import { outputLogger } from './devserver-log'
 import { registerServiceDevServer } from './devserver-service'
 import { editingOwner } from './editing-owner'
 import { productLog } from './product-log'
@@ -37,19 +38,12 @@ export function registerDevServerIpc(
   )
   // The window can outlive its webContents (display sleep / GPU loss), so guard
   // isDestroyed() or `.send()` throws for a late log line.
+  const output = outputLogger()
   registerServiceDevServer(router, runtime, (line) => {
     // A target can print source excerpts, prompts or secrets in build errors. Only
     // persist a fixed category and length; the Activity view still gets the line.
-    if (line.trim()) {
-      const kind = /\b(?:ready|listening)\b/i.test(line)
-        ? 'ready'
-        : /\b(?:error|failed)\b/i.test(line)
-          ? 'error'
-          : /\bwarn(?:ing)?\b/i.test(line)
-            ? 'warning'
-            : 'output'
-      productLog.info('output', 'Dev server output', { kind, chars: line.length }, 'devserver')
-    }
+    const fields = output(line)
+    if (fields) productLog.info('output', 'Dev server output', { ...fields }, 'devserver')
     const wc = getWindow()?.webContents
     if (wc && !wc.isDestroyed()) wc.send('devserver:log', line)
   })

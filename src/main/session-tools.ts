@@ -13,6 +13,7 @@ import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-too
 import { openAgentPreview } from './preview-tools'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
+import { askUser } from './question-tool'
 import { findPack } from './skill-packs'
 import type { TreziAgentToolAction } from './trezi-agent-tools'
 import { workflowOwner } from './workflow-owner'
@@ -57,6 +58,7 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'preview_viewport',
   'project_ui_catalog',
   'compose_project_ui',
+  'ask_user',
   'install_skills'
 ]
 
@@ -70,7 +72,7 @@ export async function runTreziTool(
     return { error: `${String(action)} is not one of Trezi's session tools.` }
   if (action === 'preview_viewport' && s.background)
     return { error: 'Background edits cannot resize the user preview.' }
-  if (isPreviewObserver(action)) return observeAgentPreview(action, args)
+  if (isPreviewObserver(action)) return observeAgentPreview(action, args, s.liveRoot)
   if (action === 'project_ui_catalog' || action === 'compose_project_ui')
     return runProjectUiTool(s.root, s.emitKey, action, args as never, s.connectionId)
   if (action === 'chat_island')
@@ -88,6 +90,7 @@ export async function runTreziTool(
       ? { error: 'Background edits cannot navigate the user editor.' }
       : openAgentCode(s.root, s.liveRoot, s.emitKey, args as never, s.notify)
   if (action === 'install_skills') return installSkills(args, s)
+  if (action === 'ask_user') return askUser(args, s)
   if (s.background)
     return {
       ok: false,

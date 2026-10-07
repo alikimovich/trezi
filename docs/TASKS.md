@@ -13,6 +13,16 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Open: keep the Agent OS token in the Keychain instead of preferences.
 - [ ] Open: Open Chat could scroll to the cited turn, not only open the chat.
 - [ ] Open: once LKM-200's tool timing lands, read it instead of the `Tool step` lines.
+## New chats, preview page, Codex questions, feedback log noise (LKM-199)
+
+- [x] Island sessions register for every chat with a workspace: restore, new chat (after `agent:chat-record` waits for the preparation), first turn, provider switch, and lazily on the first `chat_island` call (`ChatIslands.ensure`, `src/native/chat-island-session.ts`); never "not available yet" for a chat with a workspace.
+- [x] Repair: `chat_island` catalog returns `readiness` (ready + root/record/worktree, or `code`/`reason`/`recovery`); define/read/show/clone failures return the same structured block (`workspace_pending`, `preparation_failed`, `not_git`, `no_session`, `closed`); a ready workspace without a session is attached by the catalog. `agent:chat-record` (`src/main/chat-record.ts`) reports why a chat has no record. Unit `chat-island-new-chat` covers every code.
+- [x] Tests: unit `chat-island-new-chat` (real ChatIslands, stub owner, real chat controller); native check `island-new-chat` (group `islands`).
+- [x] Preview tools read the page's own location, name URL/port/route in every answer and refuse while the preview shows another server than the chat project's (`src/main/preview-page.ts`); unit `preview-page`.
+- [x] Codex gets `ask_user` (`src/main/question-tool.ts`): AskUserQuestion's card, returns at once, the answer is the next user message; foreground only; rules v34. Unit `ask-user`, policy golden and tool inventories.
+- [x] Feedback: identical repeated dev-server output lines dropped (`src/main/devserver-log.ts`); the system log section is errors/faults of Trezi processes and subsystems, repeats collapsed, 200 lines (`systemLogLines`).
+- [ ] Not verified against the reporter's diagnostics (GitHub #232/#233 were not readable from the worker): the preview mismatch cause (another server in the single preview view, or a lagging view URL) is inferred.
+- [ ] Background Codex agents cannot ask (`ask_user` is foreground-only, LKM-195 default rule); Gemini has no tools and no question card.
 
 ## Preview keeps old CSS after a dependency upgrade (LKM-197)
 
@@ -95,6 +105,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Remove the conversation's clearance mask (`LatestClearanceMask`, `latestClearHeight`, `ChatLatestButton.fade`): history stays painted under the composer and the latest button.
 - [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
 - [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
+
+## Composer queue: no row icon, even spacing and alignment (LKM-198)
+
+- [x] `ComposerQueue`: list glyph removed; note line and rows 24 pt with centred content, 4 pt apart, 10 pt above the first and below the last visible line (44 / 72 / 100 pt for 1 / 2 / 3+ rows, +28 with a note); more than three rows scroll.
+- [x] Box 10 pt inside the composer's sides, tucked 24 pt (the composer's radius) under it at every count, radius 18; text at the placeholder's x, the "…" menu in Send's 30 pt column.
+- [x] Composer-layout fixture (heights, overlap, insets for 1/2/3/5 rows, with and without a note); chat smoke `checkQueueGeometry` (`src/native/smoke-queue.ts`) asserts measured SwiftUI frames (|top − bottom| ≤ 1, centred rows, text vs placeholder and menu vs Send ±1) for 1 row, 3 rows and the Resolve note at both widths, with light and dark `-queue-<label>-{light,dark}.png` captures and JSON; CHANGELOG line.
 
 ## Composer queue: no note for the normal waiting case (LKM-191)
 

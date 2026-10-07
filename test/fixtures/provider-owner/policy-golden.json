@@ -31,7 +31,8 @@
      "git_merge_continue",
      "git_merge_abort",
      "pr_status",
-     "publish_update"
+     "publish_update",
+     "ask_user"
     ]
    }
   }
@@ -660,7 +661,8 @@
      "git_merge_continue",
      "git_merge_abort",
      "pr_status",
-     "publish_update"
+     "publish_update",
+     "ask_user"
     ],
     "resume": "thread-1",
     "session": "fg-N"

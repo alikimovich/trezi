@@ -13,9 +13,7 @@ import type {
   AgentOptions,
   ImageAttachment,
   PermissionRequest,
-  QuestionAnswers,
   QuestionRequest,
-  QuestionSpec,
   SessionTranscriptEntry,
   SlashCommandItem
 } from '../../shared/api'
@@ -35,6 +33,7 @@ import {
   type PermissionVerdict,
   permissionTarget
 } from '../provider-policy'
+import { formatAnswers, parseQuestions } from '../question-tool'
 import { treziRules } from '../rules'
 import { runTreziTool, sessionTool } from '../session-tools'
 import { elevationScale, layeredShadow } from '../shadows'
@@ -457,62 +456,6 @@ function textDelta(msg: unknown): string | null {
     return event.delta.text ?? null
   }
   return null
-}
-
-/**
- * Coerce the AskUserQuestion tool input into our `QuestionSpec[]`, tolerating the
- * SDK's loosely-typed payload. Returns [] when nothing usable is present (the
- * caller then lets the tool fall through rather than showing an empty card).
- */
-function parseQuestions(input: unknown): QuestionSpec[] {
-  const raw = (input as { questions?: unknown })?.questions
-  if (!Array.isArray(raw)) return []
-  const out: QuestionSpec[] = []
-  for (const q of raw) {
-    const question =
-      typeof (q as { question?: unknown })?.question === 'string'
-        ? (q as { question: string }).question
-        : ''
-    const options = Array.isArray((q as { options?: unknown })?.options)
-      ? (q as { options: unknown[] }).options
-          .map((o) => ({
-            label:
-              typeof (o as { label?: unknown })?.label === 'string'
-                ? (o as { label: string }).label
-                : '',
-            ...(typeof (o as { description?: unknown })?.description === 'string'
-              ? { description: (o as { description: string }).description }
-              : {})
-          }))
-          .filter((o) => o.label)
-      : []
-    if (!question || options.length === 0) continue
-    out.push({
-      question,
-      header:
-        typeof (q as { header?: unknown })?.header === 'string' && (q as { header: string }).header
-          ? (q as { header: string }).header
-          : 'Question',
-      options,
-      multiSelect: (q as { multiSelect?: unknown })?.multiSelect === true
-    })
-  }
-  return out
-}
-
-/**
- * Feed the user's picks back to the model as the AskUserQuestion tool result. We
- * DENY the tool with the answer as its message: in headless SDK mode there is no
- * built-in interactive prompt to run, so intercepting `canUseTool` and returning
- * the answer here keeps the whole exchange under trezi's control. The message is
- * phrased as an answer so the model continues with the user's choice in hand.
- */
-function formatAnswers(questions: QuestionSpec[], answers: QuestionAnswers): string {
-  const lines = questions.map((q) => {
-    const a = (answers[q.question] ?? '').trim()
-    return `- ${q.question}\n  → ${a || '(no answer)'}`
-  })
-  return `The user answered your question(s):\n${lines.join('\n')}`
 }
 
 /**
@@ -1316,6 +1259,7 @@ async function startSession(
               pendingQuestions.set(id, {
                 settle: (answers) => {
                   cleanup()
+                  // Headless SDK mode has no prompt to run: the denial message is the answer.
                   resolve({
                     behavior: 'deny',
                     message: answers

@@ -12,6 +12,7 @@ import type { NativeBridge } from './bridge'
 import { type ChatServices, NativeChatController } from './chat-controller'
 import { chatFrames } from './chat-frames'
 import { addReference, setIslandDirectory } from './chat-island-refs'
+import { islandLocator, islandRestorer } from './chat-island-session'
 import { islandPreviewPort } from './island-preview'
 import { LandingChecks, landingCheckMessage, previewLandingHost } from './landing-check'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
@@ -47,13 +48,23 @@ export function installNativeChat(
     previewLandingHost((root) => previewServers.get(projectKey(root))?.url ?? null),
     postLandingCheck
   )
+  const turnOf = (key: string) =>
+    nativeChat.get(key).messages.filter((m) => m.role === 'user').length
   const islands = new ChatIslands(
     (key) => {
       const chat = nativeChat.chats.get(key)
       if (chat) nativeChat.changed(chat)
     },
     undefined,
-    { origin: currentTurn, overrides: new IslandOverrides(islandPreviewPort()) }
+    {
+      origin: currentTurn,
+      overrides: new IslandOverrides(islandPreviewPort()),
+      locate: islandLocator(
+        (channel, ...args) => dispatchIPC('main', { type: 'invoke', channel, args }),
+        turnOf,
+        (key) => nativeChat.closed.has(key)
+      )
+    }
   )
   nativeIslands = islands
   installChatIslands(islands)
@@ -75,13 +86,7 @@ export function installNativeChat(
   }
   const frame = chatFrames()
   nativeChat = new NativeChatController({
-    restoreIslands: (key, root, recordId) =>
-      islands.register(
-        key,
-        root,
-        recordId,
-        () => nativeChat.get(key).messages.filter((m) => m.role === 'user').length
-      ),
+    restoreIslands: islandRestorer(islands, turnOf),
     invoke: (channel, ...args) => dispatchIPC('main', { type: 'invoke', channel, args }),
     render: (state) => host.send('chatState', { state: frame(renderIslands(state)) }),
     effect: (effect) => {
@@ -186,6 +191,8 @@ export function installNativeChat(
       if (key && !event.sessionId)
         for (const { kind, turn } of boundaries.events(key, event)) {
           for (const listener of turnBoundaries) listener(key, kind, turn)
+          // A chat's workspace is ready once a turn runs: its islands must be too (LKM-199).
+          if (kind === 'begin' && !islands.sessions.has(key)) void islands.ensure(key)
           // Only the islands the ending turn defined are activated (or made unavailable).
           if (kind !== 'begin')
             void islands.settle(key, kind === 'landed', turn).catch((error) => {
@@ -211,6 +218,8 @@ export function installNativeChat(
       if (chat) {
         chat.settings = chatAgentSettingsFromOptions(args[2])
         nativeChat.changed(chat)
+        // A provider switch keeps the record; a chat without islands gets them here.
+        void islands.ensure(args[1])
       }
     } else if (
       channel === 'agent:open-project' ||

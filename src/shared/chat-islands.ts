@@ -105,3 +105,50 @@ export interface IslandReference {
   title: string
   status: IslandStatus
 }
+
+/** Why a chat cannot host islands right now (LKM-199); each has one recovery step. */
+export type IslandBlockCode =
+  | 'workspace_pending'
+  | 'preparation_failed'
+  | 'not_git'
+  | 'no_session'
+  | 'closed'
+export const ISLAND_RECOVERY: Record<IslandBlockCode, string> = {
+  workspace_pending:
+    "This chat's workspace is still being prepared. Call chat_island again in a moment; define, read and show wait for it.",
+  preparation_failed:
+    "This chat's workspace could not be prepared. Tell the user, and ask them to start a new chat; do not retry here.",
+  not_git:
+    "This project's folder is not a Git repository, so the chat has no workspace. Tell the user to open a Git repository (git init) and start a new chat.",
+  no_session:
+    'The chat has a workspace but its islands could not be attached. Call chat_island catalog again; if it persists, tell the user to reopen the chat.',
+  closed: 'This chat is closed. Tell the user; islands need an open chat.'
+}
+export const ISLAND_REASON: Record<IslandBlockCode, string> = {
+  workspace_pending: "The chat's workspace is still being prepared.",
+  preparation_failed: "The chat's workspace could not be prepared.",
+  not_git: "The project's folder is not a Git repository.",
+  no_session: "The chat's islands are not attached to its workspace.",
+  closed: 'The chat is closed.'
+}
+export interface IslandBlocker {
+  code: IslandBlockCode
+  /** The underlying cause, when one is known (redacted by the caller). */
+  detail?: string
+}
+/** What `chat_island` catalog reports: whether this chat can host islands now, and where. */
+export interface IslandReadiness {
+  ready: boolean
+  chat: string
+  root?: string
+  recordId?: string
+  /** The chat's checkout (its worktree, or the project folder when it is not a Git repo). */
+  worktree?: string
+  code?: IslandBlockCode
+  reason?: string
+  recovery?: string
+}
+/** The answer of `agent:chat-record`: the chat's record, or why it has none. */
+export type ChatRecordLookup =
+  | { ready: true; root: string; recordId: string; worktree: string }
+  | ({ ready: false } & IslandBlocker)

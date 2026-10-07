@@ -262,6 +262,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-dreamer.ts` | test | — | smoke fixture |
 | `src/native/smoke-fixture.ts` | test | — | `--test` project and failure capture |
 | `src/native/smoke-inspector-island.ts` | test | — | smoke fixture |
+| `src/native/smoke-island-new-chat.ts` | test | — | smoke fixture |
 | `src/native/smoke-island-status.ts` | test | — | smoke fixture |
 | `src/native/smoke-islands.ts` | test | — | smoke fixture |
 | `src/native/smoke-layers.ts` | test | — | smoke fixture |
@@ -270,6 +271,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-preview-inspector.ts` | test | — | smoke fixture |
 | `src/native/smoke-projects.ts` | test | — | smoke fixture |
 | `src/native/smoke-publish.ts` | test | — | smoke fixture |
+| `src/native/smoke-queue.ts` | test | — | smoke fixture |
 | `src/native/smoke-restore.ts` | test | — | smoke fixture |
 | `src/native/smoke-sent-attachments.ts` | test | — | smoke fixture |
 | `src/native/smoke-session.ts` | test | — | smoke fixture (`TreziHost --session`) |
