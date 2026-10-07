@@ -74,7 +74,9 @@ This is not a runtime adapter and gestures do not call a model.
 Verify a representative adjustment for each independent effect on the actual
 preview, Undo, and persistence after reload. A file diff alone does not prove
 reactivity. When worktree landing or available observation tools prevent that
-check, report verification as pending and describe what remains to verify. Source created in a worktree waits
+check, never report it as passed and never leave it as an ownerless "pending": Trezi checks the
+preview after landing by itself, and anything else is a concrete user action you name (e.g. "Drag
+the Blur slider and check the card's shadow"). Source created in a worktree waits
 for successful landing; parked/failed changes do not activate. If this provider
 lacks `chat_island`, explain that limitation rather than invoking an older panel
 tool. Trezi owns the dev server; do not start another server.

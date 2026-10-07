@@ -19,6 +19,7 @@ import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import { checkInspectorIsland } from './smoke-inspector-island'
 import { checkChatIslands } from './smoke-islands'
+import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
@@ -821,6 +822,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkCommentRows(host, artifacts)
+      }
+    },
+    {
+      name: 'landing-check',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkLandingChecks(host, artifacts)
       }
     },
     {

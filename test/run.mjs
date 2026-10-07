@@ -165,6 +165,7 @@ const UNIT = [
   'background-model',
   'comment-agents',
   'chat-agent-card',
+  'landing-check',
   'run-stats',
   'codex-usage',
   'file-tree',
