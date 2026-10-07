@@ -218,6 +218,12 @@ export interface ModelProvider {
     options: AgentOptions
   ) => Promise<string | null>
   /**
+   * One-shot, tool-less completion of a self-contained prompt (LKM-189: a landing
+   * commit message from the turn's diff). Ends when `signal` aborts; `null` on any
+   * failure, so the caller falls back. Optional.
+   */
+  complete?: (prompt: string, options: AgentOptions, signal: AbortSignal) => Promise<string | null>
+  /**
    * Evaluate a completed chat against the project's current shared memory and
    * return the complete revised memory. Tool-less and best-effort: `null` means
    * no durable change or an evaluation failure. agent.ts serializes persistence.

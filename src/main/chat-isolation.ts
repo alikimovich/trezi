@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
+import { finalReply, turnMessage } from './chat-commit'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
 import { spareWorktreeIds, takeSpare } from './chat-spare'
@@ -289,7 +290,12 @@ async function landBatch(
 ): Promise<string[] | null> {
   await settleReverted(st)
   const turnNo = ++st.turnNo
-  let outcome = await completeTurn(st.liveRoot, st.wt, message, {
+  // Describes the cumulative diff (parked turns included), never the prompt (LKM-189).
+  const described = await turnMessage(sessionKey, st, turnNo, {
+    prompt: message,
+    reply: finalReply(turn)
+  })
+  let outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
     land: terminal === 'success'
   })
   let reconcileFiles: string[] | null = null
@@ -302,7 +308,7 @@ async function landBatch(
   ) {
     try {
       const prep = await stageResolve(st.liveRoot, st.wt)
-      if (prep.clean) outcome = await completeTurn(st.liveRoot, st.wt, message)
+      if (prep.clean) outcome = await completeTurn(st.liveRoot, st.wt, described.text)
       else reconcileFiles = prep.conflicted
     } catch {
       /* preserve the recovery branch and surface the fallback */
@@ -311,7 +317,7 @@ async function landBatch(
   logLanding(sessionKey, st.wt.branch, outcome, terminal, reconcileFiles)
   const at = Date.now()
   if (outcome.outcome === 'merged') {
-    await landTurn(sessionKey, st, outcome, turnNo, message)
+    await landTurn(sessionKey, st, outcome, turnNo, described)
     st.lastLanding = { outcome: 'merged', files: outcome.files, at }
   } else if (outcome.outcome === 'parked') {
     // A stopped or failed turn holds its work (LKM-151); a drift park stays a
@@ -474,7 +480,8 @@ export async function releaseChat(
       await settleReverted(st)
       if (!st.parked) {
         const turnNo = ++st.turnNo
-        const outcome = await completeTurn(st.liveRoot, st.wt, 'trezi chat changes', {
+        const described = await turnMessage(sessionKey, st, turnNo)
+        const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
           land: pendingTerminal === 'success'
         })
         // Not `landTurn`: the chat is gone, so there is no park to leave, no branch
@@ -491,8 +498,8 @@ export async function releaseChat(
             )
           }
           await commitLiveTurn(st.liveRoot, outcome.files, {
-            title: 'Trezi chat changes',
-            body: `Trezi final turn (${st.wt.branch}).`
+            title: described.subject,
+            body: described.body
           })
         } else if (outcome.outcome === 'parked') {
           st.parked = true
