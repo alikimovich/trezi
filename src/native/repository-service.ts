@@ -171,6 +171,9 @@ export function serviceRepository(
       effect('commitLive', { root, files, title, ...(body ? { body } : {}) }),
     checkout: (root, branch) => effect('checkout', { root, branch }),
     switchBranch: (root, branch) => effect('switchBranch', { root, branch }),
+    strandedLandings: (root) => call('strandedLandings', { root }, 'read', 60_000),
+    restoreLandings: (root, branch, tip) =>
+      effect('restoreLandings', { root, branch, tip, intent: 'restore' }),
     status: () => call('status', {}, 'read', 30_000),
     recoveryRefs: (roots) => call('recoveryRefs', { roots }, 'read', 60_000),
     deleteRecoveryRefs: (root, refs) =>

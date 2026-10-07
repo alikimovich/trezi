@@ -204,6 +204,13 @@ Mutations take an optional `leases` array (the leases the calling chain holds).
 | `removeLegacyFolder` | `{root: <old-name worktrees folder>, intent:"legacy"}` | `{removed}` |
 | `commitLive` | `{root, files, title, body?}` | `{committed, sha?, files}` |
 | `checkout` / `switchBranch` | `{root, branch}` | `BranchResult` |
+| `strandedLandings` (read) | `{root}` | `{current, branches:[{branch, tip, count}]}` |
+| `restoreLandings` | `{root, branch, tip, intent:"restore"}` | `{merged, files, conflictFiles, recoveryRefs}` |
+
+`switchBranch` (automatic: `git:ensure`, publish heal) never moves the live checkout
+onto an existing branch that lacks its commits (LKM-185, `RepositoryBranches.swift`):
+a branch behind HEAD fast-forwards first (old tip at a recovery ref), a diverged one is
+refused. The branch rules are in `docs/WORKTREES.md` (Publishing a shared work branch).
 
 Unknown or missing fields, wrong types, oversized or relative paths, NUL and lone
 surrogates are refused before anything is journaled.

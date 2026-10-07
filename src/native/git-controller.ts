@@ -117,6 +117,7 @@ export class NativeGitController {
           `${mode === 'pr' ? 'PR ready' : 'Published'}${result.url ? ': ' + result.url : ''}`,
           'success'
         )
+        if (result.notice) this.log.append(result.notice, 'warning')
       })
     } catch (error) {
       this.log.append(String(error), 'error')
