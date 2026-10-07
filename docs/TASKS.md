@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Publish shows progress (LKM-187)
+
+- [x] The workflow owner reports the publish step (commit, sync, push, describe, pr, merge, cleanup) in its `workflows` summaries and logs each step's timing; a failed result names its step.
+- [x] `publish:progress` / `publish:cancel`; `NativeGitController` shows "Publishing…" at once, polls the step (elapsed after 3 s), cancels before the PR, adopts a running publish after a reload, and ends in a toast or a failure sheet with Retry / Copy details (`src/shared/publish-progress.ts`).
+- [x] Toolbar: spinner frames on the standard menu item, not clickable while publishing, Cancel Publish in the chevron menu (`ToolbarPublish.swift`).
+- [x] `publish-progress` core smoke check with a stubbed workflow owner and captures; unit tests `publish-progress`, `native-git`, `workflow-owner`; CHANGELOG line.
 ## Select a whole chat message (LKM-186)
 
 - [x] Each reply text segment is one selectable TextKit text view (`ChatTextView.swift`) over one attributed string (`ChatRichText.swift`): drag selection crosses paragraphs, lists, headings, code blocks and tables.

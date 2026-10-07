@@ -1184,6 +1184,10 @@ export interface PublishResult {
   conflictFiles?: string[]
   /** Local refs preserving the pre-reconciliation tips. */
   recoveryRefs?: string[]
+  /** The publish step that failed (`publish-progress.ts`), when one had started (LKM-187). */
+  step?: string
+  /** The user cancelled the run before the pull request was created. */
+  cancelled?: boolean
 }
 
 /**

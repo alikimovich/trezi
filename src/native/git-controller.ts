@@ -1,25 +1,57 @@
-import type { GithubStatus, GitRemoteStatus } from '../shared/api'
+import type { GithubStatus, GitRemoteStatus, PublishResult } from '../shared/api'
 import { sanitizeRepoName } from '../shared/github'
 import type { NativeShellState } from '../shared/native-shell'
+import {
+  type PublishProgress,
+  publishCancellable,
+  publishedMessage,
+  publishFailure,
+  publishLabel
+} from '../shared/publish-progress'
 import type { NativeActivityController } from './activity-controller'
 import type { NativePreferences } from './preferences'
 import type { NativeSheetController } from './sheets-runtime'
+
+/** A publish the toolbar shows for one project (LKM-187), kept per root across switches. */
+interface PublishRun {
+  mode: 'merge' | 'pr'
+  /** The owner's step and when it started (epoch ms). */
+  step?: string
+  since?: number
+  /** The workflow record, once the owner reports it open. */
+  id?: string
+  cancelling?: boolean
+  /** `publish:ship` is in flight, so a cancel goes to the owner. */
+  shipping?: boolean
+  timer?: ReturnType<typeof setTimeout>
+}
+
+const OPEN = new Set(['running', 'describe'])
+
 export class NativeGitController {
   readonly branches = new Map<string, string[]>()
   readonly connections = new Map<string, GithubStatus | null>()
   private readonly revisions = new Map<string, number>()
-  readonly publishing = new Set<string>()
+  /** Publishes under way, by root: the toolbar follows the active project's. */
+  readonly runs = new Map<string, PublishRun>()
+  /** How often a running publish's step is read (it also ticks the elapsed time). */
+  pollInterval = 400
   constructor(
     readonly sheets: NativeSheetController,
     readonly log: NativeActivityController,
     readonly preferences: NativePreferences,
-    readonly render: () => void
+    readonly render: () => void,
+    readonly openExternal: (url: string) => unknown = () => {}
   ) {}
   private get workspace() {
     return this.sheets.workspace
   }
   private get invoke() {
     return this.sheets.invoke
+  }
+  /** Whether Publish can run (the native smoke stands in a connected remote). */
+  githubStatus(root: string): Promise<GithubStatus> {
+    return this.invoke('github:status', root)
   }
   get mode() {
     return this.preferences.get('trezi:publish-mode') === 'pr' ? 'pr' : 'merge'
@@ -33,24 +65,22 @@ export class NativeGitController {
   decorate(state: NativeShellState): NativeShellState {
     const entry = this.workspace.active,
       root = entry?.root ?? '',
-      publishing = this.publishing.has(root)
+      run = this.runs.get(root)
     const connection = this.connections.get(root)
     return {
       ...state,
       branch: entry?.branch ?? null,
       branches: this.branches.get(root) ?? [],
-      publishing,
+      publishing: !!run,
+      publishCancellable: !!run && !run.cancelling && publishCancellable(run.step),
       publishMode: this.mode,
-      publishLabel:
-        connection && !connection.connected
+      publishLabel: run
+        ? publishLabel(run.mode, run)
+        : connection && !connection.connected
           ? 'Connect to GitHub'
-          : publishing
-            ? this.mode === 'pr'
-              ? 'Creating PR…'
-              : 'Publishing…'
-            : this.mode === 'pr'
-              ? 'Create PR'
-              : 'Publish'
+          : this.mode === 'pr'
+            ? 'Create PR'
+            : 'Publish'
     }
   }
   async refresh(root: string) {
@@ -70,6 +100,7 @@ export class NativeGitController {
       return
     this.connections.set(root, status)
     this.render()
+    if (!this.runs.has(root)) await this.adopt(root)
   }
   async branch(key: string, name: string, create = false) {
     if (!name.trim()) return
@@ -85,47 +116,178 @@ export class NativeGitController {
     })
     await this.workspace.refreshEnvironment(key, files)
   }
+  /**
+   * Publish (LKM-187): the button shows progress at once, then the owner's step
+   * (`publish:progress`); success is a toast, failure a sheet with Retry.
+   */
   async publish(key: string) {
     const entry = this.workspace.state.projects.find((p) => p.key === key)
-    if (!entry || this.publishing.has(entry.root)) return
+    if (!entry || this.runs.has(entry.root)) return
     const root = entry.root,
       mode = this.mode,
-      generation = this.sheets.generation
-    this.publishing.add(root)
+      generation = this.sheets.generation,
+      run: PublishRun = { mode }
+    this.runs.set(root, run)
     this.render()
+    let result: PublishResult | null = null
     try {
-      const status: GithubStatus = await this.invoke('github:status', root)
+      const status = await this.githubStatus(root)
       this.connections.set(root, status)
       if (!status.connected) {
         if (this.sheets.generation === generation) await this.connect(key, status)
         return
       }
+      if (run.cancelling) {
+        result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
+        return
+      }
       await this.workspace.transact(key, async () => {
+        // transact queues behind other work on the project: a Cancel that arrived while
+        // waiting must still stop the publish before anything changes.
+        if (run.cancelling) {
+          result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
+          return
+        }
         this.log.append(
           mode === 'pr' ? 'Creating pull request…' : 'Publishing and merging changes…'
         )
-        const result = await this.invoke('publish:ship', root, undefined, mode)
-        if (!result.ok) {
-          const recovery = result.conflictFiles?.length
-            ? `\nConflicting files:\n${result.conflictFiles.join('\n')}\nResolve and stage each file, commit the merge, then Publish again.\nRecovery refs: ${(result.recoveryRefs ?? []).join(', ')}`
-            : ''
-          throw new Error((result.error ?? 'Publish failed') + recovery)
+        run.shipping = true
+        this.follow(root, run)
+        result = await this.invoke('publish:ship', root, undefined, mode)
+        run.shipping = false
+        if (!result?.ok) return
+        // Tagging the chat is bookkeeping: its failure doesn't fail the publish.
+        try {
+          if (result.branch) await this.invoke('agent:tag-session', root, { branch: result.branch })
+          if (result.url) await this.invoke('agent:tag-session', root, { prUrl: result.url })
+        } catch (error) {
+          this.log.append(String(error), 'error')
         }
-        if (result.branch) await this.invoke('agent:tag-session', root, { branch: result.branch })
-        if (result.url) await this.invoke('agent:tag-session', root, { prUrl: result.url })
-        this.log.append(
-          `${mode === 'pr' ? 'PR ready' : 'Published'}${result.url ? ': ' + result.url : ''}`,
-          'success'
-        )
-        if (result.notice) this.log.append(result.notice, 'warning')
       })
     } catch (error) {
-      this.log.append(String(error), 'error')
+      result = { ok: false, error: error instanceof Error ? error.message : String(error) }
     } finally {
-      this.publishing.delete(root)
+      this.stop(root, run)
       await this.refresh(root).catch((error) => this.log.append(String(error), 'error'))
       this.render()
     }
+    if (result) this.finished(key, mode, result, run.cancelling)
+  }
+  /** Asks the owner to stop the active publish before its next step. */
+  async cancel(key: string) {
+    const entry = this.workspace.state.projects.find((p) => p.key === key)
+    const run = entry && this.runs.get(entry.root)
+    if (!entry || !run || run.cancelling || !publishCancellable(run.step)) return
+    run.cancelling = true
+    this.render()
+    // Before the ship request starts, publish() stops by itself.
+    if (!run.shipping) return
+    const stopped = await this.invoke('publish:cancel', entry.root).catch(() => false)
+    if (stopped || this.runs.get(entry.root) !== run) return
+    run.cancelling = false
+    this.log.append('Publishing could not be cancelled at this step.', 'warning')
+    this.render()
+  }
+  /** Reads the owner's step for `run` until it stops; every read re-renders the label. */
+  private follow(root: string, run: PublishRun, closed?: (progress: PublishProgress) => void) {
+    const tick = async () => {
+      if (this.runs.get(root) !== run) return
+      const progress: PublishProgress | null = await this.invoke('publish:progress', root).catch(
+        () => null
+      )
+      if (this.runs.get(root) !== run) return
+      // An adopted run stops at `describe`: its describer was the process that reloaded.
+      const open =
+        progress && OPEN.has(progress.state) && !(closed && progress.state === 'describe')
+      if (progress && open && (!run.id || run.id === progress.id)) {
+        run.id = progress.id
+        if (progress.step && progress.step !== run.step) {
+          run.step = progress.step
+          run.since = progress.since ?? Date.now()
+        }
+      } else if (closed && progress?.id === run.id) {
+        closed(progress!)
+        return
+      }
+      this.render()
+      run.timer = setTimeout(tick, this.pollInterval)
+    }
+    void tick()
+  }
+  private stop(root: string, run: PublishRun) {
+    clearTimeout(run.timer)
+    if (this.runs.get(root) === run) this.runs.delete(root)
+  }
+  /**
+   * A publish this process didn't start (Trezi reloaded mid-publish): show it on the
+   * toolbar until the owner closes the record, then report its result.
+   */
+  private async adopt(root: string) {
+    const progress: PublishProgress | null = await this.invoke('publish:progress', root).catch(
+      () => null
+    )
+    if (progress?.state !== 'running' || !progress.id || this.runs.has(root)) return
+    const run: PublishRun = {
+      mode: this.mode,
+      id: progress.id,
+      step: progress.step,
+      since: progress.since ?? Date.now(),
+      shipping: true
+    }
+    this.runs.set(root, run)
+    this.render()
+    this.follow(root, run, (last) => {
+      this.stop(root, run)
+      this.render()
+      const key = this.workspace.state.projects.find((p) => p.root === root)?.key
+      // Waiting for a description nobody will write: a new Publish resumes it.
+      if (key && last.result && last.state !== 'describe')
+        this.finished(key, run.mode, last.result, false)
+      void this.refresh(root).catch((error) => this.log.append(String(error), 'error'))
+    })
+  }
+  /** The result: a toast on success, the failure sheet otherwise. */
+  private finished(key: string, mode: 'merge' | 'pr', result: PublishResult, cancelling?: boolean) {
+    if (result.ok) {
+      const message = publishedMessage(mode, result)
+      this.log.append(`${message}${result.url ? ': ' + result.url : ''}`, 'success')
+      if (result.notice) this.log.append(result.notice, 'warning')
+      const url = result.url
+      this.sheets.toast(
+        message,
+        url ? { label: 'View on GitHub', run: async () => this.openExternal(url) } : undefined
+      )
+      return
+    }
+    if (result.cancelled || cancelling) {
+      this.log.append(result.error ?? 'Publishing was cancelled.', 'warning')
+      this.sheets.toast('Publish cancelled')
+      return
+    }
+    const failure = publishFailure(mode, result)
+    this.log.append(failure.details, 'error')
+    this.sheets.present(
+      {
+        title: failure.title,
+        detail: failure.detail,
+        fields: [],
+        actions: [
+          { id: 'copy', label: 'Copy details', copy: failure.details },
+          { id: 'cancel', label: 'Close' },
+          { id: 'retry', label: 'Retry', primary: true }
+        ]
+      },
+      async (action) => {
+        const sheet = this.sheets.current
+        if (action.action === 'copy') {
+          if (sheet?.state.id === action.id)
+            sheet.state.message = 'Details copied to the clipboard.'
+          return
+        }
+        if (sheet?.state.id === action.id) this.sheets.close()
+        void this.publish(key)
+      }
+    )
   }
   async connect(key: string, status?: GithubStatus) {
     const entry = this.workspace.state.projects.find((p) => p.key === key)
