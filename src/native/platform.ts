@@ -117,7 +117,8 @@ export class NativeView {
     isDestroyed: () => boolean
     getURL: () => string
     send: (channel: string, ...args: any[]) => void
-    loadURL: (url: string) => void
+    /** `hard` (LKM-197): WebKit's caches are cleared first; the same URL reloads from origin. */
+    loadURL: (url: string, options?: { hard?: boolean }) => void
     capturePage: () => Promise<NativeImage>
     executeJavaScript: (code: string) => Promise<any>
     insertCSS: (css: string) => Promise<string>
@@ -143,9 +144,9 @@ export class NativeView {
         if (id === 'main') serviceEvents.emit('event', channel, ...args)
         else bridge().send('deliver', { view: id, message: { type: 'event', channel, args } })
       },
-      loadURL: (url: string) => {
+      loadURL: (url: string, options?: { hard?: boolean }) => {
         this.url = url
-        bridge().send('load', { view: id, url })
+        bridge().send('load', { view: id, url, ...(options?.hard ? { hard: true } : {}) })
       },
       capturePage: async () =>
         new NativeImage(

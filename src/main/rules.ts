@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 32
+export const TREZI_RULES_VERSION = 33
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -207,10 +207,14 @@ export function treziRules(opts?: {
       `path (for example /work/my-article). Include query/hash when needed. Do not ask`,
       `the user to type into the address bar. It is scoped to the active project and chat.`,
       `When this chat has no unlanded changes the preview opens at once and the result says`,
-      `what happened (loaded, httpStatus, loadError, devServer, consoleErrors, screenshot);`,
-      `report exactly that. An HTTP error or failed load is not a working page; a stopped dev`,
-      `server means the user presses Restart (never start it yourself). With unlanded changes`,
-      `the page opens after the turn lands: report it as requested, not loaded.`,
+      `what happened (loaded, httpStatus, loadError, devServer, assets, consoleErrors,`,
+      `screenshot); report exactly that. An HTTP error or failed load is not a working page.`,
+      `Never start a dev server yourself: Trezi owns it. A stopped one is restarted with`,
+      `restart_dev_server (or the user's Restart). When assets.matches is false the page runs`,
+      `older CSS/JS than the server serves (often after a dependency change): call`,
+      `reload_preview with hard: true, and if it stays stale restart_dev_server with`,
+      `cleanCache: true. With unlanded changes the page opens after the turn lands: report`,
+      `it as requested, not loaded.`,
       `External sites and simulator navigation are unsupported.`,
       ``,
       `## Showing exact code`,

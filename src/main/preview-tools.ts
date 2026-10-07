@@ -6,6 +6,7 @@ import { type PreviewOpenRequest, previewPath } from '../shared/preview-navigati
 import { projectKey } from '../shared/projectKey'
 import { hasUnlandedWork } from './chat-status'
 import { previewServers } from './preview-evidence'
+import { previewFreshness } from './preview-freshness'
 import {
   type PreviewDispatch,
   type PreviewLoadOutcome,
@@ -18,8 +19,8 @@ import { capturePreview, getPreviewUrl, previewAgentHost } from './preview-state
 export const OPEN_PREVIEW_BUDGET_MS = 10_000
 /** Late console errors (hydration, effects) right after the load event. */
 const SETTLE_MS = 400
-const RESTART =
-  'The dev server is not answering. Do not start it yourself: tell the user to press Restart in the preview (Trezi owns the dev server), then call open_preview again.'
+export const RESTART =
+  'The dev server is not answering. Do not start it yourself: call restart_dev_server (Trezi owns the dev server) or tell the user to press Restart in the preview, then call open_preview again.'
 
 interface Probe {
   /** The server answered at all; false when the connection failed (server down). */
@@ -159,10 +160,12 @@ export async function openAgentPreview(
     }
   }
   const outcome = await load!.done
-  return report(key, path, target, outcome, devServer, left)
+  return reportLoad(key, path, target, outcome, devServer, left)
 }
 
-async function report(
+/** What a finished (or timed-out) preview load shows; `open_preview` and
+ *  `reload_preview` / `restart_dev_server` (LKM-197) answer with it. */
+export async function reportLoad(
   key: string,
   path: string,
   target: string,
@@ -195,6 +198,7 @@ async function report(
   await new Promise((resolve) => setTimeout(resolve, Math.min(SETTLE_MS, left())))
   const status = outcome.status
   const failed = status !== null && status >= 400
+  const assets = failed ? null : await previewFreshness(devServer.url, Math.min(3000, left()))
   return {
     ...base,
     navigation: 'loaded',
@@ -203,10 +207,11 @@ async function report(
     httpStatus: status,
     loadError: failed ? `HTTP ${status}` : null,
     devServer: { ...devServer, answering: true },
+    assets,
     consoleErrors: await consoleErrors(),
     screenshot: await screenshot(key),
     message: failed
       ? `The preview loaded ${pathOf(outcome.finalUrl)}, but the dev server answered HTTP ${status}: the page is an error page. Read consoleErrors and the dev-server output before claiming it works.`
-      : `The preview loaded ${pathOf(outcome.finalUrl)}${status !== null ? ` (HTTP ${status})` : ''}. Call preview_screenshot to see it.`
+      : `The preview loaded ${pathOf(outcome.finalUrl)}${status !== null ? ` (HTTP ${status})` : ''}. ${assets?.matches === false ? assets.note : 'Call preview_screenshot to see it.'}`
   }
 }

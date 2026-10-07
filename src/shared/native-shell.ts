@@ -68,6 +68,8 @@ export interface NativeShellAction {
     | 'home'
     | 'device'
     | 'select-object'
+    | 'reload-hard'
+    | 'restart-clean'
   id?: string
   value?: string
   project?: string

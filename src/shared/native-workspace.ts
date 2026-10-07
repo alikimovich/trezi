@@ -29,7 +29,9 @@ export type NativeWorkspaceCommand =
   | { type: 'chat'; key: string; session: string }
   | { type: 'close-chat'; key: string; session: string }
   | { type: 'resume'; key: string; record: string }
-  | { type: 'restart'; key: string; command?: string }
+  /** `cleanCache` (LKM-197): drop the dependency caches and reload the preview past WebKit's;
+   *  'dependencies' when a dependency change caused it (the preview says so). */
+  | { type: 'restart'; key: string; command?: string; cleanCache?: boolean | 'dependencies' }
 export interface NativeWorkspaceBridge {
   command(command: NativeWorkspaceCommand): Promise<void>
   onProjection(

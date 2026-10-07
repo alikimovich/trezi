@@ -124,6 +124,26 @@ server.registerTool(
   async (args) => result(await invoke('open_preview', args))
 )
 
+server.registerTool(
+  'reload_preview',
+  {
+    annotations: { destructiveHint: false, openWorldHint: false },
+    description: 'Reload the page shown in the user preview, keeping its route. hard: true bypasses the browser caches (use after a dependency or CSS change the page does not show). Returns the load result and whether the loaded CSS/JS matches what the dev server serves now.',
+    inputSchema: { hard: z.boolean().optional() }
+  },
+  async (args) => result(await invoke('reload_preview', args))
+)
+
+server.registerTool(
+  'restart_dev_server',
+  {
+    annotations: { destructiveHint: false, openWorldHint: false },
+    description: "Restart the project's dev server (Trezi owns it; never start one yourself). cleanCache: true first removes its dependency caches (Vite node_modules/.vite, Next .next/cache) and reloads the preview without cache on the same route. Returns the new server URL, the load result and CSS/JS freshness.",
+    inputSchema: { cleanCache: z.boolean().optional() }
+  },
+  async (args) => result(await invoke('restart_dev_server', args))
+)
+
 // Observation results already contain MCP content blocks. Preserve images as images.
 server.registerTool('preview_location', {
   description: "Read the page/route currently shown in the user's live preview pane.",

@@ -19,9 +19,16 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 32, 'version bumped to 32')
+assert(TREZI_RULES_VERSION === 33, 'version bumped to 33')
 // LKM-196: open_preview reports the real load; only a deferred open is "requested".
 assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
+// LKM-197: stale CSS/JS → a hard reload, then a clean restart; never a self-started server.
+assert(
+  /reload_preview with hard: true[\s\S]*restart_dev_server with\s+cleanCache: true/.test(
+    treziRules({ previewTools: true })
+  ),
+  'stale assets rule'
+)
 // LKM-195: no ownerless pending items; finish the step, name the user action, or a true
 // automatic owner. Every provider gets these, with or without preview tools.
 for (const rules of [r, treziRules({ previewTools: true }), treziRules({ background: true })]) {

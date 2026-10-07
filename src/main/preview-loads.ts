@@ -53,7 +53,8 @@ const sameTarget = (a: string, b: string): boolean => {
 }
 
 interface LoadWaiter {
-  target: string
+  /** null: any navigation (a restart's new server URL is not known yet, LKM-197). */
+  target: string | null
   armed: boolean
   resolve: (outcome: PreviewLoadOutcome | null) => void
 }
@@ -78,7 +79,8 @@ export class PreviewLoads {
       this.status = null
       this.url = event.url
       this.loading = true
-      for (const waiter of this.loads) if (sameTarget(waiter.target, event.url)) waiter.armed = true
+      for (const waiter of this.loads)
+        if (waiter.target === null || sameTarget(waiter.target, event.url)) waiter.armed = true
       if (this.banner?.kind === 'error') this.show(null)
       this.timer = setTimeout(() => {
         this.timer = undefined
@@ -118,9 +120,9 @@ export class PreviewLoads {
     }
   }
 
-  /** The next navigation of `target` to finish or fail, or null after `timeoutMs`. */
+  /** The next navigation of `target` (any when null) to finish or fail, or null after `timeoutMs`. */
   nextLoad(
-    target: string,
+    target: string | null,
     timeoutMs: number
   ): { done: Promise<PreviewLoadOutcome | null>; cancel: () => void } {
     let waiter!: LoadWaiter

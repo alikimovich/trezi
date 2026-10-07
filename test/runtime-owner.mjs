@@ -601,6 +601,34 @@ exit 0
     )
     assert.deepEqual(await handlers.get('devserver:info')({}, project), { running: false })
     assert.equal(await handlers.get('devserver:running')({}, project), false)
+    // LKM-197: a clean start drops the dependency caches before it launches, nothing else.
+    write(join(project, 'node_modules/.vite/deps/ui.js'), 'old')
+    write(join(project, 'node_modules/ui/index.js'), 'kept')
+    write(join(project, '.next/cache/webpack/old'), 'old')
+    await assert.rejects(
+      handlers.get('devserver:start')(
+        {},
+        {
+          root: project,
+          command: 'test -e node_modules/.vite && echo STALE; exit 5',
+          cleanCache: true
+        }
+      ),
+      (error) => /code 5/.test(error.message) && !/STALE/.test(error.message)
+    )
+    assert.ok(!existsSync(join(project, 'node_modules/.vite')), 'the Vite pre-bundle is gone')
+    assert.ok(existsSync(join(project, 'node_modules/ui/index.js')), 'installed packages stay')
+    assert.ok(existsSync(join(project, '.next/cache/webpack/old')), 'Next’s cache only for Next')
+    assert.ok(logs.includes('Cleared the dependency cache node_modules/.vite.'))
+    await assert.rejects(
+      handlers.get('devserver:start')(
+        {},
+        { root: project, command: "sh -c 'exit 6' next", framework: 'next', cleanCache: true }
+      ),
+      /code 6/
+    )
+    assert.ok(!existsSync(join(project, '.next/cache')), 'the Next dev cache is gone')
+    assert.ok(existsSync(join(project, '.next')), 'the rest of .next stays')
     setDependencyInstaller(null)
     await stop(fixture)
   })

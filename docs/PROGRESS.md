@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-197: clean restart and hard reload after dependency changes
+
+- **Cause.** After a dependency upgrade the preview kept the old CSS. Vite serves pre-bundled dependencies from `node_modules/.vite`, and WebKit kept its memory/disk caches, so a plain restart plus a normal reload could still show the old styles.
+- **Detection.** A landed package.json or lockfile change already restarted the environment; now that restart, and every restart after an install (by Trezi or the agent), carries `cleanCache: 'dependencies'` (`refreshEnvironment` in `src/native/workspace-controller.ts`). `src/native/dependency-watch.ts` polls every 2 s while the project's server runs: the manifest, the lockfiles and each direct dependency's `node_modules/<dep>/package.json`. A change must hold for two polls, and the baseline resets whenever the server is not running, so a landing's own restart does not fire a second one.
+- **Clean restart.** `RuntimeOwner.start` takes `cleanCache` and, after retiring the previous server, removes `node_modules/.vite` (plus `.next/cache` for Next) inside the project root and logs it; other frameworks get a plain restart. The preview then loads with `hard` (`PreviewCache`: clears WebKit memory/disk/fetch caches, `reloadFromOrigin` on the same URL, otherwise a load that ignores local and remote cache data), and `keepPath` puts the shown route on the new origin. Status: "Dependencies changed — restarting preview…".
+- **Agent tools.** `reload_preview {hard}` and `restart_dev_server {cleanCache}` (`src/main/preview-refresh-tools.ts`) ask the native side over `preview:refresh` (`src/native/preview-refresh.ts`): a 2 s acknowledgement, then the result (25 s budget under the bridge's 30 s). Both are foreground-only and refused for background agents. A restart is the agent's way to bring back a stopped server; rules v33 still forbid starting a server any other way.
+- **Freshness.** `open_preview` and the two tools return `assets`: the page lists up to 8 same-origin stylesheets and 8 scripts with an FNV-1a hash of what it has (a `force-cache` fetch) and Bun fetches the same URLs fresh from the dev-server origin only. `matches: false` names the stale files and tells the agent to hard-reload, then clean-restart.
+- **Toolbar.** A "…" menu after Publish (`src/native/ToolbarMore.swift`) with Reload Without Cache and Restart Dev Server (clean cache).
+- **Tests.** Unit `test/preview-refresh.mjs` (watch, signature, freshness, both tools against a stub host), `native-workspace-controller` (clean restarts and labels), `runtime-owner` (cache removal per framework), `rules` (v33), the policy golden and tool inventories. No native fixture with a real Vite `file:` dependency yet; see TASKS.
+
 ## 2026-10-07 — LKM-196: ghost parked state and a real open_preview result
 
 - **Ghost park, cause.** Nothing ever re-checked a park against the live tree. A drift park whose content later reached live another way stayed parked with an empty diff, and `sendRefusal` blocked the chat. A `failed` landing whose base moved on also stayed parked with nothing to land. Separately, a park could lose `parkedFiles` or its record while the worktree still held work, which left a card with no working action.

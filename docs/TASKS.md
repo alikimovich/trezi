@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview keeps old CSS after a dependency upgrade (LKM-197)
+
+- [x] Detect dependency changes: a landed package.json/lockfile change, an install by Trezi or the agent, and a changed `node_modules/<dep>/package.json` of a direct dependency (`src/native/dependency-watch.ts`, 2 s polls, two-poll confirmation).
+- [x] Clean restart: the runtime owner removes `node_modules/.vite` (and `.next/cache` for Next) before starting (`cleanCache`, `src/service/RuntimeOwner.swift`); the preview reloads bypassing caches (`PreviewCache` in `src/native/PreviewLoad.swift`) on the same route; status "Dependencies changed — restarting preview…".
+- [x] Agent tools `reload_preview {hard}` and `restart_dev_server {cleanCache}` (`src/main/preview-refresh-tools.ts`, answered by `src/native/preview-refresh.ts`); `open_preview` reports `assets` freshness (`src/main/preview-freshness.ts`); rules v33.
+- [x] Preview toolbar "…" menu: Reload Without Cache, Restart Dev Server (clean cache) (`src/native/ToolbarMore.swift`).
+- [x] Tests: unit `preview-refresh`, `native-workspace-controller`, `runtime-owner` (clean start), `rules`, policy golden and tool inventories.
+- [ ] Open: a native fixture Vite project with a local `file:` dependency whose CSS changes, asserting the new computed style end to end (the pieces are unit-tested; the full chain needs a real Vite install in the smoke profile).
+
 ## Ghost parked state and open_preview results (LKM-196)
 
 - [x] Reconcile parks at turn start, chat open (workspace snapshot) and `workspace_state` / `prepare_conflict_resolution` (`src/main/park-reconcile.ts`): an empty park is cleared and logged; a pending diff without a batch rebuilds it; `workspace_state` never says parked without a batch.

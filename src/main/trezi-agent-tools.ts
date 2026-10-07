@@ -15,6 +15,8 @@ export const TREZI_AGENT_ACTIONS = [
   'chat_island',
   'open_code',
   'open_preview',
+  'reload_preview',
+  'restart_dev_server',
   'preview_location',
   'preview_screenshot',
   'preview_inspect',

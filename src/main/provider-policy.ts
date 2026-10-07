@@ -50,6 +50,8 @@ export const TREZI_TOOLS = [
   'preview_console',
   'preview_viewport',
   'open_preview',
+  'reload_preview',
+  'restart_dev_server',
   'open_code',
   'chat_island',
   'spring_to_css',
@@ -73,7 +75,9 @@ export const TREZI_TOOLS = [
 export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
   open_code: 'Background edits cannot navigate the user editor.',
   chat_island: 'Background edits cannot create chat islands.',
-  preview_viewport: 'Background edits cannot resize the user preview.'
+  preview_viewport: 'Background edits cannot resize the user preview.',
+  reload_preview: 'Background edits cannot reload the user preview.',
+  restart_dev_server: 'Background edits cannot restart the dev server.'
 }
 
 /** Trezi tools that never prompt (side-effect-free or validated by their own service). */

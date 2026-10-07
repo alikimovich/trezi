@@ -33,7 +33,13 @@ export function registerServiceDevServer(
     'devserver:start',
     async (
       _e,
-      opts: { root: string; command: string; framework?: Framework; installDependencies?: boolean }
+      opts: {
+        root: string
+        command: string
+        framework?: Framework
+        installDependencies?: boolean
+        cleanCache?: boolean
+      }
     ): Promise<RunningDevServer> => {
       const key = projectKey(opts.root)
       const generation = bump(key)
@@ -45,7 +51,8 @@ export function registerServiceDevServer(
       const server = await runtime.start({
         root: opts.root,
         command: opts.command,
-        framework: opts.framework
+        framework: opts.framework,
+        ...(opts.cleanCache ? { cleanCache: true } : {})
       })
       if (generations.get(key) === generation) previewServers.set(key, server)
       return server

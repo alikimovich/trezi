@@ -215,14 +215,25 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     toPreview(PREVIEW_SET_FRAME, state.frameMode)
   })
 
-  ipcMain.handle('preview:load', (_e, url: string) => {
-    if (!host.isLocalPreviewUrl(url)) return
-    state.url = url
-    state.retries = 0
-    const view = host.ensurePreviewView()
-    view.setVisible(true)
-    view.webContents.loadURL(url)
-  })
+  // `hard` bypasses WebKit's caches; `keepPath` keeps the route the preview showed on
+  // the restarted server's origin (LKM-197).
+  ipcMain.handle(
+    'preview:load',
+    (_e, url: string, options?: { hard?: boolean; keepPath?: boolean }) => {
+      if (!host.isLocalPreviewUrl(url)) return
+      const view = host.ensurePreviewView()
+      if (options?.keepPath) url = keepRoute(view.webContents.getURL(), url)
+      state.url = url
+      state.retries = 0
+      view.setVisible(true)
+      view.webContents.loadURL(url, options?.hard ? { hard: true } : undefined)
+    }
+  )
+  function keepRoute(shown: string, url: string): string {
+    if (!/^https?:/.test(shown) || !host.isLocalPreviewUrl(shown)) return url
+    const route = new URL(shown)
+    return new URL(route.pathname + route.search + route.hash, url).href
+  }
 
   ipcMain.handle('preview:reset', () => {
     state.url = null

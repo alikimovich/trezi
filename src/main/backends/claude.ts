@@ -104,6 +104,8 @@ const TREZI_TOOL_NAMES = new Set([
   'mcp__trezi__chat_island',
   'mcp__trezi__open_code',
   'mcp__trezi__open_preview',
+  'mcp__trezi__reload_preview',
+  'mcp__trezi__restart_dev_server',
   'mcp__trezi__project_ui_catalog',
   'mcp__trezi__compose_project_ui',
   // Pure, deterministic spring→CSS calculator. No state, no side effects, so
@@ -743,6 +745,18 @@ async function startSession(
         'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Waits up to 10 s and returns the real result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); with unlanded changes in this chat it opens after the turn lands.',
         { path: z.string() },
         async (args) => asText(treziTool('open_preview', args))
+      ),
+      tool(
+        'reload_preview',
+        'Reload the page shown in the user preview, keeping its route. hard: true bypasses the browser caches (use after a dependency or CSS change the page does not show). Returns the load result and whether the loaded CSS/JS matches what the dev server serves now.',
+        { hard: z.boolean().optional() },
+        async (args) => asText(treziTool('reload_preview', args))
+      ),
+      tool(
+        'restart_dev_server',
+        "Restart the project's dev server (Trezi owns it; never start one yourself). cleanCache: true first removes its dependency caches (Vite node_modules/.vite, Next .next/cache) and reloads the preview without cache on the same route. Returns the new server URL, the load result and CSS/JS freshness.",
+        { cleanCache: z.boolean().optional() },
+        async (args) => asText(treziTool('restart_dev_server', args))
       ),
       tool(
         'open_code',

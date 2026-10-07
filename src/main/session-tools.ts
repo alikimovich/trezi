@@ -9,6 +9,7 @@ import {
 } from './chat-isolation'
 import { openAgentCode } from './code-tools'
 import { isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
+import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-tools'
 import { openAgentPreview } from './preview-tools'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
@@ -46,6 +47,8 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'chat_island',
   'open_code',
   'open_preview',
+  'reload_preview',
+  'restart_dev_server',
   'preview_location',
   'preview_screenshot',
   'preview_inspect',
@@ -76,6 +79,10 @@ export async function runTreziTool(
       : runChatIslandTool(s.emitKey, s.root, args as never, s.connectionId)
   if (action === 'open_preview')
     return openAgentPreview(s.liveRoot, s.emitKey, args as never, s.notify, s.background)
+  if (action === 'reload_preview')
+    return reloadAgentPreview(s.liveRoot, s.emitKey, args, s.notify, s.background)
+  if (action === 'restart_dev_server')
+    return restartAgentDevServer(s.liveRoot, s.emitKey, args, s.notify, s.background)
   if (action === 'open_code')
     return s.background
       ? { error: 'Background edits cannot navigate the user editor.' }

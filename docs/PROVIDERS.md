@@ -190,6 +190,12 @@ landing; detached agents cannot navigate. External origins and simulator routes
 are unsupported. The tool reports a request, not proof that the page loaded.
 Gemini does not expose this tool.
 
+`reload_preview {hard?}` and `restart_dev_server {cleanCache?}` (LKM-197) ask
+the native window over `preview:refresh` (`src/main/preview-refresh-tools.ts`,
+`src/native/preview-refresh.ts`). They are foreground-only and wait for the reload
+or restart, like `open_preview`. All three return `assets`, which says whether the
+page's CSS/JS matches what the dev server serves now (`src/main/preview-freshness.ts`).
+
 The Codex MCP helper uses an absolute path and working directory rooted at the
 Trezi installation, independent of the target checkout. Before starting a session,
 Trezi checks the real helper’s tool inventory and authenticated workspace socket.
@@ -919,6 +925,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `preview_location`, `preview_screenshot` | routed | routed | the preview registry (URL, capture) |
 | `preview_inspect`, `preview_evaluate`, `preview_console`, `preview_viewport` | routed | routed | the preview's isolated agent world and page zoom |
 | `open_preview`, `open_code` | routed | routed | the window that navigates the preview or reveals code |
+| `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |
 | `workspace_state`, `prepare_conflict_resolution` | — | routed | chat-isolation state (worktree, parked batch) |
 | `install_skills` | routed | — | the workflow owner |

@@ -136,6 +136,8 @@ try {
     'preview_viewport',
     'project_ui_catalog',
     'publish_update',
+    'reload_preview',
+    'restart_dev_server',
     'workspace_state'
   ])
 
