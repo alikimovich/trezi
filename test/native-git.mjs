@@ -14,6 +14,7 @@ let branch = 'main',
   connected = true,
   conflict = false,
   prConflict = false,
+  prUnknown = false,
   release,
   paused = false,
   queued = null
@@ -58,7 +59,7 @@ const invoke = async (channel, ...args) => {
   }
   if (channel === 'publish:pr-status')
     return {
-      mergeable: prConflict ? 'CONFLICTING' : 'MERGEABLE',
+      mergeable: prConflict ? (prUnknown ? 'UNKNOWN' : 'CONFLICTING') : 'MERGEABLE',
       number: 6,
       baseRefName: 'main',
       headRefName: 'trezi/main',
@@ -167,7 +168,17 @@ await sheets.action({ id: sheets.current.state.id, action: 'resolve', values: {}
 assert.equal(calls.at(-1)[1], 'chat-a', 'Resolve turn uses the published project’s chat')
 assert.match(calls.at(-1)[2], /package\.json[\s\S]*origin\/main[\s\S]*git_merge_continue/)
 assert.equal(workspace.active.key, 'a')
+// Right after a push GitHub reports UNKNOWN; the local conflict list still decides.
+sheets.close()
+prUnknown = true
+workspace.active = b
+await git.publish('a')
+assert.equal(sheets.current.state.title, 'Publish has merge conflicts')
+assert.ok(sheets.current.state.actions.some((action) => action.label === 'Resolve with agent'))
+sheets.close()
+prUnknown = false
 prConflict = false
+workspace.active = a
 // A publish this process didn't start (Trezi reloaded): adopted, then its result shows.
 progress = { id: 'w2', state: 'running', step: 'merge' }
 await git.refresh('/a')

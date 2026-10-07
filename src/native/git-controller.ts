@@ -264,7 +264,12 @@ export class NativeGitController {
           const pr = await this.invoke('publish:pr-status', root).catch((error) => ({
             error: String(error)
           }))
-          if (pr.mergeable === 'CONFLICTING') {
+          // GitHub reports UNKNOWN while it recomputes after the push; the local
+          // merge-tree result against the fetched base is still authoritative.
+          if (
+            pr.mergeable === 'CONFLICTING' ||
+            (pr.mergeable === 'UNKNOWN' && pr.conflictingFiles?.length > 0)
+          ) {
             this.resolveWithAgent(key, {
               error: `Pull request #${pr.number ?? '?'} conflicts with ${pr.baseRefName ?? 'its base branch'}.`,
               conflictFiles: pr.conflictingFiles,
