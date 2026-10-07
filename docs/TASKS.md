@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Conflict markers never block a chat turn (LKM-194)
+
+- [x] A failed dependency install never refuses a turn: `syncFromLive` returns it as `dependencies`, `createWorktree` logs it, `agent:send` tells the agent and emits a `dependencies` event for the chat's card.
+- [x] Unresolved markers in synced files are detected after the sync (`markerConflict`); a marked manifest/lockfile is never installed (`DependencyConflictError`); the chat shows "Conflicts in package.json" with Show conflict and Resolve with agent.
+- [x] Publish reconcile aborts a conflicting merge: no markers in the live checkout, both tips on recovery refs, a Resolve card that merges `origin/<branch>` with the LKM-188 tools.
+- [x] package.json `version` conflicts where both sides bumped offer the higher SemVer (chat card, publish card, agent facts).
+- [x] The legacy profile path in tool output is expected (`docs/agent-guide/legacy-names.md`).
+- [x] Tests: `dependency-issue` (unit), `chat-worktrees` repo16 (Swift owner), `workflow-owner` publish-version-conflict, `native-git`; CHANGELOG line.
+
 ## Code editor soft wrap (LKM-192)
 
 - [x] Soft wrap on by default: the text container tracks the visible width through resizes, with no horizontal scroller (`SourceWrap.swift`).

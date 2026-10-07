@@ -4,6 +4,9 @@
  * without dragging in process-specific code.
  */
 
+import type { DependencyIssue } from './dependency-issue'
+
+export type { DependencyIssue } from './dependency-issue'
 export type { GithubConnectOptions, GithubConnectResult, GithubStatus } from './github'
 
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm'
@@ -367,6 +370,10 @@ export type AgentEvent = (
   /** Main starts one bounded reconciliation turn in the originating chat. */
   | { type: 'reconciliation-started' }
   | { type: 'landing-finished' }
+  /** LKM-194: at turn start, why the chat's dependencies are not installed (conflict
+   *  markers, a failed install), or null once nothing stands in the way. The turn
+   *  starts either way; the chat shows a card. */
+  | { type: 'dependencies'; issue: DependencyIssue | null }
   /** Per-chat worktree isolation status (v9). A chat's turn merged back onto the live
    *  checkout ('merged'), a private worktree was forked for the chat ('isolated'), or a
    *  turn parked on its branch after mid-turn drift ('parked'). Routed by `projectKey` =
@@ -1186,6 +1193,8 @@ export interface PublishResult {
   conflictFiles?: string[]
   /** Local refs preserving the pre-reconciliation tips. */
   recoveryRefs?: string[]
+  /** LKM-194: both tips bumped package.json `version` differently. */
+  versionConflict?: { local: string; remote: string }
   /** The publish step that failed (`publish-progress.ts`), when one had started (LKM-187). */
   step?: string
   /** The user cancelled the run before the pull request was created. */

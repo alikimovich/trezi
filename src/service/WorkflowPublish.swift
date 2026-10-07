@@ -82,7 +82,7 @@ struct WorkflowPublish {
             let pushed = try pushReconciled(branch)
             if !pushed.ok {
                 context.failed("push", "conflict")
-                return Self.conflict(pushed.files, pushed.refs)
+                return Self.conflict(pushed.files, pushed.refs, branch: branch, version: pushed.version)
             }
             let sha = try context.run(["rev-parse", "HEAD"])
             try context.done("push", [("action", Self.text(pushed.action)), ("attempts", .number(Double(pushed.attempts))),
@@ -325,11 +325,15 @@ struct WorkflowPublish {
 
     // MARK: Reconciled push
 
-    struct Pushed { var ok: Bool; var action = ""; var attempts = 0; var refs: [String] = []; var files: [String] = [] }
+    struct Pushed {
+        var ok: Bool; var action = ""; var attempts = 0; var refs: [String] = []; var files: [String] = []
+        var version: (local: String, remote: String)? = nil
+    }
 
     /// Fetch, preserve both tips under `refs/trezi/recovery/…`, reconcile without
     /// rewriting either history, push; a non-fast-forward race retries (bounded).
-    /// A content conflict stays in the checkout for per-file resolution.
+    /// A content conflict aborts the merge: the checkout stays clean and the recovery
+    /// refs hold both sides for Resolve with agent (LKM-194).
     func pushReconciled(_ branch: String, maxAttempts: Int = 3) throws -> Pushed {
         var refs: [String] = []
         for attempt in 1...maxAttempts {
@@ -370,9 +374,24 @@ struct WorkflowPublish {
             return Pushed(ok: true, action: "merged")
         } catch {
             let files = conflictFiles()
-            if !files.isEmpty { return Pushed(ok: false, attempts: attempt, refs: refs, files: files) }
-            throw error
+            if files.isEmpty { throw error }
+            // LKM-194: the conflict lives on the recovery refs, never as markers in the
+            // live checkout, where the next chat turn would sync them and fail to install.
+            let version = files.contains("package.json") ? versionConflict(local, remote) : nil
+            try context.run(["merge", "--abort"])
+            return Pushed(ok: false, attempts: attempt, refs: refs, files: files, version: version)
         }
+    }
+
+    /// Both tips' package.json `version`, when they differ (the Resolve card offers the higher).
+    private func versionConflict(_ local: String, _ remote: String) -> (local: String, remote: String)? {
+        func version(_ sha: String) -> String? {
+            guard let text = try? context.run(["show", "\(sha):package.json"]),
+                  let value = try? JSValue.parse(Data(text.utf8), maxDepth: 64) else { return nil }
+            return value["version"]?.text?.string
+        }
+        guard let ours = version(local), let theirs = version(remote), ours != theirs else { return nil }
+        return (ours, theirs)
     }
 
     private static let counter = RecoveryCounter()
@@ -464,10 +483,19 @@ struct WorkflowPublish {
         return WorkflowOwner.object(fields)
     }
 
-    static func conflict(_ files: [String], _ refs: [String]) -> WorkflowOutcome {
-        let message = "Publish paused because local and remote changes overlap in \(files.count) \(files.count == 1 ? "file" : "files"). " +
-            "Resolve each file, commit the merge, then Publish again."
-        return .failed(WorkflowOwner.object([("ok", .bool(false)), ("error", text(message)), ("conflictFiles", RepositoryOwner.strings(files)),
-                                             ("recoveryRefs", RepositoryOwner.strings(refs))]), state: "failed")
+    /// `refs` empty: the checkout already had unmerged files before Publish started.
+    static func conflict(_ files: [String], _ refs: [String], branch: String? = nil,
+                         version: (local: String, remote: String)? = nil) -> WorkflowOutcome {
+        let overlap = "local and remote changes overlap in \(files.count) \(files.count == 1 ? "file" : "files")"
+        let message = refs.isEmpty
+            ? "Publish paused because \(overlap). Resolve each file, commit the merge, then Publish again."
+            : "Publish stopped because \(overlap). Your project was left unchanged; both versions are kept on recovery refs. Resolve with agent, then Publish again."
+        var fields: [(String, JSValue)] = [("ok", .bool(false)), ("error", text(message)), ("conflictFiles", RepositoryOwner.strings(files)),
+                                           ("recoveryRefs", RepositoryOwner.strings(refs))]
+        if let branch { fields.append(("branch", text(branch))) }
+        if let version {
+            fields.append(("versionConflict", WorkflowOwner.object([("local", text(version.local)), ("remote", text(version.remote))])))
+        }
+        return .failed(WorkflowOwner.object(fields), state: "failed")
     }
 }
