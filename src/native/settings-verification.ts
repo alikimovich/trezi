@@ -40,7 +40,8 @@ export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 680 }
 export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
-  { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' }
+  { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' },
+  { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' }
 ] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id']
 

@@ -2,6 +2,8 @@ import '../shared/rename-compat'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   conversationsClosed,
+  dreamerCompletion,
+  dreamerSessions,
   onProjectMemoryUpdated,
   projectHasRunningAgents,
   registerAgentIpc,
@@ -25,6 +27,7 @@ import { registerControlsIpc } from '../main/control-panels'
 import { type ConversationOwner, setConversationOwner } from '../main/conversation-owner'
 import { registerDevServerIpc } from '../main/devserver'
 import { registerDiagnoseIpc } from '../main/diagnose'
+import { registerDreamerIpc } from '../main/dreamer'
 import { setEditingOwner } from '../main/editing-owner'
 import { registerFeedbackIpc } from '../main/feedback'
 import { createProjectFile, deleteProjectFile, renameProjectFile } from '../main/file-ops'
@@ -70,6 +73,7 @@ import { installNativeChat } from './chat-runtime'
 import { NativeContextController } from './context-controller'
 import { serviceConversation } from './conversation-service'
 import { displayText, setDisplayProfile } from './display-paths'
+import { NativeDreamerController, nativeDreamer } from './dreamer-controller'
 import { serviceEditing } from './editing-service'
 import { NativeEditorController } from './editor-controller'
 import { NativeGitController } from './git-controller'
@@ -94,6 +98,7 @@ import { NativeReviewController } from './review-controller'
 import { type ProjectRuntime, serviceRuntime } from './runtime-service'
 import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
+import { withDreamerPane } from './settings-dreamer'
 import { NativeSheetController } from './sheets-runtime'
 import { NativeShellController } from './shell-controller'
 import { installShutdown } from './shutdown'
@@ -300,6 +305,7 @@ async function main() {
     () => window,
     () => (host ? { pid: hostPid, ping: () => host!.request('webViews', {}, 2000) } : null)
   )
+  registerDreamerIpc({ sessions: dreamerSessions, completion: dreamerCompletion })
   registerGitRemoteIpc(ipcMain, projectHasRunningAgents)
   ipcMain.handle('project:pick', () => {
     if (pickedRoot) {
@@ -832,9 +838,33 @@ async function main() {
   const reviewController = new NativeReviewController(sheetController, (url) =>
     shell.openExternal(url)
   )
-  const settingsController = withClaudePane(
-    new NativeSettingsController(sheetController, preferences, refreshPreferences)
+  const settingsController = withDreamerPane(
+    withClaudePane(new NativeSettingsController(sheetController, preferences, refreshPreferences)),
+    preferences
   )
+  const dreamerController = new NativeDreamerController(sheetController, preferences, {
+    pickExport: async (name) => {
+      // The save panel waits for the user: no timeout.
+      const dest = await host!.request('pickLogExport', { name }, 0x7fffffff)
+      return typeof dest === 'string' && dest ? dest : null
+    },
+    copyText: (text) => host!.request('copyText', { text }),
+    openChat: (session) =>
+      void reviewController.open(session).catch((error) => workspaceController.reportError(error)),
+    busy: () =>
+      [...chatController.chats.values()].some(
+        (chat) => !!chat.streamingId || chat.sending || chat.queue.length > 0
+      )
+  })
+  nativeDreamer.current = dreamerController
+  if (!testing) dreamerController.schedule()
+  host.on('menu', ({ action }) => {
+    if (sheetController.current?.state.busy) return
+    const fail = (error: unknown) => workspaceController.reportError(error)
+    if (action === 'dreamer-run') void dreamerController.run().catch(fail)
+    else if (action === 'dreamer-review') dreamerController.review()
+    else if (action === 'dreamer-export') void dreamerController.exportReport().catch(fail)
+  })
   // An external edit adopted by the service reaches the controllers and the host.
   preferences.subscribe(() => {
     refreshPreferences()

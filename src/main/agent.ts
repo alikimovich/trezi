@@ -12,6 +12,7 @@ import type {
   OpenProjectResult,
   PermissionMode,
   QuestionAnswers,
+  SessionRecord,
   SessionTranscriptEntry,
   WorkspaceSnapshot
 } from '../shared/api'
@@ -334,6 +335,29 @@ function describeChangeWith(sessionKey: string): DescribeChange | null {
   return (prompt, signal) => complete(prompt, options, signal)
 }
 
+/** LKM-202: every chat record for the Dreamer, saved ones overlaid by the open chats. */
+export function dreamerSessions(): SessionRecord[] {
+  const byId = new Map(
+    store()
+      .all()
+      .map((record) => [record.id, record])
+  )
+  for (const session of sessions.values()) byId.set(session.record.id, session.record)
+  return [...byId.values()]
+}
+
+/** LKM-202: the active chat's provider and model (else the default) as a one-shot, tool-free completion. */
+export function dreamerCompletion(): {
+  label: string
+  complete: (prompt: string, signal: AbortSignal) => Promise<string | null>
+} | null {
+  const options = activeSession()?.options ?? {}
+  const complete = pickProvider(options).complete
+  if (!complete) return null
+  const label = `${options.provider ?? (options.connectionId ? 'connection' : 'claude')} · ${options.model || 'default model'}`
+  return { label, complete: (prompt, signal) => complete(prompt, options, signal) }
+}
+
 /**
  * After each successful interactive turn, conservatively merge durable decisions
  * into the project's one shared memory. The queue re-reads memory between peer
@@ -384,7 +408,7 @@ const interactiveEvents =
         .catch(() => {})
     const at = e.turn ? null : tracker.attribute(e)
     if (at) e.turn = at.turn
-    if (e.type === 'model') logTurnEvent(sessionKey, e)
+    if (e.type === 'model' || e.type === 'status' || e.type === 'delta') logTurnEvent(sessionKey, e)
     if (e.type === 'status') scheduleCheckpoint(sessionKey)
     if (e.type !== 'done' && e.type !== 'error') return
     // Backends forward this same tagged event after the hook. Keep the UI busy

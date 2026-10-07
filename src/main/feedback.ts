@@ -2,6 +2,7 @@ import { app, ipcMain, type NativeView } from '../native/platform'
 import type { FeedbackInput, FeedbackResult } from '../shared/api'
 import { buildFeedbackBody, buildFeedbackTitle } from '../shared/feedback-body'
 import { captureConsole, gatherDiagnostics, redact } from './feedback-diagnostics'
+import { productLog } from './product-log'
 import { workflowOwner } from './workflow-owner'
 
 /**
@@ -63,7 +64,10 @@ async function submitFeedback(
     diagnostics
   })
   try {
-    return await workflowOwner().feedback(repoRoot, title, issueBody)
+    const result = await workflowOwner().feedback(repoRoot, title, issueBody)
+    // LKM-202: counted by the Dreamer; never the feedback's text.
+    if (result.ok) productLog.info('feedback', 'Feedback posted')
+    return result
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

@@ -11,6 +11,12 @@ extension Host {
         let about = NSMenuItem(title: "About Trezi", action: #selector(showAbout(_:)), keyEquivalent: ""); about.target = self; appMenu.addItem(about)
         appMenu.addItem(.separator())
         let settings = NSMenuItem(title: "Settings…", action: #selector(menuAction(_:)), keyEquivalent: ","); settings.representedObject = "settings"; settings.target = self; appMenu.addItem(settings)
+        // LKM-202: the Dreamer's run, its proposals and the report export.
+        appMenu.addItem(.separator())
+        for (label, action) in [("Run Dreamer…", "dreamer-run"), ("Dreamer Proposals…", "dreamer-review"), ("Export Dreamer Report…", "dreamer-export")] {
+            let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: ""); item.target = self; item.representedObject = action; appMenu.addItem(item)
+        }
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Trezi", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = submenu("File")
         for (label, key, action) in [("New Project…", "n", "new-project"), ("Open Project…", "o", "open-project")] {

@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Dreamer: analyze past sessions, propose improvements (LKM-202)
+
+- [x] Digest of saved chats and the product log (`src/main/dreamer-digest.ts`): slow tools, repeated failures, retries and corrections, repeated requests, turn times, landings, parks, conflicts, refusals, island steps, feedback; per-step `Tool step` debug lines from `src/main/turn-log.ts`.
+- [x] Tool-free model run with a digest-only fallback and the token estimate before the run (`src/main/dreamer.ts`); version 1 format and validation (`src/shared/dreamer.ts`, `docs/DREAMER.md`).
+- [x] Trezi → Run Dreamer…, Dreamer Proposals… (filter, edit, select, Open Chat, Copy as JSON, Export…, Send to Agent OS) and Export Dreamer Report… (`src/native/dreamer-controller.ts`, `src/native/dreamer-review.ts`, `src/native/dreamer-export.ts`).
+- [x] Settings → Dreamer: Agent OS URL, project ID, token, weekly run while idle (off by default) (`src/native/settings-dreamer.ts`).
+- [x] Tests: unit `dreamer-digest`, `dreamer-export`; native smoke `dreamer` (group `settings`).
+- [ ] Open: keep the Agent OS token in the Keychain instead of preferences.
+- [ ] Open: Open Chat could scroll to the cited turn, not only open the chat.
+- [ ] Open: once LKM-200's tool timing lands, read it instead of the `Tool step` lines.
+
 ## Preview keeps old CSS after a dependency upgrade (LKM-197)
 
 - [x] Detect dependency changes: a landed package.json/lockfile change, an install by Trezi or the agent, and a changed `node_modules/<dep>/package.json` of a direct dependency (`src/native/dependency-watch.ts`, 2 s polls, two-poll confirmation).

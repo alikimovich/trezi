@@ -37,6 +37,8 @@
     "test:feedback-body": "bun test/feedback-body.mjs",
     "test:feedback-diagnostics": "bun test/feedback-diagnostics.mjs",
     "test:product-log": "bun test/product-log.mjs",
+    "test:dreamer-digest": "bun test/dreamer-digest.mjs",
+    "test:dreamer-export": "bun test/dreamer-export.mjs",
     "test:slash-token": "bun test/slash-token.mjs",
     "test:skills": "bun test/skills-discovery.mjs",
     "test:github-connect": "bun test/github-connect.mjs",

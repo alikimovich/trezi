@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentOptions } from '../shared/api'
+import { toolName } from './dreamer-digest'
 import { productLog, truncate } from './product-log'
 
 /**
@@ -58,8 +59,33 @@ export function logLandingFailed(chat: string, branch: string, reason: string) {
   })
 }
 
-/** Records the resolved model and the end of a turn from the provider's events. */
+const steps = new Map<string, { at: number; tool: string; turn?: string }>()
+
+/**
+ * LKM-202: one debug line per tool step, for the Dreamer's slowest-tools statistic. A
+ * step starts with its status line and ends at the next status, reply text or the end
+ * of the turn. Only the tool's name and duration are logged, never its input.
+ */
+function logToolStep(chat: string, event: AgentEvent, now = Date.now()) {
+  const open = steps.get(chat)
+  if (open) {
+    steps.delete(chat)
+    productLog.debug('tool', 'Tool step', {
+      chat,
+      turn: open.turn,
+      tool: open.tool,
+      ms: now - open.at
+    })
+  }
+  if (event.type !== 'status') return
+  const tool = toolName(event.text)
+  if (tool) steps.set(chat, { at: now, tool, turn: event.turn })
+}
+
+/** Records the resolved model, tool steps and the end of a turn from the provider's events. */
 export function logTurnEvent(chat: string, event: AgentEvent) {
+  if (event.type === 'status' || event.type === 'delta') return logToolStep(chat, event)
+  if (event.type === 'done' || event.type === 'error') logToolStep(chat, event)
   if (event.type === 'model') {
     if (event.model && resolved.get(chat) !== event.model) {
       resolved.set(chat, event.model)

@@ -77,6 +77,16 @@ extension Host {
                 do { reply(id, try await captureVisibleRegion(window: panel, view: content, region: content.bounds)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
+        case "captureVisibleSheet":
+            // Any sheet window's real pixels (LKM-202): `captureSheet`'s cached display leaves a sectioned window's split view blank.
+            guard ephemeral, let panel = sheets.panel, let content = panel.contentView else { reply(id, error: "No native sheet"); return true }
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                do { reply(id, try await captureVisibleRegion(window: panel, view: content, region: content.bounds, recognize: false)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "captureSheet":
             guard let content = sheets.panel?.contentView?.superview else { reply(id, error: "No native sheet"); return true }
             content.layoutSubtreeIfNeeded(); content.displayIfNeeded()

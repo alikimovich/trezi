@@ -52,6 +52,13 @@ const sections = (): NativeSheetSection[] => [
     label: 'Experimental',
     symbol: 'testtube.2',
     detail: 'Changes save automatically. UI generation options apply to your next message.'
+  },
+  // LKM-202: its rows come from `settings-dreamer.ts`.
+  {
+    id: 'dreamer',
+    label: 'Dreamer',
+    symbol: 'moon.stars',
+    detail: 'Where Send to Agent OS posts the Dreamer’s proposals, and the optional weekly run.'
   }
 ]
 /** LKM-136: chat workspace cleanup, under General. Keep in sync with `src/main/chat-workspaces.ts`. */
