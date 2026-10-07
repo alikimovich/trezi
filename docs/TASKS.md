@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Grammar-based syntax highlighting in the code editor (LKM-183)
+
+- [x] Shiki/TextMate tokenization on Bun (`syntax-controller.ts`, `src/main/syntax-*.ts`): text, language and revision in, category runs for that revision out; Swift applies a result only while its revision is on screen.
+- [x] TS/TSX/JS/JSX, CSS/SCSS, HTML, JSON/JSONC, Markdown/MDX, Svelte, Vue, Swift, YAML, shell and plain text by extension; grammars and the WASM engine load lazily.
+- [x] Visible lines plus 100 first, then the rest; per-line grammar state for incremental edits; the 500 KB cut-off is gone.
+- [x] Xcode-like dynamic light/dark colours (`SourceSyntax.swift`), no re-tokenization on an appearance change.
+- [x] `test/syntax-highlight.mjs` (unit) and the `source-syntax` smoke check (group `core`): TSX categories, under 16 ms per keystroke on 3,000 lines, light/dark captures.
+- [x] Install `shiki@^3` (3.23.0, installed by the operator) and confirm the Shiki halves of both tests; categories tuned against real scopes.
+- [x] Shiki ships inside `Trezi.app` (`backend/syntax/`, `scripts/syntax-bundle.mjs`) and loads outside the checkout (`test/syntax-bundle.mjs`); bundle size and startup recorded in PROGRESS.
 ## Background agent questions on the card (LKM-193)
 
 - [x] A spawn's `question-request` reaches its card (`chat-agent-card.ts`, `ChatAgentCard.swift`) and renders with `NativeQuestionCard`; the answer settles the spawn's own pending question through `agent:respond-question`; Cancel dismisses a waiting question.

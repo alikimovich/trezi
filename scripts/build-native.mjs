@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { nativeCatAssets } from './native-cat-assets.mjs'
 import { bundleBun } from './bundle-bun.mjs'
+import { SYNTAX_BUNDLE_BANNER, SYNTAX_BUNDLE_DEFINE, buildSyntaxBundle } from './syntax-bundle.mjs'
 import { appInfoPlist, serviceInfoPlist } from './service-info.mjs'
 import { buildInfo, versionLabel } from './version.mjs'
 import { build as bundle } from 'esbuild'
@@ -32,6 +33,12 @@ const outDirname = {
   define: { __dirname: '__treziOutDir', TREZI_VERSION: JSON.stringify(label) },
   banner: { js: `// ${label}\nvar __treziOutDir = require("node:path").resolve(__dirname, "../../../..");` }
 }
+// LKM-183: Shiki is the one package the backend does not resolve from the checkout; it
+// ships as its own lazily split bundle under backend/syntax/ (scripts/syntax-bundle.mjs).
+const backendBuild = {
+  define: { ...outDirname.define, ...SYNTAX_BUNDLE_DEFINE },
+  banner: { js: `${outDirname.banner.js}\n${SYNTAX_BUNDLE_BANNER}` }
+}
 mkdirSync(join(contents, 'MacOS'), { recursive: true })
 mkdirSync(join(contents, 'Resources'), { recursive: true })
 mkdirSync(join(contents, 'Helpers'), { recursive: true })
@@ -53,8 +60,9 @@ const bundles = (async () => {
       format: 'cjs',
       packages: 'external',
       sourcemap: true,
-      ...outDirname
+      ...backendBuild
     }),
+    buildSyntaxBundle(root, join(backendDir, 'syntax')),
     bundle({
       entryPoints: [join(root, 'src/main/backends/provider-helper-entry.ts')],
       outfile: join(backendDir, 'provider-helper.cjs'),
@@ -80,6 +88,7 @@ const bundles = (async () => {
   const inputs = Object.keys(backend.metafile.inputs)
   const externalImports = Object.values(backend.metafile.outputs).flatMap(output => output.imports).filter(item => item.external).map(item => item.path)
   if (inputs.some(path => /src\/renderer\//.test(path)) || externalImports.some(path => /^(electron|electron-vite|react|react-dom|@codemirror)(\/|$)/.test(path))) throw new Error('Native build unexpectedly depends on a retired application runtime')
+  if (externalImports.some(path => /^(shiki|@shikijs)(\/|$)/.test(path)) || inputs.some(path => /node_modules\/(shiki|@shikijs)\//.test(path))) throw new Error('The backend bundle must load Shiki only from backend/syntax/')
   writeFileSync(join(out, 'build-inputs.json'), JSON.stringify({ inputs, externalImports }, null, 2))
   console.log(`[build] JS bundles: ${seconds(started)}`)
 })()
@@ -172,6 +181,8 @@ const host = compile(
     join(root, 'src/native/Activity.swift'),
     join(root, 'src/native/ActivityIndicator.swift'),
     join(root, 'src/native/SourceEditor.swift'),
+    join(root, 'src/native/SourceSyntax.swift'),
+    join(root, 'src/native/SourceSyntaxVerification.swift'),
     join(root, 'src/native/SourceFileTree.swift'),
     join(root, 'src/native/FloatingIsland.swift'),
     join(root, 'src/native/IslandLayout.swift'),

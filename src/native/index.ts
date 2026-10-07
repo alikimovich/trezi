@@ -112,6 +112,7 @@ import {
 import { serviceSource } from './source-service'
 import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
+import { SyntaxController } from './syntax-controller'
 import { NativeUpdateController } from './update-controller'
 import { serviceWorkflows } from './workflow-service'
 import { installNativeWorkspace } from './workspace-runtime'
@@ -510,13 +511,27 @@ async function main() {
   // grant for the source editor (re-issued when it expired or the file changed). Only
   // the newest state is delivered when a resolution is outstanding.
   let sourceStates = 0
+  // Grammar highlighting (LKM-183): results follow the state they were computed for.
+  const syntax = new SyntaxController(
+    (message) => host!.send('sourceHighlight', message),
+    undefined,
+    (message) => productLog.warn('editor', message)
+  )
   const editorController = new NativeEditorController(
     workspaceController.services.invoke,
     (state) => {
       const media = state.document?.media,
         sequence = ++sourceStates
       const deliver = (mediaPath?: string) => {
-        if (sequence === sourceStates) host!.send('sourceState', { state: { ...state, mediaPath } })
+        if (sequence !== sourceStates) return
+        host!.send('sourceState', { state: { ...state, mediaPath } })
+        syntax.document(
+          state.root,
+          state.source,
+          state.text,
+          state.revision,
+          state.visible && !!state.document && !state.document.binary && !media
+        )
       }
       if (!media) deliver()
       else
@@ -534,8 +549,9 @@ async function main() {
     if (root) void editorController.open(root, source, popped)
   }
   const editorAction = (action: any) => {
-    if (workspaceController.state.projects.some((p) => p.root === action.root))
-      void editorController.action(action)
+    if (!workspaceController.state.projects.some((p) => p.root === action.root)) return
+    if (action.action === 'highlight') syntax.report(action.root, action)
+    else void editorController.action(action)
   }
   host.on('source-action', editorAction)
   ipcMain.handle('source:popout', (_event, root, source) =>

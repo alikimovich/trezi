@@ -47,6 +47,12 @@ src/
                     native source, layers and property/style inspector; the Layers
                     and editing islands float over the preview (LayersLayout.swift
                     places Layers under its toolbar button, never over the other)
+    SourceSyntax.swift  applies Shiki token categories from native/syntax-controller.ts
+                    (TextMate grammars on Bun, main/syntax-*.ts) by revision, in
+                    dynamic Xcode-like light/dark colours (LKM-183); Shiki ships in
+                    the app as its own lazily split bundle (scripts/syntax-bundle.mjs
+                    → Resources/backend/syntax/), the one package not resolved from
+                    the checkout
     FloatingIsland.swift / IslandLayout.swift
                     what both islands share: glass, opaque face, a header that
                     drags them (snap, no overlap, corner-relative saved place) and

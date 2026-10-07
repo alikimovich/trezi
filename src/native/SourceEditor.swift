@@ -15,6 +15,8 @@ final class SourceTextView: NSTextView {
         }
         super.mouseDown(with: event)
     }
+    /// Syntax colours are dynamic; redraw them for the new appearance.
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
 
 final class SourceLineRuler: NSRulerView {
@@ -51,7 +53,10 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     let image = NSImageView(), player = AVPlayerView(), binary = NSTextField(labelWithString: "")
     let header = NSStackView(), spacer = NSView()
     var popout: NSWindow?, updating = false
-    var highlightWork: DispatchWorkItem?
+    /// Grammar highlighting (`SourceSyntax.swift`): the last applied revision, the
+    /// reported visible lines and a test-only main-thread timing hook.
+    var highlighted = -1, viewport: [Int] = [], viewportWork: DispatchWorkItem?
+    var measure: ((String, Int, CFTimeInterval) -> Void)?
     var dock: (() -> Void)?
     var controls: [String: NSButton] = [:], symbols: [String: String] = [:]
     var documentKey = "", reveal = -1
@@ -77,12 +82,14 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true; scroll.autohidesScrollers = true
         code.isRichText = false; code.isEditable = true; code.isSelectable = true; code.allowsUndo = true; code.usesFindBar = true; code.isIncrementalSearchingEnabled = true
         code.isAutomaticQuoteSubstitutionEnabled = false; code.isAutomaticDashSubstitutionEnabled = false; code.isAutomaticTextReplacementEnabled = false; code.isAutomaticSpellingCorrectionEnabled = false
-        code.font = .monospacedSystemFont(ofSize: 12, weight: .regular); code.textColor = .labelColor; code.textContainerInset = NSSize(width: 8, height: 10)
+        code.font = SourceSyntaxTheme.regular; code.textColor = .labelColor; code.typingAttributes = SourceSyntaxTheme.plain; code.textContainerInset = NSSize(width: 8, height: 10)
         code.minSize = NSSize(width: 0, height: 0); code.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         code.isVerticallyResizable = true; code.isHorizontallyResizable = false; code.autoresizingMask = [.width]; code.textContainer?.widthTracksTextView = true
         code.layoutManager?.allowsNonContiguousLayout = true
         code.delegate = self; scroll.documentView = code
         scroll.verticalRulerView = SourceLineRuler(scroll: scroll, text: code); scroll.hasVerticalRuler = true; scroll.rulersVisible = true
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in self?.scheduleViewport() }
         code.component = { [weak self] name in self?.send("component", ["name":name]) }
         image.imageScaling = .scaleProportionallyUpOrDown
         binary.alignment = .center; binary.textColor = .secondaryLabelColor
@@ -145,6 +152,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         send(action)
     }
     func update(_ value: [String: Any]) {
+        let started = CACurrentMediaTime()
         state = value; root = value["root"] as? String ?? ""; source = value["source"] as? String ?? ""
         let newFiles = value["files"] as? [String] ?? []; if files != newFiles { files = newFiles; filter() }
         // Rewriting an unchanged path would drop the user's selection in it.
@@ -157,10 +165,10 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         if value["popped"] as? Bool == true { setIcon("popout", "arrow.down.right.and.arrow.up.left", "Dock Editor") } else { setIcon("popout", "arrow.up.left.and.arrow.down.right", "Pop Out Editor") }
         let document = value["document"] as? [String: Any] ?? [:], incoming = value["text"] as? String ?? "", nextRevision = value["revision"] as? Int ?? 0
         let key = root + "/" + source, changed = key != documentKey
+        var replaced = false
         if changed || nextRevision >= revision && incoming != code.string {
-            updating = true; code.string = incoming; updating = false
+            updating = true; code.string = incoming; updating = false; replaced = true
             if changed { code.undoManager?.removeAllActions(); documentKey = key; let line = document["line"] as? Int ?? 1; let pieces = incoming.split(separator: "\n", omittingEmptySubsequences: false); let offset = pieces.prefix(max(0, line - 1)).reduce(0) { $0 + ($1 as NSString).length + 1 }; code.setSelectedRange(NSRange(location: min(offset, (incoming as NSString).length), length: 0)); code.scrollRangeToVisible(code.selectedRange()) }
-            highlight()
         }
         if let nextReveal = value["reveal"] as? Int, nextReveal != reveal {
             reveal = nextReveal
@@ -175,23 +183,12 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         binary.stringValue = "Binary file · \(document["bytes"] as? Int ?? 0) bytes"
         if let path = value["mediaPath"] as? String, let media { if media["kind"] as? String == "image" { image.isHidden = false; image.image = NSImage(contentsOfFile: path) } else { player.isHidden = false; if changed { player.player?.pause(); player.player = AVPlayer(url: URL(fileURLWithPath: path)) } } } else { player.player?.pause() }
         tree.selectFile(source)
+        // A replaced text shows plain until the backend's highlight for this revision lands.
+        if replaced { resetHighlight(nextRevision) }
+        measure?("update", nextRevision, CACurrentMediaTime() - started)
     }
-    func textDidChange(_ notification: Notification) { guard !updating else { return }; revision += 1; send("edit", ["text":code.string, "revision":revision]); highlight() }
-    func highlight() {
-        highlightWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.code.hasMarkedText(), let storage = self.code.textStorage else { return }
-            let text = self.code.string, full = NSRange(location: 0, length: (text as NSString).length)
-            storage.beginEditing(); storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: full)
-            if full.length < 500_000 {
-                for (pattern, color) in [("\\b(?:import|from|export|default|const|let|var|function|return|class|interface|type|if|else|async|await|true|false|null|for|while|switch|case|public|private|func|struct)\\b", NSColor.systemPurple), ("\\b[0-9]+(?:\\.[0-9]+)?\\b", NSColor.systemBlue), ("\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`(?:\\\\.|[^`\\\\])*`", NSColor.systemRed), ("//[^\\n]*|/\\*[\\s\\S]*?\\*/|<!--[\\s\\S]*?-->", NSColor.secondaryLabelColor)] {
-                    if let regex = try? NSRegularExpression(pattern: pattern) { for match in regex.matches(in: text, range: full) { storage.addAttribute(.foregroundColor, value: color, range: match.range) } }
-                }
-            }
-            storage.endEditing(); self.scroll.verticalRulerView?.needsDisplay = true
-        }
-        highlightWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
-    }
+    /// Highlighting is the backend's (LKM-183): an edit only sends the text and revision.
+    func textDidChange(_ notification: Notification) { guard !updating else { return }; revision += 1; send("edit", ["text":code.string, "revision":revision]); scroll.verticalRulerView?.needsDisplay = true }
     func filter() { tree.update(files, query: search.stringValue) }
     func controlTextDidChange(_ obj: Notification) { filter() }
     func windowShouldClose(_ sender: NSWindow) -> Bool { send("hide"); return false }

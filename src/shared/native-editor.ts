@@ -32,10 +32,16 @@ export type NativeEditorAction = {
     | 'rename'
     | 'delete'
     | 'component'
+    | 'highlight'
   source?: string
   text?: string
   name?: string
   revision?: number
+  /** `highlight` (LKM-183): visible lines, a replaced text, a dropped stale result. */
+  first?: number
+  last?: number
+  reset?: boolean
+  dropped?: number
 }
 
 declare global {

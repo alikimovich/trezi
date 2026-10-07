@@ -2,7 +2,7 @@
   "name": "trezi",
   "productName": "Trezi",
   "version": "0.0.1",
-  "description": "AI design & prototyping tool \u2014 chat on the left, live preview of your repo on the right",
+  "description": "AI design & prototyping tool — chat on the left, live preview of your repo on the right",
   "main": "./out/native/Trezi.app/Contents/Resources/backend/index.cjs",
   "license": "MIT",
   "bin": {
@@ -101,6 +101,8 @@
     "test:codex-usage": "bun test/codex-usage.mjs",
     "test:turn-terminal": "bun test/turn-terminal.mjs",
     "test:file-tree": "bun test/file-tree.mjs",
+    "test:syntax-highlight": "bun test/syntax-highlight.mjs",
+    "test:syntax-bundle": "bun test/syntax-bundle.mjs",
     "test:media-types": "bun test/media-types.mjs",
     "test:rules": "bun test/rules.mjs",
     "test:tw-classes": "bun test/tw-classes.mjs",
@@ -142,9 +144,10 @@
     "colorparsley": "^0.1.8",
     "parse5": "^7.2.1",
     "react-docgen": "^8.0.3",
+    "shiki": "^3",
     "svelte": "^5.56.4",
-    "zod": "^4.0.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
