@@ -8,6 +8,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Each reply text segment is one selectable TextKit text view (`ChatTextView.swift`) over one attributed string (`ChatRichText.swift`): drag selection crosses paragraphs, lists, headings, code blocks and tables.
 - [x] Cmd-A selects the message; Cmd-C copies plain text with paragraph breaks, whole code blocks keep their fences; links, code Copy buttons, inline code and light/dark kept.
 - [x] `native-chat-text` unit fixture and `chat-text` smoke check (group `chat`) with light/dark captures; CHANGELOG line.
+## Landing commit messages describe the change (LKM-189)
+
+- [x] `commit-message.ts`/`chat-commit.ts`: subject (imperative, <= 72 chars) and 3–6 bullets from the turn's diff and final reply via the provider's background model (`complete` one-shot), 3 s timeout, deterministic file-list fallback, Conventional Commits when the repo uses them, `Trezi-Turn`/`Trezi-Chat` trailers; never the prompt.
+- [x] Used for every landing (turn, reconcile, resolve, Keep, parked apply, chat release); a re-squash after a park describes the combined diff.
+- [x] Publish PR title/body summarise the branch's commits; tests (mocked model, timeout, no prompt, combined diff, trailers, PR), CHANGELOG line, docs/WORKTREES.md.
+
 ## Landed chat commits never become unreachable (LKM-185)
 
 - [x] One branch rule in the repository owner: automatic switches (`git:ensure`, publish heal) never move the live checkout onto a branch lacking its commits; a behind branch fast-forwards with a recovery ref, a diverged one is refused (`joinBranch`).

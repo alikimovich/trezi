@@ -43,6 +43,7 @@ export function helperProvider(id: string): ModelProvider {
     host: 'helper',
     supportsSpawn: adapter?.supportsSpawn ?? true,
     generateTitle: adapter?.generateTitle,
+    complete: adapter?.complete,
     updateProjectMemory: adapter?.updateProjectMemory,
     startSession: (root, options, getWindow, ctx) =>
       startHelperSession(id, root, options, getWindow, ctx)
