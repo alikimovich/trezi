@@ -8,6 +8,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Each reply text segment is one selectable TextKit text view (`ChatTextView.swift`) over one attributed string (`ChatRichText.swift`): drag selection crosses paragraphs, lists, headings, code blocks and tables.
 - [x] Cmd-A selects the message; Cmd-C copies plain text with paragraph breaks, whole code blocks keep their fences; links, code Copy buttons, inline code and light/dark kept.
 - [x] `native-chat-text` unit fixture and `chat-text` smoke check (group `chat`) with light/dark captures; CHANGELOG line.
+## Chat text scrolls behind the composer (LKM-190)
+
+- [x] Remove the conversation's clearance mask (`LatestClearanceMask`, `latestClearHeight`, `ChatLatestButton.fade`): history stays painted under the composer and the latest button.
+- [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
+- [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
+
 ## Landing commit messages describe the change (LKM-189)
 
 - [x] `commit-message.ts`/`chat-commit.ts`: subject (imperative, <= 72 chars) and 3–6 bullets from the turn's diff and final reply via the provider's background model (`complete` one-shot), 3 s timeout, deterministic file-list fallback, Conventional Commits when the repo uses them, `Trezi-Turn`/`Trezi-Chat` trailers; never the prompt.

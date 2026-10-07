@@ -200,7 +200,8 @@ const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 // still get a longer budget for a cold Swift cache.
 const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,
-  'repository-owner': 300_000,
+  // Its Swift fixture queues behind other tests' swiftc runs; it takes 110 s+ under load.
+  'repository-owner': 240_000,
   'keychain-rebuild': 300_000,
   'setup-vite-real': 300_000
 }
