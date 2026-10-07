@@ -332,6 +332,20 @@ cannot create islands. The default auto engine uses saved Gateway credentials fo
 Jev to select/order whole prepared blocks; missing credentials use the agent's
 layout with explicit fallback reporting. Runtime failures are not hidden.
 
+A chat's island session is attached when its workspace is ready (LKM-199;
+`ChatIslands.attach`): at restore, on a new chat once its preparation ends, at the
+first send and turn start, on a provider switch, and by any `chat_island` call that
+finds it missing. The catalog also returns `readiness`: `ready` with the project
+`root`, owner `recordId` and checkout `worktree`, or `ready: false` with a `code`,
+`reason` and `recovery` step. It answers at once (it never waits for a pending
+workspace, and attaches a ready one). A define, read, show or clone that cannot run
+returns the same `code`, `reason` and `recovery` as its error instead of a sentence.
+The codes (`ISLAND_RECOVERY` in `src/shared/chat-islands.ts`, looked up by
+`agent:chat-record` in `src/main/chat-record.ts`) are `workspace_pending` (define, read
+and show wait for it), `preparation_failed` (with the cause as `detail`), `not_git` (the
+preparation failed and the project folder is not a Git repository), `no_session` (the
+workspace has no owner record to attach to) and `closed`.
+
 Control-capable providers receive the same selection/verification guidance that
 `chat_island` returns in its catalog, maintained in
 `src/shared/chat-island-guidance.ts`. The bundled surface-controls skill reads

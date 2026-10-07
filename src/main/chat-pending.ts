@@ -22,6 +22,7 @@ interface Entry {
   chat: PendingChat
   run: Promise<void>
   failed: boolean
+  error?: string
 }
 
 export class PendingChats {
@@ -51,6 +52,7 @@ export class PendingChats {
       (error) => {
         entry.failed = true
         const message = error instanceof Error ? error.message : String(error)
+        entry.error = truncate(message, 300)
         productLog.warn('chat', 'New chat preparation failed', {
           chat: chat.sessionKey,
           ms: Date.now() - chat.createdAt,
@@ -88,6 +90,12 @@ export class PendingChats {
   /** Resolves once the chat's current preparation ends, either way; never retries it. */
   async settled(sessionKey: string): Promise<void> {
     await this.entries.get(sessionKey)?.run.catch(() => {})
+  }
+
+  /** Whether the chat is still being prepared, or its preparation failed (and why). Null when not pending. */
+  status(sessionKey: string): { failed: boolean; error?: string } | null {
+    const entry = this.entries.get(sessionKey)
+    return entry ? { failed: entry.failed, error: entry.error } : null
   }
 
   /** Close a pending chat; its preparation tears down what it made. */

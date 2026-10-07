@@ -37,6 +37,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 - A new chat can create chat islands again: its agent no longer gets "chat islands are not available yet" while the workspace is still being prepared; the island waits for it (LKM-199).
 - The agent's preview route, DOM inspection and screenshot always describe the same page, the preview you see, and name its port and route; when the preview shows another server than the chat's project, the tools say so instead of describing the wrong page (LKM-199).
+- When a chat cannot hold islands, the agent now gets a reason code and a recovery step (workspace still preparing, preparation failed, not a Git repository, no session, closed) from `chat_island`, and its catalog says whether the chat is ready (LKM-199).
 - Codex asks its questions on the same question card as Claude, then waits for your answer instead of choosing for you (LKM-199).
 - Feedback diagnostics are shorter and more useful: repeated identical dev-server output lines are logged once, and the system log section keeps only errors and faults from Trezi, up to 200 lines (LKM-199).
 - The queued-messages box above the composer no longer has a list icon, keeps even 10 pt padding with each row centred, lines its text up with the message field and its buttons with Send, and tucks under the composer by the same amount at every row count (LKM-198).

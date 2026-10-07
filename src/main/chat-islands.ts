@@ -1,4 +1,5 @@
 import type {
+  IslandBlocker,
   IslandCommand,
   IslandHealth,
   IslandRecord,
@@ -19,7 +20,7 @@ import { islandTool } from './chat-island-tool'
 import { selectControlCandidates } from './control-selection'
 import { cancelControlComposition } from './controls-jev'
 import { type EditingOwner, editingOwner } from './editing-owner'
-import { IslandOverrides } from './island-overrides'
+import type { IslandOverrides } from './island-overrides'
 import { shadowBlockCss } from './shadow-controls'
 
 export interface IslandSession {
@@ -59,6 +60,12 @@ export interface IslandLocation {
   recordId: string
   turn: () => number
 }
+export type LocateIslands = (
+  chat: string,
+  wait: boolean
+) => Promise<IslandLocation | IslandBlocker | null>
+/** A chat's session, or why it has none (LKM-199). */
+export type Attached = { session: Session } | { blocked: IslandBlocker }
 export const ISLAND_CONFLICT_NOTICE =
   'This value changed in the source. The controls now show the source values.'
 /**
@@ -75,9 +82,12 @@ export class ChatIslands {
   private readonly given?: EditingOwner
   /** Shadow gestures shown in the preview, written once (LKM-140); without it every frame writes. */
   readonly overrides?: IslandOverrides
-  /** Finds a chat's record once its workspace is ready (a new chat's is prepared later). */
-  private readonly locate: (chat: string) => Promise<IslandLocation | null>
-  private locating = new Map<string, Promise<Session | undefined>>()
+  /**
+   * Finds a chat's record once its workspace is ready (a new chat's is prepared later);
+   * without `wait` it answers at once, with why there is no record yet. Null is "no locator".
+   */
+  private readonly locate: LocateIslands
+  private locating = new Map<string, Promise<Attached>>()
   constructor(
     readonly changed: (chat: string) => void,
     readonly select = selectControlCandidates,
@@ -85,13 +95,13 @@ export class ChatIslands {
       owner?: EditingOwner
       origin?: (chat: string) => string | null
       overrides?: IslandOverrides
-      locate?: (chat: string) => Promise<IslandLocation | null>
+      locate?: LocateIslands
     } = {}
   ) {
     this.given = options.owner
     this.origin = options.origin ?? (() => null)
     this.overrides = options.overrides
-    this.locate = options.locate ?? (async () => null)
+    this.locate = options.locate ?? (async (): Promise<null> => null)
   }
   get owner(): EditingOwner {
     return this.given ?? editingOwner()
@@ -132,20 +142,51 @@ export class ChatIslands {
   /**
    * The chat's session, registered when it is missing (LKM-199): a new chat's record
    * exists only once its workspace is prepared, so this waits for it. Undefined when the
-   * chat closed or has no record.
+   * chat closed or has no record; `attach` says which.
    */
-  ensure(chat: string): Promise<Session | undefined> {
+  async ensure(chat: string): Promise<Session | undefined> {
+    const attached = await this.attach(chat)
+    return 'session' in attached ? attached.session : undefined
+  }
+  /**
+   * The chat's session, or why it has none. With `wait` (the default) a pending workspace
+   * is awaited and concurrent callers share one lookup; without it the answer is
+   * immediate: a workspace that is ready is attached, one still being prepared is
+   * reported as `workspace_pending`.
+   */
+  attach(chat: string, wait = true): Promise<Attached> {
     const known = this.sessions.get(chat)
-    if (known) return Promise.resolve(known)
+    if (known) return Promise.resolve({ session: known })
+    const settle = (found: IslandLocation | IslandBlocker | null): Attached => {
+      if (found && 'recordId' in found && found.recordId) {
+        this.register(chat, found.root, found.recordId, found.turn)
+        const session = this.sessions.get(chat)
+        if (session) return { session }
+      }
+      return { blocked: found && 'code' in found ? found : { code: 'no_session' } }
+    }
+    if (!wait) {
+      if (this.locating.has(chat))
+        return Promise.resolve({ blocked: { code: 'workspace_pending' } })
+      return this.locate(chat, false)
+        .catch((): null => null)
+        .then((found) => {
+          const session = this.sessions.get(chat)
+          return session ? { session } : settle(found)
+        })
+    }
     let run = this.locating.get(chat)
     if (run) return run
-    run = this.locate(chat)
-      .catch(() => null)
-      .then((found) => {
-        if (this.locating.get(chat) !== run) return this.sessions.get(chat)
+    run = this.locate(chat, true)
+      .catch((): null => null)
+      .then((found): Attached => {
+        // Closed while waiting: no session is registered for it.
+        if (this.locating.get(chat) !== run) {
+          const session = this.sessions.get(chat)
+          return session ? { session } : { blocked: { code: 'closed' } }
+        }
         this.locating.delete(chat)
-        if (found?.recordId) this.register(chat, found.root, found.recordId, found.turn)
-        return this.sessions.get(chat)
+        return settle(found)
       })
     this.locating.set(chat, run)
     return run

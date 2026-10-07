@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runChatIslandTool } from '../main/chat-islands'
+import type { IslandReadiness } from '../shared/chat-islands'
 import type { NativeBridge } from './bridge'
 import { nativeChat, nativeIslands } from './chat-runtime'
 import { nativeWorkspace } from './workspace-runtime'
@@ -32,6 +33,15 @@ export async function checkIslandNewChat(
   const created = nativeChat.active
   state.created = created
   // At once, as an agent's first tool call can be: the workspace may still be preparing.
+  // The catalog answers without waiting: ready, or `workspace_pending` with its recovery.
+  const early = (await runChatIslandTool(created, fixture, { action: 'catalog' })) as {
+    readiness?: IslandReadiness
+  }
+  assert.ok(
+    early.readiness?.ready ||
+      (early.readiness?.code === 'workspace_pending' && early.readiness.recovery),
+    `New chat catalog readiness: ${JSON.stringify(early.readiness)}`
+  )
   const result = (await runChatIslandTool(created, fixture, {
     action: 'define',
     engine: 'agent',
@@ -63,6 +73,11 @@ export async function checkIslandNewChat(
   assert.ok(result.id, 'The island is defined in the brand-new chat')
   const session = nativeIslands.sessions.get(created)
   assert.ok(session?.recordId, 'The new chat has an island session against its record')
+  const ready = (await runChatIslandTool(created, fixture, { action: 'catalog' })) as {
+    readiness?: IslandReadiness
+  }
+  assert.equal(ready.readiness?.ready, true, JSON.stringify(ready.readiness))
+  assert.equal(ready.readiness?.recordId, session.recordId, 'The catalog names the record')
   assert.ok(
     nativeIslands.attachments(created).some((a) => a.view?.id === result.id),
     'The island is attached to the new chat'

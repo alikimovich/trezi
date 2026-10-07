@@ -6,6 +6,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## New chats, preview page, Codex questions, feedback log noise (LKM-199)
 
 - [x] Island sessions register for every chat with a workspace: restore, new chat (after `agent:chat-record` waits for the preparation), first turn, provider switch, and lazily on the first `chat_island` call (`ChatIslands.ensure`, `src/native/chat-island-session.ts`); never "not available yet" for a chat with a workspace.
+- [x] Repair: `chat_island` catalog returns `readiness` (ready + root/record/worktree, or `code`/`reason`/`recovery`); define/read/show/clone failures return the same structured block (`workspace_pending`, `preparation_failed`, `not_git`, `no_session`, `closed`); a ready workspace without a session is attached by the catalog. `agent:chat-record` (`src/main/chat-record.ts`) reports why a chat has no record. Unit `chat-island-new-chat` covers every code.
 - [x] Tests: unit `chat-island-new-chat` (real ChatIslands, stub owner, real chat controller); native check `island-new-chat` (group `islands`).
 - [x] Preview tools read the page's own location, name URL/port/route in every answer and refuse while the preview shows another server than the chat project's (`src/main/preview-page.ts`); unit `preview-page`.
 - [x] Codex gets `ask_user` (`src/main/question-tool.ts`): AskUserQuestion's card, returns at once, the answer is the next user message; foreground only; rules v34. Unit `ask-user`, policy golden and tool inventories.
