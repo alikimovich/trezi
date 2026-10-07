@@ -43,6 +43,11 @@ extension Host {
             if c["prepare"] as? Bool == true { reply(id, editor.prepareForeground()) }
             else if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await editor.captureToolbar()) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, editor.verifyShortcut(c["key"] as? String ?? "", focus: c["focus"] as? String ?? "code").merging(["toolbar": editor.inspectToolbar()]) { _, new in new }) }
+        case "sourceSyntax":
+            guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
+            if let appearance = c["capture"] as? String { Task { @MainActor in do { reply(id, try await editor.captureSyntax(dark: appearance == "dark", offscreen: c["offscreen"] as? Bool == true)) } catch { reply(id, error: error.localizedDescription) } } }
+            else if let text = c["type"] as? String { Task { @MainActor in reply(id, await editor.typeSyntax(text, after: c["after"] as? String ?? "", pace: c["pace"] as? Double ?? 0.06)) } }
+            else { reply(id, editor.inspectSyntax(c["probes"] as? [String] ?? [])) }
         case "activityInspect": reply(id, ["visible":activity.window?.isVisible ?? false, "key":activity.window?.isKeyWindow ?? false, "count":activity.count, "text":String(activity.text.string.suffix(20000))].merging(activityIndicator.inspect()) { _, new in new })
         case "activityMenu":
             // Pipe test: Command-L through the main menu's key equivalents, as the keyboard sends it.

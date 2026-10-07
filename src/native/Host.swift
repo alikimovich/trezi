@@ -161,6 +161,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             sourceRoot = c["root"] as? String ?? ""
             for (root, editor) in sourceEditors where editor.state["popped"] as? Bool != true { editor.isHidden = root != sourceRoot || editor.state["visible"] as? Bool != true }
             nativeLayout.layout()
+        case "sourceHighlight": sourceEditors[c["root"] as? String ?? ""]?.applyHighlight(c)
         case "sourceState":
             let state = c["state"] as? [String: Any] ?? [:], root = state["root"] as? String ?? ""
             let editor = sourceEditors[root] ?? NativeSourceEditor(); sourceEditors[root] = editor

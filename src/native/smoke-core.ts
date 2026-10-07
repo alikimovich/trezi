@@ -39,6 +39,7 @@ import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets } from './smoke-sheets'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
+import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
@@ -768,6 +769,12 @@ export async function runNativeCoreSmoke(
         if ((await host.request('sourceInspect')).visible)
           await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
       }
+    },
+    {
+      name: 'source-syntax',
+      dependsOn: ['open-project'],
+      run: () => checkSourceSyntax(host, fixture, artifacts),
+      cleanup: () => restoreSourceSyntax(host, fixture)
     },
     {
       name: 'visible-composer',

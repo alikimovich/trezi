@@ -99,6 +99,7 @@
     "test:codex-usage": "bun test/codex-usage.mjs",
     "test:turn-terminal": "bun test/turn-terminal.mjs",
     "test:file-tree": "bun test/file-tree.mjs",
+    "test:syntax-highlight": "bun test/syntax-highlight.mjs",
     "test:media-types": "bun test/media-types.mjs",
     "test:rules": "bun test/rules.mjs",
     "test:tw-classes": "bun test/tw-classes.mjs",
