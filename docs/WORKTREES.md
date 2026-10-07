@@ -198,6 +198,12 @@ Shell commands and Codex are covered too (LKM-156, below).
 
 The Codex sandbox above applies only with Agent file access set to Project only (LKM-163, below).
 
+### Agent Git access and base merges (LKM-188)
+
+Settings → General → Agent Git access (`trezi:agent-git-access:v1`) defaults to Managed, beside Agent file access. Managed permits read-only Git and Trezi's `git_sync_base`, `git_merge_continue`, `git_merge_abort`, `pr_status` and `publish_update`. Claude's PreToolUse hook and Codex's session command hook refuse direct Git writes with the corresponding tool name. Full permits raw Git effects in the private chat worktree; raw pushes still go through Publish. This setting applies when a provider helper session opens.
+
+The repository owner validates that each Git tool targets a linked chat worktree, serializes it with landings and writes recovery refs before a base merge or abort. `git_sync_base` fetches `origin/<base>` and merges with `--no-ff`; a conflict leaves the usual markers and `MERGE_HEAD`. After editing, `git_merge_continue` stages the result and makes the two-parent commit. Turn completion does not squash a merge or a Full-mode raw commit. The live landing attaches previously unseen chat history as a second parent, including a merge whose resolved files equal the live version, so landed commits stay reachable. `publish_update` schedules the existing PR's normal publish workflow after a successful landing, without a force push.
+
 ### Agent file access and symlinked paths (LKM-163)
 
 - **Setting.** Settings → General → Agent file access (`trezi:agent-file-access:v1`,

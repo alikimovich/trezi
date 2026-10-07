@@ -20,6 +20,7 @@ import type {
   SlashCommandItem
 } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
+import { agentGitAccess, rawGitWrite } from '../agent-git-access'
 import { checkContrast, suggestAccessible } from '../apca'
 import { discoverPortableSkills } from '../bundled-skills'
 import { fluidClamp, fluidScale } from '../fluid'
@@ -675,6 +676,33 @@ async function startSession(
         async (args) => asText(treziTool('compose_project_ui', args))
       ),
       tool(
+        'git_sync_base',
+        'Fetch an origin base and merge it into this chat worktree. Resolve any listed conflicts, then call git_merge_continue.',
+        { ref: z.string().optional() },
+        async (args) => asText(treziTool('git_sync_base', args))
+      ),
+      tool(
+        'git_merge_continue',
+        'Create the two-parent merge commit after resolving conflicts.',
+        {},
+        async () => asText(treziTool('git_merge_continue', {}))
+      ),
+      tool('git_merge_abort', 'Abort the in-progress base merge.', {}, async () =>
+        asText(treziTool('git_merge_abort', {}))
+      ),
+      tool(
+        'pr_status',
+        'Read the existing pull request mergeability and checks.',
+        { number: z.number().int().positive().optional() },
+        async (args) => asText(treziTool('pr_status', args))
+      ),
+      tool(
+        'publish_update',
+        'Update the existing PR branch after this turn lands.',
+        { number: z.number().int().positive().optional() },
+        async (args) => asText(treziTool('publish_update', args))
+      ),
+      tool(
         'preview_location',
         "The page/route currently shown in the user's live preview pane.",
         {},
@@ -1157,7 +1185,11 @@ async function startSession(
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: treziRules({ previewTools: true, projectMemory: ctx?.projectMemory })
+          append: treziRules({
+            previewTools: true,
+            agentGitAccess: options.agentGitAccess,
+            projectMemory: ctx?.projectMemory
+          })
         },
         // The trezi MCP server (preview_location / preview_screenshot / chat_island /
         // spring_to_css / check_contrast / fluid_clamp / color_scale / layered_shadow /
@@ -1191,6 +1223,19 @@ async function startSession(
               hooks: [
                 async (input) => {
                   const pre = input as { tool_name?: string; tool_input?: unknown }
+                  const gitRefusal = rawGitWrite(
+                    pre.tool_name ?? '',
+                    pre.tool_input,
+                    agentGitAccess(options.agentGitAccess)
+                  )
+                  if (gitRefusal)
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        permissionDecision: 'deny' as const,
+                        permissionDecisionReason: gitRefusal
+                      }
+                    }
                   const denied = liveCheckoutEdit(
                     pre.tool_name ?? '',
                     pre.tool_input,

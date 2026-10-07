@@ -61,7 +61,12 @@ export const TREZI_TOOLS = [
   'list_recommended_skills',
   'install_skills',
   'workspace_state',
-  'prepare_conflict_resolution'
+  'prepare_conflict_resolution',
+  'git_sync_base',
+  'git_merge_continue',
+  'git_merge_abort',
+  'pr_status',
+  'publish_update'
 ] as const
 
 /** Tools a background (comment) session is not granted, and what it is told instead. */

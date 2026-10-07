@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-188: agents resolve conflicting PRs
+
+- Swift repository-owner effects `gitSyncBase`, `gitMergeContinue` and `gitMergeAbort` operate only on a validated linked chat worktree. They fetch an origin base, keep conflict markers for the agent, and journal recovery refs before merges and aborts.
+- Turn completion preserves chat merge and raw-commit history; the live landing records an unseen chat merge/commit as a second parent while keeping the live checkout's resulting tree. Publish updates use the existing workflow owner after the turn lands.
+- Settings gains Managed (default) and Full Agent Git access. Claude and Codex PreToolUse hooks deny raw Git writes in Managed mode, naming the Trezi tool; Full allows worktree Git and keeps raw pushes routed through Publish. Publish offers Resolve with agent and sends the conflict facts as a chat turn.
+- `test/agent-git.mjs` reproduces the package.json 0.2.5/0.2.6 conflict in real Git repositories, tests two-parent ancestry, live landing and a normal push, and tests Full raw merge/commit reconciliation and the command guard. Native Settings unit/evidence tests cover the saved choice.
+
 ## 2026-10-06 — LKM-190: chat text scrolls behind the composer
 
 - **Cause.** LKM-141 masked the conversation (`LatestClearanceMask`) while the latest button showed: the bottom band (composer, button, a gap either side) was transparent with a 14 pt fade above, so text faded into the background above the composer instead of passing under its glass.

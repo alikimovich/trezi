@@ -2,6 +2,7 @@ import type { GithubStatus, GitRemoteStatus } from '../shared/api'
 import { sanitizeRepoName } from '../shared/github'
 import type { NativeShellState } from '../shared/native-shell'
 import type { NativeActivityController } from './activity-controller'
+import type { NativeChatController } from './chat-controller'
 import type { NativePreferences } from './preferences'
 import type { NativeSheetController } from './sheets-runtime'
 export class NativeGitController {
@@ -13,7 +14,8 @@ export class NativeGitController {
     readonly sheets: NativeSheetController,
     readonly log: NativeActivityController,
     readonly preferences: NativePreferences,
-    readonly render: () => void
+    readonly render: () => void,
+    readonly chat?: NativeChatController
   ) {}
   private get workspace() {
     return this.sheets.workspace
@@ -106,6 +108,10 @@ export class NativeGitController {
         )
         const result = await this.invoke('publish:ship', root, undefined, mode)
         if (!result.ok) {
+          if (result.conflictFiles?.length && this.chat) {
+            this.resolveWithAgent(key, result)
+            return
+          }
           const recovery = result.conflictFiles?.length
             ? `\nConflicting files:\n${result.conflictFiles.join('\n')}\nResolve and stage each file, commit the merge, then Publish again.\nRecovery refs: ${(result.recoveryRefs ?? []).join(', ')}`
             : ''
@@ -126,6 +132,47 @@ export class NativeGitController {
       await this.refresh(root).catch((error) => this.log.append(String(error), 'error'))
       this.render()
     }
+  }
+  private resolveWithAgent(
+    key: string,
+    result: {
+      error?: string
+      conflictFiles?: string[]
+      recoveryRefs?: string[]
+      branch?: string
+      url?: string
+    }
+  ) {
+    const files = result.conflictFiles ?? []
+    this.sheets.present(
+      {
+        title: 'Publish has merge conflicts',
+        alert: false,
+        detail: `${result.error ?? 'The pull request cannot merge.'}\nConflicting files: ${files.join(', ')}.`,
+        fields: [],
+        actions: [
+          { id: 'cancel', label: 'Later' },
+          { id: 'resolve', label: 'Resolve with agent', primary: true }
+        ]
+      },
+      async (action) => {
+        if (action.action !== 'resolve' || !this.chat) return
+        const active = this.chat.get(this.chat.active || key)
+        const facts = [
+          'Resolve the Publish merge conflict in this chat worktree.',
+          `Publish reported: ${result.error ?? 'pull request is not mergeable'}`,
+          `Conflicting files: ${files.join(', ')}`,
+          result.branch ? `Work branch: ${result.branch}` : '',
+          result.url ? `Pull request: ${result.url}` : '',
+          result.recoveryRefs?.length ? `Recovery refs: ${result.recoveryRefs.join(', ')}` : '',
+          'Call pr_status and git_sync_base, resolve the conflict markers, then git_merge_continue and publish_update. Keep the chosen version consistent with the user’s changes.'
+        ]
+          .filter(Boolean)
+          .join('\n')
+        this.sheets.close()
+        await this.chat.submit(active, facts)
+      }
+    )
   }
   async connect(key: string, status?: GithubStatus) {
     const entry = this.workspace.state.projects.find((p) => p.key === key)

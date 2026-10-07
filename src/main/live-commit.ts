@@ -67,12 +67,13 @@ export interface LiveCommit {
 export async function commitLiveTurn(
   root: string,
   files: string[],
-  message: { title: string; body?: string }
+  message: { title: string; body?: string },
+  mergeParent?: string
 ): Promise<LiveCommit> {
   const paths = committableFiles(files)
-  if (!paths.length) return { committed: false, files: [] }
+  if (!paths.length && !mergeParent) return { committed: false, files: [] }
   // A pathspec commit in the repository's lane; the service re-checks the paths.
   return repositoryOwner()
-    .commitLive(root, paths, commitTitle(message.title), message.body)
+    .commitLive(root, paths, commitTitle(message.title), message.body, mergeParent)
     .catch(() => ({ committed: false, files: [] }))
 }

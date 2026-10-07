@@ -158,18 +158,39 @@ extension RepositoryEffects {
     /// commit, so the user's own staged work elsewhere stays staged. Only at a
     /// repository's top level. Any Git refusal (an external index lock, a moved ref
     /// mid-commit, a hook) leaves the landed files in the working tree, uncommitted.
-    func commitLive(_ c: RepositoryContext, files: [String], title: String, body: String?) -> (sha: String?, files: [String]) {
+    func commitLive(_ c: RepositoryContext, files: [String], title: String, body: String?, mergeParent: String? = nil) -> (sha: String?, files: [String]) {
         var seen = Set<String>(), paths: [String] = []
         for rel in files where Self.relative(rel) && !RepositoryPaths.excluded(rel) && seen.insert(rel).inserted { paths.append(rel) }
-        guard !paths.isEmpty, (try? git.line(c.root, ["rev-parse", "--is-inside-work-tree"])) == "true",
+        guard (try? git.line(c.root, ["rev-parse", "--is-inside-work-tree"])) == "true",
               (try? git.line(c.root, ["rev-parse", "--show-cdup"])) == "" else { return (nil, []) }
         do {
-            try git.data(c.root, ["add", "--"] + paths)
-            let staged = try git.paths(c.root, ["diff", "--cached", "--name-only", "-z", "--"] + paths)
-            if staged.isEmpty { return (nil, []) }
-            c.point("commit.staged")
-            try git.data(c.root, ["-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit", "--no-verify", "-m", title]
-                         + (body.map { ["-m", $0] } ?? []) + ["--"] + paths)
+            let before = try head(c.root)
+            let parent = mergeParent.flatMap { git.revision(c.root, $0) }
+            let unseen = parent.flatMap { p in try? git.text(c.root, ["log", "--format=%ae", "\(before)..\(p)"]) } ?? ""
+            let newMerge = parent != nil && !isAncestor(c.root, parent!, before) && (
+                ((try? git.line(c.root, ["rev-list", "--count", "--merges", "\(before)..\(parent!)"])) ?? "0") != "0"
+                || unseen.split(separator: "\n").contains(where: { $0 != "trezi@local" })
+            )
+            if !paths.isEmpty { try git.data(c.root, ["add", "--"] + paths) }
+            let staged = paths.isEmpty ? [] : try git.paths(c.root, ["diff", "--cached", "--name-only", "-z", "--"] + paths)
+            if staged.isEmpty && !newMerge { return (nil, []) }
+            if !staged.isEmpty {
+                c.point("commit.staged")
+                try git.data(c.root, ["-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit", "--no-verify", "-m", title]
+                             + (body.map { ["-m", $0] } ?? []) + ["--"] + paths)
+            }
+            if newMerge, let parent, let branch = currentBranch(c.root) {
+                let current = try head(c.root)
+                let tree = try git.line(c.root, ["rev-parse", "HEAD^{tree}"])
+                // A pathspec commit, when needed, makes the index match this tree.
+                // Replace it with a two-parent commit before exposing the landing.
+                let guardRef = current == before ? nil : try c.preserve(current, label: "pre-merge-landing")
+                let merge = try git.line(c.root, ["-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit-tree", tree,
+                                                  "-p", before, "-p", parent, "-m", title] + (body.map { ["-m", $0] } ?? []))
+                try git.data(c.root, ["update-ref", "refs/heads/\(branch)", merge, current])
+                guardRef.map(c.release)
+                return (merge, staged)
+            }
             return (try head(c.root), staged)
         } catch { return (nil, []) }
     }

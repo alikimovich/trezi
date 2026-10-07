@@ -62,7 +62,12 @@ const git = new NativeGitController(
   sheets,
   { append: (...args) => logs.push(args) },
   { get: (key) => values.get(key), set: (key, value) => values.set(key, value) },
-  () => {}
+  () => {},
+  {
+    active: 'a',
+    get: (key) => ({ chat: key }),
+    submit: async (chat, text) => calls.push(['resolve-turn', chat.chat, text])
+  }
 )
 await git.branch('a', 'feature')
 assert.equal(a.branch, 'feature')
@@ -82,7 +87,10 @@ assert.ok(!calls.some((c) => c[0] === 'publish:ship' && c[1] === '/b'))
 paused = false
 conflict = true
 await git.publish('a')
-assert.match(logs.at(-1)[0], /recovery\/a/)
+assert.equal(sheets.current.state.title, 'Publish has merge conflicts')
+assert.ok(sheets.current.state.actions.some((action) => action.label === 'Resolve with agent'))
+await sheets.action({ id: sheets.current.state.id, action: 'resolve', values: {} })
+assert.match(calls.at(-1)[2], /app\.ts[\s\S]*recovery\/a[\s\S]*git_merge_continue/)
 connected = false
 await git.publish('a')
 assert.equal(sheets.current.state.title, 'Connect to GitHub')

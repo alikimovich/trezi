@@ -80,6 +80,28 @@ server.registerTool(
   async () => result(await invoke('prepare_conflict_resolution'))
 )
 
+server.registerTool('git_sync_base', {
+  description: 'Fetch an origin base branch and merge it into this chat worktree. Conflicts remain in the files for you to resolve.',
+  inputSchema: { ref: z.string().optional() }
+}, async (args) => result(await invoke('git_sync_base', args)))
+server.registerTool('git_merge_continue', {
+  description: 'After resolving every conflict, create the real two-parent merge commit in this chat worktree.',
+  inputSchema: {}
+}, async () => result(await invoke('git_merge_continue')))
+server.registerTool('git_merge_abort', {
+  description: 'Abort the in-progress base merge in this chat worktree.',
+  inputSchema: {}
+}, async () => result(await invoke('git_merge_abort')))
+server.registerTool('pr_status', {
+  description: 'Read mergeability, checks, and branch information for an existing pull request.',
+  inputSchema: { number: z.number().int().positive().optional() },
+  annotations: { readOnlyHint: true }
+}, async (args) => result(await invoke('pr_status', args)))
+server.registerTool('publish_update', {
+  description: 'Update the existing PR branch through Trezi Publish after this turn lands. Never force-pushes.',
+  inputSchema: { number: z.number().int().positive().optional() }
+}, async (args) => result(await invoke('publish_update', args)))
+
 server.registerTool('chat_island', { description: chatIslandDescription, inputSchema: chatIslandShape }, async (args) => result(await invoke('chat_island', args)))
 
 server.registerTool(

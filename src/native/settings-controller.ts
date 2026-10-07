@@ -3,6 +3,11 @@ import {
   AGENT_FILE_ACCESS_KEY,
   agentFileAccess
 } from '../main/agent-file-access'
+import {
+  AGENT_GIT_ACCESS_CHOICES,
+  AGENT_GIT_ACCESS_KEY,
+  agentGitAccess
+} from '../main/agent-git-access'
 import { CLAUDE_USER_PLUGINS_KEY } from '../main/backends/claude-isolation'
 import type { ModelChoice, ProviderConnection } from '../shared/api'
 import type {
@@ -145,6 +150,15 @@ export class NativeSettingsController {
             kind: 'choice',
             value: agentFileAccess(this.preferences.get(AGENT_FILE_ACCESS_KEY)),
             choices: AGENT_FILE_ACCESS_CHOICES
+          },
+          {
+            id: 'agentGitAccess',
+            section: 'general',
+            label: 'Agent Git access',
+            help: 'Managed: use Trezi Git tools and read-only Git. Full: also allow Git changes in the chat workspace. Publishing stays in Trezi.',
+            kind: 'choice',
+            value: agentGitAccess(this.preferences.get(AGENT_GIT_ACCESS_KEY)),
+            choices: AGENT_GIT_ACCESS_CHOICES
           },
           {
             id: 'workspaceIdle',
@@ -291,6 +305,9 @@ export class NativeSettingsController {
     const access = action.values.agentFileAccess
     if (access !== undefined && !AGENT_FILE_ACCESS_CHOICES.some((c) => c.value === access))
       throw new Error('Invalid setting.')
+    const gitAccess = action.values.agentGitAccess
+    if (gitAccess !== undefined && !AGENT_GIT_ACCESS_CHOICES.some((c) => c.value === gitAccess))
+      throw new Error('Invalid setting.')
     // One atomic batch, built from the committed state when it is sent (a chat may
     // have recorded a newer last-used model since the sheet opened). Autosave
     // keeps the draft and closing waits for this to settle.
@@ -312,7 +329,8 @@ export class NativeSettingsController {
         ...(plugins === undefined ? [] : [[CLAUDE_USER_PLUGINS_KEY, plugins] as [string, string]]),
         ...(idle === undefined ? [] : [[IDLE_KEY, idle] as [string, string]]),
         ...(activity === undefined ? [] : [[ACTIVITY_AUTO_OPEN_KEY, activity] as [string, string]]),
-        ...(access === undefined ? [] : [[AGENT_FILE_ACCESS_KEY, access] as [string, string]])
+        ...(access === undefined ? [] : [[AGENT_FILE_ACCESS_KEY, access] as [string, string]]),
+        ...(gitAccess === undefined ? [] : [[AGENT_GIT_ACCESS_KEY, gitAccess] as [string, string]])
       ]
     })
     this.notify()

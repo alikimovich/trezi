@@ -26,7 +26,7 @@ import { scrubSecret } from '../providers-store'
 import { treziRules } from '../rules'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
-import { isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
+import { gitAccessHook, isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
 import {
   codexFallbackNotice,
   codexModelUnavailable,
@@ -341,7 +341,16 @@ async function startSession(
       const codex = new Codex({
         ...codexPathOverride(),
         ...codexOptions,
-        config: isolatedCodexConfig({ ...codexOptions.config, ...mcpConfig, ...sandbox.config })
+        config: isolatedCodexConfig({
+          ...codexOptions.config,
+          ...mcpConfig,
+          ...sandbox.config,
+          ...gitAccessHook(
+            app.getAppPath(),
+            options.agentGitAccess === 'full' ? 'full' : 'managed',
+            liveRoot
+          )
+        })
       })
       return id ? codex.resumeThread(id, threadOptions) : codex.startThread(threadOptions)
     }
@@ -593,7 +602,7 @@ async function startSession(
     // Composer image attachments are not wired yet; MCP screenshot results are images.
     send: (text, _images) => {
       const prompt = firstTurn
-        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
+        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
         : text
       firstTurn = false
       chain = chain.then(() => runTurn(prompt))

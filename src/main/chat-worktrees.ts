@@ -123,9 +123,14 @@ export async function completeTurn(
   liveRoot: string,
   wt: Worktree,
   message: string,
-  opts: { land?: boolean } = {}
+  opts: { land?: boolean; keepHistory?: boolean } = {}
 ): Promise<TurnOutcome> {
-  return repositoryOwner().completeTurn({ ...wt, repoRoot: liveRoot }, message, opts.land !== false)
+  return repositoryOwner().completeTurn(
+    { ...wt, repoRoot: liveRoot },
+    message,
+    opts.land !== false,
+    opts.keepHistory
+  )
 }
 
 /** Automatic reconciliation only handles existing regular text files. Binary,

@@ -121,8 +121,12 @@ try {
   assert.deepEqual(listed.result.tools.map((tool) => tool.name).sort(), [
     'chat_island',
     'compose_project_ui',
+    'git_merge_abort',
+    'git_merge_continue',
+    'git_sync_base',
     'open_code',
     'open_preview',
+    'pr_status',
     'prepare_conflict_resolution',
     'preview_console',
     'preview_evaluate',
@@ -131,6 +135,7 @@ try {
     'preview_screenshot',
     'preview_viewport',
     'project_ui_catalog',
+    'publish_update',
     'workspace_state'
   ])
 

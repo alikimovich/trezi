@@ -65,6 +65,11 @@ const requiredTools = [
   'preview_viewport',
   'workspace_state',
   'prepare_conflict_resolution',
+  'git_sync_base',
+  'git_merge_continue',
+  'git_merge_abort',
+  'pr_status',
+  'publish_update',
   'project_ui_catalog',
   'compose_project_ui',
   'open_preview',
@@ -92,6 +97,27 @@ export function treziMcpConfig(appRoot: string, registration: TreziAgentToolRegi
           TREZI_AGENT_TOOL_TOKEN: registration.token
         }
       }
+    }
+  }
+}
+
+/** Codex's PreToolUse hook enforces the selected Git mode before shell execution. */
+export function gitAccessHook(appRoot: string, access: 'managed' | 'full', liveRoot: string) {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
+  return {
+    features: { hooks: true },
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: '^Bash$',
+          hooks: [
+            {
+              type: 'command',
+              command: `${quote(process.execPath)} ${quote(join(appRoot, 'bin/trezi-git-guard.mjs'))} ${quote(access)} ${quote(liveRoot)}`
+            }
+          ]
+        }
+      ]
     }
   }
 }

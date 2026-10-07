@@ -226,6 +226,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/backends/gemini.ts` | helper | ProviderOwner (provider helper) | Gemini CLI process, inside the supervised helper |
 | `src/main/backends/live-tree-watch.ts` | helper | ProviderOwner (provider helper) | `git status` reads of the live checkout around a Full-access Codex turn (LKM-163), inside the supervised helper |
 | `src/main/chat-park.ts` | helper | RepositoryOwner | Git reads (diff, show, status) |
+| `src/main/chat-agent-git.ts` | helper | RepositoryOwner / WorkflowOwner | `gh pr view` and `git merge-tree` reads; mutations route through the owners (LKM-188) |
 | `src/main/chat-workspaces.ts` | helper | RepositoryOwner | `du` and `git rev-parse` reads (LKM-136 usage, old-name folders' repositories) |
 | `src/main/chat-worktrees.ts` | helper | RepositoryOwner | `git show` reads of the live checkout |
 | `src/main/commit-message.ts` | helper | RepositoryOwner | Git reads (a chat worktree's diff and new files, recent subjects) for the landing commit message (LKM-189) |

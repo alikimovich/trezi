@@ -18,6 +18,8 @@ import { retireWorktreeBranch, type Worktree } from './worktrees'
 export interface ChatState {
   wt: Worktree
   liveRoot: string
+  /** Git mode captured when this chat workspace opened. */
+  gitAccess?: 'managed' | 'full'
   /** A turn's merge refused (mid-turn drift): work stays on the branch for review. */
   parked: boolean
   /** The persisted park `SessionRecord` id while parked, else null. */

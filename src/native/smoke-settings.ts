@@ -77,7 +77,7 @@ export async function checkVisibleSettings(
       ? minimumHeight
       : width === SETTINGS_DEFAULT_SIZE.width
         ? SETTINGS_DEFAULT_SIZE.height
-        : 600
+        : Math.max(600, minimumHeight)
   const shoot = async (width: number, name: string) => {
     const height = heightFor(width)
     await host.request('settingsVerification', { prepare: true, width, height })
@@ -134,6 +134,7 @@ export async function checkVisibleSettings(
     'full',
     'Agents have full file access in a new profile (LKM-163)'
   )
+  assert.equal(initial.values.agentGitAccess, 'managed', 'Agent Git access defaults to Managed')
   // LKM-143: General shows the version stamped into this build, as `trezi --version` prints it.
   assert.match(
     initial.values.version ?? '',
@@ -180,6 +181,12 @@ export async function checkVisibleSettings(
   await reopen()
   assert.equal((await inspect()).values.agentFileAccess, 'project')
   await choose('agentFileAccess', 'full')
+  await reopen()
+  // Agent Git access autosaves and survives close/reopen, then returns to Managed.
+  await choose('agentGitAccess', 'full')
+  await reopen()
+  assert.equal((await inspect()).values.agentGitAccess, 'full')
+  await choose('agentGitAccess', 'managed')
   await reopen()
   // LKM-152: Show Activity automatically defaults to problems that need the user and persists.
   assert.equal(

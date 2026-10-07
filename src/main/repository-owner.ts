@@ -48,7 +48,8 @@ export interface RepositoryOwner {
   completeTurn(
     wt: OwnedWorktree,
     message: string,
-    land: boolean
+    land: boolean,
+    keepHistory?: boolean
   ): Promise<{
     outcome: 'noop' | 'merged' | 'parked'
     files: string[]
@@ -65,6 +66,13 @@ export interface RepositoryOwner {
   stageResolve(
     wt: OwnedWorktree
   ): Promise<{ conflicted: string[]; files: string[]; clean: boolean; baseSha: string }>
+  /** Merge a fetched publish base into this chat branch, keeping both parents. */
+  gitSyncBase(
+    wt: OwnedWorktree,
+    ref: string
+  ): Promise<{ merged: boolean; conflicted: string[]; head: string }>
+  gitMergeContinue(wt: OwnedWorktree): Promise<{ head: string }>
+  gitMergeAbort(wt: OwnedWorktree): Promise<{ head: string }>
   discardParked(wt: OwnedWorktree): Promise<void>
   removeWorktree(wt: OwnedWorktree, keepBranch: boolean, intent: RemoveIntent): Promise<void>
   /** Idle cleanup: removes a clean checkout; a dirty one stays, its work at a recovery ref. */
@@ -88,7 +96,8 @@ export interface RepositoryOwner {
     root: string,
     files: string[],
     title: string,
-    body?: string
+    body?: string,
+    mergeParent?: string
   ): Promise<{ committed: boolean; sha?: string; files: string[] }>
   checkout(root: string, branch: string): Promise<BranchResult>
   switchBranch(root: string, branch: string): Promise<BranchResult>

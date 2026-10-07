@@ -18,12 +18,13 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 27
+export const TREZI_RULES_VERSION = 28
 
 export function treziRules(opts?: {
   previewTools?: boolean
   previewObservationTools?: boolean
   workspaceTools?: boolean
+  agentGitAccess?: 'managed' | 'full'
   controlTools?: boolean
   projectMemory?: string
 }): string {
@@ -65,26 +66,28 @@ export function treziRules(opts?: {
     `When in doubt, search first. Always report the other places you changed (or`,
     `deliberately left alone) and why.`,
     ``,
-    `## Git is Trezi-managed`,
-    `On a git repo your chat runs in its own worktree on a \`trezi/chat-*\` branch.`,
-    `When your turn completes, Trezi auto-merges your work onto the live checkout`,
-    `(the tree the preview serves), commits it there as ONE commit per turn (so the`,
-    `user can follow or revert each turn), and squashes the branch's pending work into a`,
-    `single commit — whose hash is rewritten every turn. Therefore:`,
-    `- Do NOT mutate git state yourself: no commit, branch, checkout, merge, rebase,`,
-    `  reset, or moving refs — in your worktree or the live checkout. Any commit you`,
-    `  make gets rewritten by the turn-end squash, so a branch you pointed at it`,
-    `  permanently diverges and every later fast-forward fails. That divergence is`,
-    `  self-inflicted, not a real conflict — don't try to "resolve" it.`,
-    `- Never \`git reset --hard\` (or otherwise rewrite) the live checkout to force`,
-    `  the preview to update. The preview picks up your work when the turn ends;`,
-    `  mid-turn edits staying invisible until then is by design, and a hard reset`,
-    `  there can destroy the user's own uncommitted edits.`,
-    `- Don't build sync scripts or publish pipelines into the user's repo — Trezi's`,
-    `  turn-end merge IS the publish step. If the preview looks stale after a turn`,
-    `  ends, inspect Trezi's authoritative workspace state when that tool is available`,
-    `  instead of working around it with Git commands.`,
-    `Read-only git (status, log, diff, show) is always fine.`,
+    `## Git and pull requests`,
+    `Your chat works in a private trezi/chat-* worktree. Trezi lands completed turns`,
+    `in the live checkout and keeps resolved base merges in the commit history.`,
+    `For a conflicting PR, call pr_status, git_sync_base, edit the listed files,`,
+    `then git_merge_continue. Call git_merge_abort to abandon a merge. Call`,
+    `publish_update to push the landed work to the existing PR through Publish.`,
+    ...(opts?.agentGitAccess === 'full'
+      ? [
+          `Agent Git access is Full: you may commit, merge, rebase, cherry-pick or`,
+          `branch with raw git inside your own chat worktree. Trezi reconciles these`,
+          `commits when the turn ends. Never rewrite or delete commits already landed`,
+          `in the live branch, and never force-push. Push only through Publish.`
+        ]
+      : [
+          `Agent Git access is Managed: read-only git is allowed. Do not run raw git`,
+          `writes (commit, merge, rebase, cherry-pick, branch, checkout, reset or`,
+          `push). Use git_sync_base, git_merge_continue, git_merge_abort and`,
+          `publish_update for those effects. You may create a real merge commit`,
+          `through git_merge_continue.`
+        ]),
+    `Never reset or otherwise rewrite the live checkout. Its preview refreshes`,
+    `when Trezi lands your turn.`,
     ``,
     `## Project memory is not work`,
     `Trezi keeps a project memory of durable rules and preferences and updates it itself`,
