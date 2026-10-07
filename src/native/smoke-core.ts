@@ -44,6 +44,7 @@ import { checkNativeSheets } from './smoke-sheets'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
+import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
@@ -780,6 +781,12 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: () => checkSourceSyntax(host, fixture, artifacts),
       cleanup: () => restoreSourceSyntax(host, fixture)
+    },
+    {
+      name: 'source-wrap',
+      dependsOn: ['open-project'],
+      run: () => checkSourceWrap(host, fixture, artifacts),
+      cleanup: () => restoreSourceWrap(host, fixture)
     },
     {
       name: 'visible-composer',

@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-192: soft wrap in the code editor
+
+- **Why.** Long lines (an MDX paragraph) ran past the right edge and the editor scrolled sideways. The text view was already set to track its width, but the scroll view kept a horizontal scroller and nothing re-synced the text view to the clip view after the ruler and resizes re-tiled it.
+- **Wrap.** `SourceWrap.swift` owns the mode. Wrapping: no horizontal scroller, the container tracks the text view, and a clip-view frame observer (`fitWidth`) keeps the text view exactly the visible width. Off: an unbounded container, a horizontally resizable text view at least the visible width, and the horizontal scroller back. Layout stays non-contiguous.
+- **Hanging indent.** Each edited line gets a shared paragraph style whose `headIndent` is its leading whitespace (tabs every four columns, capped at 32 columns so deep lines still wrap). An `NSTextStorageDelegate` only records the edited range (`didProcessEditing`, characters only); `applyIndent` sets the style in `textDidChange` and after a replaced text. Setting it inside `willProcessEditing` while typing moved the insertion point and scattered typed characters (this broke "Highlights survive typing" in the first native run). The typing attributes carry the insertion line's style, so a keystroke usually changes nothing; an unchanged run is skipped. Colours from LKM-183 never touch the paragraph style.
+- **Ruler.** `SourceLineRuler.labels()` numbers each logical line at its first line fragment, counts lines before the visible top with the existing newline counter instead of a `filter` over a substring, and numbers the empty line after a final newline.
+- **Toggle.** View › Wrap Lines (responder chain: the focused editor, else `Host` routes to the docked or any open editor) and the header's new "…" menu send `wrap` to the backend. `NativeEditorController` stores `trezi:source-wrap` (`'0'` = off, default on) through the service preferences and republishes every session, so all editors follow and the state survives relaunch.
+- **Keys.** Home/End move to the logical line's start/end (with Shift extending); arrow up/down stay per visual line; ⌘←/⌘→ keep AppKit's visual-line behaviour.
+- **Tests.** `test/native-editor.mjs`: default on, persisted, reaches every editor. New smoke `source-wrap` (group `core`): a 300-character line wraps with no horizontal scroller and every fragment within the container, continuation lines start where the code starts, ruler numbers are consecutive, on each first fragment and absent from continuations; Home/End/arrow-down; View menu off (scroller back, one fragment), "…" menu on; `source-wrap.png`. `source-editor` expects the "…" button. `source-syntax` now types on the 3,000-line TSX with wrapping on.
+
 ## 2026-10-06 — LKM-183: real Shiki, shipped in the app, sizes and startup
 
 - **Shiki installed.** The operator added `shiki@^3` (3.23.0) to package.json/bun.lock, so the "Still blocked"/"Open" notes in the two entries below no longer apply. Both tests now run against real Shiki and neither skips.

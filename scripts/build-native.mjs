@@ -183,6 +183,8 @@ const host = compile(
     join(root, 'src/native/SourceEditor.swift'),
     join(root, 'src/native/SourceSyntax.swift'),
     join(root, 'src/native/SourceSyntaxVerification.swift'),
+    join(root, 'src/native/SourceWrap.swift'),
+    join(root, 'src/native/SourceWrapVerification.swift'),
     join(root, 'src/native/SourceFileTree.swift'),
     join(root, 'src/native/FloatingIsland.swift'),
     join(root, 'src/native/IslandLayout.swift'),

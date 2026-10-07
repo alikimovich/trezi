@@ -542,7 +542,8 @@ async function main() {
         shellController.codeOpen = state.visible
         shellController.schedule()
       }
-    }
+    },
+    preferences
   )
   const openSource = (source?: string, popped?: boolean) => {
     const root = workspaceController.active?.root

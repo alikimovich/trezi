@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Code editor soft wrap (LKM-192)
+
+- [x] Soft wrap on by default: the text container tracks the visible width through resizes, with no horizontal scroller (`SourceWrap.swift`).
+- [x] Hanging indent at each line's own leading whitespace (capped at 32 columns); the ruler numbers each logical line once, on its first visual line.
+- [x] View › Wrap Lines and the editor's "…" menu toggle the remembered `trezi:source-wrap` preference (default on) for every open editor.
+- [x] Home/End move by logical line; arrow up/down by visual line; find, selection and ⌘-click unchanged.
+- [x] `test/native-editor.mjs` (preference) and the `source-wrap` smoke check (group `core`, `source-wrap.png`); `source-syntax` keeps the 3,000-line typing bound with wrapping on.
+
 ## Grammar-based syntax highlighting in the code editor (LKM-183)
 
 - [x] Shiki/TextMate tokenization on Bun (`syntax-controller.ts`, `src/main/syntax-*.ts`): text, language and revision in, category runs for that revision out; Swift applies a result only while its revision is on screen.

@@ -1,6 +1,10 @@
 import type { SourceDraft } from '../main/source-owner'
 import type { SourceView, SourceWriteResult } from '../shared/api'
 import type { NativeEditorAction, NativeEditorState } from '../shared/native-editor'
+import type { NativePreferences } from './preferences'
+
+/** Soft wrap in the code editor (LKM-192): on unless the user turned it off ('0'). */
+export const SOURCE_WRAP = 'trezi:source-wrap'
 
 /** `baseHash`: the hash of the text the draft was typed against (issued with the read, or a restored draft's). */
 type Document = {
@@ -31,7 +35,8 @@ export class NativeEditorController {
   private readonly persisting = new Map<string, ReturnType<typeof setTimeout>>()
   constructor(
     readonly invoke: (channel: string, ...args: any[]) => Promise<any>,
-    readonly render: (state: NativeEditorState) => void
+    readonly render: (state: NativeEditorState) => void,
+    readonly preferences?: Pick<NativePreferences, 'get' | 'set'>
   ) {}
   session(root: string) {
     let session = this.sessions.get(root)
@@ -70,6 +75,7 @@ export class NativeEditorController {
       dirty: !!doc && doc.text !== doc.baseline,
       conflict: doc?.conflict ?? false
     })
+    session.state.wrap = this.preferences?.get(SOURCE_WRAP) !== '0'
     session.state.canBack = session.cursor > 0
     session.state.canForward = session.cursor < session.history.length - 1
     this.render({ ...session.state })
@@ -271,6 +277,11 @@ export class NativeEditorController {
           break
         case 'dock':
           session.state.popped = false
+          break
+        // Wrap Lines (LKM-192) is one app-wide preference; every open editor follows it.
+        case 'wrap':
+          await this.preferences?.set(SOURCE_WRAP, action.wrap === false ? '0' : '1')
+          for (const other of this.sessions.values()) if (other !== session) this.publish(other)
           break
         case 'component': {
           if (!action.name || !/^[A-Za-z_$][\w$]*$/.test(action.name)) return

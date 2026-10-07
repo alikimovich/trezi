@@ -60,6 +60,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'text-edit': ['core'],
   'source-editor': ['core'],
   'source-syntax': ['core'],
+  'source-wrap': ['core'],
   'preview-inspector': ['core'],
   'agent-preview': ['core'],
   'publish-progress': ['core'],

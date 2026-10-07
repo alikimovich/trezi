@@ -83,3 +83,34 @@ await action('back')
 assert.ok(states.at(-1).canForward)
 await action('forward')
 assert.ok(states.at(-1).reveal > 0)
+
+// Wrap Lines (LKM-192): on by default, one remembered preference for every editor.
+const stored = new Map(),
+  wrapped = []
+const wrapping = new NativeEditorController(
+  async (channel, _root, source) =>
+    channel === 'source:tree'
+      ? ['a.ts']
+      : channel === 'source:read'
+        ? { file: source, code: 'x', line: 1 }
+        : undefined,
+  (state) => wrapped.push(structuredClone(state)),
+  { get: (key) => stored.get(key) ?? null, set: async (key, value) => void stored.set(key, value) }
+)
+await wrapping.open('/one', 'a.ts')
+await wrapping.open('/two', 'a.ts')
+assert.equal(wrapped.at(-1).wrap, true, 'Wrap Lines is on by default')
+await wrapping.action({ root: '/two', action: 'wrap', wrap: false })
+assert.equal(stored.get('trezi:source-wrap'), '0')
+assert.deepEqual(
+  wrapped.slice(-2).map((state) => [state.root, state.wrap]),
+  [
+    ['/one', false],
+    ['/two', false]
+  ],
+  'Turning it off reaches every open editor'
+)
+await wrapping.action({ root: '/one', action: 'wrap', wrap: true })
+assert.equal(stored.get('trezi:source-wrap'), '1')
+assert.equal(wrapped.at(-1).wrap, true)
+console.log('Native editor: Wrap Lines defaults on, persists and reaches every editor')
