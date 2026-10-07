@@ -30,6 +30,8 @@ export interface SessionStore {
   /** Current record for a project, including the legacy `slot: 'main'` shape. */
   current: (projectKey: string) => SessionRecord | null
   get: (id: string) => SessionRecord | null
+  /** Every saved record of every project (LKM-202: the Dreamer's digest). */
+  all: () => SessionRecord[]
   remove: (id: string) => void
   /** Settles once every write so far is acknowledged (on disk). */
   flush: () => Promise<void>
@@ -154,5 +156,5 @@ export function createSessionStore(baseDir: string): SessionStore {
     await Promise.all([...writes])
   }
 
-  return { save, saveCurrent, list, current, get, remove, flush }
+  return { save, saveCurrent, list, current, get, all: readAll, remove, flush }
 }

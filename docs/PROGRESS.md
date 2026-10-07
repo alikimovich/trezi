@@ -2,6 +2,30 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-202 repair: Activity count after a hidden render (chat-gate retry)
+
+- **Symptom.** The full native run failed `chat-gate` with "Activity reset did not settle". Its artifacts show the check passed its first attempt's loaded and failed-open captures, so this was the runner's one focus-loss retry (`smoke-runner.ts`): the first attempt had left Activity open with "Could not open Folder Gamma", and the retry's `activity-action reset` could not bring `activityInspect.count` back to 0.
+- **Cause.** `NativeActivity.update` (`src/native/Activity.swift`) returned early for `visible: false` before it touched `count`, `fullText` or the text view, so a hidden Activity reported the lines of its last visible state. Pre-existing, not from the Dreamer code (nothing in LKM-202 writes to Activity).
+- **Fix.** A hidden state now applies its lines first (`show(lines)`), then hides the window; the visible path is unchanged. `chat-gate`'s Activity-reset wait keeps its assertion and now reports the Activity state and tail when it times out. What lost focus during the first attempt is not in the kept log; it is not known.
+
+## 2026-10-07 — LKM-202 repair: Send route, `start`, exact v1 schema
+
+- **Send.** The recorded decision overrides the ticket text: `sendToAgentOs` makes one `POST <url>/proposals` with `{projectId, file, start}` (Bearer token). The `/api/projects/<id>/proposals` attempt and its 404 retry are gone (an earlier entry below describes them). A 404 is now an ordinary `Agent OS answered 404` error that falls back to the export like any other.
+- **`start`.** Settings → Dreamer → "When tasks are created" (`trezi:dreamer:agent-os-start`, off by default) goes through `AgentOsTarget.start` into the body; the Overview's target line says "starts the tasks" when it is on.
+- **Same Mac only.** Agent OS listens on 127.0.0.1, so an unreachable endpoint now says so and the export save panel opens; `docs/DREAMER.md` documents `bun run cli import-proposals <project> <file.json> [--start]` for another Mac.
+- **Schema.** `dreamerErrors` now equals Agent OS's `proposalFileSchema`: `generatedAt` and `effort` optional, text and lists default empty, evidence items a string or any object. `normalizeProposal` no longer invents `effort: 'M'` and keeps string evidence; the report, review window and Open Chat handle missing fields and string items (`evidenceSession`).
+- **Tests.** `dreamer-export` asserts the single POST, `start` false/true, no 404 retry, the unreachable and 400 messages with the export fallback; `dreamer-digest` gained optional-field and string-evidence cases; the native smoke check expects `/proposals` and `file.proposals`.
+
+## 2026-10-07 — LKM-202: Dreamer
+
+- **What.** Trezi → Run Dreamer…, Dreamer Proposals… and Export Dreamer Report…, plus Settings → Dreamer. The format, inputs and privacy rules are in `docs/DREAMER.md`.
+- **Two stages.** `buildDigest` (`src/main/dreamer-digest.ts`) is pure and deterministic, so the statistics are tested without a model: slowest tools, repeated failures, retries and corrections, repeated request patterns, turn times, landings, parks, conflicts and feedback. The model gets only that digest, as one tool-free `complete` call on the active chat's provider (`dreamerCompletion` in `src/main/agent.ts`). A missing or unusable answer falls back to `digestProposals`, so a run always yields a valid version 1 file or an honest empty one.
+- **Tool timing.** LKM-200's per-tool timing is not in this tree. `logTurnEvent` now writes a `tool` `Tool step tool= ms=` debug line per provider status step (name and duration only), and the digest reads those. Statistics therefore exist only for turns run after this change, and for the product log's 7 days.
+- **Agent OS.** Its import route today is `POST /proposals {projectId, file}` (Bearer token, zod-stripped keys). Send tries the ticket's `/api/projects/<id>/proposals` first and falls back to `/proposals` on 404; task ids come from `created[].issue`. A failed send opens the export save panel instead.
+- **Review window.** A sectioned autosave sheet: an Overview plus one pane per proposal. Select All/None bumps an epoch in the include fields' ids, because the Swift model keeps a field's edited value while its id stays the same. The estimate per scope is a readonly field per scope with `visibleWhen`, listing every range: a non-autosave form cannot recompute as the choice changes.
+- **Not done.** The token is a preference, not a Keychain item. Open Chat opens the saved chat, not the turn. No live model run was exercised (stub completions only).
+- **Tests.** Unit `dreamer-digest` and `dreamer-export` (the zip unpacked with `ditto -x -k` and checked for emails, tokens and home paths; Send via a stub fetch and through the controller's fallback). Native smoke check `dreamer` (group `settings`) opens the window from the menu with a fixture, sends to a local `node:http` stub and captures the Overview and a proposal pane.
+- **Captures.** `captureSheet`'s cached display painted the sectioned window's split view blank, so the host gained a test-only `captureVisibleSheet` request (`src/native/HostInspect.swift`): the sheet's real pixels through the same own-process ScreenCaptureKit path as `captureVisibleSettings`, with `captureSheet` kept as a recorded fallback.
 ## 2026-10-07 — LKM-201: pending islands with planned bindings
 
 - **Why.** `define` read the bindings from the worktree and refused any that did not resolve, so an agent had to finish its source edits before the island existed, and definition mistakes surfaced only at the end of the turn.

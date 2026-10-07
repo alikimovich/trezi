@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
+import { nativeDreamer } from './dreamer-controller'
 import type { NativeGitController } from './git-controller'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
@@ -14,6 +15,7 @@ import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-ga
 import { checkChatText } from './smoke-chat-text'
 import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
+import { checkDreamerReview } from './smoke-dreamer'
 import { smokeFocusHooks } from './smoke-focus'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
@@ -472,6 +474,14 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         host.emit('activity-action', { action: 'hide' })
+      }
+    },
+    {
+      name: 'dreamer',
+      dependsOn: ['open-project'],
+      run: async () => {
+        assert.ok(nativeDreamer.current, 'Dreamer controller')
+        await checkDreamerReview(host, nativeDreamer.current, artifacts)
       }
     },
     {

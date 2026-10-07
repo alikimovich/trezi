@@ -8,7 +8,9 @@ final class NativeActivity: NSObject, NSWindowDelegate {
     /// Every line with its full paths, for Copy All.
     var fullText = ""
     func update(_ state: [String: Any]) {
-        guard state["visible"] as? Bool == true else { let wasVisible = window?.isVisible == true; window?.orderOut(nil); if wasVisible { parent?.makeKeyAndOrderFront(nil) }; return }
+        // A hidden Activity still holds what the controller holds (a reset or Clear empties it), so a
+        // later inspection never sees the lines of an earlier visible state.
+        guard state["visible"] as? Bool == true else { show(state["lines"] as? [[String: Any]] ?? []); let wasVisible = window?.isVisible == true; window?.orderOut(nil); if wasVisible { parent?.makeKeyAndOrderFront(nil) }; return }
         if window == nil {
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 420), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
             panel.title = "Activity"; panel.isReleasedWhenClosed = false; panel.delegate = self
@@ -33,8 +35,15 @@ final class NativeActivity: NSObject, NSWindowDelegate {
             ])
             panel.center(); window = panel
         }
+        show(state["lines"] as? [[String: Any]] ?? [])
+        // The user's Show takes the key window; an automatic open only orders it front,
+        // so typing in the chat is not interrupted.
+        if state["focus"] as? Bool == true { window?.makeKeyAndOrderFront(nil) }
+        else if state["raise"] as? Bool == true || window?.isVisible != true { window?.orderFront(nil) }
+    }
+    private func show(_ lines: [[String: Any]]) {
         let pinned = text.visibleRect.maxY >= text.bounds.maxY - 24
-        let lines = state["lines"] as? [[String: Any]] ?? []; count = lines.count
+        count = lines.count
         let output = NSMutableAttributedString()
         var full = ""
         for line in lines {
@@ -52,10 +61,6 @@ final class NativeActivity: NSObject, NSWindowDelegate {
         fullText = full
         text.textStorage?.setAttributedString(output)
         if pinned { text.scrollToEndOfDocument(nil) }
-        // The user's Show takes the key window; an automatic open only orders it front,
-        // so typing in the chat is not interrupted.
-        if state["focus"] as? Bool == true { window?.makeKeyAndOrderFront(nil) }
-        else if state["raise"] as? Bool == true || window?.isVisible != true { window?.orderFront(nil) }
     }
     @objc func clearLog() { emit(["event":"activity-action", "action":"clear"]) }
     @objc func showRecovery() { emit(["event":"activity-action", "action":"recovery"]) }

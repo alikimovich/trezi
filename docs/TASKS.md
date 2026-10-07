@@ -3,6 +3,18 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Dreamer: analyze past sessions, propose improvements (LKM-202)
+
+- [x] Digest of saved chats and the product log (`src/main/dreamer-digest.ts`): slow tools, repeated failures, retries and corrections, repeated requests, turn times, landings, parks, conflicts, refusals, island steps, feedback; per-step `Tool step` debug lines from `src/main/turn-log.ts`.
+- [x] Tool-free model run with a digest-only fallback and the token estimate before the run (`src/main/dreamer.ts`); version 1 format and validation (`src/shared/dreamer.ts`, `docs/DREAMER.md`).
+- [x] Trezi → Run Dreamer…, Dreamer Proposals… (filter, edit, select, Open Chat, Copy as JSON, Export…, Send to Agent OS) and Export Dreamer Report… (`src/native/dreamer-controller.ts`, `src/native/dreamer-review.ts`, `src/native/dreamer-export.ts`).
+- [x] Settings → Dreamer: Agent OS URL, project ID, token, weekly run while idle (off by default) (`src/native/settings-dreamer.ts`).
+- [x] Tests: unit `dreamer-digest`, `dreamer-export`; native smoke `dreamer` (group `settings`).
+- [ ] Open: keep the Agent OS token in the Keychain instead of preferences.
+- [ ] Open: Open Chat could scroll to the cited turn, not only open the chat.
+- [ ] Open: once LKM-200's tool timing lands, read it instead of the `Tool step` lines.
+- [x] Repair: Send is one `POST <url>/proposals` `{projectId, file, start}` (no `/api/projects/…` route or 404 retry); Settings → Dreamer "When tasks are created" sets `start` (off by default); an unreachable Agent OS says it is reachable only from the same Mac and offers the export; the validator equals Agent OS's v1 schema (optional `generatedAt`/`effort`, string-or-object evidence); `docs/DREAMER.md` documents `bun run cli import-proposals` for another Mac.
+- [x] Repair: a hidden Activity applies its lines (`Activity.swift`), so `chat-gate`'s reset also settles on the runner's retry; the wait reports Activity state on timeout.
 ## Pending islands with planned bindings (LKM-201)
 
 - [x] `chat_island define {planned:true}` reserves a pending island before its literals exist; every define is validated before any wait or reservation and returns all problems (`islandProblems`, `code: 'invalid_definition'`).

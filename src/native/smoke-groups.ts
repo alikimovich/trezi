@@ -72,6 +72,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'project-switching': ['sidebar'],
   'chat-gate': ['sidebar'],
   sheets: ['settings'],
+  dreamer: ['settings'],
   'security-session': ['settings'],
   'native-chat': ['chat'],
   'sent-attachments': ['chat'],

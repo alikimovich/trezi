@@ -46,6 +46,9 @@ Lifecycle facts only:
 - chat turn start, end and failure, with the provider and the requested and resolved
   model (`src/main/turn-log.ts`);
 - landing, parking and resolve steps, with the Git result;
+- one debug `tool` `Tool step tool=<name> ms=<n>` line per provider status step (name
+  and duration only), `feedback` `Feedback posted`, and the Dreamer's counts
+  (`dreamer` area); the Dreamer reads these back (LKM-202, `docs/DREAMER.md`);
 - worktree create, sync and remove;
 - New chat timing (LKM-182): `New chat composer ready` with each step's ms
   (`src/native/workspace-controller.ts`), then `New chat workspace ready`, `New chat

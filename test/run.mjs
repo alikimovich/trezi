@@ -128,6 +128,8 @@ const UNIT = [
   'feedback-body',
   'feedback-diagnostics',
   'product-log',
+  'dreamer-digest',
+  'dreamer-export',
   'publish-message',
   'publish-description',
   'commit-message',

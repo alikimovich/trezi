@@ -82,7 +82,8 @@ assert.deepEqual(
   [
     ['general', 'General', 'gearshape'],
     ['providers', 'AI Providers', 'sparkles'],
-    ['experimental', 'Experimental', 'testtube.2']
+    ['experimental', 'Experimental', 'testtube.2'],
+    ['dreamer', 'Dreamer', 'moon.stars']
   ]
 )
 assert.equal(sheets.current.state.section, 'general', 'first open shows General')

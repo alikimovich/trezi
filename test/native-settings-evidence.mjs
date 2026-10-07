@@ -20,12 +20,13 @@ const control = (id, selected) => ({
 const sections = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
-  { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' }
+  { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' },
+  { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' }
 ]
 const sidebar = (section) => ({
   section,
   sections: structuredClone(sections),
-  sidebarRows: 3,
+  sidebarRows: 4,
   sidebarSelected: sections.findIndex((s) => s.id === section),
   windowTitle: sections.find((s) => s.id === section).label,
   sourceList: structuredClone(sourceList),
@@ -80,6 +81,7 @@ for (const width of settingsVerificationWidths(680))
           'General',
           'AI Providers',
           'Experimental',
+          'Dreamer',
           'Gen UI',
           help,
           ...(enabled ? ['UI layout method', engineHelp] : [])
@@ -98,7 +100,7 @@ for (const width of settingsVerificationWidths(680))
       reject((e) => (e.controls[0].hitTarget = false))
       reject((e) => (e.controls[0].selected = enabled ? 'Off' : 'On'))
       reject((e) => (e.values.engine = engine === 'jev' ? 'agent' : 'jev'))
-      reject((e) => (e.text[4] = help.slice(0, -10)))
+      reject((e) => (e.text[5] = help.slice(0, -10)))
       // The Experimental pane alone: no General picker, the right row selected.
       reject((e) => e.controls.push(control('default', 'Use last selected model')))
       reject((e) => Object.assign(e, sidebar('general')))
@@ -116,8 +118,8 @@ for (const width of settingsVerificationWidths(680))
       const ocrRead = structuredClone(good)
       homoglyphs(ocrRead)
       assertSettingsEvidence(ocrRead, width, enabled, engine)
-      reject((e) => (e.text[4] = help.replace('Experimental;', 'Experlmental;')))
-      reject((e) => (e.text[4] = help.replace(' Svelte', '')))
+      reject((e) => (e.text[5] = help.replace('Experimental;', 'Experlmental;')))
+      reject((e) => (e.text[5] = help.replace(' Svelte', '')))
       if (enabled) {
         reject((e) => e.controls.pop())
         reject((e) => e.text.pop())
@@ -151,6 +153,7 @@ for (const width of [680, 780]) {
       'General',
       'Al Providers',
       'Experimental',
+      'Dreamer',
       'General',
       'Default model',
       'New chats start with this model.',
@@ -166,6 +169,7 @@ for (const width of [680, 780]) {
       'General',
       'AI Providers',
       'Experimental',
+      'Dreamer',
       'Al Providers',
       'Claude and Codex use your existing sign-ins. Add another provider to',
       'use its models in chats.',
@@ -187,7 +191,8 @@ for (const width of [680, 780]) {
   )
   reject(general, 'general', (e) => e.controls.push(control('projectUi', 'Off')))
   reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Experimental')))
-  reject(general, 'general', (e) => (e.text[5] = 'New chats start with'))
+  reject(general, 'general', (e) => (e.text[6] = 'New chats start with'))
+  reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Dreamer')))
   reject(general, 'general', (e) => (e.sidebarSelected = 1))
   reject(general, 'general', (e) => (e.foreground = false))
   reject(providers, 'providers', (e) => (e.text = e.text.slice(0, 4)))
@@ -202,9 +207,9 @@ for (const width of [680, 780]) {
   misread.text = misread.text.map((line) => line.replace('Default model', 'Detault model'))
   assert.ok(misread.text.includes('Detault model'))
   assertSectionEvidence(misread, width, 'general')
-  reject(misread, 'general', (e) => (e.text[4] = 'Model'))
-  reject(misread, 'general', (e) => (e.text[4] = 'Detault'))
-  reject(misread, 'general', (e) => (e.text[4] = 'Detault models'))
+  reject(misread, 'general', (e) => (e.text[5] = 'Model'))
+  reject(misread, 'general', (e) => (e.text[5] = 'Detault'))
+  reject(misread, 'general', (e) => (e.text[5] = 'Detault models'))
 }
 // Verbatim OCR lines from the manager's earlier foreground Off capture (the pixels
 // render "UI"/"AI" correctly; Vision returned "Ul"/"Al"). Must still pass.
@@ -221,6 +226,7 @@ assertSettingsEvidence(
       'General',
       'Al Providers',
       'Experimental',
+      'Dreamer',
       'Experimental Gen UI',
       "Generate Ul using your project's existing components and styles. Experimental;",
       'supports React and Svelte.',
