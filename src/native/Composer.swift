@@ -148,7 +148,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         attachmentsHeight = attachments.heightAnchor.constraint(equalToConstant: 0)
         formTop = backdrop.topAnchor.constraint(equalTo: topAnchor)
         NSLayoutConstraint.activate([
-            queuedMessages.topAnchor.constraint(equalTo: topAnchor), queuedMessages.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14), queuedMessages.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14), queuedMessages.bottomAnchor.constraint(equalTo: backdrop.topAnchor, constant: 16),
+            queuedMessages.topAnchor.constraint(equalTo: topAnchor), queuedMessages.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ComposerQueue.inset), queuedMessages.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ComposerQueue.inset), queuedMessages.bottomAnchor.constraint(equalTo: backdrop.topAnchor, constant: ComposerQueue.overlap),
             formTop, backdrop.leadingAnchor.constraint(equalTo: leadingAnchor), backdrop.trailingAnchor.constraint(equalTo: trailingAnchor), backdrop.bottomAnchor.constraint(equalTo: bottomAnchor),
             chips.topAnchor.constraint(equalTo: content.topAnchor, constant: 10), chips.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), chips.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -12), chipsHeight,
             attachments.topAnchor.constraint(equalTo: chips.bottomAnchor), attachments.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), attachments.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12), attachmentsHeight,
