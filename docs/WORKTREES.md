@@ -334,9 +334,13 @@ registration. Closing a pending chat cancels it; whatever was made is released.
 - **Dependencies.** On the new-chat path the copy-on-write clone of the live
   `node_modules` still happens; a needed install (changed manifests) runs in the
   background (`provisionDependencies(..., { background: true })`) and is never started
-  twice. A foreground call (a later sync) waits for it. While it runs, the turn's
-  prompt tells the agent to read and edit but not run commands that need
-  `node_modules`.
+  twice. A chat's later sync (`syncFromLive`) during a running install neither waits
+  for it nor redoes it: it skips re-provisioning and the install carries on. Only a
+  non-chat foreground `provisionDependencies` (e.g. a spawn's `createWorktree`) waits
+  for a running install. While it runs, the turn's prompt tells the agent to read and
+  edit but not run commands that need `node_modules`. Removing the checkout (closing
+  the chat or project, `releaseChat`, `releaseSpare`, or a spare whose sync failed)
+  first waits for the install to settle, so nothing writes into a deleted folder.
 
 Measured with a stub provider and the Swift repository owner (`isolatedCwd` timings
 are what New chat used to wait for; see `docs/PROGRESS.md`): small project 195–216 ms

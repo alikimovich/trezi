@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
+
+- `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.
+
 ## 2026-10-06 — LKM-182: New chat opens instantly
 
 - **Why.** `agent:new-chat` created the chat's worktree, synced and provisioned its dependencies and started the provider before returning, so New chat waited for Git (and on a large project for seconds) before the composer appeared.

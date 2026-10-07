@@ -22,6 +22,8 @@ import {
   releaseChat
 } from '../src/main/chat-isolation.ts'
 import { prewarmSpare, releaseSpare, spareReady, takeSpare } from '../src/main/chat-spare.ts'
+import { setDependencyInstaller } from '../src/main/project-dependencies.ts'
+import { dependenciesInstalling } from '../src/main/worktree-dependencies.ts'
 
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-chat-spare-')))
 const worktrees = join(base, 'profile', 'worktrees')
@@ -109,5 +111,54 @@ mkdirSync(plain, { recursive: true })
 prewarmSpare(plain, worktrees)
 assert.equal(await spareReady(plain), null)
 assert.equal(takeSpare(plain), null)
+
+// Closing a chat whose background install is still running waits for the install, then
+// removes the checkout: nothing keeps writing into a deleted folder or recreates it.
+const deps = repo('deps')
+writeFileSync(join(deps, 'package.json'), '{"name":"deps","dependencies":{"x":"1.0.0"}}\n')
+git(deps, 'add', '-A')
+git(deps, 'commit', '-q', '-m', 'manifest')
+mkdirSync(join(deps, 'node_modules', 'x'), { recursive: true })
+writeFileSync(join(deps, 'node_modules', 'x', 'index.js'), 'live\n')
+// A spare cloned from the live dependencies, then the manifests change: the take needs an install.
+prewarmSpare(deps, worktrees)
+const depSpare = await spareReady(deps)
+assert.ok(
+  depSpare && existsSync(join(depSpare.path, 'node_modules', 'x')),
+  'the spare cloned node_modules'
+)
+writeFileSync(join(deps, 'package.json'), '{"name":"deps","dependencies":{"x":"2.0.0"}}\n')
+let openGate
+const gate = new Promise((resolve) => {
+  openGate = resolve
+})
+const installs = []
+setDependencyInstaller(async (path) => {
+  installs.push(path)
+  await gate
+  mkdirSync(join(path, 'node_modules', 'x'), { recursive: true })
+  writeFileSync(join(path, 'node_modules', 'x', 'index.js'), 'installed\n')
+})
+try {
+  const depCwd = await isolatedCwd(deps, 'chat-deps')
+  assert.equal(depCwd, depSpare.path)
+  assert.ok(dependenciesInstalling(depCwd), 'the new chat installs in the background')
+  assert.deepEqual(installs, [depCwd])
+  let released = false
+  const closing = releaseChat('chat-deps').then(() => {
+    released = true
+  })
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  assert.ok(!released && existsSync(depCwd), 'the checkout stays while the install runs')
+  openGate()
+  await closing
+  assert.ok(!dependenciesInstalling(depCwd))
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  assert.ok(!existsSync(depCwd), 'the checkout is removed once the install settled')
+  assert.ok(!git(deps, 'worktree', 'list', '--porcelain').includes(depCwd))
+} finally {
+  openGate()
+  setDependencyInstaller(null)
+}
 
 console.log('chat-spare: ok')

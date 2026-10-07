@@ -30,6 +30,7 @@ import { commitLiveTurn } from './live-commit'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
+import { dependencyInstall } from './worktree-dependencies'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
 export { handleReclaimed, hasParkRecord } from './chat-park'
@@ -99,8 +100,12 @@ export async function isolatedCwd(liveRoot: string, sessionKey: string): Promise
     const spare = await takeSpare(liveRoot)
     const wt = await enqueueRepoWrite(liveRoot, async () => {
       if (spare) {
-        const synced = await syncFromLive(liveRoot, spare, { backgroundInstall: true }).catch(() =>
-          removeWorktree(liveRoot, spare, { intent: 'abandon' }).catch(() => {})
+        const synced = await syncFromLive(liveRoot, spare, { backgroundInstall: true }).catch(
+          async () => {
+            // The sync may have started an install in the checkout: let it settle first.
+            await dependencyInstall(spare.path)
+            await removeWorktree(liveRoot, spare, { intent: 'abandon' }).catch(() => {})
+          }
         )
         if (synced) return spare
       }
@@ -494,6 +499,8 @@ export async function releaseChat(
           upsertParkRecord(st, outcome.files)
         }
       }
+      // A new-chat background install (LKM-182) may still be writing node_modules here.
+      await dependencyInstall(st.wt.path)
       await removeWorktree(st.liveRoot, st.wt, {
         keepBranch: st.parked,
         intent: st.parked ? 'release' : 'landed'
