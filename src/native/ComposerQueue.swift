@@ -16,8 +16,8 @@ struct QueuedComposerMessage: Decodable, Identifiable {
 struct ComposerQueue: View {
     let messages: [QueuedComposerMessage]
     let paused: Bool
-    /// Why the queue is not sending yet (LKM-151 paused, LKM-169 a running turn, a landing,
-    /// Resolve or sign-in), and whether a paused queue can be sent now.
+    /// Why the queue is not sending yet (LKM-151 paused, LKM-169 Resolve or sign-in; a
+    /// running turn or a landing has none, LKM-191), and whether a paused queue can be sent now.
     var note = ""
     var canSend = true
     let action: (String, String?) -> Void

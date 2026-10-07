@@ -26,6 +26,11 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Fix.** The mask, `ChatModel.latestClearHeight` and `ChatLatestButton.fade`/`clearHeight` are gone; history scrolls under the composer and the button exactly as when the button is hidden. `ChatLatestButton` keeps its NSButton tracking, size and place but draws no opaque circle: a backdrop subview (`NSGlassEffectView` like the composer, `NSVisualEffectView` `.popover` with the old shadow before macOS 26) holds the chevron, a custom cell tints it while pressed, and `hitTest` returns the button for every point of its circle, so the text under it is never clicked.
 - **Tests.** The acceptance checks drop the masked-band assertions and require the backdrop, `latestButtonHit == ChatLatestButton` and, in new `acceptance-{440,320}-scrolled-up-{light,dark}` captures (window appearance forced), more than 40 text pixels beside the button between `gap` above it and the composer top (`latestBandInk`, computed in `ChatAcceptance` from the capture); the old mask left that band empty. The composer-layout fixture checks the backdrop and hit-tests three off-centre points in the circle.
 
+## 2026-10-06 — LKM-191: composer queue has no note for the normal wait
+
+- **Why.** "Sends when this turn finishes" / "Sends after this turn's changes land" above a queued message only restated the obvious (user request).
+- **Change.** `BLOCK_NOTES` in `src/native/chat-queue.ts` maps `running` and `landing` to `''`; `queueCanSend` stays false while blocked. `ComposerQueue.hasHeader` already drops the 28 pt header for an empty note on an unpaused queue, so the box is one 34 pt row. Resolve, sign-in, paused and landing-error notes are unchanged.
+- **Tests.** `test/chat-send-queue.mjs` expects an empty note while running and landing. `smoke-chat` expects `queueNote === ''` and `queueHeight` 34 before the `-queue-stack` capture; the Resolve check keeps 62.
 ## 2026-10-06 — LKM-189: landing commit messages describe the change
 
 - **Why.** A landing commit's subject was the user's prompt (capped at 72 chars), so `git log` read as chat text, sometimes with "[Attached files]", and the PR description started from the first prompt.
