@@ -6,6 +6,8 @@ export interface NavigationView {
   /** The active project's root, its current chat, and its running web server (if any). */
   active(): { root: string; chat: string; url: string | null } | null
   load(url: string): Promise<unknown>
+  /** The preview already shows `url`, loaded (LKM-200). */
+  showing?(url: string): Promise<boolean>
 }
 
 /**
@@ -41,15 +43,11 @@ export class NavigationController {
         request.now
       )
       if (ready) this.ready.add(request.key)
-      const opened = await this.open()
+      // A page opened now (no unlanded work) is not reloaded when the preview already shows it.
+      const opened = await this.open(request.now ? request.key : null)
       report(
-        opened.has(request.key)
-          ? 'loading'
-          : !ready
-            ? 'deferred'
-            : this.ready.has(request.key)
-              ? 'no-server'
-              : 'dropped'
+        opened.get(request.key) ??
+          (!ready ? 'deferred' : this.ready.has(request.key) ? 'no-server' : 'dropped')
       )
     } catch (error) {
       report('dropped')
@@ -64,9 +62,10 @@ export class NavigationController {
   }
 
   /** Opens a released request when its chat is active and its server runs (safe to call
-   *  often). Returns the chats it loaded. */
-  async open(): Promise<Set<string>> {
-    const opened = new Set<string>()
+   *  often). Returns the chats it opened; `keep` is a chat whose page is not reloaded
+   *  when the preview already shows it. */
+  async open(keep: string | null = null): Promise<Map<string, 'loading' | 'already-loaded'>> {
+    const opened = new Map<string, 'loading' | 'already-loaded'>()
     const active = this.view.active()
     for (const chat of [...this.ready]) {
       if (active?.chat === chat && !active.url) continue
@@ -79,8 +78,13 @@ export class NavigationController {
       if (!taken || taken.root !== active.root) continue
       const base = new URL(active.url!)
       if (!['http:', 'https:'].includes(base.protocol)) continue
-      await this.view.load(base.origin + taken.path)
-      opened.add(chat)
+      const url = base.origin + taken.path
+      if (chat === keep && (await this.view.showing?.(url))) {
+        opened.set(chat, 'already-loaded')
+        continue
+      }
+      await this.view.load(url)
+      opened.set(chat, 'loading')
     }
     return opened
   }

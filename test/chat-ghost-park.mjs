@@ -25,6 +25,7 @@ import {
 } from '../src/main/chat-isolation.ts'
 import { states } from '../src/main/chat-state.ts'
 import { runTreziTool } from '../src/main/session-tools.ts'
+import { turnTimings } from '../src/main/turn-timing.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-ghost-park-'))
 const git = (cwd, ...args) =>
@@ -117,9 +118,17 @@ try {
   // No diff, agent tool: workspace_state answers one consistent status, never parked.
   const tool = await driftPark()
   writeFileSync(join(tool.root, FILE), 'export const bar = 1\n')
+  turnTimings.received(tool.key, 'turn-timed')
   const reported = await runTreziTool('workspace_state', {}, scope(tool))
   assert.equal(reported.state, 'isolated')
   assert.equal(reported.lastLanding.outcome, 'merged')
+  // LKM-200: the agent reads its turn's timing, this very call included (still running).
+  assert.equal(reported.timing.current.turn, 'turn-timed')
+  assert.deepEqual(
+    reported.timing.current.tools.map((call) => [call.tool, call.ms]),
+    [['workspace_state', null]]
+  )
+  turnTimings.completed(tool.key, 'turn-timed')
   assertCleared(tool)
   await releaseChat(tool.key)
 

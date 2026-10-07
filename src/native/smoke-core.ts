@@ -25,6 +25,7 @@ import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smok
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewInspector } from './smoke-preview-inspector'
+import { checkPreviewTiming, restorePreviewTiming } from './smoke-preview-timing'
 import { checkProjectSwitching } from './smoke-projects'
 import { checkPublishProgress } from './smoke-publish'
 import {
@@ -877,6 +878,14 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         await restoreAgentPreview(page)
       }
+    },
+    {
+      name: 'preview-timing',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkPreviewTiming(page, artifacts)
+      },
+      cleanup: restorePreviewTiming
     },
     {
       name: 'toolbar-more',

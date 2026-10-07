@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Fast preview tools: measure and speed up screenshot, inspect and navigation (LKM-200)
+
+- [x] Every Trezi tool call logs `Tool call tool= ms= ok= phases=` (page, identity, read, capture/snapshot/encode/transfer, unlanded/dispatch/wait-for-load/settle/reads; `src/main/tool-timing.ts`); every turn logs `Turn timing … perTool=` (`src/main/turn-timing.ts`); `workspace_state` returns the current and last turn's timing. Unit `turn-timing`.
+- [x] Screenshot: one host-side `takeSnapshot` at the bounded size, JPEG ≤ 1280 px at quality 0.8 (`full: true` for full resolution; `PreviewAgent.capture`), no PNG round trip.
+- [x] No fixed sleeps: viewport waits in-page for the first frame at the asked width; `open_preview` waits for load + one frame; `open_preview` on the route already shown (loaded, no navigation running, no unlanded work) answers `already-loaded` without a reload.
+- [x] Observation identity: location, screenshot, inspect and console carry preview session, navigation, document start and served revision; stale documents are flagged, another project's server and mid-observation navigations refused (`src/main/preview-identity.ts`). Unit `preview-identity`.
+- [x] Native check `preview-timing` (group `core`, `src/native/smoke-preview-timing.ts`): median under each target, no run over 2×, viewport + screenshot and `open_preview` keep the navigation, document and dev-server pid.
+- [ ] DOM snapshot cache per revision: not done (the DOM changes without a navigation, so a cache needs a mutation signal; reads are already ~1 ms).
+- [ ] `open_preview` with unlanded work keeps the deferred reload (the page changes on landing).
+
 ## New chats, preview page, Codex questions, feedback log noise (LKM-199)
 
 - [x] Island sessions register for every chat with a workspace: restore, new chat (after `agent:chat-record` waits for the preparation), first turn, provider switch, and lazily on the first `chat_island` call (`ChatIslands.ensure`, `src/native/chat-island-session.ts`); never "not available yet" for a chat with a workspace.

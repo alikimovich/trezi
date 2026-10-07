@@ -117,14 +117,9 @@ export async function reloadAgentPreview(
   return {
     reloaded: !!outcome,
     hard,
-    ...((await reportLoad(
-      key,
-      pathOf(target),
-      target,
-      outcome,
-      devServer(server.url),
-      left
-    )) as object)
+    ...((await reportLoad(key, pathOf(target), target, outcome, devServer(server.url), left, {
+      root
+    })) as object)
   }
 }
 
@@ -169,7 +164,9 @@ export async function restartAgentDevServer(
   const outcome = await load.done
   const target = outcome?.finalUrl ?? getPreviewUrl() ?? answer.url
   const report = outcome
-    ? await reportLoad(key, pathOf(target), target, outcome, devServer(answer.url), left)
+    ? await reportLoad(key, pathOf(target), target, outcome, devServer(answer.url), left, {
+        root
+      })
     : {
         loaded: false,
         devServer: { ...devServer(answer.url), ...(await probeDevServer(answer.url, 2000)) },

@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chatIslandDescription } from '../bin/chat-island-schema.mjs'
 import { observeAgentPreview } from '../src/main/preview-observation-tools.ts'
+import { PAGE_PROBE } from '../src/main/preview-page.ts'
 import { registerPreviewSource } from '../src/main/preview-state.ts'
 import { registerTreziAgentTools, shutdownTreziAgentTools } from '../src/main/trezi-agent-tools.ts'
 
@@ -156,13 +157,14 @@ try {
   const image = {
     isEmpty: () => false,
     getSize: () => ({ width: 1600, height: 900 }),
+    // LKM-200: a source without the native agent capture is fitted to 1280 px, quality 80.
     resize: ({ width }) => {
-      assert.equal(width, 1200)
+      assert.equal(width, 1280)
       resized = true
       return image
     },
     toJPEG: (quality) => {
-      assert.equal(quality, 70)
+      assert.equal(quality, 80)
       return jpeg
     }
   }
@@ -174,9 +176,11 @@ try {
   assert.match(location.result.content[0].text, /page\?view=full#intro/)
   const captured = await previewCall('preview_screenshot')
   assert.deepEqual(
-    captured.result.content,
+    captured.result.content.slice(0, 3),
     [
       { type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') },
+      // The stub's resize keeps its size; the native capture reports the sent size.
+      { type: 'text', text: 'Screenshot: 1600×900 px JPEG.' },
       // LKM-199: every preview answer names the page it describes.
       {
         type: 'text',
@@ -185,6 +189,8 @@ try {
     ],
     'real stdio transport preserves image content instead of stringifying it'
   )
+  // LKM-200: and its preview identity.
+  assert.match(captured.result.content[3].text, /^Preview identity: /)
   assert.equal(captured.result.structuredContent, undefined)
   assert.ok(resized)
   // LKM-138: inspection arguments survive the MCP transport and reach the isolated host.
@@ -195,7 +201,7 @@ try {
     agent: {
       evaluate: async (code, world) => {
         // Every preview tool first reads the page's own location (LKM-199).
-        if (code === 'location.href') return 'http://localhost:3000/'
+        if (code === PAGE_PROBE) return { href: 'http://localhost:3000/', startedAt: 1 }
         evaluated.push(world)
         return { element: '<h1>', styles: { 'box-shadow': 'rgb(0, 0, 0) 0px 2px 4px 0px' } }
       },

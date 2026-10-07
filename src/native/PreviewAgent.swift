@@ -53,6 +53,39 @@ enum PreviewAgent {
         return config
     }
 
+    /// LKM-200: the agent's frame. WebKit renders it at the size it is sent at (the longest
+    /// side at most `maxPixels` unless `full`) and it is encoded once as JPEG: no
+    /// full-resolution PNG and no second scaling pass. The reply carries the host's timings.
+    static func capture(_ options: [String: Any], view: WKWebView, reply: @escaping ([String: Any]?, String?) -> Void) {
+        let started = Date()
+        let full = options["full"] as? Bool == true
+        let maxPixels = CGFloat(options["maxPixels"] as? Double ?? 1280)
+        let quality = options["quality"] as? Double ?? 0.8
+        let scale = view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let size = view.bounds.size, longest = max(size.width, size.height) * scale
+        let config = WKSnapshotConfiguration()
+        if !full, longest > maxPixels, size.width > 0 { config.snapshotWidth = NSNumber(value: Double(size.width * maxPixels / longest)) }
+        view.takeSnapshot(with: config) { image, error in
+            let snapshotMs = Date().timeIntervalSince(started) * 1000, encoding = Date()
+            guard var frame = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { reply(nil, error?.localizedDescription ?? "Snapshot unavailable"); return }
+            if !full, let fitted = fit(frame, maxPixels: maxPixels) { frame = fitted }
+            guard let jpeg = NSBitmapImageRep(cgImage: frame).representation(using: .jpeg, properties: [.compressionFactor: quality]) else { reply(nil, "Snapshot encoding failed"); return }
+            reply(["jpeg": jpeg.base64EncodedString(), "width": frame.width, "height": frame.height, "snapshotMs": snapshotMs, "encodeMs": Date().timeIntervalSince(encoding) * 1000], nil)
+        }
+    }
+
+    /// `image` scaled so its longest side is `maxPixels`; nil when it already fits.
+    static func fit(_ image: CGImage, maxPixels: CGFloat) -> CGImage? {
+        let longest = CGFloat(max(image.width, image.height))
+        guard longest > maxPixels, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let width = max(1, Int((CGFloat(image.width) * maxPixels / longest).rounded()))
+        let height = max(1, Int((CGFloat(image.height) * maxPixels / longest).rounded()))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
     /// `previewViewport {width}`: lay the page out at `width` CSS px (nil restores).
     static func setViewport(_ command: [String: Any], layout: WorkspaceLayout, view: WKWebView?) -> [String: Any] {
         if let width = command["width"] as? Double, width.isFinite { layout.viewportWidth = CGFloat(min(3840, max(240, width))) }

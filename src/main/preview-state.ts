@@ -1,4 +1,5 @@
-import type { NativeImage } from '../native/platform'
+import type { AgentCaptureReply, NativeImage } from '../native/platform'
+import { notePhase, phase } from './tool-timing'
 
 /**
  * A tiny registry that lets any main-process module read the live preview's
@@ -15,8 +16,20 @@ export interface PreviewSource {
   getUrl: () => string | null
   /** A capture of the preview's current frame, or null when unavailable. */
   capture: () => Promise<NativeImage | null>
+  /** The agent's bounded JPEG of the current frame (LKM-200); `capture` serves sources without it. */
+  captureAgent?: (options: { full?: boolean }) => Promise<AgentCaptureReply | null>
   /** The agent inspection host (LKM-138); absent before the native preview registers. */
   agent?: PreviewAgentHost
+}
+
+/** The agent's preview frame: the longest side at most `maxPixels` unless full (LKM-200). */
+export const AGENT_CAPTURE = { maxPixels: 1280, quality: 0.8 } as const
+
+/** A frame for the agent: JPEG bytes and pixel size. */
+export interface AgentCapture {
+  jpeg: Buffer
+  width: number
+  height: number
 }
 
 /** CSS-pixel rectangle in the preview viewport. */
@@ -62,6 +75,43 @@ export async function capturePreview(): Promise<NativeImage | null> {
   if (!source) return null
   try {
     return await source.capture()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * LKM-200: the frame the agent sees, rendered by WebKit at its sent size (at most
+ * `AGENT_CAPTURE.maxPixels` on the longest side unless `full`) and encoded once as JPEG.
+ * The tool call's phases get the host's snapshot and encode times and the transfer.
+ */
+export async function capturePreviewForAgent(full = false): Promise<AgentCapture | null> {
+  const src = source
+  if (!src) return null
+  try {
+    if (!src.captureAgent) {
+      const image = await phase('capture', () => src.capture())
+      if (!image || image.isEmpty()) return null
+      const { width, height } = image.getSize()
+      const longest = Math.max(width, height)
+      const fitted =
+        full || longest <= AGENT_CAPTURE.maxPixels
+          ? image
+          : image.resize({ width: Math.round((width * AGENT_CAPTURE.maxPixels) / longest) })
+      return phase('encode', async () => ({
+        jpeg: fitted.toJPEG(AGENT_CAPTURE.quality * 100),
+        ...fitted.getSize()
+      }))
+    }
+    const at = performance.now()
+    const reply = await src.captureAgent(full ? { full } : {})
+    const total = performance.now() - at
+    if (!reply?.jpeg) return null
+    const host = (reply.snapshotMs ?? 0) + (reply.encodeMs ?? 0)
+    notePhase('snapshot', reply.snapshotMs)
+    notePhase('encode', reply.encodeMs)
+    notePhase('transfer', Math.max(0, total - host))
+    return { jpeg: Buffer.from(reply.jpeg, 'base64'), width: reply.width, height: reply.height }
   } catch {
     return null
   }

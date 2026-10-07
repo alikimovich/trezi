@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { previewServers } from '../src/main/preview-evidence.ts'
 import { observeAgentPreview } from '../src/main/preview-observation-tools.ts'
-import { previewPage } from '../src/main/preview-page.ts'
+import { PAGE_PROBE, previewPage } from '../src/main/preview-page.ts'
 import { registerPreviewSource } from '../src/main/preview-state.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 
@@ -24,7 +24,7 @@ registerPreviewSource({
   agent: {
     evaluate: async (code, world) => {
       evaluated.push([code, world])
-      if (code === 'location.href') return pageHref
+      if (code === PAGE_PROBE) return { href: pageHref, startedAt: 1, ready: 'complete' }
       return { element: '<main>', path: new URL(pageHref).pathname }
     },
     captureRect: async () => null,
@@ -40,12 +40,12 @@ assert.match(texts(location)[0], /127\.0\.0\.1:7777\/portfolio \(port 7777, rout
 const shot = await observeAgentPreview('preview_screenshot', {}, root)
 assert.equal(shot.content[0].type, 'image')
 assert.equal(
-  texts(shot).at(-1),
+  texts(shot).at(-2),
   'Preview page: http://127.0.0.1:7777/portfolio (port 7777, route /portfolio).'
 )
 const inspected = await observeAgentPreview('preview_inspect', { selector: 'main' }, root)
 assert.match(texts(inspected)[0], /portfolio/)
-assert.equal(texts(inspected).at(-1), texts(shot).at(-1), 'Every tool names the same page')
+assert.equal(texts(inspected).at(-2), texts(shot).at(-2), 'Every tool names the same page')
 
 // The preview shows another server (another project, an old port): every tool refuses.
 pageHref = 'http://127.0.0.1:7779/projects'
@@ -56,7 +56,7 @@ for (const action of ['preview_location', 'preview_screenshot', 'preview_inspect
   assert.equal(refused.content.length, 1)
   assert.match(
     refused.content[0].text,
-    /shows http:\/\/127\.0\.0\.1:7779\/projects \(port 7779\), not this project's dev server http:\/\/127\.0\.0\.1:7777 \(port 7777\)/
+    /shows http:\/\/127\.0\.0\.1:7779\/projects \(port 7779\), not this project's dev server http:\/\/127\.0\.0\.1:7777 \(port 7777, preview session ps-\d+\)/
   )
   assert.match(refused.content[0].text, /open_preview/)
 }
@@ -64,7 +64,7 @@ const before = evaluated.length
 await observeAgentPreview('preview_inspect', { selector: 'main' }, root)
 assert.deepEqual(
   evaluated.slice(before).map(([code]) => code),
-  ['location.href'],
+  [PAGE_PROBE],
   'A refused tool never inspects the other page'
 )
 

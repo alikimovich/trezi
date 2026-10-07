@@ -16,6 +16,8 @@ export const VIEWPORT_PRESETS = { mobile: 390, tablet: 768, laptop: 1280, deskto
 export const VIEWPORT_RESTORE_MS = 120_000
 const VIEWPORT_RANGE = { min: 240, max: 3840 }
 const CALL_TIMEOUT = 8000
+/** The longest a viewport change waits for the page to reach the width. */
+const VIEWPORT_SETTLE_MS = 1500
 const PNG_LIMIT = 1024 * 1024
 
 const text = (value: string, isError = false): PreviewToolResult => ({
@@ -162,15 +164,17 @@ async function readConsole(host: PreviewAgentHost, raw: unknown) {
 
 let restoreTimer: ReturnType<typeof setTimeout> | null = null
 
+/** The page's size in the first frame laid out at `width` (LKM-200: one in-page wait,
+ *  checked each frame, instead of polling across the bridge with sleeps). */
+export const settleCode = (width: number | null, budgetMs = VIEWPORT_SETTLE_MS) =>
+  `new Promise((r) => { const end = performance.now() + ${budgetMs}; const tick = () => ${width === null ? 'true' : `Math.abs(innerWidth - ${width}) <= 1`} || performance.now() > end ? r({ innerWidth, innerHeight }) : requestAnimationFrame(tick); requestAnimationFrame(tick) })`
+
 async function measure(host: PreviewAgentHost, width: number | null) {
-  const code = `new Promise((r) => requestAnimationFrame(() => r({ innerWidth, innerHeight })))`
-  let size = { innerWidth: 0, innerHeight: 0 }
-  for (let i = 0; i < 20; i++) {
-    size = ((await host.evaluate(code, 'preview', CALL_TIMEOUT)) as typeof size | null) ?? size
-    if (width === null || Math.abs(size.innerWidth - width) <= 1) break
-    await new Promise((resolve) => setTimeout(resolve, 50))
-  }
-  return size
+  const size = (await host.evaluate(settleCode(width), 'preview', CALL_TIMEOUT)) as {
+    innerWidth: number
+    innerHeight: number
+  } | null
+  return size ?? { innerWidth: 0, innerHeight: 0 }
 }
 
 async function viewport(host: PreviewAgentHost, raw: unknown) {

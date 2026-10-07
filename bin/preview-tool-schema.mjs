@@ -12,7 +12,8 @@ const target = {
 export const previewToolShapes = {
   preview_screenshot: {
     ...target,
-    padding: z.number().min(0).max(64).optional().describe('Element crops only: CSS px around the element (default 8)')
+    padding: z.number().min(0).max(64).optional().describe('Element crops only: CSS px around the element (default 8)'),
+    full: z.boolean().optional().describe('Whole view only: full resolution instead of at most 1280 px (slower, larger)')
   },
   preview_inspect: target,
   preview_evaluate: {
@@ -32,7 +33,7 @@ export const previewToolShapes = {
 
 export const previewToolText = {
   preview_screenshot:
-    "Capture the user's live preview. With no arguments: exactly what the user sees right now. With a selector (or x/y): an image cropped to that element, scrolled into view if needed. Observes the current view; does not confirm private worktree edits have landed.",
+    "Capture the user's live preview. With no arguments: exactly what the user sees right now, as a JPEG at most 1280 px on its longest side (full: true for full resolution). With a selector (or x/y): an image cropped to that element, scrolled into view if needed. Observes the current view; does not confirm private worktree edits have landed.",
   preview_inspect:
     "Inspect one element of the user's live preview by CSS selector or viewport point: bounding box, box model, curated computed styles (box-shadow, overflow, position, transform, …), data-trezi-source file:line, children count and clipping ancestors. Use this instead of an external browser.",
   preview_evaluate:

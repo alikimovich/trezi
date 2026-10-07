@@ -163,6 +163,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
       return url && /^https?:/.test(url) ? url : null
     },
     capture: async () => (await previewWc()?.capturePage()) ?? null,
+    captureAgent: (options) => openPreview().captureAgent(options),
     agent: {
       evaluate: (code, world, timeoutMs) => openPreview().evaluateIn(code, world, timeoutMs),
       captureRect: (rect) => openPreview().captureRect(rect),

@@ -26,8 +26,15 @@ export type PreviewLoadBanner =
   | { kind: 'loading'; path: string }
   | { kind: 'error'; path: string; status: number; message: string }
 
-/** How the native side handled one `preview:open` request. */
-export type PreviewDispatch = 'loading' | 'deferred' | 'no-server' | 'elsewhere' | 'dropped'
+/** How the native side handled one `preview:open` request; `already-loaded`: the
+ *  preview already showed that page, loaded, so it was not reloaded (LKM-200). */
+export type PreviewDispatch =
+  | 'loading'
+  | 'already-loaded'
+  | 'deferred'
+  | 'no-server'
+  | 'elsewhere'
+  | 'dropped'
 
 /** A quick navigation never flashes the loading pill. */
 export const LOADING_DELAY_MS = 350
@@ -63,6 +70,10 @@ export class PreviewLoads {
   banner: PreviewLoadBanner | null = null
   /** Called whenever `banner` changes. */
   onChange: () => void = () => {}
+  /** LKM-200: main-frame navigations seen so far; the current document's navigation id. */
+  navigation = 0
+  /** Called when a main-frame navigation starts, with its id. */
+  onNavigation: (navigation: number, url: string) => void = () => {}
   private status: number | null = null
   private url = ''
   private loading = false
@@ -73,12 +84,22 @@ export class PreviewLoads {
 
   constructor(readonly loadingDelay = LOADING_DELAY_MS) {}
 
+  /** A main-frame navigation is under way. */
+  get busy(): boolean {
+    return this.loading
+  }
+  /** The current document's HTTP status, when WebKit reported one. */
+  get lastStatus(): number | null {
+    return this.status
+  }
+
   record(event: PreviewLoadEvent): void {
     if (event.type === 'start') {
       this.clearTimer()
       this.status = null
       this.url = event.url
       this.loading = true
+      this.onNavigation(++this.navigation, event.url)
       for (const waiter of this.loads)
         if (waiter.target === null || sameTarget(waiter.target, event.url)) waiter.armed = true
       if (this.banner?.kind === 'error') this.show(null)

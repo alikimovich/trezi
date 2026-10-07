@@ -55,6 +55,13 @@ Lifecycle facts only:
 - publish steps (LKM-187): `Publish started`, one `Publish step step=<name> ms=<n>`
   per finished step and `Publish done|failed|cancelled|interrupted step=<last> ms=<n>
   total=<n>` from `WorkflowOwner.swift`, with an 8-character workflow id;
+- Trezi tool and turn timing (LKM-200): one `Tool call tool=<name> ms=<n> ok=<bool>
+  phases=<name:ms,…>` per Trezi MCP tool call (area `tool`, `src/main/tool-timing.ts`;
+  phases such as `page`, `wait-for-load`, `settle`, `snapshot`, `encode`, `transfer`),
+  `Turn received`, and one `Turn timing end=<completed|superseded> ms= sentMs=
+  providerMs= landingMs= calls= toolMs= perTool=<tool:count/ms,…>` per turn
+  (`src/main/turn-timing.ts`). The agent reads the same timing in `workspace_state`;
+  tool arguments and answers are never logged;
 - provider helper start, exit and crash with status, and backend start and exit;
 - target dev server output category and length (the raw line stays in Activity);
 - preview load, reload, load failure and web-content crash;
