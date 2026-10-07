@@ -23,9 +23,11 @@ export function sendBlock(chat: Chat): SendBlock | null {
   return null
 }
 
+/** LKM-191: a running turn or a landing is the normal wait, so it gets no note (and the
+ *  queue no header row); only blocks that need the user's action are named. */
 const BLOCK_NOTES: Record<SendBlock, string> = {
-  running: 'Sends when this turn finishes',
-  landing: 'Sends after this turn’s changes land',
+  running: '',
+  landing: '',
   resolve: 'Waiting for Resolve — sends once the held changes land',
   login: 'Waiting for sign-in — sends after Retry on the login card'
 }
@@ -37,10 +39,7 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
   const block = sendBlock(chat)
   const waiting = needsResolve(chat) ? 'resolve' : chat.login ? 'login' : null
   if (waiting) return { queueNote: BLOCK_NOTES[waiting], queueCanSend: false }
-  if (!chat.paused)
-    return block
-      ? { queueNote: BLOCK_NOTES[block], queueCanSend: false }
-      : { queueNote: '', queueCanSend: true }
+  if (!chat.paused) return { queueNote: block ? BLOCK_NOTES[block] : '', queueCanSend: !block }
   if (chat.isolation === 'parked' && chat.landingError)
     return {
       queueNote: 'Waiting — retry, resolve or discard the held changes to send these',

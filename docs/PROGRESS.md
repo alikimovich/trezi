@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-191: composer queue has no note for the normal wait
+
+- **Why.** "Sends when this turn finishes" / "Sends after this turn's changes land" above a queued message only restated the obvious (user request).
+- **Change.** `BLOCK_NOTES` in `src/native/chat-queue.ts` maps `running` and `landing` to `''`; `queueCanSend` stays false while blocked. `ComposerQueue.hasHeader` already drops the 28 pt header for an empty note on an unpaused queue, so the box is one 34 pt row. Resolve, sign-in, paused and landing-error notes are unchanged.
+- **Tests.** `test/chat-send-queue.mjs` expects an empty note while running and landing. `smoke-chat` expects `queueNote === ''` and `queueHeight` 34 before the `-queue-stack` capture; the Resolve check keeps 62.
+
 ## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
 
 - **Why.** After a publish, landed chat commits were unreachable from `trezi/main`. Its reflog said `branch: Created from refs/remotes/origin/trezi/main`, which is Git's DWIM `checkout <branch>` after the local branch was deleted while a stale remote-tracking ref survived.

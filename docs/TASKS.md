@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Composer queue: no note for the normal waiting case (LKM-191)
+
+- [x] `queueNote` returns no note for a running turn or a landing, so the queue has no header row (34 pt for one row); Resolve, sign-in, paused and landing-error notes are unchanged.
+- [x] `chat-send-queue` expects the empty note; the native chat smoke expects no note and a 34 pt queue in the `-queue-stack` capture.
+
 ## Landed chat commits never become unreachable (LKM-185)
 
 - [x] One branch rule in the repository owner: automatic switches (`git:ensure`, publish heal) never move the live checkout onto a branch lacking its commits; a behind branch fast-forwards with a recovery ref, a diverged one is refused (`joinBranch`).

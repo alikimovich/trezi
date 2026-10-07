@@ -25,6 +25,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 - Chat island problems are one plain sentence instead of exception text, and an island whose turn did not land shows as Disabled with that reason; hidden and disabled islands stay that way across relaunch (LKM-181).
 - New chat opens at once with the composer focused: its workspace (a prewarmed spare when one is ready), dependencies and provider are prepared in the background, and a message sent before they are ready waits, showing "Preparing workspace…" after 300 ms (LKM-182).
+- The composer queue no longer shows a note while a turn is running or its changes are landing, only the queued messages; notes that need your action (Resolve, sign-in, a paused queue, a failed landing) are unchanged (LKM-191).
 
 ### Fixed
 - Publishing no longer loses chat changes. Merging a PR keeps the project on its work branch, which takes in the merged main or, if they overlap, stays as it was with a note offering Git updates. Trezi never recreates the branch from an outdated GitHub copy or switches onto a branch that lacks the preview's changes. On open, chat changes an earlier publish left on another branch get one notice, "N earlier chat changes are on branch main, not on trezi/main", with Bring them back and Ignore (LKM-185).
