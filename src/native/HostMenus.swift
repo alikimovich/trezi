@@ -26,6 +26,9 @@ extension Host {
             edit.addItem(withTitle: label, action: Selector(selector), keyEquivalent: key)
         }
         let find = NSMenuItem(title: "Find…", action: #selector(NSTextView.performFindPanelAction(_:)), keyEquivalent: "f"); find.tag = NSTextFinder.Action.showFindInterface.rawValue; edit.addItem(find)
+        // LKM-192: the code editor's soft wrap; the focused editor, else Host, answers it.
+        let view = submenu("View")
+        view.addItem(withTitle: "Wrap Lines", action: #selector(NativeSourceEditor.toggleWrapLines(_:)), keyEquivalent: "")
         let actions = submenu("Actions")
         for (label, key, action) in [("Reload Preview", "r", "reload"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
             let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; actions.addItem(item)

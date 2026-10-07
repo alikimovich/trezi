@@ -8,7 +8,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 type Inspect = (method: string, check: (state: any) => boolean) => Promise<any>
 
-/** The toolbar reads back, forward, path, then pop out/dock and close on the right edge. */
+/** The toolbar reads back, forward, path, then "…" (LKM-192), pop out/dock and close on the right edge. */
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 function checkToolbar(toolbar: any, popped: boolean) {
   // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
@@ -16,17 +16,22 @@ function checkToolbar(toolbar: any, popped: boolean) {
   // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
   assert.deepEqual(
     toolbar.items.map((entry: any) => entry.id).filter((id: string) => id !== 'edited'),
-    ['back', 'forward', 'path', 'popout', 'hide']
+    ['back', 'forward', 'path', 'more', 'popout', 'hide']
   )
   assert.ok(
     item('back').maxX <= item('forward').minX && item('forward').maxX <= item('path').minX,
     'Back and forward sit left of the path'
   )
-  assert.ok(item('path').maxX <= item('popout').minX && item('popout').maxX <= item('hide').minX)
+  assert.ok(
+    item('path').maxX <= item('more').minX &&
+      item('more').maxX <= item('popout').minX &&
+      item('popout').maxX <= item('hide').minX
+  )
   assert.ok(toolbar.width - item('hide').maxX <= 12, 'Close sits on the right edge')
   const expected: Record<string, [string, string]> = {
     back: ['chevron.left', 'Back'],
     forward: ['chevron.right', 'Forward'],
+    more: ['ellipsis.circle', 'More'],
     hide: ['xmark', 'Close Editor'],
     popout: popped
       ? ['arrow.down.right.and.arrow.up.left', 'Dock Editor']

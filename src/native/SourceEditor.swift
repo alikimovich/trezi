@@ -15,6 +15,18 @@ final class SourceTextView: NSTextView {
         }
         super.mouseDown(with: event)
     }
+    /// Home and End move to the start and end of the logical line, as in Xcode; arrow
+    /// up and down keep moving by visual (wrapped) line (LKM-192).
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard let key = event.specialKey, key == .home || key == .end, modifiers.subtracting(.shift).isEmpty else { super.keyDown(with: event); return }
+        switch (key == .home, modifiers.contains(.shift)) {
+        case (true, false): moveToBeginningOfParagraph(nil)
+        case (true, true): moveToBeginningOfParagraphAndModifySelection(nil)
+        case (false, false): moveToEndOfParagraph(nil)
+        case (false, true): moveToEndOfParagraphAndModifySelection(nil)
+        }
+    }
     /// Syntax colours are dynamic; redraw them for the new appearance.
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
@@ -24,24 +36,30 @@ final class SourceLineRuler: NSRulerView {
     init(scroll: NSScrollView, text: NSTextView) { self.text = text; super.init(scrollView: scroll, orientation: .verticalRuler); clientView = text; ruleThickness = 48 }
     required init(coder: NSCoder) { fatalError() }
     override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let text, let manager = text.layoutManager, let container = text.textContainer else { return }
         NSColor.controlBackgroundColor.setFill(); bounds.fill()
-        guard manager.numberOfGlyphs > 0 else { return }
+        for (line, y) in labels() {
+            ("\(line)" as NSString).draw(at: NSPoint(x: 6, y: y), withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor])
+        }
+    }
+    /// Each visible logical line's number at the top of its first visual line, so a
+    /// wrapped line (LKM-192) is numbered once.
+    func labels() -> [(Int, CGFloat)] {
+        guard let text, let manager = text.layoutManager, let container = text.textContainer, manager.numberOfGlyphs > 0 else { return [] }
         let ns = text.string as NSString
-        let visible = text.visibleRect
+        let visible = text.visibleRect, top = text.textContainerOrigin.y - visible.minY
         let glyphs = manager.glyphRange(forBoundingRect: visible, in: container)
-        let start = manager.characterIndexForGlyph(at: min(glyphs.location, max(0, manager.numberOfGlyphs - 1)))
-        var line = ns.substring(to: min(start, ns.length)).filter { $0 == "\n" }.count + 1
-        var position = start
+        let start = ns.lineRange(for: NSRange(location: min(manager.characterIndexForGlyph(at: min(glyphs.location, manager.numberOfGlyphs - 1)), ns.length), length: 0)).location
+        var line = SourceSyntaxTheme.lines(in: ns, before: start) + 1, position = start, result: [(Int, CGFloat)] = []
         while position < ns.length {
             let range = ns.lineRange(for: NSRange(location: position, length: 0))
-            let glyph = manager.glyphIndexForCharacter(at: range.location)
-            let frame = manager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-            if frame.minY > visible.maxY { break }
-            let label = "\(line)" as NSString
-            label.draw(at: NSPoint(x: 6, y: frame.minY + text.textContainerOrigin.y - visible.minY), withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor])
+            let frame = manager.lineFragmentRect(forGlyphAt: manager.glyphIndexForCharacter(at: range.location), effectiveRange: nil)
+            if frame.minY > visible.maxY { return result }
+            result.append((line, frame.minY + top))
             position = NSMaxRange(range); line += 1
         }
+        // The empty last line after a final newline.
+        if ns.hasSuffix("\n"), manager.extraLineFragmentTextContainer != nil { result.append((line, manager.extraLineFragmentRect.minY + top)) }
+        return result
     }
 }
 
@@ -60,6 +78,8 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     var dock: (() -> Void)?
     var controls: [String: NSButton] = [:], symbols: [String: String] = [:]
     var documentKey = "", reveal = -1
+    /// Soft wrap (`SourceWrap.swift`), from the editor state's `wrap`.
+    var wraps = true, indentPending: NSRange?
     init() {
         super.init(frame: .zero); wantsLayer = true; layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         header.orientation = .horizontal; header.spacing = 6
@@ -70,7 +90,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         for (name, symbol, label) in [("back", "chevron.left", "Back"), ("forward", "chevron.right", "Forward")] { header.addArrangedSubview(iconButton(name, symbol, label)) }
         for view in [filename, edited, spacer] { header.addArrangedSubview(view) }
-        for (name, symbol, label) in [("popout", "arrow.up.left.and.arrow.down.right", "Pop Out Editor"), ("hide", "xmark", "Close Editor")] { header.addArrangedSubview(iconButton(name, symbol, label)) }
+        for (name, symbol, label) in [("more", "ellipsis.circle", "More"), ("popout", "arrow.up.left.and.arrow.down.right", "Pop Out Editor"), ("hide", "xmark", "Close Editor")] { header.addArrangedSubview(iconButton(name, symbol, label)) }
         let split = NSSplitView(); split.isVertical = true; split.dividerStyle = .thin
         let sidebar = NSView(), content = NSView(); split.addArrangedSubview(sidebar); split.addArrangedSubview(content)
         search.placeholderString = "Filter files"; search.delegate = self
@@ -79,17 +99,20 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         treeScroll.documentView = tree
         let operations = NSStackView(); operations.spacing = 6
         for (name, label) in [("create", "+"), ("rename", "Rename"), ("delete", "Trash")] { let b = NSButton(title: label, target: self, action: #selector(buttonAction(_:))); b.identifier = NSUserInterfaceItemIdentifier(name); b.controlSize = .small; operations.addArrangedSubview(b) }
-        scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true; scroll.autohidesScrollers = true
+        scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         code.isRichText = false; code.isEditable = true; code.isSelectable = true; code.allowsUndo = true; code.usesFindBar = true; code.isIncrementalSearchingEnabled = true
         code.isAutomaticQuoteSubstitutionEnabled = false; code.isAutomaticDashSubstitutionEnabled = false; code.isAutomaticTextReplacementEnabled = false; code.isAutomaticSpellingCorrectionEnabled = false
         code.font = SourceSyntaxTheme.regular; code.textColor = .labelColor; code.typingAttributes = SourceSyntaxTheme.plain; code.textContainerInset = NSSize(width: 8, height: 10)
         code.minSize = NSSize(width: 0, height: 0); code.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         code.isVerticallyResizable = true; code.isHorizontallyResizable = false; code.autoresizingMask = [.width]; code.textContainer?.widthTracksTextView = true
         code.layoutManager?.allowsNonContiguousLayout = true
+        code.defaultParagraphStyle = SourceSyntaxTheme.paragraph(0); code.textStorage?.delegate = self
         code.delegate = self; scroll.documentView = code
         scroll.verticalRulerView = SourceLineRuler(scroll: scroll, text: code); scroll.hasVerticalRuler = true; scroll.rulersVisible = true
-        scroll.contentView.postsBoundsChangedNotifications = true
+        scroll.contentView.postsBoundsChangedNotifications = true; scroll.contentView.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in self?.scheduleViewport() }
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in self?.fitWidth() }
+        setWrap(true)
         code.component = { [weak self] name in self?.send("component", ["name":name]) }
         image.imageScaling = .scaleProportionallyUpOrDown
         binary.alignment = .center; binary.textColor = .secondaryLabelColor
@@ -138,7 +161,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         default: return super.performKeyEquivalent(with: event)
         }
     }
-    @objc func buttonAction(_ sender: NSButton) { perform(sender.identifier?.rawValue ?? "") }
+    @objc func buttonAction(_ sender: NSButton) { if sender.identifier?.rawValue == "more" { showMore(sender) } else { perform(sender.identifier?.rawValue ?? "") } }
     func perform(_ action: String) {
         if action == "popout" { send(state["popped"] as? Bool == true ? "dock" : "popout"); return }
         if action == "reload" && state["dirty"] as? Bool == true || action == "delete" {
@@ -163,6 +186,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         controls["back"]?.isEnabled = value["canBack"] as? Bool == true
         controls["forward"]?.isEnabled = value["canForward"] as? Bool == true
         if value["popped"] as? Bool == true { setIcon("popout", "arrow.down.right.and.arrow.up.left", "Dock Editor") } else { setIcon("popout", "arrow.up.left.and.arrow.down.right", "Pop Out Editor") }
+        if let wrap = value["wrap"] as? Bool, wrap != wraps { setWrap(wrap) }
         let document = value["document"] as? [String: Any] ?? [:], incoming = value["text"] as? String ?? "", nextRevision = value["revision"] as? Int ?? 0
         let key = root + "/" + source, changed = key != documentKey
         var replaced = false
@@ -184,11 +208,11 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         if let path = value["mediaPath"] as? String, let media { if media["kind"] as? String == "image" { image.isHidden = false; image.image = NSImage(contentsOfFile: path) } else { player.isHidden = false; if changed { player.player?.pause(); player.player = AVPlayer(url: URL(fileURLWithPath: path)) } } } else { player.player?.pause() }
         tree.selectFile(source)
         // A replaced text shows plain until the backend's highlight for this revision lands.
-        if replaced { resetHighlight(nextRevision) }
+        if replaced { resetHighlight(nextRevision); applyIndent() }
         measure?("update", nextRevision, CACurrentMediaTime() - started)
     }
     /// Highlighting is the backend's (LKM-183): an edit only sends the text and revision.
-    func textDidChange(_ notification: Notification) { guard !updating else { return }; revision += 1; send("edit", ["text":code.string, "revision":revision]); scroll.verticalRulerView?.needsDisplay = true }
+    func textDidChange(_ notification: Notification) { guard !updating else { return }; applyIndent(); revision += 1; send("edit", ["text":code.string, "revision":revision]); scroll.verticalRulerView?.needsDisplay = true }
     func filter() { tree.update(files, query: search.stringValue) }
     func controlTextDidChange(_ obj: Notification) { filter() }
     func windowShouldClose(_ sender: NSWindow) -> Bool { send("hide"); return false }

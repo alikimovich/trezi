@@ -12,6 +12,8 @@ export interface NativeEditorState {
   canBack?: boolean
   canForward?: boolean
   reveal?: number
+  /** Soft wrap at the visible width (LKM-192); the `trezi:source-wrap` preference. */
+  wrap?: boolean
   busy: boolean
   error: string
   conflict: boolean
@@ -33,7 +35,10 @@ export type NativeEditorAction = {
     | 'delete'
     | 'component'
     | 'highlight'
+    | 'wrap'
   source?: string
+  /** `wrap` (LKM-192): the new Wrap Lines state. */
+  wrap?: boolean
   text?: string
   name?: string
   revision?: number
