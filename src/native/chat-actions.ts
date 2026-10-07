@@ -1,5 +1,6 @@
 import type { NativeChatAction } from '../shared/native-chat'
 import { setupPrompt } from '../shared/setup-prompt'
+import { requestTarget } from './chat-agent-card'
 import type { NativeChatController } from './chat-controller'
 import { loginAction } from './chat-login'
 import { editQueued } from './chat-queue'
@@ -41,11 +42,30 @@ export async function cardAction(
       await invoke('agent:respond-permission', action.id, action.value)
       chat.permissions = chat.permissions.filter((p) => p.id !== action.id)
       break
-    case 'question':
-      if (!chat.questions.some((q) => q.id === action.id)) return
+    case 'question': {
+      // A background agent's question (LKM-193) takes the same answer path as the chat's.
+      const spawn = chat.context?.spawns.find((s) => s.question?.id === action.id)
+      if (!spawn && !chat.questions.some((q) => q.id === action.id)) return
       await invoke('agent:respond-question', action.id, action.answers ?? null)
       chat.questions = chat.questions.filter((q) => q.id !== action.id)
+      if (spawn)
+        effect({
+          type: 'spawn',
+          event: {
+            type: 'question-resolved',
+            id: action.id!,
+            projectKey: chat.chat,
+            sessionId: spawn.id
+          }
+        })
       break
+    }
+    case 'spawn-open-target': {
+      const spawn = chat.context?.spawns.find((s) => s.id === action.id)
+      const target = spawn && requestTarget(spawn.label)
+      if (target) effect({ type: 'source', source: target.source })
+      break
+    }
     case 'queue-remove':
       chat.queue = chat.queue.filter((q) => `queued-${q.id}` !== action.id)
       break

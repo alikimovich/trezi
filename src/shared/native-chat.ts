@@ -34,6 +34,19 @@ export interface NativeChatCard {
   /** The detail with full paths, for the tooltip and Copy, when `detail` is collapsed. */
   fullDetail?: string
   actions: { label: string; action: string; value?: string; disabled?: boolean }[]
+  /** A background agent's card (LKM-193). */
+  agent?: NativeAgentCard
+}
+export interface NativeAgentCard {
+  status: 'queued' | 'running' | 'waiting'
+  statusLabel: string
+  /** The whole request, and its collapsed form cut at a word (equal when short). */
+  request: string
+  preview: string
+  /** The file:line the request targets; Open shows it in the editor. */
+  target?: { label: string; source: string }
+  /** The question the agent waits on, shown and answered like a chat question. */
+  question?: QuestionRequest
 }
 export interface NativeChatActivity {
   label: string

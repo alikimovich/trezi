@@ -810,6 +810,15 @@ function findSessionWithQuestion(id: string): ProviderSession | undefined {
   return undefined
 }
 
+/** A background agent's pending question (LKM-193). The owner registers only interactive
+ *  chats' questions, so a spawn's is settled here, by its own session. */
+function findSpawnWithQuestion(id: string): ProviderSession | undefined {
+  for (const { session } of spawns.values()) {
+    if (session.pendingQuestions?.has(id)) return session
+  }
+  return undefined
+}
+
 /** Settle a pending prompt and tell the renderer to drop its card. */
 function resolvePending(s: ProviderSession, id: string, behavior: 'allow' | 'deny'): void {
   const p = s.pending.get(id)
@@ -1419,6 +1428,8 @@ export function registerAgentIpc(
   ipcMain.handle(
     'agent:respond-question',
     async (_e, id: string, answers: QuestionAnswers | null) => {
+      const background = findSpawnWithQuestion(id)
+      if (background) return resolveQuestion(background, id, answers)
       const chat = await conversation()
         .resolve(id, 'question')
         .catch(() => undefined)
@@ -1732,6 +1743,9 @@ export function registerAgentIpc(
       return
     }
     spawn.cancelled = true
+    // A question still waiting for the user is dismissed, so the turn can stop (LKM-193).
+    for (const qid of [...(spawn.session.pendingQuestions?.keys() ?? [])])
+      resolveQuestion(spawn.session, qid, null)
     // → emits done → finalizeSpawn commits any work. Interrupting a turn that
     // already finished/aborted makes the SDK throw "Operation aborted" — a stop
     // that arrives late is a no-op, not an error.

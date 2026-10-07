@@ -9,6 +9,7 @@ import type {
 } from '../shared/native-chat'
 import { providerOptions, resolveSelection } from '../shared/provider-choices'
 import { formatTokens, isEmptyUsage, type TokenUsage } from '../shared/run-stats'
+import { agentCard } from './chat-agent-card'
 import { menuItems } from './chat-island-refs'
 import { loginCard } from './chat-login'
 import { queueNote, sendBlock } from './chat-queue'
@@ -203,13 +204,7 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
       title: 'Publish notes as a PR',
       actions: [{ label: 'Publish PR', action: 'publish-notes' }]
     })
-  for (const spawn of context?.spawns ?? [])
-    cards.push({
-      id: spawn.id,
-      title: spawn.status === 'queued' ? 'Queued agent' : 'Background agent',
-      detail: [spawn.label, spawn.activity].filter(Boolean).join('\n\n'),
-      actions: [{ label: 'Cancel', action: 'spawn-stop' }]
-    })
+  for (const spawn of context?.spawns ?? []) cards.push(agentCard(spawn))
   const currentActivity = activity(chat)
   const thinking = !!currentActivity?.animated && currentActivity.kind !== 'applying'
   const stop = chat.isRunning && !chat.text.trim() && !chat.attachments.length

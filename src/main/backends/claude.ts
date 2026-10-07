@@ -1188,7 +1188,8 @@ async function startSession(
           append: treziRules({
             previewTools: true,
             agentGitAccess: options.agentGitAccess,
-            projectMemory: ctx?.projectMemory
+            projectMemory: ctx?.projectMemory,
+            background: !!ctx?.sessionId
           })
         },
         // The trezi MCP server (preview_location / preview_screenshot / chat_island /

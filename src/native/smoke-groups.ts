@@ -72,6 +72,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'native-chat': ['chat'],
   'sent-attachments': ['chat'],
   'comment-rows': ['chat'],
+  'agent-question': ['chat'],
   'chat-text': ['chat'],
   composer: ['composer'],
   'chat-drafts': ['composer'],
