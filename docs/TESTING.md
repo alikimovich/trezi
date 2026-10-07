@@ -371,6 +371,10 @@ not change before the release. It writes `shadow-light-drag.png` (mid-drag),
 test `test/island-flicker.mjs` models a gap HMR to record the same counts before
 and after the fix. With TreziHost built, `test/island-flicker-frameworks.mjs` runs
 the same drag on real Next.js Webpack HMR and a Vite/CSS module fixture.
+`test/dependency-refresh-vite.mjs` (LKM-197) runs real Vite with a local `file:`
+dependency through the Swift runtime owner and WebKit: after the dependency's CSS
+changes, the watch's clean restart and hard reload show the new computed style. It
+SKIPs without a native build, a working `bun install` or local port binding.
 `test/island-override.mjs` runs the preview override module on a fake DOM. It checks
 that the override survives HMR remounts and that it is removed only on the final value.
 

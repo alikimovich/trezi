@@ -10,7 +10,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Agent tools `reload_preview {hard}` and `restart_dev_server {cleanCache}` (`src/main/preview-refresh-tools.ts`, answered by `src/native/preview-refresh.ts`); `open_preview` reports `assets` freshness (`src/main/preview-freshness.ts`); rules v33.
 - [x] Preview toolbar "…" menu: Reload Without Cache, Restart Dev Server (clean cache) (`src/native/ToolbarMore.swift`).
 - [x] Tests: unit `preview-refresh`, `native-workspace-controller`, `runtime-owner` (clean start), `rules`, policy golden and tool inventories.
-- [ ] Open: a native fixture Vite project with a local `file:` dependency whose CSS changes, asserting the new computed style end to end (the pieces are unit-tested; the full chain needs a real Vite install in the smoke profile).
+- [x] `test/dependency-refresh-vite.mjs` (fixture `test/fixtures/dependency-refresh-vite`): real Vite with a local `file:../ui` dependency, started through the Swift RuntimeOwner's `devserver:start`, shown in WebKit; the dependency's CSS and version change, the dependency watch fires after two polls, the clean start removes `node_modules/.vite`, the hard reload keeps the path, `getComputedStyle` shows the new colour and the page's assets match the dev server (the `assets.matches` comparison). SKIPs without a native build, a working install or local port binding.
+- [x] Native smoke `toolbar-more` (group `core`, `src/native/smoke-toolbar-more.ts`): the menu lists both entries and is enabled; Reload Without Cache navigates the preview; Restart Dev Server (clean cache) passes through "Restarting <name> with a clean cache…", removes a planted `node_modules/.vite` and loads again.
+- [x] The "…" item has `visibilityPriority = .low` and is hidden in windows narrower than 1000 pt (`fitMore` in `src/native/ToolbarMore.swift`, macOS 15+), so it no longer widens the right toolbar group at the 850 pt minimum; the reserved address-block inset moves with it in the same resize pass. `toolbar-address` asserts the item's state per width and pins the right-group inset per state.
 
 ## Ghost parked state and open_preview results (LKM-196)
 

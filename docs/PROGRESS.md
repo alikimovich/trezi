@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-197 repair: end-to-end test, menu smoke, toolbar width
+
+- **End to end.** `test/dependency-refresh-vite.mjs` (fixture `test/fixtures/dependency-refresh-vite/{app,ui}`) installs the fixture with Bun (`"ui": "file:../ui"`, normalised to a real copy because Vite refuses symlinks outside its root), starts real Vite through `devserver:start` on the compiled Swift RuntimeOwner, and shows it in system WebKit. It plants a marker in `node_modules/.vite`, rewrites `ui`'s CSS and version, and ticks `DependencyWatch` (quiet, then change seen once, then fired on the second poll). The refresh is the same pair the controller issues: a `cleanCache` start and a hard `reload`. It asserts the marker is gone, the path is kept, `getComputedStyle` has the new colour and every page asset equals what Vite serves (`staleAsset`, the `assets.matches` rule). It does not drive `NativeWorkspaceController.refreshEnvironment`; that wiring stays covered by `native-workspace-controller`. It SKIPs without TreziHost, a working install or local port binding, so it never ran in the worker sandbox.
+- **Menu smoke.** Native check `toolbar-more` (group `core`): menu titles and enabled state, an unknown row refused, Reload Without Cache loads the page again, Restart Dev Server (clean cache) passes through its busy label and back to running with the planted `node_modules/.vite` removed.
+- **Toolbar width.** `.low` alone changed nothing: at 850 pt AppKit still fits every item (the address block just shrinks), so the right group stayed 374 pt wide. The "…" item now leaves the toolbar in windows narrower than 1000 pt (`NSToolbarItem.isHidden`, macOS 15+, `fitMore`), taking the right group's inset from 374 to 330 pt at the minimum. The address block is sized in the same resize pass, so `fitMore` moves the reserved inset by the item's measured shift first (a first attempt without that left the block 44 pt short inside the resize). `shellInspect` reports `moreVisible`; `toolbar-address` asserts the state per width and pins the inset per state. Below 1000 pt the two actions remain with the agent tools.
+
 ## 2026-10-07 — LKM-197: clean restart and hard reload after dependency changes
 
 - **Cause.** After a dependency upgrade the preview kept the old CSS. Vite serves pre-bundled dependencies from `node_modules/.vite`, and WebKit kept its memory/disk caches, so a plain restart plus a normal reload could still show the old styles.

@@ -89,6 +89,7 @@ const UNIT = [
   'island-flicker',
   'island-override',
   'island-flicker-frameworks',
+  'dependency-refresh-vite',
   'native-context',
   'native-updates',
   'native-inspector',
@@ -214,6 +215,8 @@ const UNIT_TIMEOUT_MS = {
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   'keychain-rebuild': 300_000,
+  // Real Vite install, Swift runtime fixture and a WebKit load.
+  'dependency-refresh-vite': 300_000,
   'setup-vite-real': 300_000
 }
 // `--typecheck` runs these next to the tests (quick verification in one command).

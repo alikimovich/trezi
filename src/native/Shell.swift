@@ -49,6 +49,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     // The address block and its layout (`ToolbarAddress.swift`).
     var addressWidth: NSLayoutConstraint?
     var addressLayout = ToolbarAddressLayout()
+    /// How far the right groups move when the "…" item leaves or joins the toolbar (`ToolbarMore.swift`).
+    var moreShift: CGFloat = 44
     let addressHeader = ToolbarAddressView()
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor
@@ -156,6 +158,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// The chat header follows the chat column; the address block fills the rest (`ToolbarAddressLayout`).
     func alignChatHeader() {
         let windowWidth = window?.frame.width ?? 1320
+        fitMore(toolbarItems["more"], after: toolbarItems["publish"], windowWidth: windowWidth)
         var chatTrailing: CGFloat?
         if chatHeader.window != nil, chatHeaderWidth != nil {
             let detail = split.splitViewItems[1].viewController.view

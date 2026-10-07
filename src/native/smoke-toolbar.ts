@@ -8,6 +8,8 @@ import { waitFor } from './smoke-wait'
 const background = () => process.env.TREZI_NATIVE_BACKGROUND_TEST === '1'
 /** NSToolbar shifts the right groups once the address block comes closer than this (ToolbarAddress.swift). */
 const PINNED_GAP = 16
+/** Below this window width the "…" item is not in the toolbar (`moreMinimumWindow`, ToolbarMore.swift). */
+const MORE_MINIMUM_WINDOW = 1000
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 type Toolbar = Record<string, any>
 
@@ -41,6 +43,7 @@ const pick = (state: Toolbar) => ({
   branchChevronLeading: state.branchChevronLeading,
   branchChevronTrailing: state.branchChevronTrailing,
   branchChevronGap: state.branchChevronGap,
+  moreVisible: state.moreVisible,
   windowAppearance: state.windowAppearance
 })
 
@@ -127,7 +130,9 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
   )
   const defaultWidth = Math.round(initial.windowWidth)
   const evidence: Record<string, unknown> = {}
-  let pinnedInset: number | undefined
+  // The "…" item (LKM-197) leaves a window narrower than MORE_MINIMUM_WINDOW, which
+  // shortens the right groups' inset by its width: each state keeps its own pinned inset.
+  const pinnedInsets = new Map<boolean, number>()
   for (const [name, width] of [
     ['minimum', 850],
     ['wide', 1800],
@@ -158,10 +163,17 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
         `Toolbar ${name}: ${key} is final in the resize pass (no reflow later): ${JSON.stringify({ live: pick(live), settled: pick(settled) })}`
       )
     const inset = settled.windowWidth - settled.rightGroupLeading
-    pinnedInset ??= inset
+    const moreShown = Boolean(settled.moreVisible)
+    assert.equal(
+      moreShown,
+      width >= MORE_MINIMUM_WINDOW,
+      `Toolbar ${name}: the "…" item shows only in windows of ${MORE_MINIMUM_WINDOW} pt or more (${width} pt)`
+    )
+    const pinnedInset = pinnedInsets.get(moreShown) ?? inset
+    pinnedInsets.set(moreShown, pinnedInset)
     assert.ok(
       Math.abs(inset - pinnedInset) <= 1,
-      `Toolbar ${name}: the right groups stay pinned to the trailing edge (${inset} vs ${pinnedInset})`
+      `Toolbar ${name}: the right groups stay pinned to the trailing edge (${inset} vs ${pinnedInset}, "…" ${moreShown ? 'shown' : 'in the overflow menu'})`
     )
     if (name === 'wide') {
       assert.ok(
@@ -202,6 +214,11 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
       capture: await capture(host, artifacts, name)
     }
   }
+  const [hiddenInset, shownInset] = [pinnedInsets.get(false), pinnedInsets.get(true)]
+  assert.ok(
+    hiddenInset !== undefined && shownInset !== undefined && hiddenInset < shownInset,
+    `Toolbar minimum: without the "…" item the right groups are narrower (${hiddenInset} vs ${shownInset})`
+  )
   writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
 }
 

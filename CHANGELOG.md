@@ -11,7 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
-- The preview toolbar's … menu has Reload Without Cache and Restart Dev Server (clean cache); agents get `reload_preview` (with `hard`) and `restart_dev_server` (with `cleanCache`), and `open_preview` says whether the page's CSS/JS matches what the dev server serves now (LKM-197).
+- The preview toolbar's … menu (windows 1000 pt or wider) has Reload Without Cache and Restart Dev Server (clean cache); agents get `reload_preview` (with `hard`) and `restart_dev_server` (with `cleanCache`), and `open_preview` says whether the page's CSS/JS matches what the dev server serves now (LKM-197).
 - Agents can resolve a conflicting pull request with Trezi's Git merge tools, keep the two-parent merge in the published branch, and choose Managed or Full Agent Git access in Settings (LKM-188).
 - Publish offers Resolve with agent when a pull request has merge conflicts (LKM-188).
 - Native macOS app: a Swift/AppKit chat and shell beside the project's live preview in system WebKit, started with `open -a Trezi` or `trezi`.

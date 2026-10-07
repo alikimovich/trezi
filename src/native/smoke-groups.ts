@@ -63,6 +63,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'source-wrap': ['core'],
   'preview-inspector': ['core'],
   'agent-preview': ['core'],
+  'toolbar-more': ['core'],
   'publish-progress': ['core'],
   'live-provider': ['core'],
   // One fixture scope covers both; smoke-islands reads the selection to run either part.
