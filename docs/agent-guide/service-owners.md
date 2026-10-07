@@ -108,7 +108,7 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
                   stays a JS helper
                   (docs/SWIFT-BACKEND-RUNTIME.md)
   RepositoryOwner.swift / RepositoryEffects.swift / RepositoryLanding.swift /
-  RepositoryCleanup.swift / RepositoryMerge.swift / RepositoryJournal.swift / RepositoryGit.swift /
+  RepositoryBranches.swift / RepositoryCleanup.swift / RepositoryMerge.swift / RepositoryJournal.swift / RepositoryGit.swift /
   GitMessages.swift   the repository coordinator
                   (LKM-95): one FIFO lane per repository common directory (Bun's
                   `enqueueRepoWrite` becomes a lease on it), every Trezi Git effect

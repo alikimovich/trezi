@@ -34,6 +34,7 @@ export const SOURCES = [
   'RepositoryJournal',
   'RepositoryEffects',
   'RepositoryLanding',
+  'RepositoryBranches',
   'RepositoryCleanup',
   'RepositoryMerge',
   'RepositoryOwner',

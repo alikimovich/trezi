@@ -1175,9 +1175,11 @@ export interface PublishResult {
   ok: boolean
   /** The created PR URL on success. */
   url?: string
-  /** The fresh trezi/* branch created to continue on (publish.ship). */
+  /** The work branch publish kept the live checkout on (publish.ship). */
   branch?: string
   error?: string
+  /** Published, but the work branch could not take in the merged base (LKM-185). */
+  notice?: string
   /** Per-file merge conflicts left for explicit resolution; never auto-resolved. */
   conflictFiles?: string[]
   /** Local refs preserving the pre-reconciliation tips. */

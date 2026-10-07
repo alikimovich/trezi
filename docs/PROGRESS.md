@@ -2,6 +2,38 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
+
+- **Why.** After a publish, landed chat commits were unreachable from `trezi/main`. Its reflog said `branch: Created from refs/remotes/origin/trezi/main`, which is Git's DWIM `checkout <branch>` after the local branch was deleted while a stale remote-tracking ref survived.
+  - In Trezi that checkout was `WorkflowPublish.recoverShip`.
+  - Three things set it up:
+    - `gh pr merge --delete-branch`, run in the live checkout, checks out the base and `branch -D`s the work branch, including a landing made while the description was written;
+    - the deletion on GitHub leaves the tracking ref stale;
+    - the old cleanup (`checkout base` → `pull --ff-only` → `branch -D` → `checkout -b`) fails on a diverged base and falls into `recoverShip`.
+  - Separately, the open-time `git:ensure` / publish heal switched a checkout that was left on main onto an existing stale `trezi/main`.
+  - The exact original timeline is not known. The test reproduces these mechanisms.
+- **Publish** (`WorkflowPublish.swift`):
+  - The merge runs without `--delete-branch`. Cleanup deletes the remote branch itself (`push --force-with-lease=refs/heads/B:<pushed head> --delete`) and fetches with `--prune`.
+  - It fast-forwards the local base only when that is a fast-forward, and never checks out, deletes or recreates a branch.
+  - The work branch fast-forwards to the merged base or merges it (`Sync … with the merged …`), with recovery refs for both tips first. If that merge fails, it is aborted, the branch is kept and the result carries a `notice` (logged as a warning).
+  - `recoverShip` is gone.
+  - "Nothing to publish" also covers a branch whose tree equals the base, which is what a squash-synced branch looks like.
+- **Repository owner** (`RepositoryBranches.swift`):
+  - `switchBranch` onto an existing branch fast-forwards it to HEAD (old tip at a recovery ref) or, when it diverged, refuses and stays (`joinBranch`).
+  - New read `strandedLandings`: other local branches with commits by `trezi@local` (not chat or comment worktree branches) that HEAD lacks, skipping ones whose merge would change nothing (`merge-tree --write-tree`).
+  - New mutation `restoreLandings` (intent `restore`): recovery refs for both tips, then a `--no-ff` merge. A conflict is left for per-file resolution.
+- **UI.** `src/native/stranded-landings.ts` runs once per project per launch from activation. It shows a 30 s toast with Bring them back and Ignore; Ignore is stored per tip in `trezi:stranded-landings-ignored`. After a merge it refreshes the branch label and the environment.
+- **Tests.**
+  - New `test/branch-safety.mjs` (unit) runs the real Swift owners with `fake-gh`, which now does real gh's local `--delete-branch` effects. It covers:
+    - a landing during describe;
+    - the same with the merge reply lost and a landing between attempts;
+    - an overlapping base;
+    - ensure refuse and fast-forward;
+    - the reported state (landings on main, `trezi/main` recreated by DWIM), found by the notice and merged back;
+    - a conflict, Ignore, and a cherry-picked change that is not listed.
+  - Against the old `WorkflowPublish.swift` its first scenario fails: both landings are unreachable.
+  - `workflow-durability` now expects the kept, synced branch instead of a reset to main.
+
 ## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
 
 - `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.

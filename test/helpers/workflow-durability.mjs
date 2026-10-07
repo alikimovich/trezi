@@ -22,6 +22,15 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     readdirSync(join(w.profile, 'service/workflows')).map((name) =>
       readFileSync(join(w.profile, 'service/workflows', name), 'utf8')
     )
+  // LKM-185: after a merge the work branch is kept and merges the squashed main, never reset to it.
+  const synced = (w) => {
+    assert.equal(git(w.local, 'rev-parse', '--abbrev-ref', 'HEAD'), 'trezi/main')
+    git(w.local, 'merge-base', '--is-ancestor', git(w.origin, 'rev-parse', 'main'), 'HEAD')
+    assert.equal(
+      git(w.local, 'rev-parse', 'HEAD^{tree}'),
+      git(w.origin, 'rev-parse', 'main^{tree}')
+    )
+  }
   const steps = (record) => record.steps.map((step) => `${step.name}:${step.state}`)
   const crashed = async (fixture, promise) => {
     await assert.rejects(promise, (error) => error.code === 'deadlineExceeded')
@@ -99,7 +108,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     const state = snapshot(w)
     assert.deepEqual(state.remote, ['main'])
     assert.equal(state.mainLog[0], 'Update the greeting (#1)')
-    assert.equal(git(w.local, 'rev-parse', 'HEAD'), git(w.origin, 'rev-parse', 'main'))
+    synced(w)
     const done = (await owner.workflows()).at(-1)
     assert.deepEqual(done.steps.find((step) => step.name === 'merge').receipt, { adopted: true })
     log('durability crash after merge')
@@ -120,7 +129,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     const again = await owner.publish(w.local, 'merge', describe)
     assert.equal(again.ok, true, JSON.stringify(again))
     assert.deepEqual(gh(w), { prCreate: 1, prEdit: 1, prMerge: 1 })
-    assert.equal(git(w.local, 'rev-parse', 'HEAD'), git(w.origin, 'rev-parse', 'main'))
+    synced(w)
     log('durability GitHub failing after acting')
   }
 

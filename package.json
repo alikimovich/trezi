@@ -73,6 +73,7 @@
     "test:editing-owner": "bun test/editing-owner.mjs",
     "test:workflow-owner": "bun test/workflow-owner.mjs",
     "test:workflow-durability": "bun test/workflow-durability.mjs",
+    "test:branch-safety": "bun test/branch-safety.mjs",
     "test:platform-owner": "bun test/platform-owner.mjs",
     "test:annotation-store": "bun test/annotation-store.mjs",
     "test:retirement-census": "bun test/retirement-census.mjs",

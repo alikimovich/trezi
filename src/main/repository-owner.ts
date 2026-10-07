@@ -92,6 +92,10 @@ export interface RepositoryOwner {
   ): Promise<{ committed: boolean; sha?: string; files: string[] }>
   checkout(root: string, branch: string): Promise<BranchResult>
   switchBranch(root: string, branch: string): Promise<BranchResult>
+  /** Other local branches holding landed chat commits the checkout lacks (LKM-185, read only). */
+  strandedLandings(root: string): Promise<StrandedLandings>
+  /** Explicit user intent: merges `branch`, still at `tip`, into the checked-out branch. */
+  restoreLandings(root: string, branch: string, tip: string): Promise<RestoredLandings>
   /** Operations a previous service left unfinished, with the recovery refs that hold their work. */
   status(): Promise<RepositoryStatus>
   /** The recovery refs in `roots` and in the journal's repositories (read only). */
@@ -125,6 +129,18 @@ export interface RepositoryStatus {
   /** Open entries of an older journal, closed without a new report (they were reported at every earlier launch). */
   closedEarlier: number
   journal?: string
+}
+
+export interface StrandedLandings {
+  current: string | null
+  branches: Array<{ branch: string; tip: string; count: number }>
+}
+
+export interface RestoredLandings {
+  merged: boolean
+  files: string[]
+  conflictFiles: string[]
+  recoveryRefs: string[]
 }
 
 export interface RecoveryRepository {
