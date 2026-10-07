@@ -142,6 +142,12 @@ export class NativeGitController {
         return
       }
       await this.workspace.transact(key, async () => {
+        // transact queues behind other work on the project: a Cancel that arrived while
+        // waiting must still stop the publish before anything changes.
+        if (run.cancelling) {
+          result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
+          return
+        }
         this.log.append(
           mode === 'pr' ? 'Creating pull request…' : 'Publishing and merging changes…'
         )

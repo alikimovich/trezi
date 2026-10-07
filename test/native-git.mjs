@@ -14,7 +14,8 @@ let branch = 'main',
   connected = true,
   conflict = false,
   release,
-  paused = false
+  paused = false,
+  queued = null
 const workspace = {
   active: a,
   state: { projects: [a, b] },
@@ -22,6 +23,8 @@ const workspace = {
   transact: async (key, fn) => {
     const entry = workspace.state.projects.find((p) => p.key === key)
     if (!entry) throw new Error('Closed')
+    // Other work on the project holds the queue until `queued` resolves.
+    if (queued) await queued
     await fn(entry)
   },
   refreshEnvironment: async (...args) => calls.push(['refresh', ...args])
@@ -152,6 +155,27 @@ await tick()
 assert.equal(git.decorate({}).publishing, false)
 assert.equal(lastToast().message, 'Pull request #7 opened')
 progress = null
+// Cancel while publish() waits in the project's queue: nothing is shipped.
+let unblock
+queued = new Promise((resolve) => {
+  unblock = resolve
+})
+const shipsBefore = calls.filter((c) => c[0] === 'publish:ship').length
+const queuedPublish = git.publish('a')
+await tick()
+assert.equal(git.decorate({}).publishing, true)
+await git.cancel('a')
+assert.equal(git.decorate({}).publishLabel, 'Cancelling…')
+unblock()
+queued = null
+await queuedPublish
+assert.equal(
+  calls.filter((c) => c[0] === 'publish:ship').length,
+  shipsBefore,
+  'A publish cancelled while queued never ships'
+)
+assert.equal(git.decorate({}).publishing, false)
+assert.equal(lastToast().message, 'Publish cancelled')
 connected = false
 await git.publish('a')
 assert.equal(sheets.current.state.title, 'Connect to GitHub')
