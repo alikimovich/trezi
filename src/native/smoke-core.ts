@@ -8,6 +8,7 @@ import type { NativeGitController } from './git-controller'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
+import { checkAgentQuestion } from './smoke-agent-question'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
 import { checkChatText } from './smoke-chat-text'
@@ -806,6 +807,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkCommentRows(host, artifacts)
+      }
+    },
+    {
+      name: 'agent-question',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkAgentQuestion(host, context, artifacts)
       }
     },
     {

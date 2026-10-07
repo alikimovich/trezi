@@ -76,7 +76,7 @@ export interface PreviewState {
   frameMode: boolean
   layersWatch: boolean
   statusText: string | null
-  pins: { id: string; selector: string }[]
+  pins: { id: string; selector: string; label?: string }[]
 }
 
 /** The bits of index.ts (views, window, state) this module is allowed to touch. */
@@ -333,7 +333,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   })
 
   // v3 annotation pins: renderer pushes the list → preview; clicks come back.
-  ipcMain.on('preview:set-annotations', (_e, pins: { id: string; selector: string }[]) => {
+  ipcMain.on('preview:set-annotations', (_e, pins: PreviewState['pins']) => {
     state.pins = Array.isArray(pins) ? pins : []
     toPreview(PREVIEW_SET_PINS, state.pins)
   })

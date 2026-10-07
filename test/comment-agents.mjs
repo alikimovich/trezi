@@ -31,6 +31,8 @@ mock.module('../src/main/backends/index.ts', () => ({
       const session = {
         record: cap.record,
         pending: new Map(),
+        pendingQuestions: new Map(),
+        emit: (event) => events.push({ ...event, sessionId: context.sessionId }),
         finalize: cap.finalize,
         dispose() {},
         shutdown() {},
@@ -104,6 +106,26 @@ try {
   await wait(() => parallel.every((r) => finished(r.spawnId)))
   assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'purple\n')
   assert.equal(readFileSync(join(repo, 'border.txt'), 'utf8'), 'none\n')
+  // LKM-193: a background agent's question settles through the chat's answer path, and
+  // Cancel dismisses one still waiting.
+  const asking = await start(),
+    d = providers.at(-1)
+  assert.equal(d.context.sessionId, asking.spawnId)
+  const settled = []
+  d.session.pendingQuestions.set('q-1', { settle: (answers) => settled.push(answers) })
+  await invoke('agent:respond-question', 'q-1', { 'Which color?': 'Teal' })
+  assert.deepEqual(settled, [{ 'Which color?': 'Teal' }])
+  assert.ok(
+    events.some(
+      (e) => e.type === 'question-resolved' && e.id === 'q-1' && e.sessionId === asking.spawnId
+    )
+  )
+  d.session.pendingQuestions.delete('q-1')
+  d.session.pendingQuestions.set('q-2', { settle: (answers) => settled.push(answers) })
+  await invoke('agent:spawn-interrupt', asking.spawnId)
+  assert.deepEqual(settled.at(-1), null, 'Cancel dismisses the waiting question')
+  await wait(() => finished(asking.spawnId))
+  assert.equal(finished(asking.spawnId).outcome, 'cancelled')
   const broken = await start(),
     c = providers.at(-1)
   rmSync(c.root, { recursive: true, force: true })

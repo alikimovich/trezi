@@ -334,6 +334,8 @@ export function installNativeInspector(
             oneLine(value.text, 300) || `<${oneLine(value.el.tag, 32)}>`
           )
           .then((result) => {
+            // The comment's element carries a "?" pin while its agent asks (LKM-193).
+            if (result.ok) context.spawnPin(result.spawnId, entry.root, value.el.selector)
             if (!result.ok && ['not-a-repo', 'unsupported-backend'].includes(result.reason))
               return chat.command({ type: 'submit', chat: parent, text: prompt })
             if (!result.ok) report(result.reason ?? 'Could not start the comment agent.')

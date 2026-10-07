@@ -3,6 +3,8 @@ import SwiftUI
 struct NativeQuestionCard: View {
     let request: ChatQuestionRequest
     @ObservedObject var model: ChatModel
+    /// False inside a background agent's card (LKM-193), which draws the frame.
+    var framed = true
     @State private var step = 0
     @State private var selected: [Int: Set<String>] = [:]
     @State private var other: [Int: String] = [:]
@@ -49,6 +51,6 @@ struct NativeQuestionCard: View {
                     }.disabled(answer(step).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-        }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        }.padding(framed ? 12 : 0).background(framed ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 10))
     }
 }

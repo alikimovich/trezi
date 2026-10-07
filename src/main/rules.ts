@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 28
+export const TREZI_RULES_VERSION = 29
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -27,6 +27,8 @@ export function treziRules(opts?: {
   agentGitAccess?: 'managed' | 'full'
   controlTools?: boolean
   projectMemory?: string
+  /** A detached comment/visual-edit agent (LKM-193): when to ask and when to choose. */
+  background?: boolean
 }): string {
   const lines: string[] = [
     `# Trezi operating rules (v${TREZI_RULES_VERSION})`,
@@ -114,6 +116,18 @@ export function treziRules(opts?: {
       `using these tools. They are the supported way for you to operate the Trezi harness.`,
       `Never call a discard/reset operation on the user's behalf; preserve both sides and`,
       `resolve with best judgment unless the user explicitly asks to abandon changes.`
+    )
+  }
+
+  if (opts?.background) {
+    lines.push(
+      ``,
+      `## Background agents`,
+      `You are a background agent started from the preview: the user is not watching`,
+      `this conversation, and a question pauses you until they answer it on your card.`,
+      `Ask (AskUserQuestion) only when a choice is truly the user's and no reasonable`,
+      `default exists. Otherwise make the reasonable default choice, finish the change,`,
+      `and name each choice you made in your final message.`
     )
   }
 

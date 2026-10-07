@@ -13,7 +13,7 @@ struct ChatMessage: Decodable, Identifiable {
     let comment: ChatComment?
 }
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool? }
-struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction] }
+struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo? }
 struct ChatQuestionOption: Decodable { let label: String; let description: String? }
 struct ChatQuestion: Decodable { let header: String; let question: String; let options: [ChatQuestionOption]; let multiSelect: Bool }
 struct ChatQuestionRequest: Decodable, Identifiable { let id: String; let questions: [ChatQuestion] }
@@ -84,6 +84,9 @@ final class ChatModel: ObservableObject {
     /// Comment result rows the user expanded (ChatCommentRow); kept for the session only.
     @Published var expandedComments: Set<String> = []
     func toggleComment(_ id: String) { if expandedComments.remove(id) == nil { expandedComments.insert(id) } }
+    /// Background agent cards (ChatAgentCard.swift): expanded requests, questions seen, frames.
+    @Published var expandedAgents: Set<String> = []
+    var seenAgentQuestions: Set<String> = [], agentCardFrames: [String: CGRect] = [:]
     var bottomPosition: CGFloat = 0
     var latestButtonFrame = CGRect.zero
     /// What the conversation's SwiftUI views read (see ChatAccessibilityEcho).
@@ -160,7 +163,8 @@ final class NativeChat: NSHostingView<ChatConversation> {
             let messages = frame.messages ?? (kept ? previous?.messages : nil) ?? []
             let snapshot = ChatSnapshot(activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
             let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false)
-            model.cat.update(running: snapshot.running, questioning: !snapshot.questions.isEmpty || snapshot.cards.contains { $0.actions.contains { $0.action == "permission" } }, completed: completed)
+            model.cat.update(running: snapshot.running, questioning: !snapshot.questions.isEmpty || snapshot.cards.contains { $0.agent?.question != nil || $0.actions.contains { $0.action == "permission" } }, completed: completed)
+            model.revealAgentQuestions(snapshot.cards)
             let follow = kept ? previous?.followHead != snapshot.followHead : previous?.followContent != snapshot.followContent
             if follow { model.followRevision += 1 }
             model.snapshot = snapshot; model.revision += 1
@@ -194,7 +198,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
     }
     func inspect() -> [String: Any] {
         let tail = model.snapshot?.messages.suffix(3).map { ["id":$0.id, "frame":NSStringFromRect(model.messageFrames[$0.id] ?? .zero)] } ?? []
-        return ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "tailFrames":tail,
+        let state: [String: Any] = ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "tailFrames":tail,
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
          "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
          "comments":model.snapshot?.messages.compactMap { m in m.comment.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
@@ -207,6 +211,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "cards":model.snapshot?.cards.map(\.id) ?? [],
          "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "actions":$0.actions.map(\.label)] as [String: Any] } ?? [],
          "questionCount":model.snapshot?.questions.count ?? 0]
+        return state.merging(inspectAgents()) { $1 }
     }
 }
 private struct BottomPosition: PreferenceKey {
@@ -298,7 +303,9 @@ struct ChatConversation: View {
             if let activity = snapshot.activity, !snapshot.messages.contains(where: { $0.id == snapshot.streamingId }) {
                 ChatTurnFooter(id: "live", activity: activity, visible: model.visible) { EmptyView() }
             }
-            ForEach(snapshot.cards) { card in NativeChatCard(card: card, model: model) }
+            ForEach(snapshot.cards) { card in
+                if let agent = card.agent { ChatAgentCardView(card: card, agent: agent, model: model) } else { NativeChatCard(card: card, model: model) }
+            }
             ForEach(snapshot.questions) { request in NativeQuestionCard(request: request, model: model) }
 
         }
@@ -376,6 +383,7 @@ struct ChatConversation: View {
                     .onPreferenceChange(RevealedActions.self) { model.revealedActions = $0 }
                     .onPreferenceChange(ChatStatusLines.self) { model.statusLines = $0 }
                     .onPreferenceChange(AttachmentFrames.self) { model.attachmentFrames = $0 }
+                    .onPreferenceChange(AgentCardFrames.self) { model.agentCardFrames = $0 }
                     .overlay(alignment: .top) {
                         stickyRequest(proxy: proxy)
                     }

@@ -162,6 +162,7 @@ const UNIT = [
   'chat-settings',
   'background-model',
   'comment-agents',
+  'chat-agent-card',
   'run-stats',
   'codex-usage',
   'file-tree',

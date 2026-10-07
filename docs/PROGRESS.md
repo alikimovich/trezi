@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-193: background agent questions on the card
+
+- **Cause.** A background (comment or text-edit) agent's AskUserQuestion was emitted with its `sessionId`, so the chat routed it to the spawn effect, and `context-controller.spawn()` dropped it. The card showed only the raw "AskUserQuestion" status. An answer could not have settled it anyway: the conversation owner registers only interactive chats' questions.
+- **Change.** `NativeSpawn.question` holds the pending question. `agentCard` (`src/native/chat-agent-card.ts`) builds the card with the request, its preview cut at a whole word, the `file:line` target, status and question. `ChatAgentCardView` (`src/native/ChatAgentCard.swift`) renders the question with the chat's `NativeQuestionCard`, with no second frame. The `question` card action answers a spawn's question through `agent:respond-question`, which now looks in `spawns` first. `agent:spawn-interrupt` dismisses a waiting question so that Cancel still cancels. `describeTool` never shows the raw tool name.
+- **Attention.** The chat scrolls to the card once for each new question. Activity gets a needs-action line ("A background agent needs your answer in the chat.", event `background-question`) with no question text. A hidden chat is marked for review. The comment's element gets a blue "?" pin (`label` on preview pins) while the question waits.
+- **Rules.** v29 adds a `## Background agents` section for spawned sessions (`background: !!ctx.sessionId` in the Claude and Codex providers): ask only when the choice is truly the user's, otherwise choose a reasonable default and name it in the result.
+- **Not covered.** Done and Failed remain the existing comment result rows, which replace the card. Text-edit agents post no row. A click on a "?" pin is not handled.
+- **Checks.** Unit tests `chat-agent-card` (new) and `comment-agents` (a spawn's question settles with the answers, and Cancel dismisses it). Native smoke `agent-question` (group `chat`) writes `agent-question-light.png` and `agent-question-dark.png`, expands the request, answers, and checks that the card returns to Running.
+
 ## 2026-10-06 — LKM-188 review repair: PR conflict route and Git command policy
 
 - Publish now checks the PR's `mergeable` state after its normal ship workflow and offers Resolve with agent for a PR/base conflict. Local-vs-remote publish reconcile conflicts keep their manual recovery message because the live checkout is mid-merge. The resolve action selects a chat whose root matches the published project.
