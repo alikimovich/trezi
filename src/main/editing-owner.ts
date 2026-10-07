@@ -100,7 +100,16 @@ export interface EditingOwner {
     initial: Record<string, IslandValue>,
     fallback?: string,
     /** The island's stable short name (`island-shadow-2`), kept across revisions. */
-    name?: string
+    name?: string,
+    /** LKM-201: bindings declared before the source has them; inactive until they resolve. */
+    planned?: boolean
+  ): Promise<IslandRecord[]>
+  /** LKM-201: a landed planned island whose bindings resolved, with the landed values. */
+  islandActivate(
+    chat: string,
+    id: string,
+    revision: number,
+    initial: Record<string, IslandValue>
   ): Promise<IslandRecord[]>
   islandAbort(chat: string, token: string): Promise<void>
   /** LKM-181: the user's Disable/Hide (`null`: Enable/Show), saved with the record. */

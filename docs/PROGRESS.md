@@ -19,6 +19,14 @@ Newest first. Append a dated entry when you finish a chunk of work.
   The check fails when a median misses its target or any run takes twice as long. It also fails when viewport + screenshot or `open_preview` change the navigation id, `performance.timeOrigin` or the dev-server pid. A first `settleCode` waited one frame after the width matched and measured 40 ms (worse than before); it now resolves in the first frame at the width.
 - **Tests.** Unit `turn-timing` (summary, lifecycle, supersede, limits, real log lines) and `preview-identity` (same identity across tools, stale, new navigation, mid-navigation and foreign refusals, `previewShows`). Updated: `preview-page`, `trezi-agent-tools`, `provider-helper-tools` and `chat-ghost-park` (timing in `workspace_state`). Native `preview-timing` (group `core`).
 - **Not done.** No DOM snapshot cache per revision: the DOM changes without a navigation, and inspect already reads in ~1 ms. The fixture page is small; heavy pages will snapshot slower.
+## 2026-10-07 — LKM-201: pending islands with planned bindings
+
+- **Why.** `define` read the bindings from the worktree and refused any that did not resolve, so an agent had to finish its source edits before the island existed, and definition mistakes surfaced only at the end of the turn.
+- **Validation first.** Every `define` runs `islandProblems` before it attaches, waits or reserves: all problems at once (manifest fields, each param, each block; a block naming a bad param is reported with the param only), as `{error, code: 'invalid_definition', problems}`.
+- **Planned.** `define {planned:true}` (also on `clone`) skips the resolve check; a missing or unparsable file is allowed (`IslandBindingError.fixable`), anything outside the project is not. The answer lists `bindings` as `resolved`/`planned`. The record stores `planned: true` (Swift `commit`), and `initial` holds only the values that resolved.
+- **Activation.** Landing makes the record `ready` as before; the owner still refuses commands and `show` while it is planned. `refresh` activates it when every binding resolves in the live source (`islandActivate`: landed values become `initial`), otherwise disables it as a whole with `plannedFailure` ("These controls never activated: Lift is not in card.js."), saved through `islandHealth`. All-or-nothing, because the agent promised every binding; a later edit that adds the literals still activates it. An unlanded turn keeps the existing "did not land" reason. Both show Recreate with agent.
+- **Guidance.** Rules v35 and `chatIslandGuidance`: catalog readiness, then preview identity, then only the relevant code, then an early planned define before editing source. The MCP schema gains `planned`.
+- **Tests.** Unit `chat-island-pending` on the real Swift editing owner. `trezi-agent-tools` cannot listen on its Unix socket in the worker sandbox.
 
 ## 2026-10-07 — LKM-199 repair: island readiness and reason codes
 

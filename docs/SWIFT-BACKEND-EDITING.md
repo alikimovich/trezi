@@ -93,6 +93,14 @@ and the inspector views. Source writes are still proposals to the
   runs). `islandShow` moves a ready island to the current turn and clears `user`; an
   island that never activated is refused (the agent clones it instead). Unknown
   `user`/`health` values in a history are dropped on load.
+- **Planned islands (LKM-201).** `islandCommit {planned: true}` stores `planned: true`:
+  the bindings were declared before the source had them. After its turn lands the
+  record is `ready` but still planned: commands (except Reload) and `islandShow` are
+  refused until Bun reports every binding resolved with `islandActivate`, which stores
+  the landed values as `initial`, sets `health: ready` and drops `planned`,
+  `reason` and `reasons`. A record that is no longer planned is left as it is. A
+  planned island whose bindings do not resolve keeps the flag and gets `health:
+  disabled` with its reason through `islandHealth`.
 - **Sidecars.** Bun renders the next store (validation stays JS) and sends it with the
   SHA-256 of the bytes it read (null for "absent"). The owner commits only if the file
   still holds them, atomically, in the repository lane or the lease the calling chain
@@ -117,7 +125,8 @@ Private pipe, S01 frames, no revision, empty scope:
 | --- | --- | --- | --- |
 | `islandsOpen` / `islandsClose` / `islands` | mutation / mutation / read | `{chat, root, record}` / `{chat}` / `{chat}` | `{records}` / `{composing}` / `{records}` |
 | `islandDefine` | mutation | `{chat, turn, origin?, id?, revision?}` | `{token, id, revision, turn, replacing}` |
-| `islandCommit` / `islandAbort` | mutation | `{chat, token, definition:{manifest, blocks}, engine, initial, fallback?, name?}` / `{chat, token}` | `{records}` / `{}` |
+| `islandCommit` / `islandAbort` | mutation | `{chat, token, definition:{manifest, blocks}, engine, initial, fallback?, name?, planned?}` / `{chat, token}` | `{records}` / `{}` |
+| `islandActivate` | mutation | `{chat, id, revision, initial}` (LKM-201) | `{records}` |
 | `islandSettle` | mutation | `{chat, successful, turn?}` | `{records \| null, cancelled}` |
 | `islandCommand` / `islandFinish` | mutation | `{chat, id, revision, action, sourceRevision}` / `{chat, ticket, ok, last, group?, revision?}` | `{ticket, expected, group?, initial?}` / `{}` |
 | `islandMark` / `islandHealth` / `islandShow` | mutation ×3 | `{chat, id, user?}` / `{chat, id, revision, health, reason?, reasons?}` / `{chat, id, turn, origin?}` | `{records}` |

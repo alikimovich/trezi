@@ -35,6 +35,12 @@ export interface IslandRecord {
   /** param id → one line on why that field is disabled. */
   reasons?: Record<string, string>
   user?: IslandUserState
+  /**
+   * LKM-201: defined before the source had its literals. After its turn lands it activates
+   * only once every binding resolves (the owner then drops the flag and keeps the landed
+   * values as `initial`); until then it writes nothing.
+   */
+  planned?: boolean
 }
 /**
  * What the transcript shows. `disabled` is by the code, or by the user (`disabledBy`);

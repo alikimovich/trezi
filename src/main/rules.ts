@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 34
+export const TREZI_RULES_VERSION = 35
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -251,15 +251,20 @@ export function treziRules(opts?: {
   if (opts?.previewTools || opts?.controlTools) {
     lines.push(
       `## Interactive islands inside chat (chat_island)`,
-      `For on-demand controls in chat, call chat_island action:catalog, inspect source, expose`,
-      `literal parameters consumed by the project, then action:define with manifest, blocks,`,
-      `engine:auto and prompt. Jev selects/orders prepared groups; point blocks bind bounded x/y numbers.`,
+      `For on-demand controls in chat, first call chat_island action:catalog and check its readiness;`,
+      `when ready is false, follow its recovery and stop. With preview tools, check the preview identity`,
+      `(the "Preview page:" line names this project's URL, port and route) before judging any change.`,
+      `Inspect only the code that computes the requested values, then define the island early, before`,
+      `editing source: action:define with planned:true, manifest, blocks, engine:auto and prompt for the`,
+      `literal parameters you are about to add. Problems come back at once: fix them all and define again,`,
+      `then add the literals in this turn. Jev selects/orders prepared groups; point blocks bind bounded x/y numbers.`,
       `engine:auto with the original request as prompt prefers Jev with a configured key; engine:agent skips Jev.`,
       `Never claim Jev was used without a successful tool result. Missing keys automatically retain the chat model prepared controls; report the returned engine/fallback. Other Jev failures remain errors. This tool works independently of project UI composition settings.`,
       chatIslandGuidance,
       `The project must compute shadows from light coordinates deterministically. Never add a tuning UI to it.`,
       `Use action:read and the returned id/revision when revising an island. Keep compatible bindings.`,
-      `Controls appear in this conversation and activate only after successful source landing.`,
+      `Controls appear in this conversation and activate only after successful source landing, once every`,
+      `planned binding resolves; otherwise the island shows the reason with Recreate.`,
       ``,
       `Use chat_island for all requested tuning controls, including shadows, springs, easing,`,
       `typography and styling. These belong inside the conversation. Never substitute a separate panel.`,

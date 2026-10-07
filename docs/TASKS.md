@@ -12,6 +12,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Native check `preview-timing` (group `core`, `src/native/smoke-preview-timing.ts`): median under each target, no run over 2×, viewport + screenshot and `open_preview` keep the navigation, document and dev-server pid.
 - [ ] DOM snapshot cache per revision: not done (the DOM changes without a navigation, so a cache needs a mutation signal; reads are already ~1 ms).
 - [ ] `open_preview` with unlanded work keeps the deferred reload (the page changes on landing).
+## Pending islands with planned bindings (LKM-201)
+
+- [x] `chat_island define {planned:true}` reserves a pending island before its literals exist; every define is validated before any wait or reservation and returns all problems (`islandProblems`, `code: 'invalid_definition'`).
+- [x] Pending → active: after the turn lands, the island activates once every binding resolves (`islandActivate` in `src/service/EditingIslands.swift`, landed values as `initial`); commands and `show` are refused while planned.
+- [x] Pending → failed: unresolved bindings (`plannedFailure`) or an unlanded turn disable it with the reason, so the island shows Recreate.
+- [x] Rules v35 and catalog guidance: readiness and preview identity first, only the relevant code, define early with `planned:true`.
+- [x] Tests: unit `chat-island-pending`, `rules`; CHANGELOG line.
+- [ ] No native smoke check drives a planned island yet; the disabled-with-Recreate row is the LKM-181 one (`chat-island-disabled.png`).
 
 ## New chats, preview page, Codex questions, feedback log noise (LKM-199)
 

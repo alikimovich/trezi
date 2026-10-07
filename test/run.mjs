@@ -87,6 +87,7 @@ const UNIT = [
   'chat-islands',
   'chat-island-status',
   'chat-island-new-chat',
+  'chat-island-pending',
   'island-flicker',
   'island-override',
   'island-flicker-frameworks',

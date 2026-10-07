@@ -17,8 +17,19 @@ import { shadowOutput } from './shadow-controls'
  * with one line that says why. Never exception text.
  */
 
-/** A whole-island problem (the file is gone, unreadable, outside the project). */
-export class IslandBindingError extends Error {}
+/**
+ * A whole-island problem (the file is gone, unreadable, outside the project). `fixable`:
+ * a source edit can fix it (the file is missing or does not parse), so a planned island
+ * (LKM-201) may still be defined.
+ */
+export class IslandBindingError extends Error {
+  constructor(
+    message: string,
+    readonly fixable = false
+  ) {
+    super(message)
+  }
+}
 
 const KIND_NAMES: Record<ControlParam['kind'], string> = {
   number: 'a number',
@@ -145,6 +156,35 @@ export function islandHealth(
       causes.length === 1
         ? `${causes[0]}; these controls can't edit it.`
         : `${causes[0]}, and ${causes.length - 1} more binding${causes.length > 2 ? 's' : ''} changed; these controls can't edit them.`
+  }
+}
+
+/** A binding line said of a planned island: it never was in the code, it did not leave it. */
+export const plannedLine = (line: string) =>
+  line.replace(/ no longer exists/, ' does not exist').replace(/ is no longer /g, ' is not ')
+
+/**
+ * LKM-201: a landed planned island activates only when every binding resolves; otherwise
+ * it is disabled as a whole with the first cause (`problem`: a whole-file problem).
+ */
+export function plannedFailure(
+  record: IslandRecord,
+  broken: Record<string, string>,
+  problem?: string
+): { health: 'disabled'; reason: string } {
+  const strip = (line: string) =>
+    plannedLine(line)
+      .replace(/(, so|;) (these|this) control.*$/, '')
+      .replace(/\.$/, '')
+  if (problem)
+    return { health: 'disabled', reason: `These controls never activated: ${strip(problem)}.` }
+  const failing = record.manifest.params.filter((p) => p.id in broken)
+  const more = failing.length - 1
+  return {
+    health: 'disabled',
+    reason: `These controls never activated: ${strip(broken[failing[0].id])}${
+      more ? `, and ${more} more planned binding${more > 1 ? 's' : ''} did not resolve` : ''
+    }.`
   }
 }
 
