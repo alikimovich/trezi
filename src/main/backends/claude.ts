@@ -740,7 +740,7 @@ async function startSession(
       ),
       tool(
         'open_preview',
-        'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Navigation waits for this turn to land.',
+        'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Waits up to 10 s and returns the real result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); with unlanded changes in this chat it opens after the turn lands.',
         { path: z.string() },
         async (args) => asText(treziTool('open_preview', args))
       ),

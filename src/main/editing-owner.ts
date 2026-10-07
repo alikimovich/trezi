@@ -136,8 +136,15 @@ export interface EditingOwner {
     last: boolean
   ): Promise<void>
   // Deferred preview navigation
-  /** Answers whether it may open now (false: it waits for its turn to land). */
-  navigate(chat: string, root: string, path: string, turn: string | null): Promise<boolean>
+  /** Answers whether it may open now (false: it waits for its turn to land). `now`: the
+   *  chat has nothing unlanded, so it opens at once instead of after the turn (LKM-196). */
+  navigate(
+    chat: string,
+    root: string,
+    path: string,
+    turn: string | null,
+    now?: boolean
+  ): Promise<boolean>
   navigation(chat: string, kind: NavigationEvent, turn: string | null): Promise<boolean>
   navigationTake(chat: string): Promise<{ root: string; path: string } | null>
   navigationState(): Promise<

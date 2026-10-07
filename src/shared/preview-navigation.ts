@@ -16,4 +16,8 @@ export interface PreviewOpenRequest {
   root: string
   key: string
   path: string
+  /** Matches the dispatch report back to the `open_preview` call (LKM-196). */
+  id?: number
+  /** The chat holds nothing unlanded: open now instead of after the turn lands. */
+  now?: boolean
 }

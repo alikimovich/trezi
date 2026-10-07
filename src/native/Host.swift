@@ -34,6 +34,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let activity = NativeActivity()
     let activityIndicator = ActivityIndicator()
     let toast = NativeToast()
+    let previewLoad = NativePreviewLoad()
     var sourceEditors: [String: NativeSourceEditor] = [:]
     var sourceRoot = ""
     var dockedSource: NativeSourceEditor? { sourceEditors[sourceRoot].flatMap { $0.state["visible"] as? Bool == true && $0.state["popped"] as? Bool != true ? $0 : nil } }
@@ -100,6 +101,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         shell.updatePreviewColor(views["preview"]!.underPageBackgroundColor)
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
+        canvas.addSubview(previewLoad)
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
@@ -202,7 +204,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "composerFocus": window.makeFirstResponder(composer.text)
         case "shellState":
             let state = c["state"] as? [String: Any] ?? [:]
-            shell.update(state); previewStatus.update(state); nativeLayout.update(state)
+            shell.update(state); previewStatus.update(state); previewLoad.update(state); nativeLayout.update(state)
             if let home = state["homeState"] as? [String: Any] { welcome.update(home) }
         case "captureFeedback":
             let content = window.contentView?.superview ?? shell.split.view
@@ -309,8 +311,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     var recentCrashes: [TimeInterval] = []
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        ProductLog.warn("preview", "Preview load failed: \(error.localizedDescription)")
-        emit(["event":"load-error", "view":views.first(where: { $0.value === webView })?.key ?? "", "message":error.localizedDescription])
+        previewNavigationFailed(webView, error, committed: false)
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         let now = Date.timeIntervalSinceReferenceDate

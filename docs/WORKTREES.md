@@ -147,6 +147,24 @@ project path was not a cause (the Swift owner works on real paths).
   files and time) and guidance that never says "pending"; Codex has the Trezi tools
   pre-approved so it can call it (`docs/PROVIDERS.md`).
 
+### No ghost parks (LKM-196)
+
+A chat could stay parked with nothing behind it in two ways. In the first, a drift park's
+changes later reached the live checkout another way (the user applied them, or another
+chat did), so the batch was empty but `sendRefusal` still blocked sends. In the second, a
+`failed` landing's base moved past its diff. `src/main/park-reconcile.ts` reconciles a parked chat on its
+chain at turn start (`beforeTurn`, folding uncommitted work first), at chat open (the
+workspace snapshot, for idle chats, bounded to 2 s) and before `workspace_state` /
+`prepare_conflict_resolution`:
+
+- No held file differs from live: the park is cleared (`clearPark`), the base moves to the
+  chat's HEAD, `lastLanding` says merged/unchanged, the product log records "Stale park
+  cleared", and the chat shows isolated.
+- Pending files the park does not list (a lost batch or park record): `parkedFiles` and
+  the record are rebuilt ("Park batch rebuilt"), and the card is emitted again so Resolve,
+  Retry and Discard work.
+- A merge in progress, a revert, a resolution or a reclaim is left alone.
+
 ## Stopped turns and broken previews (LKM-151)
 
 Stop never leaves a half-made edit in the live checkout. An interrupted or failed turn

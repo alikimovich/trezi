@@ -121,7 +121,7 @@ Private pipe, S01 frames, no revision, empty scope:
 | `islandSettle` | mutation | `{chat, successful, turn?}` | `{records \| null, cancelled}` |
 | `islandCommand` / `islandFinish` | mutation | `{chat, id, revision, action, sourceRevision}` / `{chat, ticket, ok, last, group?, revision?}` | `{ticket, expected, group?, initial?}` / `{}` |
 | `islandMark` / `islandHealth` / `islandShow` | mutation ×3 | `{chat, id, user?}` / `{chat, id, revision, health, reason?, reasons?}` / `{chat, id, turn, origin?}` | `{records}` |
-| `navigate` / `navigation` / `navigationTake` / `navigationState` | mutation ×3 / read | `{chat, root, path, turn?}` / `{chat, kind, turn?}` / `{chat}` / `{}` | `{ready}` / `{ready}` / `{root, path} \| {path:null}` / `[…]` |
+| `navigate` / `navigation` / `navigationTake` / `navigationState` | mutation ×3 / read | `{chat, root, path, turn?, now?}` (`now`: nothing unlanded, ready at once, LKM-196) / `{chat, kind, turn?}` / `{chat}` / `{}` | `{ready}` / `{ready}` / `{root, path} \| {path:null}` / `[…]` |
 | `sidecar` | mutation (lane) | `{root, name, expectedHash \| null, content, leases?}` | `{ok, hash}` / `{ok:false, conflict}` |
 
 ## Rollback (tightened to this domain)

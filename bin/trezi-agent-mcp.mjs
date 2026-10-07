@@ -118,7 +118,7 @@ server.registerTool(
   'open_preview',
   {
     annotations: { destructiveHint: false, openWorldHint: false },
-    description: 'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Navigation waits for this turn to land.',
+    description: 'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Waits up to 10 s and returns the real result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); with unlanded changes in this chat it opens after the turn lands.',
     inputSchema: { path: z.string() }
   },
   async (args) => result(await invoke('open_preview', args))

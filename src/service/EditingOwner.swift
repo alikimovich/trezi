@@ -70,7 +70,7 @@ final class EditingOwner: @unchecked Sendable {
         "islandHealth": (["chat", "id", "revision", "health"], ["reason", "reasons"]),
         "islandCommand": (["chat", "id", "revision", "action", "sourceRevision"], []),
         "islandFinish": (["chat", "ticket", "ok", "last"], ["group", "revision"]),
-        "navigate": (["chat", "root", "path"], ["turn"]), "navigation": (["chat", "kind"], ["turn"]),
+        "navigate": (["chat", "root", "path"], ["turn", "now"]), "navigation": (["chat", "kind"], ["turn"]),
         "navigationTake": (["chat"], []), "navigationState": ([], []),
         "sidecar": (["root", "name", "expectedHash", "content"], ["leases"]),
         // Project files (EditingProject): `root` is the live project, whose lane they run in.
@@ -168,7 +168,9 @@ final class EditingOwner: @unchecked Sendable {
         case "navigate":
             let chat = try Self.key(body, "chat"), path = try body.string("path")
             guard EditingNavigation.valid(path) else { throw RepositoryRefusal(.invalidRequest, "Invalid preview path.") }
-            let turn = try origin(chat: chat, claimed: body.has("turn") ? try Self.key(body, "turn") : nil, strict: false)
+            // `now`: Bun found nothing unlanded in the chat, so the live page already is the chat's (LKM-196).
+            let now = body.has("now") ? try body.bool("now") : false
+            let turn = now ? nil : try origin(chat: chat, claimed: body.has("turn") ? try Self.key(body, "turn") : nil, strict: false)
             let ready = navigation.request(chat: chat, root: try body.path("root"), path: path, turn: turn)
             return result(Self.object([("ready", .bool(ready))]))
         case "navigation":

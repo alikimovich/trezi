@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Ghost parked state and open_preview results (LKM-196)
+
+- [x] Reconcile parks at turn start, chat open (workspace snapshot) and `workspace_state` / `prepare_conflict_resolution` (`src/main/park-reconcile.ts`): an empty park is cleared and logged; a pending diff without a batch rebuilds it; `workspace_state` never says parked without a batch.
+- [x] `test/chat-ghost-park.mjs` (Swift repository owner suite): cleared at turn start, chat open and agent tool; failed landing with an empty batch; lost batch rebuilt then Resolve lands; bare parked work rebuilt then Retry lands; a real conflict kept.
+- [x] `open_preview` waits up to 10 s for the real main-frame result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); a stopped server gives the Restart path (`src/main/preview-tools.ts`, `src/main/preview-loads.ts`).
+- [x] Preview loading pill, HTTP-error pill with Reload and a load-error overlay with Restart (`src/native/PreviewLoad.swift`); `test/preview-open.mjs` with a stub server answering 500 and a server that is down.
 ## No ownerless pending items (LKM-195)
 
 - [x] Rules v31: never end a turn with an ownerless pending item; do it now, name a concrete user action, or a true "Trezi will X when Y". A change already in the preview is checked with `preview_screenshot`; a stale preview is neither "passed" nor "pending".

@@ -236,6 +236,8 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/file-tree.ts` | helper | SourceOwner | `git ls-files` read |
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |
+| `src/main/park-reconcile.ts` | helper | RepositoryOwner | `git show` reads of a parked chat's held files; the clear/rebuild runs through the owner (LKM-196) |
+| `src/main/preview-tools.ts` | helper | PlatformOwner | `open_preview` screenshot: one scratch JPEG per chat in the system temp folder, overwritten on each call (LKM-196) |
 | `src/main/product-log.ts` | helper | PlatformOwner | appends and prunes the product log day files in `~/Library/Logs/Trezi` (LKM-168) |
 | `src/main/pull-request-status.ts` | helper | WorkflowOwner | `gh pr view` and `git merge-tree` reads of PR mergeability (LKM-188) |
 | `src/main/project-memory-evaluation.ts` | helper | MemoryOwner | `git grep` reads of a chat's worktree and the live checkout: a new memory rule's design token must exist in code (LKM-177) |
