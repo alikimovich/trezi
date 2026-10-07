@@ -649,9 +649,10 @@ try {
       sent.conversation > 50 && sent.repository > 0 && sent.source > 0,
       `frames ${JSON.stringify(sent)}`
     )
+    // LKM-189: described by its change (the fixture provider has no model: the fallback).
     assert.match(
       git(repo, 'log', '--format=%s', '-n', '8'),
-      /one/,
+      /^Update a\.txt$/m,
       'the landed turn is committed by the repository owner'
     )
     const saved = Object.values(files(join(agentProfile, 'trezi/sessions'))).map((text) =>

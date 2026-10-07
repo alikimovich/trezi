@@ -25,6 +25,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 - Chat island problems are one plain sentence instead of exception text, and an island whose turn did not land shows as Disabled with that reason; hidden and disabled islands stay that way across relaunch (LKM-181).
 - New chat opens at once with the composer focused: its workspace (a prewarmed spare when one is ready), dependencies and provider are prepared in the background, and a message sent before they are ready waits, showing "Preparing workspace…" after 300 ms (LKM-182).
+- Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
 - The branch menu in the toolbar now starts on the same left edge as the preview address above it (LKM-184).

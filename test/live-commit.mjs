@@ -4,7 +4,7 @@
  * now lands as ONE commit on the user's live checkout, so a session reads as progress
  * in `git log` and any turn can be `git revert`ed on its own.
  *
- * Asserts: a turn's files commit with the prompt as the subject + a Trezi body; an
+ * Asserts: a turn's files commit with the given subject + a Trezi body; an
  * unrelated dirty file is NOT swept in; the user's own STAGED work stays staged and out
  * of the commit; a file the turn created is committed; `.trezi/` sidecar paths are
  * filtered; a no-op (content already at HEAD) commits nothing; an empty file list, a
@@ -235,14 +235,14 @@ try {
       await waitFor(() => !branchExists(repo, branch)),
       'a successfully landed turn deletes its branch'
     )
-    ok(log(repo)[0] === 'make the header blue', `turn 1 subject (got ${log(repo)[0]})`)
+    ok(log(repo)[0] === 'Update a.txt', `turn 1 subject describes the change (got ${log(repo)[0]})`)
 
     await beforeTurn(key, 'next')
     ok(branchExists(repo, branch), 'the next turn recreates the recovery branch')
     writeFileSync(join(cwd, 'b.txt'), 'turn two\n')
     afterTurn(key, 'add a footer', [])
     ok(await waitForCommits(3), 'turn 2 committed too (it merged, i.e. did not park)')
-    ok(log(repo)[0] === 'add a footer', `turn 2 subject (got ${log(repo)[0]})`)
+    ok(log(repo)[0] === 'Add b.txt', `turn 2 subject describes the change (got ${log(repo)[0]})`)
     ok(commitFiles(repo).join(',') === 'b.txt', 'turn 2 commits only its own file')
     ok(porcelain(repo).length === 0, 'the live checkout is clean between turns')
     ok(
@@ -315,6 +315,54 @@ try {
     ok(porcelain(repo).length === 0, 'failed work is not written into the live checkout')
     ok((await discardParkedChat(key)).ok, 'the failed parked turn can be discarded')
     ok(await waitFor(() => !branchExists(repo, branch)), 'discard deletes the failed-turn branch')
+    await releaseChat(key)
+  }
+
+  // --- 10b. LKM-189: a parked turn and the next one re-squash into one commit whose
+  // message is regenerated for the combined diff, through a mocked background model;
+  // the prompt never reaches the subject and the trailers close the body. ---
+  {
+    const repo = makeRepo({ 'a.txt': 'a\n' })
+    const store = { get: () => undefined, save: () => {}, remove: () => {} }
+    const asked = []
+    initChatIsolation({
+      worktreesDir: () => join(base, 'wt-described'),
+      store: () => store,
+      getWindow: () => null,
+      describe: () => async (prompt) => {
+        asked.push(prompt)
+        const files = [...prompt.matchAll(/^(?:added|modified|deleted) (\S+)$/gm)].map((m) => m[1])
+        return `Change ${files.join(' and ')}\n\n- Rework the fixture files`
+      }
+    })
+    const key = 'described-squash'
+    const cwd = await isolatedCwd(repo, key)
+    const branch = `trezi/chat-${cwd.split('/').at(-1)}`
+    await beforeTurn(key, 'first')
+    writeFileSync(join(cwd, 'a.txt'), 'held\n')
+    await afterTurn(key, 'PRIVATE PROMPT one [Attached files]', [], 'failed')
+    ok(
+      g(repo, 'log', '-1', '--format=%s', branch).trim() === 'Change a.txt',
+      'the parked squash is described'
+    )
+    await beforeTurn(key, 'second')
+    writeFileSync(join(cwd, 'b.txt'), 'new\n')
+    await afterTurn(key, 'PRIVATE PROMPT two', [
+      { role: 'user', text: 'PRIVATE PROMPT two' },
+      { role: 'assistant', text: 'Reworked both fixture files.' }
+    ])
+    ok(asked.length === 2, `one description per squash (got ${asked.length})`)
+    ok(/modified a\.txt/.test(asked[1]) && /added b\.txt/.test(asked[1]), 'combined diff')
+    ok(asked[1].includes('Reworked both fixture files.'), "the agent's reply is shown")
+    ok(!asked.join('\n').includes('PRIVATE PROMPT'), 'the prompt is never shown')
+    ok(log(repo)[0] === 'Change a.txt and b.txt', `combined subject (got ${log(repo)[0]})`)
+    ok(commitFiles(repo).sort().join(',') === 'a.txt,b.txt', 'one cumulative live commit')
+    const body = g(repo, 'log', '-1', '--format=%b').trim()
+    ok(
+      body.endsWith(`Trezi-Turn: 2\nTrezi-Chat: ${branch}`) &&
+        body.startsWith('- Rework the fixture files'),
+      `bullets, then trailers (got ${JSON.stringify(body)})`
+    )
     await releaseChat(key)
   }
 

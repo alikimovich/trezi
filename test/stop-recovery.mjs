@@ -127,10 +127,8 @@ try {
   assert.equal(last().state, 'merged')
   assert.equal(last().group, kept.group)
   assert.equal(isolationSnapshot(keep.key).state, 'isolated')
-  assert.equal(
-    git(keep.root, 'log', '-1', '--format=%s'),
-    'Keep partial changes from a stopped turn'
-  )
+  // LKM-189: the kept work is described by its change (here the fallback), not a fixed title.
+  assert.equal(git(keep.root, 'log', '-1', '--format=%s'), 'Update bar.tsx')
   const reverted = await revertGroup(keep.root, kept.group)
   assert.equal(reverted.ok, true)
   assert.ok(keep.live().equals(ORIGINAL), 'the kept turn reverts byte for byte')

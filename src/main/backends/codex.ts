@@ -637,9 +637,16 @@ async function updateProjectMemory(
 ): Promise<string | null> {
   const prompt = projectMemoryEvaluationPrompt(currentMemory, transcript)
   if (!prompt) return null
+  const answer = await complete(prompt, options, AbortSignal.timeout(25_000))
+  return answer === null ? null : parseProjectMemoryEvaluation(answer, currentMemory)
+}
 
-  const abort = new AbortController()
-  const timer = setTimeout(() => abort.abort(), 25_000)
+/** One-shot read-only thread (`ModelProvider.complete`), ended by `signal`. */
+async function complete(
+  prompt: string,
+  options: AgentOptions,
+  signal: AbortSignal
+): Promise<string | null> {
   try {
     const conn = options.connectionId ? await resolveConnection(options.connectionId) : null
     if (options.connectionId && !conn) return null
@@ -661,12 +668,10 @@ async function updateProjectMemory(
       ...(model ? { model } : {}),
       ...(isEffort(options.effort) ? { modelReasoningEffort: options.effort } : {})
     })
-    const result = await thread.run(prompt, { signal: abort.signal })
-    return parseProjectMemoryEvaluation(result.finalResponse, currentMemory)
+    const result = await thread.run(prompt, { signal })
+    return result.finalResponse
   } catch {
     return null
-  } finally {
-    clearTimeout(timer)
   }
 }
 
@@ -674,5 +679,6 @@ export const codexProvider: ModelProvider = {
   id: 'codex',
   supportsSpawn: true,
   startSession,
+  complete,
   updateProjectMemory
 }
