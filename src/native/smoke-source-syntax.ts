@@ -35,9 +35,9 @@ const KEYSTROKES = 'abcdefghijklmnopqrstuvwxyzabcdefghijklmn'
 export async function checkSourceSyntax(host: NativeBridge, fixture: string, artifacts: string) {
   const verify = (params: Record<string, unknown>) =>
     host.request('sourceSyntax', { root: fixture, ...params })
-  const shiki = await syntaxTokenizer('tsx').then(
-    () => '',
-    (error) => String(error?.message ?? error)
+  // Shiki is a declared dependency: when it cannot load, the check fails, never skips.
+  await syntaxTokenizer('tsx').catch((error) =>
+    assert.fail(`Shiki must be installed (bun add shiki@^3): ${String(error?.message ?? error)}`)
   )
   const sample = tsxSample(3000)
   writeFileSync(join(fixture, SYNTAX_SAMPLE), sample)
@@ -52,20 +52,17 @@ export async function checkSourceSyntax(host: NativeBridge, fixture: string, art
   }, 'syntax sample open')
   await host.request('sourceResize', { root: fixture, width: 1000, height: 700 })
 
-  if (shiki) console.log(`SKIP source-syntax category probes: Shiki unavailable (${shiki})`)
-  else {
-    const expected = Object.keys(PROBES)
-    let shown: Record<string, unknown> = {}
-    await waitFor(
-      async () => {
-        const state = await verify({ probes: expected })
-        shown = state.categories
-        return state.highlighted === state.revision && expected.every((p) => shown[p] === PROBES[p])
-      },
-      'syntax categories',
-      15000
-    ).catch(() => assert.fail(`Highlight categories: ${JSON.stringify(shown)}`))
-  }
+  const expected = Object.keys(PROBES)
+  let shown: Record<string, unknown> = {}
+  await waitFor(
+    async () => {
+      const state = await verify({ probes: expected })
+      shown = state.categories
+      return state.highlighted === state.revision && expected.every((p) => shown[p] === PROBES[p])
+    },
+    'syntax categories',
+    15000
+  ).catch(() => assert.fail(`Highlight categories: ${JSON.stringify(shown)}`))
 
   const typed = await verify({ type: KEYSTROKES, after: 'const total', pace: 0.06 })
   assert.ok(Array.isArray(typed.keystrokes), `Typing ran: ${JSON.stringify(typed)}`)
@@ -78,7 +75,12 @@ export async function checkSourceSyntax(host: NativeBridge, fixture: string, art
     `Native syntax typing (3,000-line TSX): p95 ${p95.toFixed(2)} ms, worst ${worst.toFixed(2)} ms, highlighted ${typed.highlighted}/${typed.revision}`
   )
   assert.ok(p95 < 16, `Main-thread work per keystroke p95 ${p95.toFixed(2)} ms ≥ 16 ms`)
-  if (!shiki) assert.equal(typed.highlighted, typed.revision, 'The last keystroke is highlighted')
+  assert.equal(typed.highlighted, typed.revision, 'The last keystroke is highlighted')
+  const after = await verify({ probes: expected })
+  assert.ok(
+    expected.every((p) => after.categories[p] === PROBES[p]),
+    `Highlights survive typing: ${JSON.stringify(after.categories)}`
+  )
 
   const offscreen = process.env.TREZI_NATIVE_BACKGROUND_TEST === '1'
   if (offscreen)
@@ -98,10 +100,14 @@ export async function checkSourceSyntax(host: NativeBridge, fixture: string, art
   }
   writeFileSync(
     join(artifacts, 'source-syntax.json'),
-    JSON.stringify({ shiki: shiki || 'loaded', keystrokes: typed.keystrokes, p95, worst }, null, 2)
+    JSON.stringify(
+      { keystrokes: typed.keystrokes, p95, worst, categories: after.categories },
+      null,
+      2
+    )
   )
   console.log(
-    `Native syntax highlighting: ${shiki ? 'probes skipped' : 'TSX categories'}, typing under 16 ms, light/dark captures pass.`
+    'Native syntax highlighting: TSX categories, typing under 16 ms with highlights applied, light/dark captures pass.'
   )
 }
 

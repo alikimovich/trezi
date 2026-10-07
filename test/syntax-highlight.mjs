@@ -1,7 +1,7 @@
 // Code editor grammar highlighting (LKM-183): language detection, the category theme,
 // incremental per-line tokenization with revision-tagged batches (driven by a small
 // fake grammar, so it always runs) and Shiki's token output and typing cost on real
-// TSX/CSS/Swift samples. The Shiki half prints SKIP when the package is not installed.
+// TSX/CSS/Swift samples. The Shiki half fails when the package is not installed.
 import assert from 'node:assert/strict'
 import { SyntaxDocument } from '../src/main/syntax-document.ts'
 import { syntaxLanguage } from '../src/main/syntax-languages.ts'
@@ -260,17 +260,13 @@ const decode = (doc, batch) => {
 }
 
 // --- Shiki: real grammars ---
-let shiki
-try {
-  shiki = await import('../src/main/syntax-shiki.ts')
-  await shiki.syntaxTokenizer('css')
-} catch (error) {
-  console.log(
-    `SYNTAX-HIGHLIGHT SKIP — Shiki token and typing checks not run: ${String(error.message).split('\n')[0]}`
+// Shiki is a declared dependency: when it cannot load, the test fails, never skips.
+const shiki = await import('../src/main/syntax-shiki.ts')
+await shiki.syntaxTokenizer('css').catch((error) => {
+  throw new Error(
+    `Shiki must be installed (bun add shiki@^3): ${String(error.message).split('\n')[0]}`
   )
-  console.log('SYNTAX-HIGHLIGHT OK — languages, theme, incremental tokenization and controller')
-  process.exit(0)
-}
+})
 const highlight = async (language, text) => {
   const doc = new SyntaxDocument(text)
   doc.tokenize(await shiki.syntaxTokenizer(language), doc.length)

@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-183 repair: Shiki is required, tests no longer skip
+
+- **Review finding.** `shiki` was not a dependency, so the editor showed plain text (`highlighted -1/41`) and the tests passed by skipping. The unit test and the `source-syntax` smoke check now fail when Shiki cannot load, and the smoke check also asserts `highlighted` reaches the final revision, that the probe categories are still shown after typing, and that the p95 includes applying highlights.
+- **Still blocked.** `bun add shiki@^3` was retried and the registry was denied again (`registry.npmjs.org:443`, user denied) in the worker sandbox; nothing was worked around. A maintainer must run `bun add shiki@^3` (package.json + bun.lock), confirm `shiki/core`, `shiki/engine/oniguruma`, `shiki/langs` and `shiki/wasm` resolve, run `bun test/syntax-highlight.mjs` (fix any scope-to-category mismatch in `src/main/syntax-theme.ts`; the TSX/CSS/Swift probes were written without Shiki), then the `core` native group, and record here the on-disk size of `shiki` plus the loaded grammars, the first-highlight load time and the backend start time before/after as bundle and startup evidence. Until then the unit test and `source-syntax` fail by design.
+
 ## 2026-10-06 — LKM-183: grammar-based syntax highlighting in the code editor
 
 - **Why.** The editor coloured code with a handful of regexes on the main thread, re-ran them over the whole text on every keystroke, and gave up above 500 KB. Highlighting now uses real TextMate grammars, off the main thread.
