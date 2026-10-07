@@ -1,6 +1,7 @@
 import type { SessionTranscriptEntry } from '../shared/api'
 import type { ProviderSession } from './backends/types'
 import type { TurnTerminalOutcome } from './turn-terminal'
+import { turnTimings } from './turn-timing'
 
 type Preparation = { cancelled: boolean }
 interface ReconciliationDeps {
@@ -62,6 +63,7 @@ export class ReconciliationCoordinator {
         .reverse()
         .find((entry) => entry.role === 'user')
       if (entry && entry.completedAt == null) entry.completedAt = completedAt ?? Date.now()
+      turnTimings.completed(key, turn)
       session?.emit({ type: 'landing-finished', ...(turn ? { turn } : {}) })
     }
     try {

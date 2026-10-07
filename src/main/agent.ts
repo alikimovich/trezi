@@ -95,6 +95,7 @@ import type { RpcHandlerRegistry } from './rpc-router'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
+import { turnTimings } from './turn-timing'
 import { workflowOwner } from './workflow-owner'
 import { dependenciesInstalling } from './worktree-dependencies'
 import {
@@ -451,6 +452,7 @@ const interactiveEvents =
         if (sessions.get(sessionKey) !== session) return
         runningKeys.delete(sessionKey)
         preparingTurns.delete(sessionKey)
+        turnTimings.completed(sessionKey, at.turn)
         session.emit({ type: 'landing-finished', turn: at.turn })
       })
   }
@@ -1562,6 +1564,7 @@ export function registerAgentIpc(
       turn?: AgentTurnOptions,
       turnId?: string
     ) => {
+      const receivedAt = Date.now()
       const key = requestedKey ?? activeKey
       if (key && (pending.has(key) || firstSends.has(key))) await waitForChat(key)
       const session = key ? sessions.get(key) : null
@@ -1595,6 +1598,7 @@ export function registerAgentIpc(
         throw error
       }
       turnIds.set(key, id)
+      turnTimings.received(key, id, receivedAt)
       watchdog.touch(key)
       const preparation = { cancelled: false }
       preparingTurns.set(key, preparation)
@@ -2066,6 +2070,7 @@ export function registerAgentIpc(
     const session = sessions.get(sessionKey)
     const turn = turnIds.get(sessionKey)
     session?.emit({ type: 'status', text: note })
+    turnTimings.completed(sessionKey, turn)
     session?.emit({ type: 'landing-finished', ...(turn ? { turn } : {}) })
   }
   // A running chat with no progress for the limit: stop its provider turn and its

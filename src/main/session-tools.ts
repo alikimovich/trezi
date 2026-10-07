@@ -15,7 +15,9 @@ import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
 import { askUser } from './question-tool'
 import { findPack } from './skill-packs'
+import { timedToolCall } from './tool-timing'
 import type { TreziAgentToolAction } from './trezi-agent-tools'
+import { turnTimings } from './turn-timing'
 import { workflowOwner } from './workflow-owner'
 
 /**
@@ -62,11 +64,12 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'install_skills'
 ]
 
-export async function runTreziTool(
-  action: SessionTool,
-  args: unknown,
-  s: ToolScope
-): Promise<unknown> {
+/** Runs one session tool; every call is timed and logged with its phases (LKM-200). */
+export function runTreziTool(action: SessionTool, args: unknown, s: ToolScope): Promise<unknown> {
+  return timedToolCall(s.emitKey, String(action), () => runTool(action, args, s))
+}
+
+async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promise<unknown> {
   // The owner grants more names than run here (the calculators run in the provider).
   if (!SESSION_TOOLS.includes(action))
     return { error: `${String(action)} is not one of Trezi's session tools.` }
@@ -99,7 +102,12 @@ export async function runTreziTool(
   // LKM-196: one consistent status, never "parked" with no batch behind it.
   if (action === 'workspace_state' || action === 'prepare_conflict_resolution')
     await reconcilePark(s.emitKey, 'agent-tool')
-  if (action === 'workspace_state') return agentWorkspaceEvidence(s.emitKey, s.liveRoot)
+  // LKM-200: the turn's timing, so the agent answers "how long did this take" from facts.
+  if (action === 'workspace_state')
+    return {
+      ...(await agentWorkspaceEvidence(s.emitKey, s.liveRoot)),
+      timing: turnTimings.report(s.emitKey)
+    }
   if (
     [
       'git_sync_base',

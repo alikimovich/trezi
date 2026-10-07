@@ -237,6 +237,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |
 | `src/main/park-reconcile.ts` | helper | RepositoryOwner | `git show` reads of a parked chat's held files; the clear/rebuild runs through the owner (LKM-196) |
+| `src/main/preview-identity.ts` | helper | RepositoryOwner | `git rev-parse HEAD` read of the live checkout: the revision a preview document serves (LKM-200) |
 | `src/main/preview-tools.ts` | helper | PlatformOwner | `open_preview` screenshot: one scratch JPEG per chat in the system temp folder, overwritten on each call (LKM-196) |
 | `src/main/product-log.ts` | helper | PlatformOwner | appends and prunes the product log day files in `~/Library/Logs/Trezi` (LKM-168) |
 | `src/main/pull-request-status.ts` | helper | WorkflowOwner | `gh pr view` and `git merge-tree` reads of PR mergeability (LKM-188) |
@@ -262,6 +263,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-dreamer.ts` | test | — | smoke fixture |
 | `src/native/smoke-fixture.ts` | test | — | `--test` project and failure capture |
 | `src/native/smoke-inspector-island.ts` | test | — | smoke fixture |
+| `src/native/smoke-preview-timing.ts` | test | — | smoke fixture |
 | `src/native/smoke-island-new-chat.ts` | test | — | smoke fixture |
 | `src/native/smoke-island-status.ts` | test | — | smoke fixture |
 | `src/native/smoke-islands.ts` | test | — | smoke fixture |

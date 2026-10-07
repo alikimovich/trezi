@@ -389,11 +389,18 @@ try {
   assert.ok(made.id, `chat_island created an island: ${textOf(made)}`)
   assert.notEqual(all.results.chat_island.isError, true)
   assert.match(textOf(all.results.preview_location), /helper-route/, 'main’s preview URL')
-  assert.deepEqual(all.results.preview_screenshot.content, [
-    { type: 'image', data: JPEG.toString('base64'), mimeType: 'image/jpeg' },
-    // LKM-199: every preview answer names the page it describes.
-    { type: 'text', text: `Preview page: ${URL_SHOWN} (port 5199, route /helper-route).` }
-  ])
+  const [shot, size, named, identity] = all.results.preview_screenshot.content
+  assert.deepEqual(
+    [shot, size, named],
+    [
+      { type: 'image', data: JPEG.toString('base64'), mimeType: 'image/jpeg' },
+      { type: 'text', text: 'Screenshot: 10×10 px JPEG.' },
+      // LKM-199: every preview answer names the page it describes.
+      { type: 'text', text: `Preview page: ${URL_SHOWN} (port 5199, route /helper-route).` }
+    ]
+  )
+  // LKM-200: and the preview identity it was read from.
+  assert.match(identity.text, /^Preview identity: session /)
   assert.equal(JSON.parse(all.results.open_preview.content[0].text).requested, true)
   assert.ok(
     notified.some(

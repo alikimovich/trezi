@@ -1,5 +1,6 @@
 import { currentTurn } from '../main/agent'
 import { editingOwner } from '../main/editing-owner'
+import { previewShows } from '../main/preview-page'
 import type { LayersSnapshot, SelectedElement } from '../shared/api'
 import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
@@ -61,7 +62,8 @@ export function installNativeInspector(
           status.kind === 'running' && entry.previewKind !== 'simulator' ? status.url : null
         return { root: entry.root, chat: entry.activeSessionKey, url }
       },
-      load: (url) => workspace.services.invoke('preview:load', url)
+      load: (url) => workspace.services.invoke('preview:load', url),
+      showing: previewShows
     },
     currentTurn,
     report

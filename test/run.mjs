@@ -121,6 +121,8 @@ const UNIT = [
   'preview-open',
   'preview-refresh',
   'preview-page',
+  'preview-identity',
+  'turn-timing',
   'syntax-highlight',
   'syntax-bundle',
   'conversation-handoff',

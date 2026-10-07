@@ -7,6 +7,7 @@ import { EventEmitter } from 'node:events'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { platformOwner } from '../main/platform-owner'
+import { AGENT_CAPTURE } from '../main/preview-state'
 import * as channels from '../shared/preview-channels'
 import { bridge } from './bridge'
 
@@ -88,6 +89,15 @@ export const shell = {
   }
 }
 
+/** The host's answer to an agent capture: base64 JPEG, pixel size and its own timings. */
+export interface AgentCaptureReply {
+  jpeg: string
+  width: number
+  height: number
+  snapshotMs?: number
+  encodeMs?: number
+}
+
 export class NativeImage {
   constructor(private result: { png: string; jpeg: string; width: number; height: number }) {}
   isEmpty() {
@@ -134,6 +144,8 @@ export class NativeView {
     setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
     /** A small JPEG (base64, at most 160 px wide) of the current frame, for chat rows. */
     captureThumbnail: () => Promise<string>
+    /** The agent's frame (LKM-200): one JPEG rendered at its bounded size, with host timings. */
+    captureAgent: (options: { full?: boolean }) => Promise<AgentCaptureReply>
   }
   constructor(readonly id: string) {
     views.set(id, this)
@@ -180,6 +192,11 @@ export class NativeView {
         new NativeImage(await bridge().request('capture', { view: id, rect })),
       captureThumbnail: async () =>
         (await bridge().request('capture', { view: id, thumbnail: true })).jpeg,
+      captureAgent: (options) =>
+        bridge().request('capture', {
+          view: id,
+          agent: { maxPixels: AGENT_CAPTURE.maxPixels, quality: AGENT_CAPTURE.quality, ...options }
+        }),
       setViewport: (width) => bridge().request('previewViewport', { view: id, width })
     }
   }

@@ -26,6 +26,23 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Not done.** The token is a preference, not a Keychain item. Open Chat opens the saved chat, not the turn. No live model run was exercised (stub completions only).
 - **Tests.** Unit `dreamer-digest` and `dreamer-export` (the zip unpacked with `ditto -x -k` and checked for emails, tokens and home paths; Send via a stub fetch and through the controller's fallback). Native smoke check `dreamer` (group `settings`) opens the window from the menu with a fixture, sends to a local `node:http` stub and captures the Overview and a proposal pane.
 - **Captures.** `captureSheet`'s cached display painted the sectioned window's split view blank, so the host gained a test-only `captureVisibleSheet` request (`src/native/HostInspect.swift`): the sheet's real pixels through the same own-process ScreenCaptureKit path as `captureVisibleSettings`, with `captureSheet` kept as a recorded fallback.
+## 2026-10-07 — LKM-200: timed, faster preview tools with one observation identity
+
+- **Measured.** `timedToolCall` (`src/main/tool-timing.ts`) wraps every Trezi tool call (`runTreziTool`) and logs `Tool call tool= ms= ok= phases=`. Phases come from `phase()`/`notePhase()`: the screenshot's `snapshot`/`encode` come from the host's reply and `transfer` is the rest of the bridge time. `TurnTimings` (`src/main/turn-timing.ts`) records a turn's received, sent, tool start/end, provider end, landing and completion. It logs `Turn timing … calls= toolMs= perTool=tool:count/ms` once per turn (or `end=superseded`), and `workspace_state` returns `timing.current`/`timing.last` to the agent. Arguments and answers are never logged.
+- **Faster.** The agent screenshot is one `takeSnapshot` at the bounded size, encoded once in Swift as JPEG ≤ 1280 px at 0.8 (`PreviewAgent.capture`; `full: true` keeps full resolution). The old path was full PNG + 900 px JPEG over the bridge, then a JPEG re-encode in Bun. Viewport waits in-page for the first frame at the asked width instead of up to 20 bridge polls with 50 ms sleeps. `open_preview` drops the fixed 400 ms settle (load + one painted frame), and on the route already shown answers `already-loaded` without a reload. That needs: the exact href, `readyState` complete, no navigation running, no unlanded work (`previewShows`, `NavigationController.open(keep)`). Its follow-up reads (freshness, console, screenshot, identity) run in parallel.
+- **Identity.** Location, screenshot, inspect and console append `Preview identity: session ps-N, navigation N, document <time>, revision <sha>` plus a JSON block (`src/main/preview-identity.ts`). The session is the dev-server instance, so a restart gives a new one. The served revision is HEAD at navigation start; a document older than the live HEAD is flagged `stale`, not refused. Another project's server is refused naming both sessions, and an observation during which the page navigated is refused and must be repeated.
+- **Numbers** (native check `preview-timing`, fixture page in a 650×776 pt preview, median of 5, ms; "before" is the pre-LKM-200 code path timed in the same run):
+
+  | Tool | Target | Before | After |
+  | --- | --- | --- | --- |
+  | `preview_screenshot` | < 400 | 69 | 4 |
+  | `preview_inspect` (body) | < 150 | — | 1 |
+  | `preview_viewport` 768 + settle | < 800 | 20 | 20 |
+  | `open_preview` on the shown route | < 300 | reload + ≥ 400 fixed settle (not timed) | 9 |
+
+  The check fails when a median misses its target or any run takes twice as long. It also fails when viewport + screenshot or `open_preview` change the navigation id, `performance.timeOrigin` or the dev-server pid. A first `settleCode` waited one frame after the width matched and measured 40 ms (worse than before); it now resolves in the first frame at the width.
+- **Tests.** Unit `turn-timing` (summary, lifecycle, supersede, limits, real log lines) and `preview-identity` (same identity across tools, stale, new navigation, mid-navigation and foreign refusals, `previewShows`). Updated: `preview-page`, `trezi-agent-tools`, `provider-helper-tools` and `chat-ghost-park` (timing in `workspace_state`). Native `preview-timing` (group `core`).
+- **Not done.** No DOM snapshot cache per revision: the DOM changes without a navigation, and inspect already reads in ~1 ms. The fixture page is small; heavy pages will snapshot slower.
 ## 2026-10-07 — LKM-201: pending islands with planned bindings
 
 - **Why.** `define` read the bindings from the worktree and refused any that did not resolve, so an agent had to finish its source edits before the island existed, and definition mistakes surfaced only at the end of the turn.

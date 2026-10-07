@@ -15,6 +15,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Open: once LKM-200's tool timing lands, read it instead of the `Tool step` lines.
 - [x] Repair: Send is one `POST <url>/proposals` `{projectId, file, start}` (no `/api/projects/…` route or 404 retry); Settings → Dreamer "When tasks are created" sets `start` (off by default); an unreachable Agent OS says it is reachable only from the same Mac and offers the export; the validator equals Agent OS's v1 schema (optional `generatedAt`/`effort`, string-or-object evidence); `docs/DREAMER.md` documents `bun run cli import-proposals` for another Mac.
 - [x] Repair: a hidden Activity applies its lines (`Activity.swift`), so `chat-gate`'s reset also settles on the runner's retry; the wait reports Activity state on timeout.
+## Fast preview tools: measure and speed up screenshot, inspect and navigation (LKM-200)
+
+- [x] Every Trezi tool call logs `Tool call tool= ms= ok= phases=` (page, identity, read, capture/snapshot/encode/transfer, unlanded/dispatch/wait-for-load/settle/reads; `src/main/tool-timing.ts`); every turn logs `Turn timing … perTool=` (`src/main/turn-timing.ts`); `workspace_state` returns the current and last turn's timing. Unit `turn-timing`.
+- [x] Screenshot: one host-side `takeSnapshot` at the bounded size, JPEG ≤ 1280 px at quality 0.8 (`full: true` for full resolution; `PreviewAgent.capture`), no PNG round trip.
+- [x] No fixed sleeps: viewport waits in-page for the first frame at the asked width; `open_preview` waits for load + one frame; `open_preview` on the route already shown (loaded, no navigation running, no unlanded work) answers `already-loaded` without a reload.
+- [x] Observation identity: location, screenshot, inspect and console carry preview session, navigation, document start and served revision; stale documents are flagged, another project's server and mid-observation navigations refused (`src/main/preview-identity.ts`). Unit `preview-identity`.
+- [x] Native check `preview-timing` (group `core`, `src/native/smoke-preview-timing.ts`): median under each target, no run over 2×, viewport + screenshot and `open_preview` keep the navigation, document and dev-server pid.
+- [ ] DOM snapshot cache per revision: not done (the DOM changes without a navigation, so a cache needs a mutation signal; reads are already ~1 ms).
+- [ ] `open_preview` with unlanded work keeps the deferred reload (the page changes on landing).
 ## Pending islands with planned bindings (LKM-201)
 
 - [x] `chat_island define {planned:true}` reserves a pending island before its literals exist; every define is validated before any wait or reservation and returns all problems (`islandProblems`, `code: 'invalid_definition'`).

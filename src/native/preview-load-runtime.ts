@@ -1,3 +1,4 @@
+import { installPreviewIdentity } from '../main/preview-identity'
 import { type PreviewLoadEvent, pathOf, previewLoads } from '../main/preview-loads'
 import type { NativeBridge } from './bridge'
 import type { NativeShellController } from './shell-controller'
@@ -25,7 +26,9 @@ export function loadErrorStatus(event: { url?: unknown; message?: unknown }): {
 
 /**
  * The preview's main-frame navigation events into `previewLoads` (LKM-196): what
- * `open_preview` waits for, and the loading / HTTP-error pill over the page.
+ * `open_preview` waits for, and the loading / HTTP-error pill over the page. Each
+ * navigation start also numbers the document and notes the revision it is served
+ * from (LKM-200).
  */
 export function installPreviewLoads(
   host: NativeBridge,
@@ -33,6 +36,7 @@ export function installPreviewLoads(
   shell: NativeShellController
 ): void {
   previewLoads.onChange = () => shell.schedule()
+  installPreviewIdentity()
   const on = (name: string, event: (e: HostEvent) => PreviewLoadEvent | null) =>
     host.on(name, (e: HostEvent) => {
       if (e?.view !== 'preview') return

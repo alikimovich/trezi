@@ -262,6 +262,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
         case "previewViewport": reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"]))
         case "capture":
+            if let agent = c["agent"] as? [String: Any] {
+                guard let view else { reply(id, error: "Snapshot unavailable"); return }
+                PreviewAgent.capture(agent, view: view) { value, error in if let value { self.reply(id, value) } else { self.reply(id, error: error ?? "Snapshot unavailable") } }
+                return
+            }
             if c["rect"] != nil && PreviewAgent.snapshot(for: c, view: view) == nil { reply(id, error: "The element is outside the visible preview"); return }
             view?.takeSnapshot(with: PreviewAgent.snapshot(for: c, view: view)) { image, error in
                 if c["thumbnail"] as? Bool == true {
