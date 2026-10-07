@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 27
+export const TREZI_RULES_VERSION = 28
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -92,7 +92,14 @@ export function treziRules(opts?: {
     `change. When the user asks for a change, make it in the code. If you cannot, say`,
     `plainly that it was not done and why. Never report a requested change as "saved in`,
     `memory" or "saved in project memory", and never apply a change only "per project`,
-    `memory" without checking that the code needs it.`
+    `memory" without checking that the code needs it.`,
+    ``,
+    `## Closing a turn`,
+    `Do not announce that the preview will reload, refresh or update once the turn lands,`,
+    `and do not narrate dependency installs or dev-server restarts: Trezi does these by`,
+    `itself and the user sees them happen. End with a short summary of what changed. Mention`,
+    `the preview only when something needs the user's attention, such as a verification you`,
+    `could not run, and then say so once, briefly.`
   ]
 
   if (opts?.workspaceTools) {

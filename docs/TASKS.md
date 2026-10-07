@@ -15,6 +15,17 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Position saved per island in `trezi:native-panel-sizes` (`inspectorX`/`inspectorCorner`, `layersCorner`) and restored on reopen; Reset Position in the editing island's … menu.
 - [x] `movable-islands` smoke check (group `core`) with light/dark captures; CHANGELOG line.
 
+## Post-turn preview check instead of "the preview will reload" (ticket ID pending)
+
+Why: the agent cannot verify a change mid-turn (the live checkout, which the preview serves, only changes when the turn lands), so it used to close with "Preview will reload once this turn lands". Rules v28 stops that narration. This ticket replaces it with a check Trezi runs itself.
+
+- [x] Reconcile the local closing-turn guidance with candidate’s project-memory guidance in rules v28, preserving both sets of tests.
+- [x] Rules v28 (`src/main/rules.ts`, "Closing a turn"): no preview-reload or install announcements; short summary; mention the preview only for something that needs attention. `test/rules.mjs`, CHANGELOG.
+- [ ] After a turn lands and the preview reloads, read the preview's page errors and console errors and a failed-load state (the data `preview_console` already reads, `src/main/preview-agent-tools.ts`), scoped to that chat and project. Compile errors in touched files already show the LKM-151 card (`devServerLog` in `src/native/chat-controller.ts`); this covers runtime errors and blank or failed loads.
+- [ ] Healthy preview: show nothing. Broken preview: reuse the existing preview-error card ("Revert last turn" / "Fix with agent", `src/native/chat-recovery.ts`) with the runtime error text. Never start a follow-up turn on its own.
+- [ ] Ignore errors that were already present before the turn, and wait for the reload to settle; page output stays untrusted data in the prompt.
+- [ ] Native smoke: a fixture turn that lands a runtime error shows the card; a clean turn shows none.
+
 ## Native smoke focus guard and failure lines (LKM-176)
 
 - [x] Host `smokeFocus` test command restores focus (activate, key window, at most 2 s) before and after every check; a check that failed after focus was lost during it is retried once; `focus restored` is logged.

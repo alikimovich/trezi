@@ -7,6 +7,10 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Cause.** The borderless pull-down's alignment rect starts 5 pt inside its frame (the stack view puts that edge on the address's), but its stock cell draws the title at x = 8, 3 pt further right; squeezed, it moves the title by varying amounts (measured 3–8 pt depending on width). The address field's text starts on its own alignment edge (frame −2 pt plus the cell's 2 pt padding).
 - **Fix.** `BranchPopUpButton` (`ToolbarAddress.swift`) uses `BranchPopUpCell`, whose `titleRect`/`drawTitle` start the title at the alignment edge at every width, keeping the stock 16 pt for the chevron. The control's intrinsic width is 3 pt narrower, so at its natural size the chevron stays the same ~4 pt after the title and the frame (the click target) keeps its size. Tail truncation is unchanged; squeezed, the title gets the room the stock cell gave it.
 - **Test.** `toolbarInspect` adds `titleAlignment()`: both controls are drawn at 8x, the first inked column found and the first glyph's side bearing subtracted (bold "h" vs regular "t"), giving text origins in window x, plus the title–chevron gap. The `toolbar-address` check requires |dx| <= 0.5 pt and a 1–6.5 pt gap (16 when truncated) at all three widths, and at the wide and default widths forces the window's own appearance (`window-appearance`, never the system's) for `toolbar-{wide,default}-{light,dark}.png`. Standalone AppKit measurement: dx 0.04–0.07 pt (was 3 pt).
+## 2026-10-06 — Reconcile local rules with candidate updates
+
+- Preserved the five local files, fast-forwarded candidate from `5671e1c6` to `4140f60c`, and combined the local closing-turn guidance with upstream project-memory guidance as rules v28. Both sets of assertions and all changelog/task entries remain; the post-turn preview check is still planned.
+- Verification: `bun run typecheck`, `bun test/rules.mjs`, and `bun run lint --diagnostic-level=error` passed. Fixed formatting of the preserved reload assertion.
 
 ## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
 
@@ -63,6 +67,12 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Not work.** `treziRules` (v26) always carries "Project memory is not work": saving to memory applies nothing, and a requested change is never reported as "saved in memory". The memory section adds that a rule is not a change to the code.
 - **Note and Undo.** The update queue reports each committed change; the host shows "Project memory updated: +1 rule" (or "−3 rules" after a cleanup) with View and Undo. The toast now takes up to two actions (`actions`, click `index`). Undo is `store.restore`: a save on the update's own revision, never retried, so a later edit makes it a no-op that says so. It may restore an empty memory.
 - **Checks.** `test/project-memory-evaluation.mjs` (mocked evaluator): Themer items dropped and Undo restores them, `--radius-pill` stored only once the token exists, a working preference kept, a `--force` preference not mistaken for a token, tags, the note and a refused Undo, and the `git grep` search in a temporary repository. `test/memory-owner.mjs` runs Undo against the real Swift owner. `test/rules.mjs` pins v26 and the not-work section. The settings smoke shows the memory note, inspects View/Undo and clicks Undo (`memory-note-toast.png`).
+
+## 2026-10-06 — Rules v26: no "preview will reload" notes; post-turn preview check planned
+
+- **Why.** In Trezi chats the agent ended turns with lines like "Updated to v0.2.5. Preview will reload once this turn lands." That text came from the agent, not from Trezi. A subagent cannot monitor the reload inside the turn: the worktree reaches the live checkout, which the preview serves, only when the turn lands.
+- **Done.** `src/main/rules.ts` is v26 with a "Closing a turn" section (no reload, install or restart announcements; short summary; mention the preview only for something that needs attention). `test/rules.mjs` pins v26 and the new text. CHANGELOG line under Changed.
+- **Planned, not built.** A post-turn runtime check of the reloaded preview that reuses the LKM-151 preview-error card. Scoped in `docs/TASKS.md` ("Post-turn preview check"); no ticket ID yet.
 
 ## 2026-10-05 — LKM-176: native smoke focus guard and fixed failure lines
 

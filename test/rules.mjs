@@ -19,8 +19,13 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 27, 'version bumped to 27')
+assert(TREZI_RULES_VERSION === 28, 'version bumped to 28')
 assert(r.includes(`v${TREZI_RULES_VERSION}`), 'rules carry the version marker')
+assert(/closing a turn/i.test(r), 'closing-a-turn rule present')
+assert(
+  /do not announce that the preview will reload/i.test(r),
+  'agent must not announce preview reloads'
+)
 assert(r.includes('before scaffolding or'), 'new projects ask about unresolved setup choices')
 assert(r.includes('after these files successfully land'), 'environment refresh follows landing')
 // v3 naming — the product is Trezi in the rule text now.
