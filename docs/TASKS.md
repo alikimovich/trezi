@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Select a whole chat message (LKM-186)
+
+- [x] Each reply text segment is one selectable TextKit text view (`ChatTextView.swift`) over one attributed string (`ChatRichText.swift`): drag selection crosses paragraphs, lists, headings, code blocks and tables.
+- [x] Cmd-A selects the message; Cmd-C copies plain text with paragraph breaks, whole code blocks keep their fences; links, code Copy buttons, inline code and light/dark kept.
+- [x] `native-chat-text` unit fixture and `chat-text` smoke check (group `chat`) with light/dark captures; CHANGELOG line.
 ## Chat text scrolls behind the composer (LKM-190)
 
 - [x] Remove the conversation's clearance mask (`LatestClearanceMask`, `latestClearHeight`, `ChatLatestButton.fade`): history stays painted under the composer and the latest button.

@@ -142,7 +142,15 @@ export class NativeActivityController {
     })
   }
   action(action: string) {
-    if (action === 'clear') this.lines = []
+    // Verification only: a known starting state (nothing shown, read or already auto-opened).
+    if (action === 'reset') {
+      this.lines = []
+      this.visible = false
+      this.opened.clear()
+      this.unread = 0
+      this.unreadLevel = 'info'
+      this.badge()
+    } else if (action === 'clear') this.lines = []
     else if (action === 'show') this.visible = true
     else if (action === 'hide') this.visible = false
     else if (action === 'toggle') this.visible = !this.visible
