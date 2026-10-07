@@ -32,6 +32,8 @@ export interface NativeShellState {
   branches: string[]
   publishLabel: string
   publishing: boolean
+  /** The publish's current step can still be cancelled (LKM-187). */
+  publishCancellable: boolean
   publishMode: string
   codeOpen: boolean
   previewBase: string | null
@@ -52,6 +54,7 @@ export interface NativeShellAction {
     | 'new-branch'
     | 'git-updates'
     | 'publish'
+    | 'publish-cancel'
     | 'publish-mode'
     | 'code'
     | 'layers'

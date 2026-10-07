@@ -100,6 +100,7 @@ const UNIT = [
   'sidebar-icon',
   'sidebar-focus',
   'native-git',
+  'publish-progress',
   'native-support-sheets',
   'native-cat-assets',
   'project-ui',

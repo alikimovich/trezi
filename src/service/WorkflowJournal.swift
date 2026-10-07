@@ -63,12 +63,16 @@ struct WorkflowRecord: Sendable {
             ("result", result ?? .null), ("started", .string(JSText(started))), ("updated", .string(JSText(updated)))])
     }
 
-    /// What Bun (and the recovery UI) sees: no stored replies.
-    func summary(progress: String?) -> JSValue {
+    /// What Bun (and the recovery UI) sees: no stored replies. `step` is the step a
+    /// running publish is on and since when (LKM-187).
+    func summary(progress: String?, step: (name: String, since: String)? = nil) -> JSValue {
         var fields: [(String, JSValue)] = [("id", .string(JSText(id))), ("kind", .string(JSText(kind))), ("root", .string(JSText(root))),
             ("params", params), ("state", .string(JSText(state))), ("steps", .array(steps.map { $0.value() })),
             ("result", result ?? .null), ("started", .string(JSText(started))), ("updated", .string(JSText(updated)))]
         if let progress { fields.append(("progress", .string(JSText(progress)))) }
+        if let step, WorkflowRecord.open.contains(state) {
+            fields.append(("step", .string(JSText(step.name)))); fields.append(("stepSince", .string(JSText(step.since))))
+        }
         return RepositoryOwner.object(fields)
     }
 

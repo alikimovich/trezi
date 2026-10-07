@@ -45,6 +45,9 @@ final class WorkflowContext: @unchecked Sendable {
         if let id, owner.isCancelled(id) { throw WorkflowCancelled(message: "Cancelled; nothing further was changed.") }
     }
 
+    /// The user-facing step a publish is on (LKM-187); in memory only, never journaled.
+    func phase(_ step: String) { if let id { owner.phase(id, step) } }
+
     /// Records a step's intent (synced) before its first effect.
     func begin(_ name: String) throws {
         try check()

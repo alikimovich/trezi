@@ -78,6 +78,9 @@ final class WorkflowOwner: @unchecked Sendable {
     private var cancelled: Set<String> = []
     private var processes: [String: Set<pid_t>] = [:]
     private var progress: [String: String] = [:]
+    /// The step a publish is on (LKM-187), in memory: `workflows` reports it to the
+    /// toolbar and every step's time goes to the product log.
+    private var phases: [String: (step: String, since: Date, at: String, began: Date)] = [:]
 
     init(options: Options, repository: RepositoryOwner, send: @escaping @Sendable (Data) -> Void) {
         self.options = options; self.repository = repository; self.send = send
@@ -113,7 +116,7 @@ final class WorkflowOwner: @unchecked Sendable {
         let body = try Body(frame, required: rule.required, optional: rule.optional)
         if let intent = rule.intent, try body.string("intent") != intent { throw ServiceContractFailure.invalidRequest }
         switch frame.method {
-        case "workflows": return answer(frame, .succeeded(.array(journal.all().map { $0.summary(progress: progressOf($0.id)) })))
+        case "workflows": return answer(frame, .succeeded(.array(journal.all().map { $0.summary(progress: progressOf($0.id), step: phaseOf($0.id)) })))
         case "diagnosis":
             return answer(frame, .succeeded(try diagnoses.recall(root: try body.path("root"), signature: try Self.signature(body))))
         case "remember":
@@ -211,7 +214,7 @@ final class WorkflowOwner: @unchecked Sendable {
         if refused { return settle(id, operation: operation, failure: Self.stopping) }
         guard let record = journal.record(id) else { return settle(id, operation: operation, failure: Self.stopping) }
         let context = self.context(id: id, root: record.root)
-        let outcome: WorkflowOutcome
+        var outcome: WorkflowOutcome
         do {
             if let prior { try journal.update(prior.id) { $0.state = "superseded" } }
             switch record.kind {
@@ -230,6 +233,15 @@ final class WorkflowOwner: @unchecked Sendable {
             outcome = .failed(Self.object([("ok", .bool(false)), ("error", .string(JSText(cancel.message))), ("cancelled", .bool(true))]), state: "cancelled")
         } catch {
             outcome = .failed(Self.object([("ok", .bool(false)), ("error", .string(JSText(WorkflowJournal.redact("\(error)"))))]), state: "failed")
+        }
+        // A publish waits for its description as a step of its own; a failure names its step.
+        if record.kind == "publish" {
+            switch outcome {
+            case .describe: phase(id, "describe")
+            case .done: endPhase(id, state: "done")
+            case .failed(let result, let failed):
+                if let step = endPhase(id, state: failed) { outcome = .failed(Self.merge(result, [("step", .string(JSText(step)))]), state: failed) }
+            }
         }
         let payload: JSValue, state: String
         switch outcome {
@@ -253,6 +265,7 @@ final class WorkflowOwner: @unchecked Sendable {
     private func settle(_ id: String, operation: String, payload: JSValue? = nil, failure: ServiceFailure? = nil) {
         if failure != nil, let record = journal.record(id), record.state == "running" {
             _ = try? journal.update(id) { $0.state = $0.steps.isEmpty ? "failed" : "interrupted" }
+            if phaseOf(id) != nil { endPhase(id, state: "interrupted") }
         }
         lock.lock(); let frames = waiting.removeValue(forKey: operation) ?? []; lock.unlock()
         for frame in frames { answer(frame, payload.map { .succeeded($0) } ?? .failed(failure!)) }
@@ -282,6 +295,7 @@ final class WorkflowOwner: @unchecked Sendable {
         if record.state == "describe" {
             try journal.update(record.id) { $0.state = "cancelled"
                 $0.result = Self.object([("ok", .bool(false)), ("error", .string(JSText("Publishing was cancelled before the pull request was created."))), ("cancelled", .bool(true))]) }
+            if phaseOf(record.id) != nil { endPhase(record.id, state: "cancelled") }
             return Self.object([("cancelled", .bool(true)), ("workflow", .string(JSText(record.id)))])
         }
         lock.lock()
@@ -316,6 +330,41 @@ final class WorkflowOwner: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return progress[id].map { WorkflowJournal.redact($0).split(separator: "\n").suffix(4).joined(separator: "\n") }
     }
+
+    // MARK: Publish steps (LKM-187)
+
+    /// The publish moved to `step`; the product log gets the time the previous one took.
+    func phase(_ id: String, _ step: String) {
+        let now = Date()
+        lock.lock()
+        let previous = phases[id]
+        if previous?.step != step { phases[id] = (step, now, WorkflowJournal.now(), previous?.began ?? now) }
+        lock.unlock()
+        guard previous?.step != step else { return }
+        if let previous {
+            ProductLog.info("publish", "Publish step step=\(previous.step) ms=\(Self.ms(previous.since, now)) workflow=\(id.prefix(8))")
+        } else {
+            ProductLog.info("publish", "Publish started workflow=\(id.prefix(8))")
+        }
+    }
+
+    /// Ends a publish's step tracking with its last step's and the whole run's time.
+    @discardableResult
+    func endPhase(_ id: String, state: String) -> String? {
+        let now = Date()
+        lock.lock(); let last = phases.removeValue(forKey: id); lock.unlock()
+        let timing = last.map { " ms=\(Self.ms($0.since, now)) total=\(Self.ms($0.began, now))" } ?? ""
+        ProductLog.write(state == "done" ? "info" : "warn", "publish",
+                         "Publish \(state) step=\(last?.step ?? "none")\(timing) workflow=\(id.prefix(8))")
+        return last?.step
+    }
+
+    private func phaseOf(_ id: String) -> (name: String, since: String)? {
+        lock.lock(); defer { lock.unlock() }
+        return phases[id].map { ($0.step, $0.at) }
+    }
+
+    private static func ms(_ from: Date, _ to: Date) -> Int { Int((to.timeIntervalSince(from) * 1000).rounded()) }
 
     // MARK: Drain
 

@@ -135,6 +135,7 @@ const host = compile(
     join(root, 'src/native/PreviewAgent.swift'),
     join(root, 'src/native/ToolbarLayout.swift'),
     join(root, 'src/native/ToolbarAddress.swift'),
+    join(root, 'src/native/ToolbarPublish.swift'),
     join(root, 'src/native/Inspector.swift'),
     join(root, 'src/native/Composer.swift'),
     join(root, 'src/native/ComposerVerification.swift'),

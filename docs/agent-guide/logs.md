@@ -52,6 +52,9 @@ Lifecycle facts only:
   provider started`, `New chat registered`, `New chat ready` and `New chat first send`
   (wait and age) from `src/main/agent.ts`, the spare's ready/taken/removed lines and
   background dependency installs;
+- publish steps (LKM-187): `Publish started`, one `Publish step step=<name> ms=<n>`
+  per finished step and `Publish done|failed|cancelled|interrupted step=<last> ms=<n>
+  total=<n>` from `WorkflowOwner.swift`, with an 8-character workflow id;
 - provider helper start, exit and crash with status, and backend start and exit;
 - target dev server output category and length (the raw line stays in Activity);
 - preview load, reload, load failure and web-content crash;

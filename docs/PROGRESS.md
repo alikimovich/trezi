@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-187: Publish shows progress
+
+- **Why.** After clicking Publish nothing changed until the whole workflow returned, which can take a minute (sync, push, `gh pr create`, merge, cleanup). There was no way to tell it was running, no cancel, and a failure only reached the Activity log.
+- **Owner** (`WorkflowOwner.swift`, `WorkflowContext.phase`, `WorkflowPublish.swift`):
+  - The publish reports its step through `context.phase`. The step is kept in memory per workflow id, not in the journal; after a service restart the journal's open intent step stands in.
+  - The `workflows` summary carries `step`/`stepSince` while the record is open. A failed result is merged with `step`.
+  - The product log gets `Publish started`, one `Publish step … ms=` per step and a final `Publish <state> … total=`.
+  - `check()` now also runs before sync, push and the describe hand-off, so Cancel takes effect between those steps.
+- **Bun** (`git-controller.ts`, `src/shared/publish-progress.ts`):
+  - `runs` per root replaces the `publishing` set. The button label is set synchronously on click, and Bun polls `publish:progress` every 400 ms; the poll also advances the elapsed seconds.
+  - `refresh()` adopts a running publish it did not start, which covers a reload.
+  - Results end in a toast with "View on GitHub", or a standard sheet (Copy details, Close, Retry) that names the step and classifies the reason as conflict, auth or network.
+- **Toolbar** (`ToolbarPublish.swift`):
+  - The item stays a standard `NSMenuToolbarItem` (no custom view, so Liquid Glass and overflow still work). Template spinner frames are swapped on a common-mode timer.
+  - While publishing, `action = nil`, so a click can't start a second publish; the chevron menu shows the status and, while it's allowed, Cancel Publish.
+- **Tests.**
+  - New core smoke check `publish-progress` stubs the workflow owner and GitHub status. It covers feedback under 1 s, every step label, the elapsed time, Cancel only before the PR, the success toast, the cancel toast and the failure sheet, and writes `publish-progress.png`, `publish-toast.png` and `publish-failure.png`.
+  - Unit: `publish-progress` (new), `native-git` (immediate state, per-project indicator, cancel, toast, failure sheet, Retry, adopt) and `workflow-owner` (the real owner tags a conflict with `step: sync`). The workflow fixture now compiles `ProductLog.swift`; when unconfigured it writes nothing.
+
 ## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
 
 - **Why.** After a publish, landed chat commits were unreachable from `trezi/main`. Its reflog said `branch: Created from refs/remotes/origin/trezi/main`, which is Git's DWIM `checkout <branch>` after the local branch was deleted while a stale remote-tracking ref survived.
