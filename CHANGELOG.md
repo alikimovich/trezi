@@ -63,6 +63,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 - Layers is a floating island under the toolbar's Layers button instead of a panel docked over the chat: it sits beside or above the editing island without covering it, moves by its header, resizes from its edges and remembers its place and size (LKM-179).
+- The agent no longer ends turns with "the preview will reload" notes; it closes with a short summary and mentions the preview only when something needs attention.
 - Settings redesign: one native window with a General, AI Providers and Experimental sidebar that saves automatically.
 - Renamed the app to Trezi; projects that use the earlier setup names are migrated once on open.
 - Project memory keeps only durable rules a future chat could not learn from the code (preferences, design rules, constraints, project facts, pitfalls), each dated; one-off requests are no longer stored and existing ones are cleaned up, a design token becomes a rule only once it exists in the code, agents no longer report a requested change as "saved in memory", and each automatic update shows "Project memory updated: +1 rule" with View and Undo (LKM-177).
