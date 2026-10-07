@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Branch menu aligned with the address (LKM-184)
+
+- [x] `BranchPopUpButton`/`BranchPopUpCell` (`ToolbarAddress.swift`): the branch title starts on the address text's left edge; the chevron follows it, tail truncation and the frame-sized click target kept.
+- [x] `toolbar-address` smoke check measures both rendered text origins (window x, |dx| <= 0.5 pt) and the title–chevron gap at three widths, with light and dark window captures at two; CHANGELOG line.
+
 ## Movable islands (LKM-180)
 
 - [x] One shared island (`FloatingIsland.swift`): glass, opaque face, AppKit header that drags (open/closed hand), header controls never start a drag, double-click resets, whole frame keeps the pointer from the page.

@@ -53,7 +53,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor
     let address = NSTextField()
-    let branchMenu = NSPopUpButton(frame: .zero, pullsDown: true)
+    let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
     var publishTitle = "Publish"
     /// Toolbar frames read synchronously inside the last `window-width` test resize.
     var resizeSnapshot: [String: Any] = [:]
@@ -485,6 +485,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             // Read before returning to the run loop: no deferred alignment has run yet.
             resizeSnapshot = toolbarInspect(); return true
         }
+        // Test captures force the window's own appearance (nil: follow the system); system settings are never touched.
+        if action == "window-appearance" { window?.appearance = id == "dark" ? NSAppearance(named: .darkAqua) : id == "light" ? NSAppearance(named: .aqua) : nil; return true }
         if action == "sidebar-width", let id, let width = Double(id), (180...340).contains(width) {
             setSidebarContentWidth(width, in: split); return true
         }
