@@ -204,6 +204,18 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
       (s) => ids.every((id) => s.attachmentFrames[id])
     )
     await host.request('shellPerform', { action: 'select-object' })
+    // The baseline is the settled transcript: the follow/pin pass after the edit above
+    // renders rows for a few frames, and only evaluations after it are hover's.
+    let settled = { count: -1, since: 0 }
+    await waitFor(
+      async () => {
+        const { messageBodyEvaluations: count } = await host.request('chatInspect')
+        if (count !== settled.count) settled = { count, since: Date.now() }
+        return Date.now() - settled.since >= 500
+      },
+      'the transcript stops rendering rows after the edit',
+      10000
+    )
     const chatBeforeHover = await host.request('chatInspect')
     assert.ok(
       chatBeforeHover.messageBodyEvaluations > 0,

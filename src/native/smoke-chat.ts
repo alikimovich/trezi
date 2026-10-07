@@ -112,10 +112,11 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       if (queue.queueCount === 1) break
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
-    // One row plus the reason row ("Sends when this turn finishes", LKM-169).
+    // One row and no reason row: a running turn is the normal wait (LKM-191).
     if (
       queue.queueCount !== 1 ||
-      queue.queueHeight !== 62 ||
+      queue.queueNote !== '' ||
+      queue.queueHeight !== 34 ||
       queue.queueInset !== 14 ||
       Math.abs(queue.queueOverlap - 16) > 1
     )
