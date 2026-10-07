@@ -1,7 +1,12 @@
 import type { SessionToolHost } from './backends/types'
 import { agentGitTool } from './chat-agent-git'
 import { runChatIslandTool } from './chat-islands'
-import { agentWorkspaceEvidence, agentWorkspaceState, resolveParkedChat } from './chat-isolation'
+import {
+  agentWorkspaceEvidence,
+  agentWorkspaceState,
+  reconcilePark,
+  resolveParkedChat
+} from './chat-isolation'
 import { openAgentCode } from './code-tools'
 import { isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { openAgentPreview } from './preview-tools'
@@ -81,6 +86,9 @@ export async function runTreziTool(
       ok: false,
       guidance: 'This background edit lands automatically. Do not change the parent chat workspace.'
     }
+  // LKM-196: one consistent status, never "parked" with no batch behind it.
+  if (action === 'workspace_state' || action === 'prepare_conflict_resolution')
+    await reconcilePark(s.emitKey, 'agent-tool')
   if (action === 'workspace_state') return agentWorkspaceEvidence(s.emitKey, s.liveRoot)
   if (
     [

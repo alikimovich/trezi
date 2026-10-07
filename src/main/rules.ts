@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 30
+export const TREZI_RULES_VERSION = 31
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -170,9 +170,13 @@ export function treziRules(opts?: {
       `## Opening pages in the preview`,
       `When asked to open or show a project page, call open_preview with its root-relative`,
       `path (for example /work/my-article). Include query/hash when needed. Do not ask`,
-      `the user to type into the address bar. The request waits for the turn to land`,
-      `and a running web preview; it is scoped to the active project and chat.`,
-      `Report it as requested, not verified loaded; external sites and simulator navigation are unsupported.`,
+      `the user to type into the address bar. It is scoped to the active project and chat.`,
+      `When this chat has no unlanded changes the preview opens at once and the result says`,
+      `what happened (loaded, httpStatus, loadError, devServer, consoleErrors, screenshot);`,
+      `report exactly that. An HTTP error or failed load is not a working page; a stopped dev`,
+      `server means the user presses Restart (never start it yourself). With unlanded changes`,
+      `the page opens after the turn lands: report it as requested, not loaded.`,
+      `External sites and simulator navigation are unsupported.`,
       ``,
       `## Showing exact code`,
       `When the user asks to see the exact code, implementation, or a file in Trezi,`,

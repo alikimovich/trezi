@@ -219,6 +219,8 @@ final class WorkspaceLayout {
             preview.layer?.masksToBounds = mobile
             preview.isHidden = !shown || page.width <= 0 || page.height <= 0
         }
+        // Loading and HTTP-error pill over the page (LKM-196), never over Opening or error states.
+        host.previewLoad.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
         // Straddles the island's left edge below and above its rounded corners.
         let corner = min(NativeEditingInspector.cornerRadius, island.height / 2)

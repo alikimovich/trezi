@@ -1,3 +1,4 @@
+import { previewLoads } from '../main/preview-loads'
 import type { NativeShellAction, NativeShellState } from '../shared/native-shell'
 import type { NativeProjectStatus } from '../shared/native-workspace'
 import type { NativeChatController } from './chat-controller'
@@ -91,6 +92,7 @@ export class NativeShellController {
     } catch {}
     const state = this.git.decorate({
       previewStatus: status,
+      previewLoad: status.kind === 'running' && active?.url ? previewLoads.banner : null,
       rows,
       project: active?.key ?? null,
       chatReady: !!active && ws.loadedKey === active.key && status.kind !== 'error',

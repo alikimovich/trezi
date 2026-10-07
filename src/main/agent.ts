@@ -41,6 +41,7 @@ import {
   isolationSnapshot,
   landingInFlight,
   liveChatWorktreeIds,
+  reconcileIdleParks,
   releaseChat,
   resolveParkedChat,
   retryLanding,
@@ -1894,6 +1895,10 @@ export function registerAgentIpc(
   // Turn state (running, the turn in flight) comes from the owner, so a reattach sees
   // what the coordinator decided; the transcript is the provider's live capture.
   ipcMain.handle('agent:workspace-snapshot', async (): Promise<WorkspaceSnapshot> => {
+    // LKM-196: an idle chat never opens parked with nothing to land.
+    await reconcileIdleParks(
+      (key) => runningKeys.has(key) || preparingTurns.has(key) || landingInFlight(key)
+    )
     const owned = new Map(
       (
         await conversation()

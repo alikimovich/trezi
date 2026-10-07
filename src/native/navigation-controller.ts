@@ -1,4 +1,5 @@
 import type { EditingOwner, NavigationEvent } from '../main/editing-owner'
+import { type PreviewDispatch, previewLoads } from '../main/preview-loads'
 import type { PreviewOpenRequest } from '../shared/preview-navigation'
 
 export interface NavigationView {
@@ -23,13 +24,37 @@ export class NavigationController {
     readonly report: (error: unknown) => void = () => {}
   ) {}
 
+  /** Handles one request and reports what happened to the waiting tool (LKM-196). */
   async request(request: PreviewOpenRequest) {
+    const report = (outcome: PreviewDispatch) => previewLoads.dispatched(request.id, outcome)
     const active = this.view.active()
     // Never followed into another chat or project.
-    if (!active || active.root !== request.root || active.chat !== request.key) return
-    if (await this.owner.navigate(request.key, request.root, request.path, this.turn(request.key)))
-      this.ready.add(request.key)
-    await this.open()
+    if (!active || active.root !== request.root || active.chat !== request.key)
+      return report('elsewhere')
+    try {
+      const turn = request.now ? null : this.turn(request.key)
+      const ready = await this.owner.navigate(
+        request.key,
+        request.root,
+        request.path,
+        turn,
+        request.now
+      )
+      if (ready) this.ready.add(request.key)
+      const opened = await this.open()
+      report(
+        opened.has(request.key)
+          ? 'loading'
+          : !ready
+            ? 'deferred'
+            : this.ready.has(request.key)
+              ? 'no-server'
+              : 'dropped'
+      )
+    } catch (error) {
+      report('dropped')
+      throw error
+    }
   }
 
   async boundary(chat: string, kind: NavigationEvent, turn: string | null) {
@@ -38,8 +63,10 @@ export class NavigationController {
     await this.open()
   }
 
-  /** Opens a released request when its chat is active and its server runs (safe to call often). */
-  async open() {
+  /** Opens a released request when its chat is active and its server runs (safe to call
+   *  often). Returns the chats it loaded. */
+  async open(): Promise<Set<string>> {
+    const opened = new Set<string>()
     const active = this.view.active()
     for (const chat of [...this.ready]) {
       if (active?.chat === chat && !active.url) continue
@@ -53,7 +80,9 @@ export class NavigationController {
       const base = new URL(active.url!)
       if (!['http:', 'https:'].includes(base.protocol)) continue
       await this.view.load(base.origin + taken.path)
+      opened.add(chat)
     }
+    return opened
   }
 
   /** `open` without awaiting, for render hooks. */

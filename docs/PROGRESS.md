@@ -2,6 +2,27 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-196: ghost parked state and a real open_preview result
+
+- **Ghost park, cause.** Nothing ever re-checked a park against the live tree. A drift park whose content later reached live another way stayed parked with an empty diff, and `sendRefusal` blocked the chat. A `failed` landing whose base moved on also stayed parked with nothing to land. Separately, a park could lose `parkedFiles` or its record while the worktree still held work, which left a card with no working action.
+- **Reconcile.** `src/main/park-reconcile.ts` runs on the chat's chain at turn start (folding uncommitted work first), at chat open (the `agent:workspace-snapshot` handler, idle chats only, bounded to 2 s) and before `workspace_state` / `prepare_conflict_resolution`.
+  - An empty park is cleared and logged ("Stale park cleared").
+  - Pending files the park does not list rebuild the batch and the record, and re-emit the card ("Park batch rebuilt").
+  - A merge in progress, a revert, a resolution or a reclaim is left alone.
+  - The test is `test/chat-ghost-park.mjs`, in the Swift repository-owner suites.
+- **open_preview, cause.** The tool sent `preview:open` and answered "requested". The navigation was also deferred until a landing even when the chat had nothing unlanded, so the agent reported pages it never saw.
+- **Real result.**
+  - The request now carries an id and `now` (true when `hasUnlandedWork` is false). `NavigationController.request` reports how it handled the request: loading, deferred, no-server, elsewhere or dropped.
+  - The host now reports main-frame start, HTTP response, finish, failure and cancel (`PreviewLoad.swift`, `PreviewPlatform.swift`), and `previewLoads` (`src/main/preview-loads.ts`) tracks them.
+  - The tool waits up to 10 s. It returns the final URL, HTTP status, load error, dev-server state (with a bounded probe when the preview cannot say), console errors and a screenshot path. A stopped server gives the Restart text; the agent must not start it.
+  - The rules are at v31.
+- **UI.**
+  - A navigation slower than 350 ms shows a loading pill over the page.
+  - HTTP ≥ 400 shows an error pill with Reload and dismiss (it is in `previewCoverRects`).
+  - A failed load shows the status overlay naming the path, with Restart (`loadErrorStatus`).
+  - Cancelled navigations no longer raise errors.
+  - The test is `test/preview-open.mjs`: a stub server answering 500, a server that is down, no server, and deferred.
+
 ## 2026-10-06 — LKM-192: soft wrap in the code editor
 
 - **Why.** Long lines (an MDX paragraph) ran past the right edge and the editor scrolled sideways. The text view was already set to track its width, but the scroll view kept a horizontal scroller and nothing re-synced the text view to the clip view after the ruler and resizes re-tiled it.

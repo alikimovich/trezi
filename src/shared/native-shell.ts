@@ -12,6 +12,11 @@ export interface NativeShellRow {
 }
 export interface NativeShellState {
   previewStatus?: import('./native-workspace').NativeProjectStatus
+  /** The pill over the running preview: loading, or the page answered an HTTP error (LKM-196). */
+  previewLoad?:
+    | { kind: 'loading'; path: string }
+    | { kind: 'error'; path: string; status: number; message: string }
+    | null
   homeState: {
     visible: boolean
     busy: boolean

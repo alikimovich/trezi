@@ -114,6 +114,7 @@ const UNIT = [
   'setup-vite',
   'setup-vite-real',
   'code-reveal',
+  'preview-open',
   'syntax-highlight',
   'syntax-bundle',
   'conversation-handoff',

@@ -151,8 +151,8 @@ export function serviceEditing(
         })
       )
     },
-    navigate: async (chat, root, path, turn) =>
-      (await call('navigate', present({ chat, root, path, turn }))).ready,
+    navigate: async (chat, root, path, turn, now) =>
+      (await call('navigate', present({ chat, root, path, turn, now: now || undefined }))).ready,
     navigation: async (chat, kind, turn) =>
       (await call('navigation', present({ chat, kind, turn }))).ready,
     navigationTake: async (chat) => {

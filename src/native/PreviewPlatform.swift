@@ -14,5 +14,11 @@ final class PreviewDownloads: NSObject, WKDownloadDelegate {
 extension Host {
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = downloads }
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = downloads }
-    func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) { decisionHandler(response.canShowMIMEType ? .allow : .download) }
+    func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        // The main frame's HTTP status, so open_preview and the preview pill can report a 500 (LKM-196).
+        if response.isForMainFrame, webView === views["preview"], let http = response.response as? HTTPURLResponse {
+            emit(["event":"navigation-response", "view":"preview", "url":http.url?.absoluteString ?? "", "status":http.statusCode])
+        }
+        decisionHandler(response.canShowMIMEType ? .allow : .download)
+    }
 }

@@ -111,6 +111,24 @@ export function agentWorkspaceState(sessionKey: string): {
   }
 }
 
+/**
+ * LKM-196: whether the chat holds edits the live preview does not serve yet (a parked
+ * batch, commits since its base or uncommitted changes in its worktree). Its
+ * `open_preview` then waits for the landing; otherwise the preview opens at once and the
+ * tool reports the real load. An unreadable worktree counts as unlanded.
+ */
+export async function hasUnlandedWork(sessionKey: string): Promise<boolean> {
+  const st = states.get(sessionKey)
+  if (!st) return false
+  if (st.parked && !st.reverted) return true
+  try {
+    if ((await gitOut(st.wt.path, ['rev-parse', 'HEAD'])).trim() !== st.wt.baseSha) return true
+    return !!(await gitOut(st.wt.path, ['status', '--porcelain', '--untracked-files=all'])).trim()
+  } catch {
+    return true
+  }
+}
+
 /** Git state and preview observations are distinct: a reachable preview is not
  * proof that a just-landed revision finished compiling. */
 export async function agentWorkspaceEvidence(sessionKey: string, root: string) {

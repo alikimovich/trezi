@@ -134,6 +134,7 @@ try {
       'stop-recovery',
       'chat-landing',
       'chat-landing-recovery',
+      'chat-ghost-park',
       'setup-worktree'
     ]
     const results = await Promise.all(

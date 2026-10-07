@@ -34,6 +34,7 @@ import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
+import { reconcileParkOnChain } from './park-reconcile'
 import { productLog } from './product-log'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { logLanding, logLandingFailed } from './turn-log'
@@ -49,6 +50,7 @@ export {
   isolationSnapshot,
   sendRefusal
 } from './chat-status'
+export { reconcileIdleParks, reconcilePark } from './park-reconcile'
 export {
   applyParkedBranch,
   discardParkedBranch,
@@ -180,6 +182,9 @@ export async function beforeTurn(sessionKey: string, _text: string): Promise<voi
   await onChain(st, async () => {
     await recreateWorkspace(st)
     await settleReverted(st)
+    // LKM-196: a park whose work is already live (or whose batch went missing) is
+    // settled before the send guard reads it.
+    await reconcileParkOnChain(sessionKey, st, 'turn-start', true)
     // Helpers live under excluded `.trezi/` paths, so a parked chat gets them too
     // without looking changed (LKM-153: a stopped chat ran setup without them).
     if (st.parked) return editingOwner().syncSetupHelpers(st.liveRoot, st.wt.path)

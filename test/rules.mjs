@@ -19,7 +19,9 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 30, 'version bumped to 30')
+assert(TREZI_RULES_VERSION === 31, 'version bumped to 31')
+// LKM-196: open_preview reports the real load; only a deferred open is "requested".
+assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
 // LKM-193: background agents ask only for the user's own choices, else default and say so.
 assert(!/## Background agents/.test(r), 'R-bg: interactive chats get no background section')
 const bg = treziRules({ background: true })

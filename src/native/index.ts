@@ -82,6 +82,7 @@ import { networkVolumeNote } from './network-volume-note'
 import { app, dispatchIPC, ipcMain, NativeView, serviceEvents, shell, views } from './platform'
 import { servicePlatform } from './platform-service'
 import { servicePreferences } from './preferences-service'
+import { installPreviewLoads, loadErrorStatus } from './preview-load-runtime'
 import { NativePreviewRecovery } from './preview-recovery'
 import { NativePreviewSupervisor } from './preview-supervisor'
 import { serviceProjectMemory } from './project-memory-service'
@@ -667,6 +668,7 @@ async function main() {
       previewView.webContents.send(channels.PREVIEW_HIDE_SCROLLBARS, viewport === 'mobile')
     }
   )
+  installPreviewLoads(host, workspaceController, shellController)
   const renderWorkspace = workspaceController.services.render
   workspaceController.services.render = (state) => {
     renderWorkspace(state)
@@ -925,7 +927,7 @@ async function main() {
   host.on('load-error', (message) => {
     activityController.append(message.message, 'error')
     if (message.view === 'preview' && workspaceController.active) {
-      workspaceController.state.status = { kind: 'error', message: message.message }
+      workspaceController.state.status = loadErrorStatus(message)
       workspaceController.changed()
     }
   })

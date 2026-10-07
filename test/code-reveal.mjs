@@ -53,13 +53,15 @@ const navigate = (path, background = false) =>
     (channel, request) => navigation.push({ channel, request }),
     background
   )
-assert.equal(navigate('/work/article?view=full#intro').requested, true)
+assert.equal((await navigate('/work/article?view=full#intro')).requested, true)
 assert.deepEqual(navigation[0], {
   channel: 'preview:open',
   request: {
     root: '/project',
     key: 'chat',
-    path: '/work/article?view=full#intro'
+    path: '/work/article?view=full#intro',
+    id: navigation[0].request.id,
+    now: true
   }
 })
 for (const path of [
@@ -71,6 +73,6 @@ for (const path of [
   '',
   null
 ])
-  assert(navigate(path).error, String(path))
-assert(navigate('/article', true).error)
+  assert((await navigate(path)).error, String(path))
+assert((await navigate('/article', true)).error)
 assert.equal(navigation.length, 1)

@@ -33,6 +33,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { previewLoads } from '../src/main/preview-loads.ts'
 import { contentHash } from '../src/main/source-owner.ts'
 import { NavigationController } from '../src/native/navigation-controller.ts'
 import { TurnBoundaries } from '../src/native/turn-boundaries.ts'
@@ -450,12 +451,24 @@ try {
     active = { ...active, url: 'http://127.0.0.1:5173/old/page' }
     await controller.open()
     assert.deepEqual(loads, ['http://127.0.0.1:5173/next'])
-    await controller.request({ root, key: 'other-chat', path: '/never' })
+    // LKM-196: each request reports what happened to the waiting open_preview.
+    const elsewhere = previewLoads.request(1000)
+    await controller.request({ root, key: 'other-chat', path: '/never', id: elsewhere.id })
     assert.deepEqual(await editing.navigationState(), [], 'Never followed into another chat')
+    assert.equal(await elsewhere.dispatched, 'elsewhere')
+    const now = previewLoads.request(1000)
+    assert.equal(
+      await editing.navigate('live', root, '/held', null),
+      false,
+      'Without now the owner binds the turn in flight'
+    )
+    await controller.request({ root, key: 'live', path: '/now', id: now.id, now: true })
+    assert.equal(await now.dispatched, 'loading', 'Nothing unlanded: opened at once mid-turn')
+    assert.equal(loads.at(-1), 'http://127.0.0.1:5173/now')
     await controller.request({ root, key: 'live', path: '/switch' })
     active = { root, chat: 'second', url: 'http://127.0.0.1:5173/' }
     await controller.open()
-    assert.equal(loads.length, 1, 'Leaving the chat drops its request')
+    assert.equal(loads.length, 2, 'Leaving the chat drops its request')
     await fixture.stop()
     // Bun's attribution of provider events to turn boundaries (the events reordered).
     const boundaries = new TurnBoundaries()
