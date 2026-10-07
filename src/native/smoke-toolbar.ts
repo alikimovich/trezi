@@ -29,8 +29,42 @@ const pick = (state: Toolbar) => ({
   addressTruncated: state.addressTruncated,
   branchTruncated: state.branchTruncated,
   addressTextWidth: state.addressTextWidth,
-  addressTextRoom: state.addressTextRoom
+  addressTextRoom: state.addressTextRoom,
+  addressTextLeading: state.addressTextLeading,
+  branchTextLeading: state.branchTextLeading,
+  addressInkLeading: state.addressInkLeading,
+  branchInkLeading: state.branchInkLeading,
+  branchTitleRectLeading: state.branchTitleRectLeading,
+  branchFrameLeading: state.branchFrameLeading,
+  branchFrameWidth: state.branchFrameWidth,
+  branchTitleEnd: state.branchTitleEnd,
+  branchChevronLeading: state.branchChevronLeading,
+  branchChevronTrailing: state.branchChevronTrailing,
+  branchChevronGap: state.branchChevronGap,
+  windowAppearance: state.windowAppearance
 })
+
+/** LKM-184: the branch title starts on the address text's left edge (rendered text
+ *  origins, window x), and the chevron follows the title inside the pop-up's frame. */
+function assertTitles(state: Toolbar, stage: string) {
+  const detail = JSON.stringify(pick(state))
+  assert.ok(state.titleAlignmentMeasured, `Toolbar ${stage}: both titles render: ${detail}`)
+  assert.ok(
+    Math.abs(state.branchTextLeading - state.addressTextLeading) <= 0.5,
+    `Toolbar ${stage}: branch and address text share one left edge: ${detail}`
+  )
+  // Untruncated, the stock cell left ~4.5 pt; a tail ellipsis can leave up to a glyph more.
+  const maxGap = state.branchTruncated ? 16 : 6.5
+  assert.ok(
+    state.branchChevronGap >= 1 && state.branchChevronGap <= maxGap,
+    `Toolbar ${stage}: the chevron follows the branch title (gap 1–${maxGap}pt): ${detail}`
+  )
+  assert.ok(
+    state.branchFrameLeading <= state.branchInkLeading &&
+      state.branchChevronTrailing <= state.branchFrameLeading + state.branchFrameWidth + 0.5,
+    `Toolbar ${stage}: title and chevron stay inside the pop-up's click target: ${detail}`
+  )
+}
 
 /** LKM-148 frame assertions for one laid-out toolbar. */
 function assertToolbar(state: Toolbar, stage: string) {
@@ -141,16 +175,38 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
         'Toolbar wide: the full branch shows when it fits'
       )
     }
+    assertTitles(settled, name)
+    const titles: Record<string, unknown> = {}
+    // LKM-184: at two widths, the titles stay aligned in a light and a dark window.
+    if (name !== 'minimum')
+      for (const appearance of ['light', 'dark'] as const) {
+        await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        const state: Toolbar = await host.request('shellInspect')
+        assert.equal(
+          /dark/i.test(state.windowAppearance),
+          appearance === 'dark',
+          `Toolbar ${name} ${appearance}: window appearance forced (${state.windowAppearance})`
+        )
+        assertTitles(state, `${name} ${appearance}`)
+        titles[appearance] = {
+          ...pick(state),
+          capture: await capture(host, artifacts, `${name}-${appearance}`)
+        }
+      }
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
     evidence[name] = {
       live: pick(live),
       settled: pick(settled),
+      titles,
       capture: await capture(host, artifacts, name)
     }
   }
   writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
 }
 
-/** Cleanup: the default window width. */
+/** Cleanup: the default window width and the system appearance. */
 export async function restoreToolbarAddress(host: NativeBridge) {
+  await host.request('shellPerform', { action: 'window-appearance', row: '' })
   await host.request('shellPerform', { action: 'window-width', row: '1320' })
 }

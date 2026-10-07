@@ -28,6 +28,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 - Publishing no longer loses chat changes. Merging a PR keeps the project on its work branch, which takes in the merged main or, if they overlap, stays as it was with a note offering Git updates. Trezi never recreates the branch from an outdated GitHub copy or switches onto a branch that lacks the preview's changes. On open, chat changes an earlier publish left on another branch get one notice, "N earlier chat changes are on branch main, not on trezi/main", with Bring them back and Ignore (LKM-185).
+- The branch menu in the toolbar now starts on the same left edge as the preview address above it (LKM-184).
 - Select mode highlights the hovered element again, and pointer moves over the preview are no longer slowed by a window hit test; the editing island still keeps hover, clicks and scrolls from reaching the page beneath it (LKM-173).
 - Preview selection coalesces pointer hover redraws to one per display frame, keeping attached chats responsive (LKM-171).
 - Unstamped elements now explain why source editing is unavailable, offer Connect and Ask the agent, and allow direct edits when one project CSS class rule can be identified (LKM-174).

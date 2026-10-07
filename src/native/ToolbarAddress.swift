@@ -9,7 +9,78 @@ final class ToolbarAddressView: NSStackView {
     }
 }
 
+/// LKM-184: the branch pull-down under the address. The borderless cell starts its title
+/// 3 pt inside the control's alignment edge (less, by a varying amount, when squeezed),
+/// while the address text starts on that edge. `BranchPopUpCell` draws the title from the
+/// alignment edge, and the control gives up those 3 pt so the chevron still follows it.
+final class BranchPopUpButton: NSPopUpButton {
+    /// The stock cell's title inset beyond the alignment edge (macOS 26).
+    static let titleInset: CGFloat = 3
+    override init(frame: NSRect, pullsDown: Bool) {
+        super.init(frame: frame, pullsDown: pullsDown)
+        cell = BranchPopUpCell(textCell: "", pullsDown: pullsDown)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+    override var intrinsicContentSize: NSSize {
+        let size = super.intrinsicContentSize
+        return NSSize(width: max(0, size.width - Self.titleInset), height: size.height)
+    }
+}
+
+final class BranchPopUpCell: NSPopUpButtonCell {
+    /// What the stock cell keeps after the title for the chevron, which it draws 13 pt before the trailing edge.
+    static let chevronRoom: CGFloat = 16
+    override func titleRect(forBounds rect: NSRect) -> NSRect {
+        let stock = super.titleRect(forBounds: rect), leading = controlView?.alignmentRectInsets.left ?? 0
+        return NSRect(x: rect.minX + leading, y: stock.minY, width: max(0, rect.width - leading - Self.chevronRoom), height: stock.height)
+    }
+    override func drawTitle(_ title: NSAttributedString, withFrame frame: NSRect, in controlView: NSView) -> NSRect {
+        let rect = titleRect(forBounds: controlView.bounds)
+        return super.drawTitle(title, withFrame: NSRect(x: rect.minX, y: frame.minY, width: rect.width, height: frame.height), in: controlView)
+    }
+}
+
+/// Where a control's rendered text starts and its ink runs (window x): the view is drawn
+/// at 8x, its first inked column found and the first glyph's left side bearing subtracted,
+/// so a bold "h" and a regular "t" compare by text origin rather than by ink.
+private func renderedText(_ view: NSView, text: String, font: NSFont?) -> (origin: CGFloat, runs: [(CGFloat, CGFloat)])? {
+    let scale: CGFloat = 8, bounds = view.bounds
+    guard view.window != nil, bounds.width > 0, bounds.height > 0, let first = text.first,
+          let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int((bounds.width * scale).rounded(.up)), pixelsHigh: Int((bounds.height * scale).rounded(.up)),
+                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 32),
+          let data = rep.bitmapData else { return nil }
+    rep.size = bounds.size
+    view.cacheDisplay(in: bounds, to: rep)
+    let x0 = view.convert(bounds, to: nil).minX
+    func inked(_ x: Int) -> Bool { (0..<rep.pixelsHigh).contains { data[$0 * rep.bytesPerRow + x * 4 + 3] > 25 } }
+    var runs: [(CGFloat, CGFloat)] = [], start: Int?
+    for x in 0...rep.pixelsWide {
+        let ink = x < rep.pixelsWide && inked(x)
+        if ink, start == nil { start = x }
+        if !ink, let begin = start { runs.append((x0 + CGFloat(begin) / scale, x0 + CGFloat(x) / scale)); start = nil }
+    }
+    guard let ink = runs.first?.0 else { return nil }
+    let glyph = NSAttributedString(string: String(first), attributes: [.font:font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)])
+    return (ink - glyph.boundingRect(with: .zero, options: [.usesLineFragmentOrigin, .usesDeviceMetrics]).minX, runs)
+}
+
 extension NativeShell {
+    /// LKM-184: the rendered address and branch text origins (window x) and the gap
+    /// between the branch title and its chevron (the pop-up's last ink run).
+    func titleAlignment() -> [String: Any] {
+        let addressText = address.stringValue.isEmpty ? address.placeholderString ?? "" : address.stringValue
+        let branchItem = branchMenu.menu?.items.first
+        let branchFont = branchItem?.attributedTitle.flatMap { $0.length > 0 ? $0.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil } ?? branchMenu.font
+        guard let addressText = renderedText(address, text: addressText, font: address.font),
+              let branch = renderedText(branchMenu, text: branchItem?.title ?? "", font: branchFont), branch.runs.count >= 2 else { return ["titleAlignmentMeasured":false] }
+        let titleEnd = branch.runs[branch.runs.count - 2].1, chevron = branch.runs[branch.runs.count - 1]
+        return ["titleAlignmentMeasured":true, "addressTextLeading":addressText.origin, "branchTextLeading":branch.origin,
+                "addressInkLeading":addressText.runs[0].0, "branchInkLeading":branch.runs[0].0,
+                "branchTitleRectLeading":branchMenu.convert(branchMenu.cell?.titleRect(forBounds: branchMenu.bounds) ?? .zero, to: nil).minX,
+                "branchFrameLeading":branchMenu.convert(branchMenu.bounds, to: nil).minX, "branchFrameWidth":branchMenu.bounds.width,
+                "branchTitleEnd":titleEnd, "branchChevronLeading":chevron.0, "branchChevronTrailing":chevron.1,"branchChevronGap":chevron.0 - titleEnd,
+                "windowAppearance":window?.effectiveAppearance.name.rawValue ?? ""]
+    }
     @objc func windowResized(_ notification: Notification) { alignChatHeader() }
     /// Re-reads the toolbar offsets after a layout, then aligns. Not during a live
     /// resize: frames from the previous pass would pair with the new window width.
@@ -43,6 +114,7 @@ extension NativeShell {
             .merging(["windowWidth":window?.frame.width ?? 0, "addressConstant":addressWidth?.constant ?? 0,
                       "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
+            .merging(titleAlignment()) { _, new in new }
     }
 }
 
