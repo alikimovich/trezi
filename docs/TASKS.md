@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat text scrolls behind the composer (LKM-190)
+
+- [x] Remove the conversation's clearance mask (`LatestClearanceMask`, `latestClearHeight`, `ChatLatestButton.fade`): history stays painted under the composer and the latest button.
+- [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
+- [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
+
 ## Branch menu aligned with the address (LKM-184)
 
 - [x] `BranchPopUpButton`/`BranchPopUpCell` (`ToolbarAddress.swift`): the branch title starts on the address text's left edge; the chevron follows it, tail truncation and the frame-sized click target kept.

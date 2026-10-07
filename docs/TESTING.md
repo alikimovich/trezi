@@ -329,6 +329,12 @@ Inspect these artifacts under `test/artifacts/native/chat-scroll/`:
 - `acceptance-{440,320}-scrolled-up.png/.json` (LKM-141): the latest button scrolled
   into history, asserted round, centered over the column, `latestButtonGap` above
   `composerTop`, below `readingHeight` (never over the reading area) and labelled.
+  LKM-190: the conversation is unmasked, so every latest-button check also asserts
+  its own backdrop (`latestButtonBackdrop`, `latestButtonBackdropFills`) and that a
+  click at its centre hit-tests to it (`latestButtonHit`). `acceptance-{440,320}-scrolled-up-{light,dark}.png/.json`
+  force the window's appearance (never the system's) and require `latestBandInk`
+  (text pixels beside the button, from `latestButtonGap` above it to the composer)
+  above 40, nudging the history up to three times past a gap between messages.
 - `tokens-{running,done}-{440,320}.png` and `tokens-{440,320}.json` (LKM-141): a
   turn's counter after "Thinking…" while running, then under Copy/Revert, with
   the footer's height and bottom unchanged by completion.
