@@ -209,6 +209,10 @@ extension Host {
             let clip = composer.scroll.contentSize
             inspected["inputWidth"] = Double(clip.width); inspected["textMinimumHeight"] = Double(composer.text.minSize.height)
             inspected["scrollerStyle"] = composer.scroll.scrollerStyle.rawValue
+            // LKM-198: queue rows against the placeholder's x (its 7 pt draw origin) and Send.
+            inspected["queueGeometry"] = composer.queuedMessages.inspect(composerTop: composer.content.convert(composer.content.bounds, to: composer).maxY)
+            inspected["placeholderX"] = Double(composer.text.convert(NSPoint(x: 7, y: 0), to: composer).x)
+            inspected["sendMidX"] = Double(composer.sendButton.convert(composer.sendButton.bounds, to: composer).midX)
             reply(id, inspected)
         case "composerIMECheck":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
@@ -222,6 +226,13 @@ extension Host {
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             reply(id, composer.checkPaste(c))
         case "composerPerform": composer.perform(c); reply(id)
+        case "composerAppearance":
+            // "light"/"dark" forces the composer view only (SwiftUI repaints asynchronously,
+            // so captures follow a short wait); anything else returns it to the window's.
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            let name = c["appearance"] as? String
+            composer.appearance = name == "dark" ? NSAppearance(named: .darkAqua) : name == "light" ? NSAppearance(named: .aqua) : nil
+            reply(id, ["dark": composer.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua])
         case "captureComposer":
             composer.layoutSubtreeIfNeeded()
             let target: NSView = c["contentOnly"] as? Bool == true ? composer.content : composer

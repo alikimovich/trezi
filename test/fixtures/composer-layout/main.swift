@@ -175,6 +175,26 @@ require(composer.verificationLayout()["alignment"] as? Bool == false, "Attachmen
 provider.frame = oldProviderFrame
 print("Composer alignment: AppKit insets, all control gaps, containment and rejected overlaps passed without a window")
 
+// LKM-198: the queue box keeps 10 pt above and below its lines, tucks 24 pt under the
+// composer at every count, and its text inset and trailing column meet the placeholder and Send.
+for (count, paused, note, wanted) in [(1, false, "", 44), (2, false, "", 72), (3, false, "", 100), (5, false, "", 100), (1, false, "Waiting for Resolve", 72), (3, true, "", 128)] as [(Int, Bool, String, CGFloat)] {
+    let entries = (0..<count).map { ["id": "q\($0)", "text": "queued \($0)", "attachments": 0] as [String: Any] }
+    let height = ComposerQueueHost.height(count: count, paused: paused, note: note)
+    require(height == wanted, "Queue of \(count) (note \(paused || !note.isEmpty)) is \(height) pt, wanted \(wanted)")
+    composer.update(["bounds": ["x": 0.0, "y": 0.0, "width": 420.0, "height": Double(148 + height)], "visible": true, "text": "",
+                     "queue": entries, "queuePaused": paused, "queueNote": note])
+    composer.layoutSubtreeIfNeeded()
+    let queue = composer.queuedMessages.frame
+    let form = composer.content.convert(composer.content.bounds, to: composer)
+    require(queue.maxY == composer.bounds.maxY && queue.maxY - form.maxY == height, "Queue of \(count): visible part above the composer (\(queue), \(form))")
+    require(form.maxY - queue.minY == ComposerQueue.overlap, "Queue of \(count) tucks \(ComposerQueue.overlap) pt under the composer (\(form.maxY - queue.minY))")
+    let placeholder = composer.text.convert(NSPoint(x: 7, y: 0), to: composer).x
+    require(queue.minX + ComposerQueue.textInset == placeholder, "Queue text inset meets the placeholder at \(placeholder)")
+    require(queue.maxX == composer.sendButton.convert(composer.sendButton.bounds, to: composer).maxX, "Queue trailing column meets Send")
+}
+composer.update(["bounds": ["x": 0.0, "y": 0.0, "width": 420.0, "height": 148.0], "visible": false, "text": ""])
+print("Composer queue: even padding, fixed overlap, placeholder and Send alignment for 1, 2, 3 and 5 rows, with and without a note")
+
 // Exterior spacing and reading clearance share the same inset, including when
 // TextKit expands/caps the composer at narrow widths or with attachments/queue.
 for width: CGFloat in [320, 420, 520] {
