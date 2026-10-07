@@ -173,6 +173,14 @@ extension Host {
         let latest = chat.model.snapshot?.messages.last?.id ?? ""
         let latestFrame = chat.model.messageFrames[latest] ?? .zero
         let readingHeight = chat.bounds.height - chat.model.bottomInset
+        // What a click at the button's center reaches: the button itself, never the text under it.
+        let buttonFrame = chat.model.latestButtonFrame
+        let composerTop = chat.isFlipped ? composerFrame.minY : chat.bounds.height - composerFrame.maxY
+        var latestHit = ""
+        if buttonFrame.width > 0, let content = window.contentView {
+            let point = chat.convert(NSPoint(x: buttonFrame.midX, y: chat.isFlipped ? buttonFrame.midY : chat.bounds.height - buttonFrame.midY), to: nil)
+            latestHit = content.hitTest(content.superview?.convert(point, from: nil) ?? point).map { String(describing: type(of: $0)) } ?? "nil"
+        }
         var result: [String: Any] = [
             "probeAttached": probe.configuredScroll === scroll, "configurationCount": probe.configurationCount, "pinCount": probe.pinCount,
             "attachCount": probe.attachCount, "ignoredLiveScrollEnds": probe.ignoredLiveScrollEndCount,
@@ -197,12 +205,13 @@ extension Host {
             "latestVisible": latestFrame.height > 0 && latestFrame.minY >= 0 && latestFrame.maxY <= readingHeight + 1,
             "readingHeight": readingHeight, "bottomPosition": chat.model.bottomPosition, "settleAttempts": chat.model.latestSettleAttempts, "latestButton": chat.model.latestButtonFrame.width > 0,
             "latestButtonFrame": NSStringFromRect(chat.model.latestButtonFrame),
-            "latestButtonGap": ChatLatestButton.gap, "latestClearTop": chat.bounds.height - chat.model.latestClearHeight,
-            "latestClearHeight": chat.model.latestClearHeight, "latestFade": ChatLatestButton.fade,
+            "latestButtonGap": ChatLatestButton.gap, "latestButtonHit": latestHit,
+            "latestButtonBackdrop": String(describing: type(of: chat.latestButton.backdrop)),
+            "latestButtonBackdropFills": !chat.latestButton.backdrop.isHidden && chat.latestButton.backdrop.frame == chat.latestButton.bounds,
             "messageFrames": chat.model.messageFrames.mapValues { NSStringFromRect($0) },
             "footerFrames": chat.model.footerFrames.mapValues { NSStringFromRect($0) }, "revealedActions": chat.model.revealedActions,
             "hoverOverride": chat.model.hoverOverride ?? NSNull(), "latestButtonLabel": chat.latestButton.accessibilityLabel() ?? "",
-            "composerTop": chat.isFlipped ? composerFrame.minY : chat.bounds.height - composerFrame.maxY,
+            "composerTop": composerTop,
             "lastDrag": AcceptanceDiagnostics.lastDrag,
             "lastLatest": AcceptanceDiagnostics.lastLatest,
             "layout": composer.verificationLayout(), "composer": composer.inspect(),
@@ -216,8 +225,40 @@ extension Host {
             "scrollerEffectiveAppearance": scroller.effectiveAppearance.name.rawValue
         ]
         if command["capture"] as? Bool == true {
-            result["image"] = try await captureVisibleRegion(window: window, view: chat, region: chat.bounds)
+            let image = try await captureVisibleRegion(window: window, view: chat, region: chat.bounds)
+            result["image"] = image
+            if buttonFrame.width > 0, let png = (image["png"] as? String).flatMap({ Data(base64Encoded: $0) }) {
+                result["latestBandInk"] = Self.inkPixels(png: png, chatWidth: chat.bounds.width, button: buttonFrame,
+                                                         top: buttonFrame.minY - ChatLatestButton.gap, bottom: composerTop)
+            }
         }
         return result
+    }
+    /// Text pixels beside the shown latest button, from `gap` above it down to the
+    /// composer: the band LKM-141's mask left empty. Counts captured pixels whose
+    /// luminance is far from the band's most common (background) value.
+    static func inkPixels(png: Data, chatWidth: CGFloat, button: CGRect, top: CGFloat, bottom: CGFloat) -> Int {
+        guard let image = NSBitmapImageRep(data: png)?.cgImage, chatWidth > 0,
+              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+              let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return 0 }
+        // Row 0 of the buffer is the image's top row.
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let scale = CGFloat(image.width) / chatWidth
+        func luminance(_ x: Int, _ y: Int) -> CGFloat {
+            let i = (y * image.width + x) * 4
+            return (0.2126 * CGFloat(pixels[i]) + 0.7152 * CGFloat(pixels[i + 1]) + 0.0722 * CGFloat(pixels[i + 2])) / 255
+        }
+        // Skip the column margins, the scroller and the button with a 4 pt halo.
+        let halo = Int((button.minX - 4) * scale)..<Int((button.maxX + 4) * scale)
+        let columns = stride(from: Int(18 * scale), to: min(image.width, Int((chatWidth - 24) * scale)), by: 1).filter { !halo.contains($0) }
+        let rows = stride(from: max(0, Int(top * scale)), to: min(image.height, Int(bottom * scale)), by: 1)
+        guard !columns.isEmpty else { return 0 }
+        var values: [CGFloat] = []
+        for y in rows { for x in columns { values.append(luminance(x, y)) } }
+        var bins = [Int](repeating: 0, count: 33)
+        for value in values { bins[min(32, max(0, Int(value * 32)))] += 1 }
+        let background = CGFloat(bins.indices.max { bins[$0] < bins[$1] } ?? 0) / 32
+        return values.filter { abs($0 - background) > 0.3 }.count
     }
 }

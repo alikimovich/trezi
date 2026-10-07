@@ -617,6 +617,15 @@ require(!latest.isHidden && shownFrame.width > 0 && shownFrame.height > 0, "Show
 let latestPoint = latestChat.convert(NSPoint(x: shownFrame.midX, y: shownFrame.midY), to: nil)
 let latestHit = column.hitTest(column.superview?.convert(latestPoint, from: nil) ?? latestPoint)
 require(latestHit === latest, "A click at the reported frame hit-tests to the native button (\(String(describing: latestHit.map { type(of: $0) })))")
+// LKM-190: the transcript is unmasked under the button, so it carries its own
+// glass (or blur) circle, and every point of the circle, not just its centre, is the button's.
+require(["NSGlassEffectView", "NSVisualEffectView"].contains(String(describing: type(of: latest.backdrop))) && latest.backdrop.superview === latest
+        && latest.backdrop.frame == latest.bounds, "Latest button has its own glass background (\(type(of: latest.backdrop)), \(latest.backdrop.frame))")
+for offset in [NSPoint(x: 0, y: 12), NSPoint(x: -12, y: 0), NSPoint(x: 8, y: -8)] {
+    let point = latestChat.convert(NSPoint(x: shownFrame.midX + offset.x, y: shownFrame.midY + offset.y), to: nil)
+    let hit = column.hitTest(column.superview?.convert(point, from: nil) ?? point)
+    require(hit === latest, "Latest button claims its whole circle, no click-through at \(offset) (\(String(describing: hit.map { type(of: $0) })))")
+}
 var presses = 0
 latest.onPress = { presses += 1 }
 NSApp.postEvent(latestClick(.leftMouseUp, latestPoint), atStart: false)

@@ -275,6 +275,34 @@ Implementation: `src/main/repo-write-queue.ts`, `src/main/chat-isolation.ts` (wi
 Regression coverage: `test/chat-worktrees.mjs`, `test/live-commit.mjs`,
 `test/chat-isolation.mjs`, `test/turn-terminal.mjs`.
 
+### Landing commit messages (LKM-189)
+
+A landing's commit message describes the change, never the user's prompt. Before the
+chat branch is squashed, `src/main/chat-commit.ts` reads the worktree's diff against
+`baseSha` (file list, diff stat and an excerpt of at most 8,000 characters, new files
+included; `src/main/commit-message.ts`) and gives it, with the agent's final reply, to
+the chat's provider as a tool-less one-shot on its background model (Haiku for Claude,
+`gpt-6-sol` low effort for Codex, the connection's own model otherwise —
+`describeAgentOptions`). The prompt never contains the user's message.
+
+- The answer must be an imperative subject of at most 72 characters plus 3–6 bullets.
+  An echo of the prompt, "[Attached files]", chatter or an error is rejected.
+- The model has 3 s. On timeout, refusal or no provider the message is built from the
+  files: "Update key-tile.tsx, home.tsx and bottom-bar.tsx" (Add/Remove when every file
+  was added/deleted), one bullet per file and a "Changed areas" line.
+- If at least 3 of the last 20 non-merge subjects (and 60%) use Conventional Commits,
+  the subject does too (`chore:` when the model gave no type).
+- The same message is used for the chat branch's squash commit and the live commit.
+  Parked turns never advance `baseSha`, so a re-squash describes the combined diff.
+- `Trezi-Turn` and `Trezi-Chat` (the chat branch) are Git trailers at the end of the
+  body, never in the subject.
+- Publish's PR title and body summarise the branch's commit subjects, checked against
+  the diff; legacy prompt-subject commits (body "Trezi turn N …") are left out of that list.
+
+Coverage: `test/commit-message.mjs` (mocked model, timeout, refusals, conventions,
+combined diff, trailers), `test/live-commit.mjs` (re-squash after a park),
+`test/chat-landing.mjs`, `test/publish-description.mjs`.
+
 ## Chat workspace cleanup
 
 Each open chat's checkout lives in the profile's `worktrees/` folder (LKM-136). They

@@ -41,7 +41,12 @@ initChatIsolation({
   }),
   getWindow: () => ({
     webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) }
-  })
+  }),
+  // A mocked background model (LKM-189): it describes the diff it is shown.
+  describe: () => async (prompt) => {
+    const value = prompt.match(/^\+export const bar = (\d)$/m)?.[1]
+    return value ? `Set the bar constant to ${value}\n\n- Change bar in src/bar.ts` : null
+  }
 })
 
 const FILE = 'src/bar.ts'
@@ -80,7 +85,10 @@ function assertLanded(chat, { turn, title, content, revertable }) {
   assert.equal(readFileSync(join(chat.root, FILE), 'utf8'), content)
   assert.equal(git(chat.root, 'log', '-1', '--format=%s'), title)
   assert.ok(
-    git(chat.root, 'log', '-1', '--format=%b').includes(`Trezi turn ${turn} (${chat.branch}).`)
+    git(chat.root, 'log', '-1', '--format=%b').endsWith(
+      `\n\nTrezi-Turn: ${turn}\nTrezi-Chat: ${chat.branch}`
+    ),
+    'the trailers close the body'
   )
   assert.equal(git(chat.root, 'status', '--porcelain'), '')
   assert.deepEqual(isolationSnapshot(chat.key), { state: 'isolated', branch: chat.branch })
@@ -95,7 +103,7 @@ try {
   assert.equal(await afterTurn(done.key, 'Set bar to one', [], 'success'), null)
   const doneGroup = assertLanded(done, {
     turn: 1,
-    title: 'Set bar to one',
+    title: 'Set the bar constant to 1',
     content: 'export const bar = 1\n',
     revertable: true
   })
@@ -116,7 +124,7 @@ try {
   const result = await keepStoppedTurn(kept.key)
   const keptGroup = assertLanded(kept, {
     turn: 2,
-    title: 'Keep partial changes from a stopped turn',
+    title: 'Set the bar constant to 2',
     content: 'export const bar = 2\n',
     revertable: true
   })
@@ -135,7 +143,7 @@ try {
   await afterTurn(pr.key, 'Set bar to three', [], 'success')
   assertLanded(pr, {
     turn: 1,
-    title: 'Set bar to three',
+    title: 'Set the bar constant to 3',
     content: 'export const bar = 3\n',
     revertable: false
   })
@@ -145,7 +153,7 @@ try {
   await keepStoppedTurn(pr.key)
   assertLanded(pr, {
     turn: 3,
-    title: 'Keep partial changes from a stopped turn',
+    title: 'Set the bar constant to 4',
     content: 'export const bar = 4\n',
     revertable: false
   })

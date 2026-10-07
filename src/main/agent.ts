@@ -15,7 +15,7 @@ import type {
   SessionTranscriptEntry,
   WorkspaceSnapshot
 } from '../shared/api'
-import { backgroundAgentOptions } from '../shared/background-model'
+import { backgroundAgentOptions, describeAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
 import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
@@ -57,6 +57,7 @@ import {
   legacyWorkspaceDirs,
   workspaceUsage
 } from './chat-workspaces'
+import type { DescribeChange } from './commit-message'
 import { conflictResolutionPrompt, ReconciliationCoordinator } from './conflict-resolution'
 import {
   ConversationError,
@@ -319,6 +320,16 @@ async function maybeGenerateTitle(sessionKey: string): Promise<void> {
       live.emit({ type: 'title', title: result.title })
     }
   }
+}
+
+/** The chat's provider and background model as a one-shot completion for its landing
+ * commit message (LKM-189); null without a live session or a `complete` primitive. */
+function describeChangeWith(sessionKey: string): DescribeChange | null {
+  const session = sessions.get(sessionKey)
+  const complete = session && pickProvider(session.options).complete
+  if (!session || !complete) return null
+  const options = describeAgentOptions(session.options)
+  return (prompt, signal) => complete(prompt, options, signal)
 }
 
 /**
@@ -822,7 +833,7 @@ export function registerAgentIpc(
   ipcMain = router
   getWindow_ = getWindow // share with finalizeSpawn (runs outside this closure)
   // v9 per-chat worktree isolation — deps-injected so this module barely grows.
-  initChatIsolation({ worktreesDir, store, getWindow })
+  initChatIsolation({ worktreesDir, store, getWindow, describe: describeChangeWith })
   // LKM-136: idle and old-name chat workspace cleanup; Settings shows the usage.
   initChatWorkspaces({
     worktreesDir,

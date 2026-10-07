@@ -9,6 +9,17 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `publish:progress` / `publish:cancel`; `NativeGitController` shows "Publishing…" at once, polls the step (elapsed after 3 s), cancels before the PR, adopts a running publish after a reload, and ends in a toast or a failure sheet with Retry / Copy details (`src/shared/publish-progress.ts`).
 - [x] Toolbar: spinner frames on the standard menu item, not clickable while publishing, Cancel Publish in the chevron menu (`ToolbarPublish.swift`).
 - [x] `publish-progress` core smoke check with a stubbed workflow owner and captures; unit tests `publish-progress`, `native-git`, `workflow-owner`; CHANGELOG line.
+## Chat text scrolls behind the composer (LKM-190)
+
+- [x] Remove the conversation's clearance mask (`LatestClearanceMask`, `latestClearHeight`, `ChatLatestButton.fade`): history stays painted under the composer and the latest button.
+- [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
+- [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
+
+## Landing commit messages describe the change (LKM-189)
+
+- [x] `commit-message.ts`/`chat-commit.ts`: subject (imperative, <= 72 chars) and 3–6 bullets from the turn's diff and final reply via the provider's background model (`complete` one-shot), 3 s timeout, deterministic file-list fallback, Conventional Commits when the repo uses them, `Trezi-Turn`/`Trezi-Chat` trailers; never the prompt.
+- [x] Used for every landing (turn, reconcile, resolve, Keep, parked apply, chat release); a re-squash after a park describes the combined diff.
+- [x] Publish PR title/body summarise the branch's commits; tests (mocked model, timeout, no prompt, combined diff, trailers, PR), CHANGELOG line, docs/WORKTREES.md.
 
 ## Landed chat commits never become unreachable (LKM-185)
 
