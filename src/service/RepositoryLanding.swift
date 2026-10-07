@@ -209,6 +209,8 @@ extension RepositoryEffects {
     }
 
     /// Switches to (creating if needed) a `trezi/*` branch; uncommitted changes come along.
+    /// An existing branch is joined only when no commit of the checkout would be left
+    /// behind (`joinBranch`, LKM-185).
     func switchBranch(_ c: RepositoryContext, name: String) -> JSValue {
         guard isRepoRoot(c.root) else { return branchResult(repo: false, branch: nil, created: false) }
         let current = currentBranch(c.root)
@@ -216,6 +218,7 @@ extension RepositoryEffects {
         let existed = git.revision(c.root, "refs/heads/\(name)") != nil
         let before = git.revision(c.root, "HEAD")
         do {
+            if existed { try joinBranch(c, name, from: current) }
             try git.data(c.root, existed ? ["checkout", name, "--"] : ["checkout", "-b", name])
             return branchResult(repo: true, branch: name, created: !existed, files: changedSince(c.root, before))
         } catch {

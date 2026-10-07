@@ -53,6 +53,7 @@ final class RepositoryOwner: @unchecked Sendable {
         "commitLive": (["root", "files", "title"], ["body", "leases"], nil),
         "checkout": (["root", "branch"], ["leases"], nil),
         "switchBranch": (["root", "branch"], ["leases"], nil),
+        "restoreLandings": (["root", "branch", "tip", "intent"], ["leases"], ["restore"]),
     ]
 
     final class Lease: Sendable { let id: String, key: String; let queue: DispatchQueue
@@ -117,6 +118,14 @@ final class RepositoryOwner: @unchecked Sendable {
                 let roots = try body.strings("roots")
                 guard roots.count <= 1_000 else { throw ServiceContractFailure.invalidRequest }
                 work.async { self.answer(frame, .succeeded(self.recoveryRefs(roots))) }
+            case ("strandedLandings", "read"):
+                let root = try Body(frame, required: ["root"], optional: []).path("root")
+                work.async {
+                    let (current, stranded) = self.effects.strandedLandings(root)
+                    self.answer(frame, .succeeded(Self.object([("current", current.map { .string(JSText($0)) } ?? .null),
+                        ("branches", .array(stranded.map { Self.object([("branch", .string(JSText($0.branch))), ("tip", .string(JSText($0.tip))),
+                                                                        ("count", .number(Double($0.count)))]) }))])))
+                }
             case ("acknowledge", "mutation"):
                 let body = try Body(frame, required: ["operationID", "intent"], optional: [])
                 guard try body.string("intent") == "acknowledge" else { throw ServiceContractFailure.invalidRequest }
@@ -333,6 +342,14 @@ final class RepositoryOwner: @unchecked Sendable {
             let branch = try body.string("branch")
             guard branch.hasPrefix("trezi/"), try validBranch(c.root, branch) else { throw ServiceContractFailure.invalidRequest }
             return e.switchBranch(c, name: branch)
+        case "restoreLandings":
+            let branch = try body.string("branch"), tip = try body.string("tip")
+            guard try validBranch(c.root, branch), tip.range(of: #"^([0-9a-f]{40}|[0-9a-f]{64})$"#, options: .regularExpression) != nil else {
+                throw ServiceContractFailure.invalidRequest
+            }
+            let restored = try e.restoreLandings(c, branch: branch, tip: tip)
+            return Self.object([("merged", .bool(restored.merged)), ("files", Self.strings(restored.files)),
+                                ("conflictFiles", Self.strings(restored.conflicted)), ("recoveryRefs", Self.strings(restored.refs))])
         default: throw ServiceContractFailure.invalidRequest
         }
     }
