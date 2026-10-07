@@ -375,6 +375,17 @@ registration. Closing a pending chat cancels it; whatever was made is released.
   edit but not run commands that need `node_modules`. Removing the checkout (closing
   the chat or project, `releaseChat`, `releaseSpare`, or a spare whose sync failed)
   first waits for the install to settle, so nothing writes into a deleted folder.
+- **Dependencies never refuse a turn (LKM-194).** After its sync, `syncFromLive` looks
+  for unresolved Git conflict markers in the checkout (`markerConflict`, one
+  `git grep` confirmed by reading each hit, `src/main/conflict-markers.ts`).
+  `provisionDependencies` never installs a manifest or lockfile that carries markers
+  (`DependencyConflictError`). A failed install no longer throws either, here or in
+  `createWorktree`. Both come back as `dependencies` and the turn starts. `agent:send`
+  tells the agent the facts (`dependencyNotice`), including a both-sides `version`
+  bump and its higher SemVer. It also sends a `dependencies` event, so the chat shows
+  "Conflicts in package.json" (Show conflict opens the first marker line, Resolve
+  with agent sends `resolveConflictPrompt`) or "Dependencies aren’t installed" (Fix
+  with agent). The next clean turn start clears the card.
 
 Measured with a stub provider and the Swift repository owner (`isolatedCwd` timings
 are what New chat used to wait for; see `docs/PROGRESS.md`): small project 195–216 ms
@@ -394,9 +405,16 @@ fetches/prunes origin and records both tips below `refs/trezi/recovery/`.
 The reconciliation is ancestry-driven: a remote ancestor needs only a normal push; a
 local ancestor fast-forwards; true divergence gets an explicit merge commit. A push
 rejected because the remote moved repeats fetch/reconciliation, with three total
-attempts. Content conflicts remain in the live checkout with both recovery refs and
-are surfaced as an exact file list. Publish never force-pushes, rebases, resets, or
-chooses ours/theirs across the repository.
+attempts. A content conflict aborts that merge (LKM-194): the live checkout keeps
+its committed work with no markers, both tips stay on the recovery refs, and the
+result carries the exact file list, the branch and, when both sides bumped
+package.json, both `version`s (`versionConflict`). The Resolve card ("Publish has
+merge conflicts") offers the higher SemVer and Resolve with agent. That turn runs
+`git_sync_base` with `origin/<branch>` in the chat worktree, resolves and
+`git_merge_continue`s, and the landed merge is published again. Markers left in the
+live checkout by an older build would sync into every chat and break its install.
+Publish never force-pushes, rebases, resets, or chooses ours/theirs across the
+repository.
 
 Implementation: the workflow owner, `src/service/WorkflowPublish.swift` (since LKM-111
 the only one; the Bun twin `publish-reconcile.ts` was removed). Regression coverage:

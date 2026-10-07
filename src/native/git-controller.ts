@@ -1,4 +1,5 @@
 import type { GithubStatus, GitRemoteStatus, PublishResult } from '../shared/api'
+import { versionConflict } from '../shared/dependency-issue'
 import { sanitizeRepoName } from '../shared/github'
 import type { NativeShellState } from '../shared/native-shell'
 import {
@@ -297,6 +298,13 @@ export class NativeGitController {
       this.sheets.toast('Publish cancelled')
       return
     }
+    // LKM-194: the reconcile aborted its merge, so the checkout is clean and both tips are
+    // on recovery refs; the agent merges the remote branch in its own worktree.
+    if (result.conflictFiles?.length && result.recoveryRefs?.length && result.branch) {
+      this.log.append(publishFailure(mode, result).details, 'error')
+      this.resolveWithAgent(key, { ...result, sync: `origin/${result.branch}` })
+      return
+    }
     const failure = publishFailure(mode, result)
     this.log.append(failure.details, 'error')
     this.sheets.present(
@@ -331,14 +339,28 @@ export class NativeGitController {
       branch?: string
       url?: string
       base?: string
+      /** The publish reconcile's remote branch (`origin/<branch>`), merged instead of the base. */
+      sync?: string
+      versionConflict?: { local: string; remote: string }
     }
   ) {
     const files = result.conflictFiles ?? []
+    const remote = result.versionConflict
+    const version = remote && versionConflict(remote.local, remote.remote)
+    const versionLine = version
+      ? `Both sides changed the version in package.json (${version.ours} here, ${version.theirs} on GitHub): keep ${version.keep}, the higher one.`
+      : ''
     this.sheets.present(
       {
         title: 'Publish has merge conflicts',
         alert: false,
-        detail: `${result.error ?? 'The pull request cannot merge.'}\nConflicting files: ${files.join(', ')}.`,
+        detail: [
+          result.error ?? 'The pull request cannot merge.',
+          `Conflicting files: ${files.join(', ')}.`,
+          versionLine
+        ]
+          .filter(Boolean)
+          .join('\n'),
         fields: [],
         actions: [
           { id: 'cancel', label: 'Later' },
@@ -359,14 +381,21 @@ export class NativeGitController {
         if (active.root !== project.root)
           throw new Error('The selected chat does not belong to the published project.')
         const facts = [
-          'Resolve this pull request’s conflict with its base in this chat worktree.',
+          result.sync
+            ? `Resolve the conflict between this work branch and ${result.sync} that stopped Publish, in this chat worktree. The project itself has no conflict markers.`
+            : 'Resolve this pull request’s conflict with its base in this chat worktree.',
           `Publish reported: ${result.error ?? 'pull request is not mergeable'}`,
           `Conflicting files: ${files.join(', ')}`,
+          version
+            ? `package.json "version": ${version.ours} here, ${version.theirs} on ${result.sync ?? 'the base'}. Both sides bumped it; keep ${version.keep} (the higher SemVer).`
+            : '',
           result.branch ? `Work branch: ${result.branch}` : '',
           result.base ? `Base branch: origin/${result.base}` : '',
           result.url ? `Pull request: ${result.url}` : '',
           result.recoveryRefs?.length ? `Recovery refs: ${result.recoveryRefs.join(', ')}` : '',
-          'Call pr_status and git_sync_base, resolve the conflict markers, then git_merge_continue and publish_update. Keep the chosen version consistent with the user’s changes.'
+          result.sync
+            ? `Call git_sync_base with ref ${result.sync}, resolve the conflict markers, then git_merge_continue. When the turn has landed, call publish_update if the branch has a pull request; otherwise tell the user to Publish again.`
+            : 'Call pr_status and git_sync_base, resolve the conflict markers, then git_merge_continue and publish_update. Keep the chosen version consistent with the user’s changes.'
         ]
           .filter(Boolean)
           .join('\n')

@@ -10,6 +10,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Post-landing check (`src/native/landing-check.ts`): after a chat turn's `merged` landing with files, wait for the reload, read console/page errors since the landing and capture the preview; post one compact row (`ChatLandingCheck.swift`) with the result and a thumbnail, or why it could not check. Off in the smoke suite's fixture landings.
 - [x] `test/rules.mjs`, unit `landing-check`, native `landing-check` smoke check (group `chat`, light/dark captures); CHANGELOG line.
 - [ ] Open (from "Post-turn preview check" below): a broken preview could also offer the LKM-151 recovery card (Revert / Fix with agent); the row only reports.
+## Conflict markers never block a chat turn (LKM-194)
+
+- [x] A failed dependency install never refuses a turn: `syncFromLive` returns it as `dependencies`, `createWorktree` logs it, `agent:send` tells the agent and emits a `dependencies` event for the chat's card.
+- [x] Unresolved markers in synced files are detected after the sync (`markerConflict`); a marked manifest/lockfile is never installed (`DependencyConflictError`); the chat shows "Conflicts in package.json" with Show conflict and Resolve with agent.
+- [x] Publish reconcile aborts a conflicting merge: no markers in the live checkout, both tips on recovery refs, a Resolve card that merges `origin/<branch>` with the LKM-188 tools.
+- [x] package.json `version` conflicts where both sides bumped offer the higher SemVer (chat card, publish card, agent facts).
+- [x] The legacy profile path in tool output is expected (`docs/agent-guide/legacy-names.md`).
+- [x] Tests: `dependency-issue` (unit), `chat-worktrees` repo16 (Swift owner), `workflow-owner` publish-version-conflict, `native-git`; CHANGELOG line.
 
 ## Code editor soft wrap (LKM-192)
 

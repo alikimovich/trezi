@@ -235,6 +235,45 @@ try {
     // LKM-187: the failure names the step it stopped at, for the failure sheet.
     assert.equal(conflicted.result.step, 'sync')
 
+    // LKM-194: both sides bumped package.json's version. The reconcile leaves no markers
+    // in the live checkout (the next chat turn would sync them and fail to install):
+    // the merge is aborted, both tips stay on recovery refs, the versions are reported.
+    const bumped = await owned('publish-version-conflict', async (owner, w) => {
+      const pkg = (version) => `{\n  "name": "shop",\n  "version": "${version}"\n}\n`
+      commit(w.local, 'package.json', pkg('0.2.6'))
+      git(w.local, 'push', '-q', 'origin', 'trezi/main')
+      const peer = w.peer()
+      git(peer, 'checkout', '-q', 'trezi/main')
+      commit(peer, 'package.json', pkg('0.2.7'))
+      git(peer, 'push', '-q', 'origin', 'trezi/main')
+      write(w.local, 'package.json', pkg('0.2.8'))
+      const head = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.publish(w.local, 'merge', describe)
+      return {
+        result,
+        live: readFileSync(join(w.local, 'package.json'), 'utf8'),
+        status: git(w.local, 'status', '--porcelain'),
+        merging: existsSync(join(w.local, '.git', 'MERGE_HEAD')),
+        moved: git(w.local, 'rev-parse', 'HEAD') !== head,
+        refs: git(w.local, 'for-each-ref', '--format=%(refname)', 'refs/trezi/recovery/')
+      }
+    })
+    assert.deepEqual(bumped.result.conflictFiles, ['package.json'])
+    assert.deepEqual(bumped.result.versionConflict, { local: '0.2.8', remote: '0.2.7' })
+    assert.equal(bumped.result.branch, 'trezi/main')
+    assert.equal(bumped.result.recoveryRefs.length, 2)
+    assert.match(bumped.result.error, /left unchanged/)
+    assert.doesNotMatch(
+      bumped.live,
+      /^(<<<<<<<|=======|>>>>>>>)/m,
+      'no markers in the live checkout'
+    )
+    assert.match(bumped.live, /"version": "0\.2\.8"/)
+    assert.equal(bumped.status, '', 'the live checkout is clean')
+    assert.equal(bumped.merging, false, 'no merge left in progress')
+    assert.equal(bumped.moved, true, 'the local bump stays committed')
+    assert.equal(bumped.refs.split('\n').filter(Boolean).length, 2)
+
     const nothing = await owned('publish-nothing', async (owner, w) => ({
       result: await owner.publish(w.local, 'merge', describe),
       state: snapshot(w)

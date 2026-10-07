@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  DependencyIssue,
   PermissionRequest,
   QuestionRequest,
   SessionTranscriptEntry,
@@ -82,6 +83,8 @@ export interface Chat extends NativeChatMirror {
   landed?: { files: string[]; group?: string }
   /** LKM-151: a dev-server compile/parse error in a file the last turn touched. */
   previewError?: { file: string; message: string }
+  /** LKM-194: why the checkout's dependencies are not installed, from the turn start. */
+  dependencies?: DependencyIssue
   /** LKM-164: the model the session reported running (`claude-opus-5-5`); cleared when
    *  the chat switches model, so it never names the previous one. */
   resolvedModel?: string
@@ -293,6 +296,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       break
     case 'landing-finished':
       finish(chat)
+      break
+    case 'dependencies':
+      chat.dependencies = event.issue ?? undefined
       break
     case 'reconciliation-started':
       chat.isolation = 'isolated'
