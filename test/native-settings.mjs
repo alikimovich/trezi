@@ -92,6 +92,7 @@ assert.deepEqual(
     ['default', 'general'],
     ['claudePlugins', 'general'],
     ['agentFileAccess', 'general'],
+    ['agentGitAccess', 'general'],
     ['workspaceIdle', 'general'],
     ['activityAutoOpen', 'general'],
     ['workspaceUsage', 'general'],
@@ -187,6 +188,34 @@ values.set('trezi:agent-file-access:v1', 'bogus')
 await settings.open()
 assert.equal(field('agentFileAccess').value, 'full', 'an unknown stored value reads as Full access')
 values.delete('trezi:agent-file-access:v1')
+await settings.open()
+assert.equal(field('agentGitAccess').label, 'Agent Git access')
+assert.equal(field('agentGitAccess').value, 'managed', 'Managed is the default')
+assert.deepEqual(
+  field('agentGitAccess').choices.map((c) => c.value),
+  ['managed', 'full']
+)
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  agentGitAccess: 'full'
+})
+assert.equal(values.get('trezi:agent-git-access:v1'), 'full')
+await settings.open()
+assert.equal(field('agentGitAccess').value, 'full', 'Git access survives reopen')
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  agentGitAccess: 'invalid'
+})
+assert.match(sheets.current.state.message, /Invalid setting/)
+assert.equal(values.get('trezi:agent-git-access:v1'), 'full')
+values.set('trezi:agent-git-access:v1', 'unknown')
+await settings.open()
+assert.equal(field('agentGitAccess').value, 'managed', 'unknown values read as Managed')
+values.delete('trezi:agent-git-access:v1')
 await settings.open()
 // LKM-143: General shows the version as a read-only row (the build stamps the label; unbuilt source says so).
 assert.equal(field('version').kind, 'readonly')

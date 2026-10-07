@@ -21,6 +21,7 @@ const UNIT = [
   'memory-owner',
   'runtime-owner',
   'repository-owner',
+  'agent-git',
   'git-messages',
   'repository-recovery',
   'source-owner',

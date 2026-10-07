@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Agents resolve merge conflicts (LKM-188)
+
+- [x] Repository-owner Git tools fetch and merge the publish base, leave conflict markers, and continue or abort with recovery refs; a resolved merge keeps both parents when landed.
+- [x] Agent Git access defaults to Managed, persists beside Agent file access, blocks raw writes in Claude and Codex, and lets Full mode reconcile raw chat-worktree commits and merges.
+- [x] Agent PR status and Publish update tools use the existing PR and normal publish path; Publish offers Resolve with agent with conflict facts.
+- [x] Real-Git package version conflict, raw merge and commit, ancestry, setting and command guard tests; CHANGELOG and Git/provider docs.
+
 ## Publish shows progress (LKM-187)
 
 - [x] The workflow owner reports the publish step (commit, sync, push, describe, pr, merge, cleanup) in its `workflows` summaries and logs each step's timing; a failed result names its step.

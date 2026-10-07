@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-188 review repair: PR conflict route and Git command policy
+
+- Publish now checks the PR's `mergeable` state after its normal ship workflow and offers Resolve with agent for a PR/base conflict. Local-vs-remote publish reconcile conflicts keep their manual recovery message because the live checkout is mid-merge. The resolve action selects a chat whose root matches the published project.
+- Claude and Codex use one command policy. Managed allows read-only branch, stash, tag and worktree queries; Full refuses raw pushes and commands that rewrite the live branch. Scheduled `publish_update` runs only after the same turn lands and is cleared otherwise.
+- `test/native-git.mjs` covers the PR/base conflict and project-specific chat selection. `test/agent-git.mjs` calls the session tools for `pr_status` and `publish_update` against real repositories and a stub `gh`, then checks that the PR branch advances through the normal workflow path. The Swift-backed chat-landing suite takes a Full-mode raw merge through `afterTurn` and checks its ancestry on the live branch.
+
+## 2026-10-06 — LKM-188: agents resolve conflicting PRs
+
+- Swift repository-owner effects `gitSyncBase`, `gitMergeContinue` and `gitMergeAbort` operate only on a validated linked chat worktree. They fetch an origin base, keep conflict markers for the agent, and journal recovery refs before merges and aborts.
+- Turn completion preserves chat merge and raw-commit history; the live landing records an unseen chat merge/commit as a second parent while keeping the live checkout's resulting tree. Publish updates use the existing workflow owner after the turn lands.
+- Settings gains Managed (default) and Full Agent Git access. Claude and Codex PreToolUse hooks deny raw Git writes in Managed mode, naming the Trezi tool; Full allows worktree Git and keeps raw pushes routed through Publish. Publish offers Resolve with agent and sends the conflict facts as a chat turn.
+- `test/agent-git.mjs` reproduces the package.json 0.2.5/0.2.6 conflict in real Git repositories, tests two-parent ancestry, live landing and a normal push, and tests Full raw merge/commit reconciliation and the command guard. Native Settings unit/evidence tests cover the saved choice.
+
 ## 2026-10-06 — LKM-187 repair: `sheets` smoke "did not reach expected state"
 
 - **Failure.** The manager's `test:native` failed `sheets` (group `settings`) with a bare "Native sheet did not reach expected state"; the capture showed only the "Project memory change undone" toast left by the alerts check. Everything else, including `publish-progress`, passed. LKM-187 does not touch the sheets or the alerts smoke.

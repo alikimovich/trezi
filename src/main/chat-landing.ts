@@ -27,7 +27,12 @@ export async function landTurn(
     recordEdit(st.liveRoot, e.file, e.before, e.after, undefined, group)
   }
   if (outcome.newBase) st.wt.baseSha = outcome.newBase
-  await commitLiveTurn(st.liveRoot, outcome.files, { title: message.subject, body: message.body })
+  await commitLiveTurn(
+    st.liveRoot,
+    outcome.files,
+    { title: message.subject, body: message.body },
+    outcome.newBase
+  )
   clearPark(st)
   await retireWorktreeBranch(st.wt)
   // Not revertable once this chat's work has been pushed & merged via a PR.

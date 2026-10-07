@@ -11,6 +11,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- Agents can resolve a conflicting pull request with Trezi's Git merge tools, keep the two-parent merge in the published branch, and choose Managed or Full Agent Git access in Settings (LKM-188).
+- Publish offers Resolve with agent when a pull request has merge conflicts (LKM-188).
 - Native macOS app: a Swift/AppKit chat and shell beside the project's live preview in system WebKit, started with `open -a Trezi` or `trezi`.
 - Trezi Service: a Swift XPC service that owns the profile lock, the operation ledger, and every write to preferences, workspaces, memory, repositories, sources, conversations and providers.
 - Provider helpers: Claude, Codex and Responses-API providers run in separate helper processes that the service supervises, with clearer cold-start status and sign-in handling.

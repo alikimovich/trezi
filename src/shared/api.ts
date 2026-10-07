@@ -454,6 +454,8 @@ export interface AgentOptions {
    * chat worktree. Set by main when a helper session opens; absent ⇒ 'full'.
    */
   agentFileAccess?: 'full' | 'project'
+  /** Settings → Agent Git access; absent is Managed. */
+  agentGitAccess?: 'managed' | 'full'
 }
 
 /** Trezi-managed durable context for one project, stored outside the repo. */

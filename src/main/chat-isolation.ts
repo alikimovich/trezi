@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
+import { currentAgentGitAccess } from './agent-git-access'
+import {
+  clearAgentPublish,
+  clearAllAgentPublishes,
+  publishAfterAgentLanding
+} from './chat-agent-git'
 import { finalReply, turnMessage } from './chat-commit'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
@@ -28,6 +34,7 @@ import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
+import { productLog } from './product-log'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
@@ -117,6 +124,7 @@ export async function isolatedCwd(liveRoot: string, sessionKey: string): Promise
     states.set(sessionKey, {
       wt,
       liveRoot,
+      gitAccess: currentAgentGitAccess(),
       parked: false,
       parkRecordId: null,
       parkedFiles: [],
@@ -231,50 +239,67 @@ export function afterTurn(
   if (!st) return Promise.resolve(null)
   const turn = lastTurn(transcript)
   st.lastUsed = Date.now()
-  const task = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
-      st.lastUsed = Date.now()
-      if (st.reclaimed) return null
-      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
-      let settled: 'pending' | 'ok' | 'failed' = 'pending'
-      batch.then(
-        () => {
-          settled = 'ok'
-        },
-        () => {
-          settled = 'failed'
-        }
-      )
-      try {
-        // Bounded (LKM-165): the chat stops waiting on a landing that stalls, or that Stop
-        // ends, and shows it held with Retry.
-        return await landings.run(sessionKey, batch)
-      } catch (error) {
-        if (!(error instanceof LandingEnded)) {
-          await landingFailed(sessionKey, st, error, turn)
-          return null
-        }
-        // The batch itself cannot be cancelled and keeps writing the worktree and live
-        // tree, so the lease and this chat's chain stay held until it settles: a Retry or
-        // the next turn's landing never overlaps it. Whatever it ends as is the truth.
-        draining.add(sessionKey)
+  let mergedThisTurn = false
+  const task = st.chain
+    .then(() =>
+      enqueueRepoWrite(st.liveRoot, async () => {
+        st.lastUsed = Date.now()
+        if (st.reclaimed) return null
+        const before = st.lastLanding
+        const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
+        let settled: 'pending' | 'ok' | 'failed' = 'pending'
+        batch.then(
+          () => {
+            settled = 'ok'
+            mergedThisTurn = st.lastLanding !== before && st.lastLanding?.outcome === 'merged'
+          },
+          () => {
+            settled = 'failed'
+          }
+        )
         try {
-          await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
-          const late = await batch.then(
-            (files) => ({ files }),
-            (cause) => ({ cause })
-          )
-          if ('cause' in late) {
-            await landingFailed(sessionKey, st, late.cause, turn)
+          // Bounded (LKM-165): the chat stops waiting on a landing that stalls, or that Stop
+          // ends, and shows it held with Retry.
+          return await landings.run(sessionKey, batch)
+        } catch (error) {
+          if (!(error instanceof LandingEnded)) {
+            await landingFailed(sessionKey, st, error, turn)
             return null
           }
-          return late.files
-        } finally {
-          draining.delete(sessionKey)
+          // The batch itself cannot be cancelled and keeps writing the worktree and live
+          // tree, so the lease and this chat's chain stay held until it settles: a Retry or
+          // the next turn's landing never overlaps it. Whatever it ends as is the truth.
+          draining.add(sessionKey)
+          try {
+            await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
+            const late = await batch.then(
+              (files) => ({ files }),
+              (cause) => ({ cause })
+            )
+            if ('cause' in late) {
+              await landingFailed(sessionKey, st, late.cause, turn)
+              return null
+            }
+            return late.files
+          } finally {
+            draining.delete(sessionKey)
+          }
         }
-      }
+      })
+    )
+    .then(async (result) => {
+      if (mergedThisTurn && !st.parked) {
+        try {
+          await publishAfterAgentLanding(sessionKey, st.liveRoot)
+        } catch (error) {
+          productLog.error('publish', 'Agent PR update failed after landing', {
+            root: st.liveRoot,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      } else clearAgentPublish(sessionKey)
+      return result
     })
-  )
   st.chain = task.catch(() => null)
   return task.catch(() => null)
 }
@@ -296,7 +321,8 @@ async function landBatch(
     reply: finalReply(turn)
   })
   let outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-    land: terminal === 'success'
+    land: terminal === 'success',
+    keepHistory: st.gitAccess === 'full'
   })
   let reconcileFiles: string[] | null = null
   if (
@@ -308,7 +334,10 @@ async function landBatch(
   ) {
     try {
       const prep = await stageResolve(st.liveRoot, st.wt)
-      if (prep.clean) outcome = await completeTurn(st.liveRoot, st.wt, described.text)
+      if (prep.clean)
+        outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
+          keepHistory: st.gitAccess === 'full'
+        })
       else reconcileFiles = prep.conflicted
     } catch {
       /* preserve the recovery branch and surface the fallback */
@@ -471,7 +500,10 @@ export async function releaseChat(
   pendingTerminal: TurnTerminalOutcome = 'success'
 ): Promise<void> {
   const st = states.get(sessionKey)
-  if (!st) return
+  if (!st) {
+    clearAgentPublish(sessionKey)
+    return
+  }
   states.delete(sessionKey)
   try {
     await st.chain.catch(() => {})
@@ -482,7 +514,8 @@ export async function releaseChat(
         const turnNo = ++st.turnNo
         const described = await turnMessage(sessionKey, st, turnNo)
         const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-          land: pendingTerminal === 'success'
+          land: pendingTerminal === 'success',
+          keepHistory: st.gitAccess === 'full'
         })
         // Not `landTurn`: the chat is gone, so there is no park to leave, no branch
         // to retire (the checkout is removed below) and nobody to tell.
@@ -497,10 +530,15 @@ export async function releaseChat(
               `chat:${st.wt.id}:${turnNo}`
             )
           }
-          await commitLiveTurn(st.liveRoot, outcome.files, {
-            title: described.subject,
-            body: described.body
-          })
+          await commitLiveTurn(
+            st.liveRoot,
+            outcome.files,
+            {
+              title: described.subject,
+              body: described.body
+            },
+            outcome.newBase
+          )
         } else if (outcome.outcome === 'parked') {
           st.parked = true
           upsertParkRecord(st, outcome.files)
@@ -515,6 +553,8 @@ export async function releaseChat(
     })
   } catch {
     /* teardown never throws */
+  } finally {
+    clearAgentPublish(sessionKey)
   }
 }
 
@@ -522,4 +562,5 @@ export async function releaseChat(
  *  checkouts stay on disk for the next launch's crash recovery (C4). */
 export function dropAll(): void {
   states.clear()
+  clearAllAgentPublishes()
 }

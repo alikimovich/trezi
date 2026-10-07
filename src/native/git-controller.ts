@@ -9,6 +9,7 @@ import {
   publishLabel
 } from '../shared/publish-progress'
 import type { NativeActivityController } from './activity-controller'
+import type { NativeChatController } from './chat-controller'
 import type { NativePreferences } from './preferences'
 import type { NativeSheetController } from './sheets-runtime'
 
@@ -41,7 +42,8 @@ export class NativeGitController {
     readonly log: NativeActivityController,
     readonly preferences: NativePreferences,
     readonly render: () => void,
-    readonly openExternal: (url: string) => unknown = () => {}
+    readonly openExternal: (url: string) => unknown = () => {},
+    readonly chat?: NativeChatController
   ) {}
   private get workspace() {
     return this.sheets.workspace
@@ -171,7 +173,7 @@ export class NativeGitController {
       await this.refresh(root).catch((error) => this.log.append(String(error), 'error'))
       this.render()
     }
-    if (result) this.finished(key, mode, result, run.cancelling)
+    if (result) await this.finished(key, mode, result, run.cancelling)
   }
   /** Asks the owner to stop the active publish before its next step. */
   async cancel(key: string) {
@@ -242,13 +244,44 @@ export class NativeGitController {
       const key = this.workspace.state.projects.find((p) => p.root === root)?.key
       // Waiting for a description nobody will write: a new Publish resumes it.
       if (key && last.result && last.state !== 'describe')
-        this.finished(key, run.mode, last.result, false)
+        void this.finished(key, run.mode, last.result, false).catch((error) =>
+          this.log.append(String(error), 'error')
+        )
       void this.refresh(root).catch((error) => this.log.append(String(error), 'error'))
     })
   }
   /** The result: a toast on success, the failure sheet otherwise. */
-  private finished(key: string, mode: 'merge' | 'pr', result: PublishResult, cancelling?: boolean) {
+  private async finished(
+    key: string,
+    mode: 'merge' | 'pr',
+    result: PublishResult,
+    cancelling?: boolean
+  ) {
     if (result.ok) {
+      if (mode === 'pr' && result.url && this.chat) {
+        const root = this.workspace.state.projects.find((entry) => entry.key === key)?.root
+        if (root) {
+          const pr = await this.invoke('publish:pr-status', root).catch((error) => ({
+            error: String(error)
+          }))
+          // GitHub reports UNKNOWN while it recomputes after the push; the local
+          // merge-tree result against the fetched base is still authoritative.
+          if (
+            pr.mergeable === 'CONFLICTING' ||
+            (pr.mergeable === 'UNKNOWN' && pr.conflictingFiles?.length > 0)
+          ) {
+            this.resolveWithAgent(key, {
+              error: `Pull request #${pr.number ?? '?'} conflicts with ${pr.baseRefName ?? 'its base branch'}.`,
+              conflictFiles: pr.conflictingFiles,
+              branch: pr.headRefName ?? result.branch,
+              url: pr.url ?? result.url,
+              base: pr.baseRefName
+            })
+            return
+          }
+          if (pr.error) this.log.append(pr.error, 'warning')
+        }
+      }
       const message = publishedMessage(mode, result)
       this.log.append(`${message}${result.url ? ': ' + result.url : ''}`, 'success')
       if (result.notice) this.log.append(result.notice, 'warning')
@@ -286,6 +319,59 @@ export class NativeGitController {
         }
         if (sheet?.state.id === action.id) this.sheets.close()
         void this.publish(key)
+      }
+    )
+  }
+  private resolveWithAgent(
+    key: string,
+    result: {
+      error?: string
+      conflictFiles?: string[]
+      recoveryRefs?: string[]
+      branch?: string
+      url?: string
+      base?: string
+    }
+  ) {
+    const files = result.conflictFiles ?? []
+    this.sheets.present(
+      {
+        title: 'Publish has merge conflicts',
+        alert: false,
+        detail: `${result.error ?? 'The pull request cannot merge.'}\nConflicting files: ${files.join(', ')}.`,
+        fields: [],
+        actions: [
+          { id: 'cancel', label: 'Later' },
+          { id: 'resolve', label: 'Resolve with agent', primary: true }
+        ]
+      },
+      async (action) => {
+        if (action.action !== 'resolve' || !this.chat) return
+        const project = this.workspace.state.projects.find((entry) => entry.key === key)
+        if (!project) throw new Error('The published project is no longer open.')
+        await this.workspace.command({ type: 'select', key })
+        let selected = this.workspace.state.projects.find((entry) => entry.key === key)
+        if (!selected?.activeSessionKey) await this.workspace.command({ type: 'new-chat', key })
+        selected = this.workspace.state.projects.find((entry) => entry.key === key)
+        if (!selected?.activeSessionKey) throw new Error('Could not open a chat for this project.')
+        const active = this.chat.get(selected.activeSessionKey)
+        if (!active.ready) await this.chat.initialize(active)
+        if (active.root !== project.root)
+          throw new Error('The selected chat does not belong to the published project.')
+        const facts = [
+          'Resolve this pull request’s conflict with its base in this chat worktree.',
+          `Publish reported: ${result.error ?? 'pull request is not mergeable'}`,
+          `Conflicting files: ${files.join(', ')}`,
+          result.branch ? `Work branch: ${result.branch}` : '',
+          result.base ? `Base branch: origin/${result.base}` : '',
+          result.url ? `Pull request: ${result.url}` : '',
+          result.recoveryRefs?.length ? `Recovery refs: ${result.recoveryRefs.join(', ')}` : '',
+          'Call pr_status and git_sync_base, resolve the conflict markers, then git_merge_continue and publish_update. Keep the chosen version consistent with the user’s changes.'
+        ]
+          .filter(Boolean)
+          .join('\n')
+        this.sheets.close()
+        await this.chat.submit(active, facts)
       }
     )
   }

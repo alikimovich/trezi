@@ -957,6 +957,10 @@ A session that was not resuming, or one that already completed a turn, still rep
 its errors. Sessions started under a non-canonical cwd by an older build go through the
 same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.
 
+## Agent Git access (LKM-188)
+
+Settings → General → Agent Git access (`trezi:agent-git-access:v1`) defaults to Managed and is passed to new provider sessions as `AgentOptions.agentGitAccess`. The agent rules describe Trezi's `git_sync_base`, `git_merge_continue`, `git_merge_abort`, `pr_status` and `publish_update` tools. Managed mode refuses raw Git mutations in Claude's PreToolUse hook and Codex's command hook while allowing Git queries; Full permits mutations in the chat worktree and Trezi preserves new raw commit/merge ancestry when landing. Both hooks refuse raw pushes and live-branch rewrites in Full mode. After a PR is created or reused, Publish checks its mergeability; a PR that conflicts with its base offers Resolve with agent in a chat belonging to the published project. A local-vs-remote publish reconcile conflict remains on the manual recovery path.
+
 ## Agent file access (LKM-163)
 
 Settings → General → Agent file access (`trezi:agent-file-access:v1`) decides how far

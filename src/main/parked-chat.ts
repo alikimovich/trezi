@@ -149,7 +149,9 @@ export async function resolveParkedChat(
   try {
     await onChain(st, async () => {
       const described = await turnMessage(sessionKey, st, 'resolve')
-      const outcome = await completeTurn(st.liveRoot, st.wt, described.text)
+      const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
+        keepHistory: st.gitAccess === 'full'
+      })
       if (outcome.outcome === 'merged') {
         await landTurn(sessionKey, st, outcome, 'resolve', described)
         return
@@ -260,7 +262,10 @@ export function landStoppedTurn(
     if (!holding(st) || st.reverted) return null
     const turnNo = ++st.turnNo
     const described = await turnMessage(sessionKey, st, turnNo)
-    const outcome = await completeTurn(st.liveRoot, st.wt, described.text, { land: true })
+    const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
+      land: true,
+      keepHistory: st.gitAccess === 'full'
+    })
     if (outcome.outcome === 'parked') {
       st.interrupted = false
       st.parkedFiles = outcome.files

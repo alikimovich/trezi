@@ -9,6 +9,7 @@ import {
   undoProjectMemoryUpdate
 } from '../main/agent'
 import { AGENT_FILE_ACCESS_KEY, setAgentFileAccessSource } from '../main/agent-file-access'
+import { AGENT_GIT_ACCESS_KEY, setAgentGitAccessSource } from '../main/agent-git-access'
 import { registerAnnotationsIpc } from '../main/annotations'
 import {
   CLAUDE_USER_PLUGINS_KEY,
@@ -181,6 +182,7 @@ async function main() {
   })
   setClaudeUserPluginsSource(() => preferences.get(CLAUDE_USER_PLUGINS_KEY))
   setAgentFileAccessSource(() => preferences.get(AGENT_FILE_ACCESS_KEY))
+  setAgentGitAccessSource(() => preferences.get(AGENT_GIT_ACCESS_KEY))
   const workspace = await serviceWorkspace(host).catch((error) => {
     throw new Error(`Trezi could not read the workspace from its service: ${error.message}`)
   })
@@ -628,7 +630,8 @@ async function main() {
     activityController,
     preferences,
     renderShell,
-    (url) => shell.openExternal(url)
+    (url) => shell.openExternal(url),
+    chatController
   )
   shellController = new NativeShellController(
     workspaceController,

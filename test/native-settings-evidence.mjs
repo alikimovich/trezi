@@ -143,6 +143,7 @@ for (const width of [680, 780]) {
       control('default', 'Use last selected model'),
       control('claudePlugins', 'Don’t allow'),
       control('agentFileAccess', 'Full access'),
+      control('agentGitAccess', 'Managed'),
       control('workspaceIdle', '7 days'),
       control('activityAutoOpen', 'For problems that need me')
     ],

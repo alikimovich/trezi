@@ -8,17 +8,22 @@ const calls = [],
   opened = [],
   values = new Map()
 let progress = null
-const a = { key: 'a', root: '/a', branch: 'main' },
-  b = { key: 'b', root: '/b', branch: 'main' }
+const a = { key: 'a', root: '/a', branch: 'main', activeSessionKey: 'chat-a' },
+  b = { key: 'b', root: '/b', branch: 'main', activeSessionKey: 'chat-b' }
 let branch = 'main',
   connected = true,
   conflict = false,
+  prConflict = false,
+  prUnknown = false,
   release,
   paused = false,
   queued = null
 const workspace = {
   active: a,
   state: { projects: [a, b] },
+  command: async ({ type, key }) => {
+    if (type === 'select') workspace.active = workspace.state.projects.find((p) => p.key === key)
+  },
   changed() {},
   transact: async (key, fn) => {
     const entry = workspace.state.projects.find((p) => p.key === key)
@@ -52,6 +57,15 @@ const invoke = async (channel, ...args) => {
         }
       : { ok: true, branch, url: 'https://example.com/pr' }
   }
+  if (channel === 'publish:pr-status')
+    return {
+      mergeable: prConflict ? (prUnknown ? 'UNKNOWN' : 'CONFLICTING') : 'MERGEABLE',
+      number: 6,
+      baseRefName: 'main',
+      headRefName: 'trezi/main',
+      conflictingFiles: prConflict ? ['package.json'] : [],
+      url: 'https://example.com/pr'
+    }
   if (channel === 'git:remote-status')
     return {
       current: branch,
@@ -76,7 +90,12 @@ const git = new NativeGitController(
   { append: (...args) => logs.push(args) },
   { get: (key) => values.get(key), set: (key, value) => values.set(key, value) },
   () => {},
-  (url) => opened.push(url)
+  (url) => opened.push(url),
+  {
+    active: 'chat-b',
+    get: (key) => ({ chat: key, root: key === 'chat-a' ? '/a' : '/b', ready: true }),
+    submit: async (chat, text) => calls.push(['resolve-turn', chat.chat, text])
+  }
 )
 git.pollInterval = 5
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -140,6 +159,26 @@ assert.equal(calls.filter((c) => c[0] === 'publish:ship').length, ships + 1, 'Re
 assert.equal(sheets.current.state.title, 'Couldn’t create the pull request')
 sheets.close()
 conflict = false
+prConflict = true
+workspace.active = b
+await git.publish('a')
+assert.equal(sheets.current.state.title, 'Publish has merge conflicts')
+assert.ok(sheets.current.state.actions.some((action) => action.label === 'Resolve with agent'))
+await sheets.action({ id: sheets.current.state.id, action: 'resolve', values: {} })
+assert.equal(calls.at(-1)[1], 'chat-a', 'Resolve turn uses the published project’s chat')
+assert.match(calls.at(-1)[2], /package\.json[\s\S]*origin\/main[\s\S]*git_merge_continue/)
+assert.equal(workspace.active.key, 'a')
+// Right after a push GitHub reports UNKNOWN; the local conflict list still decides.
+sheets.close()
+prUnknown = true
+workspace.active = b
+await git.publish('a')
+assert.equal(sheets.current.state.title, 'Publish has merge conflicts')
+assert.ok(sheets.current.state.actions.some((action) => action.label === 'Resolve with agent'))
+sheets.close()
+prUnknown = false
+prConflict = false
+workspace.active = a
 // A publish this process didn't start (Trezi reloaded): adopted, then its result shows.
 progress = { id: 'w2', state: 'running', step: 'merge' }
 await git.refresh('/a')
