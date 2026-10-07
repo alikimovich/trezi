@@ -219,7 +219,8 @@ const noError = (h) => {
   assert.equal(h.chat().queue.length, 0)
 }
 
-// 4. A running turn, then its landing: queued with the reason, sent once it ends.
+// 4. A running turn, then its landing: queued without a note (LKM-191: the normal wait),
+//    sent once it ends.
 {
   const h = harness()
   await open(h)
@@ -227,12 +228,13 @@ const noError = (h) => {
   assert.equal(h.chat().isRunning, true)
   await h.say('Second')
   assert.equal(h.sent().length, 1)
-  assert.match(h.last().composer.queueNote, /Sends when this turn finishes/)
+  assert.equal(h.last().composer.queueNote, '')
   assert.equal(h.last().composer.queueCanSend, false)
   await h.emit({ type: 'delta', text: 'Done.' })
   await h.emit({ type: 'done', landingPending: true })
   assert.equal(h.sent().length, 1, 'the landing still blocks')
-  assert.match(h.last().composer.queueNote, /Sends after this turn’s changes land/)
+  assert.equal(h.last().composer.queueNote, '')
+  assert.equal(h.last().composer.queueCanSend, false)
   await h.say('Third')
   assert.equal(h.chat().queue.length, 2)
   await h.emit({ type: 'isolation', state: 'merged', files: ['a.ts'], group: 'g' })
