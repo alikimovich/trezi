@@ -67,6 +67,7 @@ struct WorkflowPublish {
             }
         }
         do {
+            context.phase("commit")
             try context.begin("commit")
             try context.run(["add", "-A"])
             let staged = try context.run(["diff", "--cached", "--name-only"])
@@ -87,6 +88,8 @@ struct WorkflowPublish {
             try context.done("push", [("action", Self.text(pushed.action)), ("attempts", .number(Double(pushed.attempts))),
                                       ("recoveryRefs", RepositoryOwner.strings(pushed.refs)), ("head", Self.text(sha))])
             try remember([("branch", Self.text(branch)), ("base", Self.text(base)), ("head", Self.text(sha))])
+            // A cancel during the push stops here, before the description is written.
+            try context.check()
             return describe(base: base, head: sha, branch: branch)
         } catch let cancel as WorkflowCancelled {
             throw cancel
@@ -105,6 +108,7 @@ struct WorkflowPublish {
         let title = record.param("prTitle") ?? "", body = record.param("prBody") ?? ""
         do {
             try context.check()
+            context.phase("pr")
             try context.begin("pr")
             var url = "", number: Int?
             if let open = openPullRequest(branch) {
@@ -125,6 +129,7 @@ struct WorkflowPublish {
                 try context.done("pr", Self.pr(url, number, reused: false))
             }
             if record.param("mode") == "pr" { return .done(Self.published(branch: branch, url: url)) }
+            context.phase("merge")
             try context.begin("merge")
             if let number, state(of: String(number)) == "MERGED" {
                 try context.done("merge", [("adopted", .bool(true))])
@@ -152,6 +157,7 @@ struct WorkflowPublish {
     /// with both tips kept at recovery refs; an overlap keeps `branch` as it was and
     /// answers a notice that offers the sync instead.
     private func cleanup(branch: String, base: String, head: String) throws -> String? {
+        context.phase("cleanup")
         try context.begin("cleanup")
         _ = try? context.run(["push", "--force-with-lease=refs/heads/\(branch):\(head)", "origin", "--delete", branch])
         let merged = "refs/remotes/origin/\(base)"
@@ -327,9 +333,13 @@ struct WorkflowPublish {
     func pushReconciled(_ branch: String, maxAttempts: Int = 3) throws -> Pushed {
         var refs: [String] = []
         for attempt in 1...maxAttempts {
+            try context.check()
+            context.phase("sync")
             var result = try reconcileOnce(branch, attempt: attempt, refs: &refs)
             if !result.ok { return result }
             do {
+                try context.check()
+                context.phase("push")
                 try context.run(["push", "-u", "origin", branch])
                 result.attempts = attempt; result.refs = refs
                 return result

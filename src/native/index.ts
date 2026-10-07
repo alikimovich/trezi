@@ -630,6 +630,7 @@ async function main() {
     activityController,
     preferences,
     renderShell,
+    (url) => shell.openExternal(url),
     chatController
   )
   shellController = new NativeShellController(
@@ -749,9 +750,11 @@ async function main() {
           ? gitController.branch(key, action.value ?? '', true)
           : action.action === 'publish'
             ? gitController.publish(key)
-            : action.action === 'git-updates'
-              ? gitController.updates(key)
-              : null
+            : action.action === 'publish-cancel'
+              ? gitController.cancel(key)
+              : action.action === 'git-updates'
+                ? gitController.updates(key)
+                : null
     void operation?.catch((error) => activityController.append(String(error), 'error'))
   })
   // The service drains before it relaunches Trezi (with the active project).
@@ -980,7 +983,8 @@ async function main() {
           root,
           (key) => preferences.get(key),
           contextController,
-          inspectorController
+          inspectorController,
+          gitController
         )
         process.exitCode = 0
         writeSmokeResult(testDir!, { exitCode: 0, lines: [] })

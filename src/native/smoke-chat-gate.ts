@@ -195,12 +195,33 @@ export async function checkChatGate(
     )
   }
   // Retry (the status view's "run" action) opens the project again; now it loads with its static site.
+  // Retry only means something on the project that failed: a silent no-op in `restart`
+  // (another project active) would otherwise show up as an unexplained timeout.
+  assert.equal(
+    nativeWorkspace.state.activeKey,
+    gamma.key,
+    'Retry runs on the project that failed to open'
+  )
   await nativeWorkspace.command({ type: 'restart', key: gamma.key })
   await until(
     async () =>
       nativeWorkspace.state.loadedKey === gamma.key &&
       (await host.request('shellInspect')).chatReady,
-    'retry loads the project'
+    'retry loads the project',
+    30000,
+    async () => {
+      const { text } = await host.request('activityInspect')
+      return {
+        activeKey: nativeWorkspace.state.activeKey,
+        gamma: gamma.key,
+        launchSpec: nativeWorkspace.active?.launchSpec ?? null,
+        url: nativeWorkspace.active?.url ?? null,
+        statusKind: (await host.request('layoutInspect')).statusKind,
+        status: nativeWorkspace.state.status,
+        loadedKey: nativeWorkspace.state.loadedKey,
+        activityTail: String(text).slice(-400)
+      }
+    }
   )
   // Switching back hides the chat at once and shows it when that project is ready.
   const back = nativeWorkspace.command({ type: 'select', key: first.key })

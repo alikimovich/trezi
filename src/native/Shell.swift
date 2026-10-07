@@ -55,6 +55,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     let address = NSTextField()
     let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
     var publishTitle = "Publish"
+    let publishSpinner = ToolbarPublishSpinner()
     /// Toolbar frames read synchronously inside the last `window-width` test resize.
     var resizeSnapshot: [String: Any] = [:]
 
@@ -298,7 +299,6 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         defer { for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() } }
         for (key, item) in toolbarItems {
             item.isEnabled = key == "chat" ? true : key == "branch" ? previewState["branch"] is String : ready
-            if key == "publish" { item.isEnabled = ready && !(previewState["publishing"] as? Bool ?? false) }
         }
         chatTitle.stringValue = allRows.first(where: { $0.id == selectedID })?.title ?? "Chat"
         chatTitle.toolTip = chatTitle.stringValue
@@ -351,19 +351,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             menu.items.first?.attributedTitle = branchTitle(title)
             branchMenu.menu = menu
         }
-        if let item = toolbarItems["publish"] as? NSMenuToolbarItem {
-            item.title = previewState["publishLabel"] as? String ?? "Publish"; item.label = item.title; item.toolTip = item.title
-            if item.title != publishTitle { republished(item.title) }
-            let menu = NSMenu(); menu.autoenablesItems = false
-            for (title, value) in [("Create PR and merge to main", "merge"), ("Create PR", "pr")] {
-                let entry = NSMenuItem(title: title, action: #selector(previewMenuAction(_:)), keyEquivalent: ""); entry.target = self
-                entry.representedObject = ["event":"shell-action", "action":"publish-mode", "value":value]
-                entry.state = value == previewState["publishMode"] as? String ? .on : .off; entry.isEnabled = item.isEnabled
-                menu.addItem(entry)
-            }
-            item.menu = menu
-
-        }
+        if let item = toolbarItems["publish"] as? NSMenuToolbarItem { updatePublish(item, state: previewState, ready: ready) }
         toolbarItems["code"]?.toolTip = previewState["codeOpen"] as? Bool == true ? "Hide Code" : "Show Code"
         toolbarItems["code"]?.label = toolbarItems["code"]?.toolTip ?? "Show Code"
         toolbarItems["expand"]?.toolTip = chatHidden ? "Restore Layout" : "Expand Preview"
@@ -478,6 +466,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
          "toolbar":toolbar.items.map { $0.itemIdentifier.rawValue }, "branch":previewState["branch"] ?? "", "publishLabel":previewState["publishLabel"] ?? "", "codeOpen":previewState["codeOpen"] ?? false,
          "toolbarGroupsMomentary":toolbar.items.compactMap { $0 as? NSToolbarItemGroup }.allSatisfy { ($0 as? MomentaryToolbarGroup)?.hasMomentaryControl == true }, "visibleToolbar":toolbar.visibleItems?.map { $0.itemIdentifier.rawValue } ?? [], "previewHeaderLightText":previewTextColor == .white, "address":previewAddress, "domain":address.stringValue, "viewport":previewState["viewport"] ?? "", "publishStandard":toolbarItems["publish"]?.view == nil, "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "sidebarAutohidesScrollers":(outline.enclosingScrollView?.autohidesScrollers ?? false), "sidebarActions":sidebarButtons.keys.sorted(), "chatActions":["history", "new-chat"], "historyIDs":chatActions.historyMenu?.items.compactMap { ($0.representedObject as? [String:String])?["id"] } ?? [], "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil, "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x, "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x, "chatWidth":previewState["chatWidth"] ?? 0, "enabled":toolbarItems.mapValues { $0.isEnabled }]
             .merging(toolbarInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
+            .merging(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
     }
     func perform(_ action: String, id: String?) -> Bool {
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {
@@ -512,6 +501,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
            let entry = menu.items.first(where: { ($0.representedObject as? [String: String])?["value"] == value && ($0.representedObject as? [String: String])?["action"] == action }), entry.isEnabled {
             previewMenuAction(entry); return true
         }
+        if action == "publish-cancel" { return cancelPublish(toolbarItems["publish"] as? NSMenuToolbarItem) }
+        if action == "publish", toolbarItems["publish"]?.action == nil { return false }
         if let button = sidebarButtons[action], button.isEnabled { sidebarAction(button); return true }
         if let group = toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }).first(where: { $0.subitems.contains { $0.itemIdentifier.rawValue == action } }) { return group.clickSegment(action) }
         guard let item = toolbarItems[action], item.isEnabled else { return false }

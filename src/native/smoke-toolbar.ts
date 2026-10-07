@@ -96,7 +96,7 @@ function assertToolbar(state: Toolbar, stage: string) {
   assert.equal(state.branchTruncation, 'tail', `Toolbar ${stage}: the branch truncates at the tail`)
 }
 
-async function capture(host: NativeBridge, artifacts: string, name: string) {
+export async function capture(host: NativeBridge, artifacts: string, name: string) {
   let png: string,
     how = 'foreground window'
   if (background()) {
