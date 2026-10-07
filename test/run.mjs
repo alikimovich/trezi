@@ -80,6 +80,7 @@ const UNIT = [
   'native-chat-latest-settle',
   'native-smoke-wait',
   'native-chat-reveal',
+  'native-chat-text',
   'native-island-editing',
   'no-system-preferences',
   'chat-islands',
@@ -202,6 +203,8 @@ const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,
   // Its Swift fixture queues behind other tests' swiftc runs; it takes 110 s+ under load.
   'repository-owner': 240_000,
+  // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
+  'runtime-owner': 240_000,
   'keychain-rebuild': 300_000,
   'setup-vite-real': 300_000
 }
