@@ -260,6 +260,25 @@ for (const mode of ['never', 'problems', 'always']) {
   assert.deepEqual(gaveUp, ['Exited with code 1'], 'giving up on a crash loop is reported once')
 }
 
+// Verification reset: after a first auto-open (and an unread marker), `reset` hides, clears and
+// forgets the once-per-kind latch, so the same needs-action event opens the window again.
+{
+  const { log, unread } = make('problems')
+  const open = () =>
+    log.append('Could not open Folder', 'needs-action', { event: 'project-open-failed' })
+  open()
+  assert.equal(log.visible, true, 'the first failed open brings Activity to front')
+  log.action('hide')
+  open()
+  assert.equal(log.visible, false, 'the latch keeps a repeat of the event from opening it again')
+  assert.equal(log.unread, 1)
+  log.action('reset')
+  assert.deepEqual([log.visible, log.lines.length, log.unread, log.opened.size], [false, 0, 0, 0])
+  assert.equal(unread().count, 0, 'reset clears the unread marker')
+  open()
+  assert.equal(log.visible, true, 'after reset the event opens the window again')
+}
+
 console.log(
   'Activity attention: severity, once-per-kind auto-open, collapsed recovery notices, unread marker and the setting passed'
 )

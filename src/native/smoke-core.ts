@@ -443,10 +443,10 @@ export async function runNativeCoreSmoke(
       name: 'chat-gate',
       dependsOn: ['chat-ready'],
       run: async () => {
-        await checkChatGate(host, fixture, artifacts)
+        await checkChatGate(host, fixture, artifacts, preference)
       },
       cleanup: async () => {
-        await restoreChatGate(firstProject)
+        await restoreChatGate(firstProject, host)
       }
     },
     {
