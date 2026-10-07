@@ -220,15 +220,15 @@ const valid = (proposals) => ({ version: 1, generatedAt: new Date(NOW).toISOStri
   assert.ok(dreamerErrors({ ...valid(fromDigest), version: 2 }).includes('version must be 1'))
   assert.ok(dreamerErrors(valid([])).includes('proposals must be a non-empty list'))
   const bad = { ...fromDigest[0], category: 'feature', effort: 'XL', acceptance: 'one' }
-  bad.evidence = [{ turn: 0, quote: 'q'.repeat(DREAMER_LIMITS.quote + 1), numbers: { n: 'x' } }]
+  bad.evidence = ['e'.repeat(DREAMER_LIMITS.item + 1), 7, null]
   const errors = dreamerErrors(valid([bad, { ...fromDigest[1], id: bad.id }, 'nope']))
   for (const expected of [
     /category must be one of/,
     /effort must be S, M or L/,
     /acceptance must be a list of strings/,
-    /evidence\[0\]\.turn must be a positive whole number/,
-    /evidence\[0\]\.quote must be a string of at most 200/,
-    /evidence\[0\]\.numbers must map names to numbers/,
+    /evidence\[0\] is longer than 1000 characters/,
+    /evidence\[1\] must be a string or an object/,
+    /evidence\[2\] must be a string or an object/,
     /proposals\[1\]\.id speed-bash is not unique/,
     /proposals\[2\] must be an object/
   ])
@@ -241,6 +241,38 @@ const valid = (proposals) => ({ version: 1, generatedAt: new Date(NOW).toISOStri
       /title is longer than 200/.test(e)
     )
   )
+  // Agent OS's v1 schema: generatedAt and effort are optional, evidence items are
+  // strings or any object, and a missing problem, proposal, impact or list is empty.
+  {
+    const { effort: _effort, ...noEffort } = fromDigest[0]
+    assert.deepEqual(dreamerErrors({ version: 1, proposals: [noEffort] }), [], 'no generatedAt')
+    assert.deepEqual(
+      dreamerErrors(valid([{ ...noEffort, evidence: ['plain text', { anything: [1, 'x'] }, {}] }])),
+      []
+    )
+    assert.deepEqual(
+      dreamerErrors({
+        version: 1,
+        proposals: [{ id: 'a', title: 'A', category: 'bug' }]
+      }),
+      [],
+      'only id, title and category are required'
+    )
+    assert.ok(
+      dreamerErrors({ version: 1, generatedAt: 7, proposals: [noEffort] }).includes(
+        'generatedAt must be a string'
+      )
+    )
+    assert.ok(
+      dreamerErrors(valid([{ ...noEffort, effort: 'XL' }])).some((e) => /effort must be/.test(e))
+    )
+    const markdown = dreamerMarkdown({
+      version: 1,
+      proposals: [{ ...normalizeProposal({ ...noEffort, evidence: ['plain text'] }, 0) }]
+    })
+    assert.doesNotMatch(markdown, /effort|undefined|Generated/)
+    assert.match(markdown, /- plain text/)
+  }
 
   const normal = normalizeProposal(
     {
@@ -259,7 +291,7 @@ const valid = (proposals) => ({ version: 1, generatedAt: new Date(NOW).toISOStri
     title: 'Fix it',
     category: 'improvement',
     problem: '',
-    evidence: [{ session: 's-alpha', turn: 2, numbers: { a: 1 } }],
+    evidence: [{ session: 's-alpha', turn: 2, numbers: { a: 1 } }, 'junk'],
     proposal: '',
     impact: '',
     effort: 'S',

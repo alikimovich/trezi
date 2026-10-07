@@ -13,6 +13,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Open: keep the Agent OS token in the Keychain instead of preferences.
 - [ ] Open: Open Chat could scroll to the cited turn, not only open the chat.
 - [ ] Open: once LKM-200's tool timing lands, read it instead of the `Tool step` lines.
+- [x] Repair: Send is one `POST <url>/proposals` `{projectId, file, start}` (no `/api/projects/…` route or 404 retry); Settings → Dreamer "When tasks are created" sets `start` (off by default); an unreachable Agent OS says it is reachable only from the same Mac and offers the export; the validator equals Agent OS's v1 schema (optional `generatedAt`/`effort`, string-or-object evidence); `docs/DREAMER.md` documents `bun run cli import-proposals` for another Mac.
 ## New chats, preview page, Codex questions, feedback log noise (LKM-199)
 
 - [x] Island sessions register for every chat with a workspace: restore, new chat (after `agent:chat-record` waits for the preparation), first turn, provider switch, and lazily on the first `chat_island` call (`ChatIslands.ensure`, `src/native/chat-island-session.ts`); never "not available yet" for a chat with a workspace.

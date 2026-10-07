@@ -15,6 +15,7 @@ import {
 } from '../src/native/dreamer-controller.ts'
 import {
   DREAMER_PROJECT_KEY,
+  DREAMER_START_KEY,
   DREAMER_TOKEN_KEY,
   DREAMER_URL_KEY,
   exportDreamerReport,
@@ -104,17 +105,32 @@ try {
       ok: true,
       tasks: ['AOS-7']
     })
-    assert.equal(ok.calls[0].url, 'http://127.0.0.1:4317/api/projects/my%20proj/proposals')
+    // One POST to <base>/proposals with {projectId, file, start}; start is off by default.
+    assert.equal(ok.calls.length, 1)
+    assert.equal(ok.calls[0].url, 'http://127.0.0.1:4317/proposals')
     assert.equal(ok.calls[0].headers.authorization, 'Bearer secret-token')
+    assert.deepEqual(Object.keys(ok.calls[0].body).sort(), ['file', 'projectId', 'start'])
+    assert.equal(ok.calls[0].body.projectId, 'my proj')
+    assert.equal(ok.calls[0].body.start, false)
     assert.doesNotMatch(JSON.stringify(ok.calls[0].body), PRIVATE)
-    assert.deepEqual(dreamerErrors(ok.calls[0].body), [])
+    assert.deepEqual(dreamerErrors(ok.calls[0].body.file), [])
+    assert.equal(ok.calls[0].body.file.proposals.length, 2)
 
-    // An Agent OS without the project route gets its `POST /proposals` import.
-    const legacy = stub(answer(404, {}), answer(200, { created: [{ issue: 'AOS-8' }] }))
-    assert.deepEqual((await sendToAgentOs(target, FILE, legacy.fetch, HOME)).tasks, ['AOS-8'])
-    assert.equal(legacy.calls[1].url, 'http://127.0.0.1:4317/proposals')
-    assert.equal(legacy.calls[1].body.projectId, 'my proj')
-    assert.equal(legacy.calls[1].body.file.proposals.length, 2)
+    const started = stub(answer(200, { created: [{ issue: 'AOS-8', started: true }] }))
+    assert.deepEqual(
+      (await sendToAgentOs({ ...target, start: true }, FILE, started.fetch, HOME)).tasks,
+      ['AOS-8']
+    )
+    assert.equal(started.calls[0].body.start, true)
+
+    // A 404 is an error like any other: no second route is tried.
+    const missing = stub(answer(404, { error: 'not found' }), answer(200, {}))
+    assert.deepEqual(await sendToAgentOs(target, FILE, missing.fetch, HOME), {
+      ok: false,
+      tasks: [],
+      error: 'Agent OS answered 404: not found'
+    })
+    assert.equal(missing.calls.length, 1)
 
     const refused = stub(answer(400, { error: 'proposals[0].title too long' }))
     assert.deepEqual(await sendToAgentOs(target, FILE, refused.fetch, HOME), {
@@ -123,10 +139,10 @@ try {
       error: 'Agent OS answered 400: proposals[0].title too long'
     })
     const down = stub(new Error('connect ECONNREFUSED'))
-    assert.match(
-      (await sendToAgentOs(target, FILE, down.fetch, HOME)).error,
-      /could not be reached \(connect ECONNREFUSED\)/
-    )
+    const unreachable = (await sendToAgentOs(target, FILE, down.fetch, HOME)).error
+    assert.match(unreachable, /could not be reached \(connect ECONNREFUSED\)/)
+    assert.match(unreachable, /only on this Mac \(127\.0\.0\.1\)/)
+    assert.match(unreachable, /export the report/)
     const none = stub()
     assert.match(
       (await sendToAgentOs({ ...target, url: 'not a url' }, FILE, none.fetch)).error,
@@ -143,11 +159,8 @@ try {
     assert.equal(none.calls.length, 0, 'nothing is sent without a valid target')
     const open = stub(answer(200, {}))
     await sendToAgentOs({ url: '', project: 'p' }, FILE, open.fetch, HOME)
-    assert.equal(
-      open.calls[0].url,
-      'http://127.0.0.1:4317/api/projects/p/proposals',
-      'the default URL'
-    )
+    assert.equal(open.calls[0].url, 'http://127.0.0.1:4317/proposals', 'the default URL')
+    assert.equal(open.calls[0].body.projectId, 'p')
     assert.equal(open.calls[0].headers.authorization, undefined, 'no token, no header')
     console.log('dreamer-export: send PASS')
   }
@@ -187,6 +200,7 @@ try {
       }
     }
     const picked = []
+    const posts = []
     let responses = []
     let busy = false
     const host = {
@@ -197,7 +211,8 @@ try {
       copyText: async () => {},
       openChat: () => {},
       busy: () => busy,
-      fetch: async () => {
+      fetch: async (url, init) => {
+        posts.push({ url, body: JSON.parse(init.body) })
         const next = responses.shift()
         if (next instanceof Error) throw next
         return next
@@ -221,10 +236,36 @@ try {
     assert.equal(await perform('send'), 'Sent 1 proposal to Agent OS. Created AOS-9.')
     assert.deepEqual(dreamer.result.sent.tasks, ['AOS-9'])
     assert.equal(picked.length, 0)
+    assert.equal(posts[0].url, 'http://agent-os.test/proposals')
+    assert.equal(posts[0].body.projectId, 'trezi')
+    assert.equal(posts[0].body.start, false, 'start is off by default')
+    assert.deepEqual(
+      posts[0].body.file.proposals.map((p) => p.id),
+      ['tests']
+    )
 
+    // Settings → Dreamer's "start them on import" reaches the body.
+    prefs.set(DREAMER_START_KEY, 'on')
+    responses = [answer(200, { created: [{ issue: 'AOS-10' }] })]
+    await perform('send')
+    assert.equal(posts[1].body.start, true)
+    prefs.delete(DREAMER_START_KEY)
+
+    // Unreachable: the message says Agent OS is this Mac's only, and the export is offered.
     responses = [new Error('offline')]
     const message = await perform('send')
     assert.match(message, /^Not sent: Agent OS could not be reached \(offline\)\./)
+    assert.match(message, /only on this Mac \(127\.0\.0\.1\)/)
+
+    // Another HTTP error keeps its own message and also falls back to the export.
+    responses = [answer(400, { error: 'proposals[0].title too long' })]
+    const refused = await perform('send')
+    assert.match(refused, /^Not sent: Agent OS answered 400: proposals\[0\]\.title too long/)
+    assert.doesNotMatch(refused, /127\.0\.0\.1/)
+    assert.match(refused, /Exported the report to/)
+    picked.length = 0
+    responses = [new Error('offline')]
+    await perform('send')
     assert.match(message, /Exported the report to .*fallback\.zip instead\./)
     assert.match(picked[0], /^Dreamer Report \d{4}-\d{2}-\d{2}\.zip$/)
     assert.ok(existsSync(join(scratch, 'fallback.zip')))

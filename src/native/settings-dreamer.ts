@@ -3,6 +3,7 @@ import { DREAMER_SCHEDULE_KEY } from './dreamer-controller'
 import {
   DEFAULT_AGENT_OS_URL,
   DREAMER_PROJECT_KEY,
+  DREAMER_START_KEY,
   DREAMER_TOKEN_KEY,
   DREAMER_URL_KEY
 } from './dreamer-export'
@@ -19,6 +20,10 @@ import type { NativeSheetController } from './sheets-runtime'
 type Sheet = NonNullable<NativeSheetController['current']>
 const SECTION = 'dreamer'
 const decorated = new WeakSet<Sheet>()
+const START_CHOICES = [
+  { value: 'off', label: 'Only create them' },
+  { value: 'on', label: 'Start them on import' }
+]
 const SCHEDULE_CHOICES = [
   { value: 'off', label: 'Off' },
   { value: 'weekly', label: 'Weekly, while Trezi is idle' }
@@ -30,7 +35,7 @@ function pane(preferences: NativePreferences) {
     {
       id: 'dreamerUrl',
       label: 'Agent OS URL',
-      help: 'Send to Agent OS posts the selected proposals here.',
+      help: 'Send to Agent OS posts the selected proposals to <URL>/proposals.',
       kind: 'text',
       value: preferences.get(DREAMER_URL_KEY) ?? '',
       placeholder: DEFAULT_AGENT_OS_URL
@@ -53,6 +58,14 @@ function pane(preferences: NativePreferences) {
       value: '',
       draft: true,
       placeholder: hasToken ? 'Saved' : 'Paste token'
+    },
+    {
+      id: 'dreamerStart',
+      label: 'When tasks are created',
+      help: 'Agent OS listens on 127.0.0.1 only, so Send works on the Mac that runs it.',
+      kind: 'choice',
+      value: preferences.get(DREAMER_START_KEY) === 'on' ? 'on' : 'off',
+      choices: START_CHOICES
     },
     {
       id: 'dreamerSchedule',
@@ -103,6 +116,7 @@ async function save(preferences: NativePreferences, values: NativeSheetAction['v
   await preferences.apply([
     [DREAMER_URL_KEY, url || null],
     [DREAMER_PROJECT_KEY, values.dreamerProject?.trim() || null],
+    [DREAMER_START_KEY, values.dreamerStart === 'on' ? 'on' : null],
     [DREAMER_SCHEDULE_KEY, schedule]
   ])
 }

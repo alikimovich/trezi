@@ -72,7 +72,11 @@ The estimate before the run is the prompt's length / 4 plus 4000 answer tokens.
 ## The file: version 1
 
 `src/shared/dreamer.ts` (`dreamerErrors` validates, `normalizeProposal` repairs).
-The limits match Agent OS's importer.
+The schema and limits match Agent OS's importer exactly: only `version`, `proposals`
+and each proposal's `id`, `title` and `category` are required. `generatedAt` and
+`effort` are optional, a missing `problem`, `proposal`, `impact`, `evidence`,
+`acceptance` or `areas` is empty, and an evidence item is a string or any object.
+Trezi's own runs always write `generatedAt` and object evidence.
 
 ```json
 {
@@ -88,7 +92,8 @@ The limits match Agent OS's importer.
       "problem": "Bash took the most tool time: 12 steps, 340 s in total.",
       "evidence": [
         { "session": "<chat id>", "turn": 3, "quote": "run the tests again",
-          "numbers": { "steps": 12, "totalMs": 340000 }, "note": "optional" }
+          "numbers": { "steps": 12, "totalMs": 340000 }, "note": "optional" },
+        "a plain string is also valid evidence"
       ],
       "proposal": "Cache the test run between turns.",
       "impact": "Shorter turns.",
@@ -103,17 +108,17 @@ The limits match Agent OS's importer.
 | Field | Rule |
 | --- | --- |
 | `version` | `1` |
-| `generatedAt` | ISO date |
+| `generatedAt` | optional string (Trezi writes an ISO date) |
 | `scope` | optional: `project` (a project key or `null` for all), `projectName`, `days` |
 | `summary` | optional string |
 | `proposals` | 1–50 items |
 | `id` | non-empty, unique, at most 100 characters |
 | `title` | non-empty, at most 200 |
 | `category` | `improvement`, `template`, `tool`, `speed` or `bug` |
-| `problem` / `proposal` / `impact` | strings, at most 5000 / 10000 / 2000 |
-| `effort` | `S`, `M` or `L` |
-| `acceptance` / `areas` | at most 30 strings of at most 1000 / 200 |
-| `evidence` | at most 30 objects: `session` (chat id), `turn` (1-based user turn), `quote` (≤ 200), `numbers` (name → finite number), `note` (≤ 1000); all optional |
+| `problem` / `proposal` / `impact` | optional strings, at most 5000 / 10000 / 2000 |
+| `effort` | optional: `S`, `M` or `L` |
+| `acceptance` / `areas` | optional: at most 30 strings of at most 1000 / 200 |
+| `evidence` | optional: at most 30 items, each a string of at most 1000 characters or an object. Trezi writes objects with optional `session` (chat id), `turn` (1-based user turn), `quote` (≤ 200), `numbers` (name → finite number) and `note` (≤ 1000); only `session` opens a chat |
 
 The zip's `report.md` is `dreamerMarkdown`: the summary and one section per proposal
 with its evidence and an acceptance checklist.
@@ -134,18 +139,33 @@ A sectioned window (`src/native/dreamer-review.ts`, `src/native/dreamer-controll
 ## Send to Agent OS
 
 Settings → Dreamer holds the Agent OS URL (default `http://127.0.0.1:4317`), the
-project ID, an optional token (Save Token / Remove Token) and Run the Dreamer (Off, or
+project ID, an optional token (Save Token / Remove Token), "When tasks are created"
+(Only create them, the default, or Start them on import) and Run the Dreamer (Off, or
 Weekly, while Trezi is idle). Send (`sendToAgentOs` in
-`src/native/dreamer-export.ts`):
+`src/native/dreamer-export.ts`) makes one request:
 
-- `POST <url>/api/projects/<projectId>/proposals` with the version 1 file of the
-  selected proposals, redacted again; `Authorization: Bearer <token>` when a token is
-  set; 30-second limit.
-- On 404 it retries Agent OS's import route `POST <url>/proposals` with
-  `{ "projectId": "<projectId>", "file": <file> }`.
+- `POST <url>/proposals` with `{ "projectId": "<projectId>", "file": <file>, "start": false }`.
+  `file` is the version 1 file of the selected proposals, redacted again. `start` is
+  `true` only when "Start them on import" is chosen; Agent OS then starts a worker on
+  each created task. `Authorization: Bearer <token>` is sent when a token is set;
+  30-second limit.
 - The answer's task ids are read from `created[].issue` (Agent OS), `tasks[].id`,
   `taskIds` or `ids`, and shown in the window and on the Overview.
 - On any failure the window says why and opens the save panel for the export instead.
+  An HTTP error keeps Agent OS's own message (`Agent OS answered 400: …`).
+
+Agent OS listens on 127.0.0.1 only, so Send works only on the Mac that runs it. When
+Agent OS cannot be reached the window says so ("accepts connections only on this Mac
+(127.0.0.1)") and offers the export.
+
+**Another Mac.** Export the report (or Copy as JSON), copy `proposals.json` to the Mac
+that runs Agent OS and import it there:
+
+```sh
+bun run cli import-proposals <project> <file.json> [--start]
+```
+
+`--start` is the same as "Start them on import".
 
 The token is stored in Trezi's preferences, not the Keychain, and is never shown again
 after it is saved.

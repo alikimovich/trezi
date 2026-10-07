@@ -38,15 +38,17 @@ export interface DreamerEvidence {
   numbers?: Record<string, number>
   note?: string
 }
+/** Agent OS accepts a plain string or any object as an evidence item. */
+export type DreamerEvidenceItem = string | DreamerEvidence
 export interface DreamerProposal {
   id: string
   title: string
   category: DreamerCategory
   problem: string
-  evidence: DreamerEvidence[]
+  evidence: DreamerEvidenceItem[]
   proposal: string
   impact: string
-  effort: DreamerEffort
+  effort?: DreamerEffort
   acceptance: string[]
   areas: string[]
 }
@@ -58,7 +60,7 @@ export interface DreamerScope {
 }
 export interface DreamerFile {
   version: 1
-  generatedAt: string
+  generatedAt?: string
   scope?: DreamerScope
   /** The short report: what the run looked at and what stood out. */
   summary?: string
@@ -79,8 +81,8 @@ export function dreamerErrors(value: unknown): string[] {
   const errors: string[] = []
   if (!isRecord(value)) return ['The file is not a JSON object.']
   if (value.version !== DREAMER_VERSION) errors.push('version must be 1')
-  if (typeof value.generatedAt !== 'string' || Number.isNaN(Date.parse(value.generatedAt)))
-    errors.push('generatedAt must be an ISO date')
+  if (value.generatedAt !== undefined && typeof value.generatedAt !== 'string')
+    errors.push('generatedAt must be a string')
   if (value.summary !== undefined && typeof value.summary !== 'string')
     errors.push('summary must be a string')
   const proposals = value.proposals
@@ -97,14 +99,17 @@ export function dreamerErrors(value: unknown): string[] {
       errors.push(`${at} must be an object`)
       continue
     }
+    // Agent OS defaults a missing problem, proposal, impact or list to "" / [].
     const text = (key: string, max: number, required = false) => {
       const v = p[key]
+      if (v === undefined && !required) return
       if (typeof v !== 'string') errors.push(`${at}.${key} must be a string`)
       else if (required && !v.trim()) errors.push(`${at}.${key} must not be empty`)
       else if (v.length > max) errors.push(`${at}.${key} is longer than ${max} characters`)
     }
     const list = (key: string, max: number) => {
       const v = p[key]
+      if (v === undefined) return
       if (!Array.isArray(v) || v.some((item) => typeof item !== 'string'))
         errors.push(`${at}.${key} must be a list of strings`)
       else if (v.length > DREAMER_LIMITS.list)
@@ -123,43 +128,23 @@ export function dreamerErrors(value: unknown): string[] {
     text('problem', DREAMER_LIMITS.problem)
     text('proposal', DREAMER_LIMITS.proposal)
     text('impact', DREAMER_LIMITS.impact)
-    if (!DREAMER_EFFORTS.includes(p.effort as DreamerEffort))
+    if (p.effort !== undefined && !DREAMER_EFFORTS.includes(p.effort as DreamerEffort))
       errors.push(`${at}.effort must be S, M or L`)
     list('acceptance', DREAMER_LIMITS.item)
     list('areas', DREAMER_LIMITS.area)
     const evidence = p.evidence
+    if (evidence === undefined) continue
     if (!Array.isArray(evidence)) errors.push(`${at}.evidence must be a list`)
     else if (evidence.length > DREAMER_LIMITS.list)
       errors.push(`${at}.evidence has more than ${DREAMER_LIMITS.list} items`)
+    // A string (at most 1000 characters) or any object, like Agent OS's importer.
     else
       for (const [n, e] of evidence.entries()) {
         const where = `${at}.evidence[${n}]`
-        if (!isRecord(e)) {
-          errors.push(`${where} must be an object`)
-          continue
-        }
-        if (e.session !== undefined && typeof e.session !== 'string')
-          errors.push(`${where}.session must be a string`)
-        if (e.turn !== undefined && !(Number.isInteger(e.turn) && (e.turn as number) > 0))
-          errors.push(`${where}.turn must be a positive whole number`)
-        if (
-          e.quote !== undefined &&
-          (typeof e.quote !== 'string' || e.quote.length > DREAMER_LIMITS.quote)
-        )
-          errors.push(
-            `${where}.quote must be a string of at most ${DREAMER_LIMITS.quote} characters`
-          )
-        if (
-          e.note !== undefined &&
-          (typeof e.note !== 'string' || e.note.length > DREAMER_LIMITS.item)
-        )
-          errors.push(`${where}.note must be a string of at most ${DREAMER_LIMITS.item} characters`)
-        if (
-          e.numbers !== undefined &&
-          (!isRecord(e.numbers) ||
-            Object.values(e.numbers).some((v) => typeof v !== 'number' || !Number.isFinite(v)))
-        )
-          errors.push(`${where}.numbers must map names to numbers`)
+        if (typeof e === 'string') {
+          if (e.length > DREAMER_LIMITS.item)
+            errors.push(`${where} is longer than ${DREAMER_LIMITS.item} characters`)
+        } else if (!isRecord(e)) errors.push(`${where} must be a string or an object`)
       }
   }
   return errors
@@ -184,15 +169,17 @@ export function normalizeProposal(raw: unknown, index: number): DreamerProposal 
   const category = DREAMER_CATEGORIES.includes(raw.category as DreamerCategory)
     ? (raw.category as DreamerCategory)
     : 'improvement'
-  const effort = DREAMER_EFFORTS.includes(String(raw.effort).toUpperCase() as DreamerEffort)
-    ? (String(raw.effort).toUpperCase() as DreamerEffort)
-    : 'M'
+  const effortText = String(raw.effort).toUpperCase()
+  const effort = DREAMER_EFFORTS.includes(effortText as DreamerEffort)
+    ? (effortText as DreamerEffort)
+    : undefined
   const id =
     cut(String(raw.id ?? '').replace(/[^A-Za-z0-9_.-]/g, '-'), DREAMER_LIMITS.id) || `p${index + 1}`
   const evidence = (Array.isArray(raw.evidence) ? raw.evidence : [])
-    .filter(isRecord)
+    .filter((e) => isRecord(e) || (typeof e === 'string' && e.trim()))
     .slice(0, DREAMER_LIMITS.list)
-    .map((e) => {
+    .map((e): DreamerEvidenceItem => {
+      if (typeof e === 'string') return cut(e.trim(), DREAMER_LIMITS.item)
       const out: DreamerEvidence = {}
       if (typeof e.session === 'string' && e.session) out.session = cut(e.session, 128)
       const turn = Number(e.turn)
@@ -210,7 +197,7 @@ export function normalizeProposal(raw: unknown, index: number): DreamerProposal 
       }
       return out
     })
-    .filter((e) => Object.keys(e).length)
+    .filter((e) => typeof e === 'string' || Object.keys(e).length)
   return {
     id,
     title,
@@ -219,7 +206,7 @@ export function normalizeProposal(raw: unknown, index: number): DreamerProposal 
     evidence,
     proposal: cut(raw.proposal, DREAMER_LIMITS.proposal),
     impact: cut(raw.impact, DREAMER_LIMITS.impact),
-    effort,
+    ...(effort ? { effort } : {}),
     acceptance: strings(raw.acceptance, DREAMER_LIMITS.item),
     areas: strings(raw.areas, DREAMER_LIMITS.area)
   }
@@ -237,40 +224,48 @@ export function uniqueIds(proposals: DreamerProposal[]): DreamerProposal[] {
   })
 }
 
-const evidenceLine = (e: DreamerEvidence) =>
-  [
+/** The saved chat an evidence item points at, if any (string items point at none). */
+export const evidenceSession = (e: DreamerEvidenceItem): string | undefined =>
+  typeof e === 'object' && e && typeof e.session === 'string' && e.session ? e.session : undefined
+
+const evidenceLine = (e: DreamerEvidenceItem) => {
+  if (typeof e === 'string') return e
+  return [
     e.session ? `session ${e.session}${e.turn ? ` turn ${e.turn}` : ''}` : '',
     e.quote ? `“${e.quote}”` : '',
-    e.numbers
+    isRecord(e.numbers)
       ? Object.entries(e.numbers)
           .map(([key, value]) => `${key} ${value}`)
           .join(', ')
       : '',
-    e.note ?? ''
+    typeof e.note === 'string' ? e.note : ''
   ]
     .filter(Boolean)
     .join(' — ')
+}
 
 /** One line per evidence item, for the review window and the report. */
-export const dreamerEvidenceText = (evidence: DreamerEvidence[]) =>
+export const dreamerEvidenceText = (evidence: DreamerEvidenceItem[]) =>
   evidence.map((e) => `• ${evidenceLine(e)}`).join('\n')
 
 /** The short Markdown report saved next to proposals.json. */
 export function dreamerMarkdown(file: DreamerFile): string {
   const scope = file.scope
-  const lines = [
-    '# Dreamer report',
-    '',
-    `Generated ${file.generatedAt}${scope ? ` · ${scope.projectName ?? (scope.project ? 'one project' : 'all projects')} · last ${scope.days} days` : ''}.`,
-    ''
-  ]
+  const generated = [
+    file.generatedAt ? `Generated ${file.generatedAt}` : '',
+    scope
+      ? `${scope.projectName ?? (scope.project ? 'one project' : 'all projects')} · last ${scope.days} days`
+      : ''
+  ].filter(Boolean)
+  const lines = ['# Dreamer report', '']
+  if (generated.length) lines.push(`${generated.join(' · ')}.`, '')
   if (file.summary?.trim()) lines.push(file.summary.trim(), '')
   lines.push(`## Proposals (${file.proposals.length})`, '')
   for (const p of file.proposals) {
     lines.push(
       `### ${p.title}`,
       '',
-      `${DREAMER_CATEGORY_LABELS[p.category]} · effort ${p.effort} · \`${p.id}\``,
+      `${[DREAMER_CATEGORY_LABELS[p.category], p.effort ? `effort ${p.effort}` : '', `\`${p.id}\``].filter(Boolean).join(' · ')}`,
       ''
     )
     if (p.problem) lines.push(`**Problem.** ${p.problem}`, '')

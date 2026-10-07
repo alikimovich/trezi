@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-202 repair: Send route, `start`, exact v1 schema
+
+- **Send.** The recorded decision overrides the ticket text: `sendToAgentOs` makes one `POST <url>/proposals` with `{projectId, file, start}` (Bearer token). The `/api/projects/<id>/proposals` attempt and its 404 retry are gone (an earlier entry below describes them). A 404 is now an ordinary `Agent OS answered 404` error that falls back to the export like any other.
+- **`start`.** Settings → Dreamer → "When tasks are created" (`trezi:dreamer:agent-os-start`, off by default) goes through `AgentOsTarget.start` into the body; the Overview's target line says "starts the tasks" when it is on.
+- **Same Mac only.** Agent OS listens on 127.0.0.1, so an unreachable endpoint now says so and the export save panel opens; `docs/DREAMER.md` documents `bun run cli import-proposals <project> <file.json> [--start]` for another Mac.
+- **Schema.** `dreamerErrors` now equals Agent OS's `proposalFileSchema`: `generatedAt` and `effort` optional, text and lists default empty, evidence items a string or any object. `normalizeProposal` no longer invents `effort: 'M'` and keeps string evidence; the report, review window and Open Chat handle missing fields and string items (`evidenceSession`).
+- **Tests.** `dreamer-export` asserts the single POST, `start` false/true, no 404 retry, the unreachable and 400 messages with the export fallback; `dreamer-digest` gained optional-field and string-evidence cases; the native smoke check expects `/proposals` and `file.proposals`.
+
 ## 2026-10-07 — LKM-202: Dreamer
 
 - **What.** Trezi → Run Dreamer…, Dreamer Proposals… and Export Dreamer Report…, plus Settings → Dreamer. The format, inputs and privacy rules are in `docs/DREAMER.md`.

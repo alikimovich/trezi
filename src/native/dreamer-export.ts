@@ -19,6 +19,8 @@ import {
 export const DREAMER_URL_KEY = 'trezi:dreamer:agent-os-url'
 export const DREAMER_PROJECT_KEY = 'trezi:dreamer:agent-os-project'
 export const DREAMER_TOKEN_KEY = 'trezi:dreamer:agent-os-token'
+/** 'on' asks Agent OS to start a worker on each created task; anything else does not. */
+export const DREAMER_START_KEY = 'trezi:dreamer:agent-os-start'
 export const DEFAULT_AGENT_OS_URL = 'http://127.0.0.1:4317'
 const SEND_TIMEOUT_MS = 30_000
 
@@ -76,6 +78,8 @@ export interface AgentOsTarget {
   url: string
   project: string
   token?: string
+  /** Ask Agent OS to start each created task (default off). */
+  start?: boolean
 }
 type Fetch = (url: string, init: RequestInit) => Promise<Response>
 
@@ -88,9 +92,9 @@ const reason = async (response: Response) => {
 }
 
 /**
- * POSTs the selected proposals to `<url>/api/projects/<project>/proposals`. An Agent
- * OS without that route (404) gets its `POST /proposals` import instead. The token,
- * when set, goes only in the Authorization header.
+ * One `POST <url>/proposals` with `{projectId, file, start}` (`start` is false unless
+ * the user turned it on). The token, when set, goes only in the Authorization header.
+ * Agent OS listens on 127.0.0.1 only, so this reaches it from the same Mac alone.
  */
 export async function sendToAgentOs(
   target: AgentOsTarget,
@@ -113,17 +117,13 @@ export async function sendToAgentOs(
   const clean = redactDeep(file, home)
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (target.token?.trim()) headers.authorization = `Bearer ${target.token.trim()}`
-  const post = (path: string, body: unknown) =>
-    fetchImpl(`${root}${path}`, {
+  try {
+    const response = await fetchImpl(`${root}/proposals`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify({ projectId: project, file: clean, start: target.start === true }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS)
     })
-  try {
-    let response = await post(`/api/projects/${encodeURIComponent(project)}/proposals`, clean)
-    if (response.status === 404)
-      response = await post('/proposals', { projectId: project, file: clean })
     if (!response.ok)
       return {
         ok: false,
@@ -137,6 +137,10 @@ export async function sendToAgentOs(
     return { ok: true, tasks: dreamerTaskIds(body) }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return { ok: false, tasks: [], error: `Agent OS could not be reached (${message}).` }
+    return {
+      ok: false,
+      tasks: [],
+      error: `Agent OS could not be reached (${message}). It accepts connections only on this Mac (127.0.0.1), so Send works only here; export the report to import it on the Mac that runs Agent OS.`
+    }
   }
 }

@@ -1,11 +1,12 @@
 import type { DreamerEstimate, DreamerRun } from '../main/dreamer'
 import { productLog } from '../main/product-log'
-import type { DreamerFile, DreamerScope } from '../shared/dreamer'
+import { type DreamerFile, type DreamerScope, evidenceSession } from '../shared/dreamer'
 import type { NativeSheetAction, NativeSheetField } from '../shared/native-sheet'
 import {
   type AgentOsTarget,
   DEFAULT_AGENT_OS_URL,
   DREAMER_PROJECT_KEY,
+  DREAMER_START_KEY,
   DREAMER_TOKEN_KEY,
   DREAMER_URL_KEY,
   exportDreamerReport,
@@ -89,13 +90,14 @@ export class NativeDreamerController {
     return {
       url: this.preferences.get(DREAMER_URL_KEY) || DEFAULT_AGENT_OS_URL,
       project: this.preferences.get(DREAMER_PROJECT_KEY) ?? '',
-      token: this.preferences.get(DREAMER_TOKEN_KEY) ?? undefined
+      token: this.preferences.get(DREAMER_TOKEN_KEY) ?? undefined,
+      start: this.preferences.get(DREAMER_START_KEY) === 'on'
     }
   }
   private targetText() {
     const target = this.target()
     return target.project
-      ? `${target.url} · project ${target.project}`
+      ? `${target.url} · project ${target.project}${target.start ? ' · starts the tasks' : ''}`
       : `${target.url} · set the project ID in Settings → Dreamer`
   }
 
@@ -248,7 +250,8 @@ export class NativeDreamerController {
     }
     if (action.action.startsWith('open:')) {
       const [, id, n] = /^open:(.+):(\d+)$/.exec(action.action) ?? []
-      const session = result.file.proposals.find((p) => p.id === id)?.evidence[Number(n)]?.session
+      const item = result.file.proposals.find((p) => p.id === id)?.evidence[Number(n)]
+      const session = item === undefined ? undefined : evidenceSession(item)
       if (session) this.host.openChat(session)
       return
     }

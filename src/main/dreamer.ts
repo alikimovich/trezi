@@ -122,6 +122,7 @@ export function sanitizeProposal(
     acceptance: p.acceptance.map(clean),
     areas: p.areas.map(clean),
     evidence: p.evidence.map((e) => {
+      if (typeof e === 'string') return quote(e, home).slice(0, DREAMER_LIMITS.item)
       const out = { ...e }
       if (out.session && !known.has(out.session)) {
         delete out.session

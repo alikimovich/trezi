@@ -111,10 +111,12 @@ export async function checkDreamerReview(
     await host.request('sheetPerform', { action: 'send' })
     const sent = await until((s: any) => !s.busy && /SMK-101/.test(s.message))
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].path, '/api/projects/smoke/proposals')
+    assert.equal(requests[0].path, '/proposals')
     assert.equal(requests[0].auth, 'Bearer smoke-token')
+    assert.equal(requests[0].body.projectId, 'smoke')
+    assert.equal(requests[0].body.start, false, 'start is off by default')
     assert.deepEqual(
-      requests[0].body.proposals.map((p: { id: string }) => p.id),
+      requests[0].body.file.proposals.map((p: { id: string }) => p.id),
       ['speed-bash'],
       'only the selected proposal is sent'
     )

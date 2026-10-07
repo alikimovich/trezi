@@ -4,8 +4,9 @@ import {
   DREAMER_CATEGORY_LABELS,
   DREAMER_LIMITS,
   type DreamerCategory,
-  type DreamerEvidence,
-  type DreamerFile
+  type DreamerEvidenceItem,
+  type DreamerFile,
+  evidenceSession
 } from '../shared/dreamer'
 import type { NativeSheetField, NativeSheetSection, NativeSheetState } from '../shared/native-sheet'
 
@@ -51,27 +52,29 @@ export function reviewSections(result: DreamerResult, filter: string): NativeShe
       id: `p:${p.id}`,
       label: p.title,
       symbol: SYMBOLS[p.category],
-      detail: `${DREAMER_CATEGORY_LABELS[p.category]} · effort ${p.effort}${result.selected.includes(p.id) ? ' · selected' : ''}`
+      detail: `${DREAMER_CATEGORY_LABELS[p.category]}${p.effort ? ` · effort ${p.effort}` : ''}${result.selected.includes(p.id) ? ' · selected' : ''}`
     }))
   ]
 }
 
-const evidenceLines = (evidence: DreamerEvidence[]) =>
+const evidenceLines = (evidence: DreamerEvidenceItem[]) =>
   evidence
     .map((e, n) =>
-      [
-        `${n + 1}.`,
-        e.session ? `chat ${e.session.slice(0, 8)}${e.turn ? `, turn ${e.turn}` : ''}` : '',
-        e.quote ? `“${e.quote}”` : '',
-        e.numbers
-          ? Object.entries(e.numbers)
-              .map(([key, value]) => `${key} ${value}`)
-              .join(', ')
-          : '',
-        e.note ?? ''
-      ]
-        .filter(Boolean)
-        .join(' ')
+      typeof e === 'string'
+        ? `${n + 1}. ${e}`
+        : [
+            `${n + 1}.`,
+            e.session ? `chat ${e.session.slice(0, 8)}${e.turn ? `, turn ${e.turn}` : ''}` : '',
+            e.quote ? `“${e.quote}”` : '',
+            e.numbers && typeof e.numbers === 'object'
+              ? Object.entries(e.numbers)
+                  .map(([key, value]) => `${key} ${value}`)
+                  .join(', ')
+              : '',
+            typeof e.note === 'string' ? e.note : ''
+          ]
+            .filter(Boolean)
+            .join(' ')
     )
     .join('\n')
 
@@ -126,7 +129,9 @@ export function reviewFields(
         scope
           ? `${scope.projectName ?? (scope.project ? 'One project' : 'All projects')}, last ${scope.days} days`
           : '',
-        new Date(file.generatedAt).toLocaleString(),
+        file.generatedAt && !Number.isNaN(Date.parse(file.generatedAt))
+          ? new Date(file.generatedAt).toLocaleString()
+          : '',
         result.model ?? 'digest only'
       ]
         .filter(Boolean)
@@ -171,7 +176,7 @@ export function reviewFields(
         kind: 'readonly',
         value: [
           DREAMER_CATEGORY_LABELS[p.category],
-          `effort ${p.effort}`,
+          p.effort ? `effort ${p.effort}` : '',
           p.areas.length ? `areas: ${p.areas.join(', ')}` : ''
         ]
           .filter(Boolean)
@@ -218,7 +223,7 @@ export function reviewActions(result: DreamerResult): NativeSheetState['actions'
   ]
   for (const p of result.file.proposals)
     p.evidence.forEach((e, n) => {
-      if (e.session && actions.filter((a) => a.section === `p:${p.id}`).length < MAX_OPEN)
+      if (evidenceSession(e) && actions.filter((a) => a.section === `p:${p.id}`).length < MAX_OPEN)
         actions.push({ id: `open:${p.id}:${n}`, label: `Open Chat ${n + 1}`, section: `p:${p.id}` })
     })
   return actions
