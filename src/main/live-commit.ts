@@ -28,11 +28,11 @@ import { excludedWorktreePath } from './worktrees'
  * The service's repository owner makes the commit (S07); this module shapes it.
  */
 
-/** Longest commit SUBJECT we write — keeps `git log --oneline` readable when the turn's
- *  prompt was a paragraph. The full prompt is not repeated in the body (the chat has it). */
+/** Longest commit SUBJECT we write — keeps `git log --oneline` readable. */
 const MAX_TITLE = 72
 
-/** One line, collapsed whitespace, capped — a user prompt makes the commit subject. */
+/** One line, collapsed whitespace, capped. A chat landing's subject describes the
+ *  change (`chat-commit.ts`, LKM-189), never the user's prompt. */
 export function commitTitle(message: string): string {
   const line = (message ?? '').split('\n')[0].replace(/\s+/g, ' ').trim()
   if (!line) return 'Trezi chat edit'
@@ -67,12 +67,13 @@ export interface LiveCommit {
 export async function commitLiveTurn(
   root: string,
   files: string[],
-  message: { title: string; body?: string }
+  message: { title: string; body?: string },
+  mergeParent?: string
 ): Promise<LiveCommit> {
   const paths = committableFiles(files)
-  if (!paths.length) return { committed: false, files: [] }
+  if (!paths.length && !mergeParent) return { committed: false, files: [] }
   // A pathspec commit in the repository's lane; the service re-checks the paths.
   return repositoryOwner()
-    .commitLive(root, paths, commitTitle(message.title), message.body)
+    .commitLive(root, paths, commitTitle(message.title), message.body, mergeParent)
     .catch(() => ({ committed: false, files: [] }))
 }

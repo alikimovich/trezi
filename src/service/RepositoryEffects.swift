@@ -219,8 +219,21 @@ final class RepositoryEffects: @unchecked Sendable {
 
     // MARK: Turns
 
-    func commitWorktree(_ c: RepositoryContext, _ wt: RepositoryWorktree, message: String) throws -> (committed: Bool, files: [String]) {
+    func commitWorktree(_ c: RepositoryContext, _ wt: RepositoryWorktree, message: String, keepHistory: Bool = false) throws -> (committed: Bool, files: [String]) {
         try linked(c, wt)
+        let preserveHistory = keepHistory || ((try? git.line(wt.path, ["rev-list", "--count", "--merges", "\(wt.baseSha)..HEAD"])) ?? "0") != "0"
+        if preserveHistory {
+            // A resolved base merge must retain its two parents. Never squash this
+            // history; later edits become ordinary child commits on the same branch.
+            try git.data(wt.path, ["add", "-A"])
+            try RepositoryPaths.unstageExcluded(git, wt.path)
+            let staged = try git.paths(wt.path, ["diff", "--cached", "--name-only", "-z"])
+            if !staged.isEmpty {
+                try git.data(wt.path, ["-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit", "--no-verify", "-m", message])
+            }
+            let files = try git.paths(wt.path, ["diff", "--name-only", "--no-renames", "-z", "\(wt.baseSha)..HEAD"])
+            return (try head(wt.path) != wt.baseSha, files)
+        }
         // Collapse everything since the fork point (including the agent's own commits)
         // into one commit. The soft reset keeps index and files; the ref keeps the
         // agent's commits reachable until the new commit exists.
@@ -307,15 +320,25 @@ final class RepositoryEffects: @unchecked Sendable {
 
     enum TurnOutcome { case noop, merged, parked }
 
-    func completeTurn(_ c: RepositoryContext, _ wt: RepositoryWorktree, message: String, land: Bool)
+    func completeTurn(_ c: RepositoryContext, _ wt: RepositoryWorktree, message: String, land: Bool, keepHistory: Bool = false)
         throws -> (outcome: TurnOutcome, files: [String], edits: [Edit], newBase: String?) {
-        let (committed, files) = try commitWorktree(c, wt, message: message)
+        try linked(c, wt)
+        if git.revision(wt.path, "MERGE_HEAD") != nil {
+            let files = try git.paths(wt.path, ["diff", "--name-only", "--diff-filter=U", "-z"])
+            return (.parked, files, [], nil)
+        }
+        let (committed, files) = try commitWorktree(c, wt, message: message, keepHistory: keepHistory)
         if !committed { return (.noop, [], [], try head(wt.path)) }
         // Failed/interrupted turns stay on their branch; they never land automatically.
         if !land { return (.parked, files, [], nil) }
         if !conflictMarkerFiles(wt, files).isEmpty { return (.parked, files, [], nil) }
+        let preserveHistory = keepHistory || ((try? git.line(wt.path, ["rev-list", "--count", "--merges", "\(wt.baseSha)..HEAD"])) ?? "0") != "0"
+        if preserveHistory && files.isEmpty { return (.merged, [], [], try head(wt.path)) }
         let (applied, edits) = try autoApply(c, wt, files: files)
         if applied { return (.merged, files, edits, try head(wt.path)) }
+        if preserveHistory && edits.isEmpty && files.allSatisfy({ rel in
+            FileManager.default.contents(atPath: wt.path + "/" + rel) == FileManager.default.contents(atPath: c.root + "/" + rel)
+        }) { return (.merged, files, [], try head(wt.path)) }
         if edits.isEmpty { return (.parked, files, [], nil) }
         return (.noop, files, [], try head(wt.path))
     }

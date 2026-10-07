@@ -16,6 +16,7 @@ const root = fileURLToPath(new URL('../..', import.meta.url))
 export const SOURCES = [
   ...SOURCE_SOURCES,
   ...[
+    'ProductLog',
     'WorkflowJournal',
     'WorkflowContext',
     'WorkflowOwner',

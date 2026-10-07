@@ -17,6 +17,7 @@ import {
   isolationSnapshot,
   releaseChat
 } from '../src/main/chat-isolation.ts'
+import { states } from '../src/main/chat-state.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
 import { keepStoppedTurn } from '../src/main/stopped-turn.ts'
 
@@ -41,7 +42,12 @@ initChatIsolation({
   }),
   getWindow: () => ({
     webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) }
-  })
+  }),
+  // A mocked background model (LKM-189): it describes the diff it is shown.
+  describe: () => async (prompt) => {
+    const value = prompt.match(/^\+export const bar = (\d)$/m)?.[1]
+    return value ? `Set the bar constant to ${value}\n\n- Change bar in src/bar.ts` : null
+  }
 })
 
 const FILE = 'src/bar.ts'
@@ -80,7 +86,10 @@ function assertLanded(chat, { turn, title, content, revertable }) {
   assert.equal(readFileSync(join(chat.root, FILE), 'utf8'), content)
   assert.equal(git(chat.root, 'log', '-1', '--format=%s'), title)
   assert.ok(
-    git(chat.root, 'log', '-1', '--format=%b').includes(`Trezi turn ${turn} (${chat.branch}).`)
+    git(chat.root, 'log', '-1', '--format=%b').endsWith(
+      `\n\nTrezi-Turn: ${turn}\nTrezi-Chat: ${chat.branch}`
+    ),
+    'the trailers close the body'
   )
   assert.equal(git(chat.root, 'status', '--porcelain'), '')
   assert.deepEqual(isolationSnapshot(chat.key), { state: 'isolated', branch: chat.branch })
@@ -95,7 +104,7 @@ try {
   assert.equal(await afterTurn(done.key, 'Set bar to one', [], 'success'), null)
   const doneGroup = assertLanded(done, {
     turn: 1,
-    title: 'Set bar to one',
+    title: 'Set the bar constant to 1',
     content: 'export const bar = 1\n',
     revertable: true
   })
@@ -116,7 +125,7 @@ try {
   const result = await keepStoppedTurn(kept.key)
   const keptGroup = assertLanded(kept, {
     turn: 2,
-    title: 'Keep partial changes from a stopped turn',
+    title: 'Set the bar constant to 2',
     content: 'export const bar = 2\n',
     revertable: true
   })
@@ -135,7 +144,7 @@ try {
   await afterTurn(pr.key, 'Set bar to three', [], 'success')
   assertLanded(pr, {
     turn: 1,
-    title: 'Set bar to three',
+    title: 'Set the bar constant to 3',
     content: 'export const bar = 3\n',
     revertable: false
   })
@@ -145,11 +154,26 @@ try {
   await keepStoppedTurn(pr.key)
   assertLanded(pr, {
     turn: 3,
-    title: 'Keep partial changes from a stopped turn',
+    title: 'Set the bar constant to 4',
     content: 'export const bar = 4\n',
     revertable: false
   })
   await releaseChat(pr.key)
+  // A Full-mode raw merge lands through afterTurn with its two-parent history.
+  const full = await fixture()
+  git(full.root, 'checkout', '-qb', 'base-updated')
+  writeFileSync(join(full.root, 'base-note.txt'), 'new base content\n')
+  git(full.root, 'add', 'base-note.txt')
+  git(full.root, 'commit', '-qm', 'Advance the base')
+  git(full.root, 'checkout', '-q', 'main')
+  git(full.cwd, 'merge', '--no-ff', '--no-edit', 'base-updated')
+  const rawMerge = git(full.cwd, 'rev-parse', 'HEAD')
+  states.get(full.key).gitAccess = 'full'
+  await afterTurn(full.key, 'Land the base update', [], 'success')
+  assert.equal(readFileSync(join(full.root, 'base-note.txt'), 'utf8'), 'new base content\n')
+  git(full.root, 'merge-base', '--is-ancestor', rawMerge, 'HEAD')
+  assert.equal(git(full.root, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3)
+  await releaseChat(full.key)
   console.log('CHAT LANDING OK — afterTurn and Keep share landTurn; only clearPark unparks')
 } finally {
   rmSync(dir, { recursive: true, force: true })

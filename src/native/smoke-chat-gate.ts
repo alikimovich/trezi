@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { ACTIVITY_AUTO_OPEN_KEY, activityAutoOpen } from './activity-controller'
 import type { NativeBridge } from './bridge'
 import { restoreSidebarFocus } from './smoke-sidebar'
 import { nativeWorkspace } from './workspace-runtime'
@@ -8,11 +9,22 @@ import { nativeWorkspace } from './workspace-runtime'
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const background = () => process.env.TREZI_NATIVE_BACKGROUND_TEST === '1'
 
-async function until(check: () => boolean | Promise<boolean>, label: string, timeout = 30000) {
+async function until(
+  check: () => boolean | Promise<boolean>,
+  label: string,
+  timeout = 30000,
+  describe?: () => unknown | Promise<unknown>
+) {
   for (const end = Date.now() + timeout; Date.now() < end; await pause(50))
     if (await check()) return
+  let detail: unknown
+  try {
+    detail = await describe?.()
+  } catch (error) {
+    detail = `diagnostics unavailable: ${String(error)}`
+  }
   throw new Error(
-    `Chat gate: ${label} did not settle: ${JSON.stringify({ status: nativeWorkspace.state.status, loadedKey: nativeWorkspace.state.loadedKey })}`
+    `Chat gate: ${label} did not settle: ${JSON.stringify({ status: nativeWorkspace.state.status, loadedKey: nativeWorkspace.state.loadedKey, ...(detail === undefined ? {} : { detail }) })}`
   )
 }
 
@@ -94,8 +106,20 @@ export async function captureChatGate(
 
 /** Loaded → opening another project → failed open → Retry → switch back, with the
  *  chat hidden until each project has opened and no layout jump between them. */
-export async function checkChatGate(host: NativeBridge, fixture: string, artifacts: string) {
+export async function checkChatGate(
+  host: NativeBridge,
+  fixture: string,
+  artifacts: string,
+  preference: (key: string) => string | null
+) {
   const first = nativeWorkspace.active!
+  // LKM-152's automatic open happens once per event kind per process: start from a hidden,
+  // empty, unread-free Activity that has not auto-opened yet, whatever ran before this check.
+  host.emit('activity-action', { action: 'reset' })
+  await until(async () => {
+    const activity = await host.request('activityInspect')
+    return !activity.visible && activity.count === 0
+  }, 'Activity reset')
   assert.equal(nativeWorkspace.state.loadedKey, first.key, 'The opened project is the loaded one')
   const loaded = await captureChatGate(host, artifacts, 'loaded', true)
   const root = join(fixture, '../Folder Gamma')
@@ -131,10 +155,22 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   const failed = await captureChatGate(host, artifacts, 'failed-open', false)
   // LKM-152: a failed open has no automatic recovery, so Activity comes to front by itself,
   // without taking the key window from the chat (the capture above needs it).
-  await until(async () => {
-    const activity = await host.request('activityInspect')
-    return activity.visible && activity.text.includes('Could not open Folder Gamma')
-  }, 'failed open shows Activity')
+  await until(
+    async () => {
+      const activity = await host.request('activityInspect')
+      return activity.visible && activity.text.includes('Could not open Folder Gamma')
+    },
+    'failed open shows Activity',
+    30000,
+    async () => {
+      const { text, ...activity } = await host.request('activityInspect')
+      return {
+        activity,
+        textTail: String(text).slice(-300),
+        autoOpen: activityAutoOpen(preference(ACTIVITY_AUTO_OPEN_KEY))
+      }
+    }
+  )
   assert.equal(
     (await host.request('activityInspect')).key,
     false,
@@ -159,12 +195,33 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     )
   }
   // Retry (the status view's "run" action) opens the project again; now it loads with its static site.
+  // Retry only means something on the project that failed: a silent no-op in `restart`
+  // (another project active) would otherwise show up as an unexplained timeout.
+  assert.equal(
+    nativeWorkspace.state.activeKey,
+    gamma.key,
+    'Retry runs on the project that failed to open'
+  )
   await nativeWorkspace.command({ type: 'restart', key: gamma.key })
   await until(
     async () =>
       nativeWorkspace.state.loadedKey === gamma.key &&
       (await host.request('shellInspect')).chatReady,
-    'retry loads the project'
+    'retry loads the project',
+    30000,
+    async () => {
+      const { text } = await host.request('activityInspect')
+      return {
+        activeKey: nativeWorkspace.state.activeKey,
+        gamma: gamma.key,
+        launchSpec: nativeWorkspace.active?.launchSpec ?? null,
+        url: nativeWorkspace.active?.url ?? null,
+        statusKind: (await host.request('layoutInspect')).statusKind,
+        status: nativeWorkspace.state.status,
+        loadedKey: nativeWorkspace.state.loadedKey,
+        activityTail: String(text).slice(-400)
+      }
+    }
   )
   // Switching back hides the chat at once and shows it when that project is ready.
   const back = nativeWorkspace.command({ type: 'select', key: first.key })
@@ -191,7 +248,9 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
 }
 
 /** Cleanup: leave only the original project open and selected. */
-export async function restoreChatGate(firstKey: string) {
+export async function restoreChatGate(firstKey: string, host: NativeBridge) {
+  // The failed open's Activity line and window must not leak into the checks after this one.
+  host.emit('activity-action', { action: 'reset' })
   for (const entry of [...nativeWorkspace.state.projects])
     if (entry.root.endsWith('/Folder Gamma'))
       await nativeWorkspace.command({ type: 'close', key: entry.key })

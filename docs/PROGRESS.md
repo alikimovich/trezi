@@ -15,6 +15,132 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Swift.** `SourceSyntax.swift` applies `sourceHighlight` spans/runs (absolute UTF-16 offsets) only when the message revision is the editor's current revision. Otherwise it reports `dropped` and the backend resends those lines for the current text. Replacing the text (open, reload) resets attributes to plain and reports `reset` with the revision. Scrolling reports the visible lines (60 ms debounce). Colours are dynamic `NSColor`s with an Xcode-like palette, so a system appearance change only redraws and never re-tokenizes. The `textDidChange` regex pass and the 500 KB cut-off are gone. Find, the line ruler, component jump and edits/revisions are unchanged.
 - **Tests.** `test/syntax-highlight.mjs` (unit) covers detection, the theme, and incremental tokenization, convergence, slicing, drop/reset and controller ordering with a fake grammar. When Shiki is present it also runs TSX/CSS/Swift (and other) token probes and a 3,000-line TSX typing cost (p95 < 16 ms, ≤ 2 lines resent per keystroke). The new `source-syntax` smoke check (group `core`, `smoke-source-syntax.ts`, host command `sourceSyntax` in `SourceSyntaxVerification.swift`) opens a 3,000-line TSX sample, checks the categories at probe texts, types 40 characters and asserts p95 main-thread time per keystroke < 16 ms (insertion, layout/display, state update and highlight apply), and captures `source-syntax-light.png` / `-dark.png`.
 - **Open.** The worker sandbox could not reach the npm registry, so `shiki` is not yet in package.json/bun.lock: run `bun add shiki@^3`. Until then the Shiki halves of both tests print SKIP and the editor shows plain text (one product-log warning). Bundle and startup cost are not yet measured. Shiki stays outside the esbuild bundle and loads only with the first highlighted file.
+## 2026-10-06 — LKM-188 review repair: PR conflict route and Git command policy
+
+- Publish now checks the PR's `mergeable` state after its normal ship workflow and offers Resolve with agent for a PR/base conflict. Local-vs-remote publish reconcile conflicts keep their manual recovery message because the live checkout is mid-merge. The resolve action selects a chat whose root matches the published project.
+- Claude and Codex use one command policy. Managed allows read-only branch, stash, tag and worktree queries; Full refuses raw pushes and commands that rewrite the live branch. Scheduled `publish_update` runs only after the same turn lands and is cleared otherwise.
+- `test/native-git.mjs` covers the PR/base conflict and project-specific chat selection. `test/agent-git.mjs` calls the session tools for `pr_status` and `publish_update` against real repositories and a stub `gh`, then checks that the PR branch advances through the normal workflow path. The Swift-backed chat-landing suite takes a Full-mode raw merge through `afterTurn` and checks its ancestry on the live branch.
+
+## 2026-10-06 — LKM-188: agents resolve conflicting PRs
+
+- Swift repository-owner effects `gitSyncBase`, `gitMergeContinue` and `gitMergeAbort` operate only on a validated linked chat worktree. They fetch an origin base, keep conflict markers for the agent, and journal recovery refs before merges and aborts.
+- Turn completion preserves chat merge and raw-commit history; the live landing records an unseen chat merge/commit as a second parent while keeping the live checkout's resulting tree. Publish updates use the existing workflow owner after the turn lands.
+- Settings gains Managed (default) and Full Agent Git access. Claude and Codex PreToolUse hooks deny raw Git writes in Managed mode, naming the Trezi tool; Full allows worktree Git and keeps raw pushes routed through Publish. Publish offers Resolve with agent and sends the conflict facts as a chat turn.
+- `test/agent-git.mjs` reproduces the package.json 0.2.5/0.2.6 conflict in real Git repositories, tests two-parent ancestry, live landing and a normal push, and tests Full raw merge/commit reconciliation and the command guard. Native Settings unit/evidence tests cover the saved choice.
+
+## 2026-10-06 — LKM-187 repair: `sheets` smoke "did not reach expected state"
+
+- **Failure.** The manager's `test:native` failed `sheets` (group `settings`) with a bare "Native sheet did not reach expected state"; the capture showed only the "Project memory change undone" toast left by the alerts check. Everything else, including `publish-progress`, passed. LKM-187 does not touch the sheets or the alerts smoke.
+- **Cause (not proven).** The wait names no check, so the failing step is unknown. The first wait after the alerts, for the "Running servers" sheet to stop being busy, depends on the service's `lsof`/`ps` scan and had a fixed 4 s budget, which a loaded machine can exceed.
+- **Change.** `smoke-sheets.ts`: `wait` takes a timeout (default 4 s, unchanged), the "Running servers" wait gets 20 s, and a timeout now reports the check's source and the last `sheetInspect` state. No assertion was removed or loosened.
+- **Checks.** Quick passed. Native `settings` passed twice in a row (6/6 plus `native-chat-scroll`). Full suite left to the manager.
+
+## 2026-10-06 — LKM-187 repair: chat-gate "retry loads the project" diagnosis
+
+- **Failure.** The manager's `test:native` failed once in `chat-gate` (group `sidebar`): "retry loads the project did not settle", status `Dev server exited (code 1) before printing a URL`. Nothing in LKM-187 touches the chat gate, the workspace controller or the runtime owner.
+- **Reproduction.** Not reproduced: the `sidebar` group passed on three native runs after the change (the third run's later `native-chat-scroll` step failed with the known foreground-focus environment error, after the smoke itself passed 6/6). The root cause of the one failure is therefore not proven; it looks like Retry running before the failed open had settled on the project, or the custom command (`sleep 8; exit 1`) being run again.
+- **Change.** `smoke-chat-gate.ts` asserts that the failed project is still active before Retry and the "retry loads the project" wait now reports `activeKey`, the project key, `launchSpec`, `url`, the status view kind, status and the Activity tail when it times out. No check was weakened; the next occurrence names its cause.
+
+## 2026-10-06 — LKM-187: Publish shows progress
+
+- **Why.** After clicking Publish nothing changed until the whole workflow returned, which can take a minute (sync, push, `gh pr create`, merge, cleanup). There was no way to tell it was running, no cancel, and a failure only reached the Activity log.
+- **Owner** (`WorkflowOwner.swift`, `WorkflowContext.phase`, `WorkflowPublish.swift`):
+  - The publish reports its step through `context.phase`. The step is kept in memory per workflow id, not in the journal; after a service restart the journal's open intent step stands in.
+  - The `workflows` summary carries `step`/`stepSince` while the record is open. A failed result is merged with `step`.
+  - The product log gets `Publish started`, one `Publish step … ms=` per step and a final `Publish <state> … total=`.
+  - `check()` now also runs before sync, push and the describe hand-off, so Cancel takes effect between those steps.
+- **Bun** (`git-controller.ts`, `src/shared/publish-progress.ts`):
+  - `runs` per root replaces the `publishing` set. The button label is set synchronously on click, and Bun polls `publish:progress` every 400 ms; the poll also advances the elapsed seconds.
+  - `refresh()` adopts a running publish it did not start, which covers a reload.
+  - Results end in a toast with "View on GitHub", or a standard sheet (Copy details, Close, Retry) that names the step and classifies the reason as conflict, auth or network.
+- **Toolbar** (`ToolbarPublish.swift`):
+  - The item stays a standard `NSMenuToolbarItem` (no custom view, so Liquid Glass and overflow still work). Template spinner frames are swapped on a common-mode timer.
+  - While publishing, `action = nil`, so a click can't start a second publish; the chevron menu shows the status and, while it's allowed, Cancel Publish.
+- **Tests.**
+  - New core smoke check `publish-progress` stubs the workflow owner and GitHub status. It covers feedback under 1 s, every step label, the elapsed time, Cancel only before the PR, the success toast, the cancel toast and the failure sheet, and writes `publish-progress.png`, `publish-toast.png` and `publish-failure.png`.
+  - Unit: `publish-progress` (new), `native-git` (immediate state, per-project indicator, cancel, toast, failure sheet, Retry, adopt) and `workflow-owner` (the real owner tags a conflict with `step: sync`). The workflow fixture now compiles `ProductLog.swift`; when unconfigured it writes nothing.
+## 2026-10-06 — LKM-186: select text across a whole chat message
+
+- **Why.** Each Markdown block was its own SwiftUI `Text` with `.textSelection`, so a selection stopped at every paragraph and Cmd-A selected one paragraph.
+- **One text view per segment.** `ChatRichText.swift` turns a reply's Markdown into one `NSAttributedString` (inline Markdown via `AttributedString`, code blocks as `NSTextBlock`s, tables as `NSTextTable`s) plus a block list. `ChatTextView.swift` is a non-editable TextKit 1 `NSTextView` that draws the rounded code/table backgrounds, places the code Copy buttons, sizes itself for SwiftUI (`sizeThatFits`) and replaces `StreamingText.swift`'s reveal with a fade of newly appended words (no blur; skipped under Reduce Motion). Selecting in one view clears the others.
+- **Copy.** `writeSelection` copies the shown text with blocks joined by blank lines; a wholly selected code block copies with its fence, a table as its Markdown source.
+- **Repair (manager run).** `sent-attachments` failed once in the full native run with "preview hover does not render the transcript (expected 237, actual 238)": one row body evaluation landed after the baseline `chatInspect`, from the follow/pin pass that follows the check's own message edit (it waited only for the attachment frames). The baseline now waits until `messageBodyEvaluations` has been unchanged for 500 ms; the hover and selection assertions are unchanged. I could not reproduce the failure (chat and core+chat native runs passed before and after), so the cause is inferred, not proven.
+- **Repair 2 (chat-gate).** The full native run failed `chat-gate` ("failed open shows Activity did not settle"): the failed open ran (status=error) but Activity never became visible. Activity's automatic open is a once-per-event-kind latch (`NativeActivityController.opened`) for the whole process and `chat-gate` neither reset it nor Activity's window, so it depended on what ran before; it was not an LKM-186 change (the diff touches none of that code). `activity-action` now has a verification-only `reset` (hide, clear lines, forget the latch, clear unread; `test/activity-attention.mjs` covers it); `checkChatGate` resets before opening Folder Gamma and its cleanup resets again so the failed-open line cannot leak into `sheets`. The wait's timeout now reports the full `activityInspect` (minus text, with a 300-char tail) and the Show Activity automatically preference. The assertion itself is unchanged.
+- **Repair 3 (unit tier under load).** The manager's unit run timed out `repository-owner` (120 s, empty log) and failed `island-flicker-frameworks` ("Preview override did not settle after the gesture"). Neither touches chat code: `repository-owner` compiles only `src/service` sources and queues behind the 2-wide swiftc lane while 8 workers run, and the framework test is a real-browser Next shadow-override check that failed after a 6.5 s cold compile. Alone, `repository-owner` passes in 87 s (close to the 120 s default), so it gets a longer budget in `UNIT_TIMEOUT_MS` in `test/run.mjs` (a time budget, not a weaker test; another ticket landed the same entry at 240 s and the merge kept that value). `island-flicker-frameworks` is unchanged: it cannot install its fixture in the worker sandbox (SKIP), so I could not reproduce it; it is an unrelated load-sensitive flake to re-check on the manager's machine.
+- **Repair 4 (review-quick on the merged tree).** `runtime-owner` was killed at the 120 s default in a cold 8-worker run (it builds a Swift fixture through the same saturated swiftc lane; 17.8 s warm). `UNIT_TIMEOUT_MS` in `test/run.mjs` now gives it 240 s like `repository-owner`; no assertion changed.
+- **Limits.** Selection spans one text segment: tool rows and other messages split it. Long code lines wrap instead of scrolling.
+- **Tests.** `test/native-chat-text.mjs` (unit, offscreen fixture: geometry, point drag, Copy, Select All, Copy buttons, streaming) and the `chat-text` smoke check (group `chat`): a point selection from the first paragraph to past the last code block, Copy through the responder chain into a private pasteboard, Select All and the code Copy button, captured in light and dark.
+## 2026-10-06 — LKM-190: chat text scrolls behind the composer
+
+- **Cause.** LKM-141 masked the conversation (`LatestClearanceMask`) while the latest button showed: the bottom band (composer, button, a gap either side) was transparent with a 14 pt fade above, so text faded into the background above the composer instead of passing under its glass.
+- **Fix.** The mask, `ChatModel.latestClearHeight` and `ChatLatestButton.fade`/`clearHeight` are gone; history scrolls under the composer and the button exactly as when the button is hidden. `ChatLatestButton` keeps its NSButton tracking, size and place but draws no opaque circle: a backdrop subview (`NSGlassEffectView` like the composer, `NSVisualEffectView` `.popover` with the old shadow before macOS 26) holds the chevron, a custom cell tints it while pressed, and `hitTest` returns the button for every point of its circle, so the text under it is never clicked.
+- **Tests.** The acceptance checks drop the masked-band assertions and require the backdrop, `latestButtonHit == ChatLatestButton` and, in new `acceptance-{440,320}-scrolled-up-{light,dark}` captures (window appearance forced), more than 40 text pixels beside the button between `gap` above it and the composer top (`latestBandInk`, computed in `ChatAcceptance` from the capture); the old mask left that band empty. The composer-layout fixture checks the backdrop and hit-tests three off-centre points in the circle.
+
+## 2026-10-06 — LKM-191: composer queue has no note for the normal wait
+
+- **Why.** "Sends when this turn finishes" / "Sends after this turn's changes land" above a queued message only restated the obvious (user request).
+- **Change.** `BLOCK_NOTES` in `src/native/chat-queue.ts` maps `running` and `landing` to `''`; `queueCanSend` stays false while blocked. `ComposerQueue.hasHeader` already drops the 28 pt header for an empty note on an unpaused queue, so the box is one 34 pt row. Resolve, sign-in, paused and landing-error notes are unchanged.
+- **Tests.** `test/chat-send-queue.mjs` expects an empty note while running and landing. `smoke-chat` expects `queueNote === ''` and `queueHeight` 34 before the `-queue-stack` capture; the Resolve check keeps 62.
+## 2026-10-06 — LKM-189: landing commit messages describe the change
+
+- **Why.** A landing commit's subject was the user's prompt (capped at 72 chars), so `git log` read as chat text, sometimes with "[Attached files]", and the PR description started from the first prompt.
+- **Message.** `chat-commit.ts` builds it before the squash from the worktree diff against `baseSha` (`changeEvidence`: name-status, stat, bounded `-U2` excerpt plus new files) and the final reply, and asks the chat's provider through a new optional `ModelProvider.complete` one-shot (tool-less Claude `query` with no setting sources; Codex thread) on the background model (`describeAgentOptions`). `parseCommitMessage` rejects prompt echoes, chatter, attachments, long subjects and bullet-less answers. A 3 s deadline aborts the call and falls back to `fallbackCommitMessage` ("Update a, b and c", bullets, changed areas). The same text is the branch commit and the live commit; trailers `Trezi-Turn`/`Trezi-Chat` replace the old "Trezi turn N (branch)." body. Conventional Commits are followed when >= 3 of the last 20 subjects (60%) use them.
+- **Re-squash.** Parked turns don't advance `baseSha`, so the next landing's evidence is the combined diff; `test/live-commit.mjs` 10b checks the model sees both turns and no prompt.
+- **Publish.** `generatePublishDescription` now gives the model the branch's commit subjects (`describedCommitSubjects` drops legacy prompt-subject commits) and asks it to summarise them against the diff.
+- **Tests.** New `test/commit-message.mjs` (unit); updated chat-landing, live-commit, stop-recovery, auto-reconciliation, conversation-owner and publish-description expectations. No real provider call was made, so the 3 s budget for Haiku/Sol is unmeasured; a slow model simply falls back.
+
+## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
+
+- **Why.** After a publish, landed chat commits were unreachable from `trezi/main`. Its reflog said `branch: Created from refs/remotes/origin/trezi/main`, which is Git's DWIM `checkout <branch>` after the local branch was deleted while a stale remote-tracking ref survived.
+  - In Trezi that checkout was `WorkflowPublish.recoverShip`.
+  - Three things set it up:
+    - `gh pr merge --delete-branch`, run in the live checkout, checks out the base and `branch -D`s the work branch, including a landing made while the description was written;
+    - the deletion on GitHub leaves the tracking ref stale;
+    - the old cleanup (`checkout base` → `pull --ff-only` → `branch -D` → `checkout -b`) fails on a diverged base and falls into `recoverShip`.
+  - Separately, the open-time `git:ensure` / publish heal switched a checkout that was left on main onto an existing stale `trezi/main`.
+  - The exact original timeline is not known. The test reproduces these mechanisms.
+- **Publish** (`WorkflowPublish.swift`):
+  - The merge runs without `--delete-branch`. Cleanup deletes the remote branch itself (`push --force-with-lease=refs/heads/B:<pushed head> --delete`) and fetches with `--prune`.
+  - It fast-forwards the local base only when that is a fast-forward, and never checks out, deletes or recreates a branch.
+  - The work branch fast-forwards to the merged base or merges it (`Sync … with the merged …`), with recovery refs for both tips first. If that merge fails, it is aborted, the branch is kept and the result carries a `notice` (logged as a warning).
+  - `recoverShip` is gone.
+  - "Nothing to publish" also covers a branch whose tree equals the base, which is what a squash-synced branch looks like.
+- **Repository owner** (`RepositoryBranches.swift`):
+  - `switchBranch` onto an existing branch fast-forwards it to HEAD (old tip at a recovery ref) or, when it diverged, refuses and stays (`joinBranch`).
+  - New read `strandedLandings`: other local branches with commits by `trezi@local` (not chat or comment worktree branches) that HEAD lacks, skipping ones whose merge would change nothing (`merge-tree --write-tree`).
+  - New mutation `restoreLandings` (intent `restore`): recovery refs for both tips, then a `--no-ff` merge. A conflict is left for per-file resolution.
+- **UI.** `src/native/stranded-landings.ts` runs once per project per launch from activation. It shows a 30 s toast with Bring them back and Ignore; Ignore is stored per tip in `trezi:stranded-landings-ignored`. After a merge it refreshes the branch label and the environment.
+- **Tests.**
+  - New `test/branch-safety.mjs` (unit) runs the real Swift owners with `fake-gh`, which now does real gh's local `--delete-branch` effects. It covers:
+    - a landing during describe;
+    - the same with the merge reply lost and a landing between attempts;
+    - an overlapping base;
+    - ensure refuse and fast-forward;
+    - the reported state (landings on main, `trezi/main` recreated by DWIM), found by the notice and merged back;
+    - a conflict, Ignore, and a cherry-picked change that is not listed.
+  - Against the old `WorkflowPublish.swift` its first scenario fails: both landings are unreachable.
+  - `workflow-durability` now expects the kept, synced branch instead of a reset to main.
+## 2026-10-06 — LKM-184: branch menu aligned with the address text
+
+- **Cause.** The borderless pull-down's alignment rect starts 5 pt inside its frame (the stack view puts that edge on the address's), but its stock cell draws the title at x = 8, 3 pt further right; squeezed, it moves the title by varying amounts (measured 3–8 pt depending on width). The address field's text starts on its own alignment edge (frame −2 pt plus the cell's 2 pt padding).
+- **Fix.** `BranchPopUpButton` (`ToolbarAddress.swift`) uses `BranchPopUpCell`, whose `titleRect`/`drawTitle` start the title at the alignment edge at every width, keeping the stock 16 pt for the chevron. The control's intrinsic width is 3 pt narrower, so at its natural size the chevron stays the same ~4 pt after the title and the frame (the click target) keeps its size. Tail truncation is unchanged; squeezed, the title gets the room the stock cell gave it.
+- **Test.** `toolbarInspect` adds `titleAlignment()`: both controls are drawn at 8x, the first inked column found and the first glyph's side bearing subtracted (bold "h" vs regular "t"), giving text origins in window x, plus the title–chevron gap. The `toolbar-address` check requires |dx| <= 0.5 pt and a 1–6.5 pt gap (16 when truncated) at all three widths, and at the wide and default widths forces the window's own appearance (`window-appearance`, never the system's) for `toolbar-{wide,default}-{light,dark}.png`. Standalone AppKit measurement: dx 0.04–0.07 pt (was 3 pt).
+
+## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
+
+- `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.
+
+## 2026-10-06 — LKM-182: New chat opens instantly
+
+- **Why.** `agent:new-chat` created the chat's worktree, synced and provisioned its dependencies and started the provider before returning, so New chat waited for Git (and on a large project for seconds) before the composer appeared.
+- **Pending chats.** `agent:new-chat` now registers a pending chat (`chat-pending.ts`) and returns; the snapshot lists it, the native workspace controller shows it and focuses the composer (`focusComposer`). `prepareChat` builds checkout → provider → registration in the background and honours a close at every step. Send, restart, rename and permission changes wait for it; the send shows "Preparing workspace…" after 300 ms and Stop cancels the wait.
+- **Spare.** `chat-spare.ts` keeps one prewarmed detached chat worktree per open repository project (after open when it has chats, and after each new chat is ready). `isolatedCwd` takes it and syncs it from live; orphan recovery treats it as live; project close removes it unused, with no recovery ref.
+- **Dependencies.** The new-chat path keeps the copy-on-write `node_modules` clone but runs a needed install in the background, deduplicated (`dependenciesInstalling`, `dependencyInstall`); the turn prompt tells the agent not to run commands needing `node_modules` until it finishes. This is a prompt notice, not a tool gate.
+- **Timing.** Product-log lines for each step (`New chat composer ready` with snapshot/created/listed/active/shown ms, workspace/provider/registered/ready, first send wait). Measured here with a stub provider and the Swift repository owner, three runs each. Before = the `isolatedCwd` that New chat awaited; after = composer ready, with the spare take done in the background:
+  - small (20 files, 50 in `node_modules`): before 195–216 ms; after 2–3 ms (spare take 146–156 ms);
+  - large (6,000 files, 8,000 in `node_modules`): before 0.90–1.30 s; after 2–3 ms (spare take 0.31–0.44 s).
+  - Real provider start time came on top of "before" and is now off the path too; it was not measured (no live provider calls).
+- **Tests.** New `test/chat-new-instant.mjs` (unit): with worktree creation slowed to 3 s, New chat gives a ready, focused composer in < 100 ms with no provider started; the first send shows "Preparing workspace…", waits, and lands in the chat's worktree; the next chat takes the synced spare; a pending chat closed at once starts nothing and leaves no worktree; project close removes the spare and every chat worktree. New Git suite `test/chat-spare.mjs` (through the Swift owner). `setup-next.mjs` covers the background install; `conversation-owner.mjs` waits for the second chat's provider.
 
 ## 2026-10-06 — LKM-181: chat islands disable, hide and references
 

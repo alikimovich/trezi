@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 27, 'version bumped to 27')
+assert(TREZI_RULES_VERSION === 28, 'version bumped to 28')
 assert(r.includes(`v${TREZI_RULES_VERSION}`), 'rules carry the version marker')
 assert(r.includes('before scaffolding or'), 'new projects ask about unresolved setup choices')
 assert(r.includes('after these files successfully land'), 'environment refresh follows landing')
@@ -34,13 +34,21 @@ assert(/scope of an element edit/i.test(r), 'R1: scope-of-edit heading present')
 assert(/\blocal\b/i.test(r) && /project-wide/i.test(r), 'R1: local vs project-wide distinction')
 assert(/search first|grep/i.test(r), 'R1: search-first guidance')
 assert(/report/i.test(r), 'R1: report-what-changed guidance')
-// R-git (v10) — Trezi owns git state; the agent must not fight the worktree
-// machinery (turn-end squash rewrites hashes; manual branch moves diverge).
-assert(/git is trezi-managed/i.test(r), 'R-git: heading present')
+// LKM-188: Managed uses Trezi Git tools; Full can make chat-worktree commits.
+assert(/git and pull requests/i.test(r), 'R-git: heading present')
 assert(/trezi\/chat-/.test(r), 'R-git: names the chat worktree branch scheme')
-assert(/squash/i.test(r), 'R-git: explains the turn-end squash')
-assert(/reset --hard/.test(r), 'R-git: forbids hard-resetting the live checkout')
-assert(/status, log, diff/i.test(r), 'R-git: read-only git allowed')
+assert(/git_sync_base/.test(r) && /git_merge_continue/.test(r), 'R-git: teaches conflict tools')
+assert(
+  /Never reset or otherwise rewrite the live checkout/.test(r),
+  'R-git: protects live checkout'
+)
+assert(/read-only git is allowed/.test(r), 'R-git: read-only git allowed')
+const fullGit = treziRules({ agentGitAccess: 'full' })
+assert(/may commit, merge, rebase/.test(fullGit), 'R-git: Full permits raw worktree Git')
+assert(
+  /Never rewrite or delete commits already landed/.test(fullGit),
+  'R-git: Full protects landed commits'
+)
 // R2: browser inspection → agent-browser, never Chrome DevTools unless asked.
 assert(/agent-browser/i.test(r), 'R2: directs the agent to agent-browser')
 assert(

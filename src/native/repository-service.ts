@@ -146,11 +146,19 @@ export function serviceRepository(
     },
     commitWorktree: (wt, message) => effect('commitWorktree', { ...on(wt), message }),
     autoApply: (wt, files) => effect('autoApply', { ...on(wt), files, intent: 'land' }),
-    completeTurn: (wt, message, land) =>
-      effect('completeTurn', { ...on(wt), message, intent: land ? 'land' : 'park' }),
+    completeTurn: (wt, message, land, keepHistory) =>
+      effect('completeTurn', {
+        ...on(wt),
+        message,
+        intent: land ? 'land' : 'park',
+        ...(keepHistory ? { keepHistory } : {})
+      }),
     applyParked: (wt) => effect('applyParked', { ...on(wt), intent: 'land' }),
     applyBranch: (root, branch) => effect('applyBranch', { root, branch, intent: 'land' }),
     stageResolve: (wt) => effect('stageResolve', { ...on(wt), intent: 'reconcile' }),
+    gitSyncBase: (wt, ref) => effect('gitSyncBase', { ...on(wt), ref, intent: 'sync' }),
+    gitMergeContinue: (wt) => effect('gitMergeContinue', { ...on(wt), intent: 'continue' }),
+    gitMergeAbort: (wt) => effect('gitMergeAbort', { ...on(wt), intent: 'abort' }),
     discardParked: async (wt) => {
       await effect('discardParked', { ...on(wt), intent: 'discard' })
     },
@@ -167,10 +175,19 @@ export function serviceRepository(
       effect('pruneBranches', { root, protected: protectedIds, intent: 'integrated' }),
     removeLegacyFolder: async (directory) =>
       (await effect('removeLegacyFolder', { root: directory, intent: 'legacy' })).removed,
-    commitLive: (root, files, title, body) =>
-      effect('commitLive', { root, files, title, ...(body ? { body } : {}) }),
+    commitLive: (root, files, title, body, mergeParent) =>
+      effect('commitLive', {
+        root,
+        files,
+        title,
+        ...(body ? { body } : {}),
+        ...(mergeParent ? { mergeParent } : {})
+      }),
     checkout: (root, branch) => effect('checkout', { root, branch }),
     switchBranch: (root, branch) => effect('switchBranch', { root, branch }),
+    strandedLandings: (root) => call('strandedLandings', { root }, 'read', 60_000),
+    restoreLandings: (root, branch, tip) =>
+      effect('restoreLandings', { root, branch, tip, intent: 'restore' }),
     status: () => call('status', {}, 'read', 30_000),
     recoveryRefs: (roots) => call('recoveryRefs', { roots }, 'read', 60_000),
     deleteRecoveryRefs: (root, refs) =>

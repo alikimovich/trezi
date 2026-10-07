@@ -16,7 +16,7 @@ import { editingOwner } from '../src/main/editing-owner.ts'
 import { typescriptProps } from '../src/main/props-typescript.ts'
 import { detectNext, NEXT_ADAPTER_CONTENT, NEXT_LOADER_CONTENT } from '../src/main/setup-next.ts'
 import { REACT_HELPER_CONTENT } from '../src/main/setup-react.ts'
-import { provisionDependencies } from '../src/main/worktree-dependencies.ts'
+import { dependenciesInstalling, provisionDependencies } from '../src/main/worktree-dependencies.ts'
 import { setupPrompt } from '../src/shared/setup-prompt.ts'
 
 const require = createRequire(import.meta.url)
@@ -270,6 +270,28 @@ try {
   await writeFile(join(checkout, 'bun.lock'), 'changed-lock')
   await provisionDependencies(root, checkout, install)
   assert.equal(installs, 2)
+  // LKM-182: a background install returns at once and is never started twice; a
+  // foreground call waits for it, and nothing is installed again afterwards.
+  await writeFile(join(checkout, 'bun.lock'), 'changed-again')
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const slow = async (destination) => {
+    installs++
+    await gate
+    await mkdir(join(destination, 'node_modules'), { recursive: true })
+  }
+  await provisionDependencies(root, checkout, slow, { background: true })
+  assert.equal(dependenciesInstalling(checkout), true)
+  await provisionDependencies(root, checkout, slow, { background: true })
+  const waiting = provisionDependencies(root, checkout, slow)
+  release()
+  await waiting
+  assert.equal(installs, 3)
+  assert.equal(dependenciesInstalling(checkout), false)
+  await provisionDependencies(root, checkout, install)
+  assert.equal(installs, 3)
   const prompt = setupPrompt({
     framework: 'next',
     next: await detectNext(root),

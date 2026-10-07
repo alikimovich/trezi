@@ -4,11 +4,13 @@ import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
+import type { NativeGitController } from './git-controller'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
+import { checkChatText } from './smoke-chat-text'
 import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
 import { smokeFocusHooks } from './smoke-focus'
@@ -21,6 +23,7 @@ import { checkLegacyProject } from './smoke-legacy-project'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkProjectSwitching } from './smoke-projects'
+import { checkPublishProgress } from './smoke-publish'
 import {
   formatFailureReport,
   SMOKE_EXIT_PRODUCT,
@@ -54,7 +57,8 @@ export async function runNativeCoreSmoke(
   root: string,
   preference: (key: string) => string | null,
   context: NativeContextController,
-  inspector: NativeInspectorController
+  inspector: NativeInspectorController,
+  git: NativeGitController
 ) {
   const invoke = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'invoke', channel, args })
@@ -443,10 +447,10 @@ export async function runNativeCoreSmoke(
       name: 'chat-gate',
       dependsOn: ['chat-ready'],
       run: async () => {
-        await checkChatGate(host, fixture, artifacts)
+        await checkChatGate(host, fixture, artifacts, preference)
       },
       cleanup: async () => {
-        await restoreChatGate(firstProject)
+        await restoreChatGate(firstProject, host)
       }
     },
     {
@@ -812,6 +816,13 @@ export async function runNativeCoreSmoke(
       }
     },
     {
+      name: 'chat-text',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkChatText(host, artifacts)
+      }
+    },
+    {
       name: 'preview-inspector',
       dependsOn: ['open-project'],
       run: async () => {
@@ -834,6 +845,17 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreAgentPreview(page)
+      }
+    },
+    {
+      name: 'publish-progress',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkPublishProgress(host, git, artifacts)
+      },
+      cleanup: async () => {
+        if ((await host.request('sheetInspect')).visible)
+          await host.request('sheetPerform', { action: 'cancel' })
       }
     },
     {

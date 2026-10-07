@@ -1,4 +1,5 @@
 import type { SessionToolHost } from './backends/types'
+import { agentGitTool } from './chat-agent-git'
 import { runChatIslandTool } from './chat-islands'
 import { agentWorkspaceEvidence, agentWorkspaceState, resolveParkedChat } from './chat-isolation'
 import { openAgentCode } from './code-tools'
@@ -32,6 +33,11 @@ export type SessionTool = TreziAgentToolAction | 'install_skills'
 export const SESSION_TOOLS: readonly SessionTool[] = [
   'workspace_state',
   'prepare_conflict_resolution',
+  'git_sync_base',
+  'git_merge_continue',
+  'git_merge_abort',
+  'pr_status',
+  'publish_update',
   'chat_island',
   'open_code',
   'open_preview',
@@ -76,6 +82,16 @@ export async function runTreziTool(
       guidance: 'This background edit lands automatically. Do not change the parent chat workspace.'
     }
   if (action === 'workspace_state') return agentWorkspaceEvidence(s.emitKey, s.liveRoot)
+  if (
+    [
+      'git_sync_base',
+      'git_merge_continue',
+      'git_merge_abort',
+      'pr_status',
+      'publish_update'
+    ].includes(action)
+  )
+    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args)
   const before = agentWorkspaceState(s.emitKey)
   if (before.state === 'live' || before.state === 'isolated') {
     return { ok: false, ...before, guidance: 'There is no parked Trezi batch to prepare.' }

@@ -15,7 +15,7 @@ import type {
   SessionTranscriptEntry,
   WorkspaceSnapshot
 } from '../shared/api'
-import { backgroundAgentOptions } from '../shared/background-model'
+import { backgroundAgentOptions, describeAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
 import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
@@ -47,6 +47,8 @@ import {
   sendRefusal,
   showParkedChat
 } from './chat-isolation'
+import { type PendingChat, PendingChats } from './chat-pending'
+import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
 import { TurnTracker } from './chat-turns'
 import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
@@ -55,6 +57,7 @@ import {
   legacyWorkspaceDirs,
   workspaceUsage
 } from './chat-workspaces'
+import type { DescribeChange } from './commit-message'
 import { conflictResolutionPrompt, ReconciliationCoordinator } from './conflict-resolution'
 import {
   ConversationError,
@@ -66,6 +69,7 @@ import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
 import { platformOwner } from './platform-owner'
+import { productLog } from './product-log'
 import {
   createProjectMemoryInjection,
   createProjectMemoryUpdateQueue,
@@ -86,6 +90,7 @@ import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
 import { workflowOwner } from './workflow-owner'
+import { dependenciesInstalling } from './worktree-dependencies'
 import {
   applyBranchToWorkingTree,
   autoApplyWorktree,
@@ -211,9 +216,21 @@ const activeSession = (): ProviderSession | null =>
 // switching back to a project (agent:set-active) restores whichever peer chat the
 // user was last looking at. Untouched by projects with only one chat.
 const activeSessionKeyByProject = new Map<string, string>()
-/** All live sessionKeys belonging to a project. */
+// LKM-182: new chats shown before their worktree and provider are ready
+// (`chat-pending.ts`); `prepareChat` is set by registerAgentIpc.
+let prepareChat = async (_chat: PendingChat): Promise<void> => {}
+const pending = new PendingChats((chat) => prepareChat(chat))
+/** New chats with no send yet, and when they were created (the first send is timed). */
+const firstSends = new Map<string, number>()
+/** All live sessionKeys belonging to a project, including chats still being prepared. */
 const sessionKeysForProject = (key: string): string[] =>
-  [...sessions.keys()].filter((k) => k === key || k.startsWith(`${key}#`))
+  [
+    ...sessions.keys(),
+    ...pending
+      .list()
+      .map((chat) => chat.sessionKey)
+      .filter((k) => !sessions.has(k))
+  ].filter((k) => k === key || k.startsWith(`${key}#`))
 // The project the renderer LAST asked to make active (via open-project or
 // set-active), recorded synchronously. A slow first-time open (the ESM SDK
 // `import()`) must not claim `activeKey` if the user has since switched away —
@@ -303,6 +320,16 @@ async function maybeGenerateTitle(sessionKey: string): Promise<void> {
       live.emit({ type: 'title', title: result.title })
     }
   }
+}
+
+/** The chat's provider and background model as a one-shot completion for its landing
+ * commit message (LKM-189); null without a live session or a `complete` primitive. */
+function describeChangeWith(sessionKey: string): DescribeChange | null {
+  const session = sessions.get(sessionKey)
+  const complete = session && pickProvider(session.options).complete
+  if (!session || !complete) return null
+  const options = describeAgentOptions(session.options)
+  return (prompt, signal) => complete(prompt, options, signal)
 }
 
 /**
@@ -806,7 +833,7 @@ export function registerAgentIpc(
   ipcMain = router
   getWindow_ = getWindow // share with finalizeSpawn (runs outside this closure)
   // v9 per-chat worktree isolation — deps-injected so this module barely grows.
-  initChatIsolation({ worktreesDir, store, getWindow })
+  initChatIsolation({ worktreesDir, store, getWindow, describe: describeChangeWith })
   // LKM-136: idle and old-name chat workspace cleanup; Settings shows the usage.
   initChatWorkspaces({
     worktreesDir,
@@ -866,6 +893,7 @@ export function registerAgentIpc(
   /** Forget a chat's local turn state (its owner record was closed or replaced). */
   const forgetChat = (sessionKey: string): void => {
     memoryInjection.forget(sessionKey)
+    firstSends.delete(sessionKey)
     setProjectUiEnabled(sessionKey, false)
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
@@ -888,6 +916,7 @@ export function registerAgentIpc(
       // includes all safely landed output.
       const existingKeys = sessionKeysForProject(key)
       const currentKey = activeSessionKeyByProject.get(key) ?? existingKeys[0]
+      pending.cancelAll(key)
       for (const sessionKey of existingKeys) {
         const existing = sessions.get(sessionKey)
         if (!existing) continue
@@ -941,6 +970,9 @@ export function registerAgentIpc(
       // before removing the checkout. Skip ids of spawns live THIS session (their
       // checkouts are under the same dir). Best-effort, fire-and-forget.
       if (await isRepoRoot(root)) {
+        // LKM-182: the next "New chat" takes this prewarmed checkout. Started first so
+        // the recovery sweep below skips it.
+        if (sessionKeysForProject(key).length) prewarmSpare(root, worktreesDir())
         // Skip live spawns AND live chat worktrees (the worktrees dir is global across
         // projects) so a recovery sweep never reclaims a chat's live checkout.
         // handleReclaimed then surfaces any crashed-mid-turn chat's work as a recovery
@@ -992,6 +1024,9 @@ export function registerAgentIpc(
     // active slot for a project the user just closed.
     if (intendedKey === key) intendedKey = null
     const closing: Promise<void>[] = []
+    // LKM-182: chats still being prepared tear down what they made; the unused spare goes.
+    pending.cancelAll(key)
+    void releaseSpare(root)
     for (const sk of projectSessionKeys) {
       const s = sessions.get(sk)
       if (s) {
@@ -1000,6 +1035,10 @@ export function registerAgentIpc(
         closing.push(closeChat(sk, s, sk === currentSessionKey ? 'current' : 'history'))
         forgetChat(sk)
         void releaseChat(sk, terminal) // running partial work parks; idle work tears down
+      } else {
+        // LKM-182: a chat whose preparation failed may hold a worktree.
+        firstSends.delete(sk)
+        void releaseChat(sk)
       }
     }
     await Promise.all(closing)
@@ -1023,16 +1062,18 @@ export function registerAgentIpc(
     const target =
       sessionKey && sessionKeysForProject(key).includes(sessionKey)
         ? sessionKey
-        : remembered && sessions.has(remembered)
+        : remembered && (sessions.has(remembered) || pending.has(remembered))
           ? remembered
           : (sessionKeysForProject(key)[0] ?? key)
-    if (sessions.has(target)) {
+    // A chat still being prepared becomes active here; the owner hears when it opens.
+    if (sessions.has(target) || pending.has(target)) {
       activeKey = target
       activeSessionKeyByProject.set(key, target)
+    }
+    if (sessions.has(target))
       await conversation()
         .activate(target)
         .catch(() => {})
-    }
   })
 
   // v9 resume/multi-chat — start an ADDITIONAL fresh session for a project that
@@ -1053,19 +1094,46 @@ export function registerAgentIpc(
       }
       intendedKey = key
       const sessionKey = `${key}#${randomUUID()}`
-      try {
-        const cwd = await isolatedCwd(root, sessionKey)
-        const s = await startChat(root, sessionKey, options, cwd)
-        adoptSession(sessionKey, s.record, root)
-        await installChat(sessionKey, key, s, options, true)
-        activeSessionKeyByProject.set(key, sessionKey)
-        if (intendedKey === key) activeKey = sessionKey
-        return { ok: true, sessionKey }
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) }
-      }
+      // LKM-182: the chat exists from here; its workspace and provider follow.
+      firstSends.set(sessionKey, pending.begin(sessionKey, key, root, options).createdAt)
+      activeSessionKeyByProject.set(key, sessionKey)
+      activeKey = sessionKey
+      productLog.info('chat', 'New chat created', { chat: sessionKey })
+      return { ok: true, sessionKey }
     }
   )
+
+  /** LKM-182: a new chat's worktree, provider session and owner record, prepared in the
+   *  background with each step timed. A chat closed meanwhile tears down what was made. */
+  prepareChat = async (chat: PendingChat): Promise<void> => {
+    const { sessionKey, root, options } = chat
+    const step = (name: string, since: number) =>
+      productLog.info('chat', `New chat ${name}`, { chat: sessionKey, ms: Date.now() - since })
+    let since = Date.now()
+    const cwd = await isolatedCwd(root, sessionKey)
+    step('workspace ready', since)
+    if (chat.closed) return void (await releaseChat(sessionKey))
+    since = Date.now()
+    const s = await startChat(root, sessionKey, options, cwd)
+    step('provider started', since)
+    if (chat.closed) {
+      stopProvider(s)
+      return void (await releaseChat(sessionKey))
+    }
+    adoptSession(sessionKey, s.record, root)
+    since = Date.now()
+    await installChat(sessionKey, chat.projectKey, s, options, activeKey === sessionKey)
+    step('registered', since)
+    if (chat.closed) {
+      sessions.delete(sessionKey)
+      await closeChat(sessionKey, s, 'history')
+      forgetChat(sessionKey)
+      return void (await releaseChat(sessionKey))
+    }
+    step('ready', chat.createdAt)
+    // The next new chat of this project takes a fresh spare.
+    prewarmSpare(root, worktreesDir())
+  }
 
   // Codex fixes its model/backend when a thread is created. Restart exactly the
   // selected chat (not the project's default session) so a picker change never
@@ -1152,6 +1220,7 @@ export function registerAgentIpc(
           ok: false,
           error: 'Wait for the current response to finish before switching models.'
         }
+      await pending.wait(sessionKey).catch(() => {})
       return restartChatSession(root, sessionKey, options, 'model')
     }
   )
@@ -1239,11 +1308,18 @@ export function registerAgentIpc(
         closing = closeChat(sessionKey, s, 'history')
         forgetChat(sessionKey)
         void releaseChat(sessionKey, terminal) // running partial work parks; idle work tears down
+      } else if (pending.cancel(sessionKey)) {
+        firstSends.delete(sessionKey)
+        void releaseChat(sessionKey) // LKM-182
       }
       const remaining = sessionKeysForProject(key)
       // Every chat is a peer; keep the first remaining session as the fallback.
       let nextActive = activeSessionKeyByProject.get(key) ?? null
-      if (!nextActive || nextActive === sessionKey || !sessions.has(nextActive)) {
+      if (
+        !nextActive ||
+        nextActive === sessionKey ||
+        !(sessions.has(nextActive) || pending.has(nextActive))
+      ) {
         nextActive = remaining[0] ?? null
         if (nextActive) activeSessionKeyByProject.set(key, nextActive)
         else activeSessionKeyByProject.delete(key)
@@ -1253,7 +1329,7 @@ export function registerAgentIpc(
       // a backgrounded session into a chat the renderer isn't showing).
       if (activeKey === sessionKey) activeKey = intendedKey === key ? nextActive : null
       await closing
-      if (nextActive)
+      if (nextActive && sessions.has(nextActive))
         await conversation()
           .activate(nextActive)
           .catch(() => {})
@@ -1268,6 +1344,7 @@ export function registerAgentIpc(
   // be overwritten by the auto-namer. The `title` event keeps every other renderer
   // view (and this window's own store) in step.
   ipcMain.handle('agent:rename-chat', async (_e, sessionKey: string, title: string) => {
+    await pending.wait(sessionKey).catch(() => {})
     const session = sessions.get(sessionKey)
     if (!session) return { ok: false, error: 'no live chat' }
     // The owner cleans the name, keeps it over any generated one, and updates a
@@ -1303,6 +1380,7 @@ export function registerAgentIpc(
     'agent:set-permission-mode',
     async (_e, mode: PermissionMode, sessionKey?: string) => {
       const key = sessionKey === undefined ? activeKey : sessionKey
+      if (key) await pending.wait(key).catch(() => {})
       const session = key ? sessions.get(key) : undefined
       if (!session || !key) return
       // Apply to the backend first; only commit our copy if it took (keeps the
@@ -1350,6 +1428,55 @@ export function registerAgentIpc(
     }
   )
 
+  /** LKM-182: a send to a chat still being prepared waits for what is missing. Stop
+   *  cancels the wait; after 300 ms the chat says it is preparing its workspace. */
+  const waitForChat = async (key: string): Promise<void> => {
+    const started = Date.now()
+    // Stop sets `cancelled` (interruptChat), which ends the wait at once.
+    let cancelled = false
+    let stop = () => {}
+    const stopped = new Promise<void>((resolve) => {
+      stop = resolve
+    })
+    const preparation = {
+      get cancelled() {
+        return cancelled
+      },
+      set cancelled(value: boolean) {
+        cancelled = value
+        if (value) stop()
+      }
+    }
+    preparingTurns.set(key, preparation)
+    let shown = false
+    const progress = (step: string) =>
+      safeSend(getWindow, 'agent:event', {
+        type: 'progress',
+        step,
+        projectKey: key
+      } satisfies AgentEvent)
+    const slow = setTimeout(() => {
+      shown = true
+      progress('Preparing workspace…')
+    }, 300)
+    try {
+      await Promise.race([pending.wait(key), stopped])
+    } finally {
+      clearTimeout(slow)
+      if (preparingTurns.get(key) === preparation) preparingTurns.delete(key)
+    }
+    const created = firstSends.get(key)
+    firstSends.delete(key)
+    if (created !== undefined)
+      productLog.info('chat', 'New chat first send', {
+        chat: key,
+        waitMs: Date.now() - started,
+        sinceCreatedMs: started - created
+      })
+    if (preparation.cancelled) throw new Error('Message cancelled before sending.')
+    if (shown) progress('Thinking…')
+  }
+
   // One user turn. The owner admits it (one turn per chat: a second is refused as
   // busy), records the user entry when the provider is about to get it, and hands
   // the model-switch history over once. `turnId` names the turn (the composer's
@@ -1365,6 +1492,7 @@ export function registerAgentIpc(
       turnId?: string
     ) => {
       const key = requestedKey ?? activeKey
+      if (key && (pending.has(key) || firstSends.has(key))) await waitForChat(key)
       const session = key ? sessions.get(key) : null
       if (requestedKey && !session) throw new Error('This chat is closed.')
       // The chat is busy: the caller queues the message (and the watchdog bounds the wait).
@@ -1446,13 +1574,21 @@ export function registerAgentIpc(
         // A model switch: the fresh provider gets the recorded conversation, once.
         const history = handoff ? (handoffHistory.get(key) ?? []) : []
         if (handoff) handoffHistory.delete(key)
+        // LKM-182: a new chat's dependency install may still be running.
+        const installNotice = dependenciesInstalling(session.root)
+          ? 'Dependencies are still installing in this workspace: read and edit files, but do not run commands that need node_modules until it finishes.\n\n'
+          : ''
         trackers.get(session)?.push(id, 0)
         watchdog.touch(key)
         logTurnStart(key, id, session.options)
         session.send(
           handoffPrompt(
             history,
-            projectUiInstructions(useUi, uiEngine) + uiNotice + islandContext + prompt
+            projectUiInstructions(useUi, uiEngine) +
+              uiNotice +
+              installNotice +
+              islandContext +
+              prompt
           ),
           images
         )
@@ -1752,18 +1888,21 @@ export function registerAgentIpc(
       ).chats.map((chat) => [chat.chat, chat])
     )
     const byProject = new Map<string, LiveProjectSnapshot>()
-    for (const [sessionKey, s] of sessions) {
-      const pKey = s.record.projectKey
+    const project = (pKey: string, root: string): LiveProjectSnapshot => {
       let proj = byProject.get(pKey)
       if (!proj) {
         proj = {
           projectKey: pKey,
-          root: s.record.projectRoot,
+          root,
           chats: [],
           activeSessionKey: activeSessionKeyByProject.get(pKey) ?? null
         }
         byProject.set(pKey, proj)
       }
+      return proj
+    }
+    for (const [sessionKey, s] of sessions) {
+      const proj = project(s.record.projectKey, s.record.projectRoot)
       const chat = owned.get(sessionKey)
       proj.chats.push({
         sessionKey,
@@ -1777,7 +1916,31 @@ export function registerAgentIpc(
         options: { ...s.options }
       })
     }
-    const activeRoot = (activeKey && sessions.get(activeKey)?.record.projectRoot) || null
+    // LKM-182: a chat still being prepared is shown empty and idle.
+    for (const chat of pending.list()) {
+      if (sessions.has(chat.sessionKey)) continue
+      project(chat.projectKey, chat.root).chats.push({
+        sessionKey: chat.sessionKey,
+        record: {
+          id: '',
+          projectKey: chat.projectKey,
+          projectRoot: chat.root,
+          projectName: basename(chat.root),
+          startedAt: chat.createdAt,
+          endedAt: null,
+          filesTouched: [],
+          transcript: []
+        },
+        isRunning: false,
+        turn: null,
+        options: { ...chat.options }
+      })
+    }
+    const activeRoot =
+      (activeKey &&
+        (sessions.get(activeKey)?.record.projectRoot ??
+          pending.list().find((chat) => chat.sessionKey === activeKey)?.root)) ||
+      null
     return { projects: [...byProject.values()], activeRoot }
   })
 
@@ -1896,6 +2059,7 @@ export function registerAgentIpc(
       )
     }
     sessions.clear()
+    pending.cancelAll()
     memoryInjection.clear()
     runningKeys.clear()
     preparingTurns.clear()
@@ -1912,6 +2076,7 @@ export function registerAgentIpc(
     // v9: forget chat-isolation state (mirror of spawns) — checkouts stay on disk for
     // the next launch's crash recovery, never committed/removed during the quit race.
     dropAll()
+    dropSpares()
   })
 }
 

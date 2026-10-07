@@ -1,3 +1,4 @@
+import { productLog } from '../main/product-log'
 import type { WorkspaceSnapshot } from '../shared/api'
 import {
   agentOptionsFor,
@@ -26,6 +27,8 @@ export interface WorkspaceServices {
   activate(entry: ProjectEntry | null): Promise<void>
   closeChat(key: string): void
   reusableChat(key: string): boolean
+  /** Put keyboard focus in the active chat's composer (after New chat). */
+  focusComposer?(): void
 }
 /** A working entry from a stored record. Gaps in old records get the defaults the
  *  pre-S04 controller created entries with; unknown fields are carried along. */
@@ -251,6 +254,12 @@ export class NativeWorkspaceController {
     }
     const entry = this.find(command.key),
       intent = ++this.intent
+    // LKM-182: each step from the New chat action to a focused composer, in ms.
+    const started = Date.now(),
+      steps: Record<string, number> = {}
+    const step = (name: string) => {
+      steps[name] = Date.now() - started
+    }
     if (command.type === 'close-chat' && entry.sessionKeys.length === 1)
       return this.close(entry.key)
     await this.serialize(entry.key, async () => {
@@ -260,6 +269,7 @@ export class NativeWorkspaceController {
         entry.activeSessionKey = command.session
       } else if (command.type === 'new-chat' || command.type === 'resume') {
         const live: WorkspaceSnapshot = await this.services.invoke('agent:workspace-snapshot')
+        step('snapshot')
         const sessions = live.projects.find((p) => p.projectKey === entry.key)?.chats ?? []
         const empty =
           command.type === 'new-chat' &&
@@ -287,6 +297,7 @@ export class NativeWorkspaceController {
           if (!result.ok || !result.sessionKey)
             throw new Error(result.error || 'Unable to start chat')
           key = result.sessionKey
+          step('created')
         }
         if (!entry.sessionKeys.includes(key)) entry.sessionKeys.push(key)
         entry.activeSessionKey = key
@@ -305,6 +316,7 @@ export class NativeWorkspaceController {
       }
       if (this.closing.has(entry.key)) return
       this.changed()
+      step('listed')
     })
     if (
       this.intent !== intent ||
@@ -314,8 +326,17 @@ export class NativeWorkspaceController {
       return
     if (this.state.activeKey === entry.key) {
       await this.services.invoke('agent:set-active', entry.root, entry.activeSessionKey)
+      step('active')
       if (this.intent === intent) await this.services.activate(entry)
     } else await this.select(entry.key)
+    if (command.type !== 'new-chat' || this.intent !== intent) return
+    step('shown')
+    this.services.focusComposer?.()
+    productLog.info('chat', 'New chat composer ready', {
+      chat: entry.activeSessionKey,
+      ms: Date.now() - started,
+      ...steps
+    })
   }
   private async restore() {
     this.adopt()

@@ -21,6 +21,7 @@ const UNIT = [
   'memory-owner',
   'runtime-owner',
   'repository-owner',
+  'agent-git',
   'git-messages',
   'repository-recovery',
   'source-owner',
@@ -36,6 +37,7 @@ const UNIT = [
   'editing-owner',
   'workflow-owner',
   'workflow-durability',
+  'branch-safety',
   'platform-owner',
   'native-visible-capture',
   'native-smoke-runner',
@@ -55,6 +57,7 @@ const UNIT = [
   'native-supervised-bridge',
   'native-preview-recovery',
   'native-workspace-controller',
+  'chat-new-instant',
   'preview-supervisor',
   'native-support',
   'activity-attention',
@@ -78,6 +81,7 @@ const UNIT = [
   'native-chat-latest-settle',
   'native-smoke-wait',
   'native-chat-reveal',
+  'native-chat-text',
   'native-island-editing',
   'no-system-preferences',
   'chat-islands',
@@ -98,6 +102,7 @@ const UNIT = [
   'sidebar-icon',
   'sidebar-focus',
   'native-git',
+  'publish-progress',
   'native-support-sheets',
   'native-cat-assets',
   'project-ui',
@@ -117,6 +122,7 @@ const UNIT = [
   'product-log',
   'publish-message',
   'publish-description',
+  'commit-message',
   'slash-token',
   'skills-discovery',
   'provider-skills',
@@ -197,6 +203,10 @@ const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 // still get a longer budget for a cold Swift cache.
 const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,
+  // Its Swift fixture queues behind other tests' swiftc runs; it takes 110 s+ under load.
+  'repository-owner': 240_000,
+  // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
+  'runtime-owner': 240_000,
   'keychain-rebuild': 300_000,
   'setup-vite-real': 300_000
 }

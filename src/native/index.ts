@@ -9,6 +9,7 @@ import {
   undoProjectMemoryUpdate
 } from '../main/agent'
 import { AGENT_FILE_ACCESS_KEY, setAgentFileAccessSource } from '../main/agent-file-access'
+import { AGENT_GIT_ACCESS_KEY, setAgentGitAccessSource } from '../main/agent-git-access'
 import { registerAnnotationsIpc } from '../main/annotations'
 import {
   CLAUDE_USER_PLUGINS_KEY,
@@ -108,6 +109,7 @@ import {
   SmokeRunFailure
 } from './smoke-report'
 import { serviceSource } from './source-service'
+import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
 import { SyntaxController } from './syntax-controller'
 import { NativeUpdateController } from './update-controller'
@@ -181,6 +183,7 @@ async function main() {
   })
   setClaudeUserPluginsSource(() => preferences.get(CLAUDE_USER_PLUGINS_KEY))
   setAgentFileAccessSource(() => preferences.get(AGENT_FILE_ACCESS_KEY))
+  setAgentGitAccessSource(() => preferences.get(AGENT_GIT_ACCESS_KEY))
   const workspace = await serviceWorkspace(host).catch((error) => {
     throw new Error(`Trezi could not read the workspace from its service: ${error.message}`)
   })
@@ -568,7 +571,24 @@ async function main() {
     if (channel === 'source:reveal' && value.root === workspaceController.active?.root)
       openSource(`${value.source}:${value.startLine}`)
   })
+  // LKM-185: chat changes an older publish left on another branch, once per project.
+  const strandedNotice = strandedLandingsNotice({
+    sheets: {
+      toast: (message, actions, seconds) => sheetController.toast(message, actions, seconds)
+    },
+    owner: () => repository,
+    preferences,
+    log: (text, kind) => activityController.append(text, kind),
+    restored: async (root, files) => {
+      await gitController.refresh(root)
+      const entry = workspaceController.state.projects.find((p) => p.root === root)
+      if (entry && files.length) await workspaceController.refreshEnvironment(entry.key, files)
+    }
+  })
   workspaceController.services.activate = async (entry) => {
+    void strandedNotice(entry?.root).catch((error) =>
+      activityController.append(String(error), 'error')
+    )
     host!.send('sourceActive', { root: entry?.root ?? '' })
     void layersController.activate(entry?.root ?? '')
     if (shellController) {
@@ -625,7 +645,9 @@ async function main() {
     sheetController,
     activityController,
     preferences,
-    renderShell
+    renderShell,
+    (url) => shell.openExternal(url),
+    chatController
   )
   shellController = new NativeShellController(
     workspaceController,
@@ -744,9 +766,11 @@ async function main() {
           ? gitController.branch(key, action.value ?? '', true)
           : action.action === 'publish'
             ? gitController.publish(key)
-            : action.action === 'git-updates'
-              ? gitController.updates(key)
-              : null
+            : action.action === 'publish-cancel'
+              ? gitController.cancel(key)
+              : action.action === 'git-updates'
+                ? gitController.updates(key)
+                : null
     void operation?.catch((error) => activityController.append(String(error), 'error'))
   })
   // The service drains before it relaunches Trezi (with the active project).
@@ -975,7 +999,8 @@ async function main() {
           root,
           (key) => preferences.get(key),
           contextController,
-          inspectorController
+          inspectorController,
+          gitController
         )
         process.exitCode = 0
         writeSmokeResult(testDir!, { exitCode: 0, lines: [] })

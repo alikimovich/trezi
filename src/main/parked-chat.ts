@@ -1,4 +1,5 @@
 import { projectKey } from '../shared/projectKey'
+import { turnMessage } from './chat-commit'
 import { landTurn } from './chat-landing'
 import { clearPark, dropParkRecord, upsertParkRecord } from './chat-park'
 import { type ChatState, emitIsolation, onChain, states } from './chat-state'
@@ -61,15 +62,19 @@ export async function applyParkedBranch(
   if (!found) return { handled: false }
   const [key, st] = found
   try {
-    const res = await onChain(st, () => applyParked(st.liveRoot, st.wt))
+    // Described before the apply advances the fork point (LKM-189).
+    const { res, described } = await onChain(st, async () => {
+      const described = await turnMessage(key, st, 'apply')
+      return { res: await applyParked(st.liveRoot, st.wt), described }
+    })
     if (res.ok) {
       if (res.newBase) st.wt.baseSha = res.newBase
       // A 3-way apply onto a dirty tree can leave conflict markers, so unlike the
       // turn path this commits whatever landed — keeping the apply revertable in one
       // step, markers and all, instead of tangling it with the user's other WIP.
       await commitLiveTurn(st.liveRoot, res.files, {
-        title: `Apply ${st.wt.branch} changes`,
-        body: 'Trezi parked-chat apply.'
+        title: described.subject,
+        body: described.body
       })
       clearPark(st)
       await retireWorktreeBranch(st.wt)
@@ -143,9 +148,12 @@ export async function resolveParkedChat(
   // just resolved by policy) — the applyParked fallback below is what actually lands it.
   try {
     await onChain(st, async () => {
-      const outcome = await completeTurn(st.liveRoot, st.wt, 'Resolve chat/live merge')
+      const described = await turnMessage(sessionKey, st, 'resolve')
+      const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
+        keepHistory: st.gitAccess === 'full'
+      })
       if (outcome.outcome === 'merged') {
-        await landTurn(sessionKey, st, outcome, 'resolve', 'Resolve chat/live merge')
+        await landTurn(sessionKey, st, outcome, 'resolve', described)
         return
       }
       if (outcome.outcome === 'noop') {
@@ -246,15 +254,18 @@ export function markStoppedReverted(sessionKey: string, reverted: boolean): void
  * re-checked there; answers null when nothing is held any more.
  */
 export function landStoppedTurn(
-  sessionKey: string,
-  title: string
+  sessionKey: string
 ): Promise<{ files: string[]; group?: string; conflict?: boolean } | null> {
   const st = states.get(sessionKey)
   if (!holding(st) || st.reverted) return Promise.resolve(null)
   return onChain(st, async () => {
     if (!holding(st) || st.reverted) return null
     const turnNo = ++st.turnNo
-    const outcome = await completeTurn(st.liveRoot, st.wt, title, { land: true })
+    const described = await turnMessage(sessionKey, st, turnNo)
+    const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
+      land: true,
+      keepHistory: st.gitAccess === 'full'
+    })
     if (outcome.outcome === 'parked') {
       st.interrupted = false
       st.parkedFiles = outcome.files
@@ -263,7 +274,10 @@ export function landStoppedTurn(
       return { files: outcome.files, conflict: true }
     }
     if (outcome.outcome === 'merged')
-      return { files: outcome.files, group: await landTurn(sessionKey, st, outcome, turnNo, title) }
+      return {
+        files: outcome.files,
+        group: await landTurn(sessionKey, st, outcome, turnNo, described)
+      }
     // Nothing left to land: the hold ends all the same.
     if (outcome.newBase) st.wt.baseSha = outcome.newBase
     clearPark(st)

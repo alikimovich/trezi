@@ -3,6 +3,7 @@ import type { NativeView } from '../../native/platform'
 import type { AgentEvent, AgentOptions } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
 import { currentAgentFileAccess } from '../agent-file-access'
+import { currentAgentGitAccess } from '../agent-git-access'
 import { type HelperHandlers, providerOwner } from '../provider-owner'
 import { runTreziTool, type SessionTool } from '../session-tools'
 import { claudeProvider } from './claude'
@@ -43,6 +44,7 @@ export function helperProvider(id: string): ModelProvider {
     host: 'helper',
     supportsSpawn: adapter?.supportsSpawn ?? true,
     generateTitle: adapter?.generateTitle,
+    complete: adapter?.complete,
     updateProjectMemory: adapter?.updateProjectMemory,
     startSession: (root, options, getWindow, ctx) =>
       startHelperSession(id, root, options, getWindow, ctx)
@@ -143,7 +145,8 @@ async function startHelperSession(
         options: {
           ...options,
           ...(provider === 'claude' ? { claudeUserPlugins: claudeUserPluginsAllowed() } : {}),
-          agentFileAccess: currentAgentFileAccess()
+          agentFileAccess: currentAgentFileAccess(),
+          agentGitAccess: currentAgentGitAccess()
         },
         context: {
           emitKey,

@@ -6,17 +6,23 @@ import { checkNativeAlerts } from './smoke-alerts'
 import { preparePreviewInput } from './smoke-input'
 import { checkVisibleSettings } from './smoke-settings'
 export async function checkNativeSheets(host: NativeBridge, key: string, artifacts: string) {
-  const wait = async (check: (state: any) => boolean) => {
-    for (let i = 0; i < 80; i++) {
-      const state = await host.request('sheetInspect')
+  // `timeoutMs` is 4 s unless a wait depends on a real process scan; a timeout names the
+  // check that did not settle and the last sheet state instead of a bare message.
+  const wait = async (check: (state: any) => boolean, timeoutMs = 4000) => {
+    let state: any
+    for (const end = Date.now() + timeoutMs; Date.now() < end; ) {
+      state = await host.request('sheetInspect')
       if (check(state)) return state
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
-    throw new Error('Native sheet did not reach expected state')
+    throw new Error(
+      `Native sheet did not reach expected state: ${String(check).replace(/\s+/g, ' ')} — last ${JSON.stringify(state)}`
+    )
   }
   await checkNativeAlerts(host, artifacts)
   host.emit('menu', { action: 'servers' })
-  await wait((state) => state.visible && state.title === 'Running servers' && !state.busy)
+  // The lookup runs `lsof` and `ps` in the service, which a loaded machine can slow past 4 s.
+  await wait((state) => state.visible && state.title === 'Running servers' && !state.busy, 20000)
   writeFileSync(
     join(artifacts, 'running-servers.png'),
     Buffer.from(await host.request('captureSheet'), 'base64')

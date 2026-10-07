@@ -36,7 +36,7 @@ export interface SourceListEvidence {
   [key: string]: unknown
 }
 /** The Settings window's content size when it opens (`SectionedSheetContent.defaultSize`). */
-export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 540 }
+export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 680 }
 export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
@@ -117,8 +117,15 @@ export function assertSectionEvidence(
   if (section === 'general')
     assert.deepEqual(
       ids,
-      ['activityAutoOpen', 'agentFileAccess', 'claudePlugins', 'default', 'workspaceIdle'],
-      'General shows the default model, Claude plugins, agent file access, workspace cleanup and Activity pickers'
+      [
+        'activityAutoOpen',
+        'agentFileAccess',
+        'agentGitAccess',
+        'claudePlugins',
+        'default',
+        'workspaceIdle'
+      ],
+      'General shows the default model, Claude plugins, agent file and Git access, workspace cleanup and Activity pickers'
     )
   else
     assert.ok(

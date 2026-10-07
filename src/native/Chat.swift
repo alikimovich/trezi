@@ -96,8 +96,6 @@ final class ChatModel: ObservableObject {
     func pressLatest() { latestButtonClickCount += 1; latestRequest += 1 }
     // Preserve message clearance above the floating composer.
     var bottomInset: CGFloat { ChatLayout.bottomInset(composerHeight: composerHeight) }
-    /// Bottom band of the conversation masked out while the latest button is shown, else 0.
-    var latestClearHeight: CGFloat { showsLatest ? ChatLatestButton.clearHeight(composerHeight: composerHeight) : 0 }
     /// `gesture` groups a control's live writes into one Undo step (`IslandLiveWrites`);
     /// `ended` marks its last batch.
     func islandAction(_ island: IslandView, action: String, values: [String: Any] = [:], gesture: String? = nil, ended: Bool = false) {
@@ -222,19 +220,6 @@ private struct MessagePositions: PreferenceKey {
 struct IslandPositions: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue()) { _, new in new } }
-}
-/// Opaque except for the bottom `clear` points, with a short fade above them.
-private struct LatestClearanceMask: View {
-    let clear: CGFloat
-    var body: some View {
-        VStack(spacing: 0) {
-            Color.black
-            if clear > 0 {
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: ChatLatestButton.fade)
-                Color.clear.frame(height: clear)
-            }
-        }
-    }
 }
 struct ChatConversation: View {
     @ObservedObject var model: ChatModel
@@ -378,10 +363,9 @@ struct ChatConversation: View {
                     let readingHeight = max(1, viewport.size.height - model.bottomInset)
                     let bottomAnchor = UnitPoint(x: 0.5, y: readingHeight / max(1, viewport.size.height))
                     let settle = { settleLatest(proxy) }
+                    // Unmasked: history scrolls on under the composer and the latest
+                    // button, which bring their own glass (LKM-190).
                     conversationScroll(onMovedToEnd: { if follows { settle() } })
-                    // The latest button only shows while history scrolls under that
-                    // spot: keep that band free of text and controls (LKM-141).
-                    .mask { LatestClearanceMask(clear: model.latestClearHeight) }
                     .coordinateSpace(name: "chatScroll")
                     .onPreferenceChange(MessagePositions.self) { positions in
                         model.messageFrames = positions
@@ -446,7 +430,7 @@ private struct NativeMessageRow: View {
                 }
                 if let selection = message.selection { Text(selection.tag + selection.ident).font(.caption.monospaced()).foregroundStyle(.secondary) }
                 if let attachments = message.attachments, !attachments.isEmpty { SentAttachments(attachments: attachments, model: model) }
-                ForEach(Array(message.segments.enumerated()), id: \.offset) { _, segment in
+                ForEach(Array(message.segments.enumerated()), id: \.offset) { index, segment in
                     if let island = segment.island { NativeChatIsland(island: island, model: model) }
                     else if segment.kind == "tools" {
                         DisclosureGroup {
@@ -458,7 +442,7 @@ private struct NativeMessageRow: View {
                         }
                     } else if let text = segment.text {
                         if message.role == "user" { Text(text).textSelection(.enabled).font(ChatTypography.body).lineSpacing(ChatTypography.lineSpacing).fixedSize(horizontal: false, vertical: true) }
-                        else { ChatMarkdown(source: text, streaming: running).help(messageTime(segment.at ?? message.at)) }
+                        else { ChatMarkdown(source: text, streaming: running, identity: "\(message.id)#\(index)").help(messageTime(segment.at ?? message.at)) }
                     }
                 }
                 if message.role == "assistant" && (activity != nil || !running) {

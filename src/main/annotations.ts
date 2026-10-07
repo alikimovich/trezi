@@ -1,7 +1,9 @@
 import { ipcMain } from '../native/platform'
 import type { AnnotationInput, PublishResult } from '../shared/api'
+import { publishProgress } from '../shared/publish-progress'
 import { createAnnotationStore } from './annotation-store'
 import { generatePublishDescription } from './publish-description'
+import { pullRequestStatus } from './pull-request-status'
 import { workflowOwner } from './workflow-owner'
 
 /**
@@ -46,4 +48,10 @@ export function registerAnnotationsIpc(): void {
       )
     )
   )
+  ipcMain.handle('publish:pr-status', (_e, root: string) => pullRequestStatus(root))
+  // LKM-187: the toolbar follows the newest publish on a root and can stop it.
+  ipcMain.handle('publish:progress', async (_e, root: string) =>
+    publishProgress(await workflowOwner().workflows(), root)
+  )
+  ipcMain.handle('publish:cancel', (_e, root: string) => workflowOwner().cancel('publish', root))
 }

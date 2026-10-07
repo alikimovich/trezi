@@ -36,8 +36,12 @@ src/
                     agent's show/clone ops: main/chat-island-tool.ts; referenced
                     island context: main/chat-island-context.ts; the composer's "#"
                     picker and reference chips: native/chat-island-refs.ts (LKM-181)
-    ChatActivity.swift / StreamingText.swift   text-only live activity and native
-                    word reveal. Cat.swift supplies cats for other app surfaces
+    ChatActivity.swift           text-only live activity. Cat.swift supplies cats
+                    for other app surfaces
+    ChatMarkdown.swift / ChatRichText.swift / ChatTextView.swift   one selectable
+                    TextKit text view per reply text segment: Markdown to one
+                    attributed string (code/table blocks), Copy, code Copy buttons
+                    and the streaming word reveal (LKM-186)
     WorkspaceLayout.swift        authoritative view/divider geometry and AppKit divider input
     SourceEditor.swift / Layers.swift / EditingInspector.swift
                     native source, layers and property/style inspector; the Layers

@@ -2,6 +2,7 @@ import { dirname } from 'node:path'
 import type { NativeView } from '../native/platform'
 import type { AgentEvent, SessionRecord } from '../shared/api'
 import { createChatWorktree } from './chat-worktrees'
+import type { DescribeChange } from './commit-message'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { SessionStore } from './sessions-store'
 import { retireWorktreeBranch, type Worktree } from './worktrees'
@@ -17,6 +18,8 @@ import { retireWorktreeBranch, type Worktree } from './worktrees'
 export interface ChatState {
   wt: Worktree
   liveRoot: string
+  /** Git mode captured when this chat workspace opened. */
+  gitAccess?: 'managed' | 'full'
   /** A turn's merge refused (mid-turn drift): work stays on the branch for review. */
   parked: boolean
   /** The persisted park `SessionRecord` id while parked, else null. */
@@ -60,6 +63,9 @@ interface Deps {
   worktreesDir: () => string
   store: () => SessionStore
   getWindow: () => NativeView | null
+  /** The chat's background model as a one-shot completion for its landing commit
+   *  message (LKM-189); absent or null → the deterministic message. */
+  describe?: (sessionKey: string) => DescribeChange | null
 }
 
 let deps: Deps | null = null

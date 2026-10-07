@@ -443,6 +443,8 @@ try {
     assert.notEqual(p1.cwd, repo, 'a repository chat runs in its own worktree')
     const second = await invoke('agent:new-chat', repo, { provider: 'claude' })
     assert.equal(second.ok, true)
+    // LKM-182: the new chat's provider starts in the background.
+    await until(() => providers.length === opened + 2, 'second chat provider')
     const key2 = second.sessionKey,
       p2 = providers.at(-1)
     await controller.command({ type: 'context', context: context(key2) })
@@ -647,9 +649,10 @@ try {
       sent.conversation > 50 && sent.repository > 0 && sent.source > 0,
       `frames ${JSON.stringify(sent)}`
     )
+    // LKM-189: described by its change (the fixture provider has no model: the fallback).
     assert.match(
       git(repo, 'log', '--format=%s', '-n', '8'),
-      /one/,
+      /^Update a\.txt$/m,
       'the landed turn is committed by the repository owner'
     )
     const saved = Object.values(files(join(agentProfile, 'trezi/sessions'))).map((text) =>

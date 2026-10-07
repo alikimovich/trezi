@@ -38,10 +38,13 @@ final class RepositoryOwner: @unchecked Sendable {
         "retireBranch": (["root", "worktree"], ["leases"], nil),
         "commitWorktree": (["root", "worktree", "message"], ["leases"], nil),
         "autoApply": (["root", "worktree", "files", "intent"], ["leases"], ["land"]),
-        "completeTurn": (["root", "worktree", "message", "intent"], ["leases"], ["land", "park"]),
+        "completeTurn": (["root", "worktree", "message", "intent"], ["keepHistory", "leases"], ["land", "park"]),
         "applyParked": (["root", "worktree", "intent"], ["leases"], ["land"]),
         "applyBranch": (["root", "branch", "intent"], ["leases"], ["land"]),
         "stageResolve": (["root", "worktree", "intent"], ["leases"], ["reconcile"]),
+        "gitSyncBase": (["root", "worktree", "ref", "intent"], ["leases"], ["sync"]),
+        "gitMergeContinue": (["root", "worktree", "intent"], ["leases"], ["continue"]),
+        "gitMergeAbort": (["root", "worktree", "intent"], ["leases"], ["abort"]),
         "discardParked": (["root", "worktree", "intent"], ["leases"], ["discard"]),
         "removeWorktree": (["root", "worktree", "keepBranch", "intent"], ["leases"], ["landed", "release", "abandon"]),
         "reclaimWorktree": (["root", "worktree", "intent"], ["leases"], ["idle"]),
@@ -50,9 +53,10 @@ final class RepositoryOwner: @unchecked Sendable {
         "pruneBranches": (["root", "protected", "intent"], ["leases"], ["integrated"]),
         "removeLegacyFolder": (["root", "intent"], ["leases"], ["legacy"]),
         "deleteRecoveryRefs": (["root", "refs", "shas", "intent"], ["leases"], ["discard"]),
-        "commitLive": (["root", "files", "title"], ["body", "leases"], nil),
+        "commitLive": (["root", "files", "title"], ["body", "mergeParent", "leases"], nil),
         "checkout": (["root", "branch"], ["leases"], nil),
         "switchBranch": (["root", "branch"], ["leases"], nil),
+        "restoreLandings": (["root", "branch", "tip", "intent"], ["leases"], ["restore"]),
     ]
 
     final class Lease: Sendable { let id: String, key: String; let queue: DispatchQueue
@@ -117,6 +121,14 @@ final class RepositoryOwner: @unchecked Sendable {
                 let roots = try body.strings("roots")
                 guard roots.count <= 1_000 else { throw ServiceContractFailure.invalidRequest }
                 work.async { self.answer(frame, .succeeded(self.recoveryRefs(roots))) }
+            case ("strandedLandings", "read"):
+                let root = try Body(frame, required: ["root"], optional: []).path("root")
+                work.async {
+                    let (current, stranded) = self.effects.strandedLandings(root)
+                    self.answer(frame, .succeeded(Self.object([("current", current.map { .string(JSText($0)) } ?? .null),
+                        ("branches", .array(stranded.map { Self.object([("branch", .string(JSText($0.branch))), ("tip", .string(JSText($0.tip))),
+                                                                        ("count", .number(Double($0.count)))]) }))])))
+                }
             case ("acknowledge", "mutation"):
                 let body = try Body(frame, required: ["operationID", "intent"], optional: [])
                 guard try body.string("intent") == "acknowledge" else { throw ServiceContractFailure.invalidRequest }
@@ -275,7 +287,8 @@ final class RepositoryOwner: @unchecked Sendable {
             let (applied, edits) = try e.autoApply(c, try worktree(body, c), files: try body.strings("files"))
             return Self.object([("applied", .bool(applied)), ("edits", Self.edits(edits))])
         case "completeTurn":
-            let turn = try e.completeTurn(c, try worktree(body, c), message: try body.string("message"), land: intent == "land")
+            let turn = try e.completeTurn(c, try worktree(body, c), message: try body.string("message"), land: intent == "land",
+                                          keepHistory: body.has("keepHistory") ? try body.bool("keepHistory") : false)
             var fields: [(String, JSValue)] = [("outcome", .string(JSText("\(turn.outcome)"))), ("files", Self.strings(turn.files)), ("edits", Self.edits(turn.edits))]
             if let base = turn.newBase { fields.append(("newBase", .string(JSText(base)))) }
             return Self.object(fields)
@@ -292,6 +305,14 @@ final class RepositoryOwner: @unchecked Sendable {
             let (conflicted, files, base) = try e.stageResolve(c, try worktree(body, c))
             return Self.object([("conflicted", Self.strings(conflicted)), ("files", Self.strings(files)), ("clean", .bool(conflicted.isEmpty)),
                                 ("baseSha", .string(JSText(base)))])
+        case "gitSyncBase":
+            let result = try e.gitSyncBase(c, try worktree(body, c), ref: try body.string("ref"))
+            return Self.object([("merged", .bool(result.merged)), ("conflicted", Self.strings(result.conflicted)),
+                                ("head", .string(JSText(result.head)))])
+        case "gitMergeContinue":
+            return Self.object([("head", .string(JSText(try e.gitMergeContinue(c, try worktree(body, c)))))])
+        case "gitMergeAbort":
+            return Self.object([("head", .string(JSText(try e.gitMergeAbort(c, try worktree(body, c)))))])
         case "discardParked": try e.discardParked(c, try worktree(body, c)); return .object([])
         case "removeWorktree":
             let wt = try body.worktree()
@@ -320,7 +341,8 @@ final class RepositoryOwner: @unchecked Sendable {
             return Self.object([("deleted", Self.strings(deleted)), ("kept", Self.strings(kept))])
         case "commitLive":
             let (sha, files) = e.commitLive(c, files: try body.strings("files"), title: try body.string("title"),
-                                            body: body.has("body") ? try body.string("body") : nil)
+                                            body: body.has("body") ? try body.string("body") : nil,
+                                            mergeParent: body.has("mergeParent") ? try body.string("mergeParent") : nil)
             var fields: [(String, JSValue)] = [("committed", .bool(sha != nil))]
             if let sha { fields.append(("sha", .string(JSText(sha)))) }
             fields.append(("files", Self.strings(files)))
@@ -333,6 +355,14 @@ final class RepositoryOwner: @unchecked Sendable {
             let branch = try body.string("branch")
             guard branch.hasPrefix("trezi/"), try validBranch(c.root, branch) else { throw ServiceContractFailure.invalidRequest }
             return e.switchBranch(c, name: branch)
+        case "restoreLandings":
+            let branch = try body.string("branch"), tip = try body.string("tip")
+            guard try validBranch(c.root, branch), tip.range(of: #"^([0-9a-f]{40}|[0-9a-f]{64})$"#, options: .regularExpression) != nil else {
+                throw ServiceContractFailure.invalidRequest
+            }
+            let restored = try e.restoreLandings(c, branch: branch, tip: tip)
+            return Self.object([("merged", .bool(restored.merged)), ("files", Self.strings(restored.files)),
+                                ("conflictFiles", Self.strings(restored.conflicted)), ("recoveryRefs", Self.strings(restored.refs))])
         default: throw ServiceContractFailure.invalidRequest
         }
     }

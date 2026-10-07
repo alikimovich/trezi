@@ -26,7 +26,7 @@ import { scrubSecret } from '../providers-store'
 import { treziRules } from '../rules'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
-import { isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
+import { gitAccessHook, isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
 import {
   codexFallbackNotice,
   codexModelUnavailable,
@@ -341,7 +341,17 @@ async function startSession(
       const codex = new Codex({
         ...codexPathOverride(),
         ...codexOptions,
-        config: isolatedCodexConfig({ ...codexOptions.config, ...mcpConfig, ...sandbox.config })
+        config: isolatedCodexConfig({
+          ...codexOptions.config,
+          ...mcpConfig,
+          ...sandbox.config,
+          ...gitAccessHook(
+            app.getAppPath(),
+            options.agentGitAccess === 'full' ? 'full' : 'managed',
+            liveRoot,
+            root
+          )
+        })
       })
       return id ? codex.resumeThread(id, threadOptions) : codex.startThread(threadOptions)
     }
@@ -593,7 +603,7 @@ async function startSession(
     // Composer image attachments are not wired yet; MCP screenshot results are images.
     send: (text, _images) => {
       const prompt = firstTurn
-        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
+        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
         : text
       firstTurn = false
       chain = chain.then(() => runTurn(prompt))
@@ -637,9 +647,16 @@ async function updateProjectMemory(
 ): Promise<string | null> {
   const prompt = projectMemoryEvaluationPrompt(currentMemory, transcript)
   if (!prompt) return null
+  const answer = await complete(prompt, options, AbortSignal.timeout(25_000))
+  return answer === null ? null : parseProjectMemoryEvaluation(answer, currentMemory)
+}
 
-  const abort = new AbortController()
-  const timer = setTimeout(() => abort.abort(), 25_000)
+/** One-shot read-only thread (`ModelProvider.complete`), ended by `signal`. */
+async function complete(
+  prompt: string,
+  options: AgentOptions,
+  signal: AbortSignal
+): Promise<string | null> {
   try {
     const conn = options.connectionId ? await resolveConnection(options.connectionId) : null
     if (options.connectionId && !conn) return null
@@ -661,12 +678,10 @@ async function updateProjectMemory(
       ...(model ? { model } : {}),
       ...(isEffort(options.effort) ? { modelReasoningEffort: options.effort } : {})
     })
-    const result = await thread.run(prompt, { signal: abort.signal })
-    return parseProjectMemoryEvaluation(result.finalResponse, currentMemory)
+    const result = await thread.run(prompt, { signal })
+    return result.finalResponse
   } catch {
     return null
-  } finally {
-    clearTimeout(timer)
   }
 }
 
@@ -674,5 +689,6 @@ export const codexProvider: ModelProvider = {
   id: 'codex',
   supportsSpawn: true,
   startSession,
+  complete,
   updateProjectMemory
 }

@@ -454,6 +454,8 @@ export interface AgentOptions {
    * chat worktree. Set by main when a helper session opens; absent ⇒ 'full'.
    */
   agentFileAccess?: 'full' | 'project'
+  /** Settings → Agent Git access; absent is Managed. */
+  agentGitAccess?: 'managed' | 'full'
 }
 
 /** Trezi-managed durable context for one project, stored outside the repo. */
@@ -1175,13 +1177,19 @@ export interface PublishResult {
   ok: boolean
   /** The created PR URL on success. */
   url?: string
-  /** The fresh trezi/* branch created to continue on (publish.ship). */
+  /** The work branch publish kept the live checkout on (publish.ship). */
   branch?: string
   error?: string
+  /** Published, but the work branch could not take in the merged base (LKM-185). */
+  notice?: string
   /** Per-file merge conflicts left for explicit resolution; never auto-resolved. */
   conflictFiles?: string[]
   /** Local refs preserving the pre-reconciliation tips. */
   recoveryRefs?: string[]
+  /** The publish step that failed (`publish-progress.ts`), when one had started (LKM-187). */
+  step?: string
+  /** The user cancelled the run before the pull request was created. */
+  cancelled?: boolean
 }
 
 /**

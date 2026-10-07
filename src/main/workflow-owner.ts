@@ -65,6 +65,9 @@ export interface WorkflowSummary {
   updated: string
   /** The last lines of a running step's output. */
   progress?: string
+  /** An open publish's current step and since when (ISO), LKM-187. */
+  step?: string
+  stepSince?: string
 }
 export type WorkflowKind =
   | 'publish'

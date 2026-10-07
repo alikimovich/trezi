@@ -68,48 +68,49 @@ export async function checkChatAcceptance(host, artifacts) {
       y >= state.readingHeight,
       `${label}: below reading area ${state.readingHeight} ${state.latestButtonFrame}`
     )
-    // The button shows while history scrolls under it, so the conversation masks
-    // out the band it sits in (composer, button and a gap either side), fading
-    // above it. Rows that reach the button are therefore painted only above that
-    // band, and the button never covers text or controls.
-    assert.ok(state.latestClearHeight > 0, `${label}: transcript band behind the button is masked`)
-    assert.ok(
-      y >= state.latestClearTop + state.latestButtonGap - 1,
-      `${label}: button inside the cleared band, clear top ${state.latestClearTop} ${state.latestButtonFrame}`
+    // LKM-190: the conversation is not masked, so history scrolls on under the
+    // button and the composer. The button brings its own glass (or blur) circle
+    // and claims the click at its center, so the text under it is never hit.
+    assert.match(
+      state.latestButtonBackdrop,
+      /^(NSGlassEffectView|NSVisualEffectView)$/,
+      `${label}: button has its own glass background`
     )
-    assert.ok(
-      state.latestClearTop - state.latestFade + 1 >= 0,
-      `${label}: fade stays inside the column`
-    )
-    const under = Object.entries({ ...state.messageFrames, ...state.footerFrames })
-      .filter(([, value]) => {
-        const frame = String(value)
-          .match(/-?[\d.]+(?:e-?\d+)?/g)
-          .map(Number)
-        return (
-          frame[1] < y + height &&
-          frame[1] + frame[3] > y &&
-          frame[0] < x + width &&
-          frame[0] + frame[2] > x
-        )
-      })
-      .map(([id]) => id)
-    for (const id of under) {
-      const frame = String(state.messageFrames[id] ?? state.footerFrames[id])
-        .match(/-?[\d.]+(?:e-?\d+)?/g)
-        .map(Number)
-      // Row pixels above the band start are the only painted ones; none can reach the button.
-      assert.ok(
-        Math.min(frame[1] + frame[3], state.latestClearTop) <= y,
-        `${label}: painted part of ${id} ends above the button`
-      )
-    }
+    assert.equal(state.latestButtonBackdropFills, true, `${label}: background fills the button`)
+    assert.equal(state.latestButtonHit, 'ChatLatestButton', `${label}: no click-through`)
     assert.equal(
       state.latestButtonLabel,
       'Scroll to latest message',
       `${label}: accessibility label`
     )
-    return under
+  }
+  // LKM-190: scrolled up, in the window's forced light and dark appearance (never
+  // the system's), history text is painted beside the button down to the
+  // composer edge: the band the old mask left empty. A gap between messages can
+  // sit in that band, so nudge the history a little until a text line does.
+  const scrolledUpCaptures = async (width) => {
+    for (const appearance of ['light', 'dark']) {
+      await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+      const name = `acceptance-${width}-scrolled-up-${appearance}`
+      let state
+      for (let nudge = 0; nudge < 4; nudge++) {
+        if (nudge) await inspect({ input: 'wheel', delta: 23 })
+        await delay(250)
+        state = await capture(name)
+        checkLatestButton(state, `${width}pt scrolled up ${appearance}`)
+        if (state.latestBandInk > 40) break
+      }
+      assert.equal(
+        /dark/i.test(state.appearance),
+        appearance === 'dark',
+        `${name}: ${state.appearance}`
+      )
+      assert.ok(
+        state.latestBandInk > 40,
+        `${name}: text visible beside the button down to the composer (${state.latestBandInk} ink pixels)`
+      )
+    }
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
   }
   const clickLatest = async (label) => {
     const before = await inspect({})
@@ -124,8 +125,6 @@ export async function checkChatAcceptance(host, artifacts) {
     await wait((s) => s.latestVisible, `${name}: complete latest row above composer clearance`)
     const state = await capture(name)
     assert.equal(state.latestVisible, true)
-    if (!state.latestButton)
-      assert.equal(state.latestClearHeight, 0, `${name}: no masked band while the button is hidden`)
     // LKM-149: finished history responses have one 28 pt footer row; only the
     // latest keeps the counter's (empty) line under it.
     const footerHeights = Object.entries(state.footerFrames).map(([id, value]) => [
@@ -229,6 +228,7 @@ export async function checkChatAcceptance(host, artifacts) {
         `${width}pt wheel scrolls history and reveals latest button`
       )
       checkLatestButton(await capture(`acceptance-${width}-scrolled-up`), `${width}pt scrolled up`)
+      await scrolledUpCaptures(width)
       await clickLatest(`acceptance-${width}-scrolled-up-latest`)
       await latestCapture(`acceptance-${width}-scrolled-up-latest`)
     }
@@ -363,6 +363,7 @@ export async function checkChatAcceptance(host, artifacts) {
     }
     throw error
   } finally {
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
     await inspect({
       environment: { clear: true },
       width: original.chatWidth,

@@ -11,6 +11,50 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Xcode-like dynamic light/dark colours (`SourceSyntax.swift`), no re-tokenization on an appearance change.
 - [x] `test/syntax-highlight.mjs` (unit) and the `source-syntax` smoke check (group `core`): TSX categories, under 16 ms per keystroke on 3,000 lines, light/dark captures.
 - [ ] Install `shiki@^3` (`bun add shiki@^3`; the worker sandbox had no registry access) and confirm the Shiki halves of both tests.
+## Agents resolve merge conflicts (LKM-188)
+
+- [x] Repository-owner Git tools fetch and merge the publish base, leave conflict markers, and continue or abort with recovery refs; a resolved merge keeps both parents when landed.
+- [x] Agent Git access defaults to Managed, persists beside Agent file access, blocks raw writes in Claude and Codex, and lets Full mode reconcile raw chat-worktree commits and merges.
+- [x] Agent PR status and Publish update tools use the existing PR and normal publish path; Publish offers Resolve with agent with conflict facts.
+- [x] Real-Git package version conflict, raw merge and commit, ancestry, setting and command guard tests; CHANGELOG and Git/provider docs.
+
+## Publish shows progress (LKM-187)
+
+- [x] The workflow owner reports the publish step (commit, sync, push, describe, pr, merge, cleanup) in its `workflows` summaries and logs each step's timing; a failed result names its step.
+- [x] `publish:progress` / `publish:cancel`; `NativeGitController` shows "Publishing…" at once, polls the step (elapsed after 3 s), cancels before the PR, adopts a running publish after a reload, and ends in a toast or a failure sheet with Retry / Copy details (`src/shared/publish-progress.ts`).
+- [x] Toolbar: spinner frames on the standard menu item, not clickable while publishing, Cancel Publish in the chevron menu (`ToolbarPublish.swift`).
+- [x] `publish-progress` core smoke check with a stubbed workflow owner and captures; unit tests `publish-progress`, `native-git`, `workflow-owner`; CHANGELOG line.
+## Select a whole chat message (LKM-186)
+
+- [x] Each reply text segment is one selectable TextKit text view (`ChatTextView.swift`) over one attributed string (`ChatRichText.swift`): drag selection crosses paragraphs, lists, headings, code blocks and tables.
+- [x] Cmd-A selects the message; Cmd-C copies plain text with paragraph breaks, whole code blocks keep their fences; links, code Copy buttons, inline code and light/dark kept.
+- [x] `native-chat-text` unit fixture and `chat-text` smoke check (group `chat`) with light/dark captures; CHANGELOG line.
+## Chat text scrolls behind the composer (LKM-190)
+
+- [x] Remove the conversation's clearance mask (`LatestClearanceMask`, `latestClearHeight`, `ChatLatestButton.fade`): history stays painted under the composer and the latest button.
+- [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
+- [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
+
+## Composer queue: no note for the normal waiting case (LKM-191)
+
+- [x] `queueNote` returns no note for a running turn or a landing, so the queue has no header row (34 pt for one row); Resolve, sign-in, paused and landing-error notes are unchanged.
+- [x] `chat-send-queue` expects the empty note; the native chat smoke expects no note and a 34 pt queue in the `-queue-stack` capture.
+## Landing commit messages describe the change (LKM-189)
+
+- [x] `commit-message.ts`/`chat-commit.ts`: subject (imperative, <= 72 chars) and 3–6 bullets from the turn's diff and final reply via the provider's background model (`complete` one-shot), 3 s timeout, deterministic file-list fallback, Conventional Commits when the repo uses them, `Trezi-Turn`/`Trezi-Chat` trailers; never the prompt.
+- [x] Used for every landing (turn, reconcile, resolve, Keep, parked apply, chat release); a re-squash after a park describes the combined diff.
+- [x] Publish PR title/body summarise the branch's commits; tests (mocked model, timeout, no prompt, combined diff, trailers, PR), CHANGELOG line, docs/WORKTREES.md.
+
+## Landed chat commits never become unreachable (LKM-185)
+
+- [x] One branch rule in the repository owner: automatic switches (`git:ensure`, publish heal) never move the live checkout onto a branch lacking its commits; a behind branch fast-forwards with a recovery ref, a diverged one is refused (`joinBranch`).
+- [x] Publish merges without `gh --delete-branch`, deletes the remote branch with a lease, keeps the work branch (fast-forward or merge of the merged base, recovery refs first, a notice instead when it does not merge cleanly), and no longer recreates a branch by name (`recoverShip` removed).
+- [x] Recovery on open: "N earlier chat changes are on branch X, not on Y" with Bring them back (`restoreLandings`, normal conflict flow) and Ignore (`strandedLandings`, `src/native/stranded-landings.ts`).
+- [x] `test/branch-safety.mjs` (unit; fails on the old cleanup), `fake-gh` does the real `--delete-branch` local effects; CHANGELOG, `docs/WORKTREES.md` branch rules.
+## Branch menu aligned with the address (LKM-184)
+
+- [x] `BranchPopUpButton`/`BranchPopUpCell` (`ToolbarAddress.swift`): the branch title starts on the address text's left edge; the chevron follows it, tail truncation and the frame-sized click target kept.
+- [x] `toolbar-address` smoke check measures both rendered text origins (window x, |dx| <= 0.5 pt) and the title–chevron gap at three widths, with light and dark window captures at two; CHANGELOG line.
 
 ## Movable islands (LKM-180)
 

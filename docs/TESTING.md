@@ -329,6 +329,12 @@ Inspect these artifacts under `test/artifacts/native/chat-scroll/`:
 - `acceptance-{440,320}-scrolled-up.png/.json` (LKM-141): the latest button scrolled
   into history, asserted round, centered over the column, `latestButtonGap` above
   `composerTop`, below `readingHeight` (never over the reading area) and labelled.
+  LKM-190: the conversation is unmasked, so every latest-button check also asserts
+  its own backdrop (`latestButtonBackdrop`, `latestButtonBackdropFills`) and that a
+  click at its centre hit-tests to it (`latestButtonHit`). `acceptance-{440,320}-scrolled-up-{light,dark}.png/.json`
+  force the window's appearance (never the system's) and require `latestBandInk`
+  (text pixels beside the button, from `latestButtonGap` above it to the composer)
+  above 40, nudging the history up to three times past a gap between messages.
 - `tokens-{running,done}-{440,320}.png` and `tokens-{440,320}.json` (LKM-141): a
   turn's counter after "Thinking…" while running, then under Copy/Revert, with
   the footer's height and bottom unchanged by completion.
@@ -430,7 +436,7 @@ check to its group, and a check with no group there is an error:
 | `shadow-light` | `chat-islands`, Shadow Light part (same fixture scope; the check runs when either group is selected) |
 | `sidebar` | project switching and visible sidebar captures/interactions |
 | `settings` | sheets and forms: running servers, New project, project memory, Settings (General, inline AI Providers, Experimental), feedback, diagnose, activity; attached alert sheets, the feedback error sheet and toast (`smoke-alerts.ts`) |
-| `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`); sent-bubble attachment thumbnails, wrapping and preview (`smoke-sent-attachments.ts`); comment result rows collapsed/expanded in light and dark (`smoke-comment-rows.ts`) |
+| `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`); sent-bubble attachment thumbnails, wrapping and preview (`smoke-sent-attachments.ts`); comment result rows collapsed/expanded in light and dark (`smoke-comment-rows.ts`); whole-message selection, Copy and Select All in light and dark (`smoke-chat-text.ts`) |
 | `composer` | composer growth/paste/attachments, per-chat drafts, slash commands, visible composer |
 
 An unknown or empty group name fails before the build. `--live` requires `core`

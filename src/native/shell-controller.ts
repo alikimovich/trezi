@@ -110,6 +110,7 @@ export class NativeShellController {
       branches: [],
       publishLabel: 'Publish',
       publishing: false,
+      publishCancellable: false,
       publishMode: this.git.mode,
       codeOpen: this.codeOpen,
       previewBase: active?.url ?? null,

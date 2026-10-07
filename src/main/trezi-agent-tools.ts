@@ -7,6 +7,11 @@ import { join } from 'node:path'
 export const TREZI_AGENT_ACTIONS = [
   'workspace_state',
   'prepare_conflict_resolution',
+  'git_sync_base',
+  'git_merge_continue',
+  'git_merge_abort',
+  'pr_status',
+  'publish_update',
   'chat_island',
   'open_code',
   'open_preview',

@@ -158,6 +158,12 @@ extension Host {
                 do { reply(id, try await verifyCommentRows(c)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
+        case "chatText":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await verifyChatText(c)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         // The same state a thumbnail click sets; null closes the preview (LKM-166).
         case "chatAttachmentPreview":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

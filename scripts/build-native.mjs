@@ -103,7 +103,7 @@ writeFileSync(join(out, 'main.swift'), readFileSync(join(root, 'src/native/Host.
 // sources, flags and toolchain are unchanged (LKM-175).
 const compile = swiftBuilder({ root, target, profile })
 const service = compile('TreziService', [
-  ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryCleanup', 'RepositoryMerge', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
+  ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryAgentGit', 'RepositoryBranches', 'RepositoryCleanup', 'RepositoryMerge', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
   '-o', join(serviceContents, 'MacOS/TreziService'), '-framework', 'Foundation', '-framework', 'Security', '-framework', 'CoreServices'
 ]).then(built => {
   copyFileSync(join(serviceContents, 'MacOS/TreziService'), join(out, 'TreziService'))
@@ -135,6 +135,7 @@ const host = compile(
     join(root, 'src/native/PreviewAgent.swift'),
     join(root, 'src/native/ToolbarLayout.swift'),
     join(root, 'src/native/ToolbarAddress.swift'),
+    join(root, 'src/native/ToolbarPublish.swift'),
     join(root, 'src/native/Inspector.swift'),
     join(root, 'src/native/Composer.swift'),
     join(root, 'src/native/ComposerVerification.swift'),
@@ -159,7 +160,6 @@ const host = compile(
     join(root, 'src/native/ShadowIsland.swift'),
     join(root, 'src/native/ChatActivity.swift'),
     join(root, 'src/native/ChatActivityClock.swift'),
-    join(root, 'src/native/StreamingText.swift'),
     join(root, 'src/native/Cat.swift'),
     join(root, 'src/native/Welcome.swift'),
     join(root, 'src/native/Sheets.swift'),
@@ -187,6 +187,9 @@ const host = compile(
     join(root, 'src/native/PreviewStatus.swift'),
     join(root, 'src/native/ChatDivider.swift'),
     join(root, 'src/native/ChatMarkdown.swift'),
+    join(root, 'src/native/ChatRichText.swift'),
+    join(root, 'src/native/ChatTextView.swift'),
+    join(root, 'src/native/ChatTextVerification.swift'),
     join(root, 'src/native/ChatQuestion.swift'),
     join(root, 'src/native/SnappedSlider.swift'),
     '-o',

@@ -198,6 +198,12 @@ Shell commands and Codex are covered too (LKM-156, below).
 
 The Codex sandbox above applies only with Agent file access set to Project only (LKM-163, below).
 
+### Agent Git access and base merges (LKM-188)
+
+Settings → General → Agent Git access (`trezi:agent-git-access:v1`) defaults to Managed, beside Agent file access. Managed permits read-only Git and Trezi's `git_sync_base`, `git_merge_continue`, `git_merge_abort`, `pr_status` and `publish_update`. Claude's PreToolUse hook and Codex's session command hook refuse direct Git writes with the corresponding tool name. Full permits raw Git effects in the private chat worktree; raw pushes still go through Publish. This setting applies when a provider helper session opens.
+
+The repository owner validates that each Git tool targets a linked chat worktree, serializes it with landings and writes recovery refs before a base merge or abort. `git_sync_base` fetches `origin/<base>` and merges with `--no-ff`; a conflict leaves the usual markers and `MERGE_HEAD`. After editing, `git_merge_continue` stages the result and makes the two-parent commit. Turn completion does not squash a merge or a Full-mode raw commit. The live landing attaches previously unseen chat history as a second parent, including a merge whose resolved files equal the live version, so landed commits stay reachable. `publish_update` schedules the existing PR's normal publish workflow only after that turn lands; a parked or failed turn clears the request. It never force-pushes.
+
 ### Agent file access and symlinked paths (LKM-163)
 
 - **Setting.** Settings → General → Agent file access (`trezi:agent-file-access:v1`,
@@ -275,6 +281,34 @@ Implementation: `src/main/repo-write-queue.ts`, `src/main/chat-isolation.ts` (wi
 Regression coverage: `test/chat-worktrees.mjs`, `test/live-commit.mjs`,
 `test/chat-isolation.mjs`, `test/turn-terminal.mjs`.
 
+### Landing commit messages (LKM-189)
+
+A landing's commit message describes the change, never the user's prompt. Before the
+chat branch is squashed, `src/main/chat-commit.ts` reads the worktree's diff against
+`baseSha` (file list, diff stat and an excerpt of at most 8,000 characters, new files
+included; `src/main/commit-message.ts`) and gives it, with the agent's final reply, to
+the chat's provider as a tool-less one-shot on its background model (Haiku for Claude,
+`gpt-6-sol` low effort for Codex, the connection's own model otherwise —
+`describeAgentOptions`). The prompt never contains the user's message.
+
+- The answer must be an imperative subject of at most 72 characters plus 3–6 bullets.
+  An echo of the prompt, "[Attached files]", chatter or an error is rejected.
+- The model has 3 s. On timeout, refusal or no provider the message is built from the
+  files: "Update key-tile.tsx, home.tsx and bottom-bar.tsx" (Add/Remove when every file
+  was added/deleted), one bullet per file and a "Changed areas" line.
+- If at least 3 of the last 20 non-merge subjects (and 60%) use Conventional Commits,
+  the subject does too (`chore:` when the model gave no type).
+- The same message is used for the chat branch's squash commit and the live commit.
+  Parked turns never advance `baseSha`, so a re-squash describes the combined diff.
+- `Trezi-Turn` and `Trezi-Chat` (the chat branch) are Git trailers at the end of the
+  body, never in the subject.
+- Publish's PR title and body summarise the branch's commit subjects, checked against
+  the diff; legacy prompt-subject commits (body "Trezi turn N …") are left out of that list.
+
+Coverage: `test/commit-message.mjs` (mocked model, timeout, refusals, conventions,
+combined diff, trailers), `test/live-commit.mjs` (re-squash after a park),
+`test/chat-landing.mjs`, `test/publish-description.mjs`.
+
 ## Chat workspace cleanup
 
 Each open chat's checkout lives in the profile's `worktrees/` folder (LKM-136). They
@@ -307,6 +341,49 @@ Implementation: `src/main/chat-workspaces.ts`, `src/main/chat-isolation.ts`
 `src/service/RepositoryCleanup.swift`. Coverage: `test/chat-workspace-cleanup.mjs`
 (through the Swift owner) and `test/native-settings.mjs` (the Settings rows).
 
+## New chat: pending chats and the spare worktree (LKM-182)
+
+New chat never waits for Git, dependencies or the provider. `agent:new-chat` registers
+a **pending chat** (`src/main/chat-pending.ts`) and returns its session key at once;
+`agent:workspace-snapshot` lists it with an empty record, so the native controllers
+show it and focus the composer (`New chat composer ready` in the product log, about
+3 ms). The chat is then prepared in the background (`prepareChat` in
+`src/main/agent.ts`): its checkout (`isolatedCwd`), the provider session, then
+registration. Closing a pending chat cancels it; whatever was made is released.
+
+- **First send.** `agent:send` waits for a pending chat (one retry if its preparation
+  failed). After 300 ms the chat shows "Preparing workspace…" as its progress line;
+  Stop cancels the wait and nothing is sent. Restart, rename and permission-mode
+  changes wait for it too.
+- **Spare.** Each open repository project keeps one prewarmed **spare** checkout
+  (`src/main/chat-spare.ts`): a detached chat worktree with no branch, created through
+  the repository write queue after the project opens (when it has chats) and after each
+  new chat is ready. `isolatedCwd` takes it and syncs it from the live tree (uncommitted
+  and untracked work included) before use; a spare that fails to sync is removed and a
+  fresh checkout is made. Without a ready spare the chat creates its own in the
+  background as before. Orphan recovery treats the spare as live
+  (`liveChatWorktreeIds`). Closing the project removes the unused spare (abandon intent,
+  no recovery ref, after any background install in it); quit drops the record and the
+  next launch's orphan recovery removes the clean checkout.
+- **Dependencies.** On the new-chat path the copy-on-write clone of the live
+  `node_modules` still happens; a needed install (changed manifests) runs in the
+  background (`provisionDependencies(..., { background: true })`) and is never started
+  twice. A chat's later sync (`syncFromLive`) during a running install neither waits
+  for it nor redoes it: it skips re-provisioning and the install carries on. Only a
+  non-chat foreground `provisionDependencies` (e.g. a spawn's `createWorktree`) waits
+  for a running install. While it runs, the turn's prompt tells the agent to read and
+  edit but not run commands that need `node_modules`. Removing the checkout (closing
+  the chat or project, `releaseChat`, `releaseSpare`, or a spare whose sync failed)
+  first waits for the install to settle, so nothing writes into a deleted folder.
+
+Measured with a stub provider and the Swift repository owner (`isolatedCwd` timings
+are what New chat used to wait for; see `docs/PROGRESS.md`): small project 195–216 ms
+before, composer ready in 2–3 ms after with the spare take at 146–156 ms in the
+background; 6,000 files plus 8,000 in `node_modules`, 0.9–1.3 s before, 2–3 ms after
+with the take at 0.31–0.44 s. Coverage: `test/chat-new-instant.mjs` (unit; 3 s
+worktree creation, first send, spare reuse, pending close, project close) and
+`test/chat-spare.mjs` (Git suite through the Swift owner).
+
 ## Publishing a shared work branch
 
 Publish is a second repository-wide landing boundary after chat work reaches the live
@@ -324,6 +401,43 @@ chooses ours/theirs across the repository.
 Implementation: the workflow owner, `src/service/WorkflowPublish.swift` (since LKM-111
 the only one; the Bun twin `publish-reconcile.ts` was removed). Regression coverage:
 `test/workflow-owner.mjs`.
+
+### Branch rules (LKM-185)
+
+- **One branch.** Landings always go to the branch the live checkout has checked out,
+  the preview serves that checkout, and the toolbar shows that branch. Only an explicit
+  user action (the branch menu, Git updates → Switch) switches, deletes or recreates it.
+- **Merge without `--delete-branch`.** `gh pr merge --delete-branch`, run in the live
+  checkout, checks out the base and force-deletes the work branch locally, including any
+  landing that arrived while the PR description was written. Trezi merges without it
+  and then deletes the remote branch itself, with a lease on the pushed head.
+- **Cleanup keeps the work branch.** After the merge, Trezi fetches with `--prune` (no
+  stale `origin/<branch>` is left behind to recreate the branch from) and fast-forwards
+  the local base only when that is a fast-forward. The work branch fast-forwards to the
+  merged base when that contains it, or else merges it (a squash merge never contains
+  it). Both tips are recorded below `refs/trezi/recovery/` first. If the merge does not
+  apply cleanly, it is aborted and the branch stays as it was. The result then carries
+  a `notice` that offers Git updates → Pull. Nothing checks out, deletes or recreates a
+  branch, so the old `recoverShip` fallback, which re-checked-out the branch by name, is
+  gone. Git's DWIM checkout of a deleted branch creates it from the stale
+  remote-tracking ref (reflog `branch: Created from refs/remotes/origin/…`), which is
+  how earlier landings became unreachable.
+- **Ensure never hides landings.** The open-time `git:ensure` and publish's heal call
+  `switchBranch` onto `trezi/<base>`. If that branch already exists and lacks the
+  checkout's commits, the repository owner either fast-forwards it to HEAD (old tip at
+  a recovery ref) or, when it diverged, refuses and stays put
+  (`joinBranch`, `src/service/RepositoryBranches.swift`).
+- **Recovery on open.** Once per project per launch, `strandedLandings` lists other
+  local branches holding landed chat commits (committer `trezi@local`, `trezi/chat-*`
+  and `trezi/comment-*` excluded) whose changes the checkout lacks. A squash or
+  cherry-pick already in the checkout is skipped through `git merge-tree`. One notice
+  reads "N earlier chat changes are on branch main, not on trezi/main" and offers
+  **Bring them back** and **Ignore**. Bring them back runs `restoreLandings`: recovery
+  refs for both tips, then a `--no-ff` merge. A conflict stays in the checkout for
+  per-file resolution. Ignore is remembered per branch tip
+  (`trezi:stranded-landings-ignored`). UI: `src/native/stranded-landings.ts`. Coverage:
+  `test/branch-safety.mjs` reproduces the reported sequence, and it fails on the old
+  cleanup.
 
 Model/provider changes keep the selected chat's worktree and require confirmation
 when the chat contains messages. The replacement session receives a one-time

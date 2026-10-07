@@ -24,7 +24,12 @@
      "list_recommended_skills",
      "install_skills",
      "workspace_state",
-     "prepare_conflict_resolution"
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update"
     ]
    }
   }
@@ -51,7 +56,12 @@
      "list_recommended_skills",
      "install_skills",
      "workspace_state",
-     "prepare_conflict_resolution"
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update"
     ]
    }
   }
@@ -604,7 +614,12 @@
      "list_recommended_skills",
      "install_skills",
      "workspace_state",
-     "prepare_conflict_resolution"
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update"
     ],
     "resume": null,
     "session": "bg-N"
@@ -636,7 +651,12 @@
      "list_recommended_skills",
      "install_skills",
      "workspace_state",
-     "prepare_conflict_resolution"
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update"
     ],
     "resume": "thread-1",
     "session": "fg-N"

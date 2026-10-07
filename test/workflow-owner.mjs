@@ -232,6 +232,8 @@ try {
     })
     assert.deepEqual(conflicted.result.conflictFiles, ['a.txt'])
     assert.equal(conflicted.result.recoveryRefs.length, 2)
+    // LKM-187: the failure names the step it stopped at, for the failure sheet.
+    assert.equal(conflicted.result.step, 'sync')
 
     const nothing = await owned('publish-nothing', async (owner, w) => ({
       result: await owner.publish(w.local, 'merge', describe),

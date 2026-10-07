@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { editingOwner } from './editing-owner'
 import { productLog } from './product-log'
 import { repositoryOwner } from './repository-owner'
-import { provisionDependencies } from './worktree-dependencies'
+import { dependenciesInstalling, provisionDependencies } from './worktree-dependencies'
 import { createWorktree, type Worktree } from './worktrees'
 
 /**
@@ -63,14 +63,19 @@ export async function conflictMarkerFiles(wt: Worktree, files: string[]): Promis
 /**
  * Fork a fresh worktree for a chat on branch `trezi/chat-<id>`, forking from the live
  * tree's CURRENT state (uncommitted WIP included) — exactly like comment spawns, only
- * the branch-name scheme differs.
+ * the branch-name scheme differs. A needed dependency install runs in the background
+ * (LKM-182): the chat's turn can start and read or edit files meanwhile.
  */
 export function createChatWorktree(
   liveRoot: string,
   id: string,
   worktreesDir: string
 ): Promise<Worktree> {
-  return createWorktree(liveRoot, worktreesDir, { id, branchName: (i) => `chat-${i}` })
+  return createWorktree(liveRoot, worktreesDir, {
+    id,
+    branchName: (i) => `chat-${i}`,
+    backgroundInstall: true
+  })
 }
 
 /**
@@ -78,14 +83,22 @@ export function createChatWorktree(
  * worktree's HEAD tree already matches there's no drift, otherwise it resets the clean
  * worktree onto the snapshot (sparing its runtime deps) and refreshes its own
  * node_modules when the synced manifests changed. Advances
- * `wt.baseSha` in place to the new fork point.
+ * `wt.baseSha` in place to the new fork point. `backgroundInstall` (a spare taken by a
+ * new chat, LKM-182) leaves a needed install running; an install already running in
+ * the checkout is never awaited or restarted here.
  */
-export async function syncFromLive(liveRoot: string, wt: Worktree): Promise<{ synced: boolean }> {
+export async function syncFromLive(
+  liveRoot: string,
+  wt: Worktree,
+  opts: { backgroundInstall?: boolean } = {}
+): Promise<{ synced: boolean }> {
   await editingOwner().syncSetupHelpers(liveRoot, wt.path)
   const { synced, baseSha } = await repositoryOwner().syncWorktree({ ...wt, repoRoot: liveRoot })
   if (synced) productLog.info('worktree', 'Worktree synced from the live tree', { worktree: wt.id })
   wt.baseSha = baseSha
-  await provisionDependencies(liveRoot, wt.path)
+  await provisionDependencies(liveRoot, wt.path, undefined, {
+    background: opts.backgroundInstall || dependenciesInstalling(wt.path)
+  })
   return { synced }
 }
 
@@ -110,9 +123,14 @@ export async function completeTurn(
   liveRoot: string,
   wt: Worktree,
   message: string,
-  opts: { land?: boolean } = {}
+  opts: { land?: boolean; keepHistory?: boolean } = {}
 ): Promise<TurnOutcome> {
-  return repositoryOwner().completeTurn({ ...wt, repoRoot: liveRoot }, message, opts.land !== false)
+  return repositoryOwner().completeTurn(
+    { ...wt, repoRoot: liveRoot },
+    message,
+    opts.land !== false,
+    opts.keepHistory
+  )
 }
 
 /** Automatic reconciliation only handles existing regular text files. Binary,

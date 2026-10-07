@@ -48,7 +48,8 @@ export interface RepositoryOwner {
   completeTurn(
     wt: OwnedWorktree,
     message: string,
-    land: boolean
+    land: boolean,
+    keepHistory?: boolean
   ): Promise<{
     outcome: 'noop' | 'merged' | 'parked'
     files: string[]
@@ -65,6 +66,13 @@ export interface RepositoryOwner {
   stageResolve(
     wt: OwnedWorktree
   ): Promise<{ conflicted: string[]; files: string[]; clean: boolean; baseSha: string }>
+  /** Merge a fetched publish base into this chat branch, keeping both parents. */
+  gitSyncBase(
+    wt: OwnedWorktree,
+    ref: string
+  ): Promise<{ merged: boolean; conflicted: string[]; head: string }>
+  gitMergeContinue(wt: OwnedWorktree): Promise<{ head: string }>
+  gitMergeAbort(wt: OwnedWorktree): Promise<{ head: string }>
   discardParked(wt: OwnedWorktree): Promise<void>
   removeWorktree(wt: OwnedWorktree, keepBranch: boolean, intent: RemoveIntent): Promise<void>
   /** Idle cleanup: removes a clean checkout; a dirty one stays, its work at a recovery ref. */
@@ -88,10 +96,15 @@ export interface RepositoryOwner {
     root: string,
     files: string[],
     title: string,
-    body?: string
+    body?: string,
+    mergeParent?: string
   ): Promise<{ committed: boolean; sha?: string; files: string[] }>
   checkout(root: string, branch: string): Promise<BranchResult>
   switchBranch(root: string, branch: string): Promise<BranchResult>
+  /** Other local branches holding landed chat commits the checkout lacks (LKM-185, read only). */
+  strandedLandings(root: string): Promise<StrandedLandings>
+  /** Explicit user intent: merges `branch`, still at `tip`, into the checked-out branch. */
+  restoreLandings(root: string, branch: string, tip: string): Promise<RestoredLandings>
   /** Operations a previous service left unfinished, with the recovery refs that hold their work. */
   status(): Promise<RepositoryStatus>
   /** The recovery refs in `roots` and in the journal's repositories (read only). */
@@ -125,6 +138,18 @@ export interface RepositoryStatus {
   /** Open entries of an older journal, closed without a new report (they were reported at every earlier launch). */
   closedEarlier: number
   journal?: string
+}
+
+export interface StrandedLandings {
+  current: string | null
+  branches: Array<{ branch: string; tip: string; count: number }>
+}
+
+export interface RestoredLandings {
+  merged: boolean
+  files: string[]
+  conflictFiles: string[]
+  recoveryRefs: string[]
 }
 
 export interface RecoveryRepository {
