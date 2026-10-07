@@ -8,6 +8,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Each reply text segment is one selectable TextKit text view (`ChatTextView.swift`) over one attributed string (`ChatRichText.swift`): drag selection crosses paragraphs, lists, headings, code blocks and tables.
 - [x] Cmd-A selects the message; Cmd-C copies plain text with paragraph breaks, whole code blocks keep their fences; links, code Copy buttons, inline code and light/dark kept.
 - [x] `native-chat-text` unit fixture and `chat-text` smoke check (group `chat`) with light/dark captures; CHANGELOG line.
+## Branch menu aligned with the address (LKM-184)
+
+- [x] `BranchPopUpButton`/`BranchPopUpCell` (`ToolbarAddress.swift`): the branch title starts on the address text's left edge; the chevron follows it, tail truncation and the frame-sized click target kept.
+- [x] `toolbar-address` smoke check measures both rendered text origins (window x, |dx| <= 0.5 pt) and the title–chevron gap at three widths, with light and dark window captures at two; CHANGELOG line.
 
 ## Movable islands (LKM-180)
 
