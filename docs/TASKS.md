@@ -9,6 +9,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `test/chat-ghost-park.mjs` (Swift repository owner suite): cleared at turn start, chat open and agent tool; failed landing with an empty batch; lost batch rebuilt then Resolve lands; bare parked work rebuilt then Retry lands; a real conflict kept.
 - [x] `open_preview` waits up to 10 s for the real main-frame result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); a stopped server gives the Restart path (`src/main/preview-tools.ts`, `src/main/preview-loads.ts`).
 - [x] Preview loading pill, HTTP-error pill with Reload and a load-error overlay with Restart (`src/native/PreviewLoad.swift`); `test/preview-open.mjs` with a stub server answering 500 and a server that is down.
+## No ownerless pending items (LKM-195)
+
+- [x] Rules v31: never end a turn with an ownerless pending item; do it now, name a concrete user action, or a true "Trezi will X when Y". A change already in the preview is checked with `preview_screenshot`; a stale preview is neither "passed" nor "pending".
+- [x] Rules v31: releases end to end with Trezi's Git/publish tools (bump, publish, merge if allowed, tag unless the workflow tags); questions only for the version number or a merge approval the settings require. The surface-controls skill no longer says "report verification as pending".
+- [x] Post-landing check (`src/native/landing-check.ts`): after a chat turn's `merged` landing with files, wait for the reload, read console/page errors since the landing and capture the preview; post one compact row (`ChatLandingCheck.swift`) with the result and a thumbnail, or why it could not check. Off in the smoke suite's fixture landings.
+- [x] `test/rules.mjs`, unit `landing-check`, native `landing-check` smoke check (group `chat`, light/dark captures); CHANGELOG line.
+- [ ] Open (from "Post-turn preview check" below): a broken preview could also offer the LKM-151 recovery card (Revert / Fix with agent); the row only reports.
 ## Conflict markers never block a chat turn (LKM-194)
 
 - [x] A failed dependency install never refuses a turn: `syncFromLive` returns it as `dependencies`, `createWorktree` logs it, `agent:send` tells the agent and emits a `dependencies` event for the chat's card.

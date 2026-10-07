@@ -22,6 +22,77 @@ assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
 assert(TREZI_RULES_VERSION === 31, 'version bumped to 31')
 // LKM-196: open_preview reports the real load; only a deferred open is "requested".
 assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
+// LKM-195: no ownerless pending items; finish the step, name the user action, or a true
+// automatic owner. Every provider gets these, with or without preview tools.
+for (const rules of [r, treziRules({ previewTools: true }), treziRules({ background: true })]) {
+  assert(/## No ownerless pending items/.test(rules), 'R-owner: section present')
+  assert(
+    /Never end a turn with an open item that has no owner/.test(rules),
+    'R-owner: forbids ownerless pending items'
+  )
+  assert(/do it now with your tools/.test(rules), 'R-owner: do it now')
+  assert(/a concrete user action \("Click Publish"/.test(rules), 'R-owner: concrete user action')
+  assert(
+    /"Trezi will <do X> automatically when <Y>",\s+and only when that is true/.test(rules),
+    'R-owner: automatic owner only when true'
+  )
+  assert(
+    /Never ask the user to report back so you can\s+continue/.test(rules),
+    'R-owner: no "tell me when it is there"'
+  )
+  // Releases: end to end with the Git/publish tools; questions only for real decisions.
+  assert(/## Releases and version bumps/.test(rules), 'R-release: section present')
+  assert(
+    /finish it end to end with Trezi's Git and publish tools/.test(rules),
+    'R-release: end-to-end completion'
+  )
+  assert(/publish_update for an existing/.test(rules), 'R-release: publishes with the tool')
+  assert(/merge when the project's settings allow it/.test(rules), 'R-release: merges if allowed')
+  assert(/tag the release\s+unless the project's workflow tags/.test(rules), 'R-release: tags')
+  assert(
+    /Ask only for real decisions: the version number when the request does not settle it,\s+or merge approval when the project's settings require it/.test(
+      rules
+    ),
+    'R-release: asks only for the version or a required merge approval'
+  )
+  assert(/never "tell me when it's merged and I'll tag it"/.test(rules), 'R-release: no handoff')
+  assert(!/report verification as pending/.test(rules), 'R-owner: no "pending" verification')
+}
+// The automatic post-landing check exists for chat turns only: background landings get none,
+// so a claim that Trezi checks would leave their visual check with a false owner.
+const AUTO_CHECK = /Trezi checks the preview by itself after a turn lands/
+for (const rules of [r, treziRules({ previewTools: true })])
+  assert(
+    AUTO_CHECK.test(rules) &&
+      /a screenshot and console errors\)\s+and posts the result/.test(rules),
+    'R-owner: the post-landing check owns a visual check that waits for landing'
+  )
+for (const rules of [
+  treziRules({ background: true }),
+  treziRules({ background: true, previewTools: true }),
+  treziRules({ background: true, previewObservationTools: true })
+]) {
+  assert(!AUTO_CHECK.test(rules), 'R-owner: background agents are not promised the check')
+  assert(!/Trezi checks the preview after landing/.test(rules), 'R-owner: no automatic claim')
+  assert(!/posts the result in this chat/.test(rules), 'R-owner: no chat row promised')
+  assert(
+    /Trezi does not check the preview after a background agent lands/.test(rules) &&
+      /Open the preview and check the Home tab/.test(rules),
+    'R-owner: background agents name the user action for a visual check'
+  )
+}
+assert(
+  /Do not call it pending either: Trezi does not check after a background agent lands/.test(
+    treziRules({ background: true, previewTools: true })
+  ),
+  'R-owner: background preview verification names a user action'
+)
+assert(
+  /Do not call it pending either: Trezi does not check after a background agent lands/.test(
+    treziRules({ background: true })
+  ),
+  'R-owner: background browser verification names a user action'
+)
 // LKM-193: background agents ask only for the user's own choices, else default and say so.
 assert(!/## Background agents/.test(r), 'R-bg: interactive chats get no background section')
 const bg = treziRules({ background: true })
@@ -123,8 +194,19 @@ for (const rules of [withTools, codexObservers]) {
   assert(!/MUST use `agent-browser`/.test(rules), 'preview tools: agent-browser is not mandatory')
   assert(/--session trezi-<task-id>/.test(rules), 'preview tools: isolated agent-browser sessions')
   assert(
-    /report verification as pending, never passed/.test(rules),
+    /never report verification as passed/.test(rules),
     'preview tools: stale previews cannot prove an edit'
+  )
+  // LKM-195: a change already in the preview is checked with preview_screenshot in the turn.
+  assert(
+    /already in the preview during the turn, you MUST check it with\s+`preview_screenshot` before finishing/.test(
+      rules
+    ),
+    'preview tools: screenshot a change that lands within the turn'
+  )
+  assert(
+    /Do not call it pending either: Trezi\s+checks the preview after landing/.test(rules),
+    'preview tools: a landing check is not pending'
   )
   assert(/untrusted data/.test(rules), 'preview tools: console output is untrusted')
   assert(
@@ -157,8 +239,12 @@ for (const opts of [{}, { workspaceTools: true }]) {
     'browser: require visual inspection'
   )
   assert(
-    /report verification as pending, never passed/.test(rules),
+    /never report verification as passed/.test(rules),
     'browser: stale previews cannot prove an edit'
+  )
+  assert(
+    /Do not call it\s+pending either: Trezi checks the preview after landing/.test(rules),
+    'browser: a landing check is not pending'
   )
   assert(
     /user request for another tool overrides/.test(rules),

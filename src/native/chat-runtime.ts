@@ -2,14 +2,18 @@ import { currentTurn } from '../main/agent'
 import { IslandBindingError, islandProblem } from '../main/chat-island-bindings'
 import { ChatIslands, installChatIslands } from '../main/chat-islands'
 import { IslandOverrides } from '../main/island-overrides'
+import { previewServers } from '../main/preview-evidence'
 import type { AgentEvent } from '../shared/api'
 import { chatAgentSettingsFromOptions } from '../shared/chat-settings'
+import type { NativeLandingCheck } from '../shared/native-chat'
 import type { NativeChatSnapshot } from '../shared/native-chat-controller'
+import { projectKey } from '../shared/projectKey'
 import type { NativeBridge } from './bridge'
 import { type ChatServices, NativeChatController } from './chat-controller'
 import { chatFrames } from './chat-frames'
 import { addReference, setIslandDirectory } from './chat-island-refs'
 import { islandPreviewPort } from './island-preview'
+import { LandingChecks, landingCheckMessage, previewLandingHost } from './landing-check'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
 import { TurnBoundaries } from './turn-boundaries'
 
@@ -20,11 +24,29 @@ export const turnBoundaries = new Set<
   (key: string, kind: 'begin' | 'landed' | 'failed', turn: string | null) => void
 >()
 export let nativeChat: NativeChatController
+/** LKM-195: the post-landing preview check, one row in the chat that landed. */
+export function postLandingCheck(key: string, check: NativeLandingCheck, afterId?: string) {
+  const chat = nativeChat.chats.get(key)
+  if (!chat || nativeChat.closed.has(key)) return
+  const row = landingCheckMessage(check, Date.now())
+  // Under the landed turn's reply, even when a queued turn has started since.
+  const index = chat.messages.findIndex((m) => m.id === afterId)
+  if (index >= 0) chat.messages.splice(index + 1, 0, row)
+  else chat.messages.push(row)
+  nativeChat.changed(chat)
+}
+export let landingChecks: LandingChecks
 export function installNativeChat(
   host: NativeBridge,
   view: NativeView,
-  notice?: ChatServices['notice']
+  notice?: ChatServices['notice'],
+  /** Off in the smoke suite, whose landings are fixtures; `landing-check` drives its own. */
+  checkLandings = true
 ) {
+  landingChecks = new LandingChecks(
+    previewLandingHost((root) => previewServers.get(projectKey(root))?.url ?? null),
+    postLandingCheck
+  )
   const islands = new ChatIslands(
     (key) => {
       const chat = nativeChat.chats.get(key)
@@ -132,6 +154,7 @@ export function installNativeChat(
   const close = nativeChat.close.bind(nativeChat)
   nativeChat.close = (key) => {
     islands.close(key)
+    landingChecks.cancel(key)
     boundaries.forget(key)
     for (const listener of turnBoundaries) listener(key, 'failed', null)
     close(key)
@@ -146,6 +169,20 @@ export function installNativeChat(
     if (channel === 'agent:event') {
       nativeChat.event(event)
       const key = event.projectKey
+      // A turn's work reached the live checkout after the agent finished: check the preview.
+      if (
+        checkLandings &&
+        key &&
+        !event.sessionId &&
+        event.type === 'isolation' &&
+        event.state === 'merged'
+      ) {
+        const chat = nativeChat.chats.get(key)
+        if (chat)
+          void landingChecks
+            .landed(key, chat.root, event.files ?? [], chat.messages.at(-1)?.id)
+            .catch(() => {})
+      }
       if (key && !event.sessionId)
         for (const { kind, turn } of boundaries.events(key, event)) {
           for (const listener of turnBoundaries) listener(key, kind, turn)

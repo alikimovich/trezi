@@ -435,7 +435,8 @@ async function main() {
   const chatController = installNativeChat(
     host!,
     mainView,
-    networkVolumeNote(preferences, reportPreferences)
+    networkVolumeNote(preferences, reportPreferences),
+    !testing
   )
   // LKM-151: a compile/parse error in a file the last turn touched gets Trezi's own recovery card.
   runtimeOwner.onLog((root, line) => chatController.devServerLog(root, line))
