@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 29, 'version bumped to 29')
+assert(TREZI_RULES_VERSION === 30, 'version bumped to 30')
 // LKM-193: background agents ask only for the user's own choices, else default and say so.
 assert(!/## Background agents/.test(r), 'R-bg: interactive chats get no background section')
 const bg = treziRules({ background: true })
@@ -27,6 +27,11 @@ assert(/## Background agents/.test(bg), 'R-bg: background section present')
 assert(/only when a choice is truly the user's/.test(bg), 'R-bg: ask only for real choices')
 assert(/reasonable default/.test(bg) && /name each choice/.test(bg), 'R-bg: default and report')
 assert(r.includes(`v${TREZI_RULES_VERSION}`), 'rules carry the version marker')
+assert(/closing a turn/i.test(r), 'closing-a-turn rule present')
+assert(
+  /do not announce that the preview will reload/i.test(r),
+  'agent must not announce preview reloads'
+)
 assert(r.includes('before scaffolding or'), 'new projects ask about unresolved setup choices')
 assert(r.includes('after these files successfully land'), 'environment refresh follows landing')
 // v3 naming — the product is Trezi in the rule text now.
