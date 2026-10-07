@@ -75,6 +75,8 @@ const CALLS = {
   preview_console: {},
   preview_viewport: { preset: 'mobile' },
   open_preview: { path: '/helper-route' },
+  reload_preview: { hard: true },
+  restart_dev_server: { cleanCache: true },
   open_code: { file: 'shadow.js', startLine: 1, endLine: 2 },
   chat_island: island,
   workspace_state: {},

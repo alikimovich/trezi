@@ -47,6 +47,7 @@ import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
+import { checkToolbarMore } from './smoke-toolbar-more'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -868,6 +869,13 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreAgentPreview(page)
+      }
+    },
+    {
+      name: 'toolbar-more',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkToolbarMore(host, page)
       }
     },
     {

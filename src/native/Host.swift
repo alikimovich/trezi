@@ -220,11 +220,13 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "load":
             guard let raw = c["url"] as? String, let url = URL(string: raw), let view = view else { return }
             targets[name] = url
-            ProductLog.info("preview", "Preview load \(Host.logURL(url))")
-            view.load(URLRequest(url: url))
+            let hard = c["hard"] as? Bool == true
+            ProductLog.info("preview", "Preview load \(Host.logURL(url))\(hard ? " without cache" : "")")
+            if hard { PreviewCache.reload(view, url: url) } else { view.load(URLRequest(url: url)) }
         case "reload":
-            ProductLog.info("preview", "Preview reload \(Host.logURL(view?.url))")
-            view?.reload()
+            let hard = c["hard"] as? Bool == true
+            ProductLog.info("preview", "Preview reload \(Host.logURL(view?.url))\(hard ? " without cache" : "")")
+            if hard, let view { PreviewCache.reload(view, url: nil) } else { view?.reload() }
             reply(id)
         case "bounds":
             if name == "preview" { nativeLayout.layout(); return }

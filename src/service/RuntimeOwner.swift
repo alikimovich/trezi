@@ -87,10 +87,11 @@ final class RuntimeOwner: @unchecked Sendable {
                 }
             case ("info", "read"): answer(frame, .succeeded(info(try Self.root(Self.fields(frame, ["root"])))))
             case ("start", "mutation"):
-                let body = try Self.fields(frame, ["root", "command"], optional: ["framework"])
+                let body = try Self.fields(frame, ["root", "command"], optional: ["framework", "cleanCache"])
                 guard let command = body["command"]?.text, command.count <= 65_536, !command.contains(0),
                       body["framework"].map({ ($0.text?.count ?? 65) <= 64 }) ?? true else { throw ServiceContractFailure.invalidRequest }
-                start(frame, root: try Self.root(body), command: command.string, framework: body["framework"]?.text?.string)
+                start(frame, root: try Self.root(body), command: command.string, framework: body["framework"]?.text?.string,
+                      cleanCache: body["cleanCache"] == .bool(true))
             case ("stop", "mutation"): stop(frame, root: try Self.root(Self.fields(frame, ["root"])))
             case ("install", "mutation"): install(frame, root: try Self.root(Self.fields(frame, ["root"])))
             case ("stopAll", "mutation"):
@@ -119,7 +120,7 @@ final class RuntimeOwner: @unchecked Sendable {
 
     // MARK: Start
 
-    private func start(_ frame: PipeFrame, root: String, command: String, framework: String?) {
+    private func start(_ frame: PipeFrame, root: String, command: String, framework: String?, cleanCache: Bool = false) {
         let key = Self.key(root), generation = bump(key)
         let previous = servers.removeValue(forKey: key)
         previous?.readiness?.settle(.failed(.cancelled, Self.cancelled))
@@ -127,7 +128,27 @@ final class RuntimeOwner: @unchecked Sendable {
         work.async {
             // A restart never overlaps its predecessor: the old group is gone first.
             if let previous { self.retire(previous) }
+            if cleanCache { self.clearDependencyCaches(root, framework: framework) }
             self.queue.async { self.launch(frame, root: root, key: key, command: command, framework: framework, generation: generation) }
+        }
+    }
+
+    /// LKM-197: caches built from `node_modules` that a start after a dependency change
+    /// must not reuse. Vite (and SvelteKit, Astro, …) pre-bundles dependencies into
+    /// `node_modules/.vite` and only re-checks at startup against the lockfile; Next keeps
+    /// its dev build cache in `.next/cache`. Only caches: nothing the project wrote itself.
+    static func dependencyCaches(framework: String?) -> [String] {
+        framework == "next" ? ["node_modules/.vite", ".next/cache"] : ["node_modules/.vite"]
+    }
+
+    private func clearDependencyCaches(_ root: String, framework: String?) {
+        for relative in Self.dependencyCaches(framework: framework) {
+            let path = root + "/" + relative
+            guard (try? FileManager.default.attributesOfItem(atPath: path)) != nil else { continue }
+            do {
+                try FileManager.default.removeItem(atPath: path)
+                log(root, "Cleared the dependency cache \(relative).")
+            } catch { log(root, "Could not clear the dependency cache \(relative): \(error.localizedDescription)") }
         }
     }
 
@@ -424,11 +445,14 @@ final class RuntimeOwner: @unchecked Sendable {
     static func key(_ root: String) -> String { WorkspaceDocument.projectKey(JSText(root)).string }
 
     /// Exactly these body fields (plus `optional`), each a string.
+    /// The only fields that are booleans rather than text.
+    static let flags: Set<String> = ["cleanCache"]
     static func fields(_ frame: PipeFrame, _ required: Set<String>, optional: Set<String> = []) throws -> [String: JSValue] {
         var fields: [String: JSValue] = [:]
         for (name, value) in frame.body {
             let key = name.string
-            guard required.union(optional).contains(key), fields[key] == nil, value.text != nil else { throw ServiceContractFailure.invalidRequest }
+            guard required.union(optional).contains(key), fields[key] == nil,
+                  value.text != nil || Self.flags.contains(key) && (value == .bool(true) || value == .bool(false)) else { throw ServiceContractFailure.invalidRequest }
             fields[key] = value
         }
         guard required.isSubset(of: Set(fields.keys)) else { throw ServiceContractFailure.invalidRequest }

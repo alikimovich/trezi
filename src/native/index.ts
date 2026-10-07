@@ -84,6 +84,7 @@ import { servicePlatform } from './platform-service'
 import { servicePreferences } from './preferences-service'
 import { installPreviewLoads, loadErrorStatus } from './preview-load-runtime'
 import { NativePreviewRecovery } from './preview-recovery'
+import { installPreviewRefresh } from './preview-refresh'
 import { NativePreviewSupervisor } from './preview-supervisor'
 import { serviceProjectMemory } from './project-memory-service'
 import { serviceProvider } from './provider-service'
@@ -670,6 +671,9 @@ async function main() {
     }
   )
   installPreviewLoads(host, workspaceController, shellController)
+  installPreviewRefresh(host, workspaceController, (error) =>
+    activityController.append(String(error), 'error')
+  )
   const renderWorkspace = workspaceController.services.render
   workspaceController.services.render = (state) => {
     renderWorkspace(state)

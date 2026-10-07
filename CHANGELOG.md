@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- The preview toolbar's … menu (windows 1000 pt or wider) has Reload Without Cache and Restart Dev Server (clean cache); agents get `reload_preview` (with `hard`) and `restart_dev_server` (with `cleanCache`), and `open_preview` says whether the page's CSS/JS matches what the dev server serves now (LKM-197).
 - Agents can resolve a conflicting pull request with Trezi's Git merge tools, keep the two-parent merge in the published branch, and choose Managed or Full Agent Git access in Settings (LKM-188).
 - Publish offers Resolve with agent when a pull request has merge conflicts (LKM-188).
 - Native macOS app: a Swift/AppKit chat and shell beside the project's live preview in system WebKit, started with `open -a Trezi` or `trezi`.
@@ -34,6 +35,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
+- The preview no longer keeps old CSS after a dependency upgrade. When package.json or a lockfile lands, after an install, or when an installed dependency's version changes, Trezi shows "Dependencies changed — restarting preview…", restarts the dev server with a clean dependency cache (Vite's `node_modules/.vite`, Next's `.next/cache`) and reloads the preview bypassing caches on the same page (LKM-197).
 - A chat no longer stays "parked" with nothing to land. At chat open, at each turn start and when the agent checks the workspace, Trezi clears a park whose changes already reached the project, and rebuilds a park that lost its batch so Resolve and Retry work again (LKM-196).
 - `open_preview` reports what really happened. It waits up to 10 s and returns the final URL, the HTTP status, any load error, the dev-server state, console errors and a screenshot; a stopped dev server tells the agent to have you press Restart. While a page opens the preview shows a loading pill. An HTTP error page shows an error pill with Reload, and a page that cannot load shows an error with Restart instead of a blank white preview (LKM-196).
 - A chat no longer refuses every message when its dependencies cannot install. The turn starts, the agent is told why, and the chat shows the reason. Unresolved conflict markers in package.json or a lockfile skip the install and show "Conflicts in package.json" with Show conflict and Resolve with agent, which suggests keeping the higher version when both sides bumped it. A Publish that hits a merge conflict now leaves the project unchanged, keeps both sides on recovery refs and offers Resolve with agent, instead of leaving conflict markers behind (LKM-194).

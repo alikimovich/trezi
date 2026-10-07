@@ -272,6 +272,33 @@ console.log(
       .filter((name) => name.startsWith('devserver:') && name !== 'devserver:info'),
     ['devserver:stop', 'devserver:start']
   )
+  const lastStart = () => calls.slice(start).find((call) => call[0] === 'devserver:start')[1]
+  const lastLoad = () => calls.slice(start).find((call) => call[0] === 'preview:load')
+  assert.ok(!('cleanCache' in lastStart()), 'a config change keeps the dependency cache')
+  assert.equal(lastLoad().length, 2, 'and reloads normally')
+  // LKM-197: a dependency change already installed (the watch) restarts with clean
+  // caches, says so, and reloads past WebKit's caches on the route it showed.
+  start = calls.length
+  serving = true
+  const statuses = renders.length
+  await controller.refreshEnvironment(key, undefined, true)
+  assert.ok(
+    calls.slice(start).every((call) => call[0] !== 'devserver:install'),
+    'nothing is reinstalled'
+  )
+  assert.equal(lastStart().cleanCache, true)
+  assert.deepEqual(lastLoad().slice(2), [{ hard: true, keepPath: true }])
+  assert.ok(
+    renders
+      .slice(statuses)
+      .some((r) => r.status.label === 'Dependencies changed — restarting preview…'),
+    'the preview says why it restarts'
+  )
+  start = calls.length
+  serving = true
+  await controller.command({ type: 'restart', key, cleanCache: true })
+  assert.equal(lastStart().cleanCache, true, 'the manual clean restart')
+  assert.deepEqual(lastLoad().slice(2), [{ hard: true, keepPath: true }])
   serving = false
   installing = undefined
   console.log(

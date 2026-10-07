@@ -73,6 +73,8 @@ const requiredTools = [
   'project_ui_catalog',
   'compose_project_ui',
   'open_preview',
+  'reload_preview',
+  'restart_dev_server',
   'open_code'
 ]
 

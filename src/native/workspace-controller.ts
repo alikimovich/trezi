@@ -203,14 +203,18 @@ export class NativeWorkspaceController {
       await work(entry)
     })
   }
-  async refreshEnvironment(key: string, files?: string[]) {
+  /** `installed`: the dependencies already changed on disk (an install ran), so the
+   *  restart only cleans the caches (LKM-197). */
+  async refreshEnvironment(key: string, files?: string[], installed = false) {
     const entry = this.state.projects.find((p) => p.key === key)
     if (!entry) return
-    const changes = files ? environmentChanges(files) : { restart: true, install: true }
+    const changes = files ? environmentChanges(files) : { restart: true, install: !installed }
     entry.environmentRevision = (entry.environmentRevision ?? 0) + 1
     entry.dependenciesPending = entry.dependenciesPending || changes.install
     this.changed()
-    if (this.active?.key === key) await this.command({ type: 'restart', key })
+    const clean = changes.install || installed
+    if (this.active?.key === key)
+      await this.command({ type: 'restart', key, ...(clean ? { cleanCache: 'dependencies' } : {}) })
   }
   async command(command: NativeWorkspaceCommand) {
     if (command.type === 'attach') {
@@ -237,6 +241,7 @@ export class NativeWorkspaceController {
         entry.url &&
         !entry.launchSpec &&
         !command.command &&
+        !command.cleanCache &&
         this.state.loadedKey === entry.key
       ) {
         await this.services.invoke('preview:load', entry.url)
@@ -250,7 +255,11 @@ export class NativeWorkspaceController {
         )
       })
       if (this.intent !== intent || this.closing.has(entry.key)) return
-      return this.select(entry.key, command.command, true)
+      const clean =
+        command.cleanCache === 'dependencies'
+          ? 'Dependencies changed — restarting preview…'
+          : command.cleanCache && 'Restarting ' + entry.name + ' with a clean cache…'
+      return this.select(entry.key, command.command, true, clean || undefined)
     }
     const entry = this.find(command.key),
       intent = ++this.intent
@@ -373,10 +382,12 @@ export class NativeWorkspaceController {
     this.adopt()
     await this.select(key, command)
   }
-  async select(key: string, command?: string, restart = false) {
+  /** `clean` (LKM-197): the busy label of a restart that drops the dependency caches and
+   *  reloads the preview past WebKit's, on the route it showed. */
+  async select(key: string, command?: string, restart = false, clean?: string) {
     const entry = this.find(key),
       intent = ++this.intent
-    this.state.status = { kind: 'busy', label: 'Opening ' + entry.name + '…' }
+    this.state.status = { kind: 'busy', label: clean ?? 'Opening ' + entry.name + '…' }
     // Another project hides the chat until it has opened; a restart of this one keeps it.
     if (this.state.loadedKey !== key) {
       this.state.loadedKey = null
@@ -460,7 +471,7 @@ export class NativeWorkspaceController {
             await this.services.invoke('devserver:install', entry.root)
             entry.dependenciesPending = false
             if (current()) {
-              this.state.status = { kind: 'busy', label: 'Starting ' + entry.name + '…' }
+              this.state.status = { kind: 'busy', label: clean ?? 'Starting ' + entry.name + '…' }
               this.changed()
             }
           }
@@ -471,7 +482,10 @@ export class NativeWorkspaceController {
                   root: entry.root,
                   ...(spec.customCommand ? { command: spec.command } : {})
                 })
-              : await this.services.invoke('devserver:start', spec)
+              : await this.services.invoke('devserver:start', {
+                  ...spec,
+                  ...(clean ? { cleanCache: true } : {})
+                })
           entry.url = server.url
           entry.launchSpec = server.attached ? null : spec
           entry.environmentRevision = 0
@@ -493,7 +507,7 @@ export class NativeWorkspaceController {
       if (!current()) return
       await this.services.invoke(
         entry.url ? 'preview:load' : 'preview:reset',
-        ...(entry.url ? [entry.url] : [])
+        ...(entry.url ? [entry.url, ...(clean ? [{ hard: true, keepPath: true }] : [])] : [])
       )
       if (!current()) return
       this.state.status = entry.url

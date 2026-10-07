@@ -1,0 +1,14 @@
+{
+  "name": "trezi-dependency-refresh-vite",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "ui": "file:../ui"
+  },
+  "devDependencies": {
+    "vite": "6.3.5"
+  }
+}

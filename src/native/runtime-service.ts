@@ -34,7 +34,13 @@ export class RuntimeServiceError extends Error {
 /** The managed project runtime, owned by the Swift service (S06). */
 export interface ProjectRuntime {
   detect(root: string): Promise<DetectedProject>
-  start(opts: { root: string; command: string; framework?: Framework }): Promise<RunningDevServer>
+  /** `cleanCache` (LKM-197): the owner removes the dependency caches before it launches. */
+  start(opts: {
+    root: string
+    command: string
+    framework?: Framework
+    cleanCache?: boolean
+  }): Promise<RunningDevServer>
   stop(root: string): Promise<void>
   info(root: string): Promise<{ running: boolean; server?: RunningDevServer }>
   /** Runs the project's own package manager install; false when there is no package.json. */
@@ -162,8 +168,13 @@ export function serviceRuntime(
 
   return {
     detect: (root) => request('detect', { root }),
-    start: ({ root, command, framework }) =>
-      request('start', { root, command, ...(framework ? { framework } : {}) }),
+    start: ({ root, command, framework, cleanCache }) =>
+      request('start', {
+        root,
+        command,
+        ...(framework ? { framework } : {}),
+        ...(cleanCache ? { cleanCache: true } : {})
+      }),
     stop: async (root) => {
       await request('stop', { root })
     },
