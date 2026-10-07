@@ -116,10 +116,18 @@ export async function checkChatGate(
   // LKM-152's automatic open happens once per event kind per process: start from a hidden,
   // empty, unread-free Activity that has not auto-opened yet, whatever ran before this check.
   host.emit('activity-action', { action: 'reset' })
-  await until(async () => {
-    const activity = await host.request('activityInspect')
-    return !activity.visible && activity.count === 0
-  }, 'Activity reset')
+  await until(
+    async () => {
+      const activity = await host.request('activityInspect')
+      return !activity.visible && activity.count === 0
+    },
+    'Activity reset',
+    30000,
+    async () => {
+      const { text, ...activity } = await host.request('activityInspect')
+      return { ...activity, tail: String(text).slice(-300) }
+    }
+  )
   assert.equal(nativeWorkspace.state.loadedKey, first.key, 'The opened project is the loaded one')
   const loaded = await captureChatGate(host, artifacts, 'loaded', true)
   const root = join(fixture, '../Folder Gamma')

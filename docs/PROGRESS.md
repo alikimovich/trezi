@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-202 repair: Activity count after a hidden render (chat-gate retry)
+
+- **Symptom.** The full native run failed `chat-gate` with "Activity reset did not settle". Its artifacts show the check passed its first attempt's loaded and failed-open captures, so this was the runner's one focus-loss retry (`smoke-runner.ts`): the first attempt had left Activity open with "Could not open Folder Gamma", and the retry's `activity-action reset` could not bring `activityInspect.count` back to 0.
+- **Cause.** `NativeActivity.update` (`src/native/Activity.swift`) returned early for `visible: false` before it touched `count`, `fullText` or the text view, so a hidden Activity reported the lines of its last visible state. Pre-existing, not from the Dreamer code (nothing in LKM-202 writes to Activity).
+- **Fix.** A hidden state now applies its lines first (`show(lines)`), then hides the window; the visible path is unchanged. `chat-gate`'s Activity-reset wait keeps its assertion and now reports the Activity state and tail when it times out. What lost focus during the first attempt is not in the kept log; it is not known.
+
 ## 2026-10-07 — LKM-202 repair: Send route, `start`, exact v1 schema
 
 - **Send.** The recorded decision overrides the ticket text: `sendToAgentOs` makes one `POST <url>/proposals` with `{projectId, file, start}` (Bearer token). The `/api/projects/<id>/proposals` attempt and its 404 retry are gone (an earlier entry below describes them). A 404 is now an ordinary `Agent OS answered 404` error that falls back to the export like any other.
