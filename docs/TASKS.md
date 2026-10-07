@@ -85,6 +85,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
 - [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
 
+## Composer queue: no row icon, even spacing and alignment (LKM-198)
+
+- [x] `ComposerQueue`: list glyph removed; note line and rows 24 pt with centred content, 4 pt apart, 10 pt above the first and below the last visible line (44 / 72 / 100 pt for 1 / 2 / 3+ rows, +28 with a note); more than three rows scroll.
+- [x] Box 10 pt inside the composer's sides, tucked 24 pt (the composer's radius) under it at every count, radius 18; text at the placeholder's x, the "…" menu in Send's 30 pt column.
+- [x] Composer-layout fixture (heights, overlap, insets for 1/2/3/5 rows, with and without a note); chat smoke `checkQueueGeometry` (`src/native/smoke-queue.ts`) asserts measured SwiftUI frames (|top − bottom| ≤ 1, centred rows, text vs placeholder and menu vs Send ±1) for 1 row, 3 rows and the Resolve note at both widths, with light and dark `-queue-<label>-{light,dark}.png` captures and JSON; CHANGELOG line.
+
 ## Composer queue: no note for the normal waiting case (LKM-191)
 
 - [x] `queueNote` returns no note for a running turn or a landing, so the queue has no header row (34 pt for one row); Resolve, sign-in, paused and landing-error notes are unchanged.
