@@ -17,6 +17,7 @@ import type {
 } from '../shared/api'
 import { backgroundAgentOptions, describeAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
+import type { ChatRecordLookup } from '../shared/chat-islands'
 import { dependencyNotice } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
@@ -50,6 +51,7 @@ import {
   showParkedChat
 } from './chat-isolation'
 import { type PendingChat, PendingChats } from './chat-pending'
+import { chatRecordLookup } from './chat-record'
 import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
 import { TurnTracker } from './chat-turns'
 import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
@@ -86,6 +88,7 @@ import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
 import { registerProviderIpc } from './providers'
 import { generatePublishDescription } from './publish-description'
+import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createSessionStore, type SessionStore } from './sessions-store'
@@ -1236,6 +1239,30 @@ export function registerAgentIpc(
     }
   )
 
+  // LKM-199: a chat's owner record once its workspace is ready, for its island session,
+  // or why it has none. A new chat has none until its preparation ends; `wait` (default)
+  // waits for it without retrying, otherwise a pending chat answers `workspace_pending`.
+  ipcMain.handle(
+    'agent:chat-record',
+    (_e, sessionKey: string, wait = true): Promise<ChatRecordLookup> =>
+      chatRecordLookup(sessionKey, wait !== false, {
+        settled: (key) => pending.settled(key),
+        pending: (key) => pending.status(key),
+        pendingRoot: (key) => pending.list().find((chat) => chat.sessionKey === key)?.root,
+        session: (key) => {
+          const live = sessions.get(key)
+          return live
+            ? {
+                recordId: live.record.id ?? '',
+                root: live.record.projectRoot,
+                worktree: live.root
+              }
+            : undefined
+        },
+        isRepo: isRepoRoot
+      })
+  )
+
   // v9 resume — hand a past ("previous agent") SessionRecord back to a LIVE SDK
   // query via `options.resume` (Claude-only: the record's `sdkSessionId` doubles
   // as the "this backend supports resume" marker, since only claude.ts sets it).
@@ -1429,7 +1456,14 @@ export function registerAgentIpc(
   // canUseTool callback with the user's picks (or null = dismissed).
   ipcMain.handle(
     'agent:respond-question',
-    async (_e, id: string, answers: QuestionAnswers | null) => {
+    async (
+      _e,
+      id: string,
+      answers: QuestionAnswers | null
+    ): Promise<{ message?: string } | void> => {
+      // An ask_user question (LKM-199): the chat sends the answer as the user's next message.
+      const asked = answerAsked(id, answers)
+      if (asked) return asked
       const background = findSpawnWithQuestion(id)
       if (background) return resolveQuestion(background, id, answers)
       const chat = await conversation()

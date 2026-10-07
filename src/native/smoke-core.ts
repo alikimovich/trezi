@@ -18,6 +18,7 @@ import { smokeFocusHooks } from './smoke-focus'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import { checkInspectorIsland } from './smoke-inspector-island'
+import { checkIslandNewChat, restoreIslandNewChat } from './smoke-island-new-chat'
 import { checkChatIslands } from './smoke-islands'
 import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
@@ -292,6 +293,12 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkChatIslands(host, fixture, artifacts)
       }
+    },
+    {
+      name: 'island-new-chat',
+      dependsOn: ['chat-ready'],
+      run: () => checkIslandNewChat(host, fixture, wait, inspect),
+      cleanup: () => restoreIslandNewChat(fixture, clearComposer)
     },
     {
       name: 'composer',

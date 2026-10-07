@@ -1,5 +1,11 @@
 import { chatIslandControlPurposes, chatIslandGuidance } from '../shared/chat-island-guidance'
-import type { IslandRecord } from '../shared/chat-islands'
+import {
+  ISLAND_REASON,
+  ISLAND_RECOVERY,
+  type IslandBlocker,
+  type IslandReadiness,
+  type IslandRecord
+} from '../shared/chat-islands'
 import { newIslandName } from './chat-island-bindings'
 import { cloneDefinition, findIsland } from './chat-island-context'
 import { islandDefinition } from './chat-island-schema'
@@ -21,6 +27,9 @@ export async function islandTool(
   try {
     if (raw?.action === 'catalog')
       return {
+        // Answers at once (a pending workspace is reported, not awaited); a ready
+        // workspace without a session is attached here.
+        readiness: await readiness(islands, chat, sourceRoot),
         version: 1,
         blocks: ['group', 'point', 'shadow'],
         fields: ['number', 'toggle', 'text', 'color', 'select', 'bezier'],
@@ -30,8 +39,11 @@ export async function islandTool(
         bindingRules:
           'Existing literal bindings in one file, up to 12 fields. Jev selects/orders whole prepared blocks; keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. Default auto engine uses Jev if configured. A binding that is no longer a literal of its kind disables its field; show {id} resurfaces an island, clone {id, rebind?} makes a new one from it.'
       }
-    const session = islands.sessions.get(chat)
-    if (!session) throw new Error('This chat is not available for interactive islands yet.')
+    // A chat whose session is missing (a new chat's workspace was still being prepared)
+    // registers it here, waiting for the workspace (LKM-199).
+    const attached = await islands.attach(chat)
+    if ('blocked' in attached) return blockedAnswer(chat, attached.blocked)
+    const { session } = attached
     await session.opening
     if (raw?.action === 'read') {
       await islands.refresh(chat)
@@ -56,6 +68,39 @@ export async function islandTool(
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+/** Whether this chat can host islands now, with the identity of its workspace or why not. */
+async function readiness(
+  islands: ChatIslands,
+  chat: string,
+  worktree: string
+): Promise<IslandReadiness> {
+  const attached = await islands.attach(chat, false)
+  if ('session' in attached)
+    return {
+      ready: true,
+      chat,
+      root: attached.session.root,
+      recordId: attached.session.recordId,
+      worktree
+    }
+  return { ready: false, chat, ...blockedFields(attached.blocked) }
+}
+
+function blockedFields({ code, detail }: IslandBlocker) {
+  return {
+    code,
+    reason: ISLAND_REASON[code],
+    recovery: ISLAND_RECOVERY[code],
+    ...(detail ? { detail } : {})
+  }
+}
+
+/** A define/read/show/clone that cannot run: the reason code and its recovery step. */
+function blockedAnswer(chat: string, blocked: IslandBlocker) {
+  const fields = blockedFields(blocked)
+  return { error: `${fields.reason} ${fields.recovery}`, chat, ...fields }
 }
 
 async function defineIsland(

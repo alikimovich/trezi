@@ -19,7 +19,17 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 33, 'version bumped to 33')
+assert(TREZI_RULES_VERSION === 34, 'version bumped to 34')
+// LKM-199: a provider without a native question tool asks through ask_user, then waits;
+// a choice that is not the user's proceeds with a stated default.
+const asking = treziRules({ questionTool: true })
+assert(/## Asking the user \(ask_user\)/.test(asking), 'ask_user: section present')
+assert(/end your turn right after/.test(asking), 'ask_user: ends the turn to wait')
+assert(/proceed with a stated\s+default/.test(asking), 'ask_user: stated default otherwise')
+assert(!/ask_user/.test(r), 'ask_user: absent without the tool')
+const bgAsking = treziRules({ questionTool: true, background: true })
+assert(!/ask_user|AskUserQuestion/.test(bgAsking), 'ask_user: background agents never ask')
+assert(/you cannot ask them a question/.test(bgAsking), 'ask_user: background told to choose')
 // LKM-196: open_preview reports the real load; only a deferred open is "requested".
 assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
 // LKM-197: stale CSS/JS → a hard reload, then a clean restart; never a self-started server.

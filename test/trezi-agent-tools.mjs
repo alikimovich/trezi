@@ -119,6 +119,7 @@ try {
 
   const listed = await request('tools/list')
   assert.deepEqual(listed.result.tools.map((tool) => tool.name).sort(), [
+    'ask_user',
     'chat_island',
     'compose_project_ui',
     'git_merge_abort',
@@ -174,7 +175,14 @@ try {
   const captured = await previewCall('preview_screenshot')
   assert.deepEqual(
     captured.result.content,
-    [{ type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') }],
+    [
+      { type: 'image', mimeType: 'image/jpeg', data: jpeg.toString('base64') },
+      // LKM-199: every preview answer names the page it describes.
+      {
+        type: 'text',
+        text: 'Preview page: http://localhost:3000/page?view=full#intro (port 3000, route /page?view=full#intro).'
+      }
+    ],
     'real stdio transport preserves image content instead of stringifying it'
   )
   assert.equal(captured.result.structuredContent, undefined)
@@ -186,6 +194,8 @@ try {
     capture: async () => image,
     agent: {
       evaluate: async (code, world) => {
+        // Every preview tool first reads the page's own location (LKM-199).
+        if (code === 'location.href') return 'http://localhost:3000/'
         evaluated.push(world)
         return { element: '<h1>', styles: { 'box-shadow': 'rgb(0, 0, 0) 0px 2px 4px 0px' } }
       },

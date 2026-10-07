@@ -11,7 +11,10 @@ import {
   captureConsole,
   DIAGNOSTICS_LIMIT,
   gatherDiagnostics,
-  redact
+  redact,
+  SYSTEM_LOG_LINES,
+  SYSTEM_LOG_PREDICATE,
+  systemLogLines
 } from '../src/main/feedback-diagnostics.ts'
 import { buildFeedbackBody, SAFE_LIMIT } from '../src/shared/feedback-body.ts'
 
@@ -83,7 +86,10 @@ function sources(pingMs, output = {}) {
           return output.sample ?? `Sampling process 4242 for 3 seconds\nmain thread ${HOME}/x`
         if (command === 'git') return `## trezi/chat-1\n M ${HOME}/dev/app/a.ts`
         if (command === '/usr/bin/log')
-          return output.log ?? `TreziHost: Authorization: Bearer ${SECRETS[7]}`
+          return (
+            output.log ??
+            `Timestamp               Ty Process[PID:TID]\n2020-01-01 11:59:00.000 E  TreziHost[1:2] Authorization: Bearer ${SECRETS[7]}`
+          )
         throw new Error(`unexpected ${command}`)
       }
     }
@@ -121,13 +127,37 @@ assert.match(
 assert.ok(!text.includes('Too old'), 'lines older than 30 minutes are left out')
 assert.match(
   text,
-  /## System log, Trezi processes \(last hour\)\nTreziHost: Authorization: Bearer \[redacted\]/
+  /## System log, Trezi errors and faults \(last hour\)\n2020-01-01 11:59:00.000 E {2}TreziHost\[1:2\] Authorization: Bearer \[redacted\]/
 )
-assert.deepEqual(slow.calls.find(([c]) => c === '/usr/bin/log').slice(1, 4), [
+assert.deepEqual(slow.calls.find(([c]) => c === '/usr/bin/log').slice(1), [
   'show',
   '--last',
-  '1h'
+  '1h',
+  '--style',
+  'compact',
+  '--predicate',
+  SYSTEM_LOG_PREDICATE
 ])
+// LKM-199: errors and faults of Trezi's processes and subsystems only, a repeated message
+// collapsed, the newest SYSTEM_LOG_LINES lines kept.
+assert.match(SYSTEM_LOG_PREDICATE, /process BEGINSWITH "Trezi"/)
+assert.match(SYSTEM_LOG_PREDICATE, /messageType == error OR messageType == fault/)
+const stamp = (i) => `2020-01-01 11:${String(i % 60).padStart(2, '0')}:00.000 F  TreziHost[1:2]`
+const noisy = [
+  'Timestamp               Ty Process[PID:TID]',
+  `${stamp(0)} Publishing changes from within view updates`,
+  `${stamp(1)} Publishing changes from within view updates`,
+  `${stamp(2)} Publishing changes from within view updates`,
+  `${stamp(3)} Something else`,
+  ...Array.from({ length: 300 }, (_, i) => `${stamp(i)} distinct fault ${i}`)
+].join('\n')
+assert.deepEqual(systemLogLines(noisy.split('\n').slice(0, 5).join('\n')), [
+  `${stamp(0)} Publishing changes from within view updates (repeated 2 more times)`,
+  `${stamp(3)} Something else`
+])
+const capped = systemLogLines(noisy)
+assert.equal(capped.length, SYSTEM_LOG_LINES)
+assert.equal(capped.at(-1), `${stamp(299)} distinct fault 299`)
 
 // A responsive host is not sampled; a host that does not answer is.
 const fast = sources(5)

@@ -163,6 +163,7 @@ try {
   assert.ok(server, 'Codex connects to the Trezi MCP server')
   assert.ok(!server.toolsError, 'Codex can list the tools')
   for (const tool of [
+    'ask_user',
     'chat_island',
     'preview_screenshot',
     'preview_location',

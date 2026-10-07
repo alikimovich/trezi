@@ -68,7 +68,8 @@ export const TREZI_TOOLS = [
   'git_merge_continue',
   'git_merge_abort',
   'pr_status',
-  'publish_update'
+  'publish_update',
+  'ask_user'
 ] as const
 
 /** Tools a background (comment) session is not granted, and what it is told instead. */
@@ -77,7 +78,9 @@ export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
   chat_island: 'Background edits cannot create chat islands.',
   preview_viewport: 'Background edits cannot resize the user preview.',
   reload_preview: 'Background edits cannot reload the user preview.',
-  restart_dev_server: 'Background edits cannot restart the dev server.'
+  restart_dev_server: 'Background edits cannot restart the dev server.',
+  ask_user:
+    'Background agents cannot ask with ask_user. Make the reasonable default choice and name it in your final message.'
 }
 
 /** Trezi tools that never prompt (side-effect-free or validated by their own service). */

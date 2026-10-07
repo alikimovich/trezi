@@ -3,9 +3,9 @@ import { setupPrompt } from '../shared/setup-prompt'
 import { requestTarget } from './chat-agent-card'
 import type { NativeChatController } from './chat-controller'
 import { loginAction } from './chat-login'
-import { editQueued } from './chat-queue'
+import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
-import { assistant, begin, type Chat } from './chat-state'
+import { assistant, begin, type Chat, type Submission } from './chat-state'
 
 /** Card actions call application services directly; shell effects only refresh web panels. */
 export async function cardAction(
@@ -46,8 +46,12 @@ export async function cardAction(
       // A background agent's question (LKM-193) takes the same answer path as the chat's.
       const spawn = chat.context?.spawns.find((s) => s.question?.id === action.id)
       if (!spawn && !chat.questions.some((q) => q.id === action.id)) return
-      await invoke('agent:respond-question', action.id, action.answers ?? null)
+      const reply = (await invoke('agent:respond-question', action.id, action.answers ?? null)) as
+        | { message?: string }
+        | undefined
       chat.questions = chat.questions.filter((q) => q.id !== action.id)
+      // An ask_user answer (LKM-199) is the user's next message, queued while a turn runs.
+      if (reply?.message) sendReply(controller, chat, reply.message)
       if (spawn)
         effect({
           type: 'spawn',
@@ -195,5 +199,21 @@ export async function cardAction(
       if (result.url) await invoke('agent:tag-session', chat.root, { prUrl: result.url })
       break
     }
+  }
+}
+
+/** Sends `text` as the user's next message, leaving their composer draft alone. */
+function sendReply(controller: NativeChatController, chat: Chat, text: string) {
+  const submission: Submission = {
+    id: crypto.randomUUID(),
+    text,
+    attachments: [],
+    selection: null,
+    turn: chat.context?.turn ?? {}
+  }
+  if (sendBlock(chat) || chat.queue.length) chat.queue.push(submission)
+  else {
+    chat.paused = false
+    void controller.run(chat, submission)
   }
 }
