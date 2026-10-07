@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 33
+export const TREZI_RULES_VERSION = 34
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -29,6 +29,8 @@ export function treziRules(opts?: {
   projectMemory?: string
   /** A detached comment/visual-edit agent (LKM-193): when to ask and when to choose. */
   background?: boolean
+  /** The provider has no native question tool and asks through Trezi's ask_user (LKM-199). */
+  questionTool?: boolean
 }): string {
   const lines: string[] = [
     `# Trezi operating rules (v${TREZI_RULES_VERSION})`,
@@ -166,10 +168,28 @@ export function treziRules(opts?: {
       ``,
       `## Background agents`,
       `You are a background agent started from the preview: the user is not watching`,
-      `this conversation, and a question pauses you until they answer it on your card.`,
-      `Ask (AskUserQuestion) only when a choice is truly the user's and no reasonable`,
-      `default exists. Otherwise make the reasonable default choice, finish the change,`,
+      ...(opts.questionTool
+        ? [`this conversation, and you cannot ask them a question.`]
+        : [
+            `this conversation, and a question pauses you until they answer it on your card.`,
+            `Ask (AskUserQuestion) only when a choice is truly the user's and no reasonable`,
+            `default exists.`
+          ]),
+      `Otherwise make the reasonable default choice, finish the change,`,
       `and name each choice you made in your final message.`
+    )
+  } else if (opts?.questionTool) {
+    lines.push(
+      ``,
+      `## Asking the user (ask_user)`,
+      `When a choice is truly the user's (taste, scope, a trade-off only they can make) and`,
+      `no reasonable default exists, call ask_user with the question and two to four options.`,
+      `It shows a question card in this chat and returns at once: end your turn right after,`,
+      `with one short line saying what you are waiting for, and wait for the answer. It`,
+      `arrives as the user's next message. Do not choose for them or keep working on what the`,
+      `choice decides. When the choice is not the user's, do not ask: proceed with a stated`,
+      `default and name it in your final message. Never end a turn with a question only in`,
+      `your text ("let me know which you prefer"): use ask_user or choose.`
     )
   }
 

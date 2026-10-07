@@ -35,7 +35,7 @@ capabilities instead of assuming Claude, Codex, gateways, and Gemini are interch
 | On-demand native chat islands (`chat_island`) | Yes | Yes | Yes, through Codex | No |
 | Open mini code editor / highlight exact source | Yes | Yes | Yes, through Codex | No |
 | Trezi worktree control tools | No | Yes | Yes, through Codex | No |
-| Trezi question cards | Yes | No | No | No |
+| Trezi question cards | Yes (`AskUserQuestion`) | Yes (`ask_user`) | Yes, through Codex | No |
 | Trezi approve/deny cards | Yes | No SDK approval event | No SDK approval event | No |
 | Image input | Yes | Not wired | Not wired | Not wired |
 | Resume provider thread | Yes | Not wired | Not wired | No |
@@ -53,7 +53,15 @@ does not expose raw Git or discard/reset operations. Interactive tuning uses
 bridge rejects those actions. Islands validate source anchors in the agent's
 checkout and become editable after the source lands in the live project.
 Preview location and screenshot tools share the native capture implementation across
-Claude and Codex; screenshots are returned as MCP image content. Design calculators remain Claude-only;
+Claude and Codex; screenshots are returned as MCP image content. Every preview answer
+names the page it describes (URL, port, route), read from the page itself so an SPA
+route is current, and a chat's preview tools refuse while the user's preview shows
+another server than the chat project's dev server (LKM-199, `src/main/preview-page.ts`).
+Codex asks the user through `ask_user` (LKM-199, `src/main/question-tool.ts`): the same
+question card as Claude's `AskUserQuestion`, but the call returns at once (a tool call
+cannot wait for a person through the bridges' timeouts), the agent ends its turn, and
+the answer arrives as the user's next message. Background agents are not granted it;
+they choose a stated default. Design calculators remain Claude-only;
 question cards, resume, image transport, and background-agent support are separately
 declared because they have different lifecycle and security requirements.
 
@@ -153,7 +161,7 @@ New Project offers the deterministic React/Vite starter or an empty Git reposito
 for Next.js, Svelte, or a custom environment. Discussion choices submit a short
 planning request to the selected provider. Shared Trezi rules ask for unresolved
 project/environment choices before scaffolding; an explicit choice is not asked
-again. Claude can use its question cards; Codex and gateways ask in ordinary chat.
+again. Claude asks on question cards with AskUserQuestion; Codex and gateways with ask_user.
 The model's conversational behavior remains prompt-guided. Creating the empty
 repository itself does not install packages or choose a framework.
 

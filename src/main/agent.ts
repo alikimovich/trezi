@@ -86,6 +86,7 @@ import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
 import { registerProviderIpc } from './providers'
 import { generatePublishDescription } from './publish-description'
+import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createSessionStore, type SessionStore } from './sessions-store'
@@ -1236,6 +1237,17 @@ export function registerAgentIpc(
     }
   )
 
+  // LKM-199: a chat's owner record once its workspace is ready, for its island session.
+  // A new chat has none until its preparation ends; this waits for it (no retry).
+  ipcMain.handle(
+    'agent:chat-record',
+    async (_e, sessionKey: string): Promise<{ root: string; recordId: string } | null> => {
+      await pending.settled(sessionKey)
+      const record = sessions.get(sessionKey)?.record
+      return record?.id ? { root: record.projectRoot, recordId: record.id } : null
+    }
+  )
+
   // v9 resume — hand a past ("previous agent") SessionRecord back to a LIVE SDK
   // query via `options.resume` (Claude-only: the record's `sdkSessionId` doubles
   // as the "this backend supports resume" marker, since only claude.ts sets it).
@@ -1429,7 +1441,14 @@ export function registerAgentIpc(
   // canUseTool callback with the user's picks (or null = dismissed).
   ipcMain.handle(
     'agent:respond-question',
-    async (_e, id: string, answers: QuestionAnswers | null) => {
+    async (
+      _e,
+      id: string,
+      answers: QuestionAnswers | null
+    ): Promise<{ message?: string } | void> => {
+      // An ask_user question (LKM-199): the chat sends the answer as the user's next message.
+      const asked = answerAsked(id, answers)
+      if (asked) return asked
       const background = findSpawnWithQuestion(id)
       if (background) return resolveQuestion(background, id, answers)
       const chat = await conversation()

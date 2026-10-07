@@ -1,5 +1,6 @@
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
-import { capturePreview, getPreviewUrl } from './preview-state'
+import { describePage, previewPage } from './preview-page'
+import { capturePreview } from './preview-state'
 
 /** Every preview observer; each answers as MCP content (text or one image). */
 export const PREVIEW_OBSERVERS = [
@@ -14,25 +15,38 @@ export type PreviewObserver = (typeof PREVIEW_OBSERVERS)[number]
 export const isPreviewObserver = (action: unknown): action is PreviewObserver =>
   PREVIEW_OBSERVERS.includes(action as PreviewObserver)
 
-/** Read the user's current view on demand; this does not prove an edit has landed. */
+/**
+ * Read the user's current view on demand; this does not prove an edit has landed.
+ * `root` is the chat's project: the answer is refused while the preview shows another
+ * server, and otherwise ends with the page it describes (URL, port, route; LKM-199).
+ */
 export async function observeAgentPreview(
   action: PreviewObserver,
-  args: unknown = {}
+  args: unknown = {},
+  root?: string
 ): Promise<PreviewToolResult> {
+  const { page, refusal } = await previewPage(root)
+  if (refusal) return { content: [{ type: 'text', text: refusal }], isError: true }
   if (action === 'preview_location') {
-    const url = getPreviewUrl()
     return {
       content: [
         {
           type: 'text',
-          text: url
-            ? `The user's preview is currently showing ${url}.`
+          text: page
+            ? `The user's preview is currently showing ${page.url} (port ${page.port}, route ${page.route}).`
             : 'No project preview is open.'
         }
       ]
     }
   }
-  if (action !== 'preview_screenshot') return runPreviewAgentTool(action, args)
+  const result = await observe(action, args)
+  if (page && !result.isError) result.content.push({ type: 'text', text: describePage(page) })
+  return result
+}
+
+async function observe(action: PreviewObserver, args: unknown): Promise<PreviewToolResult> {
+  if (action !== 'preview_screenshot')
+    return runPreviewAgentTool(action as Exclude<PreviewObserver, 'preview_location'>, args)
   // An element-cropped capture (LKM-138) when a selector or point is given.
   const target = (args ?? {}) as { selector?: unknown; x?: unknown; y?: unknown }
   if (typeof target.selector === 'string' || (target.x !== undefined && target.y !== undefined))

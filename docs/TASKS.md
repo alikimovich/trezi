@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## New chats, preview page, Codex questions, feedback log noise (LKM-199)
+
+- [x] Island sessions register for every chat with a workspace: restore, new chat (after `agent:chat-record` waits for the preparation), first turn, provider switch, and lazily on the first `chat_island` call (`ChatIslands.ensure`, `src/native/chat-island-session.ts`); never "not available yet" for a chat with a workspace.
+- [x] Tests: unit `chat-island-new-chat` (real ChatIslands, stub owner, real chat controller); native check `island-new-chat` (group `islands`).
+- [x] Preview tools read the page's own location, name URL/port/route in every answer and refuse while the preview shows another server than the chat project's (`src/main/preview-page.ts`); unit `preview-page`.
+- [x] Codex gets `ask_user` (`src/main/question-tool.ts`): AskUserQuestion's card, returns at once, the answer is the next user message; foreground only; rules v34. Unit `ask-user`, policy golden and tool inventories.
+- [x] Feedback: identical repeated dev-server output lines dropped (`src/main/devserver-log.ts`); the system log section is errors/faults of Trezi processes and subsystems, repeats collapsed, 200 lines (`systemLogLines`).
+- [ ] Not verified against the reporter's diagnostics (GitHub #232/#233 were not readable from the worker): the preview mismatch cause (another server in the single preview view, or a lagging view URL) is inferred.
+- [ ] Background Codex agents cannot ask (`ask_user` is foreground-only, LKM-195 default rule); Gemini has no tools and no question card.
+
 ## Preview keeps old CSS after a dependency upgrade (LKM-197)
 
 - [x] Detect dependency changes: a landed package.json/lockfile change, an install by Trezi or the agent, and a changed `node_modules/<dep>/package.json` of a direct dependency (`src/native/dependency-watch.ts`, 2 s polls, two-poll confirmation).

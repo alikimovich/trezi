@@ -75,7 +75,8 @@ const requiredTools = [
   'open_preview',
   'reload_preview',
   'restart_dev_server',
-  'open_code'
+  'open_code',
+  'ask_user'
 ]
 
 export function treziMcpConfig(appRoot: string, registration: TreziAgentToolRegistration) {

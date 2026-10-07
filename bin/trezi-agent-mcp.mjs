@@ -169,4 +169,19 @@ server.registerTool('compose_project_ui', {
   inputSchema: { file: z.string(), prompt: z.string().optional(), candidates: z.array(z.object({ id: z.string(), description: z.string(), element: z.object({ type: z.string(), props: z.record(z.string(), z.unknown()) }), root: z.boolean().optional(), resource: z.string().optional() })).optional(), spec: z.object({ root: z.string(), elements: z.record(z.string(), z.object({ type: z.string(), props: z.record(z.string(), z.unknown()), children: z.array(z.string()) }).strict()) }).strict().optional() }
 }, async (args) => result(await invoke('compose_project_ui', args)))
 
+// LKM-199: the same question card as Claude's AskUserQuestion. It returns at once; the
+// answer arrives as the user's next message.
+server.registerTool('ask_user', {
+  description: "Ask the user a choice that is truly theirs, on a question card in this chat. Returns at once: then end your turn and wait; the answer arrives as the user's next message. When the choice is not the user's, do not ask: proceed with a stated default.",
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    questions: z.array(z.object({
+      question: z.string().describe('The full question sentence.'),
+      header: z.string().describe('A very short label (12 characters at most).'),
+      options: z.array(z.object({ label: z.string(), description: z.string().optional() })).min(2).max(4),
+      multiSelect: z.boolean().optional()
+    })).min(1).max(4)
+  }
+}, async (args) => result(await invoke('ask_user', args)))
+
 await server.connect(new StdioServerTransport())

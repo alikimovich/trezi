@@ -287,6 +287,9 @@ try {
   registerDevServerIpc(() => null, { handle: () => {} }, runtime)
   const privateOutput = 'error: source excerpt const password = secret-file-content-123'
   output('/repo', privateOutput)
+  // LKM-199: a status the server repeats every few seconds is logged once, then skipped.
+  for (let i = 0; i < 4; i++) output('/repo', 'polling for changes 12:00:0' + i)
+  output('/repo', 'compiled')
   notePreviewMessage('preview:picked')
   notePreviewMessage('preview:picked')
   notePreviewMessage('agent:send', true)
@@ -314,6 +317,8 @@ try {
   )
   assert.match(text, / info devserver output ready on http:\/\/localhost:3000/)
   assert.match(text, / info devserver output Dev server output kind=error chars=\d+/)
+  assert.equal(text.match(/Dev server output kind=output chars=28\n/g)?.length, 1)
+  assert.match(text, /Dev server output kind=output chars=8 skipped=3\n/)
   assert.ok(!text.includes('secret-file-content-123'))
   assert.match(
     text,

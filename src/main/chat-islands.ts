@@ -53,6 +53,12 @@ interface Queued {
   command: IslandCommand
   replaced: boolean
 }
+/** Where a chat's islands live: its project root and owner record (LKM-199). */
+export interface IslandLocation {
+  root: string
+  recordId: string
+  turn: () => number
+}
 export const ISLAND_CONFLICT_NOTICE =
   'This value changed in the source. The controls now show the source values.'
 /**
@@ -69,6 +75,9 @@ export class ChatIslands {
   private readonly given?: EditingOwner
   /** Shadow gestures shown in the preview, written once (LKM-140); without it every frame writes. */
   readonly overrides?: IslandOverrides
+  /** Finds a chat's record once its workspace is ready (a new chat's is prepared later). */
+  private readonly locate: (chat: string) => Promise<IslandLocation | null>
+  private locating = new Map<string, Promise<Session | undefined>>()
   constructor(
     readonly changed: (chat: string) => void,
     readonly select = selectControlCandidates,
@@ -76,11 +85,13 @@ export class ChatIslands {
       owner?: EditingOwner
       origin?: (chat: string) => string | null
       overrides?: IslandOverrides
+      locate?: (chat: string) => Promise<IslandLocation | null>
     } = {}
   ) {
     this.given = options.owner
     this.origin = options.origin ?? (() => null)
     this.overrides = options.overrides
+    this.locate = options.locate ?? (async () => null)
   }
   get owner(): EditingOwner {
     return this.given ?? editingOwner()
@@ -118,7 +129,29 @@ export class ChatIslands {
     this.sessions.set(chat, session)
     void this.refresh(chat)
   }
+  /**
+   * The chat's session, registered when it is missing (LKM-199): a new chat's record
+   * exists only once its workspace is prepared, so this waits for it. Undefined when the
+   * chat closed or has no record.
+   */
+  ensure(chat: string): Promise<Session | undefined> {
+    const known = this.sessions.get(chat)
+    if (known) return Promise.resolve(known)
+    let run = this.locating.get(chat)
+    if (run) return run
+    run = this.locate(chat)
+      .catch(() => null)
+      .then((found) => {
+        if (this.locating.get(chat) !== run) return this.sessions.get(chat)
+        this.locating.delete(chat)
+        if (found?.recordId) this.register(chat, found.root, found.recordId, found.turn)
+        return this.sessions.get(chat)
+      })
+    this.locating.set(chat, run)
+    return run
+  }
   close(chat: string) {
+    this.locating.delete(chat)
     cancelControlComposition(`island:${chat}`)
     this.overrides?.clearAll(`${chat}\n`)
     if (this.sessions.delete(chat)) void this.owner.islandsClose(chat).catch(() => {})
@@ -506,8 +539,9 @@ export function runChatIslandTool(
  */
 export async function chatIslandContext(chat: string, text = '') {
   if (!installed) return ''
-  await installed.refresh(chat)
-  const session = installed.sessions.get(chat)
+  // A new chat's first send registers its islands (LKM-199).
+  const session = await installed.ensure(chat)
+  if (session) await installed.refresh(chat)
   if (!session) return ''
   return islandMessageContext(
     session.records,

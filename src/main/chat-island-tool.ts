@@ -30,8 +30,10 @@ export async function islandTool(
         bindingRules:
           'Existing literal bindings in one file, up to 12 fields. Jev selects/orders whole prepared blocks; keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. Default auto engine uses Jev if configured. A binding that is no longer a literal of its kind disables its field; show {id} resurfaces an island, clone {id, rebind?} makes a new one from it.'
       }
-    const session = islands.sessions.get(chat)
-    if (!session) throw new Error('This chat is not available for interactive islands yet.')
+    // A chat whose session is missing (a new chat's workspace was still being prepared)
+    // registers it here, waiting for the workspace (LKM-199).
+    const session = await islands.ensure(chat)
+    if (!session) throw new Error('This chat is closed, so it cannot hold islands.')
     await session.opening
     if (raw?.action === 'read') {
       await islands.refresh(chat)

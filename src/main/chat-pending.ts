@@ -85,6 +85,11 @@ export class PendingChats {
     await entry.run
   }
 
+  /** Resolves once the chat's current preparation ends, either way; never retries it. */
+  async settled(sessionKey: string): Promise<void> {
+    await this.entries.get(sessionKey)?.run.catch(() => {})
+  }
+
   /** Close a pending chat; its preparation tears down what it made. */
   cancel(sessionKey: string): boolean {
     const entry = this.entries.get(sessionKey)
