@@ -79,6 +79,7 @@ const UNIT = [
   'native-chat-latest-settle',
   'native-smoke-wait',
   'native-chat-reveal',
+  'native-chat-text',
   'native-island-editing',
   'no-system-preferences',
   'chat-islands',

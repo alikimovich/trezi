@@ -446,7 +446,7 @@ private struct NativeMessageRow: View {
                 }
                 if let selection = message.selection { Text(selection.tag + selection.ident).font(.caption.monospaced()).foregroundStyle(.secondary) }
                 if let attachments = message.attachments, !attachments.isEmpty { SentAttachments(attachments: attachments, model: model) }
-                ForEach(Array(message.segments.enumerated()), id: \.offset) { _, segment in
+                ForEach(Array(message.segments.enumerated()), id: \.offset) { index, segment in
                     if let island = segment.island { NativeChatIsland(island: island, model: model) }
                     else if segment.kind == "tools" {
                         DisclosureGroup {
@@ -458,7 +458,7 @@ private struct NativeMessageRow: View {
                         }
                     } else if let text = segment.text {
                         if message.role == "user" { Text(text).textSelection(.enabled).font(ChatTypography.body).lineSpacing(ChatTypography.lineSpacing).fixedSize(horizontal: false, vertical: true) }
-                        else { ChatMarkdown(source: text, streaming: running).help(messageTime(segment.at ?? message.at)) }
+                        else { ChatMarkdown(source: text, streaming: running, identity: "\(message.id)#\(index)").help(messageTime(segment.at ?? message.at)) }
                     }
                 }
                 if message.role == "assistant" && (activity != nil || !running) {

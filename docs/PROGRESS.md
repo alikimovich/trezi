@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-186: select text across a whole chat message
+
+- **Why.** Each Markdown block was its own SwiftUI `Text` with `.textSelection`, so a selection stopped at every paragraph and Cmd-A selected one paragraph.
+- **One text view per segment.** `ChatRichText.swift` turns a reply's Markdown into one `NSAttributedString` (inline Markdown via `AttributedString`, code blocks as `NSTextBlock`s, tables as `NSTextTable`s) plus a block list. `ChatTextView.swift` is a non-editable TextKit 1 `NSTextView` that draws the rounded code/table backgrounds, places the code Copy buttons, sizes itself for SwiftUI (`sizeThatFits`) and replaces `StreamingText.swift`'s reveal with a fade of newly appended words (no blur; skipped under Reduce Motion). Selecting in one view clears the others.
+- **Copy.** `writeSelection` copies the shown text with blocks joined by blank lines; a wholly selected code block copies with its fence, a table as its Markdown source.
+- **Limits.** Selection spans one text segment: tool rows and other messages split it. Long code lines wrap instead of scrolling.
+- **Tests.** `test/native-chat-text.mjs` (unit, offscreen fixture: geometry, point drag, Copy, Select All, Copy buttons, streaming) and the `chat-text` smoke check (group `chat`): a point selection from the first paragraph to past the last code block, Copy through the responder chain into a private pasteboard, Select All and the code Copy button, captured in light and dark.
+
 ## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
 
 - `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.
