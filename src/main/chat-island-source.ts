@@ -22,7 +22,10 @@ export async function islandSource(root: string, record: IslandRecord) {
     base = await realpath(root)
     file = await realpath(resolve(root, shown))
   } catch {
-    throw new IslandBindingError(`${shown} no longer exists, so these controls can't edit it.`)
+    throw new IslandBindingError(
+      `${shown} no longer exists, so these controls can't edit it.`,
+      true
+    )
   }
   const rel = relative(base, file)
   if (
@@ -51,7 +54,8 @@ async function sourceValues(code: string, file: string, record: IslandRecord) {
     attributes = await jsxAttributeLiterals(code, file)
   } catch {
     throw new IslandBindingError(
-      `${record.manifest.file} doesn't parse right now; these controls wait until it does.`
+      `${record.manifest.file} doesn't parse right now; these controls wait until it does.`,
+      true
     )
   }
   return checkBindings(code, file, record, attributes)

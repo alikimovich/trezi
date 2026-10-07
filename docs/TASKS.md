@@ -14,6 +14,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Open: Open Chat could scroll to the cited turn, not only open the chat.
 - [ ] Open: once LKM-200's tool timing lands, read it instead of the `Tool step` lines.
 - [x] Repair: Send is one `POST <url>/proposals` `{projectId, file, start}` (no `/api/projects/…` route or 404 retry); Settings → Dreamer "When tasks are created" sets `start` (off by default); an unreachable Agent OS says it is reachable only from the same Mac and offers the export; the validator equals Agent OS's v1 schema (optional `generatedAt`/`effort`, string-or-object evidence); `docs/DREAMER.md` documents `bun run cli import-proposals` for another Mac.
+## Pending islands with planned bindings (LKM-201)
+
+- [x] `chat_island define {planned:true}` reserves a pending island before its literals exist; every define is validated before any wait or reservation and returns all problems (`islandProblems`, `code: 'invalid_definition'`).
+- [x] Pending → active: after the turn lands, the island activates once every binding resolves (`islandActivate` in `src/service/EditingIslands.swift`, landed values as `initial`); commands and `show` are refused while planned.
+- [x] Pending → failed: unresolved bindings (`plannedFailure`) or an unlanded turn disable it with the reason, so the island shows Recreate.
+- [x] Rules v35 and catalog guidance: readiness and preview identity first, only the relevant code, define early with `planned:true`.
+- [x] Tests: unit `chat-island-pending`, `rules`; CHANGELOG line.
+- [ ] No native smoke check drives a planned island yet; the disabled-with-Recreate row is the LKM-181 one (`chat-island-disabled.png`).
+
 ## New chats, preview page, Codex questions, feedback log noise (LKM-199)
 
 - [x] Island sessions register for every chat with a workspace: restore, new chat (after `agent:chat-record` waits for the preparation), first turn, provider switch, and lazily on the first `chat_island` call (`ChatIslands.ensure`, `src/native/chat-island-session.ts`); never "not available yet" for a chat with a workspace.

@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 - Dreamer: Trezi → Run Dreamer… reviews your recent chats and Trezi's log on this Mac (slow tools, repeated failures, retried requests) with your selected model and proposes improvements; Dreamer Proposals… lets you filter, edit and select them, then Copy as JSON, Export Dreamer Report… (a redacted zip) or Send to Agent OS (Settings → Dreamer), with an optional weekly run (LKM-202).
+- Agents can reserve a pending chat island before adding the source values it controls: the definition is checked at once, the island turns on after the turn lands and its values are found, and otherwise it shows why with Recreate (LKM-201).
 - The preview toolbar's … menu (windows 1000 pt or wider) has Reload Without Cache and Restart Dev Server (clean cache); agents get `reload_preview` (with `hard`) and `restart_dev_server` (with `cleanCache`), and `open_preview` says whether the page's CSS/JS matches what the dev server serves now (LKM-197).
 - Agents can resolve a conflicting pull request with Trezi's Git merge tools, keep the two-parent merge in the published branch, and choose Managed or Full Agent Git access in Settings (LKM-188).
 - Publish offers Resolve with agent when a pull request has merge conflicts (LKM-188).

@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 34, 'version bumped to 34')
+assert(TREZI_RULES_VERSION === 35, 'version bumped to 35')
 // LKM-199: a provider without a native question tool asks through ask_user, then waits;
 // a choice that is not the user's proceeds with a stated default.
 const asking = treziRules({ questionTool: true })
@@ -287,7 +287,37 @@ for (const rules of [withTools, codexControls]) {
     /Never substitute a separate panel/.test(rules),
     'Chat is the required control destination'
   )
+  // LKM-201: readiness and preview identity first, only the relevant code, define early.
+  assert(
+    /first call chat_island action:catalog and check its readiness;\s+when ready is false, follow its recovery and stop/.test(
+      rules
+    ),
+    'R-islands: catalog readiness first'
+  )
+  assert(/check the preview identity/.test(rules), 'R-islands: preview identity first')
+  assert(
+    /Inspect only the code that computes the requested values/.test(rules),
+    'R-islands: inspect only the relevant code'
+  )
+  assert(
+    /define the island early, before\s+editing source: action:define with planned:true/.test(rules),
+    'R-islands: define a planned island before editing source'
+  )
+  assert(
+    /planned binding resolves; otherwise the island shows the reason with Recreate/.test(rules),
+    'R-islands: pending island activates or shows why with Recreate'
+  )
 }
+assert(
+  /\(1\) call catalog and check readiness.*\(2\).*preview identity.*\(3\) Inspect only the code.*\(4\) Define the island early, before editing source: define with planned:true/.test(
+    chatIslandGuidance
+  ),
+  'Catalog guidance orders readiness, preview identity, focused inspection, early planned define'
+)
+assert(
+  !/Define controls before long checks/.test(chatIslandGuidance),
+  'The old late-define hint is replaced'
+)
 assert(!/spring_to_css/.test(codexControls), 'Codex does not advertise Claude-only calculators')
 // R5 (spring) — spring_to_css rides with the Claude-only in-process tools too.
 assert(/spring_to_css/.test(withTools), 'previewTools: teaches spring_to_css')
