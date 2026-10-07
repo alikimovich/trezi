@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-06 — LKM-190: chat text scrolls behind the composer
+
+- **Cause.** LKM-141 masked the conversation (`LatestClearanceMask`) while the latest button showed: the bottom band (composer, button, a gap either side) was transparent with a 14 pt fade above, so text faded into the background above the composer instead of passing under its glass.
+- **Fix.** The mask, `ChatModel.latestClearHeight` and `ChatLatestButton.fade`/`clearHeight` are gone; history scrolls under the composer and the button exactly as when the button is hidden. `ChatLatestButton` keeps its NSButton tracking, size and place but draws no opaque circle: a backdrop subview (`NSGlassEffectView` like the composer, `NSVisualEffectView` `.popover` with the old shadow before macOS 26) holds the chevron, a custom cell tints it while pressed, and `hitTest` returns the button for every point of its circle, so the text under it is never clicked.
+- **Tests.** The acceptance checks drop the masked-band assertions and require the backdrop, `latestButtonHit == ChatLatestButton` and, in new `acceptance-{440,320}-scrolled-up-{light,dark}` captures (window appearance forced), more than 40 text pixels beside the button between `gap` above it and the composer top (`latestBandInk`, computed in `ChatAcceptance` from the capture); the old mask left that band empty. The composer-layout fixture checks the backdrop and hit-tests three off-centre points in the circle.
+
 ## 2026-10-06 — LKM-189: landing commit messages describe the change
 
 - **Why.** A landing commit's subject was the user's prompt (capped at 72 chars), so `git log` read as chat text, sometimes with "[Attached files]", and the PR description started from the first prompt.
