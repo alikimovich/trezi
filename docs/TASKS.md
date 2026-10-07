@@ -14,6 +14,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `ChatLatestButton` has its own Liquid Glass circle (`NSVisualEffectView` before macOS 26) and claims every point of it (no click-through); same size, place and click path.
 - [x] Acceptance asserts the backdrop, the hit target and text pixels beside the button down to the composer, in forced light and dark window appearance; composer-layout fixture checks backdrop and whole-circle hit-test; CHANGELOG line.
 
+## Composer queue: no note for the normal waiting case (LKM-191)
+
+- [x] `queueNote` returns no note for a running turn or a landing, so the queue has no header row (34 pt for one row); Resolve, sign-in, paused and landing-error notes are unchanged.
+- [x] `chat-send-queue` expects the empty note; the native chat smoke expects no note and a 34 pt queue in the `-queue-stack` capture.
 ## Landing commit messages describe the change (LKM-189)
 
 - [x] `commit-message.ts`/`chat-commit.ts`: subject (imperative, <= 72 chars) and 3–6 bullets from the turn's diff and final reply via the provider's background model (`complete` one-shot), 3 s timeout, deterministic file-list fallback, Conventional Commits when the repo uses them, `Trezi-Turn`/`Trezi-Chat` trailers; never the prompt.
