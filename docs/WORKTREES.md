@@ -307,6 +307,45 @@ Implementation: `src/main/chat-workspaces.ts`, `src/main/chat-isolation.ts`
 `src/service/RepositoryCleanup.swift`. Coverage: `test/chat-workspace-cleanup.mjs`
 (through the Swift owner) and `test/native-settings.mjs` (the Settings rows).
 
+## New chat: pending chats and the spare worktree (LKM-182)
+
+New chat never waits for Git, dependencies or the provider. `agent:new-chat` registers
+a **pending chat** (`src/main/chat-pending.ts`) and returns its session key at once;
+`agent:workspace-snapshot` lists it with an empty record, so the native controllers
+show it and focus the composer (`New chat composer ready` in the product log, about
+3 ms). The chat is then prepared in the background (`prepareChat` in
+`src/main/agent.ts`): its checkout (`isolatedCwd`), the provider session, then
+registration. Closing a pending chat cancels it; whatever was made is released.
+
+- **First send.** `agent:send` waits for a pending chat (one retry if its preparation
+  failed). After 300 ms the chat shows "Preparing workspace…" as its progress line;
+  Stop cancels the wait and nothing is sent. Restart, rename and permission-mode
+  changes wait for it too.
+- **Spare.** Each open repository project keeps one prewarmed **spare** checkout
+  (`src/main/chat-spare.ts`): a detached chat worktree with no branch, created through
+  the repository write queue after the project opens (when it has chats) and after each
+  new chat is ready. `isolatedCwd` takes it and syncs it from the live tree (uncommitted
+  and untracked work included) before use; a spare that fails to sync is removed and a
+  fresh checkout is made. Without a ready spare the chat creates its own in the
+  background as before. Orphan recovery treats the spare as live
+  (`liveChatWorktreeIds`). Closing the project removes the unused spare (abandon intent,
+  no recovery ref, after any background install in it); quit drops the record and the
+  next launch's orphan recovery removes the clean checkout.
+- **Dependencies.** On the new-chat path the copy-on-write clone of the live
+  `node_modules` still happens; a needed install (changed manifests) runs in the
+  background (`provisionDependencies(..., { background: true })`) and is never started
+  twice. A foreground call (a later sync) waits for it. While it runs, the turn's
+  prompt tells the agent to read and edit but not run commands that need
+  `node_modules`.
+
+Measured with a stub provider and the Swift repository owner (`isolatedCwd` timings
+are what New chat used to wait for; see `docs/PROGRESS.md`): small project 195–216 ms
+before, composer ready in 2–3 ms after with the spare take at 146–156 ms in the
+background; 6,000 files plus 8,000 in `node_modules`, 0.9–1.3 s before, 2–3 ms after
+with the take at 0.31–0.44 s. Coverage: `test/chat-new-instant.mjs` (unit; 3 s
+worktree creation, first send, spare reuse, pending close, project close) and
+`test/chat-spare.mjs` (Git suite through the Swift owner).
+
 ## Publishing a shared work branch
 
 Publish is a second repository-wide landing boundary after chat work reaches the live

@@ -55,6 +55,7 @@ const UNIT = [
   'native-supervised-bridge',
   'native-preview-recovery',
   'native-workspace-controller',
+  'chat-new-instant',
   'preview-supervisor',
   'native-support',
   'activity-attention',

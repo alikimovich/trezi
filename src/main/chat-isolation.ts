@@ -4,6 +4,7 @@ import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
+import { spareWorktreeIds, takeSpare } from './chat-spare'
 import {
   type ChatState,
   chatDeps,
@@ -94,7 +95,15 @@ export async function isolatedCwd(liveRoot: string, sessionKey: string): Promise
   try {
     const id = randomUUID().slice(0, 8)
     const dir = deps.worktreesDir()
+    // LKM-182: the project's prewarmed spare, brought up to the live tree on take.
+    const spare = await takeSpare(liveRoot)
     const wt = await enqueueRepoWrite(liveRoot, async () => {
+      if (spare) {
+        const synced = await syncFromLive(liveRoot, spare, { backgroundInstall: true }).catch(() =>
+          removeWorktree(liveRoot, spare, { intent: 'abandon' }).catch(() => {})
+        )
+        if (synced) return spare
+      }
       const created = await createChatWorktree(liveRoot, id, dir)
       await retireWorktreeBranch(created)
       return created
@@ -401,7 +410,7 @@ export async function retryLanding(
  *  skip set must include these so a crash-recovery sweep never reclaims a live chat's
  *  checkout (the global worktrees dir is shared across projects). */
 export function liveChatWorktreeIds(): string[] {
-  return [...states.values()].map((s) => s.wt.id)
+  return [...states.values()].map((s) => s.wt.id).concat(spareWorktreeIds())
 }
 
 /** Every open chat with a worktree (the idle sweep's candidates). */

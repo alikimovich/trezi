@@ -27,6 +27,7 @@ export function installNativeWorkspace(
     store,
     render: (state) => view.webContents.send('native-workspace:state', state),
     closeChat: (key) => chat.close(key),
+    focusComposer: () => chat.services.effect({ type: 'focus' }),
     reusableChat: (key) => {
       const value = chat.chats.get(key)
       return !value || (!value.text && !value.messages.length && !value.attachments.length)

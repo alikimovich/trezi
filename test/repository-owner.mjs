@@ -130,6 +130,7 @@ try {
       'chat-recovery',
       'auto-reconciliation',
       'chat-workspace-cleanup',
+      'chat-spare',
       'stop-recovery',
       'chat-landing',
       'chat-landing-recovery',
