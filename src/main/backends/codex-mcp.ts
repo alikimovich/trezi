@@ -102,7 +102,12 @@ export function treziMcpConfig(appRoot: string, registration: TreziAgentToolRegi
 }
 
 /** Codex's PreToolUse hook enforces the selected Git mode before shell execution. */
-export function gitAccessHook(appRoot: string, access: 'managed' | 'full', liveRoot: string) {
+export function gitAccessHook(
+  appRoot: string,
+  access: 'managed' | 'full',
+  liveRoot: string,
+  workRoot = ''
+) {
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
   return {
     features: { hooks: true },
@@ -113,7 +118,7 @@ export function gitAccessHook(appRoot: string, access: 'managed' | 'full', liveR
           hooks: [
             {
               type: 'command',
-              command: `${quote(process.execPath)} ${quote(join(appRoot, 'bin/trezi-git-guard.mjs'))} ${quote(access)} ${quote(liveRoot)}`
+              command: `${quote(process.execPath)} ${quote(join(appRoot, 'bin/trezi-git-guard.mjs'))} ${quote(access)} ${quote(liveRoot)} ${quote(workRoot)}`
             }
           ]
         }

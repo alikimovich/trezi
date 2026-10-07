@@ -3,7 +3,11 @@ import { basename } from 'node:path'
 import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { currentAgentGitAccess } from './agent-git-access'
-import { publishAfterAgentLanding } from './chat-agent-git'
+import {
+  clearAgentPublish,
+  clearAllAgentPublishes,
+  publishAfterAgentLanding
+} from './chat-agent-git'
 import { finalReply, turnMessage } from './chat-commit'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
@@ -235,16 +239,19 @@ export function afterTurn(
   if (!st) return Promise.resolve(null)
   const turn = lastTurn(transcript)
   st.lastUsed = Date.now()
+  let mergedThisTurn = false
   const task = st.chain
     .then(() =>
       enqueueRepoWrite(st.liveRoot, async () => {
         st.lastUsed = Date.now()
         if (st.reclaimed) return null
+        const before = st.lastLanding
         const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
         let settled: 'pending' | 'ok' | 'failed' = 'pending'
         batch.then(
           () => {
             settled = 'ok'
+            mergedThisTurn = st.lastLanding !== before && st.lastLanding?.outcome === 'merged'
           },
           () => {
             settled = 'failed'
@@ -281,7 +288,7 @@ export function afterTurn(
       })
     )
     .then(async (result) => {
-      if (!st.parked) {
+      if (mergedThisTurn && !st.parked) {
         try {
           await publishAfterAgentLanding(sessionKey, st.liveRoot)
         } catch (error) {
@@ -290,7 +297,7 @@ export function afterTurn(
             error: error instanceof Error ? error.message : String(error)
           })
         }
-      }
+      } else clearAgentPublish(sessionKey)
       return result
     })
   st.chain = task.catch(() => null)
@@ -493,7 +500,10 @@ export async function releaseChat(
   pendingTerminal: TurnTerminalOutcome = 'success'
 ): Promise<void> {
   const st = states.get(sessionKey)
-  if (!st) return
+  if (!st) {
+    clearAgentPublish(sessionKey)
+    return
+  }
   states.delete(sessionKey)
   try {
     await st.chain.catch(() => {})
@@ -543,6 +553,8 @@ export async function releaseChat(
     })
   } catch {
     /* teardown never throws */
+  } finally {
+    clearAgentPublish(sessionKey)
   }
 }
 
@@ -550,4 +562,5 @@ export async function releaseChat(
  *  checkouts stay on disk for the next launch's crash recovery (C4). */
 export function dropAll(): void {
   states.clear()
+  clearAllAgentPublishes()
 }

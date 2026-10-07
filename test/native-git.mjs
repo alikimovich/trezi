@@ -5,16 +5,20 @@ import { NativeSheetController } from '../src/native/sheets-runtime.ts'
 const calls = [],
   logs = [],
   values = new Map()
-const a = { key: 'a', root: '/a', branch: 'main' },
-  b = { key: 'b', root: '/b', branch: 'main' }
+const a = { key: 'a', root: '/a', branch: 'main', activeSessionKey: 'chat-a' },
+  b = { key: 'b', root: '/b', branch: 'main', activeSessionKey: 'chat-b' }
 let branch = 'main',
   connected = true,
   conflict = false,
+  prConflict = false,
   release,
   paused = false
 const workspace = {
   active: a,
   state: { projects: [a, b] },
+  command: async ({ type, key }) => {
+    if (type === 'select') workspace.active = workspace.state.projects.find((p) => p.key === key)
+  },
   changed() {},
   transact: async (key, fn) => {
     const entry = workspace.state.projects.find((p) => p.key === key)
@@ -46,6 +50,15 @@ const invoke = async (channel, ...args) => {
         }
       : { ok: true, branch, url: 'https://example.com/pr' }
   }
+  if (channel === 'publish:pr-status')
+    return {
+      mergeable: prConflict ? 'CONFLICTING' : 'MERGEABLE',
+      number: 6,
+      baseRefName: 'main',
+      headRefName: 'trezi/main',
+      conflictingFiles: prConflict ? ['package.json'] : [],
+      url: 'https://example.com/pr'
+    }
   if (channel === 'git:remote-status')
     return {
       current: branch,
@@ -64,8 +77,8 @@ const git = new NativeGitController(
   { get: (key) => values.get(key), set: (key, value) => values.set(key, value) },
   () => {},
   {
-    active: 'a',
-    get: (key) => ({ chat: key }),
+    active: 'chat-b',
+    get: (key) => ({ chat: key, root: key === 'chat-a' ? '/a' : '/b', ready: true }),
     submit: async (chat, text) => calls.push(['resolve-turn', chat.chat, text])
   }
 )
@@ -87,10 +100,17 @@ assert.ok(!calls.some((c) => c[0] === 'publish:ship' && c[1] === '/b'))
 paused = false
 conflict = true
 await git.publish('a')
+assert.equal(sheets.current, null, 'A live reconcile conflict stays on the manual recovery path')
+conflict = false
+prConflict = true
+workspace.active = b
+await git.publish('a')
 assert.equal(sheets.current.state.title, 'Publish has merge conflicts')
 assert.ok(sheets.current.state.actions.some((action) => action.label === 'Resolve with agent'))
 await sheets.action({ id: sheets.current.state.id, action: 'resolve', values: {} })
-assert.match(calls.at(-1)[2], /app\.ts[\s\S]*recovery\/a[\s\S]*git_merge_continue/)
+assert.equal(calls.at(-1)[1], 'chat-a', 'Resolve turn uses the published project’s chat')
+assert.match(calls.at(-1)[2], /package\.json[\s\S]*origin\/main[\s\S]*git_merge_continue/)
+assert.equal(workspace.active.key, 'a')
 connected = false
 await git.publish('a')
 assert.equal(sheets.current.state.title, 'Connect to GitHub')

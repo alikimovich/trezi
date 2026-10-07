@@ -17,6 +17,7 @@ import {
   isolationSnapshot,
   releaseChat
 } from '../src/main/chat-isolation.ts'
+import { states } from '../src/main/chat-state.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
 import { keepStoppedTurn } from '../src/main/stopped-turn.ts'
 
@@ -158,6 +159,21 @@ try {
     revertable: false
   })
   await releaseChat(pr.key)
+  // A Full-mode raw merge lands through afterTurn with its two-parent history.
+  const full = await fixture()
+  git(full.root, 'checkout', '-qb', 'base-updated')
+  writeFileSync(join(full.root, 'base-note.txt'), 'new base content\n')
+  git(full.root, 'add', 'base-note.txt')
+  git(full.root, 'commit', '-qm', 'Advance the base')
+  git(full.root, 'checkout', '-q', 'main')
+  git(full.cwd, 'merge', '--no-ff', '--no-edit', 'base-updated')
+  const rawMerge = git(full.cwd, 'rev-parse', 'HEAD')
+  states.get(full.key).gitAccess = 'full'
+  await afterTurn(full.key, 'Land the base update', [], 'success')
+  assert.equal(readFileSync(join(full.root, 'base-note.txt'), 'utf8'), 'new base content\n')
+  git(full.root, 'merge-base', '--is-ancestor', rawMerge, 'HEAD')
+  assert.equal(git(full.root, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3)
+  await releaseChat(full.key)
   console.log('CHAT LANDING OK — afterTurn and Keep share landTurn; only clearPark unparks')
 } finally {
   rmSync(dir, { recursive: true, force: true })

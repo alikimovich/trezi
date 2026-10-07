@@ -348,7 +348,8 @@ async function startSession(
           ...gitAccessHook(
             app.getAppPath(),
             options.agentGitAccess === 'full' ? 'full' : 'managed',
-            liveRoot
+            liveRoot,
+            root
           )
         })
       })

@@ -221,12 +221,13 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 
 | Module | Class | Final owner | Effect |
 | --- | --- | --- | --- |
+| `src/main/agent-git-access.ts` | helper | RepositoryOwner | `git symbolic-ref` read of the live branch for the agent command guard (LKM-188) |
 | `src/main/backends/claude-login.ts` | helper | ProviderOwner (provider helper) | `claude auth status` probes (LKM-119), inside the supervised helper |
 | `src/main/backends/codex.ts` | helper | ProviderOwner (provider helper) | Codex SDK process, inside the supervised helper |
 | `src/main/backends/gemini.ts` | helper | ProviderOwner (provider helper) | Gemini CLI process, inside the supervised helper |
 | `src/main/backends/live-tree-watch.ts` | helper | ProviderOwner (provider helper) | `git status` reads of the live checkout around a Full-access Codex turn (LKM-163), inside the supervised helper |
 | `src/main/chat-park.ts` | helper | RepositoryOwner | Git reads (diff, show, status) |
-| `src/main/chat-agent-git.ts` | helper | RepositoryOwner / WorkflowOwner | `gh pr view` and `git merge-tree` reads; mutations route through the owners (LKM-188) |
+| `src/main/chat-agent-git.ts` | helper | RepositoryOwner / WorkflowOwner | `git rev-parse` read; mutations route through the owners (LKM-188) |
 | `src/main/chat-workspaces.ts` | helper | RepositoryOwner | `du` and `git rev-parse` reads (LKM-136 usage, old-name folders' repositories) |
 | `src/main/chat-worktrees.ts` | helper | RepositoryOwner | `git show` reads of the live checkout |
 | `src/main/commit-message.ts` | helper | RepositoryOwner | Git reads (a chat worktree's diff and new files, recent subjects) for the landing commit message (LKM-189) |
@@ -235,6 +236,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |
 | `src/main/product-log.ts` | helper | PlatformOwner | appends and prunes the product log day files in `~/Library/Logs/Trezi` (LKM-168) |
+| `src/main/pull-request-status.ts` | helper | WorkflowOwner | `gh pr view` and `git merge-tree` reads of PR mergeability (LKM-188) |
 | `src/main/project-memory-evaluation.ts` | helper | MemoryOwner | `git grep` reads of a chat's worktree and the live checkout: a new memory rule's design token must exist in code (LKM-177) |
 | `src/main/publish-description.ts` | helper | WorkflowOwner | scratch directory for the description run |
 | `src/main/publish-scope.ts` | helper | WorkflowOwner | Git reads |

@@ -108,10 +108,6 @@ export class NativeGitController {
         )
         const result = await this.invoke('publish:ship', root, undefined, mode)
         if (!result.ok) {
-          if (result.conflictFiles?.length && this.chat) {
-            this.resolveWithAgent(key, result)
-            return
-          }
           const recovery = result.conflictFiles?.length
             ? `\nConflicting files:\n${result.conflictFiles.join('\n')}\nResolve and stage each file, commit the merge, then Publish again.\nRecovery refs: ${(result.recoveryRefs ?? []).join(', ')}`
             : ''
@@ -119,6 +115,20 @@ export class NativeGitController {
         }
         if (result.branch) await this.invoke('agent:tag-session', root, { branch: result.branch })
         if (result.url) await this.invoke('agent:tag-session', root, { prUrl: result.url })
+        if (mode === 'pr' && result.url) {
+          const pr = await this.invoke('publish:pr-status', root)
+          if (pr.mergeable === 'CONFLICTING' && this.chat) {
+            this.resolveWithAgent(key, {
+              error: `Pull request #${pr.number ?? '?'} conflicts with ${pr.baseRefName ?? 'its base branch'}.`,
+              conflictFiles: pr.conflictingFiles,
+              branch: pr.headRefName ?? result.branch,
+              url: pr.url ?? result.url,
+              base: pr.baseRefName
+            })
+            return
+          }
+          if (pr.error) this.log.append(pr.error, 'warning')
+        }
         this.log.append(
           `${mode === 'pr' ? 'PR ready' : 'Published'}${result.url ? ': ' + result.url : ''}`,
           'success'
@@ -141,6 +151,7 @@ export class NativeGitController {
       recoveryRefs?: string[]
       branch?: string
       url?: string
+      base?: string
     }
   ) {
     const files = result.conflictFiles ?? []
@@ -157,12 +168,23 @@ export class NativeGitController {
       },
       async (action) => {
         if (action.action !== 'resolve' || !this.chat) return
-        const active = this.chat.get(this.chat.active || key)
+        const project = this.workspace.state.projects.find((entry) => entry.key === key)
+        if (!project) throw new Error('The published project is no longer open.')
+        await this.workspace.command({ type: 'select', key })
+        let selected = this.workspace.state.projects.find((entry) => entry.key === key)
+        if (!selected?.activeSessionKey) await this.workspace.command({ type: 'new-chat', key })
+        selected = this.workspace.state.projects.find((entry) => entry.key === key)
+        if (!selected?.activeSessionKey) throw new Error('Could not open a chat for this project.')
+        const active = this.chat.get(selected.activeSessionKey)
+        if (!active.ready) await this.chat.initialize(active)
+        if (active.root !== project.root)
+          throw new Error('The selected chat does not belong to the published project.')
         const facts = [
-          'Resolve the Publish merge conflict in this chat worktree.',
+          'Resolve this pull request’s conflict with its base in this chat worktree.',
           `Publish reported: ${result.error ?? 'pull request is not mergeable'}`,
           `Conflicting files: ${files.join(', ')}`,
           result.branch ? `Work branch: ${result.branch}` : '',
+          result.base ? `Base branch: origin/${result.base}` : '',
           result.url ? `Pull request: ${result.url}` : '',
           result.recoveryRefs?.length ? `Recovery refs: ${result.recoveryRefs.join(', ')}` : '',
           'Call pr_status and git_sync_base, resolve the conflict markers, then git_merge_continue and publish_update. Keep the chosen version consistent with the user’s changes.'

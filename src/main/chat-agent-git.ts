@@ -3,12 +3,13 @@ import { promisify } from 'node:util'
 import { states } from './chat-state'
 import { generatePublishDescription } from './publish-description'
 import { defaultBase } from './publish-scope'
+import { pullRequestStatus } from './pull-request-status'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { repositoryOwner } from './repository-owner'
 import { workflowOwner } from './workflow-owner'
 
 const exec = promisify(execFile)
-const pendingPublish = new Set<string>()
+const pendingPublish = new Map<string, string>()
 
 /** Only the active chat's linked worktree may receive an agent Git effect. */
 export async function agentGitTool(
@@ -38,40 +39,9 @@ export async function agentGitTool(
     )
       return { error: 'number must be a positive PR number.' }
     const number = input.number === undefined ? undefined : String(input.number)
-    const parameters = [
-      'pr',
-      'view',
-      ...(number ? [number] : []),
-      '--json',
-      'number,url,mergeable,baseRefName,headRefName,statusCheckRollup'
-    ]
-    let status: Record<string, unknown>
-    try {
-      const { stdout } = await exec('gh', parameters, { cwd: liveRoot, timeout: 30_000 })
-      status = JSON.parse(stdout) as Record<string, unknown>
-    } catch (error) {
-      return {
-        error: `Could not read the existing pull request: ${error instanceof Error ? error.message : String(error)}`
-      }
-    }
-    if (action === 'pr_status') {
-      const base = status.baseRefName
-      let conflictingFiles: string[] = []
-      if (typeof base === 'string' && /^[A-Za-z0-9._/-]+$/.test(base)) {
-        try {
-          await exec('git', ['merge-tree', '--write-tree', `refs/remotes/origin/${base}`, 'HEAD'], {
-            cwd: root,
-            timeout: 15_000
-          })
-        } catch (error) {
-          const output = (error as { stdout?: string }).stdout ?? ''
-          conflictingFiles = [...output.matchAll(/^CONFLICT .* in (.+)$/gm)].map(
-            (match) => match[1]
-          )
-        }
-      }
-      return { ...status, conflictingFiles: [...new Set(conflictingFiles)] }
-    }
+    const status = await pullRequestStatus(liveRoot, root, number ? Number(number) : undefined)
+    if (status.error) return { error: status.error }
+    if (action === 'pr_status') return status
     const { stdout: branch } = await exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
       cwd: liveRoot
     })
@@ -79,7 +49,7 @@ export async function agentGitTool(
       return {
         error: `This PR belongs to ${String(status.headRefName)}, but Publish would push ${branch.trim()}.`
       }
-    pendingPublish.add(key)
+    pendingPublish.set(key, liveRoot)
     return {
       scheduled: true,
       pr: status.number,
@@ -92,10 +62,18 @@ export async function agentGitTool(
 
 /** Called only after a successful landing. The workflow owner is the only pusher. */
 export async function publishAfterAgentLanding(key: string, liveRoot: string): Promise<void> {
-  if (!pendingPublish.has(key)) return
+  if (pendingPublish.get(key) !== liveRoot) return
+  pendingPublish.delete(key)
   const result = await workflowOwner().publish(liveRoot, 'pr', (base, head) =>
     generatePublishDescription(liveRoot, base, head)
   )
   if (!result.ok) throw new Error(result.error ?? 'Could not update the pull request.')
+}
+
+export function clearAgentPublish(key: string): void {
   pendingPublish.delete(key)
+}
+
+export function clearAllAgentPublishes(): void {
+  pendingPublish.clear()
 }

@@ -2,6 +2,7 @@ import { ipcMain } from '../native/platform'
 import type { AnnotationInput, PublishResult } from '../shared/api'
 import { createAnnotationStore } from './annotation-store'
 import { generatePublishDescription } from './publish-description'
+import { pullRequestStatus } from './pull-request-status'
 import { workflowOwner } from './workflow-owner'
 
 /**
@@ -46,4 +47,5 @@ export function registerAnnotationsIpc(): void {
       )
     )
   )
+  ipcMain.handle('publish:pr-status', (_e, root: string) => pullRequestStatus(root))
 }

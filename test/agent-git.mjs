@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { agentGitAccess, rawGitWrite } from '../src/main/agent-git-access.ts'
 import { gitAccessHook } from '../src/main/backends/codex-mcp.ts'
+import { clearAgentPublish, publishAfterAgentLanding } from '../src/main/chat-agent-git.ts'
+import { states } from '../src/main/chat-state.ts'
+import { runTreziTool } from '../src/main/session-tools.ts'
+import { setWorkflowOwner } from '../src/main/workflow-owner.ts'
 import { compileRepositoryFixture, startRepositoryFixture } from './helpers/repository-fixture.mjs'
 import { useRunnerEnv } from './helpers/runner-env.mjs'
 
@@ -73,7 +85,60 @@ try {
     assert.equal(git(managed.live, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3)
     git(managed.live, 'merge-base', '--is-ancestor', managed.landed, 'HEAD')
     git(managed.live, 'merge-base', '--is-ancestor', continued.head, 'HEAD')
-    git(managed.live, 'push', '-q', 'origin', 'trezi/main')
+    const fakeBin = join(root, 'bin')
+    mkdirSync(fakeBin)
+    const fakeGh = join(fakeBin, 'gh')
+    writeFileSync(
+      fakeGh,
+      '#!/bin/sh\nprintf \'%s\\n\' \'{"number":6,"url":"https://example.test/pr/6","mergeable":"CONFLICTING","baseRefName":"main","headRefName":"trezi/main","statusCheckRollup":[]}\'\n'
+    )
+    chmodSync(fakeGh, 0o755)
+    const originalPath = process.env.PATH
+    process.env.PATH = `${fakeBin}:${originalPath}`
+    const statusRepo = setup('status')
+    const statusScope = {
+      root: statusRepo.work,
+      liveRoot: statusRepo.live,
+      emitKey: 'status-agent',
+      background: false,
+      notify() {}
+    }
+    const scope = {
+      root: managed.work,
+      liveRoot: managed.live,
+      emitKey: 'managed-agent',
+      background: false,
+      notify() {}
+    }
+    states.set(statusScope.emitKey, {
+      wt: statusRepo.wt,
+      liveRoot: statusRepo.live,
+      reclaimed: false
+    })
+    states.set(scope.emitKey, { wt: managed.wt, liveRoot: managed.live, reclaimed: false })
+    try {
+      const status = await runTreziTool('pr_status', { number: 6 }, statusScope)
+      assert.equal(status.mergeable, 'CONFLICTING')
+      assert.deepEqual(status.conflictingFiles, ['package.json'])
+      const pushes = []
+      setWorkflowOwner({
+        publish: async (live, mode) => {
+          pushes.push([live, mode, ['origin', 'trezi/main']])
+          git(live, 'push', 'origin', 'trezi/main')
+          return { ok: true, url: 'https://example.test/pr/6' }
+        }
+      })
+      const scheduled = await runTreziTool('publish_update', {}, scope)
+      assert.equal(scheduled.scheduled, true)
+      await publishAfterAgentLanding(scope.emitKey, managed.live)
+      assert.deepEqual(pushes, [[managed.live, 'pr', ['origin', 'trezi/main']]])
+    } finally {
+      clearAgentPublish(scope.emitKey)
+      states.delete(statusScope.emitKey)
+      states.delete(scope.emitKey)
+      setWorkflowOwner(null)
+      process.env.PATH = originalPath
+    }
     assert.equal(
       git(managed.live, 'rev-parse', 'refs/remotes/origin/trezi/main'),
       git(managed.live, 'rev-parse', 'HEAD')
@@ -128,6 +193,34 @@ try {
       /publish_update/
     )
     assert.equal(rawGitWrite('Bash', { command: 'git merge origin/main' }, 'full'), null)
+    for (const command of [
+      'git branch',
+      'git branch --show-current',
+      'git stash list',
+      'git tag -l',
+      'git worktree list'
+    ])
+      assert.equal(rawGitWrite('Bash', { command }, 'managed'), null, command)
+    for (const command of [
+      'git push origin trezi/main',
+      'git push --force origin trezi/main',
+      'git update-ref refs/heads/trezi/main HEAD',
+      'git branch -f trezi/main HEAD',
+      `git -C ${managed.live} reset --hard HEAD`
+    ])
+      assert.match(
+        rawGitWrite('Bash', { command }, 'full', managed.live, managed.work),
+        /refused/,
+        command
+      )
+    assert.match(
+      rawGitWrite(
+        'Bash',
+        { command: 'git branch --show-current && git push origin trezi/main' },
+        'managed'
+      ),
+      /publish_update/
+    )
     const hook = gitAccessHook(root, 'managed', managed.live)
     assert.equal(hook.features.hooks, true)
     assert.equal(hook.hooks.PreToolUse[0].matcher, '^Bash$')
@@ -153,6 +246,22 @@ try {
       encoding: 'utf8'
     })
     assert.equal(allowed.stdout, '')
+    const blockedFull = spawnSync(
+      'bun',
+      ['bin/trezi-git-guard.mjs', 'full', managed.live, managed.work],
+      {
+        input: JSON.stringify({
+          tool_name: 'Bash',
+          tool_input: { command: 'git update-ref refs/heads/trezi/main HEAD' }
+        }),
+        cwd: new URL('..', import.meta.url).pathname,
+        encoding: 'utf8'
+      }
+    )
+    assert.match(
+      JSON.parse(blockedFull.stdout).hookSpecificOutput.permissionDecisionReason,
+      /refused/
+    )
   } finally {
     await fixture.stop()
   }

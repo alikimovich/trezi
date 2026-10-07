@@ -1226,7 +1226,9 @@ async function startSession(
                   const gitRefusal = rawGitWrite(
                     pre.tool_name ?? '',
                     pre.tool_input,
-                    agentGitAccess(options.agentGitAccess)
+                    agentGitAccess(options.agentGitAccess),
+                    ctx?.liveRoot ?? root,
+                    root
                   )
                   if (gitRefusal)
                     return {
