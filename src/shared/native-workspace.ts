@@ -19,13 +19,17 @@ export interface NativeWorkspaceSnapshot {
   /** The project whose open finished (running or setup); the chat shows only for it.
    *  A later preview error or a restart of the same project keeps it. */
   loadedKey?: string | null
+  /** The newest sidebar pick generation applied to `activeKey` (LKM-204). */
+  selection?: number
   history: Record<string, SessionRecord[]>
   recents: { root: string; name: string; at: number }[]
 }
 export type NativeWorkspaceCommand =
   | { type: 'attach'; preferred?: ChatAgentSettings }
   | { type: 'open'; root?: string; command?: string }
-  | { type: 'select' | 'close' | 'new-chat'; key: string }
+  | { type: 'close' | 'new-chat'; key: string }
+  /** `generation`: the sidebar pick that asked for it, echoed as `selection`. */
+  | { type: 'select'; key: string; generation?: number }
   | { type: 'chat'; key: string; session: string }
   | { type: 'close-chat'; key: string; session: string }
   | { type: 'resume'; key: string; record: string }

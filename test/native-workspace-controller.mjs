@@ -370,6 +370,80 @@ const flush = async (path = join(profile, 'workspace.json')) => {
   )
 }
 
+// LKM-204: a pick shows its project in the first state after the click, before the store
+// saves it or any server starts; an older pick's acknowledgement (its snapshot still
+// naming that project) or a stale external snapshot never brings a previous one back.
+{
+  const original = controller.services.store
+  let hold = null,
+    acked = null
+  controller.services.store = {
+    ...original,
+    snapshot: () => {
+      const view = original.snapshot()
+      return acked ? { ...view, activeKey: acked } : view
+    },
+    select: async (key) => {
+      const done = original.select(key)
+      await hold?.promise
+      await done
+      acked = key
+    }
+  }
+  const shown = (from) =>
+    renders
+      .slice(from)
+      .map((state) => state.activeKey)
+      .filter((key, index, all) => key !== all[index - 1])
+  const [a, b, c] = ['/three', '/two', '/one']
+  assert.equal(controller.state.activeKey, a)
+  hold = gate()
+  let from = renders.length - 1,
+    start = calls.length
+  const single = controller.command({ type: 'select', key: b, generation: 7 })
+  await tick()
+  assert.equal(renders.at(-1).activeKey, b, 'the first state after the click names B')
+  assert.equal(renders.at(-1).selection, 7, 'and echoes the pick')
+  assert.deepEqual(renders.at(-1).status, { kind: 'busy', label: 'Opening two…' })
+  assert.ok(
+    !calls
+      .slice(start)
+      .some((call) => call[0] === 'project:detect' || call[0] === 'devserver:start'),
+    'B shows before its server starts'
+  )
+  // An external snapshot still naming A, adopted while B is unsaved.
+  acked = a
+  controller.adopt(true)
+  controller.changed()
+  assert.equal(controller.state.activeKey, b, 'a stale snapshot does not bring A back')
+  hold.resolve()
+  await single
+  assert.deepEqual(shown(from), [a, b], 'A → B is one transition')
+  assert.equal(controller.state.status.kind, 'running')
+  assert.equal(active.at(-1), b)
+  // Rapid B → C → A: every acknowledgement but the last carries an older pick.
+  hold = gate()
+  from = renders.length - 1
+  const picks = [
+    controller.command({ type: 'select', key: c, generation: 8 }),
+    controller.command({ type: 'select', key: a, generation: 9 })
+  ]
+  await tick()
+  assert.equal(renders.at(-1).activeKey, a)
+  hold.resolve()
+  await Promise.all(picks)
+  const rapid = shown(from)
+  assert.equal(rapid.at(-1), a, 'rapid picks end on the last one')
+  assert.equal(rapid.indexOf(a, 1), rapid.length - 1, 'nothing shows after the last pick')
+  assert.equal(controller.state.activeKey, a)
+  assert.equal(active.at(-1), a, 'the last pick is activated')
+  assert.equal(original.snapshot().activeKey, a, 'and stored')
+  controller.services.store = original
+  console.log(
+    'Native workspace LKM-204: the switch shows the pick at once; stale and older acknowledgements ignored; rapid picks end on the last passed'
+  )
+}
+
 // A store that cannot persist the selection: nothing dependent runs.
 {
   const store = shared
