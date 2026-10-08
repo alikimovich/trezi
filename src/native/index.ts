@@ -87,6 +87,7 @@ import { app, dispatchIPC, ipcMain, NativeView, serviceEvents, shell, views } fr
 import { servicePlatform } from './platform-service'
 import { servicePreferences } from './preferences-service'
 import { installPreviewLoads, loadErrorStatus } from './preview-load-runtime'
+import { installPreviewOverlay } from './preview-overlay-controller'
 import { NativePreviewRecovery } from './preview-recovery'
 import { installPreviewRefresh } from './preview-refresh'
 import { NativePreviewSupervisor } from './preview-supervisor'
@@ -666,6 +667,15 @@ async function main() {
     (url) => shell.openExternal(url),
     chatController
   )
+  const previewOverlay = installPreviewOverlay({
+    host,
+    preferences,
+    active: () => workspaceController.active ?? null,
+    viewportOf: (root) =>
+      workspaceController.state.projects.find((p) => p.root === root)?.viewport ?? null,
+    deliver: (lines) => previewView.webContents.send(channels.PREVIEW_OVERLAY_LINES, lines),
+    report: reportPreferences
+  })
   shellController = new NativeShellController(
     workspaceController,
     chatController,
@@ -673,6 +683,7 @@ async function main() {
     preferences,
     (state) => host!.send('shellState', { state }),
     ({ viewport }) => {
+      previewOverlay.sync()
       previewView.webContents.send(channels.PREVIEW_HIDE_SCROLLBARS, viewport === 'mobile')
     }
   )
@@ -981,6 +992,7 @@ async function main() {
     previewView.webContents.send(channels.PREVIEW_SET_STATUS, state.statusText)
     previewView.webContents.send(channels.LAYERS_SET_WATCH, state.layersWatch)
     previewView.webContents.send(channels.PREVIEW_COVERED, previewCover)
+    previewOverlay.loaded()
     if (url !== 'about:blank') send('preview:url-changed', url)
   })
   host.on('closed', async () => {

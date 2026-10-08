@@ -46,6 +46,8 @@ import {
   PREVIEW_COVERED,
   PREVIEW_HIDE_SCROLLBARS,
   PREVIEW_MOVE_NODE,
+  PREVIEW_OVERLAY_GEOMETRY,
+  PREVIEW_OVERLAY_LINES,
   PREVIEW_READINESS as READINESS,
   PREVIEW_SELECTION_LOST as SELECTION_LOST,
   PREVIEW_SET_COMMENT_MODE as SET_COMMENT_MODE,
@@ -72,6 +74,7 @@ import {
 } from './layers'
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
 import { createNativeCover } from './native-cover'
+import { createOverlayGuides } from './overlay-guides'
 import { specifiedValues, varRefName } from './style-provenance'
 import { createThreeDInspector } from './three-d'
 import { createViewportReadout } from './viewport-readout'
@@ -137,6 +140,14 @@ let active = false
 let overlayHost: HTMLDivElement | null = null
 // The page under native views floating over the preview (LKM-173).
 const nativeCover = createNativeCover()
+// The page's scroll, viewport and selection extent for the native rulers, and the
+// hover distances to their guides and grid lines (LKM-205).
+const overlayGuides = createOverlayGuides({
+  send: (geometry) => ipcRenderer.send(PREVIEW_OVERLAY_GEOMETRY, geometry),
+  selection: () => selEls.find((el) => el.isConnected) ?? null,
+  layer: () => guideLayer,
+  draw: { line: (s) => measureLine(s, false), label: measureLabel }
+})
 let overlayBox: HTMLDivElement | null = null
 let overlayLabel: HTMLDivElement | null = null
 let pinsLayer: HTMLDivElement | null = null
@@ -208,6 +219,8 @@ let selEls: Element[] = []
 // `measureKey` is the geometry it was drawn from, so a mousemove that doesn't
 // move either rect doesn't rebuild the nodes.
 let measureLayer: HTMLDivElement | null = null
+// Hover distances to the native guides and layout grid (LKM-205, `overlay-guides.ts`).
+let guideLayer: HTMLDivElement | null = null
 let measureTarget: Element | null = null
 let measureKey = ''
 let altHeld = false
@@ -243,6 +256,8 @@ function ensureOverlay(): void {
   const meas = document.createElement('div')
   meas.setAttribute('data-trezi-measure', '')
   meas.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+  const guideMeas = document.createElement('div')
+  guideMeas.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
 
   // Whole-page mode hint chip (top-center) while C/Y is armed.
   const hint = document.createElement('div')
@@ -384,7 +399,7 @@ function ensureOverlay(): void {
   // discoverable form of the double-click-to-edit gesture.
   toolbar.append(commentBtn, inputWrap, editBtn, propsBtn, threeDBtn, codeBtn, separator, deleteBtn)
 
-  shadow.append(sel, box, meas, label, pins, hint, toolbar, style)
+  shadow.append(sel, box, guideMeas, meas, label, pins, hint, toolbar, style)
   document.documentElement.appendChild(host)
   overlayHost = host
   overlayBox = box
@@ -392,6 +407,7 @@ function ensureOverlay(): void {
   pinsLayer = pins
   selLayer = sel
   measureLayer = meas
+  guideLayer = guideMeas
   hintEl = hint
   toolbarEl = toolbar
   inputWrapEl = inputWrap
@@ -477,6 +493,8 @@ function setSelectionHighlight(el: Element | null, group?: Element[]): void {
   if (!selLayer) return
   selLayer.textContent = ''
   selEls = []
+  // The native rulers show the selection's extent; reported on the next frame.
+  overlayGuides.report()
   if (!el) return
   const src = findSource(el)
   let els: Element[] = [el]
@@ -550,6 +568,7 @@ function positionSelection(): void {
       badge.style.display = 'none'
     }
   }
+  overlayGuides.report()
 }
 
 /**
@@ -685,6 +704,7 @@ function positionPins(): void {
 function hideOverlay(): void {
   if (overlayBox) overlayBox.style.display = 'none'
   if (overlayLabel) overlayLabel.style.display = 'none'
+  overlayGuides.hover(null)
 }
 
 /** Keep our overlay and project-owned tuning panels outside element selection. */
@@ -772,6 +792,7 @@ const hover = coalesceHover(({ el, at }: { el: Element; at: number }) => {
   const start = performance.now()
   drawOverlay(el)
   drawMeasure(el)
+  overlayGuides.hover(el)
   if (previewTimings.enabled) {
     const end = performance.now()
     previewTimings.hover.push(end - at)
@@ -1970,6 +1991,7 @@ if (!IS_SIM_BRIDGE) {
   nativeCover.install()
   // Main sends them on every load and whenever the host's layout changes them.
   ipcRenderer.on(PREVIEW_COVERED, (_e, rects: unknown) => nativeCover.set(rects))
+  ipcRenderer.on(PREVIEW_OVERLAY_LINES, (_e, lines: unknown) => overlayGuides.set(lines))
   // Pins track layout changes (hot-reload, async content) on a light cadence.
   const pinTimer = setInterval(() => {
     if (pinDots.size) positionPins()

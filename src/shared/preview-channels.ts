@@ -42,6 +42,11 @@ export const PREVIEW_SET_STATUS = 'trezi:preview:set-status' // → preload (lau
 // Viewport rects native views float over (LKM-173): the host reports them on layout
 // (`native-cover`), main forwards them and re-sends them after every load.
 export const PREVIEW_COVERED = 'trezi:preview:covered' // → preload ({x,y,width,height}[])
+// Rulers, guides and layout grids (LKM-205), drawn natively over the page. Main forwards
+// the host's lines (re-sent after every load); while they ask for it, the page reports
+// its scroll, viewport and selection extent, which the host takes without main.
+export const PREVIEW_OVERLAY_LINES = 'trezi:preview:overlay-lines' // → preload (OverlayLines)
+export const PREVIEW_OVERLAY_GEOMETRY = 'trezi:preview:overlay-geometry' // → host (geometry)
 
 // ── Styles tab ─────────────────────────────────────────────────────────────
 export const STYLES_PREVIEW = 'styles:preview' // → preload ({prop, value})

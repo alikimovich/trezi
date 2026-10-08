@@ -35,6 +35,9 @@ extension Host {
         // LKM-192: the code editor's soft wrap; the focused editor, else Host, answers it.
         let view = submenu("View")
         view.addItem(withTitle: "Wrap Lines", action: #selector(NativeSourceEditor.toggleWrapLines(_:)), keyEquivalent: "")
+        // LKM-205: rulers (⇧⌘R) and the layout grid (⌃G) over the preview.
+        view.addItem(.separator())
+        for item in previewOverlay?.menuItems() ?? [] { view.addItem(item) }
         let actions = submenu("Actions")
         for (label, key, action) in [("Reload Preview", "r", "reload"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
             let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; actions.addItem(item)

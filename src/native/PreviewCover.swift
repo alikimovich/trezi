@@ -12,7 +12,7 @@ extension Host {
     func previewCoverRects() -> [[String: Double]] {
         guard let preview = views["preview"], !preview.isHidden, preview.superview === canvas else { return [] }
         let scale = max(preview.pageZoom * preview.magnification, 0.01)
-        let floating: [NSView] = [editingInspector, layers, nativeLayout?.inspectorDivider, toast, previewLoad].compactMap { $0 }
+        let floating: [NSView] = [editingInspector, layers, nativeLayout?.inspectorDivider, toast, previewLoad, previewOverlay?.top, previewOverlay?.left].compactMap { $0 }
         return floating.compactMap { view in
             guard !view.isHidden, view.superview === canvas else { return nil }
             let r = preview.convert(view.frame, from: canvas).intersection(preview.bounds)

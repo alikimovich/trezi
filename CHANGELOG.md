@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- Preview rulers, guides and layout grids: View → Show Rulers (⇧⌘R) and Show Layout Grid (⌃G) or the toolbar's Rulers and Grids popover; drag guides from the rulers (they snap to elements, grid lines and whole pixels), add column, baseline and square grids with presets, see hover distances to guides in select mode, and have it all remembered per project and viewport (LKM-205).
 - Dreamer: Trezi → Run Dreamer… reviews your recent chats and Trezi's log on this Mac (slow tools, repeated failures, retried requests) with your selected model and proposes improvements; Dreamer Proposals… lets you filter, edit and select them, then Copy as JSON, Export Dreamer Report… (a redacted zip) or Send to Agent OS (Settings → Dreamer), with an optional weekly run (LKM-202).
 - Agents can reserve a pending chat island before adding the source values it controls: the definition is checked at once, the island turns on after the turn lands and its values are found, and otherwise it shows why with Recreate (LKM-201).
 - The preview toolbar's … menu (windows 1000 pt or wider) has Reload Without Cache and Restart Dev Server (clean cache); agents get `reload_preview` (with `hard`) and `restart_dev_server` (with `cleanCache`), and `open_preview` says whether the page's CSS/JS matches what the dev server serves now (LKM-197).

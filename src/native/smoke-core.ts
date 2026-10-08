@@ -27,6 +27,7 @@ import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smok
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewInspector } from './smoke-preview-inspector'
+import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
 import { checkPreviewTiming, restorePreviewTiming } from './smoke-preview-timing'
 import { checkProjectSwitching } from './smoke-projects'
 import { checkPublishProgress } from './smoke-publish'
@@ -500,7 +501,7 @@ export async function runNativeCoreSmoke(
         const shell = await inspect('shellInspect', (s) => s.enabled.code)
         assert.equal(shell.outlineRows, shell.rows.filter((r: any) => r.kind === 'project').length)
         assert.deepEqual(shell.toolGroup, ['code', 'layers', 'expand'])
-        assert.deepEqual(shell.interactionGroup, ['select-object', 'device'])
+        assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay'])
         assert.ok(
           shell.sidebarContainsTrafficLights && shell.chatTitlePlain && shell.publishStandard
         )
@@ -716,6 +717,12 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         if (islandsWindow) await restoreMovableIslands(host, layersSmoke, islandsWindow)
       }
+    },
+    {
+      name: 'preview-overlay',
+      dependsOn: ['open-project'],
+      run: () => checkPreviewOverlay(host, fixture, artifacts, preference),
+      cleanup: () => restorePreviewOverlay(host)
     },
     {
       name: 'text-edit',

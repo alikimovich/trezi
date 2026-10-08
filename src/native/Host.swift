@@ -41,6 +41,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var chatDivider: NativeChatDivider!
     var nativeLayout: WorkspaceLayout!
     var previewSurface: PreviewSurface!
+    var previewOverlay: PreviewOverlay!
     let canvas = Canvas()
     let chatColumn = Canvas()
     var views: [String: WKWebView] = [:]
@@ -113,6 +114,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         sheets = NativeSheets(parent: window); activity.parent = window; downloads.parent = window
         activityIndicator.install(in: shell.sidebar.view)
         nativeLayout = WorkspaceLayout(host: self)
+        previewOverlay = PreviewOverlay(host: self)
         toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
         canvas.changed = { [weak self] in self?.nativeLayout.layout() }
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
@@ -261,6 +263,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                 }
             }
         case "previewViewport": reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"]))
+        case "previewOverlay": previewOverlay.apply(c)
         case "capture":
             if let agent = c["agent"] as? [String: Any] {
                 guard let view else { reply(id, error: "Snapshot unavailable"); return }
@@ -308,6 +311,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             body["trace"] = trace
         }
         if body["channel"] as? String == "trezi:preview:element-picked" { previewPicks += 1 }
+        // Scroll and selection geometry for the native rulers and guides stays in the host.
+        if name == "preview", body["channel"] as? String == "trezi:preview:overlay-geometry" { previewOverlay?.receive(body["args"]); return }
         // Source identity is supplied by the host, never by page-controlled JSON.
         emit(["event":"ipc", "view":name, "message":body])
     }

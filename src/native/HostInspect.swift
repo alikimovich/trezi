@@ -16,6 +16,10 @@ extension Host {
             if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await captureInspectorIsland()) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["pointer"] as? Bool == true { Task { @MainActor in do { reply(id, try await verifyInspectorPointer(c)) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, verifyInspectorIsland(c)) }
+        case "previewOverlayInspect": reply(id, previewOverlayInspect())
+        case "previewOverlayTest":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in do { reply(id, try await previewOverlayTest(c)) } catch { reply(id, error: error.localizedDescription) } }
         case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count, "frame":NSStringFromRect(layers.frame), "selected":layers.selectedPath.map { $0 as Any } ?? NSNull()])
         case "layersIsland":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

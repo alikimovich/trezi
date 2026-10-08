@@ -2,6 +2,23 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-205: preview rulers, guides and layout grids
+
+- **What.** Rulers (⇧⌘R), guides dragged from them, and column/baseline/square layout grids (⌃G) over the preview, set in a toolbar popover and remembered per project (rulers) and per viewport (guides, grids). The design is in `docs/agent-guide/preview-overlay.md`.
+- **Native, not DOM.** Everything draws in native views over the web view (`src/native/PreviewOverlay.swift`, `src/native/PreviewRulers.swift`), so the project's DOM and CSS never change and the smoke check compares the DOM before and after. The guide layer answers hit tests only within 3 pt of an unlocked guide, so the page keeps its input everywhere else.
+- **Rulers inset the page.** They first floated over the page's top-left 16 pt, which made a guide at CSS x < 16 impossible to drop (dropping on a ruler removes it). While they show, `WorkspaceLayout` now insets the page area beside them, and the agent's viewport width is centred in that inset area.
+- **Coordinates.** All settings are page CSS px ("guide space": the document, or the viewport when Fixed to Viewport is on). The page reports scroll, client size and the selection's rect only while something shows, once per frame and only on change. The host takes that channel directly (`Host.userContentController`), so per-scroll traffic never reaches Bun. Snapping reads element rects once per drag from the isolated world, and never mid-navigation.
+- **Keys.** The host echoes main's `[root, viewport]` key with each edit, so an edit that arrives after a project switch is stored for the project it was made in. While the host's own saves are pending, main does not re-send stored settings, because an earlier save landing would briefly undo a newer edit. It also skips settings the host already shows, so an unrelated preference write never re-lays out the preview.
+- **⇧⌘R is `"R"`.** A shifted key event's characters are uppercase. A lowercase `"r"` with the Shift mask did not match it: an AppKit menu probe showed `false` for `"r"` and `true` for `"R"`, so the event fell to Reload Preview (⌘R).
+- **Agent.** `workspace_state.previewOverlay` is read-only (`src/main/preview-overlay.ts`), and the worktree rules mention it.
+- **Tests.** Unit: `preview-overlay` (Swift math fixture) and `guide-distance`. Native smoke check `preview-overlay` (group `core`):
+  - ruler drags through the window's hit testing, with a snap to the heading's x = 8 edge, a move and a removal;
+  - columns at 600 and 900 px;
+  - mobile/desktop and second-project persistence;
+  - menu key equivalents, the toolbar popover and the agent view;
+  - an unchanged DOM and `previewInputs`;
+  - light and dark captures.
+
 ## 2026-10-07 — LKM-202 repair: Activity count after a hidden render (chat-gate retry)
 
 - **Symptom.** The full native run failed `chat-gate` with "Activity reset did not settle". Its artifacts show the check passed its first attempt's loaded and failed-open captures, so this was the runner's one focus-loss retry (`smoke-runner.ts`): the first attempt had left Activity open with "Could not open Folder Gamma", and the retry's `activity-action reset` could not bring `activityInspect.count` back to 0.

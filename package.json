@@ -114,6 +114,8 @@
     "test:layers-move": "bun test/layers-move.mjs",
     "test:layers-labels": "bun test/layers-labels.mjs",
     "test:measure-distance": "bun test/measure-distance.mjs",
+    "test:guide-distance": "bun test/guide-distance.mjs",
+    "test:preview-overlay": "bun test/preview-overlay.mjs",
     "test:inline-style": "bun test/inline-style.mjs",
     "test:css-values": "bun test/css-values.mjs",
     "test:control-panels": "bun test/control-panels.mjs",
