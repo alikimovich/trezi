@@ -22,7 +22,11 @@ const part = process.argv[2]
 if (!BUMPS.includes(part) || process.argv.length > 3) fail(`usage: bun run release <${BUMPS.join('|')}>`)
 const root = must('rev-parse', '--show-toplevel')
 process.chdir(root)
-const branch = git('symbolic-ref', '--quiet', '--short', 'HEAD').stdout.trim()
+// `symbolic-ref --quiet` exits 1, silently, only for a detached HEAD. Any other result
+// (git failed, was killed or never ran) is reported as itself, never as "detached" (LKM-209).
+const head = git('symbolic-ref', '--quiet', '--short', 'HEAD')
+const branch = head.status === 0 ? (head.stdout ?? '').trim() : ''
+if (head.status !== 1 && !branch) fail(`git symbolic-ref HEAD failed (status ${head.status ?? head.signal}): ${(head.error?.message ?? head.stderr ?? '').trim() || 'no output'}`)
 if (branch !== 'main') fail(`releases are cut from main; this is ${branch ? `branch ${branch}` : 'a detached HEAD'}.`)
 const dirty = must('status', '--porcelain', '--untracked-files=all')
 if (dirty) fail(`the working tree is not clean; commit or remove these first:\n${dirty}`)

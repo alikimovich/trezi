@@ -13,7 +13,15 @@
  */
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,6 +36,23 @@ import {
   versioningProblems,
   versionLabel
 } from '../scripts/version.mjs'
+import { withRunnerEnv } from './helpers/runner-env.mjs'
+
+// LKM-209: no GIT_* (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, …) or GITHUB_* variable of
+// the parent reaches a git or script run here, so this checkout's checks read this
+// checkout. Bun's children get the environment it started with (deleting from
+// process.env does not reach them), so this file re-runs itself without them. The
+// disposable repos below also get a private HOME and no global or system config.
+const inherited = Object.keys(process.env).filter((key) => /^(GIT|GITHUB)_/.test(key))
+if (inherited.length) {
+  const env = { ...process.env }
+  for (const key of inherited) delete env[key]
+  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
+    stdio: 'inherit',
+    env
+  })
+  process.exit(child.status ?? 1)
+}
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const read = (path) => readFileSync(join(root, path), 'utf8')
@@ -184,11 +209,15 @@ if (existsSync(built) && plutil(readFileSync(built, 'utf8')).TreziCommit) {
 }
 
 // --- check-version.mjs and release.mjs against disposable repos ---
-const scratch = mkdtempSync(join(tmpdir(), 'trezi-versioning-'))
+const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-versioning-')))
 try {
+  // A runner-like HOME and TMPDIR under the scratch folder, no global or system Git
+  // config, and Git never looks above the scratch folder for a repository.
+  const env = { ...withRunnerEnv(process.env, scratch), GIT_CEILING_DIRECTORIES: scratch }
   const check = (dir) =>
     spawnSync(process.execPath, [join(root, 'scripts/check-version.mjs'), dir], {
-      encoding: 'utf8'
+      encoding: 'utf8',
+      env
     })
   const project = (dir, version, log) => {
     spawnSync('mkdir', ['-p', dir])
@@ -213,7 +242,7 @@ try {
 
   const repo = join(scratch, 'repo')
   project(repo, '0.0.1', changelog)
-  const git = (...args) => spawnSync('git', args, { cwd: repo, encoding: 'utf8' })
+  const git = (...args) => spawnSync('git', args, { cwd: repo, encoding: 'utf8', env })
   const must = (...args) => {
     const r = git(...args)
     assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`)
@@ -232,8 +261,16 @@ try {
   const release = (...args) =>
     spawnSync(process.execPath, [join(root, 'scripts/release.mjs'), ...args], {
       cwd: repo,
-      encoding: 'utf8'
+      encoding: 'utf8',
+      env
     })
+  // Each refusal starts from the HEAD it is about, checked before release.mjs runs.
+  const onBranch = (expected) =>
+    assert.equal(
+      git('symbolic-ref', '--quiet', '--short', 'HEAD').stdout.trim(),
+      expected,
+      `HEAD is ${expected || 'detached'}`
+    )
   const unchanged = (result, pattern, why) => {
     assert.equal(result.status, 1, `${why}: refused`)
     assert.match(result.stderr, pattern, why)
@@ -247,14 +284,34 @@ try {
   }
   unchanged(release(), /usage: bun run release <major\|minor\|patch>/, 'no bump')
   unchanged(release('build'), /usage/, 'unknown bump')
+  onBranch('main')
   must('checkout', '-q', '-b', 'feature')
+  onBranch('feature')
   unchanged(release('patch'), /cut from main; this is branch feature/, 'off main')
   must('checkout', '-q', '--detach')
+  onBranch('')
   unchanged(release('patch'), /detached HEAD/, 'detached HEAD')
   must('checkout', '-q', 'main')
+  onBranch('main')
+  // A failing `git symbolic-ref` is reported as itself, never as a detached HEAD.
+  const realGit = spawnSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8', env })
+  const fakeGit = join(scratch, 'fake git')
+  mkdirSync(fakeGit)
+  writeFileSync(
+    join(fakeGit, 'git'),
+    `#!/bin/sh\n[ "$1" = symbolic-ref ] && { echo 'fatal: simulated' >&2; exit 128; }\nexec '${realGit.stdout.trim()}' "$@"\n`,
+    { mode: 0o755 }
+  )
+  const broken = spawnSync(process.execPath, [join(root, 'scripts/release.mjs'), 'patch'], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: { ...env, PATH: `${fakeGit}:${env.PATH}` }
+  })
+  unchanged(broken, /git symbolic-ref HEAD failed \(status 128\): fatal: simulated/, 'git fails')
   writeFileSync(join(repo, 'CHANGELOG.md'), `${changelog}- Uncommitted.\n`)
   unchanged(release('patch'), /not clean[\s\S]*CHANGELOG\.md/, 'modified file')
   must('checkout', '-q', '--', 'CHANGELOG.md')
+  onBranch('main')
   writeFileSync(join(repo, 'notes.txt'), 'untracked\n')
   unchanged(release('patch'), /not clean[\s\S]*notes\.txt/, 'untracked file')
   rmSync(join(repo, 'notes.txt'))

@@ -228,6 +228,10 @@ const UNIT_TIMEOUT_MS = {
   'repository-owner': 240_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
+  // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
+  // most service sources after nearly every service change, queued behind other swiftc runs.
+  'workflow-durability': 240_000,
+  'workflow-owner': 240_000,
   'keychain-rebuild': 300_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,

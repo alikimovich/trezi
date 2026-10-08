@@ -53,7 +53,9 @@ export async function startRepositoryFixture(binary, profile, env = {}) {
   })
   createInterface({ input: child.stdout }).on('line', (line) => {
     const message = JSON.parse(line)
-    if (message.event === 'service-reply') link.emit('service-reply', message)
+    // `workflow-dropped`: the workflow fixture discarded a reply (test/helpers/workflow-fixture.mjs).
+    if (message.event === 'service-reply' || message.event === 'workflow-dropped')
+      link.emit(message.event, message)
     else lines.push(message)
     for (const wake of waiters) wake()
   })

@@ -10,6 +10,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Pick/submit → one structured user turn; state saved with the message; summary in the next turn; rules generated from the catalog (v37); `docs/CHAT-UI.md`.
 - [x] Tests: unit `chat-ui`, `chat-ui-model`; native smoke `chat-ui` (group `chat`).
 - [ ] Open: `compare` and `changes` components.
+## Flaky CI tests: versioning and workflow-durability (LKM-209)
+
+- [x] `scripts/release.mjs` reports a failed `git symbolic-ref` as itself, never as "detached HEAD"; `test/versioning.mjs` runs hermetic (private HOME and config, GIT_*/GITHUB_* scrubbed, branch asserted before each refusal, a "git fails" case).
+- [x] `workflow-durability`: client deadlines on an injected clock (expire on fixture exit or a dropped reply), a FIFO handshake instead of the cancel poll, local-only git; 240 s budget for the cold fixture compile.
+- [x] 20× serial and 20× with CI job settings (`--jobs=3 --timeout-ms=120000`), no failures.
 
 ## Component states workbench (LKM-207)
 

@@ -8,16 +8,13 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BODY_LIMIT, SAFE_LIMIT } from '../../src/shared/feedback-body.ts'
+import { crashed } from './workflow-fixture.mjs'
 
 export async function toolChecks({ world, start, log }) {
   const setGh = (w, change) => {
     const state = w.gh()
     change(state)
     writeFileSync(w.ghState, JSON.stringify(state))
-  }
-  const crashed = async (fixture, promise) => {
-    await assert.rejects(promise, (error) => error.code === 'deadlineExceeded')
-    assert.equal((await fixture.exited).signal, 'SIGKILL')
   }
   const title = 'The sidebar loses focus'
 
@@ -108,7 +105,7 @@ export async function toolChecks({ world, start, log }) {
   {
     const w = world('feedback-crash'),
       f1 = await start(w, { WORKFLOW_FAULT: 'feedback.issue' })
-    await crashed(f1, f1.workflows({ timeout: 3000, retries: 0 }).feedback(w.local, title, 'body'))
+    await crashed(f1, (owner) => owner.feedback(w.local, title, 'body'))
     assert.equal(w.gh().issues.length, 1)
     const f2 = await start(w)
     assert.deepEqual(await f2.workflows().feedback(w.local, title, 'body'), {
