@@ -106,7 +106,7 @@ export function installNativeWorkspace(
     }
     if (action.action === 'new-chat') run({ type: 'new-chat', key })
     else if (action.action === 'select' && action.id?.startsWith('project:'))
-      run({ type: 'select', key })
+      run({ type: 'select', key, generation: action.generation })
     else if (action.action === 'select' && action.id?.startsWith('chat:'))
       run({ type: 'chat', key, session: action.id.slice(5) })
     else if (action.action === 'close' && action.id?.startsWith('project:'))

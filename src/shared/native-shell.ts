@@ -27,6 +27,9 @@ export interface NativeShellState {
   rows: NativeShellRow[]
   selected: string | null
   project: string | null
+  /** The newest sidebar pick generation this state already reflects (LKM-204); the host
+   *  keeps a newer pick highlighted over an older state. */
+  selection?: number
   /** The selected project finished opening: only then are the chat column and its toolbar actions shown. */
   chatReady: boolean
   selectMode: boolean
@@ -73,6 +76,8 @@ export interface NativeShellAction {
   id?: string
   value?: string
   project?: string
+  /** A sidebar row pick's generation, growing per pick (LKM-204). */
+  generation?: number
 }
 export interface NativeShellBridge {
   readWorkspace: () => Promise<string | null>

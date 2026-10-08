@@ -64,21 +64,42 @@ export async function checkSourceSyntax(host: NativeBridge, fixture: string, art
     15000
   ).catch(() => assert.fail(`Highlight categories: ${JSON.stringify(shown)}`))
 
-  const typed = await verify({ type: KEYSTROKES, after: 'const total', pace: 0.06 })
-  assert.ok(Array.isArray(typed.keystrokes), `Typing ran: ${JSON.stringify(typed)}`)
-  // The first keystrokes warm caches (the first edit message, layout of the line).
-  const costs: number[] = typed.keystrokes.slice(5)
-  const sorted = [...costs].sort((a, b) => a - b)
-  const p95 = sorted[Math.floor(sorted.length * 0.95)],
-    worst = sorted[sorted.length - 1]
+  // One 35-sample pass makes p95 its second-slowest keystroke, so two scheduler or GC
+  // blips fail it. Three passes (each after the highlighter converged and a settle delay,
+  // so earlier checks' background work is not running) gate on the median of their p95s:
+  // an isolated spike is outvoted, a uniformly slower editor still fails. Threshold unchanged.
+  const passes: { keystrokes: number[]; p95: number; worst: number }[] = []
+  let typed: { keystrokes: number[]; highlighted: number; revision: number } = {
+    keystrokes: [],
+    highlighted: 0,
+    revision: 0
+  }
+  for (let pass = 0; pass < 3; pass++) {
+    await waitFor(async () => {
+      const state = await verify({ probes: [] })
+      return state.highlighted === state.revision
+    }, 'highlighter converged before typing')
+    await delay(1000)
+    typed = await verify({ type: KEYSTROKES, after: 'const total', pace: 0.06 })
+    assert.ok(Array.isArray(typed.keystrokes), `Typing ran: ${JSON.stringify(typed)}`)
+    // The first keystrokes warm caches (the first edit message, layout of the line).
+    const sorted = typed.keystrokes.slice(5).sort((a: number, b: number) => a - b)
+    passes.push({
+      keystrokes: typed.keystrokes,
+      p95: sorted[Math.floor(sorted.length * 0.95)],
+      worst: sorted[sorted.length - 1]
+    })
+  }
+  const byP95 = [...passes].sort((a, b) => a.p95 - b.p95)
+  const { p95, worst } = byP95[1]
   console.log(
-    `Native syntax typing (3,000-line TSX): p95 ${p95.toFixed(2)} ms, worst ${worst.toFixed(2)} ms, highlighted ${typed.highlighted}/${typed.revision}`
+    `Native syntax typing (3,000-line TSX): p95 ${p95.toFixed(2)} ms (runs ${passes.map((run) => run.p95.toFixed(2)).join(', ')}), worst ${worst.toFixed(2)} ms, highlighted ${typed.highlighted}/${typed.revision}`
   )
-  // The threshold is unchanged; a failure carries every keystroke's cost (warm-up included),
-  // so a few slow ones (load on the machine) tell apart from a uniformly slower editor.
+  // A failure carries every keystroke's cost of every pass (warm-up included), so a few
+  // slow ones (load on the machine) tell apart from a uniformly slower editor.
   assert.ok(
     p95 < 16,
-    `Main-thread work per keystroke p95 ${p95.toFixed(2)} ms ≥ 16 ms (per keystroke ms: ${typed.keystrokes.map((ms: number) => ms.toFixed(1)).join(' ')})`
+    `Main-thread work per keystroke median p95 ${p95.toFixed(2)} ms ≥ 16 ms (per pass, per keystroke ms: ${passes.map((run) => `[p95 ${run.p95.toFixed(2)}: ${run.keystrokes.map((ms) => ms.toFixed(1)).join(' ')}]`).join(' ')})`
   )
   assert.equal(typed.highlighted, typed.revision, 'The last keystroke is highlighted')
   const after = await verify({ probes: expected })
@@ -106,7 +127,7 @@ export async function checkSourceSyntax(host: NativeBridge, fixture: string, art
   writeFileSync(
     join(artifacts, 'source-syntax.json'),
     JSON.stringify(
-      { keystrokes: typed.keystrokes, p95, worst, categories: after.categories },
+      { passes, keystrokes: typed.keystrokes, p95, worst, categories: after.categories },
       null,
       2
     )

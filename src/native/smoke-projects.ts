@@ -8,6 +8,7 @@ import type { NativeContextController } from './context-controller'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkVisibleSidebar } from './smoke-sidebar'
+import { checkSwitchOrder } from './smoke-switch-order'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -82,6 +83,7 @@ export async function checkProjectSwitching(
   }
   assert.ok(restored, 'Restore original project/chat/preview after sidebar checks')
   await checkSwitchDropsSelection(host, first, second, artifacts, context, inspector)
+  await checkSwitchOrder(host, fixture, first, second, artifacts)
   await nativeWorkspace.command({ type: 'close', key: second.key })
 }
 
