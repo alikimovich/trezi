@@ -250,7 +250,7 @@ extension Host {
             guard let bitmap = target.bitmapImageRepForCachingDisplay(in: target.bounds) else { reply(id, error: "Composer capture unavailable"); return true }
             target.cacheDisplay(in: target.bounds, to: bitmap)
             reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
-        case "shellInspect": reply(id, shell.inspect().merging(shell.gateInspect()) { _, new in new })
+        case "shellInspect": reply(id, shell.inspect().merging(shell.gateInspect()) { _, new in new }.merging(shell.selection.inspect) { _, new in new })
         case "sidebarVerification":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             SidebarMenuMonitor.shared.install()

@@ -21,6 +21,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var rowsSignature = Data()
     var currentProject: String?
     var selectedID: String?
+    let selection = ShellSelection()
     var applying = false
     var ready = false
     var selecting = false
@@ -397,10 +398,14 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
 
         if rowsChanged || projectChanged { outline.reloadData() }
-        if let selected = rows.first(where: { $0.project == currentProject }) {
-            let index = outline.row(forItem: selected)
-            if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
-        } else if outline.selectedRow >= 0 { outline.deselectAll(nil) }
+        // A state older than the latest pick keeps the picked row highlighted (LKM-204).
+        if selection.answers(state) {
+            if let selected = rows.first(where: { $0.project == currentProject }) {
+                let index = outline.row(forItem: selected)
+                if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
+            } else if outline.selectedRow >= 0 { outline.deselectAll(nil) }
+        }
+        noteSelection()
         window?.subtitle = ""
         updateToolbar()
     }
@@ -433,8 +438,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !applying, let row = outline.item(atRow: outline.selectedRow) as? ShellRow else { return }
-        emit(["event":"shell-action", "action":"select", "id":row.id])
+        emit(["event":"shell-action", "action":"select", "id":row.id, "generation":selection.pick()])
+        noteSelection()
     }
+    func noteSelection() { selection.note(sidebar: (outline.item(atRow: outline.selectedRow) as? ShellRow)?.project, window: currentProject) }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         guard let row = outline.item(atRow: outline.clickedRow) as? ShellRow else { return }
@@ -494,6 +501,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if action == "history-select", let entry = chatActions.historyMenu?.items.first(where: { ($0.representedObject as? [String:String])?["id"] == id }) {
             contextAction(entry); return true
         }
+        if action == "selection-trail-reset" { selection.reset(); noteSelection(); return true }
         if action == "select-row", let row = rows.first(where: { $0.id == id }) {
             let index = outline.row(forItem: row)
             guard index >= 0 else { return false }

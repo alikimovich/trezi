@@ -133,6 +133,7 @@ const host = compile(
     join(root, 'src/native/HostInspect.swift'),
     join(root, 'src/native/SecuritySession.swift'),
     join(root, 'src/native/Shell.swift'),
+    join(root, 'src/native/ShellSelection.swift'),
     join(root, 'src/native/ProjectCell.swift'),
     join(root, 'src/native/SidebarVerification.swift'),
     join(root, 'src/native/SidebarSizing.swift'),

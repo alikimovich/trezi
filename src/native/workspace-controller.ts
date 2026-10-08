@@ -77,6 +77,11 @@ export class NativeWorkspaceController {
   preferred = defaultChatAgentSettings()
   private boot?: Promise<void>
   private intent = 0
+  /** The newest project pick (LKM-204): the active project from the click on, until the
+   *  store acknowledges this very pick. Generations only grow, so an older pick's
+   *  acknowledgement or an external snapshot cannot bring the previous project back. */
+  private chosen?: { key: string; generation: number }
+  private selections = 0
   private jobs = new Map<string, Promise<void>>()
   private closing = new Set<string>()
   private closes = new Map<string, Promise<void>>()
@@ -126,7 +131,13 @@ export class NativeWorkspaceController {
     })
     for (const key of [...this.sent.keys()])
       if (!view.projects.some((record) => record.key === key)) this.sent.delete(key)
-    this.state.activeKey = view.activeKey
+    const chosen = this.chosen
+    if (
+      chosen &&
+      (this.closing.has(chosen.key) || !view.projects.some((record) => record.key === chosen.key))
+    )
+      this.chosen = undefined
+    this.state.activeKey = this.chosen?.key ?? view.activeKey
     this.state.recents = view.recents.map(({ root, name, at }) => ({
       root,
       name,
@@ -230,7 +241,11 @@ export class NativeWorkspaceController {
       if (root) await this.open(root, command.command)
       return
     }
-    if (command.type === 'select') return this.select(command.key)
+    if (command.type === 'select') {
+      // Echoed to the host even when the pick is refused, so its highlight follows the state.
+      if (command.generation !== undefined) this.state.selection = command.generation
+      return this.select(command.key)
+    }
     if (command.type === 'close') return this.close(command.key)
     if (command.type === 'restart') {
       const entry = this.find(command.key),
@@ -386,7 +401,12 @@ export class NativeWorkspaceController {
    *  reloads the preview past WebKit's, on the route it showed. */
   async select(key: string, command?: string, restart = false, clean?: string) {
     const entry = this.find(key),
-      intent = ++this.intent
+      intent = ++this.intent,
+      chosen = { key, generation: ++this.selections }
+    // The window switches before the store has saved the pick or any server starts: the
+    // first state already names this project, showing its own "Opening …" (LKM-204).
+    this.chosen = chosen
+    this.state.activeKey = key
     this.state.status = { kind: 'busy', label: clean ?? 'Opening ' + entry.name + '…' }
     // Another project hides the chat until it has opened; a restart of this one keeps it.
     if (this.state.loadedKey !== key) {
@@ -400,6 +420,9 @@ export class NativeWorkspaceController {
       // The selection is persisted before the project's session or server starts.
       await this.services.store.select(key)
     } catch (error) {
+      // An unsaved pick falls back to the stored selection, unless a newer pick replaced it.
+      if (this.chosen?.generation === chosen.generation) this.chosen = undefined
+      this.adopt()
       if (current()) {
         this.state.status = { kind: 'error', message: String(error) }
         this.state.loadedKey = null
@@ -407,6 +430,7 @@ export class NativeWorkspaceController {
       }
       return
     }
+    if (this.chosen?.generation === chosen.generation) this.chosen = undefined
     this.adopt()
     try {
       await this.serialize(key, async () => {
