@@ -388,6 +388,48 @@ assert.throws(
   /TREZI_NATIVE_SMOKE_STEAL_FOCUS names an unknown check: typo/
 )
 
+// Restore after a check failed with Settings open on AI Providers (its provider editor
+// shown): Settings reopens on its remembered section, so restore leaves it on General
+// before closing, as a passing `sheets` run does. A retried `sheets` then reopens General.
+{
+  const sheet = {
+    visible: true,
+    title: 'Settings',
+    section: 'providers',
+    fields: ['connections', 'key']
+  }
+  const requests = []
+  const host = {
+    emit() {},
+    async request(method, body) {
+      requests.push(
+        (body?.action ?? body?.section) ? `${method}:${body.action ?? body.section}` : method
+      )
+      if (method === 'sheetInspect') return { ...sheet }
+      if (method === 'sheetPerform' && body.action === 'back') sheet.fields = ['connections']
+      if (method === 'sheetPerform' && body.action === 'cancel') sheet.visible = false
+      if (method === 'settingsVerification') sheet.section = body.section
+      if (method === 'sidebarFocus') return { problems: [] }
+      return true
+    }
+  }
+  const background = process.env.TREZI_NATIVE_BACKGROUND_TEST
+  process.env.TREZI_NATIVE_BACKGROUND_TEST = '1'
+  const { restoreSmokeState } = await import('../src/native/smoke-restore.ts')
+  // Other restore steps need the live app; only the sheet step matters here.
+  await restoreSmokeState(host, '').catch(() => {})
+  if (background === undefined) delete process.env.TREZI_NATIVE_BACKGROUND_TEST
+  else process.env.TREZI_NATIVE_BACKGROUND_TEST = background
+  const sheetCalls = requests.filter((r) => /^sheetPerform|^settingsVerification/.test(r))
+  assert.deepEqual(sheetCalls, [
+    'sheetPerform:back',
+    'settingsVerification:general',
+    'sheetPerform:cancel'
+  ])
+  assert.equal(sheet.section, 'general')
+  assert.equal(sheet.visible, false)
+}
+
 console.log(
-  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once.'
+  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once, Settings restored to General.'
 )

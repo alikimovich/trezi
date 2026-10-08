@@ -13,9 +13,18 @@ import { workflowOwner } from './workflow-owner'
 
 const exec = promisify(execFile)
 
-async function publishWorkflow(root: string, commit: string | undefined): Promise<unknown> {
+/** LKM-203: the publish workflow is polled until this long after the tool call began, so
+ * land + push + merge + poll + release lookup always ends inside the bridge and Codex
+ * MCP tool timeouts (`SYNC_TOOL_TIMEOUT_SEC`) with the real state, never a timeout. */
+export const PUBLISH_WORKFLOW_BUDGET_MS = 180_000
+
+async function publishWorkflow(
+  root: string,
+  commit: string | undefined,
+  startedAt: number
+): Promise<unknown> {
   if (!commit) return { state: 'unknown' }
-  const deadline = Date.now() + 180_000
+  const deadline = startedAt + PUBLISH_WORKFLOW_BUDGET_MS
   for (;;) {
     try {
       const { stdout } = await exec(
@@ -40,7 +49,9 @@ async function publishWorkflow(root: string, commit: string | undefined): Promis
       }>
       const run = runs.find((item) => /publish|release/i.test(item.name))
       if (!run) return { state: 'not_found' }
-      if (run.status === 'completed' || Date.now() >= deadline) return run
+      if (run.status === 'completed') return run
+      if (Date.now() >= deadline)
+        return { ...run, state: 'in_progress', ...(run.url ? { url: run.url } : {}) }
     } catch (error) {
       return { state: 'unavailable', error: error instanceof Error ? error.message : String(error) }
     }
@@ -78,7 +89,8 @@ export async function agentGitTool(
   root: string,
   liveRoot: string,
   action: string,
-  args: unknown
+  args: unknown,
+  startedAt = Date.now()
 ): Promise<unknown> {
   const st = states.get(key)
   if (!st || st.wt.path !== root || st.liveRoot !== liveRoot || st.reclaimed)
@@ -142,7 +154,7 @@ export async function agentGitTool(
       pushed: true,
       merged: merged.state === 'MERGED',
       mergeCommit: merged.mergeCommit?.oid ?? null,
-      workflow: await publishWorkflow(liveRoot, merged.mergeCommit?.oid),
+      workflow: await publishWorkflow(liveRoot, merged.mergeCommit?.oid, startedAt),
       release: await releaseState(liveRoot)
     }
   }

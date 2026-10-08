@@ -51,8 +51,20 @@ export async function restoreSmokeState(host: NativeBridge, firstProject: string
     }
   }
   await step(async () => {
-    if ((await host.request('sheetInspect'))?.visible)
-      await host.request('sheetPerform', { action: 'cancel' })
+    const sheet = await host.request('sheetInspect')
+    if (!sheet?.visible) return
+    // Settings reopens on its remembered section and a passing run leaves it on General,
+    // so a retried check reopening Settings must not find another section.
+    if (sheet.title === 'Settings' && sheet.section && sheet.section !== 'general') {
+      if (sheet.fields?.includes('key')) await host.request('sheetPerform', { action: 'back' })
+      await host.request('settingsVerification', { section: 'general' })
+      await until(
+        async () => (await host.request('sheetInspect'))?.section === 'general',
+        'Settings on General',
+        4000
+      )
+    }
+    await host.request('sheetPerform', { action: 'cancel' })
   })
   await step(() => restoreSidebarFocus(host, 'restore after failed check'))
   await step(() =>

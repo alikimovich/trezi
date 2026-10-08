@@ -5,9 +5,10 @@ import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { findFreePort, waitForReachable } from '../../src/main/devserver-net.ts'
+import { waitForReachable } from '../../src/main/devserver-net.ts'
 import { PREVIEW_HOST, withPort } from '../../src/main/project-detect.ts'
 import { MDX_HELPER_CONTENT } from '../../src/main/setup-mdx.ts'
 import { NEXT_ADAPTER_CONTENT, NEXT_LOADER_CONTENT } from '../../src/main/setup-next.ts'
@@ -31,8 +32,27 @@ async function install(cwd) {
   }
 }
 
-async function withServer({ cwd, command, framework, urlPath, run }) {
-  const port = await findFreePort(7777)
+/** A port the kernel just handed out from its ephemeral range. */
+async function ephemeralPort() {
+  const probe = createServer()
+  await new Promise((done, fail) => {
+    probe.once('error', fail)
+    probe.listen(0, PREVIEW_HOST, done)
+  })
+  const { port } = probe.address()
+  await new Promise((done) => probe.close(done))
+  return port
+}
+
+/**
+ * Not a port from 7777: Trezi's own allocator and other dev-server tests (a parallel
+ * dependency-refresh-vite, another checkout) probe that range too, and could take the
+ * port between the probe and this server's bind. Next then exits only after the URL
+ * already answered with the stranger's app. A server that still exits before it is
+ * reachable starts again on a fresh port.
+ */
+async function withServer({ cwd, command, framework, urlPath, run }, attempt = 1) {
+  const port = await ephemeralPort()
   const server = spawn('/bin/sh', ['-c', withPort(command, framework, port)], {
     cwd,
     detached: true,
@@ -47,18 +67,28 @@ async function withServer({ cwd, command, framework, urlPath, run }) {
     }
   })
   const url = `http://${PREVIEW_HOST}:${port}${urlPath}`
+  let retry = false
   try {
     const deadline = Date.now() + 120000
-    assert.ok(
-      await waitForReachable([url], () => Date.now() > deadline || server.exitCode !== null),
-      `dev server reachable at ${url}`
+    const reachable = await waitForReachable(
+      [url],
+      () => Date.now() > deadline || server.exitCode !== null
     )
-    return await run(url)
+    if (server.exitCode !== null && attempt < 3) {
+      console.log(
+        `ISLAND-FLICKER-FRAMEWORKS port ${port} lost before ${framework} bound it; retrying`
+      )
+      retry = true
+    } else {
+      assert.ok(reachable && server.exitCode === null, `dev server reachable at ${url}`)
+      return await run(url)
+    }
   } finally {
     try {
       if (server?.pid) process.kill(-server.pid, 'SIGTERM')
     } catch {}
   }
+  if (retry) return withServer({ cwd, command, framework, urlPath, run }, attempt + 1)
 }
 
 async function withHost(run) {

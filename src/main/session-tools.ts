@@ -130,6 +130,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       'publish_merge'
     ].includes(action)
   ) {
+    const startedAt = Date.now()
     if (action === 'publish_update' || action === 'publish_merge') {
       const landed = (await landNow(s.emitKey, 'Land changes before publishing')) as {
         outcome?: string
@@ -142,7 +143,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
           landing: landed
         }
     }
-    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args)
+    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args, startedAt)
   }
   const before = agentWorkspaceState(s.emitKey)
   if (before.state === 'live' || before.state === 'isolated') {

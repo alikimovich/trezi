@@ -319,13 +319,52 @@ export async function openOnSource(page, open, served, css, label) {
     await waitServed(served, css, label)
     await open()
     try {
-      return await waitForShadow(page, css, {
+      const shown = await waitForShadow(page, css, {
         timeoutMs: 5000,
         label: `${label} (load ${attempt})`
       })
+      await waitForClientRender(page, css, `${label} (load ${attempt})`)
+      return shown
     } catch (error) {
       if (Date.now() > deadline) throw error
     }
+  }
+}
+
+/**
+ * Next only: the server can render the new source while the browser still loads the old
+ * client chunk. Hydration then keeps the server's attribute ("This won't be patched up")
+ * but React holds the old props, so a later write of those old props changes nothing in
+ * the DOM and the gesture never shows its final value. The hydrated props must render
+ * `css` too; otherwise the load is retried.
+ */
+async function waitForClientRender(page, css, label, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs
+  let last = null
+  for (;;) {
+    last = await page(`(() => {
+      // The server HTML names Next's chunks; window.next only exists after hydration.
+      if (!document.querySelector('script[src*="/_next/"]')) return true;
+      const card = document.querySelector(${JSON.stringify(SELECTOR)});
+      const key = card && Object.keys(card).find((k) => k.startsWith('__reactProps$'));
+      if (!key) return 'not hydrated';
+      const props = card[key]?.style?.boxShadow;
+      const computed = (value) => {
+        const probe = document.createElement('div');
+        probe.style.boxShadow = value;
+        document.body.append(probe);
+        const shown = getComputedStyle(probe).boxShadow;
+        probe.remove();
+        return shown;
+      };
+      return computed(props) === computed(${JSON.stringify(css)}) || String(props);
+    })()`).catch((error) => String(error?.message ?? error))
+    if (last === true) return
+    if (Date.now() > deadline)
+      throw new Error(
+        `${label}: the hydrated client renders ${JSON.stringify(last)}, not the served shadow`
+      )
+    await Bun.sleep(100)
   }
 }
 
