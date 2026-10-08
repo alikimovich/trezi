@@ -194,8 +194,11 @@ export async function checkPreviewOverlay(
   const agent = agentPreviewOverlay(first.root)
   assert.ok(agent?.readOnly === true && agent.rulers === true && agent.viewport === 'desktop')
 
-  // The toolbar button opens the settings popover.
+  // The toolbar button opens the settings popover. Switching projects disables the
+  // preview's toolbar until its preview is ready again, so the click waits for that.
+  await until((s) => s.buttonEnabled, 'overlay toolbar button enabled', 20000)
   const clicked = await host.request('shellPerform', { action: 'overlay' })
+  assert.equal(clicked, true, 'The toolbar button takes the click')
   await until((s) => s.panelShown, 'overlay popover').catch(async (error) => {
     const { panelNote } = await inspect()
     throw new Error(`${error.message} (click ${JSON.stringify(clicked)}, ${panelNote})`)

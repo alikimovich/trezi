@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-205 root cause: `preview-overlay` clicked a disabled toolbar button
+
+- **Diagnostics.** The next failure reported `click false` and an empty `panelNote`, so `togglePanel` never ran. The focus-loss hypothesis below was wrong.
+- **Cause.** `Shell.perform("overlay")` goes through `MomentaryToolbarGroup.clickSegment`, which returns false for a disabled subitem. Preview toolbar items are enabled only while `previewReady` is true, and the check clicks right after switching from a second project back to the first and closing the second one. The overlay key comes back before the first project's preview is ready again, so a slow restart left the button disabled at click time. The product behaviour (no preview tools without a preview) is correct; the check was racing it.
+- **Fix.** `previewOverlayInspect` reports `buttonEnabled`, and the check waits for it (up to 20 s), then asserts the click returned true before it waits for the popover. The panel note diagnostics stay.
+
 ## 2026-10-08 — LKM-205 repair: `preview-overlay` popover timeout after the LKM-206 merge
 
 - **Symptom.** The manager's full run timed out for 10 s waiting for the Rulers and Grids popover (`panelShown` false) on the tree merged with LKM-206 (slow motion); every other check passed.
