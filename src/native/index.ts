@@ -12,6 +12,7 @@ import {
 } from '../main/agent'
 import { AGENT_FILE_ACCESS_KEY, setAgentFileAccessSource } from '../main/agent-file-access'
 import { AGENT_GIT_ACCESS_KEY, setAgentGitAccessSource } from '../main/agent-git-access'
+import { AGENT_MERGE_KEY, setAgentMergeSource } from '../main/agent-merge-setting'
 import { registerAnnotationsIpc } from '../main/annotations'
 import {
   CLAUDE_USER_PLUGINS_KEY,
@@ -192,6 +193,7 @@ async function main() {
   setClaudeUserPluginsSource(() => preferences.get(CLAUDE_USER_PLUGINS_KEY))
   setAgentFileAccessSource(() => preferences.get(AGENT_FILE_ACCESS_KEY))
   setAgentGitAccessSource(() => preferences.get(AGENT_GIT_ACCESS_KEY))
+  setAgentMergeSource(() => preferences.get(AGENT_MERGE_KEY))
   const workspace = await serviceWorkspace(host).catch((error) => {
     throw new Error(`Trezi could not read the workspace from its service: ${error.message}`)
   })

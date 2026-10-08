@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-07 — LKM-203: mid-turn landing and synchronous publish
+
+- Added `land_now` through the chat landing chain and repository owner. It returns the landing outcome, live commit and preview evidence; the ordinary turn-end pass handles later edits.
+- `publish_update` now lands first and waits for the workflow owner to push. `publish_merge` uses the owner's merge mode and observes the PR merge commit and publish workflow. Settings has Agent can merge pull requests, on by default.
+- Updated tool grants and rules so agents verify the landed preview and complete publication during the turn.
+- Verification: the manager's quick tier passed once (192 unit tests) and the first native run reached Settings smoke, where the new row required an updated evidence list. That list and its unit fixture now pass. A native confirmation was skipped by its preflight because another process held the Vite fixture's port 7777; the operator should rerun chat/settings native smoke when that port is free.
+
 ## 2026-10-07 — LKM-202 repair: Activity count after a hidden render (chat-gate retry)
 
 - **Symptom.** The full native run failed `chat-gate` with "Activity reset did not settle". Its artifacts show the check passed its first attempt's loaded and failed-open captures, so this was the runner's one focus-loss retry (`smoke-runner.ts`): the first attempt had left Activity open with "Could not open Folder Gamma", and the retry's `activity-action reset` could not bring `activityInspect.count` back to 0.

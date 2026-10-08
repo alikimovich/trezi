@@ -231,7 +231,7 @@ console.log(
   const landing = controller.refreshEnvironment(key, ['package.json', 'src/App.tsx'])
   for (
     let i = 0;
-    i < 50 && !calls.slice(start).some((call) => call[0] === 'devserver:install');
+    i < 2000 && !calls.slice(start).some((call) => call[0] === 'devserver:install');
     i++
   )
     await tick()

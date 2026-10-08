@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- Agents can land edits during a turn with `land_now`, then update or merge an existing pull request synchronously; Settings includes Agent can merge pull requests (LKM-203).
 - Dreamer: Trezi → Run Dreamer… reviews your recent chats and Trezi's log on this Mac (slow tools, repeated failures, retried requests) with your selected model and proposes improvements; Dreamer Proposals… lets you filter, edit and select them, then Copy as JSON, Export Dreamer Report… (a redacted zip) or Send to Agent OS (Settings → Dreamer), with an optional weekly run (LKM-202).
 - Agents can reserve a pending chat island before adding the source values it controls: the definition is checked at once, the island turns on after the turn lands and its values are found, and otherwise it shows why with Recreate (LKM-201).
 - The preview toolbar's … menu (windows 1000 pt or wider) has Reload Without Cache and Restart Dev Server (clean cache); agents get `reload_preview` (with `hard`) and `restart_dev_server` (with `cleanCache`), and `open_preview` says whether the page's CSS/JS matches what the dev server serves now (LKM-197).
@@ -38,6 +39,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
+- Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).
 - A new chat can create chat islands again: its agent no longer gets "chat islands are not available yet" while the workspace is still being prepared; the island waits for it (LKM-199).
 - The agent's preview route, DOM inspection and screenshot always describe the same page, the preview you see, and name its port and route; when the preview shows another server than the chat's project, the tools say so instead of describing the wrong page (LKM-199).
 - When a chat cannot hold islands, the agent now gets a reason code and a recovery step (workspace still preparing, preparation failed, not a Git repository, no session, closed) from `chat_island`, and its catalog says whether the chat is ready (LKM-199).

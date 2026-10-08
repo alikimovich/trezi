@@ -4,11 +4,6 @@ import type { SessionRecord, SessionTranscriptEntry } from '../shared/api'
 import type { DependencyIssue } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { currentAgentGitAccess } from './agent-git-access'
-import {
-  clearAgentPublish,
-  clearAllAgentPublishes,
-  publishAfterAgentLanding
-} from './chat-agent-git'
 import { finalReply, turnMessage } from './chat-commit'
 import { landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
@@ -21,6 +16,7 @@ import {
   recreateWorkspace,
   states
 } from './chat-state'
+import { agentWorkspaceState } from './chat-status'
 import { LandingEnded, LandingGuard } from './chat-watchdog'
 import {
   canReconcileText,
@@ -36,7 +32,8 @@ import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import { commitLiveTurn } from './live-commit'
 import { reconcileParkOnChain } from './park-reconcile'
-import { productLog } from './product-log'
+import { previewEvidence } from './preview-evidence'
+import { liveHead } from './preview-identity'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
@@ -253,69 +250,81 @@ export function afterTurn(
   if (!st) return Promise.resolve(null)
   const turn = lastTurn(transcript)
   st.lastUsed = Date.now()
-  let mergedThisTurn = false
-  const task = st.chain
-    .then(() =>
-      enqueueRepoWrite(st.liveRoot, async () => {
-        st.lastUsed = Date.now()
-        if (st.reclaimed) return null
-        const before = st.lastLanding
-        const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
-        let settled: 'pending' | 'ok' | 'failed' = 'pending'
-        batch.then(
-          () => {
-            settled = 'ok'
-            mergedThisTurn = st.lastLanding !== before && st.lastLanding?.outcome === 'merged'
-          },
-          () => {
-            settled = 'failed'
-          }
-        )
+  const task = st.chain.then(() =>
+    enqueueRepoWrite(st.liveRoot, async () => {
+      st.lastUsed = Date.now()
+      if (st.reclaimed) return null
+      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
+      let settled: 'pending' | 'ok' | 'failed' = 'pending'
+      batch.then(
+        () => {
+          settled = 'ok'
+        },
+        () => {
+          settled = 'failed'
+        }
+      )
+      try {
+        // Bounded (LKM-165): the chat stops waiting on a landing that stalls, or that Stop
+        // ends, and shows it held with Retry.
+        return await landings.run(sessionKey, batch)
+      } catch (error) {
+        if (!(error instanceof LandingEnded)) {
+          await landingFailed(sessionKey, st, error, turn)
+          return null
+        }
+        // The batch itself cannot be cancelled and keeps writing the worktree and live
+        // tree, so the lease and this chat's chain stay held until it settles: a Retry or
+        // the next turn's landing never overlaps it. Whatever it ends as is the truth.
+        draining.add(sessionKey)
         try {
-          // Bounded (LKM-165): the chat stops waiting on a landing that stalls, or that Stop
-          // ends, and shows it held with Retry.
-          return await landings.run(sessionKey, batch)
-        } catch (error) {
-          if (!(error instanceof LandingEnded)) {
-            await landingFailed(sessionKey, st, error, turn)
+          await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
+          const late = await batch.then(
+            (files) => ({ files }),
+            (cause) => ({ cause })
+          )
+          if ('cause' in late) {
+            await landingFailed(sessionKey, st, late.cause, turn)
             return null
           }
-          // The batch itself cannot be cancelled and keeps writing the worktree and live
-          // tree, so the lease and this chat's chain stay held until it settles: a Retry or
-          // the next turn's landing never overlaps it. Whatever it ends as is the truth.
-          draining.add(sessionKey)
-          try {
-            await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
-            const late = await batch.then(
-              (files) => ({ files }),
-              (cause) => ({ cause })
-            )
-            if ('cause' in late) {
-              await landingFailed(sessionKey, st, late.cause, turn)
-              return null
-            }
-            return late.files
-          } finally {
-            draining.delete(sessionKey)
-          }
+          return late.files
+        } finally {
+          draining.delete(sessionKey)
         }
-      })
-    )
-    .then(async (result) => {
-      if (mergedThisTurn && !st.parked) {
-        try {
-          await publishAfterAgentLanding(sessionKey, st.liveRoot)
-        } catch (error) {
-          productLog.error('publish', 'Agent PR update failed after landing', {
-            root: st.liveRoot,
-            error: error instanceof Error ? error.message : String(error)
-          })
-        }
-      } else clearAgentPublish(sessionKey)
-      return result
+      }
     })
+  )
   st.chain = task.catch(() => null)
   return task.catch(() => null)
+}
+
+/** Land the current snapshot while the provider is still running. The ordinary
+ * turn-end landing remains queued on the same chat chain and sees only later edits. */
+export async function landNow(sessionKey: string, message: string): Promise<unknown> {
+  const st = states.get(sessionKey)
+  if (!st || st.reclaimed) return { error: 'This chat has no active Git worktree.' }
+  const landing = afterTurn(sessionKey, message, [], 'success', true)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timed = await Promise.race([
+    landing.then(() => false),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(true), 60_000)
+    })
+  ])
+  if (timer) clearTimeout(timer)
+  if (timed)
+    return {
+      error: 'Landing is still running after 60 seconds. Check workspace_state before publishing.'
+    }
+  const state = agentWorkspaceState(sessionKey)
+  return {
+    outcome: state.lastLanding?.outcome ?? state.state,
+    files: state.lastLanding?.files ?? state.files,
+    ...(state.lastLanding?.error ? { error: state.lastLanding.error } : {}),
+    commit: state.lastLanding?.outcome === 'merged' ? await liveHead(st.liveRoot, true) : null,
+    preview: previewEvidence(st.liveRoot),
+    guidance: state.guidance
+  }
 }
 
 /** One landing attempt of the chat's cumulative batch. Inside the repository lease. */
@@ -515,7 +524,6 @@ export async function releaseChat(
 ): Promise<void> {
   const st = states.get(sessionKey)
   if (!st) {
-    clearAgentPublish(sessionKey)
     return
   }
   states.delete(sessionKey)
@@ -568,7 +576,6 @@ export async function releaseChat(
   } catch {
     /* teardown never throws */
   } finally {
-    clearAgentPublish(sessionKey)
   }
 }
 
@@ -576,5 +583,4 @@ export async function releaseChat(
  *  checkouts stay on disk for the next launch's crash recovery (C4). */
 export function dropAll(): void {
   states.clear()
-  clearAllAgentPublishes()
 }

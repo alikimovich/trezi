@@ -15,7 +15,9 @@ import {
   initChatIsolation,
   isolatedCwd,
   isolationSnapshot,
-  releaseChat
+  landNow,
+  releaseChat,
+  resolveParkedChat
 } from '../src/main/chat-isolation.ts'
 import { states } from '../src/main/chat-state.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
@@ -93,11 +95,41 @@ function assertLanded(chat, { turn, title, content, revertable }) {
   )
   assert.equal(git(chat.root, 'status', '--porcelain'), '')
   assert.deepEqual(isolationSnapshot(chat.key), { state: 'isolated', branch: chat.branch })
-  assert.equal(records.size, 0, 'the park record is dropped')
+  assert.equal(records.has(`chatpark-${chat.id}`), false, 'this chat’s park record is dropped')
   return group
 }
 
 try {
+  // A running agent can land, keep editing, and leave only the later delta to
+  // the ordinary turn-end hook.
+  const mid = await fixture()
+  writeFileSync(join(mid.cwd, FILE), 'export const bar = 1\n')
+  const first = await landNow(mid.key, 'Set bar to one')
+  assert.equal(first.outcome, 'merged')
+  assert.equal(first.commit, git(mid.root, 'rev-parse', 'HEAD'))
+  assert.equal(readFileSync(join(mid.root, FILE), 'utf8'), 'export const bar = 1\n')
+  writeFileSync(join(mid.cwd, FILE), 'export const bar = 2\n')
+  await afterTurn(mid.key, 'Set bar to two', [], 'success')
+  assert.equal(readFileSync(join(mid.root, FILE), 'utf8'), 'export const bar = 2\n')
+  assert.notEqual(git(mid.root, 'rev-parse', 'HEAD'), first.commit)
+  assert.equal(git(mid.root, 'rev-list', '--count', `${first.commit}..HEAD`), '1')
+  await releaseChat(mid.key)
+
+  const conflict = await fixture()
+  writeFileSync(join(conflict.cwd, FILE), 'export const bar = 3\n')
+  writeFileSync(join(conflict.root, FILE), 'export const bar = 4\n')
+  const parked = await landNow(conflict.key, 'Set bar to three')
+  assert.equal(parked.outcome, 'parked')
+  assert.deepEqual(parked.files, [FILE])
+  assert.equal(readFileSync(join(conflict.root, FILE), 'utf8'), 'export const bar = 4\n')
+  const prepared = await resolveParkedChat(conflict.key)
+  assert.deepEqual(prepared.conflicted, [FILE])
+  writeFileSync(join(conflict.cwd, FILE), 'export const bar = 5\n')
+  const resolved = await landNow(conflict.key, 'Resolve both bar edits')
+  assert.equal(resolved.outcome, 'merged')
+  assert.equal(readFileSync(join(conflict.root, FILE), 'utf8'), 'export const bar = 5\n')
+  await releaseChat(conflict.key)
+
   // A finished turn lands through landTurn.
   const done = await fixture()
   writeFileSync(join(done.cwd, FILE), 'export const bar = 1\n')

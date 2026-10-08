@@ -12,8 +12,9 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { agentGitAccess, rawGitWrite } from '../src/main/agent-git-access.ts'
+import { setAgentMergeSource } from '../src/main/agent-merge-setting.ts'
 import { gitAccessHook } from '../src/main/backends/codex-mcp.ts'
-import { clearAgentPublish, publishAfterAgentLanding } from '../src/main/chat-agent-git.ts'
+import { agentGitTool } from '../src/main/chat-agent-git.ts'
 import { states } from '../src/main/chat-state.ts'
 import { runTreziTool } from '../src/main/session-tools.ts'
 import { setWorkflowOwner } from '../src/main/workflow-owner.ts'
@@ -90,7 +91,7 @@ try {
     const fakeGh = join(fakeBin, 'gh')
     writeFileSync(
       fakeGh,
-      '#!/bin/sh\nprintf \'%s\\n\' \'{"number":6,"url":"https://example.test/pr/6","mergeable":"CONFLICTING","baseRefName":"main","headRefName":"trezi/main","statusCheckRollup":[]}\'\n'
+      '#!/bin/sh\nif [ "$1 $2 $3 $4" = "pr view 6 --json" ] && [ "$5" = "state,mergeCommit" ]; then printf \'%s\\n\' \'{"state":"MERGED","mergeCommit":{"oid":"abcdef1234"}}\'; elif [ "$1 $2" = "run list" ]; then printf \'%s\\n\' \'[{"name":"Publish release","status":"completed","conclusion":"success","url":"https://example.test/run/1"}]\'; else printf \'%s\\n\' \'{"number":6,"url":"https://example.test/pr/6","mergeable":"CONFLICTING","baseRefName":"main","headRefName":"trezi/main","statusCheckRollup":[]}\'; fi\n'
     )
     chmodSync(fakeGh, 0o755)
     const originalPath = process.env.PATH
@@ -128,15 +129,39 @@ try {
           return { ok: true, url: 'https://example.test/pr/6' }
         }
       })
-      const scheduled = await runTreziTool('publish_update', {}, scope)
-      assert.equal(scheduled.scheduled, true)
-      await publishAfterAgentLanding(scope.emitKey, managed.live)
+      const published = await agentGitTool(
+        scope.emitKey,
+        scope.root,
+        scope.liveRoot,
+        'publish_update',
+        {}
+      )
+      assert.equal(published.pushed, true)
       assert.deepEqual(pushes, [[managed.live, 'pr', ['origin', 'trezi/main']]])
+      const merged = await agentGitTool(
+        scope.emitKey,
+        scope.root,
+        scope.liveRoot,
+        'publish_merge',
+        {}
+      )
+      assert.equal(merged.merged, true)
+      assert.equal(merged.mergeCommit, 'abcdef1234')
+      assert.equal(merged.workflow.conclusion, 'success')
+      setAgentMergeSource(() => 'false')
+      const refused = await agentGitTool(
+        scope.emitKey,
+        scope.root,
+        scope.liveRoot,
+        'publish_merge',
+        {}
+      )
+      assert.match(refused.error, /Agent PR merging is off/)
     } finally {
-      clearAgentPublish(scope.emitKey)
       states.delete(statusScope.emitKey)
       states.delete(scope.emitKey)
       setWorkflowOwner(null)
+      setAgentMergeSource(() => null)
       process.env.PATH = originalPath
     }
     assert.equal(

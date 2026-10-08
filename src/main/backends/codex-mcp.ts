@@ -70,6 +70,8 @@ const requiredTools = [
   'git_merge_abort',
   'pr_status',
   'publish_update',
+  'publish_merge',
+  'land_now',
   'project_ui_catalog',
   'compose_project_ui',
   'open_preview',

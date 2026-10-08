@@ -28,7 +28,7 @@ const invoke = async (action, args) => {
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(payload)
         },
-        timeout: 30_000
+        timeout: 240_000
       },
       (response) => {
         const chunks = []
@@ -98,9 +98,17 @@ server.registerTool('pr_status', {
   annotations: { readOnlyHint: true }
 }, async (args) => result(await invoke('pr_status', args)))
 server.registerTool('publish_update', {
-  description: 'Update the existing PR branch through Trezi Publish after this turn lands. Never force-pushes.',
+  description: 'Land current edits and synchronously push the existing PR branch through Trezi Publish. Never force-pushes.',
   inputSchema: { number: z.number().int().positive().optional() }
 }, async (args) => result(await invoke('publish_update', args)))
+server.registerTool('land_now', {
+  description: 'Land current chat edits into the live checkout now and return the commit, park or conflict, and preview state. Later edits land again at turn end.',
+  inputSchema: { message: z.string().optional() }
+}, async (args) => result(await invoke('land_now', args)))
+server.registerTool('publish_merge', {
+  description: 'Publish and squash merge the existing PR now when Agent can merge pull requests is on.',
+  inputSchema: { number: z.number().int().positive().optional(), confirmed: z.boolean().optional() }
+}, async (args) => result(await invoke('publish_merge', args)))
 
 server.registerTool('chat_island', { description: chatIslandDescription, inputSchema: chatIslandShape }, async (args) => result(await invoke('chat_island', args)))
 

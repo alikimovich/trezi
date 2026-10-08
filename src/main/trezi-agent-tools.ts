@@ -12,6 +12,8 @@ export const TREZI_AGENT_ACTIONS = [
   'git_merge_abort',
   'pr_status',
   'publish_update',
+  'publish_merge',
+  'land_now',
   'chat_island',
   'open_code',
   'open_preview',
