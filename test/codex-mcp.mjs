@@ -171,6 +171,7 @@ try {
   for (const tool of [
     'ask_user',
     'chat_island',
+    'chat_ui',
     'preview_screenshot',
     'preview_location',
     'preview_inspect',

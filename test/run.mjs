@@ -186,6 +186,8 @@ const UNIT = [
   'media-types',
   'rules',
   'ask-user',
+  'chat-ui',
+  'chat-ui-model',
   'tw-classes',
   'tw-styles',
   'token-match',

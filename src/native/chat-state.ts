@@ -8,6 +8,7 @@ import type {
 } from '../shared/api'
 import { type ChatAgentSettings, defaultChatAgentSettings } from '../shared/chat-settings'
 import { migrateChatTitle } from '../shared/chat-title'
+import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatContext, NativeChatMirror } from '../shared/native-chat-controller'
 import { emptyUsage, type TokenUsage } from '../shared/run-stats'
 import type { ChatLogin } from './chat-login'
@@ -174,6 +175,17 @@ export function append(chat: Chat, text: string, status = false, at = Date.now()
     else message.segments.push({ kind: 'text', text, at })
   }
 }
+/** LKM-208: an answer component replaces its segment wherever it is, or joins the
+ *  streaming message where the agent showed it. */
+export function placeUi(chat: Chat, ui: ChatUiRecord) {
+  for (const message of chat.messages)
+    for (const [index, segment] of message.segments.entries())
+      if (segment.kind === 'ui' && segment.ui.id === ui.id) {
+        message.segments[index] = { kind: 'ui', ui }
+        return
+      }
+  assistant(chat).segments.push({ kind: 'ui', ui })
+}
 export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
   chat.messages = []
   chat.streamingId = null
@@ -191,7 +203,8 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
         segments: [{ kind: 'text', text: entry.text, at: entry.at }]
       })
     } else {
-      append(chat, entry.text, entry.role === 'status', entry.at)
+      if (entry.ui) placeUi(chat, entry.ui)
+      else append(chat, entry.text, entry.role === 'status', entry.at)
       const message = assistant(chat)
       message.at = message.segments.find((s) => s.kind === 'text')?.at ?? entry.at
       if (turn?.completedAt != null) message.workedMs = Math.max(0, turn.completedAt - turn.at)
@@ -350,6 +363,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       break
     case 'question-resolved':
       chat.questions = chat.questions.filter((q) => q.id !== event.id)
+      break
+    case 'chat-ui':
+      placeUi(chat, event.ui)
       break
   }
 }

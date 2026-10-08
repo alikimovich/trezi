@@ -72,7 +72,8 @@ export const TREZI_TOOLS = [
   'publish_update',
   'publish_merge',
   'land_now',
-  'ask_user'
+  'ask_user',
+  'chat_ui'
 ] as const
 
 /** Tools a background (comment) session is not granted, and what it is told instead. */
@@ -84,7 +85,9 @@ export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
   reload_preview: 'Background edits cannot reload the user preview.',
   restart_dev_server: 'Background edits cannot restart the dev server.',
   ask_user:
-    'Background agents cannot ask with ask_user. Make the reasonable default choice and name it in your final message.'
+    'Background agents cannot ask with ask_user. Make the reasonable default choice and name it in your final message.',
+  chat_ui:
+    'Background agents cannot show answer components. Make the reasonable default choice and name it in your final message.'
 }
 
 /** Trezi tools that never prompt (side-effect-free or validated by their own service). */

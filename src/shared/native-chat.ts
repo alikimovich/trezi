@@ -10,6 +10,8 @@ export interface NativeChatMessage {
     | { kind: 'text'; text: string; at?: number }
     | { kind: 'tools'; statuses: string[]; labels?: string[] }
     | { kind: 'island'; island: import('./chat-islands').IslandView }
+    /** LKM-208: an answer component (`chat_ui`) where the agent showed it. */
+    | { kind: 'ui'; ui: import('./chat-ui').ChatUiRecord }
   )[]
   attachments?: {
     id: string

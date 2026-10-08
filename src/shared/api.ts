@@ -4,6 +4,7 @@
  * without dragging in process-specific code.
  */
 
+import type { ChatUiRecord } from './chat-ui'
 import type { DependencyIssue } from './dependency-issue'
 
 export type { DependencyIssue } from './dependency-issue'
@@ -330,6 +331,8 @@ export type AgentEvent = (
   | { type: 'question-request'; request: QuestionRequest }
   /** A pending question was resolved (answered elsewhere / abort / session change) — dismiss its card. */
   | { type: 'question-resolved'; id: string }
+  /** LKM-208: an answer component shown or updated in the streaming message (`chat_ui`). */
+  | { type: 'chat-ui'; ui: ChatUiRecord }
   /** Tokens the backend just reported, as a DELTA to add to the chat's running
    *  totals (main dedupes the providers' repeated cumulative readings — see
    *  `shared/run-stats.ts`). Drives the status line's ↑/↓ counters. `cached` is
@@ -577,6 +580,8 @@ export interface SessionTranscriptEntry {
   role: 'user' | 'assistant' | 'status'
   text: string
   at: number
+  /** LKM-208: a status entry's answer component (`chat_ui`), with the user's answer. */
+  ui?: ChatUiRecord
 }
 
 /**

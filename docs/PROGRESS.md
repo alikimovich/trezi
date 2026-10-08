@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-208: native answer components in chat (options, form)
+
+- **What.** A `chat_ui` tool for Claude and Codex with three actions: catalog, show and update. It renders `options` (2–4 variants with preview images) and `form` (typed fields, Submit) natively inside the assistant message. This is OpenUI's pattern without its runtime: catalog, schemas, rules, progressive rendering, saved state. Design: `docs/CHAT-UI.md`.
+- **One schema source.** `bin/chat-ui-schema.mjs` (zod) feeds the SDK input schemas, Bun's validation, the catalog action and the generated rules section (`src/main/chat-ui-rules.ts`). Swift's `ChatUiModel.swift` checks the same limits. A bad payload is rejected whole with `path: message` lines, never half-drawn.
+- **Returns at once, like `ask_user`.** No tool call waits for a person. The agent ends its turn, and the answer becomes the user's next message (`agent:chat-ui-answer` → `sendReply`). Its summary is prepended once to the next prompt (`chatUiContext`), which makes the pick explicit ("Apply this variant").
+- **Progressive.** show publishes immediately with skeletons. Each `update {option, capture}` captures the preview (360 px JPEG, ≤120 KB, because frames re-send messages) and re-publishes in place.
+- **State.** The record is a transcript status entry carrying `ui`, owned by the conversation owner, and hydrate rebuilds it.
+- **Rules.** Rules v37: with preview tools, structured questions go through a `chat_ui` form for every provider.
+- **Tests.** Unit `chat-ui` (with a mocked provider through `NativeChatController`) and `chat-ui-model` (Swift fixture). Native smoke `chat-ui` (group `chat`) captures options mid-turn with skeletons and both components in light and dark.
+
 ## 2026-10-08 — LKM-207 repair: an empty chat root is missing, not a root
 
 - **Gap.** A chat created by an incoming event before `initialize` has `root: ''` (`chat-state.ts`, filled in by `chat-controller.ts`). `chatRoot` used `??`, so the empty string won over the project fallback and the `if (root)` guard skipped the rescan.

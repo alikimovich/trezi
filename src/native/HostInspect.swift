@@ -196,6 +196,12 @@ extension Host {
                 do { reply(id, try await verifyAgentCard(c)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
+        case "chatUi":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await verifyChatUi(c)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "chatText":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in

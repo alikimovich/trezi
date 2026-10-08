@@ -16,9 +16,10 @@
  */
 import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
+import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 36
+export const TREZI_RULES_VERSION = 37
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -187,17 +188,21 @@ export function treziRules(opts?: {
       `and name each choice you made in your final message.`
     )
   } else if (opts?.questionTool) {
+    // LKM-208: with Trezi's chat tools the form is the way to ask.
+    const form = !!(opts.previewTools || opts.controlTools)
     lines.push(
       ``,
-      `## Asking the user (ask_user)`,
+      `## Asking the user (${form ? 'chat_ui form' : 'ask_user'})`,
       `When a choice is truly the user's (taste, scope, a trade-off only they can make) and`,
-      `no reasonable default exists, call ask_user with the question and two to four options.`,
-      `It shows a question card in this chat and returns at once: end your turn right after,`,
+      form
+        ? `no reasonable default exists, call chat_ui show with a form of typed fields.`
+        : `no reasonable default exists, call ask_user with the question and two to four options.`,
+      `It shows a ${form ? 'form' : 'question card'} in this chat and returns at once: end your turn right after,`,
       `with one short line saying what you are waiting for, and wait for the answer. It`,
       `arrives as the user's next message. Do not choose for them or keep working on what the`,
       `choice decides. When the choice is not the user's, do not ask: proceed with a stated`,
       `default and name it in your final message. Never end a turn with a question only in`,
-      `your text ("let me know which you prefer"): use ask_user or choose.`
+      `your text ("let me know which you prefer"): use ${form ? 'the form' : 'ask_user'} or choose.`
     )
   }
 
@@ -285,6 +290,8 @@ export function treziRules(opts?: {
       `do not create a target-project tuning UI.`,
       ``
     )
+    // LKM-208: a background agent has no chat to answer in.
+    if (!opts.background) lines.push(...chatUiRules())
   }
   if (opts?.previewTools) {
     lines.push(

@@ -122,6 +122,7 @@ try {
   assert.deepEqual(listed.result.tools.map((tool) => tool.name).sort(), [
     'ask_user',
     'chat_island',
+    'chat_ui',
     'compose_project_ui',
     'git_merge_abort',
     'git_merge_continue',

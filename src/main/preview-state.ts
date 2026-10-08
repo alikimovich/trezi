@@ -48,6 +48,8 @@ export interface PreviewAgentHost {
   captureRect: (rect: PreviewRect) => Promise<NativeImage | null>
   /** Lay the page out at `width` CSS px (null restores the normal layout). */
   setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
+  /** LKM-208: a base64 JPEG at most `width` px wide of the visible page or of `rect`. */
+  thumbnail?: (rect: PreviewRect | null, width: number) => Promise<string | null>
 }
 
 let source: PreviewSource | null = null

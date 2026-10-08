@@ -13,6 +13,7 @@ import { checkAgentQuestion } from './smoke-agent-question'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
 import { checkChatText } from './smoke-chat-text'
+import { checkChatUi } from './smoke-chat-ui'
 import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
 import { checkDreamerReview } from './smoke-dreamer'
@@ -872,6 +873,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkChatText(host, artifacts)
+      }
+    },
+    {
+      name: 'chat-ui',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkChatUi(host, artifacts)
       }
     },
     {
