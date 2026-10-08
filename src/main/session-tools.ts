@@ -10,6 +10,7 @@ import {
 } from './chat-isolation'
 import { openAgentCode } from './code-tools'
 import { isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
+import { agentPreviewOverlay } from './preview-overlay'
 import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-tools'
 import { openAgentPreview } from './preview-tools'
 import { runProjectUiTool } from './project-ui'
@@ -112,7 +113,9 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   if (action === 'workspace_state')
     return {
       ...(await agentWorkspaceEvidence(s.emitKey, s.liveRoot)),
-      timing: turnTimings.report(s.emitKey)
+      timing: turnTimings.report(s.emitKey),
+      // LKM-205: the user's rulers, guides and grids, read-only.
+      previewOverlay: agentPreviewOverlay(s.liveRoot)
     }
   if (action === 'land_now') {
     const message = (args as { message?: unknown } | null)?.message

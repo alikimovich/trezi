@@ -57,6 +57,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   inspector: ['core'],
   'layers-island': ['core'],
   'movable-islands': ['core'],
+  'preview-overlay': ['core'],
   'text-edit': ['core'],
   'source-editor': ['core'],
   'source-syntax': ['core'],

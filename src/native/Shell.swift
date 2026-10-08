@@ -38,9 +38,11 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var toolbarLayout: ToolbarLayout!
     weak var window: NSWindow?
     private(set) var toolbarItems: [String: NSToolbarItem] = [:]
-    private let items = [ "chat", "address", "interaction", "select-object", "device", "tools", "code", "layers", "expand", "publish", "speed", "more"]
-    private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "more":"More Preview Actions"]
-    private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
+    private let items = [ "chat", "address", "interaction", "select-object", "device", "overlay", "tools", "code", "layers", "expand", "publish", "speed", "more"]
+    private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "more":"More Preview Actions"]
+    private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
+    /// The rulers-and-grids button opens its native popover (LKM-205) instead of asking main.
+    var overlayAction: (() -> Void)?
     private(set) var sidebarButtons: [String: NSButton] = [:]
     private var previewState: [String: Any] = [:]
     private var sidebarBeforeExpand = false
@@ -188,7 +190,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard items.contains(key) else { return nil }
         if key == "chat" || key == "address", let existing = toolbarItems[key] { return existing }
         if key == "tools" || key == "interaction" {
-            let actions = key == "tools" ? ["code", "layers", "expand"] : ["select-object", "device"]
+            let actions = key == "tools" ? ["code", "layers", "expand"] : ["select-object", "device", "overlay"]
             let children = actions.compactMap {
                 self.toolbar(toolbar, itemForItemIdentifier: NSToolbarItem.Identifier($0), willBeInsertedIntoToolbar: willBeInsertedIntoToolbar)
             }
@@ -285,6 +287,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         } else { emit(["event":"menu", "action":action]) }
     }
     @objc func toolbarAction(_ item: NSToolbarItem) {
+        if item.itemIdentifier.rawValue == "overlay", let overlayAction { overlayAction(); return }
         emit(["event":"shell-action", "action":item.itemIdentifier.rawValue])
     }
     @objc func previewMenuAction(_ item: NSMenuItem) {

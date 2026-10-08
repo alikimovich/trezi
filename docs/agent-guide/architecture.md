@@ -109,6 +109,8 @@ src/
   shared/style-props.ts  the Styles panel's v1 editable CSS-property allowlist
                     (the `StyleProp` union). main/styles.ts derives its
                     `STYLE_PROPS` from it (the actual write-time boundary)
+  shared/preview-overlay.ts  rulers/guides/layout-grid settings, clamping and the
+                    per-project store — see preview-overlay.md
   service/        the Swift XPC service — see service-owners.md
   main/           backend services — see backend-map.md
 bin/trezi.mjs     the `trezi` CLI (launch, `trezi --project <repo>`, `--update`); owns

@@ -158,6 +158,8 @@ export function treziRules(opts?: {
       `- \`workspace_state\` reports the landing coordinator's authoritative state for`,
       `  this chat. Call it whenever a merge, conflict, worktree, landing, or stale-preview`,
       `  problem is suspected; a clean private \`git status\` does NOT prove the batch landed.`,
+      `  Its \`previewOverlay\` is the user's rulers, guides and layout grids over the preview`,
+      `  (page CSS px, read-only): use it when they ask to align to a guide or the grid.`,
       `- \`prepare_conflict_resolution\` safely combines the user's live edits with this`,
       `  chat's parked changes inside your current worktree. When \`workspace_state\` says`,
       `  \`parked\`, call it, reconcile every returned marker-bearing file, remove all`,

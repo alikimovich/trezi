@@ -2,6 +2,35 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-205 root cause: `preview-overlay` clicked a disabled toolbar button
+
+- **Diagnostics.** The next failure reported `click false` and an empty `panelNote`, so `togglePanel` never ran. The focus-loss hypothesis below was wrong.
+- **Cause.** `Shell.perform("overlay")` goes through `MomentaryToolbarGroup.clickSegment`, which returns false for a disabled subitem. Preview toolbar items are enabled only while `previewReady` is true, and the check clicks right after switching from a second project back to the first and closing the second one. The overlay key comes back before the first project's preview is ready again, so a slow restart left the button disabled at click time. The product behaviour (no preview tools without a preview) is correct; the check was racing it.
+- **Fix.** `previewOverlayInspect` reports `buttonEnabled`, and the check waits for it (up to 20 s), then asserts the click returned true before it waits for the popover. The panel note diagnostics stay.
+
+## 2026-10-08 — LKM-205 repair: `preview-overlay` popover timeout after the LKM-206 merge
+
+- **Symptom.** The manager's full run timed out for 10 s waiting for the Rulers and Grids popover (`panelShown` false) on the tree merged with LKM-206 (slow motion); every other check passed.
+- **What I found.** The merged tree passes: `core` alone (23 checks) and all seven groups together (39 checks, `preview-overlay` and `source-syntax` included). I could not reproduce the timeout. The click path is unchanged by the merge (toolbar group segment → `overlayAction` → `togglePanel`), and the popover is `.transient`, so it closes when the window or app loses focus. Focus loss during the manager's run is the likely cause, but it is a hypothesis.
+- **Added for next time.** `PreviewOverlay.panelNote` records what the last click did (no window / no project / no toolbar button / shown / closed with AppKit's close reason) and `previewOverlayInspect` returns it. The smoke check appends it and the click result to the timeout message, so a repeat failure names its cause. No assertion or timeout changed.
+
+## 2026-10-08 — LKM-205: preview rulers, guides and layout grids
+
+- **What.** Rulers (⇧⌘R), guides dragged from them, and column/baseline/square layout grids (⌃G) over the preview, set in a toolbar popover and remembered per project (rulers) and per viewport (guides, grids). The design is in `docs/agent-guide/preview-overlay.md`.
+- **Native, not DOM.** Everything draws in native views over the web view (`src/native/PreviewOverlay.swift`, `src/native/PreviewRulers.swift`), so the project's DOM and CSS never change and the smoke check compares the DOM before and after. The guide layer answers hit tests only within 3 pt of an unlocked guide, so the page keeps its input everywhere else.
+- **Rulers inset the page.** They first floated over the page's top-left 16 pt, which made a guide at CSS x < 16 impossible to drop (dropping on a ruler removes it). While they show, `WorkspaceLayout` now insets the page area beside them, and the agent's viewport width is centred in that inset area.
+- **Coordinates.** All settings are page CSS px ("guide space": the document, or the viewport when Fixed to Viewport is on). The page reports scroll, client size and the selection's rect only while something shows, once per frame and only on change. The host takes that channel directly (`Host.userContentController`), so per-scroll traffic never reaches Bun. Snapping reads element rects once per drag from the isolated world, and never mid-navigation.
+- **Keys.** The host echoes main's `[root, viewport]` key with each edit, so an edit that arrives after a project switch is stored for the project it was made in. While the host's own saves are pending, main does not re-send stored settings, because an earlier save landing would briefly undo a newer edit. It also skips settings the host already shows, so an unrelated preference write never re-lays out the preview.
+- **⇧⌘R is `"R"`.** A shifted key event's characters are uppercase. A lowercase `"r"` with the Shift mask did not match it: an AppKit menu probe showed `false` for `"r"` and `true` for `"R"`, so the event fell to Reload Preview (⌘R).
+- **Agent.** `workspace_state.previewOverlay` is read-only (`src/main/preview-overlay.ts`), and the worktree rules mention it.
+- **Tests.** Unit: `preview-overlay` (Swift math fixture) and `guide-distance`. Native smoke check `preview-overlay` (group `core`):
+  - ruler drags through the window's hit testing, with a snap to the heading's x = 8 edge, a move and a removal;
+  - columns at 600 and 900 px;
+  - mobile/desktop and second-project persistence;
+  - menu key equivalents, the toolbar popover and the agent view;
+  - an unchanged DOM and `previewInputs`;
+  - light and dark captures.
+- **Repair: `source-syntax` p95 54 ms was load, not the overlay.** The failing run had every keystroke slow (11 ms floor, spikes to 122 ms) while other worktrees were building and running native checks. Nothing in the overlay runs in that path: its views live in the main window's canvas, `place` only runs from `WorkspaceLayout.layout()`, and the page reporter is off once nothing shows. Re-run unchanged on a quieter machine, `core` passed with `preview-overlay` and `source-syntax` in the same run (typing p95 13.96 ms, runs 13.78 / 13.96 / 14.16). No code, test or threshold changed.
 ## 2026-10-07 — LKM-203: mid-turn landing and synchronous publish
 
 - Added `land_now` through the chat landing chain and repository owner. It returns the landing outcome, live commit and preview evidence; the ordinary turn-end pass handles later edits.

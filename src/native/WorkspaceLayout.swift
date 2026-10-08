@@ -185,7 +185,10 @@ final class WorkspaceLayout {
         let available = host.canvas.convert(host.inspectorSlot.page, from: host.inspectorSlot)
         // Opening and failed-open states own the whole content area, the chat column included.
         host.previewStatus.frame = chatReady ? available : NSRect(x: 0, y: 0, width: available.maxX, height: available.height)
-        var page = available
+        // Shown rulers take a strip at the top and left of the area (LKM-205).
+        let ruler = host.previewOverlay?.inset ?? 0
+        let pageArea = NSRect(x: available.minX + ruler, y: available.minY + ruler, width: max(0, available.width - ruler), height: max(0, available.height - ruler))
+        var page = pageArea
         previewArea = available
         // The inspector floats over the preview, so opening it never reflows the page.
         let editing = !host.editingInspector.isHidden
@@ -202,7 +205,7 @@ final class WorkspaceLayout {
         host.layers.place(placed.layers)
         let mobile = viewportWidth == nil && shellState["viewport"] as? String == "mobile"
         var zoom: CGFloat = 1
-        if let width = viewportWidth { (page, zoom) = PreviewAgent.frame(width: width, in: available) }
+        if let width = viewportWidth { (page, zoom) = PreviewAgent.frame(width: width, in: pageArea) }
         // Opening, setup and error own the content area: the last project's page must not cover them.
         let shown = previewVisible && host.previewStatus.isHidden
         device.isHidden = !mobile || !shown
@@ -221,6 +224,8 @@ final class WorkspaceLayout {
         }
         // Loading and HTTP-error pill over the page (LKM-196), never over Opening or error states.
         host.previewLoad.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
+        // Rulers along the preview area, zeroed at the page origin; guides and grids over the page (LKM-205).
+        host.previewOverlay?.place(page: page, area: available, scale: zoom * (host.views["preview"]?.magnification ?? 1), radius: mobile ? page.width * 0.12 : 0, visible: shown && host.views["preview"]?.isHidden == false)
         host.speedBadge.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
         // Straddles the island's left edge below and above its rounded corners.
