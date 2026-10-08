@@ -10,7 +10,7 @@ import WebKit
 /// and selection while anything is shown (`src/preview/overlay-guides.ts`). Pure math:
 /// `PreviewOverlayModel.swift`; drawing: `PreviewRulers.swift`; popover:
 /// `PreviewOverlayPanel.swift`. Guides show with the rulers; ⇧⌘R toggles both.
-final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation {
+final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NSPopoverDelegate {
     weak var host: Host?
     @Published private(set) var state = OverlayState()
     /// The project and viewport the settings belong to; nil without an open project.
@@ -36,6 +36,8 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation {
     private(set) var snapLoad: Task<Void, Never>?
     private var lines: NSDictionary?
     let popover = NSPopover()
+    /// What the last toolbar click did, so a popover that does not open says why.
+    private(set) var panelNote = ""
 
     init(host: Host) {
         self.host = host
@@ -48,7 +50,7 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation {
         host.canvas.addSubview(top, positioned: .above, relativeTo: guides)
         host.canvas.addSubview(left, positioned: .above, relativeTo: top)
         host.canvas.addSubview(corner, positioned: .above, relativeTo: left)
-        popover.behavior = .transient
+        popover.behavior = .transient; popover.delegate = self
         host.shell.overlayAction = { [weak self] in self?.togglePanel() }
     }
 
@@ -108,15 +110,21 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation {
         }
     }
     func togglePanel() {
-        guard let host, let window = host.window, let theme = window.contentView?.superview else { return }
-        if popover.isShown { popover.close(); return }
-        guard key != nil, let button = host.shell.toolbarButtonFrame("overlay") else { return }
+        panelNote = "toggle"
+        guard let host, let window = host.window, let theme = window.contentView?.superview else { panelNote = "no window"; return }
+        if popover.isShown { panelNote = "closed by toggle"; popover.close(); return }
+        guard key != nil else { panelNote = "no project"; return }
+        guard let button = host.shell.toolbarButtonFrame("overlay") else { panelNote = "no toolbar button"; return }
         if popover.contentViewController == nil {
             let controller = NSHostingController(rootView: PreviewOverlayPanel(overlay: self))
             controller.sizingOptions = .preferredContentSize
             popover.contentViewController = controller
         }
         popover.show(relativeTo: theme.convert(button, from: nil), of: theme, preferredEdge: theme.isFlipped ? .maxY : .minY)
+        panelNote = popover.isShown ? "shown" : "not shown after show"
+    }
+    func popoverDidClose(_ notification: Notification) {
+        panelNote = "closed: " + String(describing: notification.userInfo?[NSPopover.closeReasonUserInfoKey] ?? "unknown")
     }
 
     // MARK: Geometry

@@ -21,7 +21,7 @@ extension Host {
                 "rulersHidden":overlay.top.isHidden, "guidesHidden":overlay.guides.isHidden, "selected":overlay.selected.map { $0 as Any } ?? NSNull(),
                 "page":["scrollX":overlay.page.scrollX, "scrollY":overlay.page.scrollY, "width":overlay.page.width, "height":overlay.page.height,
                         "selection":overlay.page.selection.map { box($0) as Any } ?? NSNull()],
-                "viewportWidth":overlay.viewportWidth, "columns":columns, "menu":menu, "panelShown":overlay.popover.isShown,
+                "viewportWidth":overlay.viewportWidth, "columns":columns, "menu":menu, "panelShown":overlay.popover.isShown, "panelNote":overlay.panelNote,
                 "cover":previewCoverRects(), "superview":overlay.guides.superview === canvas && overlay.top.superview === canvas]
     }
 

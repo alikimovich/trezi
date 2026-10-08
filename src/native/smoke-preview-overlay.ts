@@ -195,8 +195,11 @@ export async function checkPreviewOverlay(
   assert.ok(agent?.readOnly === true && agent.rulers === true && agent.viewport === 'desktop')
 
   // The toolbar button opens the settings popover.
-  await host.request('shellPerform', { action: 'overlay' })
-  await until((s) => s.panelShown, 'overlay popover')
+  const clicked = await host.request('shellPerform', { action: 'overlay' })
+  await until((s) => s.panelShown, 'overlay popover').catch(async (error) => {
+    const { panelNote } = await inspect()
+    throw new Error(`${error.message} (click ${JSON.stringify(clicked)}, ${panelNote})`)
+  })
   await host.request('shellPerform', { action: 'overlay' })
   await until((s) => !s.panelShown, 'overlay popover closed')
 

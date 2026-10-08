@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-205 repair: `preview-overlay` popover timeout after the LKM-206 merge
+
+- **Symptom.** The manager's full run timed out for 10 s waiting for the Rulers and Grids popover (`panelShown` false) on the tree merged with LKM-206 (slow motion); every other check passed.
+- **What I found.** The merged tree passes: `core` alone (23 checks) and all seven groups together (39 checks, `preview-overlay` and `source-syntax` included). I could not reproduce the timeout. The click path is unchanged by the merge (toolbar group segment → `overlayAction` → `togglePanel`), and the popover is `.transient`, so it closes when the window or app loses focus. Focus loss during the manager's run is the likely cause, but it is a hypothesis.
+- **Added for next time.** `PreviewOverlay.panelNote` records what the last click did (no window / no project / no toolbar button / shown / closed with AppKit's close reason) and `previewOverlayInspect` returns it. The smoke check appends it and the click result to the timeout message, so a repeat failure names its cause. No assertion or timeout changed.
+
 ## 2026-10-08 — LKM-205: preview rulers, guides and layout grids
 
 - **What.** Rulers (⇧⌘R), guides dragged from them, and column/baseline/square layout grids (⌃G) over the preview, set in a toolbar popover and remembered per project (rulers) and per viewport (guides, grids). The design is in `docs/agent-guide/preview-overlay.md`.
