@@ -50,8 +50,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     // The address block and its layout (`ToolbarAddress.swift`).
     var addressWidth: NSLayoutConstraint?
     var addressLayout = ToolbarAddressLayout()
-    /// How far the right groups move when the slow-motion and "…" items leave or join the toolbar (`ToolbarMore.swift`; measured on macOS 26).
-    var moreShift: CGFloat = 84
+    /// How far the right groups move when the slow-motion and "…" items leave or join the toolbar (`ToolbarMore.swift`; measured 82–84 between runs on macOS 26, the layout check allows ±1).
+    var moreShift: CGFloat = 83
     let addressHeader = ToolbarAddressView()
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor

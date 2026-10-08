@@ -30,23 +30,8 @@ extension NativeShell {
         // The right groups are pinned to the trailing edge, so they move by the items' widths plus
         // the spaces before them. Apply that to the reserved inset now: the address block is sized in
         // this same pass, before the toolbar's next layout can be measured.
-        if addressLayout.measured { addressLayout.rightInset += hidden ? -moreShift : moreShift }
+        addressLayout.moveRightGroups(hiding: hidden, by: moreShift)
         for item in items { item.isHidden = hidden }
-        remeasureRightGroups()
-    }
-    /// The shift is only an estimate (it varied by 2 pt between runs at 850 pt), so read the right
-    /// groups' new pinned position now. The block is held at its floor for this forced layout so it
-    /// cannot push them; `alignChatHeader` then sizes it from the measured inset. A live resize keeps
-    /// the estimate until `measureToolbar` runs after it.
-    private func remeasureRightGroups() {
-        guard let window, !window.inLiveResize, let width = addressWidth else { return }
-        let constant = width.constant
-        width.constant = ToolbarAddressLayout.floor
-        window.contentView?.superview?.layoutSubtreeIfNeeded()
-        if toolbar.visibleItems?.contains(where: { $0.itemIdentifier.rawValue == "address" }) == true {
-            addressLayout.measure(window: window, block: addressHeader, constant: ToolbarAddressLayout.floor, chat: chatHeader.window == nil ? nil : chatHeader, right: rightGroup)
-        }
-        width.constant = constant
     }
     /// Pipe checks pick an entry the way a click on it would.
     func performMore(_ item: NSMenuToolbarItem?, _ action: String) -> Bool {

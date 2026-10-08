@@ -329,6 +329,23 @@ export async function openOnSource(page, open, served, css, label) {
   }
 }
 
+/**
+ * Next streams the server-rendered card long before React hydrates it, and the page-world
+ * hydration is invisible from the preview world. A drag that starts first finishes (and its
+ * source write lands) before the HMR socket exists: React then hydrates the stale props over
+ * the dragged style and nothing ever updates it. The App Router appends `next-route-announcer`
+ * to the body when it mounts, so wait for that. Best effort: a Next without it only costs the wait.
+ */
+export async function waitForNextHydration(page, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await page(`!!document.querySelector('next-route-announcer')`).catch(() => false))
+      return true
+    await Bun.sleep(100)
+  }
+  return false
+}
+
 /** After a live-write drag, put the preview back on the initial shadow before the override run. */
 export async function resetPreviewSource(page, root, sourceFile, format, open, served) {
   await clearPreviewMeasurementState(page)
@@ -565,6 +582,7 @@ export async function measureFramework({
       steps[0],
       `${label}-${withOverrides ? 'after' : 'before'} start`
     )
+    if (label === 'next') await waitForNextHydration(page)
     const record = islands.sessions.get(chat)?.records.find((r) => r.id === island)
     assert.equal(record?.status, 'ready', `${label}: island record ready before drag`)
     assert.ok(

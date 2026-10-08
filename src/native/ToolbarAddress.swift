@@ -148,6 +148,16 @@ struct ToolbarAddressLayout {
     var leading: CGFloat = 90
     /// Laid-out block width minus its width constraint.
     var extra: CGFloat = 0
+    /// `rightInset` as measured while the speed and "…" items were showing (LKM-206); showing
+    /// them again restores it exactly instead of adding their estimated width (it varies by 2 pt).
+    var shownInset: CGFloat?
+
+    /// The trailing items hid or showed: the pinned right groups moved by `shift`, an estimate.
+    mutating func moveRightGroups(hiding: Bool, by shift: CGFloat) {
+        guard measured else { return }
+        if hiding { shownInset = rightInset; rightInset -= shift }
+        else { rightInset = shownInset ?? rightInset + shift; shownInset = nil }
+    }
 
     /// Reads the offsets from laid-out frames (window coordinates). While the right
     /// groups are pushed their position is not the pinned one, so the inset only

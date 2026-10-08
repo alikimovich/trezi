@@ -229,10 +229,11 @@ console.log(
   installing = gate()
   let start = calls.length
   const landing = controller.refreshEnvironment(key, ['package.json', 'src/App.tsx'])
-  for (
-    let i = 0;
-    i < 50 && !calls.slice(start).some((call) => call[0] === 'devserver:install');
-    i++
+  // A deadline, not a tick count: a loaded machine can take far longer than 50 ticks to get here.
+  const installDeadline = Date.now() + 5000
+  while (
+    Date.now() < installDeadline &&
+    !calls.slice(start).some((call) => call[0] === 'devserver:install')
   )
     await tick()
   assert.deepEqual(controller.state.status, { kind: 'busy', label: 'Installing dependencies…' })
