@@ -27,8 +27,12 @@ export interface StatesServices {
   log: (text: string, kind?: 'error') => void
   remove: (root: string, folder: string, seams: string[]) => Promise<FileOpResult>
   scan?: (root: string) => Promise<Workbench[]>
+  now?: () => number
   leftovers?: (root: string, workbench: Workbench) => Promise<string[]>
 }
+
+/** Minimum gap between same-path rescans triggered by preview loads. */
+const RESCAN_MS = 1500
 
 export interface StatesAction {
   action: string
@@ -49,6 +53,7 @@ export class NativeStatesController {
   private path: string | null = null
   private sent = ''
   private ids = ''
+  private scannedAt = 0
   constructor(readonly services: StatesServices) {}
 
   workbenches(root = this.services.active()?.root): Workbench[] {
@@ -57,10 +62,16 @@ export class NativeStatesController {
 
   async refresh(root = this.services.active()?.root): Promise<Workbench[]> {
     if (!root) return []
+    this.scannedAt = (this.services.now ?? Date.now)()
     const list = await (this.services.scan ?? scanWorkbenches)(root)
     this.lists.set(root, list)
     this.sync()
     return list
+  }
+
+  /** A turn landed files in `root`: a workbench may have appeared, even in a background project. */
+  landed(root: string) {
+    void this.refresh(root).catch((error) => this.services.log(String(error), 'error'))
   }
 
   /** The preview's URL changed (a load, or a replaceState from switching). */
@@ -70,8 +81,12 @@ export class NativeStatesController {
     try {
       path = url ? new URL(url).pathname : null
     } catch {}
-    // A new route may be a workbench that just landed; state switches only change the query.
-    if (path !== this.path) {
+    // A new route may be a workbench that just landed. State switches only change the query;
+    // a same-path reload (files landing under the open route) rescans while no recorded
+    // workbench matches, at most once per RESCAN_MS.
+    const known = !!url && !!matchWorkbench(url, this.workbenches())
+    const stale = (this.services.now ?? Date.now)() - this.scannedAt > RESCAN_MS
+    if (path !== this.path || (!known && stale)) {
       this.path = path
       void this.refresh().catch((error) => this.services.log(String(error), 'error'))
     }

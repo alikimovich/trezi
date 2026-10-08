@@ -1,6 +1,7 @@
 import { sourceOwner } from '../main/source-owner'
 import type { NativeActivityController } from './activity-controller'
 import type { NativeBridge } from './bridge'
+import { turnBoundaries } from './chat-runtime'
 import type { NativeGitController } from './git-controller'
 import { type NativeView, serviceEvents } from './platform'
 import type { NativeSheetController } from './sheets-runtime'
@@ -39,6 +40,12 @@ export function installStatesWorkbench(options: {
   serviceEvents.on('event', (channel: string, value: unknown) => {
     if (channel === 'preview:url-changed') states.url(typeof value === 'string' ? value : null)
     else if (channel === 'preview:states-key') void states.action({ action: 'hide' }).catch(report)
+  })
+  // A landed turn may have written a workbench into any project, open or not: rescan its
+  // root so the island and the Publish guard see it without a path change.
+  turnBoundaries.add((key, kind) => {
+    const root = workspace.state.projects.find((p) => p.key === key)?.root
+    if (kind === 'landed' && root) states.landed(root)
   })
   host.on('states-action', (action: StatesAction) => {
     if (action && typeof action.action === 'string') void states.action(action).catch(report)

@@ -82,6 +82,11 @@ Publish warns while a workbench exists (`beforePublish`, `src/native/git-control
 Cancel, Publish Anyway, or Remove and Publish. With no workbench the check is
 synchronous, so Publish still shows progress on the click.
 
+The per-project workbench list is cached (that is what keeps Publish synchronous) and
+rescanned when it may have changed: on a preview path change, on a same-path load while
+no cached workbench matches the URL (at most every 1.5 s), when a turn lands in the
+project (`src/native/states-install.ts`, any project, open or not), and after a Remove.
+
 ## Tests
 
 - `test/states-workbench.mjs` (unit): manifest parsing, URL matching, scans and

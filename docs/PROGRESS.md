@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-207 repair: the workbench list no longer goes stale
+
+- **Gap.** The cached workbench list was rescanned only on a preview path change, after a Remove and on a cold Publish. A workbench landing under the already-open route (same-path live reload) or into a background project stayed invisible, so Publish skipped its warning and the island stayed hidden.
+- **Fix.** `NativeStatesController.landed(root)` rescans a root; `states-install.ts` calls it from the `turnBoundaries` `landed` boundary for the chat's project (open or not). `url()` also rescans on a same-path load while no cached workbench matches the URL, throttled to once per 1.5 s. Publish still answers synchronously from the cache.
+- **Test.** `test/states-workbench.mjs`: a cached empty list, then a landing, makes `beforePublish` present the warning; a same-path URL event rescans only after the throttle.
+
 ## 2026-10-08 — LKM-207: component states workbench
 
 - **What.** `/states`, Show states on the element toolbar, or its … menu ask the agent (bundled `component-states` skill, adapted from Jakub Krehel's MIT state-machine skill) to build a scratch route showing every state of one component, fed at its data boundary. The preview then shows a States island, keys switch states, All shows a grid, and the … menu lists Workbenches to open or remove. Design and file map: `docs/STATES.md`.

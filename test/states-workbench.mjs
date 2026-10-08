@@ -267,4 +267,35 @@ publish = git.publish('p')
 assert.equal(git.decorate({}).publishing, true)
 await publish
 assert.equal(ships(), 3)
+
+// A workbench that lands after the list was cached empty still warns. The landing hook
+// (any project, open or not) rescans; so does a same-path reload once the throttle passed.
+assert.deepEqual(states.workbenches('/repo'), [])
+benches = [bench]
+assert.equal(states.beforePublish('/repo'), true, 'the stale empty list trusts nothing new')
+states.landed('/repo')
+await settle()
+assert.equal(states.workbenches('/repo').length, 1, 'a landing rescans its root')
+assert.equal(
+  typeof states.beforePublish('/repo').then,
+  'function',
+  'Publish now presents the warning'
+)
+await settle()
+await gitSheets.action({ id: gitSheets.current.state.id, action: 'keep', values: {} })
+
+benches = []
+await states.refresh('/repo')
+let clock = 10_000
+states.services.now = () => clock
+states.url('http://localhost:5173/')
+await settle()
+benches = [bench]
+states.url('http://localhost:5173/')
+await settle()
+assert.equal(states.workbenches('/repo').length, 0, 'same-path reloads are throttled')
+clock += 2000
+states.url('http://localhost:5173/')
+await settle()
+assert.equal(states.workbenches('/repo').length, 1, 'a same-path reload rescans after the throttle')
 console.log('states-workbench: ok')
