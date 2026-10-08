@@ -7,7 +7,8 @@ import Darwin
 // WORKFLOW_FAULT=<point> SIGKILLs the process at that named point (publish.pr,
 // publish.merge, connect.repo, update.pull: after the effect, before its receipt), so
 // the next process sees what a crashed service leaves. `{"cmd":"drop","count":n}`
-// discards the next n workflow replies (a reply lost on the way to Bun).
+// discards the next n workflow replies (a reply lost on the way to Bun), announcing each
+// as `{"event":"workflow-dropped"}` so the test expires the client's deadline then.
 
 signal(SIGPIPE, SIG_IGN)
 setvbuf(stdout, nil, _IOLBF, 0)
@@ -19,7 +20,10 @@ func emit(_ data: Data) { output.lock(); FileHandle.standardOutput.write(data + 
 func emit(_ fields: [(String, JSValue)]) { emit(JSValue.object(fields.map { (JSText($0.0), $0.1) }).utf8()) }
 func reply(_ data: Data) {
     output.lock()
-    if dropping > 0, data.starts(with: Data("{\"event\":\"service-reply\",\"service\":\"workflow\"".utf8)) { dropping -= 1; output.unlock(); return }
+    if dropping > 0, data.starts(with: Data("{\"event\":\"service-reply\",\"service\":\"workflow\"".utf8)) {
+        dropping -= 1; output.unlock()
+        return emit([("event", .string(JSText("workflow-dropped")))])
+    }
     output.unlock()
     emit(data)
 }

@@ -78,8 +78,11 @@ Measured on the operator Mac (12 cores, 8 workers), 2026-10-05:
 | `workflow-owner` | 51.3 s | 9.1 s + `workflow-durability` 48.3 s, in parallel |
 | `git-messages` / `service-contract` / `service-session` | 28.0 / 19.2 / 22.2 s | 0.3 / 0.8 / 1.2 s |
 
-The remaining long tests are runtime, not compile: `workflow-durability` (client
-deadlines after injected crashes), the composer and settings layout fixtures
+`workflow-durability` no longer waits on client deadlines: its fixtures pass a manual
+clock that expires on the fixture's exit or a dropped reply (LKM-209). It and
+`workflow-owner` have a 240 s budget because CI compiles the workflow fixture cold.
+
+The remaining long tests are runtime, not compile: the composer and settings layout fixtures
 (run-loop turns), and the repository, platform and preferences owners.
 
 ### Native build speed (LKM-175)

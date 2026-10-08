@@ -3,6 +3,7 @@
 // `gh` / package manager it runs (test/fixtures/workflow-owner/fake-*.mjs). Nothing here
 // touches GitHub, the network or a real repository: remotes are bare repositories in a
 // scratch directory.
+import assert from 'node:assert/strict'
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -48,6 +49,56 @@ export function installFakes(dir) {
     chmodSync(join(dir, name), 0o755)
   }
   return { gh: join(dir, 'gh'), bun: join(dir, 'bun') }
+}
+
+/**
+ * Reply deadlines for Bun's client (its `deadline` option) that expire only when the
+ * test calls `expire()`: a lost reply or a crash ends a request on that event, never
+ * after a wall-clock wait (LKM-209).
+ */
+export function manualClock() {
+  const armed = new Set()
+  return {
+    deadline: (expire) => {
+      const entry = { expire }
+      armed.add(entry)
+      return () => armed.delete(entry)
+    },
+    expire() {
+      assert.ok(armed.size, 'a reply deadline is armed')
+      const due = [...armed]
+      armed.clear()
+      for (const entry of due) entry.expire()
+    }
+  }
+}
+
+/** A client whose deadline expires each time the fixture drops one of its replies. */
+export function droppingClient(fixture, retries) {
+  const clock = manualClock()
+  fixture.link.on('workflow-dropped', () => clock.expire())
+  return fixture.workflows({ deadline: clock.deadline, retries })
+}
+
+/**
+ * `call(client)` on a fixture started with WORKFLOW_FAULT: the process SIGKILLs itself
+ * at the fault point; only then does the request's deadline expire (deadlineExceeded).
+ * A reply instead of the crash fails at once.
+ */
+export async function crashed(fixture, call) {
+  const clock = manualClock()
+  const request = call(fixture.workflows({ deadline: clock.deadline, retries: 0 }))
+  const outcome = await Promise.race([
+    fixture.exited.then((status) => ({ status })),
+    request.then(
+      (value) => ({ value }),
+      (error) => ({ error: String(error) })
+    )
+  ])
+  assert.ok(outcome.status, `answered instead of crashing: ${JSON.stringify(outcome)}`)
+  assert.equal(outcome.status.signal, 'SIGKILL', fixture.stderr)
+  clock.expire()
+  await assert.rejects(request, (error) => error.code === 'deadlineExceeded')
 }
 
 /** A fixture process on `profile`; `workflows(options)` is Bun's client for it. */

@@ -4,11 +4,14 @@
 // resumption, cancellation, busy, restart listing and dismissal, drain, a relaunch that
 // finishes an interrupted publish, redaction and schema.
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { registerDiagnoseIpc } from '../../src/main/diagnose.ts'
 import { setWorkflowOwner } from '../../src/main/workflow-owner.ts'
 import { ipcMain } from '../../src/native/platform.ts'
+import { crashed, droppingClient } from './workflow-fixture.mjs'
 
 export async function durability({ world, start, snapshot, git, write, commit, describe, log }) {
   const gh = (w) => w.gh().counts ?? {}
@@ -32,17 +35,11 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     )
   }
   const steps = (record) => record.steps.map((step) => `${step.name}:${step.state}`)
-  const crashed = async (fixture, promise) => {
-    await assert.rejects(promise, (error) => error.code === 'deadlineExceeded')
-    const status = await fixture.exited
-    assert.equal(status.signal, 'SIGKILL')
-  }
-
   // A reply lost after each phase: the same operation is answered from its receipt.
   {
     const w = world('lost-reply'),
       f = await start(w)
-    const owner = f.workflows({ timeout: 4000, retries: 2 })
+    const owner = droppingClient(f, 2)
     write(w.local, 'a.txt', 'two\n')
     await f.cmd({ cmd: 'drop', count: 1 })
     const result = await owner.publish(w.local, 'merge', async (base) => {
@@ -68,10 +65,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     const w = world('crash-pr')
     write(w.local, 'a.txt', 'two\n')
     const f1 = await start(w, { WORKFLOW_FAULT: 'publish.pr' })
-    await crashed(
-      f1,
-      f1.workflows({ timeout: 3000, retries: 0 }).publish(w.local, 'merge', describe)
-    )
+    await crashed(f1, (owner) => owner.publish(w.local, 'merge', describe))
     const f2 = await start(w),
       owner = f2.workflows()
     const [interrupted] = await owner.workflows()
@@ -97,10 +91,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     const w = world('crash-merge')
     write(w.local, 'a.txt', 'two\n')
     const f1 = await start(w, { WORKFLOW_FAULT: 'publish.merge' })
-    await crashed(
-      f1,
-      f1.workflows({ timeout: 3000, retries: 0 }).publish(w.local, 'merge', describe)
-    )
+    await crashed(f1, (owner) => owner.publish(w.local, 'merge', describe))
     const owner = (await start(w)).workflows()
     const result = await owner.publish(w.local, 'merge', describe)
     assert.equal(result.ok, true)
@@ -144,8 +135,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     })
     const f1 = await start(w, env),
       options = { name: 'demo-app', owner: 'octo', private: false }
-    if (env.WORKFLOW_FAULT)
-      await crashed(f1, f1.workflows({ timeout: 3000, retries: 0 }).connect(w.local, options))
+    if (env.WORKFLOW_FAULT) await crashed(f1, (owner) => owner.connect(w.local, options))
     else assert.equal((await f1.workflows().connect(w.local, options)).ok, false)
     const owner = (await start(w)).workflows()
     const result = await owner.connect(w.local, options)
@@ -209,7 +199,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     commit(peer2, 'release.txt', 'v2\n')
     git(peer2, 'push', '-q', 'origin', 'main')
     const f1 = await start(w2, { WORKFLOW_FAULT: 'update.pull' })
-    await crashed(f1, f1.workflows({ timeout: 3000, retries: 0 }).update(w2.local))
+    await crashed(f1, (owner) => owner.update(w2.local))
     const again = (await start(w2)).workflows()
     assert.deepEqual(steps((await again.workflows())[0]), ['pull:uncertain'])
     assert.deepEqual(await again.update(w2.local), { ok: true })
@@ -246,10 +236,12 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     git(peer, 'push', '-q', 'origin', 'main')
     const f = await start(w),
       owner = f.workflows()
-    setPm(w, { sleep: { install: 20_000 } })
+    // The stalled install reports through a FIFO that it started: no polling.
+    const started = join(w.base, 'install-started')
+    execFileSync('mkfifo', [started])
+    setPm(w, { sleep: { install: 20_000 }, started: { install: started } })
     const running = owner.update(w.local)
-    for (let i = 0; i < 100 && !w.pm().calls?.length; i++)
-      await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(await readFile(started, 'utf8'), 'install\n')
     assert.equal(await owner.cancel('update', w.local), true)
     const cancelled = await running
     assert.equal(cancelled.ok, false)
@@ -293,10 +285,7 @@ export async function durability({ world, start, snapshot, git, write, commit, d
     const w = world('relaunch')
     write(w.local, 'a.txt', 'two\n')
     const f1 = await start(w, { WORKFLOW_FAULT: 'publish.pr' })
-    await crashed(
-      f1,
-      f1.workflows({ timeout: 3000, retries: 0 }).publish(w.local, 'merge', describe)
-    )
+    await crashed(f1, (owner) => owner.publish(w.local, 'merge', describe))
     const owner = (await start(w)).workflows()
     assert.equal((await owner.workflows())[0].state, 'interrupted')
     assert.equal((await owner.publish(w.local, 'merge', describe)).ok, true)

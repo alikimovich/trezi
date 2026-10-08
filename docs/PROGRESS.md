@@ -2,6 +2,29 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-209: flaky versioning and workflow-durability tests
+
+- **workflow-durability timeout, root cause.** The 120 s budget covered both the run and the fixture build. That build waits for a swiftc lane slot, then compiles most service sources cold: 25.5 s on a 12-core Mac and much longer on a 3-core runner. Service sources change in nearly every commit, so CI compiles cold every time. The checks themselves spent about 25 s on wall-clock client deadlines (3 s per injected crash, 4 s × 2 for the lost replies, plus a 50 ms cancel poll). The old `crashed()` also raced the deadline against the fault and waited on exit with no bound.
+- **Fix.** `serviceWorkflows` takes an optional `deadline` arm (wall clock by default). The test helpers pass a manual clock (`test/helpers/workflow-fixture.mjs`):
+  - `crashed()` waits for the fixture's SIGKILL, then expires the deadline;
+  - the fixture reports a dropped reply (`workflow-dropped`), and `droppingClient` expires the deadline on that event;
+  - the fake package manager signals "install started" through a FIFO.
+
+  Test git and the fixture run with `GIT_ALLOW_PROTOCOL=file`. `workflow-durability` and `workflow-owner` get 240 s in `UNIT_TIMEOUT_MS`, like the other owner fixtures, and `workflow-owner` logs how long the build took. The checks now take about 11 s instead of 37 s.
+- **versioning "detached HEAD", root cause.** It did not reproduce in 240+ concurrent runs. `release.mjs` read only the stdout of `git symbolic-ref`, so a git failure, a killed git or empty output was all reported as "this is a detached HEAD", which hid git's real error. The test also inherited the runner's git environment: with `GIT_DIR` or `GIT_WORK_TREE` set, it broke.
+- **Fix.** `release.mjs` treats only exit 1 as detached and reports any other failure with its status and stderr. `test/versioning.mjs` changes:
+  - it re-execs itself without GIT_*/GITHUB_* (Bun children ignore `delete process.env`);
+  - it uses `withRunnerEnv` (private HOME and config) plus `GIT_CEILING_DIRECTORIES`;
+  - it asserts the branch before each refusal;
+  - a new case uses a fake git whose `symbolic-ref` fails.
+- **Loops.**
+
+  | Test | Serial ×20 | CI settings ×20 (`--jobs=3 --timeout-ms=120000`) |
+  | --- | --- | --- |
+  | versioning | pass (also with `GIT_DIR`, `GIT_WORK_TREE`, `GITHUB_*` set) | pass, 1.1–1.4 s |
+  | workflow-durability | pass, 11–13 s | pass, 12.0–19.8 s |
+  | workflow-owner | — | pass, 7.8–11.6 s |
+
 ## 2026-10-08 — LKM-207 repair: an empty chat root is missing, not a root
 
 - **Gap.** A chat created by an incoming event before `initialize` has `root: ''` (`chat-state.ts`, filled in by `chat-controller.ts`). `chatRoot` used `??`, so the empty string won over the project fallback and the `if (root)` guard skipped the rescan.

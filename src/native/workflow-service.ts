@@ -28,6 +28,14 @@ export interface WorkflowClientOptions {
   leases?: () => string[]
   /** How often a running update's progress is read. */
   progressInterval?: number
+  /** Arms one reply deadline and returns its cancel; a wall-clock timer by default.
+   *  Tests pass a manual clock so a deadline expires on an event, not after a wait. */
+  deadline?: (expire: () => void, ms: number) => () => void
+}
+
+const wallClock = (expire: () => void, ms: number) => {
+  const timer = setTimeout(expire, ms)
+  return () => clearTimeout(timer)
 }
 
 /**
@@ -45,6 +53,7 @@ export function serviceWorkflows(
   const connection = randomUUID()
   const timeout = options.timeout ?? 15 * 60_000
   const retries = options.retries ?? 2
+  const deadline = options.deadline ?? wallClock
   const pending = new Map<number, (value: Result) => void>()
   let sequence = 0
 
@@ -63,9 +72,9 @@ export function serviceWorkflows(
     const operationID = randomUUID()
     const ids: number[] = []
     return new Promise<Result>((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined
+      let disarm = () => {}
       const settle = (value: Result) => {
-        clearTimeout(timer)
+        disarm()
         for (const id of ids) pending.delete(id)
         resolve(value)
       }
@@ -87,7 +96,7 @@ export function serviceWorkflows(
             body
           }
         })
-        timer = setTimeout(() => {
+        disarm = deadline(() => {
           if (left > 0) return attempt(left - 1)
           for (const stale of ids) pending.delete(stale)
           reject(

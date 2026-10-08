@@ -55,6 +55,7 @@ assert.equal(
   'gh version 2.99.0 (fake)'
 )
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-workflow-owner-')))
+const compiling = Date.now()
 const binary = compileWorkflowFixture()
 const fakes = {
   gh: join(process.env.TREZI_WORKFLOW_FAKES, 'gh'),
@@ -62,8 +63,13 @@ const fakes = {
 }
 const began = Date.now()
 const log = (...args) => console.log(`[${((Date.now() - began) / 1000).toFixed(1)}s]`, ...args)
+// A cold cache waits for a swiftc slot and compiles here, inside the test's budget (LKM-209).
+log(`fixture ready after ${((began - compiling) / 1000).toFixed(1)}s (swiftc lane)`)
 const fixtures = []
+// Git may only use local (file) transports here and in the fixtures: no network (LKM-209).
+const offline = { GIT_ALLOW_PROTOCOL: 'file' }
 const env = {
+  ...offline,
   GIT_AUTHOR_NAME: 'Tester',
   GIT_AUTHOR_EMAIL: 't@example.com',
   GIT_COMMITTER_NAME: 'Tester',
@@ -178,6 +184,7 @@ const normalize = (value, w) =>
 
 async function start(w, extra = {}) {
   const fixture = await startWorkflowFixture(binary, w.profile, {
+    ...offline,
     FAKE_GH_STATE: w.ghState,
     FAKE_PM_STATE: w.pmState,
     WORKFLOW_BUN: fakes.bun,
