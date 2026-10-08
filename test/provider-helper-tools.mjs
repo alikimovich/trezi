@@ -87,6 +87,8 @@ const CALLS = {
   git_merge_abort: {},
   pr_status: {},
   publish_update: {},
+  publish_merge: {},
+  land_now: {},
   spring_to_css: { stiffness: 170, damping: 26, mass: 1 },
   check_contrast: { foreground: '#000000', background: '#ffffff' },
   fluid_clamp: { minPx: 16, maxPx: 24 },

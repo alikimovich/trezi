@@ -18,7 +18,7 @@ import { chatIslandGuidance } from '../shared/chat-island-guidance'
 import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 35
+export const TREZI_RULES_VERSION = 36
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -75,23 +75,26 @@ export function treziRules(opts?: {
     `in the live checkout and keeps resolved base merges in the commit history.`,
     `For a conflicting PR, call pr_status, git_sync_base, edit the listed files,`,
     `then git_merge_continue. Call git_merge_abort to abandon a merge. Call`,
-    `publish_update to push the landed work to the existing PR through Publish.`,
+    `land_now to land edits during the turn, then publish_update to push the existing`,
+    `PR or publish_merge to merge it when the setting allows. Wait for each result.`,
+    `If Agent can merge pull requests is off, ask the user in chat; pass confirmed: true`,
+    `only after their explicit answer permits this PR merge.`,
     ...(opts?.agentGitAccess === 'full'
       ? [
           `Agent Git access is Full: you may commit, merge, rebase, cherry-pick or`,
           `branch with raw git inside your own chat worktree. Trezi reconciles these`,
-          `commits when the turn ends. Never rewrite or delete commits already landed`,
+          `commits when they land. Never rewrite or delete commits already landed`,
           `in the live branch, and never force-push. Push only through Publish.`
         ]
       : [
           `Agent Git access is Managed: read-only git is allowed. Do not run raw git`,
           `writes (commit, merge, rebase, cherry-pick, branch, checkout, reset or`,
           `push). Use git_sync_base, git_merge_continue, git_merge_abort and`,
-          `publish_update for those effects. You may create a real merge commit`,
+          `land_now, publish_update and publish_merge for those effects. You may create a real merge commit`,
           `through git_merge_continue.`
         ]),
     `Never reset or otherwise rewrite the live checkout. Its preview refreshes`,
-    `when Trezi lands your turn.`,
+    `when you call land_now or the turn ends.`,
     ``,
     `## Project memory is not work`,
     `Trezi keeps a project memory of durable rules and preferences and updates it itself`,
@@ -102,7 +105,12 @@ export function treziRules(opts?: {
     `memory" without checking that the code needs it.`,
     ``,
     `## Closing a turn`,
-    `Do not announce that the preview will reload, refresh or update once the turn lands,`,
+    `When the user asks for verification or publishing, call land_now during the turn,`,
+    `reload_preview if needed, inspect its servedRevision and finish the publish with`,
+    `the tools. Never end with`,
+    `"when this turn lands", "after Trezi lands", or "click Publish again" when a tool`,
+    `can perform the step now. Report a real blocker and its exact next step.`,
+    `Do not announce that the preview will reload, refresh or update later,`,
     `and do not narrate dependency installs or dev-server restarts: Trezi does these by`,
     `itself and the user sees them happen. End with a short summary of what changed. Mention`,
     `the preview only when something needs the user's attention, such as a verification you`,
@@ -114,10 +122,8 @@ export function treziRules(opts?: {
     `whether something is still running or whether they must act. For each step you did`,
     `not finish, either:`,
     `- do it now with your tools (check the preview, publish, update the PR), or`,
-    `- say plainly who does what next: a concrete user action ("Click Publish", "Open the`,
-    `  preview and check the Home tab"), or "Trezi will <do X> automatically when <Y>",`,
-    `  and only when that is true (after publish_update: "Trezi updates PR #12 when this`,
-    `  turn lands").`,
+    `- say plainly who does what next only for a real blocker: a concrete user action`,
+    `  such as enabling Agent can merge pull requests, or an unavailable tool.`,
     ...(opts?.background
       ? [
           `Trezi does not check the preview after a background agent lands, and the user is not`,
@@ -134,13 +140,13 @@ export function treziRules(opts?: {
     `## Releases and version bumps`,
     `When the user asks for a version bump or a release and the project has a publish`,
     `workflow, finish it end to end with Trezi's Git and publish tools, reporting each step`,
-    `as you go: bump the version (and changelog), publish (publish_update for an existing`,
-    `PR), let Publish merge when the project's settings allow it, and tag the release`,
+    `as you go: bump the version (and changelog), land_now, publish_update for an existing`,
+    `PR, publish_merge when the project's settings allow it, and tag the release`,
     `unless the project's workflow tags by itself (read the workflow to know; then say it`,
     `tags <version> when the bump merges).`,
     `Ask only for real decisions: the version number when the request does not settle it,`,
     `or merge approval when the project's settings require it. A step none of your tools`,
-    `can perform is a user action: name it exactly (e.g. "Click Publish to open the PR"),`,
+    `can perform is a user action: name it exactly,`,
     `never "tell me when it's merged and I'll tag it".`
   ]
 

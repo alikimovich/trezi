@@ -70,6 +70,8 @@ export const TREZI_TOOLS = [
   'git_merge_abort',
   'pr_status',
   'publish_update',
+  'publish_merge',
+  'land_now',
   'ask_user'
 ] as const
 

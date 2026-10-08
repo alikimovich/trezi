@@ -645,9 +645,21 @@ async function startSession(
       ),
       tool(
         'publish_update',
-        'Update the existing PR branch after this turn lands.',
+        'Land current edits and update the existing PR branch now.',
         { number: z.number().int().positive().optional() },
         async (args) => asText(treziTool('publish_update', args))
+      ),
+      tool(
+        'land_now',
+        'Land current edits into the live checkout now and return the commit and preview revision state.',
+        { message: z.string().optional() },
+        async (args) => asText(treziTool('land_now', args))
+      ),
+      tool(
+        'publish_merge',
+        'Publish and merge the existing PR now when the agent merge setting allows it.',
+        { number: z.number().int().positive().optional(), confirmed: z.boolean().optional() },
+        async (args) => asText(treziTool('publish_merge', args))
       ),
       tool(
         'preview_location',

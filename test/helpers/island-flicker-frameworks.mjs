@@ -31,7 +31,11 @@ async function install(cwd) {
   }
 }
 
-async function withServer({ cwd, command, framework, urlPath, run }) {
+/**
+ * A server that exits before it is reachable lost its port to another dev server between the
+ * probe and its bind (the URL may even answer with that stranger's app): start again.
+ */
+async function withServer({ cwd, command, framework, urlPath, run }, attempt = 1) {
   // Not 7777: unit tests run in parallel (dependency-refresh-vite starts its own range at 8300)
   // and the probe does not reserve the port until the dev server binds it.
   const port = await findFreePort(8500)
@@ -49,18 +53,28 @@ async function withServer({ cwd, command, framework, urlPath, run }) {
     }
   })
   const url = `http://${PREVIEW_HOST}:${port}${urlPath}`
+  let retry = false
   try {
     const deadline = Date.now() + 120000
-    assert.ok(
-      await waitForReachable([url], () => Date.now() > deadline || server.exitCode !== null),
-      `dev server reachable at ${url}`
+    const reachable = await waitForReachable(
+      [url],
+      () => Date.now() > deadline || server.exitCode !== null
     )
-    return await run(url)
+    if (server.exitCode !== null && attempt < 3) {
+      console.log(
+        `ISLAND-FLICKER-FRAMEWORKS port ${port} lost before ${framework} bound it; retrying`
+      )
+      retry = true
+    } else {
+      assert.ok(reachable && server.exitCode === null, `dev server reachable at ${url}`)
+      return await run(url)
+    }
   } finally {
     try {
       if (server?.pid) process.kill(-server.pid, 'SIGTERM')
     } catch {}
   }
+  if (retry) return withServer({ cwd, command, framework, urlPath, run }, attempt + 1)
 }
 
 async function withHost(run) {

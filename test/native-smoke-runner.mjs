@@ -388,6 +388,101 @@ assert.throws(
   /TREZI_NATIVE_SMOKE_STEAL_FOCUS names an unknown check: typo/
 )
 
+// Restore after a check failed with Settings open on AI Providers (its provider editor
+// shown): Settings reopens on its remembered section, so restore leaves it on General
+// before closing, as a passing `sheets` run does. A retried `sheets` then reopens General.
+{
+  const sheet = {
+    visible: true,
+    title: 'Settings',
+    section: 'providers',
+    fields: ['connections', 'key']
+  }
+  const requests = []
+  const host = {
+    emit() {},
+    async request(method, body) {
+      requests.push(
+        (body?.action ?? body?.section) ? `${method}:${body.action ?? body.section}` : method
+      )
+      if (method === 'sheetInspect') return { ...sheet }
+      if (method === 'sheetPerform' && body.action === 'back') sheet.fields = ['connections']
+      if (method === 'sheetPerform' && body.action === 'cancel') sheet.visible = false
+      if (method === 'settingsVerification') sheet.section = body.section
+      if (method === 'sidebarFocus') return { problems: [] }
+      return true
+    }
+  }
+  const background = process.env.TREZI_NATIVE_BACKGROUND_TEST
+  process.env.TREZI_NATIVE_BACKGROUND_TEST = '1'
+  const { restoreSmokeState } = await import('../src/native/smoke-restore.ts')
+  // Other restore steps need the live app; only the sheet step matters here.
+  await restoreSmokeState(host, '').catch(() => {})
+  if (background === undefined) delete process.env.TREZI_NATIVE_BACKGROUND_TEST
+  else process.env.TREZI_NATIVE_BACKGROUND_TEST = background
+  const sheetCalls = requests.filter((r) => /^sheetPerform|^settingsVerification/.test(r))
+  assert.deepEqual(sheetCalls, [
+    'sheetPerform:back',
+    'settingsVerification:general',
+    'sheetPerform:cancel'
+  ])
+  assert.equal(sheet.section, 'general')
+  assert.equal(sheet.visible, false)
+}
+
+{
+  // native-chat-scroll: every chatAcceptance request activates first; a host that still answers
+  // "Chat must be foreground" gets the same request once more, and nothing else is retried.
+  const { foregroundChatHost } = await import('./helpers/chat-foreground.mjs')
+  const sent = []
+  let refusals = 0
+  const fake = {
+    marker: 'bridge',
+    send() {
+      return 'sent'
+    },
+    async request(method, body) {
+      sent.push([method, body])
+      if (method === 'chatAcceptance' && refusals > 0) {
+        refusals--
+        throw new Error('Chat must be foreground')
+      }
+      if (method === 'chatAcceptance' && body?.fail) throw new Error('Unknown scroller override x')
+      return { method, body }
+    }
+  }
+  const warnings = []
+  const host = foregroundChatHost(fake, (line) => warnings.push(line))
+  assert.equal(host.marker, 'bridge', 'other host members pass through')
+  assert.equal(host.send(), 'sent', 'methods stay bound to the bridge')
+
+  await host.request('chatAcceptance', { capture: true })
+  assert.deepEqual(sent, [['chatAcceptance', { capture: true, prepare: true }]])
+  sent.length = 0
+  await host.request('chatInspect')
+  assert.deepEqual(sent, [['chatInspect', undefined]], 'other requests are not prepared')
+  sent.length = 0
+
+  refusals = 1
+  const result = await host.request('chatAcceptance', { width: 320, hoverMessage: '' })
+  assert.deepEqual(
+    sent,
+    Array(2).fill(['chatAcceptance', { width: 320, hoverMessage: '', prepare: true }]),
+    'one refusal: the same state is sent again after reactivation'
+  )
+  assert.deepEqual(result.body, { width: 320, hoverMessage: '', prepare: true })
+  assert.equal(warnings.length, 1)
+  sent.length = 0
+
+  refusals = 2
+  await assert.rejects(host.request('chatAcceptance', {}), /Chat must be foreground/)
+  assert.equal(sent.length, 2, 'a second refusal fails the step: one retry only')
+  sent.length = 0
+
+  await assert.rejects(host.request('chatAcceptance', { fail: true }), /Unknown scroller override/)
+  assert.equal(sent.length, 1, 'other errors are never retried')
+}
+
 console.log(
-  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once.'
+  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once, Settings restored to General, chat acceptance reactivated and retried once.'
 )

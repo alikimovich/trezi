@@ -142,8 +142,24 @@ async function until(check, label, polls = 200) {
 const color = () => page('getComputedStyle(document.querySelector("#probe")).color')
 const pathOf = () => page('location.pathname + location.search')
 
+// The owner probes a free port from 7777 and then Vite binds it; another dev server (a
+// parallel unit test such as island-flicker-frameworks, or another checkout) can take
+// the port in between. Only that lost race is retried: the owner then assigns the next
+// free port. The clean restart below keeps its port, as the hard reload requires.
+async function firstStart() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await start(false)
+    } catch (error) {
+      if (attempt >= 3 || !/Port \d+ is already in use|EADDRINUSE/i.test(String(error?.message)))
+        throw error
+      console.log(`${NAME} port taken during start (attempt ${attempt}); starting again`)
+    }
+  }
+}
+
 try {
-  const first = await start(false)
+  const first = await firstStart()
   const entry = `${first.url.replace(/\/$/, '')}/nested/page?keep=1`
   bridge.send('load', { view: 'preview', url: entry })
   await until(async () => (await color()) === 'rgb(1, 2, 3)', 'the first style in the preview')

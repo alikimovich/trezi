@@ -25,6 +25,12 @@ const registration = await registerTreziAgentTools(async (action) => {
 let child
 try {
   const config = treziMcpConfig(root, registration)
+  // LKM-203: land_now / publish_* wait for the real result, past Codex's 60 s default.
+  assert.equal(config.mcp_servers.trezi.tool_timeout_sec, 300)
+  assert.ok(
+    config.mcp_servers.trezi.tool_timeout_sec > 60 + 180 + 30,
+    'covers landing, the workflow budget and the final lookups'
+  )
   // The provider runs in a project/worktree, separate from Trezi's install.
   process.chdir(home)
   await verifyTreziMcp(config)

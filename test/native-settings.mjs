@@ -94,6 +94,7 @@ assert.deepEqual(
     ['claudePlugins', 'general'],
     ['agentFileAccess', 'general'],
     ['agentGitAccess', 'general'],
+    ['agentMerge', 'general'],
     ['workspaceIdle', 'general'],
     ['activityAutoOpen', 'general'],
     ['workspaceUsage', 'general'],
@@ -104,6 +105,16 @@ assert.deepEqual(
   ]
 )
 // LKM-152: Show Activity automatically, default "For problems that need me", persists.
+assert.equal(field('agentMerge').value, 'true', 'Agent PR merge is on by default')
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  agentMerge: 'false'
+})
+assert.equal(values.get('trezi:agent-merge:v1'), 'false')
+await settings.open()
+assert.equal(field('agentMerge').value, 'false')
 assert.equal(field('activityAutoOpen').label, 'Show Activity automatically')
 assert.equal(field('activityAutoOpen').value, 'problems')
 assert.deepEqual(
