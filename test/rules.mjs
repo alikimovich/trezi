@@ -194,7 +194,13 @@ const codexObservers = treziRules({
   workspaceTools: true
 })
 for (const rules of [withTools, codexObservers]) {
-  for (const tool of ['preview_inspect', 'preview_evaluate', 'preview_console', 'preview_viewport'])
+  for (const tool of [
+    'preview_inspect',
+    'preview_evaluate',
+    'preview_console',
+    'preview_viewport',
+    'preview_speed'
+  ])
     assert(rules.includes(tool), `preview tools: teaches ${tool}`)
   assert(
     /MUST use Trezi's preview tools/.test(rules),

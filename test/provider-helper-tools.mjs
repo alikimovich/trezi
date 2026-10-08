@@ -74,6 +74,7 @@ const CALLS = {
   preview_evaluate: { expression: '1 + 1' },
   preview_console: {},
   preview_viewport: { preset: 'mobile' },
+  preview_speed: { speed: 1 },
   open_preview: { path: '/helper-route' },
   reload_preview: { hard: true },
   restart_dev_server: { cleanCache: true },
