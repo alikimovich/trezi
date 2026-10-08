@@ -614,12 +614,19 @@ try {
     const base = dir({ 'a.ts': 'one' })
     execFileSync('git', ['init', '-q'], { cwd: base })
     const log = []
-    // Another chain's lease holds the repository: the proposal waits for it.
+    // Another chain's lease holds the repository: the proposal waits for it. Acquiring
+    // is a service round trip, so propose only once the lease is granted (a fixed delay
+    // raced the grant on a loaded host).
+    let granted
+    const leased = new Promise((resolve) => {
+      granted = resolve
+    })
     const held = enqueueRepoWrite(base, async () => {
+      granted()
       await sleep(300)
       log.push('lease end')
     })
-    await sleep(30)
+    await leased
     const waiting = proposeEdit(base, join(base, 'a.ts'), 'one', 'two', 'k').then((r) => {
       log.push('commit')
       return r

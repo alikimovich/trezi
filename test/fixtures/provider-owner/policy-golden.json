@@ -33,6 +33,8 @@
      "git_merge_abort",
      "pr_status",
      "publish_update",
+     "publish_merge",
+     "land_now",
      "ask_user"
     ]
    }
@@ -65,7 +67,9 @@
      "git_merge_continue",
      "git_merge_abort",
      "pr_status",
-     "publish_update"
+     "publish_update",
+     "publish_merge",
+     "land_now"
     ]
    }
   }
@@ -623,7 +627,9 @@
      "git_merge_continue",
      "git_merge_abort",
      "pr_status",
-     "publish_update"
+     "publish_update",
+     "publish_merge",
+     "land_now"
     ],
     "resume": null,
     "session": "bg-N"
@@ -664,6 +670,8 @@
      "git_merge_abort",
      "pr_status",
      "publish_update",
+     "publish_merge",
+     "land_now",
      "ask_user"
     ],
     "resume": "thread-1",

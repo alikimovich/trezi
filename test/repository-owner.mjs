@@ -199,12 +199,18 @@ try {
     const at = (label) => log.push([label, Date.now()])
     const when = (label) => log.find(([name]) => name === label)[1]
 
+    // Acquiring is a service round trip: queue B and C only once A holds the lane.
+    let granted
+    const leased = new Promise((resolve) => {
+      granted = resolve
+    })
     const a = enqueueRepoWrite(live, async () => {
       at('A start')
+      granted()
       await sleep(300)
       at('A end')
     })
-    await sleep(20)
+    await leased
     // A worktree root resolves to the same common directory: same lane, after A.
     const b = enqueueRepoWrite(wt.path, async () => {
       at('B start')

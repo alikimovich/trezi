@@ -71,6 +71,8 @@ const requiredTools = [
   'git_merge_abort',
   'pr_status',
   'publish_update',
+  'publish_merge',
+  'land_now',
   'project_ui_catalog',
   'compose_project_ui',
   'open_preview',
@@ -79,6 +81,11 @@ const requiredTools = [
   'open_code',
   'ask_user'
 ]
+
+/** LKM-203: `land_now`, `publish_update` and `publish_merge` wait for the real result
+ * (landing up to 60 s, workflow polling up to 180 s from the call). Codex's default tool
+ * timeout is 60 s, which would report an error while the push or merge carries on. */
+export const SYNC_TOOL_TIMEOUT_SEC = 300
 
 export function treziMcpConfig(appRoot: string, registration: TreziAgentToolRegistration) {
   return {
@@ -91,6 +98,7 @@ export function treziMcpConfig(appRoot: string, registration: TreziAgentToolRegi
         // A missing bridge must fail the turn, including subsequent CLI resumes.
         required: true,
         startup_timeout_sec: 15,
+        tool_timeout_sec: SYNC_TOOL_TIMEOUT_SEC,
         // Every Trezi tool is pre-approved: sessions run with approvals disabled, so an
         // unapproved one is refused outright (LKM-165: `workspace_state` was).
         tools: Object.fromEntries(

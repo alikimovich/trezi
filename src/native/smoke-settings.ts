@@ -135,6 +135,7 @@ export async function checkVisibleSettings(
     'Agents have full file access in a new profile (LKM-163)'
   )
   assert.equal(initial.values.agentGitAccess, 'managed', 'Agent Git access defaults to Managed')
+  assert.equal(initial.values.agentMerge, 'true', 'Agent PR merging defaults to on')
   // LKM-143: General shows the version stamped into this build, as `trezi --version` prints it.
   assert.match(
     initial.values.version ?? '',
@@ -187,6 +188,11 @@ export async function checkVisibleSettings(
   await reopen()
   assert.equal((await inspect()).values.agentGitAccess, 'full')
   await choose('agentGitAccess', 'managed')
+  await reopen()
+  await choose('agentMerge', 'false')
+  await reopen()
+  assert.equal((await inspect()).values.agentMerge, 'false')
+  await choose('agentMerge', 'true')
   await reopen()
   // LKM-152: Show Activity automatically defaults to problems that need the user and persists.
   assert.equal(

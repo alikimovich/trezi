@@ -19,7 +19,10 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 35, 'version bumped to 35')
+assert(TREZI_RULES_VERSION === 36, 'version bumped to 36')
+assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
+assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
+assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')
 // LKM-199: a provider without a native question tool asks through ask_user, then waits;
 // a choice that is not the user's proceeds with a stated default.
 const asking = treziRules({ questionTool: true })
@@ -48,11 +51,8 @@ for (const rules of [r, treziRules({ previewTools: true }), treziRules({ backgro
     'R-owner: forbids ownerless pending items'
   )
   assert(/do it now with your tools/.test(rules), 'R-owner: do it now')
-  assert(/a concrete user action \("Click Publish"/.test(rules), 'R-owner: concrete user action')
-  assert(
-    /"Trezi will <do X> automatically when <Y>",\s+and only when that is true/.test(rules),
-    'R-owner: automatic owner only when true'
-  )
+  assert(/a concrete user action/.test(rules), 'R-owner: concrete user action')
+  assert(/land_now during the turn/.test(rules), 'R-owner: lands within the turn')
   assert(
     /Never ask the user to report back so you can\s+continue/.test(rules),
     'R-owner: no "tell me when it is there"'

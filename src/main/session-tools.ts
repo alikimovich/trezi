@@ -4,6 +4,7 @@ import { runChatIslandTool } from './chat-islands'
 import {
   agentWorkspaceEvidence,
   agentWorkspaceState,
+  landNow,
   reconcilePark,
   resolveParkedChat
 } from './chat-isolation'
@@ -48,6 +49,8 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'git_merge_abort',
   'pr_status',
   'publish_update',
+  'publish_merge',
+  'land_now',
   'chat_island',
   'open_code',
   'open_preview',
@@ -114,16 +117,40 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       // LKM-205: the user's rulers, guides and grids, read-only.
       previewOverlay: agentPreviewOverlay(s.liveRoot)
     }
+  if (action === 'land_now') {
+    const message = (args as { message?: unknown } | null)?.message
+    return landNow(
+      s.emitKey,
+      typeof message === 'string' && message.trim()
+        ? message.slice(0, 2000)
+        : 'Land current chat changes'
+    )
+  }
   if (
     [
       'git_sync_base',
       'git_merge_continue',
       'git_merge_abort',
       'pr_status',
-      'publish_update'
+      'publish_update',
+      'publish_merge'
     ].includes(action)
-  )
-    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args)
+  ) {
+    const startedAt = Date.now()
+    if (action === 'publish_update' || action === 'publish_merge') {
+      const landed = (await landNow(s.emitKey, 'Land changes before publishing')) as {
+        outcome?: string
+        error?: string
+      }
+      if (landed.error || (landed.outcome !== 'merged' && landed.outcome !== 'unchanged'))
+        return {
+          error:
+            landed.error ?? 'Changes did not land; resolve the parked files before publishing.',
+          landing: landed
+        }
+    }
+    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args, startedAt)
+  }
   const before = agentWorkspaceState(s.emitKey)
   if (before.state === 'live' || before.state === 'isolated') {
     return { ok: false, ...before, guidance: 'There is no parked Trezi batch to prepare.' }

@@ -8,6 +8,7 @@ import {
   AGENT_GIT_ACCESS_KEY,
   agentGitAccess
 } from '../main/agent-git-access'
+import { AGENT_MERGE_KEY } from '../main/agent-merge-setting'
 import { CLAUDE_USER_PLUGINS_KEY } from '../main/backends/claude-isolation'
 import type { ModelChoice, ProviderConnection } from '../shared/api'
 import type {
@@ -168,6 +169,18 @@ export class NativeSettingsController {
             choices: AGENT_GIT_ACCESS_CHOICES
           },
           {
+            id: 'agentMerge',
+            section: 'general',
+            label: 'Agent can merge pull requests',
+            help: 'When off, an agent must ask before merging a pull request.',
+            kind: 'choice',
+            value: this.preferences.get(AGENT_MERGE_KEY) === 'false' ? 'false' : 'true',
+            choices: [
+              { value: 'true', label: 'On' },
+              { value: 'false', label: 'Off' }
+            ]
+          },
+          {
             id: 'workspaceIdle',
             section: 'general',
             label: 'Remove idle chat workspaces after',
@@ -315,6 +328,9 @@ export class NativeSettingsController {
     const gitAccess = action.values.agentGitAccess
     if (gitAccess !== undefined && !AGENT_GIT_ACCESS_CHOICES.some((c) => c.value === gitAccess))
       throw new Error('Invalid setting.')
+    const agentMerge = action.values.agentMerge
+    if (agentMerge !== undefined && !['true', 'false'].includes(agentMerge))
+      throw new Error('Invalid setting.')
     // One atomic batch, built from the committed state when it is sent (a chat may
     // have recorded a newer last-used model since the sheet opened). Autosave
     // keeps the draft and closing waits for this to settle.
@@ -337,7 +353,8 @@ export class NativeSettingsController {
         ...(idle === undefined ? [] : [[IDLE_KEY, idle] as [string, string]]),
         ...(activity === undefined ? [] : [[ACTIVITY_AUTO_OPEN_KEY, activity] as [string, string]]),
         ...(access === undefined ? [] : [[AGENT_FILE_ACCESS_KEY, access] as [string, string]]),
-        ...(gitAccess === undefined ? [] : [[AGENT_GIT_ACCESS_KEY, gitAccess] as [string, string]])
+        ...(gitAccess === undefined ? [] : [[AGENT_GIT_ACCESS_KEY, gitAccess] as [string, string]]),
+        ...(agentMerge === undefined ? [] : [[AGENT_MERGE_KEY, agentMerge] as [string, string]])
       ]
     })
     this.notify()

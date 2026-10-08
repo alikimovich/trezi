@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 - Preview rulers, guides and layout grids: View → Show Rulers (⇧⌘R) and Show Layout Grid (⌃G) or the toolbar's Rulers and Grids popover; drag guides from the rulers (they snap to elements, grid lines and whole pixels), add column, baseline and square grids with presets, see hover distances to guides in select mode, and have it all remembered per project and viewport (LKM-205).
+- Agents can land edits during a turn with `land_now`, then update or merge an existing pull request synchronously; Settings includes Agent can merge pull requests (LKM-203).
 - Preview slow motion: the toolbar's tortoise menu plays the preview's CSS transitions and animations, Web Animations, requestAnimationFrame animations, timers and media at 0.5×, 0.25× or 0.1×, pauses them, or steps one frame at a time. ⌃⇧S switches between 1× and the last slow speed, a badge on the preview shows the speed, the speed resets when you switch projects, and agents can read or set it with `preview_speed` (LKM-206).
 - Dreamer: Trezi → Run Dreamer… reviews your recent chats and Trezi's log on this Mac (slow tools, repeated failures, retried requests) with your selected model and proposes improvements; Dreamer Proposals… lets you filter, edit and select them, then Copy as JSON, Export Dreamer Report… (a redacted zip) or Send to Agent OS (Settings → Dreamer), with an optional weekly run (LKM-202).
 - Agents can reserve a pending chat island before adding the source values it controls: the definition is checked at once, the island turns on after the turn lands and its values are found, and otherwise it shows why with Recreate (LKM-201).
@@ -40,6 +41,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
+- Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).
 - Switching projects in the sidebar no longer jumps back to the previous project first: the clicked project is selected and shown ("Opening …") at once while its dev server starts, and rapid clicks end on the last one (LKM-204).
 - A new chat can create chat islands again: its agent no longer gets "chat islands are not available yet" while the workspace is still being prepared; the island waits for it (LKM-199).
 - The agent's preview route, DOM inspection and screenshot always describe the same page, the preview you see, and name its port and route; when the preview shows another server than the chat's project, the tools say so instead of describing the wrong page (LKM-199).
