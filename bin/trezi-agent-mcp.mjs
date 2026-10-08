@@ -8,6 +8,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from './chat-island-schema.mjs'
+import { chatUiDescription, chatUiShape } from './chat-ui-schema.mjs'
 import { previewToolShapes, previewToolText } from './preview-tool-schema.mjs'
 
 const socketPath = process.env.TREZI_AGENT_TOOL_SOCKET
@@ -155,6 +156,13 @@ server.registerTool(
   'chat_island',
   { description: chatIslandDescription, inputSchema: chatIslandShape },
   async (args) => result(await invoke('chat_island', args))
+)
+
+// LKM-208: native answer components; Codex asks structured questions with its form.
+server.registerTool(
+  'chat_ui',
+  { description: chatUiDescription, inputSchema: chatUiShape },
+  async (args) => result(await invoke('chat_ui', args))
 )
 
 server.registerTool(

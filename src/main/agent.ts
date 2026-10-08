@@ -55,6 +55,7 @@ import { type PendingChat, PendingChats } from './chat-pending'
 import { chatRecordLookup } from './chat-record'
 import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
 import { TurnTracker } from './chat-turns'
+import { answerChatUi, chatUiContext, forgetChatUi, setChatUiHost } from './chat-ui'
 import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
   cleanUpWorkspacesNow,
@@ -534,6 +535,7 @@ async function closeChat(sessionKey: string, s: ProviderSession, persist: Persis
   clearTimeout(checkpointTimers.get(sessionKey))
   checkpointTimers.delete(sessionKey)
   handoffHistory.delete(sessionKey)
+  forgetChatUi(sessionKey)
   try {
     s.finalize()
     if (persist !== 'none' && s.record.transcript.some((t) => t.role === 'user'))
@@ -1501,6 +1503,28 @@ export function registerAgentIpc(
     }
   )
 
+  // LKM-208: answer components live in the chat's transcript, which the conversation
+  // owner persists with the record; a pick or submit is checked and saved there.
+  setChatUiHost({
+    persist: (key, record) => {
+      const transcript = sessions.get(key)?.record.transcript
+      if (!transcript) return
+      const entry = transcript.find((e) => e.ui?.id === record.id)
+      if (entry) entry.ui = record
+      else
+        transcript.push({
+          role: 'status',
+          text: `Showed ${record.component.kind}: ${record.component.title}`,
+          at: record.at,
+          ui: record
+        })
+    },
+    find: (key, id) => sessions.get(key)?.record.transcript.find((e) => e.ui?.id === id)?.ui
+  })
+  ipcMain.handle('agent:chat-ui-answer', (_e, key: string, id: string, answer: unknown) =>
+    answerChatUi(key, id, answer)
+  )
+
   /** LKM-182: a send to a chat still being prepared waits for what is missing. Stop
    *  cancels the wait; after 300 ms the chat says it is preparing its workspace. */
   const waitForChat = async (key: string): Promise<void> => {
@@ -1644,7 +1668,7 @@ export function registerAgentIpc(
           turn?.projectUi === true && !supportsUi
             ? 'The requested project component composition mode requires Claude or Codex. Explain this limitation for UI requests.\n\n'
             : ''
-        const islandContext = await chatIslandContext(key, text)
+        const islandContext = (await chatIslandContext(key, text)) + chatUiContext(key)
         if (preparation.cancelled || sessions.get(key) !== session)
           throw new Error('Message cancelled before sending.')
         // A model switch: the fresh provider gets the recorded conversation, once.

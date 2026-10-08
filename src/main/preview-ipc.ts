@@ -168,7 +168,9 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     agent: {
       evaluate: (code, world, timeoutMs) => openPreview().evaluateIn(code, world, timeoutMs),
       captureRect: (rect) => openPreview().captureRect(rect),
-      setViewport: (width) => openPreview().setViewport(width)
+      setViewport: (width) => openPreview().setViewport(width),
+      thumbnail: async (rect, width) =>
+        (await openPreview().captureThumbnail(rect ? { rect, width } : { width })) || null
     }
   })
   function openPreview(): NativeWebContents {

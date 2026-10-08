@@ -143,8 +143,12 @@ export class NativeView {
       height: number
     }) => Promise<NativeImage>
     setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
-    /** A small JPEG (base64, at most 160 px wide) of the current frame, for chat rows. */
-    captureThumbnail: () => Promise<string>
+    /** A small JPEG (base64, at most 160 px wide unless `width`, up to 480) of the current
+     *  frame or of `rect` (CSS px), for chat rows and answer-component previews (LKM-208). */
+    captureThumbnail: (options?: {
+      width?: number
+      rect?: { x: number; y: number; width: number; height: number }
+    }) => Promise<string>
     /** The agent's frame (LKM-200): one JPEG rendered at its bounded size, with host timings. */
     captureAgent: (options: { full?: boolean }) => Promise<AgentCaptureReply>
   }
@@ -191,8 +195,8 @@ export class NativeView {
         ),
       captureRect: async (rect) =>
         new NativeImage(await bridge().request('capture', { view: id, rect })),
-      captureThumbnail: async () =>
-        (await bridge().request('capture', { view: id, thumbnail: true })).jpeg,
+      captureThumbnail: async (options) =>
+        (await bridge().request('capture', { view: id, thumbnail: true, ...options })).jpeg,
       captureAgent: (options) =>
         bridge().request('capture', {
           view: id,

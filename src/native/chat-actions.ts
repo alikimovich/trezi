@@ -1,3 +1,4 @@
+import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatAction } from '../shared/native-chat'
 import { setupPrompt } from '../shared/setup-prompt'
 import { requestTarget } from './chat-agent-card'
@@ -5,7 +6,7 @@ import type { NativeChatController } from './chat-controller'
 import { loginAction } from './chat-login'
 import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
-import { assistant, begin, type Chat, type Submission } from './chat-state'
+import { assistant, begin, type Chat, placeUi, type Submission } from './chat-state'
 
 /** Card actions call application services directly; shell effects only refresh web panels. */
 export async function cardAction(
@@ -62,6 +63,27 @@ export async function cardAction(
             sessionId: spawn.id
           }
         })
+      break
+    }
+    case 'chat-ui': {
+      // LKM-208: a pick or a form's values; the conversation saves them with the
+      // component and they go back to the agent as the user's next message.
+      if (!action.id) return
+      let answer: unknown
+      try {
+        answer = JSON.parse(action.value ?? '')
+      } catch {
+        return
+      }
+      const reply = (await invoke('agent:chat-ui-answer', chat.chat, action.id, answer)) as
+        | { record: ChatUiRecord; message: string }
+        | { error: string }
+      if ('error' in reply) {
+        chat.error = reply.error
+        break
+      }
+      placeUi(chat, reply.record)
+      sendReply(controller, chat, reply.message)
       break
     }
     case 'spawn-open-target': {

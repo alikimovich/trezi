@@ -3,7 +3,8 @@ import Combine
 import SwiftUI
 
 /// `labels` are the statuses with collapsed paths (`display-path.ts`); `statuses` keep the full text.
-struct ChatSegment: Decodable { let kind: String; let text: String?; let at: Double?; let statuses: [String]?; let labels: [String]?; let island: IslandView? }
+/// `ui` is an answer component (LKM-208, `ChatUi.swift`).
+struct ChatSegment: Decodable { let kind: String; let text: String?; let at: Double?; let statuses: [String]?; let labels: [String]?; let island: IslandView?; let ui: ChatUiPayload? }
 struct ChatAttachment: Decodable, Identifiable { let id: String; let kind: String?; let name: String?; let path: String?; let url: String? }
 struct ChatSelection: Decodable { let tag: String; let ident: String; let source: String? }
 struct ChatMessage: Decodable, Identifiable {
@@ -36,6 +37,7 @@ private extension ChatSnapshot {
         followHead + messages.flatMap { message in
             [message.id, message.text] + message.segments.flatMap { segment in
                 if let island = segment.island { return [island.id, String(island.revision)] }
+                if let record = segment.ui?.record { return [record.id, record.images.keys.sorted().joined(separator: ","), String(record.answer != nil)] }
                 return [segment.text ?? ""] + (segment.statuses ?? [])
             }
         }
@@ -87,6 +89,8 @@ final class ChatModel: ObservableObject {
     /// Background agent cards (ChatAgentCard.swift): expanded requests, questions seen, frames.
     @Published var expandedAgents: Set<String> = []
     var seenAgentQuestions: Set<String> = [], agentCardFrames: [String: CGRect] = [:]
+    /// Answer components (ChatUi.swift) by record id, for inspection and captures.
+    var chatUiFrames: [String: CGRect] = [:]
     var bottomPosition: CGFloat = 0
     var latestButtonFrame = CGRect.zero
     /// What the conversation's SwiftUI views read (see ChatAccessibilityEcho).
@@ -212,7 +216,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "cards":model.snapshot?.cards.map(\.id) ?? [],
          "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "actions":$0.actions.map(\.label)] as [String: Any] } ?? [],
          "questionCount":model.snapshot?.questions.count ?? 0]
-        return state.merging(inspectAgents()) { $1 }
+        return state.merging(inspectAgents()) { $1 }.merging(inspectChatUi()) { $1 }
     }
 }
 private struct BottomPosition: PreferenceKey {
@@ -386,6 +390,7 @@ struct ChatConversation: View {
                     .onPreferenceChange(ChatStatusLines.self) { model.statusLines = $0 }
                     .onPreferenceChange(AttachmentFrames.self) { model.attachmentFrames = $0 }
                     .onPreferenceChange(AgentCardFrames.self) { model.agentCardFrames = $0 }
+                    .onPreferenceChange(ChatUiFrames.self) { model.chatUiFrames = $0 }
                     .overlay(alignment: .top) {
                         stickyRequest(proxy: proxy)
                     }
@@ -442,6 +447,7 @@ private struct NativeMessageRow: View {
                 if let attachments = message.attachments, !attachments.isEmpty { SentAttachments(attachments: attachments, model: model) }
                 ForEach(Array(message.segments.enumerated()), id: \.offset) { index, segment in
                     if let island = segment.island { NativeChatIsland(island: island, model: model) }
+                    else if let ui = segment.ui { NativeChatUi(payload: ui, running: running, model: model).id(ui.record?.id ?? "ui-\(index)") }
                     else if segment.kind == "tools" {
                         DisclosureGroup {
                             ForEach(Array((segment.statuses ?? []).enumerated()), id: \.offset) { _, status in Text(status).font(ChatTypography.activity).lineSpacing(3).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }

@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 36, 'version bumped to 36')
+assert(TREZI_RULES_VERSION === 37, 'version bumped to 37')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
 assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
 assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')
@@ -33,6 +33,23 @@ assert(!/ask_user/.test(r), 'ask_user: absent without the tool')
 const bgAsking = treziRules({ questionTool: true, background: true })
 assert(!/ask_user|AskUserQuestion/.test(bgAsking), 'ask_user: background agents never ask')
 assert(/you cannot ask them a question/.test(bgAsking), 'ask_user: background told to choose')
+// LKM-208: with Trezi's chat tools, every provider asks with a chat_ui form.
+const codexAsking = treziRules({ questionTool: true, controlTools: true })
+assert(/## Asking the user \(chat_ui form\)/.test(codexAsking), 'chat_ui: Codex asks with a form')
+assert(!/call ask_user/.test(codexAsking), 'chat_ui: the form replaces ask_user')
+for (const opts of [{ previewTools: true }, { controlTools: true }]) {
+  const withUi = treziRules(opts)
+  assert(/## Answer components in chat \(chat_ui\)/.test(withUi), 'chat_ui: section present')
+  assert(
+    /never as plain-text or multiple-choice lists/.test(withUi),
+    'chat_ui: form over plain text'
+  )
+}
+assert(!/chat_ui/.test(r), 'chat_ui: absent without the tools')
+assert(
+  !/chat_ui/.test(treziRules({ previewTools: true, background: true })),
+  'chat_ui: background agents never show components'
+)
 // LKM-196: open_preview reports the real load; only a deferred open is "requested".
 assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
 // LKM-197: stale CSS/JS → a hard reload, then a clean restart; never a self-started server.

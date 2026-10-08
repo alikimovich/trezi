@@ -80,6 +80,7 @@ const CALLS = {
   restart_dev_server: { cleanCache: true },
   open_code: { file: 'shadow.js', startLine: 1, endLine: 2 },
   chat_island: island,
+  chat_ui: { action: 'catalog' },
   workspace_state: {},
   prepare_conflict_resolution: {},
   git_sync_base: {},

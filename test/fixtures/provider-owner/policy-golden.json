@@ -35,7 +35,8 @@
      "publish_update",
      "publish_merge",
      "land_now",
-     "ask_user"
+     "ask_user",
+     "chat_ui"
     ]
    }
   }
@@ -672,7 +673,8 @@
      "publish_update",
      "publish_merge",
      "land_now",
-     "ask_user"
+     "ask_user",
+     "chat_ui"
     ],
     "resume": "thread-1",
     "session": "fg-N"

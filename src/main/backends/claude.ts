@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from '../../../bin/chat-island-schema.mjs'
+import { chatUiDescription, chatUiShape } from '../../../bin/chat-ui-schema.mjs'
 import {
   previewToolText as PREVIEW_TOOL_TEXT,
   previewToolShapes as previewShapes
@@ -103,6 +104,7 @@ const PREVIEW_TOOL_NAMES = new Set([
 const TREZI_TOOL_NAMES = new Set([
   ...PREVIEW_TOOL_NAMES,
   'mcp__trezi__chat_island',
+  'mcp__trezi__chat_ui',
   'mcp__trezi__open_code',
   'mcp__trezi__open_preview',
   'mcp__trezi__reload_preview',
@@ -733,6 +735,10 @@ async function startSession(
       ),
       tool('chat_island', chatIslandDescription, chatIslandShape, async (args) =>
         asText(treziTool('chat_island', args))
+      ),
+      // LKM-208: native answer components (options, form) in this message.
+      tool('chat_ui', chatUiDescription, chatUiShape, async (args) =>
+        asText(treziTool('chat_ui', args))
       ),
       // Pure spring→CSS calculator. LLMs can't reliably integrate a spring in
       // their head, so this computes the EXACT `linear()` easing + duration the

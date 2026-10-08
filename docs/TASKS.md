@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native answer components in chat: options and forms (LKM-208)
+
+- [x] `chat_ui` tool (catalog/show/update) for Claude and Codex; zod catalog `bin/chat-ui-schema.mjs`, Bun validation and answers `src/main/chat-ui.ts`, option images `src/main/chat-ui-capture.ts`.
+- [x] SwiftUI `options` and `form` in the assistant message (`src/native/ChatUi.swift`), Codable model and validation (`src/native/ChatUiModel.swift`), skeletons mid-turn, light/dark, accessibility.
+- [x] Pick/submit → one structured user turn; state saved with the message; summary in the next turn; rules generated from the catalog (v37); `docs/CHAT-UI.md`.
+- [x] Tests: unit `chat-ui`, `chat-ui-model`; native smoke `chat-ui` (group `chat`).
+- [ ] Open: `compare` and `changes` components.
+
 ## Component states workbench (LKM-207)
 
 - [x] Bundled user-invoked skill `agent-plugin/skills/component-states` (attribution and MIT notice), `/states` in the composer, Show states on the element toolbar and the element … menu.

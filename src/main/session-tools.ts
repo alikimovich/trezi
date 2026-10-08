@@ -8,6 +8,7 @@ import {
   reconcilePark,
   resolveParkedChat
 } from './chat-isolation'
+import { chatUiTool } from './chat-ui'
 import { openAgentCode } from './code-tools'
 import { isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { agentPreviewOverlay } from './preview-overlay'
@@ -66,6 +67,7 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'project_ui_catalog',
   'compose_project_ui',
   'ask_user',
+  'chat_ui',
   'install_skills'
 ]
 
@@ -101,6 +103,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       : openAgentCode(s.root, s.liveRoot, s.emitKey, args as never, s.notify)
   if (action === 'install_skills') return installSkills(args, s)
   if (action === 'ask_user') return askUser(args, s)
+  if (action === 'chat_ui') return chatUiTool(args, s)
   if (s.background)
     return {
       ok: false,

@@ -36,6 +36,7 @@ capabilities instead of assuming Claude, Codex, gateways, and Gemini are interch
 | Open mini code editor / highlight exact source | Yes | Yes | Yes, through Codex | No |
 | Trezi worktree control tools | No | Yes | Yes, through Codex | No |
 | Trezi question cards | Yes (`AskUserQuestion`) | Yes (`ask_user`) | Yes, through Codex | No |
+| Answer components in chat (`chat_ui` options and form) | Yes | Yes | Yes, through Codex | No |
 | Trezi approve/deny cards | Yes | No SDK approval event | No SDK approval event | No |
 | Image input | Yes | Not wired | Not wired | Not wired |
 | Resume provider thread | Yes | Not wired | Not wired | No |
@@ -61,7 +62,11 @@ Codex asks the user through `ask_user` (LKM-199, `src/main/question-tool.ts`): t
 question card as Claude's `AskUserQuestion`, but the call returns at once (a tool call
 cannot wait for a person through the bridges' timeouts), the agent ends its turn, and
 the answer arrives as the user's next message. Background agents are not granted it;
-they choose a stated default. Design calculators remain Claude-only;
+they choose a stated default. With preview tools, the rules make a `chat_ui` form the
+default way to ask a structured question for every provider, and `chat_ui` options the
+way to offer design variants with preview images. Both return at once like `ask_user`,
+and the answer comes back as the next user turn plus a summary in the prompt
+(LKM-208, `docs/CHAT-UI.md`). Design calculators remain Claude-only;
 question cards, resume, image transport, and background-agent support are separately
 declared because they have different lifecycle and security requirements.
 
