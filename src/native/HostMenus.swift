@@ -42,6 +42,12 @@ extension Host {
         for (label, key, action) in [("Reload Preview", "r", "reload"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
             let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; actions.addItem(item)
         }
+        // LKM-206: Control-Shift-S switches between 1× and the last slow speed.
+        actions.addItem(.separator())
+        for (label, key, action) in [("Toggle Slow Motion", "s", "slow-motion"), ("Step Preview Frame", "", "slow-motion-step")] {
+            let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action
+            if !key.isEmpty { item.keyEquivalentModifierMask = [.control, .shift] }; actions.addItem(item)
+        }
         let develop = submenu("Develop")
         for (title, key, action) in [("Show Preview Web Inspector", "i", "show"), ("Show Preview JavaScript Console", "c", "showConsole")] {
             let item = NSMenuItem(title: title, action: #selector(showPreviewInspector(_:)), keyEquivalent: key)

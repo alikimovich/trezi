@@ -90,6 +90,7 @@ import { installPreviewLoads, loadErrorStatus } from './preview-load-runtime'
 import { installPreviewOverlay } from './preview-overlay-controller'
 import { NativePreviewRecovery } from './preview-recovery'
 import { installPreviewRefresh } from './preview-refresh'
+import { installPreviewSpeed } from './preview-speed'
 import { NativePreviewSupervisor } from './preview-supervisor'
 import { serviceProjectMemory } from './project-memory-service'
 import { serviceProvider } from './provider-service'
@@ -691,6 +692,7 @@ async function main() {
   installPreviewRefresh(host, workspaceController, (error) =>
     activityController.append(String(error), 'error')
   )
+  installPreviewSpeed(host, previewView)
   const renderWorkspace = workspaceController.services.render
   workspaceController.services.render = (state) => {
     renderWorkspace(state)

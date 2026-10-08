@@ -49,6 +49,7 @@ export const TREZI_TOOLS = [
   'preview_evaluate',
   'preview_console',
   'preview_viewport',
+  'preview_speed',
   'open_preview',
   'reload_preview',
   'restart_dev_server',
@@ -77,6 +78,7 @@ export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
   open_code: 'Background edits cannot navigate the user editor.',
   chat_island: 'Background edits cannot create chat islands.',
   preview_viewport: 'Background edits cannot resize the user preview.',
+  preview_speed: 'Background edits cannot change the user preview speed.',
   reload_preview: 'Background edits cannot reload the user preview.',
   restart_dev_server: 'Background edits cannot restart the dev server.',
   ask_user:

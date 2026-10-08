@@ -65,6 +65,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'preview-inspector': ['core'],
   'agent-preview': ['core'],
   'preview-timing': ['core'],
+  'preview-speed': ['core'],
   'toolbar-more': ['core'],
   'publish-progress': ['core'],
   'live-provider': ['core'],

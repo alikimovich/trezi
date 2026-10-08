@@ -47,6 +47,8 @@ export const PREVIEW_COVERED = 'trezi:preview:covered' // → preload ({x,y,widt
 // its scroll, viewport and selection extent, which the host takes without main.
 export const PREVIEW_OVERLAY_LINES = 'trezi:preview:overlay-lines' // → preload (OverlayLines)
 export const PREVIEW_OVERLAY_GEOMETRY = 'trezi:preview:overlay-geometry' // → host (geometry)
+// Slow motion (LKM-206): forwarded to the page-world clock (`src/preview/speed-control.ts`).
+export const PREVIEW_SET_SPEED = 'trezi:preview:set-speed' // → preload ({speed} | {step})
 
 // ── Styles tab ─────────────────────────────────────────────────────────────
 export const STYLES_PREVIEW = 'styles:preview' // → preload ({prop, value})

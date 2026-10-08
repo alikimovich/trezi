@@ -47,6 +47,7 @@ const UNIT = [
   'native-boundary',
   'trezi-agent-tools',
   'preview-agent-tools',
+  'preview-slow-motion',
   'codex-mcp',
   'codex-mcp-approvals',
   'claude-resume',

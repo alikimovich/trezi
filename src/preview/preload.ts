@@ -54,6 +54,7 @@ import {
   PREVIEW_SET_FRAME as SET_FRAME,
   PREVIEW_SET_MODE as SET_MODE,
   PREVIEW_SET_PINS as SET_PINS,
+  PREVIEW_SET_SPEED as SET_SPEED,
   PREVIEW_SET_STATUS as SET_STATUS,
   STYLES_CLEAR_PREVIEW,
   STYLES_PREVIEW,
@@ -75,6 +76,7 @@ import {
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
 import { createNativeCover } from './native-cover'
 import { createOverlayGuides } from './overlay-guides'
+import { sendPageSpeed } from './speed-control'
 import { specifiedValues, varRefName } from './style-provenance'
 import { createThreeDInspector } from './three-d'
 import { createViewportReadout } from './viewport-readout'
@@ -2091,4 +2093,5 @@ if (!IS_SIM_BRIDGE) {
     layersHover(p.path as number[], p.fingerprint)
   })
   ipcRenderer.on(LAYERS_SET_WATCH, (_e, on: boolean) => setLayersWatch(!!on))
+  ipcRenderer.on(SET_SPEED, (_e, change: unknown) => sendPageSpeed(change))
 }

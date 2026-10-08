@@ -28,6 +28,7 @@ import { checkLegacyProject } from './smoke-legacy-project'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
+import { checkPreviewSpeed, restorePreviewSpeed } from './smoke-preview-speed'
 import { checkPreviewTiming, restorePreviewTiming } from './smoke-preview-timing'
 import { checkProjectSwitching } from './smoke-projects'
 import { checkPublishProgress } from './smoke-publish'
@@ -903,6 +904,16 @@ export async function runNativeCoreSmoke(
         await checkPreviewTiming(page, artifacts)
       },
       cleanup: restorePreviewTiming
+    },
+    {
+      name: 'preview-speed',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkPreviewSpeed(host, page, fixture, artifacts)
+      },
+      cleanup: async () => {
+        await restorePreviewSpeed(page)
+      }
     },
     {
       name: 'toolbar-more',

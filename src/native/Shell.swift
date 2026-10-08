@@ -37,9 +37,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var toolbar: NSToolbar!
     private var toolbarLayout: ToolbarLayout!
     weak var window: NSWindow?
-    private var toolbarItems: [String: NSToolbarItem] = [:]
-    private let items = [ "chat", "address", "interaction", "select-object", "device", "overlay", "tools", "code", "layers", "expand", "publish", "more"]
-    private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "more":"More Preview Actions"]
+    private(set) var toolbarItems: [String: NSToolbarItem] = [:]
+    private let items = [ "chat", "address", "interaction", "select-object", "device", "overlay", "tools", "code", "layers", "expand", "publish", "speed", "more"]
+    private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "more":"More Preview Actions"]
     private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
     /// The rulers-and-grids button opens its native popover (LKM-205) instead of asking main.
     var overlayAction: (() -> Void)?
@@ -52,8 +52,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     // The address block and its layout (`ToolbarAddress.swift`).
     var addressWidth: NSLayoutConstraint?
     var addressLayout = ToolbarAddressLayout()
-    /// How far the right groups move when the "…" item leaves or joins the toolbar (`ToolbarMore.swift`).
-    var moreShift: CGFloat = 44
+    /// How far the right groups move when the slow-motion and "…" items leave or join the toolbar (`ToolbarMore.swift`; measured 82–84 between runs on macOS 26, the layout check allows ±1).
+    var moreShift: CGFloat = 83
     let addressHeader = ToolbarAddressView()
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor
@@ -161,7 +161,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// The chat header follows the chat column; the address block fills the rest (`ToolbarAddressLayout`).
     func alignChatHeader() {
         let windowWidth = window?.frame.width ?? 1320
-        fitMore(toolbarItems["more"], after: toolbarItems["publish"], windowWidth: windowWidth)
+        fitMore(["speed", "more"].compactMap { toolbarItems[$0] }, windowWidth: windowWidth)
         var chatTrailing: CGFloat?
         if chatHeader.window != nil, chatHeaderWidth != nil {
             let detail = split.splitViewItems[1].viewController.view
@@ -183,7 +183,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.toggleSidebar, .sidebarTrackingSeparator, NSToolbarItem.Identifier("address"), .flexibleSpace,
-         NSToolbarItem.Identifier("interaction"), .space, NSToolbarItem.Identifier("tools"), .space, NSToolbarItem.Identifier("publish"), NSToolbarItem.Identifier("more")]
+         NSToolbarItem.Identifier("interaction"), .space, NSToolbarItem.Identifier("tools"), .space, NSToolbarItem.Identifier("publish"), NSToolbarItem.Identifier("speed"), NSToolbarItem.Identifier("more")]
     }
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
         let key = identifier.rawValue
@@ -199,12 +199,13 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             group.isBordered = true; group.visibilityPriority = .high
             return group
         }
-        let item: NSToolbarItem = ["branch", "publish", "more"].contains(key) ? NSMenuToolbarItem(itemIdentifier: identifier) : NSToolbarItem(itemIdentifier: identifier)
+        let item: NSToolbarItem = ["branch", "publish", "speed", "more"].contains(key) ? NSMenuToolbarItem(itemIdentifier: identifier) : NSToolbarItem(itemIdentifier: identifier)
         item.label = labels[key] ?? key; item.paletteLabel = item.label; item.toolTip = item.label
         item.image = toolbarSymbol(symbols[key] ?? "circle", item.label)
         // Menu-only items let AppKit open the menu from the entire control.
-        if !["branch", "chat", "address", "more"].contains(key) { item.target = self; item.action = #selector(toolbarAction(_:)) }
+        if !["branch", "chat", "address", "speed", "more"].contains(key) { item.target = self; item.action = #selector(toolbarAction(_:)) }
         if key == "more", let menuItem = item as? NSMenuToolbarItem { configureMore(menuItem) }
+        if key == "speed", let menuItem = item as? NSMenuToolbarItem { toolbarItems[key] = item; configureSpeed(menuItem) }
         if key == "chat" {
             chatHeader.translatesAutoresizingMaskIntoConstraints = false
             chatHeaderWidth = chatHeader.widthAnchor.constraint(equalToConstant: 400)
@@ -519,6 +520,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if action == "publish-cancel" { return cancelPublish(toolbarItems["publish"] as? NSMenuToolbarItem) }
         if action == "preview-more", let id { return performMore(toolbarItems["more"] as? NSMenuToolbarItem, id) }
+        if action == "preview-speed", let id { return performSpeed(id) }
         if action == "publish", toolbarItems["publish"]?.action == nil { return false }
         if let button = sidebarButtons[action], button.isEnabled { sidebarAction(button); return true }
         if let group = toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }).first(where: { $0.subitems.contains { $0.itemIdentifier.rawValue == action } }) { return group.clickSegment(action) }

@@ -120,6 +120,7 @@ extension Host {
             reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
         // The preview's loading / HTTP-error pill (LKM-196).
         case "previewLoadInspect": reply(id, previewLoad.inspect().merging(["statusHidden":previewStatus.isHidden, "statusKind":previewStatus.model.kind, "statusMessage":previewStatus.model.message]) { _, new in new })
+        case "previewSpeedInspect": reply(id, speedBadge.inspect().merging(shell.speedInspect()) { _, new in new })
         case "welcomeInspect": reply(id, welcome.inspect())
         case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])
         case "dividerPerform":

@@ -35,6 +35,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let activityIndicator = ActivityIndicator()
     let toast = NativeToast()
     let previewLoad = NativePreviewLoad()
+    let speedBadge = NativePreviewSpeed()
     var sourceEditors: [String: NativeSourceEditor] = [:]
     var sourceRoot = ""
     var dockedSource: NativeSourceEditor? { sourceEditors[sourceRoot].flatMap { $0.state["visible"] as? Bool == true && $0.state["popped"] as? Bool != true ? $0 : nil } }
@@ -72,11 +73,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         config.websiteDataStore = .nonPersistent()
         let contentWorld = world
         config.userContentController.add(self, contentWorld: contentWorld, name: "trezi")
-        PreviewAgent.install(config.userContentController)
-        let file = directory + "/preview.js"
-        let script = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
-        // Selection must intercept input before the project's capture listeners.
-        config.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: contentWorld))
+        installPreviewScripts(config.userContentController, speed: speedBadge.speed)
         // WebKit keeps its own tracking areas; the page shields what native views cover (LKM-173).
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self; view.uiDelegate = self; view.isInspectable = true
@@ -102,7 +99,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         shell.updatePreviewColor(views["preview"]!.underPageBackgroundColor)
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
-        canvas.addSubview(previewLoad)
+        canvas.addSubview(previewLoad); canvas.addSubview(speedBadge)
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
@@ -262,6 +259,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                 case .failure(let error): self.reply(id, error: (error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String ?? error.localizedDescription)
                 }
             }
+        case "previewSpeed": setPreviewSpeed(c)
         case "previewViewport": reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"]))
         case "previewOverlay": previewOverlay.apply(c)
         case "capture":

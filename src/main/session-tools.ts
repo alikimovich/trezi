@@ -59,6 +59,7 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'preview_evaluate',
   'preview_console',
   'preview_viewport',
+  'preview_speed',
   'project_ui_catalog',
   'compose_project_ui',
   'ask_user',
@@ -76,6 +77,8 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
     return { error: `${String(action)} is not one of Trezi's session tools.` }
   if (action === 'preview_viewport' && s.background)
     return { error: 'Background edits cannot resize the user preview.' }
+  if (action === 'preview_speed' && s.background)
+    return { error: 'Background edits cannot change the user preview speed.' }
   if (isPreviewObserver(action)) return observeAgentPreview(action, args, s.liveRoot)
   if (action === 'project_ui_catalog' || action === 'compose_project_ui')
     return runProjectUiTool(s.root, s.emitKey, action, args as never, s.connectionId)
