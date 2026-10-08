@@ -177,6 +177,7 @@ try {
     'preview_evaluate',
     'preview_console',
     'preview_viewport',
+    'preview_speed',
     'workspace_state'
   ]) {
     assert.ok(server.tools[tool], `Codex exposes ${tool}`)

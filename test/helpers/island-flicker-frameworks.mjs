@@ -5,10 +5,9 @@ import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { waitForReachable } from '../../src/main/devserver-net.ts'
+import { findFreePort, waitForReachable } from '../../src/main/devserver-net.ts'
 import { PREVIEW_HOST, withPort } from '../../src/main/project-detect.ts'
 import { MDX_HELPER_CONTENT } from '../../src/main/setup-mdx.ts'
 import { NEXT_ADAPTER_CONTENT, NEXT_LOADER_CONTENT } from '../../src/main/setup-next.ts'
@@ -32,27 +31,14 @@ async function install(cwd) {
   }
 }
 
-/** A port the kernel just handed out from its ephemeral range. */
-async function ephemeralPort() {
-  const probe = createServer()
-  await new Promise((done, fail) => {
-    probe.once('error', fail)
-    probe.listen(0, PREVIEW_HOST, done)
-  })
-  const { port } = probe.address()
-  await new Promise((done) => probe.close(done))
-  return port
-}
-
 /**
- * Not a port from 7777: Trezi's own allocator and other dev-server tests (a parallel
- * dependency-refresh-vite, another checkout) probe that range too, and could take the
- * port between the probe and this server's bind. Next then exits only after the URL
- * already answered with the stranger's app. A server that still exits before it is
- * reachable starts again on a fresh port.
+ * A server that exits before it is reachable lost its port to another dev server between the
+ * probe and its bind (the URL may even answer with that stranger's app): start again.
  */
 async function withServer({ cwd, command, framework, urlPath, run }, attempt = 1) {
-  const port = await ephemeralPort()
+  // Not 7777: unit tests run in parallel (dependency-refresh-vite starts its own range at 8300)
+  // and the probe does not reserve the port until the dev server binds it.
+  const port = await findFreePort(8500)
   const server = spawn('/bin/sh', ['-c', withPort(command, framework, port)], {
     cwd,
     detached: true,

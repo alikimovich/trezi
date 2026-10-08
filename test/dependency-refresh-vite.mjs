@@ -90,7 +90,14 @@ swiftBuild(
 )
 mkdirSync(join(scratch, 'profile'))
 const child = spawn(binary, [join(scratch, 'profile')], {
-  env: { ...process.env, RUNTIME_PORT: '', RUNTIME_READY_TIMEOUT: '90' },
+  // Its own port range: unit tests run in parallel and the default base (7777) is shared with
+  // island-flicker-frameworks, whose probe-then-bind would race this server for the same port.
+  env: {
+    ...process.env,
+    RUNTIME_PORT: '',
+    RUNTIME_PORT_BASE: '8300',
+    RUNTIME_READY_TIMEOUT: '90'
+  },
   stdio: ['pipe', 'pipe', 'inherit']
 })
 children.add(child)

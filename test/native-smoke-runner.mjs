@@ -430,6 +430,59 @@ assert.throws(
   assert.equal(sheet.visible, false)
 }
 
+{
+  // native-chat-scroll: every chatAcceptance request activates first; a host that still answers
+  // "Chat must be foreground" gets the same request once more, and nothing else is retried.
+  const { foregroundChatHost } = await import('./helpers/chat-foreground.mjs')
+  const sent = []
+  let refusals = 0
+  const fake = {
+    marker: 'bridge',
+    send() {
+      return 'sent'
+    },
+    async request(method, body) {
+      sent.push([method, body])
+      if (method === 'chatAcceptance' && refusals > 0) {
+        refusals--
+        throw new Error('Chat must be foreground')
+      }
+      if (method === 'chatAcceptance' && body?.fail) throw new Error('Unknown scroller override x')
+      return { method, body }
+    }
+  }
+  const warnings = []
+  const host = foregroundChatHost(fake, (line) => warnings.push(line))
+  assert.equal(host.marker, 'bridge', 'other host members pass through')
+  assert.equal(host.send(), 'sent', 'methods stay bound to the bridge')
+
+  await host.request('chatAcceptance', { capture: true })
+  assert.deepEqual(sent, [['chatAcceptance', { capture: true, prepare: true }]])
+  sent.length = 0
+  await host.request('chatInspect')
+  assert.deepEqual(sent, [['chatInspect', undefined]], 'other requests are not prepared')
+  sent.length = 0
+
+  refusals = 1
+  const result = await host.request('chatAcceptance', { width: 320, hoverMessage: '' })
+  assert.deepEqual(
+    sent,
+    Array(2).fill(['chatAcceptance', { width: 320, hoverMessage: '', prepare: true }]),
+    'one refusal: the same state is sent again after reactivation'
+  )
+  assert.deepEqual(result.body, { width: 320, hoverMessage: '', prepare: true })
+  assert.equal(warnings.length, 1)
+  sent.length = 0
+
+  refusals = 2
+  await assert.rejects(host.request('chatAcceptance', {}), /Chat must be foreground/)
+  assert.equal(sent.length, 2, 'a second refusal fails the step: one retry only')
+  sent.length = 0
+
+  await assert.rejects(host.request('chatAcceptance', { fail: true }), /Unknown scroller override/)
+  assert.equal(sent.length, 1, 'other errors are never retried')
+}
+
 console.log(
-  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once, Settings restored to General.'
+  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once, Settings restored to General, chat acceptance reactivated and retried once.'
 )

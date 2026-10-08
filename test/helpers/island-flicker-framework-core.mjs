@@ -319,12 +319,10 @@ export async function openOnSource(page, open, served, css, label) {
     await waitServed(served, css, label)
     await open()
     try {
-      const shown = await waitForShadow(page, css, {
+      return await waitForShadow(page, css, {
         timeoutMs: 5000,
         label: `${label} (load ${attempt})`
       })
-      await waitForClientRender(page, css, `${label} (load ${attempt})`)
-      return shown
     } catch (error) {
       if (Date.now() > deadline) throw error
     }
@@ -332,40 +330,20 @@ export async function openOnSource(page, open, served, css, label) {
 }
 
 /**
- * Next only: the server can render the new source while the browser still loads the old
- * client chunk. Hydration then keeps the server's attribute ("This won't be patched up")
- * but React holds the old props, so a later write of those old props changes nothing in
- * the DOM and the gesture never shows its final value. The hydrated props must render
- * `css` too; otherwise the load is retried.
+ * Next streams the server-rendered card long before React hydrates it, and the page-world
+ * hydration is invisible from the preview world. A drag that starts first finishes (and its
+ * source write lands) before the HMR socket exists: React then hydrates the stale props over
+ * the dragged style and nothing ever updates it. The App Router appends `next-route-announcer`
+ * to the body when it mounts, so wait for that. Best effort: a Next without it only costs the wait.
  */
-async function waitForClientRender(page, css, label, timeoutMs = 10000) {
+export async function waitForNextHydration(page, timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs
-  let last = null
-  for (;;) {
-    last = await page(`(() => {
-      // The server HTML names Next's chunks; window.next only exists after hydration.
-      if (!document.querySelector('script[src*="/_next/"]')) return true;
-      const card = document.querySelector(${JSON.stringify(SELECTOR)});
-      const key = card && Object.keys(card).find((k) => k.startsWith('__reactProps$'));
-      if (!key) return 'not hydrated';
-      const props = card[key]?.style?.boxShadow;
-      const computed = (value) => {
-        const probe = document.createElement('div');
-        probe.style.boxShadow = value;
-        document.body.append(probe);
-        const shown = getComputedStyle(probe).boxShadow;
-        probe.remove();
-        return shown;
-      };
-      return computed(props) === computed(${JSON.stringify(css)}) || String(props);
-    })()`).catch((error) => String(error?.message ?? error))
-    if (last === true) return
-    if (Date.now() > deadline)
-      throw new Error(
-        `${label}: the hydrated client renders ${JSON.stringify(last)}, not the served shadow`
-      )
+  while (Date.now() < deadline) {
+    if (await page(`!!document.querySelector('next-route-announcer')`).catch(() => false))
+      return true
     await Bun.sleep(100)
   }
+  return false
 }
 
 /** After a live-write drag, put the preview back on the initial shadow before the override run. */
@@ -604,6 +582,7 @@ export async function measureFramework({
       steps[0],
       `${label}-${withOverrides ? 'after' : 'before'} start`
     )
+    if (label === 'next') await waitForNextHydration(page)
     const record = islands.sessions.get(chat)?.records.find((r) => r.id === island)
     assert.equal(record?.status, 'ready', `${label}: island record ready before drag`)
     assert.ok(

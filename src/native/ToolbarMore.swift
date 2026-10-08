@@ -18,23 +18,20 @@ extension NativeShell {
         }
         item.menu = menu
     }
-    /// Below this window width the "…" item leaves the toolbar: the minimum-width window
-    /// already has no room for the right groups, and the item would widen them further.
-    /// Its two actions stay with the agent tools and any window wider than this.
+    /// Below this window width the slow-motion (LKM-206) and "…" items leave the toolbar: the
+    /// minimum-width window already has no room for the right groups, and they would widen
+    /// them further. Their actions stay with the menu bar, the agent tools and wider windows.
     static let moreMinimumWindow: CGFloat = 1000
-    func fitMore(_ item: NSToolbarItem?, after publish: NSToolbarItem?, windowWidth: CGFloat) {
-        guard #available(macOS 15, *), let item else { return }
+    /// `items` follow Publish, the last one at the trailing edge.
+    func fitMore(_ items: [NSToolbarItem], windowWidth: CGFloat) {
+        guard #available(macOS 15, *), !items.isEmpty else { return }
         let hidden = windowWidth < Self.moreMinimumWindow
-        guard item.isHidden != hidden else { return }
-        // The right groups are pinned to the trailing edge, so they move by the item's width plus
-        // the space before it. Apply that to the reserved inset now: the address block is sized in
+        guard items.contains(where: { $0.isHidden != hidden }) else { return }
+        // The right groups are pinned to the trailing edge, so they move by the items' widths plus
+        // the spaces before them. Apply that to the reserved inset now: the address block is sized in
         // this same pass, before the toolbar's next layout can be measured.
-        if hidden, let more = item.view, let publish = publish?.view, more.window != nil, publish.window != nil {
-            let shift = more.convert(more.bounds, to: nil).maxX - publish.convert(publish.bounds, to: nil).maxX
-            if (30...60).contains(shift) { moreShift = shift }
-        }
-        if addressLayout.measured { addressLayout.rightInset += hidden ? -moreShift : moreShift }
-        item.isHidden = hidden
+        addressLayout.moveRightGroups(hiding: hidden, by: moreShift)
+        for item in items { item.isHidden = hidden }
     }
     /// Pipe checks pick an entry the way a click on it would.
     func performMore(_ item: NSMenuToolbarItem?, _ action: String) -> Bool {

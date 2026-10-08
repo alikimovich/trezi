@@ -147,8 +147,10 @@ const fixtures = new Set()
 let binary,
   count = 0
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// A deadline, not a poll count: landing a turn runs real Git and can take far longer on a loaded machine.
 const until = async (condition, label) => {
-  for (let i = 0; i < 500; i++) {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
     if (condition()) return
     await sleep(10)
   }

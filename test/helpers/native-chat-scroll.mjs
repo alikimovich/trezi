@@ -3,6 +3,7 @@ import { once } from 'node:events'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { checkChatAcceptance } from './chat-acceptance.mjs'
+import { foregroundChatHost } from './chat-foreground.mjs'
 import { checkSendVisibility } from './chat-send-visibility.mjs'
 import { spawnHostBridge } from './host-bridge.mjs'
 
@@ -24,7 +25,9 @@ if (!existsSync(executable)) {
 }
 const artifacts = resolve('test/artifacts/native/chat-scroll')
 mkdirSync(artifacts, { recursive: true })
-const host = spawnHostBridge(executable, directory, 'ephemeral')
+const bridge = spawnHostBridge(executable, directory, 'ephemeral')
+// Another worker's native run can take focus: every chatAcceptance request reactivates first (chat-foreground.mjs).
+const host = foregroundChatHost(bridge)
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 // NSStringFromRect: "{{x, y}, {width, height}}"
 const rect = (value) => {
@@ -51,7 +54,7 @@ const visible = async (id) => {
 }
 try {
   await Promise.race([
-    once(host, 'ready'),
+    once(bridge, 'ready'),
     delay(10000).then(() => {
       throw Error('Native host did not become ready')
     })
@@ -549,6 +552,6 @@ try {
     'Native chat scroll: sent questions and streamed responses stay visible across short/long history and shrinking composers; nested island reveals settle at both edges and overlapping reveals reject the superseded request at 440pt and 320pt chat widths.'
   )
 } finally {
-  host.child.kill()
-  await host.closed
+  bridge.child.kill()
+  await bridge.closed
 }

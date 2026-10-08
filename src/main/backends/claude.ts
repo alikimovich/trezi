@@ -89,11 +89,13 @@ const PREVIEW_TOOL_NAMES = new Set([
   'mcp__trezi__preview_location',
   'mcp__trezi__preview_screenshot',
   // LKM-138: isolated-world inspection; evaluate is read-only and bounded, and a
-  // viewport change is temporary and restores itself.
+  // viewport change is temporary and restores itself; a speed change (LKM-206) lasts
+  // only for the preview session.
   'mcp__trezi__preview_inspect',
   'mcp__trezi__preview_evaluate',
   'mcp__trezi__preview_console',
-  'mcp__trezi__preview_viewport'
+  'mcp__trezi__preview_viewport',
+  'mcp__trezi__preview_speed'
 ])
 // Validated in-process tools are auto-allowed by both allowedTools and
 // canUseTool. Chat islands persist through the island service; main remains
@@ -694,6 +696,12 @@ async function startSession(
         PREVIEW_TOOL_TEXT.preview_viewport,
         previewShapes.preview_viewport,
         async (args) => observed('preview_viewport', args)
+      ),
+      tool(
+        'preview_speed',
+        PREVIEW_TOOL_TEXT.preview_speed,
+        previewShapes.preview_speed,
+        async (args) => observed('preview_speed', args)
       ),
       tool(
         'open_preview',

@@ -5,6 +5,7 @@ import Darwin
 // `{"service"…` lines are Bun frames (answers and events go to stdout); `{"cmd"…}`
 // lines are fixture commands. The binary is also its own watchdog (`--watch-group`).
 // RUNTIME_PORT=<n> fixes the allocated port (no bind probe: the sandbox may forbid it).
+// RUNTIME_PORT_BASE=<n> keeps the real bind probe but starts it at <n> instead of 7777.
 // RUNTIME_READY_TIMEOUT / RUNTIME_INSTALL_TIMEOUT / RUNTIME_STAMP_TIMEOUT /
 // RUNTIME_HEALTH_INTERVAL (seconds), RUNTIME_HEALTH_FAILURES.
 // RUNTIME_NO_WATCHDOG=1 leaves crash recovery to the journal alone.
@@ -27,6 +28,8 @@ let swept = journal.sweep()
 var options = RuntimeOwner.Options(environment: env, watchdog: env["RUNTIME_NO_WATCHDOG"] == "1" ? nil : CommandLine.arguments[0], journal: journal)
 if let fixed = env["RUNTIME_PORT"].flatMap(Int.init) {
     options.allocatePort = { reserved in var port = fixed; while reserved.contains(port) { port += 1 }; return port }
+} else if let base = env["RUNTIME_PORT_BASE"].flatMap(Int.init) {
+    options.allocatePort = { RuntimeNet.freePort(from: base, reserved: $0) }
 }
 // RUNTIME_PROBE_FILE: every probe answers 200 while that file exists (no socket needed).
 if let file = env["RUNTIME_PROBE_FILE"] {
