@@ -74,7 +74,7 @@ const bundles = (async () => {
       sourcemap: true,
       ...outDirname
     }),
-    ...[['src/preview/preload.ts', 'preview.js']].map(([input, output]) =>
+    ...[['src/preview/preload.ts', 'preview.js'], ['src/preview/slow-motion-page.ts', 'slow-motion.js']].map(([input, output]) =>
       bundle({
         entryPoints: [join(root, input)],
         outfile: join(out, output),
@@ -147,6 +147,7 @@ const host = compile(
     join(root, 'src/native/ToolbarAddress.swift'),
     join(root, 'src/native/ToolbarPublish.swift'),
     join(root, 'src/native/ToolbarMore.swift'),
+    join(root, 'src/native/ToolbarSpeed.swift'),
     join(root, 'src/native/Inspector.swift'),
     join(root, 'src/native/Composer.swift'),
     join(root, 'src/native/ComposerVerification.swift'),
@@ -201,6 +202,7 @@ const host = compile(
     join(root, 'src/native/WorkspaceLayout.swift'),
     join(root, 'src/native/PreviewStatus.swift'),
     join(root, 'src/native/PreviewLoad.swift'),
+    join(root, 'src/native/PreviewSpeed.swift'),
     join(root, 'src/native/ChatDivider.swift'),
     join(root, 'src/native/ChatMarkdown.swift'),
     join(root, 'src/native/ChatRichText.swift'),

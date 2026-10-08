@@ -135,6 +135,7 @@ try {
     'preview_inspect',
     'preview_location',
     'preview_screenshot',
+    'preview_speed',
     'preview_viewport',
     'project_ui_catalog',
     'publish_update',

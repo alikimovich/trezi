@@ -151,11 +151,11 @@ server.registerTool('preview_location', {
   annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
 }, async () => invoke('preview_location'))
 // LKM-138: isolated-world inspection of the live preview (preview-tool-schema.mjs).
-for (const name of ['preview_screenshot', 'preview_inspect', 'preview_evaluate', 'preview_console', 'preview_viewport']) {
+for (const name of ['preview_screenshot', 'preview_inspect', 'preview_evaluate', 'preview_console', 'preview_viewport', 'preview_speed']) {
   server.registerTool(name, {
     description: previewToolText[name],
     inputSchema: previewToolShapes[name],
-    annotations: { readOnlyHint: name !== 'preview_viewport', destructiveHint: false, openWorldHint: false }
+    annotations: { readOnlyHint: name !== 'preview_viewport' && name !== 'preview_speed', destructiveHint: false, openWorldHint: false }
   }, async (args) => invoke(name, args))
 }
 

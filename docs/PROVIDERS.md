@@ -114,6 +114,12 @@ only through an allowlist of read-only DOM methods. Results are JSON, clipped to
 64 KB and given 2 s. A known gap: unbounded async recursion (a microtask loop) can
 still keep the page busy until the time limit returns the tool. `preview_viewport`
 fits a CSS width with page zoom and only works on the foreground preview.
+`preview_speed` (LKM-206) reads or sets the preview session's slow-motion speed
+(`speed` 1/0.5/0.25/0.1, 0 pauses; `step` pauses and advances whole frames). The user
+sees the same speed. Like `preview_viewport` it is foreground only and not read-only,
+and while the preview is slowed every other observation says so before its identity
+block. The store is `src/main/preview-speed.ts`; the page-world clock is
+`src/preview/slow-motion.ts`.
 
 Preview observation is on demand and shows the current user view, not necessarily
 the calling chat’s private worktree. Codex screenshot tool output is separate from
@@ -946,6 +952,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `chat_island` | routed | routed | the chat-island service on the Swift editing owner |
 | `preview_location`, `preview_screenshot` | routed | routed | the preview registry (URL, capture) |
 | `preview_inspect`, `preview_evaluate`, `preview_console`, `preview_viewport` | routed | routed | the preview's isolated agent world and page zoom |
+| `preview_speed` | routed | routed | the preview session's slow-motion speed (`src/main/preview-speed.ts`) |
 | `open_preview`, `open_code` | routed | routed | the window that navigates the preview or reveals code |
 | `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |

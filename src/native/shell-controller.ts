@@ -1,4 +1,5 @@
 import { previewLoads } from '../main/preview-loads'
+import { previewSpeed } from '../main/preview-speed'
 import type { NativeShellAction, NativeShellState } from '../shared/native-shell'
 import type { NativeProjectStatus } from '../shared/native-workspace'
 import type { NativeChatController } from './chat-controller'
@@ -41,6 +42,8 @@ export class NativeShellController {
   render() {
     const ws = this.workspace.state,
       active = this.workspace.active
+    // Slow motion belongs to the open project's preview session (LKM-206).
+    previewSpeed.scope(active?.key ?? null)
     for (const entry of ws.projects) rememberProject(entry.root)
     const status: NativeProjectStatus =
       ws.status.kind === 'error'

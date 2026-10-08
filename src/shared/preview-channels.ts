@@ -42,6 +42,8 @@ export const PREVIEW_SET_STATUS = 'trezi:preview:set-status' // → preload (lau
 // Viewport rects native views float over (LKM-173): the host reports them on layout
 // (`native-cover`), main forwards them and re-sends them after every load.
 export const PREVIEW_COVERED = 'trezi:preview:covered' // → preload ({x,y,width,height}[])
+// Slow motion (LKM-206): forwarded to the page-world clock (`src/preview/speed-control.ts`).
+export const PREVIEW_SET_SPEED = 'trezi:preview:set-speed' // → preload ({speed} | {step})
 
 // ── Styles tab ─────────────────────────────────────────────────────────────
 export const STYLES_PREVIEW = 'styles:preview' // → preload ({prop, value})

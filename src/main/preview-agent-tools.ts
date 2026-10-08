@@ -1,4 +1,12 @@
 import { agentEvaluateRuntime } from '../preview/agent-evaluate'
+import {
+  MAX_STEP_FRAMES,
+  PREVIEW_SPEEDS,
+  parseSpeed,
+  previewSpeed,
+  STEP_MS,
+  speedLabel
+} from './preview-speed'
 import { type PreviewAgentHost, previewAgentHost } from './preview-state'
 
 /**
@@ -215,6 +223,45 @@ async function viewport(host: PreviewAgentHost, raw: unknown) {
   })
 }
 
+// ---- preview_speed (LKM-206) -----------------------------------------------------------
+
+async function speed(host: PreviewAgentHost, raw: unknown) {
+  const args = (raw ?? {}) as Record<string, unknown>
+  let stepped: number | undefined
+  if (args.step !== undefined) {
+    if (
+      !Number.isInteger(args.step) ||
+      (args.step as number) < 1 ||
+      (args.step as number) > MAX_STEP_FRAMES
+    )
+      return json({ error: `Pass step as a whole number of frames from 1 to ${MAX_STEP_FRAMES}.` })
+    stepped = previewSpeed.step(args.step as number)
+  } else if (args.speed !== undefined) {
+    const value = parseSpeed(args.speed)
+    if (value === null)
+      return json({
+        error: `Unknown speed. Use one of: ${PREVIEW_SPEEDS.join(', ')} (0 is paused) or "paused".`
+      })
+    previewSpeed.set(value)
+  }
+  // Two frames: the page has the change and a stepped frame is painted before a screenshot.
+  await host.evaluate(
+    'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))',
+    'preview',
+    CALL_TIMEOUT
+  )
+  const current = previewSpeed.speed
+  return json({
+    speed: current,
+    label: speedLabel(current),
+    ...(stepped ? { stepped, pageMs: Math.round(stepped * STEP_MS * 10) / 10 } : {}),
+    next:
+      current === 1
+        ? 'The preview runs at normal speed.'
+        : 'The user sees this speed too: call preview_speed with speed: 1 when you are done.'
+  })
+}
+
 // ---- preview_screenshot (element) ----------------------------------------------------
 
 interface Prepared {
@@ -302,6 +349,7 @@ export type PreviewAgentAction =
   | 'preview_evaluate'
   | 'preview_console'
   | 'preview_viewport'
+  | 'preview_speed'
   | 'preview_screenshot'
 
 /** Runs one agent preview action; failures come back as error text the model can read. */
@@ -317,6 +365,7 @@ export async function runPreviewAgentTool(
       return await evaluate(host, (args ?? {}) as { expression?: unknown })
     if (action === 'preview_console') return await readConsole(host, args)
     if (action === 'preview_viewport') return await viewport(host, args)
+    if (action === 'preview_speed') return await speed(host, args)
     return await elementScreenshot(host, args)
   } catch (error) {
     return text(`${action} failed: ${error instanceof Error ? error.message : String(error)}`, true)

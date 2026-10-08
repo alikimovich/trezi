@@ -32,7 +32,9 @@ async function install(cwd) {
 }
 
 async function withServer({ cwd, command, framework, urlPath, run }) {
-  const port = await findFreePort(7777)
+  // Not 7777: unit tests run in parallel (dependency-refresh-vite starts its own range at 8300)
+  // and the probe does not reserve the port until the dev server binds it.
+  const port = await findFreePort(8500)
   const server = spawn('/bin/sh', ['-c', withPort(command, framework, port)], {
     cwd,
     detached: true,

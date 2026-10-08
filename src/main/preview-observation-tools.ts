@@ -2,6 +2,7 @@ import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-too
 import { describeIdentity, liveHead, type PreviewIdentity } from './preview-identity'
 import { previewLoads } from './preview-loads'
 import { describePage, previewPage } from './preview-page'
+import { previewSpeed, speedLabel } from './preview-speed'
 import { capturePreviewForAgent } from './preview-state'
 import { phase } from './tool-timing'
 
@@ -12,15 +13,28 @@ export const PREVIEW_OBSERVERS = [
   'preview_inspect',
   'preview_evaluate',
   'preview_console',
-  'preview_viewport'
+  'preview_viewport',
+  'preview_speed'
 ] as const
 export type PreviewObserver = (typeof PREVIEW_OBSERVERS)[number]
+type Content = PreviewToolResult['content'][number]
 export const isPreviewObserver = (action: unknown): action is PreviewObserver =>
   PREVIEW_OBSERVERS.includes(action as PreviewObserver)
 
 /** The identity block every observation ends with (LKM-200), machine-readable. */
 export const identityText = (identity: PreviewIdentity) =>
   `${describeIdentity(identity)}\n${JSON.stringify({ preview: identity })}`
+
+/** A slowed or paused preview (LKM-206) changes what timing-sensitive reads see. */
+const speedNote = (action: PreviewObserver): Content[] =>
+  previewSpeed.speed === 1 || action === 'preview_speed'
+    ? []
+    : [
+        {
+          type: 'text',
+          text: `Preview speed: ${speedLabel(previewSpeed.speed)} (slow motion: page animations and timers run ${previewSpeed.speed === 0 ? 'paused' : 'slowed'}; preview_speed with speed 1 restores normal timing).`
+        }
+      ]
 
 /**
  * Read the user's current view on demand; this does not prove an edit has landed.
@@ -48,6 +62,7 @@ export async function observeAgentPreview(
             ? `The user's preview is currently showing ${page.url} (port ${page.port}, route ${page.route}).`
             : 'No project preview is open.'
         },
+        ...(page ? speedNote(action) : []),
         ...(page ? [{ type: 'text' as const, text: identityText(identity) }] : [])
       ]
     }
@@ -65,6 +80,7 @@ export async function observeAgentPreview(
     }
   if (page && !result.isError)
     result.content.push(
+      ...speedNote(action),
       { type: 'text', text: describePage(page) },
       { type: 'text', text: identityText(identity) }
     )
