@@ -322,7 +322,9 @@ Claude and Codex/custom endpoints expose Jev selection in `chat_island`. Its
 `auto`/`jev` modes fall back to the chat model’s validated candidates only when no
 Gateway key is configured, returning the actual engine and fallback reason. The
 bundled `surface-controls` skill is portable across providers; experimental Gemini
-explains its missing tools. The `content_controls` tool was removed with content
+explains its missing tools. The bundled `component-states` skill (LKM-207) is
+user-invoked only (`disable-model-invocation: true`): it is listed as the portable
+`/states` command and, for Claude, as `trezi:component-states`; see `docs/STATES.md`. The `content_controls` tool was removed with content
 controls in LKM-114.
 
 Codex's routine skill-description context-budget advisory is omitted from chat

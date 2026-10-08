@@ -120,6 +120,7 @@ import {
   SmokeRunFailure
 } from './smoke-report'
 import { serviceSource } from './source-service'
+import { installStatesWorkbench } from './states-install'
 import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
 import { SyntaxController } from './syntax-controller'
@@ -695,6 +696,14 @@ async function main() {
     activityController.append(String(error), 'error')
   )
   installPreviewSpeed(host, previewView)
+  installStatesWorkbench({
+    host,
+    preview: previewView,
+    workspace: workspaceController,
+    sheets: sheetController,
+    log: activityController,
+    git: gitController
+  })
   const renderWorkspace = workspaceController.services.render
   workspaceController.services.render = (state) => {
     renderWorkspace(state)

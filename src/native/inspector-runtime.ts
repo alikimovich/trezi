@@ -6,6 +6,7 @@ import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
 import { projectRelative } from '../shared/project-path'
 import { describeSelectionForPrompt, oneLine } from '../shared/selection-context'
+import { showStatesText } from '../shared/states-workbench'
 import type { NativeBridge } from './bridge'
 import type { NativeChatController } from './chat-controller'
 import { turnBoundaries } from './chat-runtime'
@@ -296,6 +297,17 @@ export function installNativeInspector(
             text:
               describeSelectionForPrompt(controller.element, entry.root) +
               'Delete the selected element(s) from the source. Remove wrappers, imports, and styles that exist only for them.'
+          })
+          .catch(report)
+      else if (value === 'states' && controller.element)
+        void chat
+          .command({
+            type: 'submit',
+            chat: entry.activeSessionKey,
+            text: showStatesText(
+              describeSelectionForPrompt(controller.element, entry.root),
+              controller.element.componentSource
+            )
           })
           .catch(report)
     } else if (channel === 'preview:text-edit') {

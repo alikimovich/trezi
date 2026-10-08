@@ -91,6 +91,8 @@ export interface SourceOwner {
   createFile(root: string, path: string): Promise<FileOpResult>
   renameFile(root: string, from: string, to: string): Promise<FileOpResult>
   deleteFile(root: string, path: string): Promise<FileOpResult>
+  /** LKM-207: a states workbench folder (holding its manifest) and its seam files. */
+  removeWorkbench(root: string, folder: string, seams: string[]): Promise<FileOpResult>
   drafts(root: string): Promise<SourceDraft[]>
   saveDraft(root: string, path: string, base: string, text: string): Promise<void>
   clearDraft(root: string, path: string): Promise<void>

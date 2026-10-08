@@ -122,6 +122,8 @@ export function serviceSource(
     createFile: (root, path) => effect('createFile', { root, path }),
     renameFile: (root, from, to) => effect('renameFile', { root, path: from, to }),
     deleteFile: (root, path) => effect('deleteFile', { root, path, intent: 'trash' }),
+    removeWorkbench: (root, path, seams) =>
+      effect('removeWorkbench', { root, path, seams, intent: 'trash' }),
     drafts: (root) => call('drafts', { root }, 'read'),
     saveDraft: async (root, path, base, text) => {
       await call('saveDraft', { root, path, base, text })

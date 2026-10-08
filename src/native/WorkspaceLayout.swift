@@ -227,6 +227,7 @@ final class WorkspaceLayout {
         // Rulers along the preview area, zeroed at the page origin; guides and grids over the page (LKM-205).
         host.previewOverlay?.place(page: page, area: available, scale: zoom * (host.views["preview"]?.magnification ?? 1), radius: mobile ? page.width * 0.12 : 0, visible: shown && host.views["preview"]?.isHidden == false)
         host.speedBadge.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
+        host.statesSwitcher.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
         // Straddles the island's left edge below and above its rounded corners.
         let corner = min(NativeEditingInspector.cornerRadius, island.height / 2)

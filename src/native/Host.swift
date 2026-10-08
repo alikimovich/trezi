@@ -36,6 +36,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let toast = NativeToast()
     let previewLoad = NativePreviewLoad()
     let speedBadge = NativePreviewSpeed()
+    let statesSwitcher = NativeStatesSwitcher()
     var sourceEditors: [String: NativeSourceEditor] = [:]
     var sourceRoot = ""
     var dockedSource: NativeSourceEditor? { sourceEditors[sourceRoot].flatMap { $0.state["visible"] as? Bool == true && $0.state["popped"] as? Bool != true ? $0 : nil } }
@@ -99,7 +100,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         shell.updatePreviewColor(views["preview"]!.underPageBackgroundColor)
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
-        canvas.addSubview(previewLoad); canvas.addSubview(speedBadge)
+        canvas.addSubview(previewLoad); canvas.addSubview(speedBadge); canvas.addSubview(statesSwitcher)
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
@@ -260,6 +261,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                 }
             }
         case "previewSpeed": setPreviewSpeed(c)
+        case "statesState": statesSwitcher.update(c["state"] as? [String: Any]); nativeLayout.layout()
+        case "workbenches": shell.updateWorkbenches(c["items"] as? [[String: Any]] ?? [])
         case "previewViewport": reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"]))
         case "previewOverlay": previewOverlay.apply(c)
         case "capture":

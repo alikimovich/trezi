@@ -208,6 +208,7 @@ const host = compile(
     join(root, 'src/native/PreviewStatus.swift'),
     join(root, 'src/native/PreviewLoad.swift'),
     join(root, 'src/native/PreviewSpeed.swift'),
+    join(root, 'src/native/StatesSwitcher.swift'),
     join(root, 'src/native/ChatDivider.swift'),
     join(root, 'src/native/ChatMarkdown.swift'),
     join(root, 'src/native/ChatRichText.swift'),

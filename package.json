@@ -41,6 +41,7 @@
     "test:dreamer-export": "bun test/dreamer-export.mjs",
     "test:slash-token": "bun test/slash-token.mjs",
     "test:skills": "bun test/skills-discovery.mjs",
+    "test:states-workbench": "bun test/states-workbench.mjs",
     "test:github-connect": "bun test/github-connect.mjs",
     "test:html-source": "bun test/html-source.mjs",
     "test:project-ui-jev": "bun test/project-ui-jev.mjs",

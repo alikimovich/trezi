@@ -38,6 +38,8 @@ export class NativeGitController {
   readonly runs = new Map<string, PublishRun>()
   /** How often a running publish's step is read (it also ticks the elapsed time). */
   pollInterval = 400
+  /** Asked before a publish starts; false stops it (the states workbench guard). */
+  beforePublish?: (root: string) => boolean | Promise<boolean>
   constructor(
     readonly sheets: NativeSheetController,
     readonly log: NativeActivityController,
@@ -124,8 +126,16 @@ export class NativeGitController {
    * (`publish:progress`); success is a toast, failure a sheet with Retry.
    */
   async publish(key: string) {
-    const entry = this.workspace.state.projects.find((p) => p.key === key)
+    let entry = this.workspace.state.projects.find((p) => p.key === key)
     if (!entry || this.runs.has(entry.root)) return
+    // LKM-207: a states workbench left in the project is confirmed (or removed) first;
+    // without one the answer is synchronous, so progress still shows on the click.
+    const go = this.beforePublish?.(entry.root) ?? true
+    if (go !== true) {
+      if (!(await go)) return
+      entry = this.workspace.state.projects.find((p) => p.key === key)
+      if (!entry || this.runs.has(entry.root)) return
+    }
     const root = entry.root,
       mode = this.mode,
       generation = this.sheets.generation,

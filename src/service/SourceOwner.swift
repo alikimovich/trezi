@@ -124,7 +124,7 @@ final class SourceOwner: @unchecked Sendable {
                 if let intent = rule.intent, try body.string("intent") != intent { throw ServiceContractFailure.invalidRequest }
                 let (given, root) = try roots(body)
                 let effect = try prepare(frame, method: method, body: body, given: given, root: root)
-                if method != "createFile", method != "renameFile", method != "deleteFile", let failure = journalFailure {
+                if !["createFile", "renameFile", "deleteFile", "removeWorkbench"].contains(method), let failure = journalFailure {
                     throw RepositoryRefusal(.recoveryRequired, failure)
                 }
                 // A request the client stopped waiting for (its deadline) never starts late.
@@ -152,6 +152,7 @@ final class SourceOwner: @unchecked Sendable {
         "createFile": (["root", "path"], [], nil),
         "renameFile": (["root", "path", "to"], [], nil),
         "deleteFile": (["root", "path", "intent"], [], "trash"),
+        "removeWorkbench": (["root", "path", "seams", "intent"], [], "trash"),
     ]
 
     /// Everything is validated before the request enters a lane; the effect only runs there.
@@ -205,6 +206,15 @@ final class SourceOwner: @unchecked Sendable {
                 return { Self.fileValue(SourceStore.badPath) }
             }
             return { Self.fileValue(self.store.rename(from, to)) }
+        case "removeWorkbench":
+            let seams = try body.strings("seams")
+            guard seams.count <= Self.maxEdits,
+                  let folder = try? SourcePaths.target(given: given, root: root, path: try body.string("path")),
+                  let targets = try? seams.map({ try SourcePaths.target(given: given, root: root, path: $0) }),
+                  targets.allSatisfy({ !$0.lexical.hasPrefix(folder.lexical + "/") }) else {
+                return { Self.fileValue(SourceStore.badPath) }
+            }
+            return { Self.fileValue(self.store.removeWorkbench(folder, seams: targets)) }
         default: throw ServiceContractFailure.invalidRequest
         }
     }
