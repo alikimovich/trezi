@@ -11,6 +11,7 @@ import { NativeSheetController } from '../src/native/sheets-runtime.ts'
 import { NativeStatesController } from '../src/native/states-controller.ts'
 import { PREVIEW_STATES, PREVIEW_STATES_SWITCH } from '../src/shared/preview-channels.ts'
 import {
+  chatRoot,
   leftoverTerms,
   matchWorkbench,
   normalizeRoute,
@@ -267,6 +268,25 @@ publish = git.publish('p')
 assert.equal(git.decorate({}).publishing, true)
 await publish
 assert.equal(ships(), 3)
+
+// A landing's chat key maps to its project root: the first chat uses the project key, the
+// others `${key}#…`; the live chat's own root wins.
+const known = [
+  { key: '/repo', root: '/repo' },
+  { key: '/other', root: '/other' }
+]
+assert.equal(chatRoot('/repo', known), '/repo')
+assert.equal(chatRoot('/repo#2', known), '/repo', 'an additional chat maps to its project')
+assert.equal(chatRoot('/other#resumed-abc', known), '/other')
+assert.equal(chatRoot('/gone#2', known), undefined)
+assert.equal(
+  chatRoot('/repo#2', known, (k) => (k === '/repo#2' ? '/live' : undefined)),
+  '/live'
+)
+assert.equal(
+  chatRoot('/repo#3', known, () => undefined),
+  '/repo'
+)
 
 // A workbench that lands after the list was cached empty still warns. The landing hook
 // (any project, open or not) rescans; so does a same-path reload once the throttle passed.

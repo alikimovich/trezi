@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-207 repair: landing hook resolves additional chats' roots
+
+- **Gap.** The `turnBoundaries` key is the chat session key, which equals the project key only for a project's first chat (`${projectKey}#…` for others). The landing hook looked it up in `workspace.state.projects`, so landings from later chats never rescanned.
+- **Fix.** `chatRoot(key, projects, live)` in `src/shared/states-workbench.ts` prefers the live chat's own root (`nativeChat.chats.get(key)?.root`, as the landing checks do), then the project matching the key or its part before `#`. `states-install.ts` uses it.
+- **Test.** `test/states-workbench.mjs` pins the mapping for first, `#`-suffixed, resumed, unknown and live-chat keys.
+
 ## 2026-10-08 — LKM-207 repair: the workbench list no longer goes stale
 
 - **Gap.** The cached workbench list was rescanned only on a preview path change, after a Remove and on a cold Publish. A workbench landing under the already-open route (same-path live reload) or into a background project stayed invisible, so Publish skipped its warning and the island stayed hidden.

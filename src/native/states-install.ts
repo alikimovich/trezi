@@ -1,7 +1,8 @@
 import { sourceOwner } from '../main/source-owner'
+import { chatRoot } from '../shared/states-workbench'
 import type { NativeActivityController } from './activity-controller'
 import type { NativeBridge } from './bridge'
-import { turnBoundaries } from './chat-runtime'
+import { nativeChat, turnBoundaries } from './chat-runtime'
 import type { NativeGitController } from './git-controller'
 import { type NativeView, serviceEvents } from './platform'
 import type { NativeSheetController } from './sheets-runtime'
@@ -42,10 +43,12 @@ export function installStatesWorkbench(options: {
     else if (channel === 'preview:states-key') void states.action({ action: 'hide' }).catch(report)
   })
   // A landed turn may have written a workbench into any project, open or not: rescan its
-  // root so the island and the Publish guard see it without a path change.
+  // root so the island and the Publish guard see it without a path change. `key` is the
+  // chat's session key, which is the project's own only for its first chat.
   turnBoundaries.add((key, kind) => {
-    const root = workspace.state.projects.find((p) => p.key === key)?.root
-    if (kind === 'landed' && root) states.landed(root)
+    if (kind !== 'landed') return
+    const root = chatRoot(key, workspace.state.projects, (k) => nativeChat.chats.get(k)?.root)
+    if (root) states.landed(root)
   })
   host.on('states-action', (action: StatesAction) => {
     if (action && typeof action.action === 'string') void states.action(action).catch(report)

@@ -171,6 +171,22 @@ export function statesContext(text: string, chat: string): string {
     : ''
 }
 
+/**
+ * The project root a chat session key belongs to. A project's first chat uses the project's
+ * own key; additional or resumed chats use `${projectKey}#…`. The live chat knows its root
+ * best (`live`); otherwise the project whose key precedes the `#`.
+ */
+export function chatRoot(
+  key: string,
+  projects: readonly { key: string; root: string }[],
+  live?: (key: string) => string | undefined
+): string | undefined {
+  return (
+    live?.(key) ??
+    (projects.find((p) => p.key === key) ?? projects.find((p) => p.key === key.split('#')[0]))?.root
+  )
+}
+
 /** The text search terms that mean a removed workbench left something behind. */
 export function leftoverTerms(workbench: Workbench): string[] {
   const terms = [workbench.route, workbench.folder, ...workbench.fixtures]
