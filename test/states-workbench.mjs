@@ -287,6 +287,12 @@ assert.equal(
   chatRoot('/repo#3', known, () => undefined),
   '/repo'
 )
+// A chat created by an event before its setup has an empty root: that is missing, not a root.
+assert.equal(
+  chatRoot('/repo#2', known, () => ''),
+  '/repo',
+  'an empty live root falls back to the project'
+)
 
 // A workbench that lands after the list was cached empty still warns. The landing hook
 // (any project, open or not) rescans; so does a same-path reload once the throttle passed.

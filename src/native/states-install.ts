@@ -47,7 +47,11 @@ export function installStatesWorkbench(options: {
   // chat's session key, which is the project's own only for its first chat.
   turnBoundaries.add((key, kind) => {
     if (kind !== 'landed') return
-    const root = chatRoot(key, workspace.state.projects, (k) => nativeChat.chats.get(k)?.root)
+    const root = chatRoot(
+      key,
+      workspace.state.projects,
+      (k) => nativeChat.chats.get(k)?.root || undefined
+    )
     if (root) states.landed(root)
   })
   host.on('states-action', (action: StatesAction) => {

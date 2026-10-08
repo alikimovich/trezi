@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-207 repair: an empty chat root is missing, not a root
+
+- **Gap.** A chat created by an incoming event before `initialize` has `root: ''` (`chat-state.ts`, filled in by `chat-controller.ts`). `chatRoot` used `??`, so the empty string won over the project fallback and the `if (root)` guard skipped the rescan.
+- **Fix.** `chatRoot` uses `||` for the live root, and the `states-install.ts` callback returns `… || undefined` as a second safeguard. `test/states-workbench.mjs` pins `chatRoot('/repo#2', known, () => '') === '/repo'`.
+
 ## 2026-10-08 — LKM-207 repair: landing hook resolves additional chats' roots
 
 - **Gap.** The `turnBoundaries` key is the chat session key, which equals the project key only for a project's first chat (`${projectKey}#…` for others). The landing hook looked it up in `workspace.state.projects`, so landings from later chats never rescanned.

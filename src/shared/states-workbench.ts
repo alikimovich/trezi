@@ -174,7 +174,8 @@ export function statesContext(text: string, chat: string): string {
 /**
  * The project root a chat session key belongs to. A project's first chat uses the project's
  * own key; additional or resumed chats use `${projectKey}#…`. The live chat knows its root
- * best (`live`); otherwise the project whose key precedes the `#`.
+ * best (`live`), but a chat created by an event before its setup has an empty root: an
+ * empty root counts as missing. Otherwise the project whose key precedes the `#`.
  */
 export function chatRoot(
   key: string,
@@ -182,7 +183,7 @@ export function chatRoot(
   live?: (key: string) => string | undefined
 ): string | undefined {
   return (
-    live?.(key) ??
+    live?.(key) ||
     (projects.find((p) => p.key === key) ?? projects.find((p) => p.key === key.split('#')[0]))?.root
   )
 }
