@@ -157,5 +157,23 @@ final class SourceStore: @unchecked Sendable {
         return FileResult(ok: true, path: t.rel)
     }
 
+    /// LKM-207: a states workbench's folder (which must hold its manifest) and the files
+    /// made only for it go to the Trash in one lane step. Everything is checked first.
+    func removeWorkbench(_ folder: SourcePaths.Target, seams: [SourcePaths.Target]) -> FileResult {
+        var info = stat()
+        guard lstat(folder.lexical, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR,
+              SourcePaths.isRegularFile(folder.lexical + "/" + Self.workbenchManifest) else {
+            return FileResult(ok: false, error: "That folder is not a states workbench.")
+        }
+        let present = seams.filter { exists($0.lexical) }
+        guard present.allSatisfy({ SourcePaths.isRegularFile($0.lexical) }) else { return FileResult(ok: false, error: "Only files can be deleted.") }
+        for item in [folder.lexical] + present.map(\.lexical) {
+            if (try? FileManager.default.trashItem(at: URL(fileURLWithPath: item), resultingItemURL: nil)) != nil { continue }
+            guard (try? FileManager.default.removeItem(atPath: item)) != nil else { return FileResult(ok: false, error: "Could not delete \(item).") }
+        }
+        return FileResult(ok: true, path: folder.rel)
+    }
+    static let workbenchManifest = "trezi-workbench.json"
+
     private func exists(_ path: String) -> Bool { var info = stat(); return lstat(path, &info) == 0 }
 }

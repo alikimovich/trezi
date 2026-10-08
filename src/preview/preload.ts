@@ -77,6 +77,7 @@ import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from
 import { createNativeCover } from './native-cover'
 import { createOverlayGuides } from './overlay-guides'
 import { sendPageSpeed } from './speed-control'
+import { installStatesSwitch } from './states-switch'
 import { specifiedValues, varRefName } from './style-provenance'
 import { createThreeDInspector } from './three-d'
 import { createViewportReadout } from './viewport-readout'
@@ -319,6 +320,10 @@ function ensureOverlay(): void {
       title: 'Show the source in the editor',
       svg: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'
     },
+    states: {
+      title: 'Show states — every state of this component side by side',
+      svg: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'
+    },
     delete: {
       title: 'Ask Trezi to delete this element',
       svg: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
@@ -392,14 +397,25 @@ function ensureOverlay(): void {
   const propsBtn = makeIcon('props')
   const threeDBtn = makeIcon('three-d')
   const codeBtn = makeIcon('code')
+  const statesBtn = makeIcon('states')
   const deleteBtn = makeIcon('delete')
 
-  // DOM order: comment, [input], edit, props, 3D, code | delete. The divider
-  // sits before Delete only; the button[data-kind] order the tests assert stays
-  // comment, edit, props, three-d, code, delete (the separator has no data-kind).
+  // DOM order: comment, [input], edit, props, 3D, code, states | delete. The divider
+  // sits before Delete only; the button[data-kind] order stays comment, edit, props,
+  // three-d, code, states, delete (the separator has no data-kind).
   // `edit` only renders for plain-text stamped leaves (setEditAction) — the
   // discoverable form of the double-click-to-edit gesture.
-  toolbar.append(commentBtn, inputWrap, editBtn, propsBtn, threeDBtn, codeBtn, separator, deleteBtn)
+  toolbar.append(
+    commentBtn,
+    inputWrap,
+    editBtn,
+    propsBtn,
+    threeDBtn,
+    codeBtn,
+    statesBtn,
+    separator,
+    deleteBtn
+  )
 
   shadow.append(sel, box, guideMeas, meas, label, pins, hint, toolbar, style)
   document.documentElement.appendChild(host)
@@ -1913,6 +1929,7 @@ if (!IS_SIM_BRIDGE) {
   window.addEventListener('dblclick', onDblClick, true)
   window.addEventListener('keydown', onKey, true)
   window.addEventListener('keyup', onKeyUp, true)
+  installStatesSwitch(() => active || !!editing || !!commenting || !!commentMode || threeD.active())
   for (const type of [
     'keypress',
     'pointerdown',

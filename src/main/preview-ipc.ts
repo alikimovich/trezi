@@ -42,6 +42,7 @@ import {
   PREVIEW_SET_MODE,
   PREVIEW_SET_PINS,
   PREVIEW_SET_STATUS,
+  PREVIEW_STATES_KEY,
   PREVIEW_TEXT_EDIT,
   PREVIEW_TOGGLE_SELECT,
   PREVIEW_TOOLBAR_ACTION,
@@ -278,8 +279,13 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   // comment/annotate are handled entirely inside the preview's composer.
   ipcMain.on(PREVIEW_TOOLBAR_ACTION, (e, kind: string) => {
     if (!fromPreview(e)) return
-    if (kind !== 'code' && kind !== 'delete' && kind !== 'props') return
+    if (!['code', 'delete', 'props', 'states'].includes(kind)) return
     sendToMain('preview:toolbar-action', kind)
+  })
+  // LKM-207: H on a states workbench hides the native switcher (for screenshots).
+  ipcMain.on(PREVIEW_STATES_KEY, (e, key: unknown) => {
+    if (!fromPreview(e) || key !== 'hide') return
+    sendToMain('preview:states-key', key)
   })
   // Renderer dropped the selection (pill ×, message sent) → hide the toolbar.
   ipcMain.on('preview:clear-selected', () => {

@@ -545,6 +545,35 @@ try {
       ok: false,
       error: 'That file no longer exists.'
     })
+    // LKM-207: a states workbench folder and its seam files leave in one step; only a
+    // folder holding the manifest qualifies, and seams stay outside it.
+    const bench = dir({
+      'trezi-states/list/trezi-workbench.json': '{}',
+      'trezi-states/list/index.html': '<div></div>',
+      'src/route-list.ts': 'x',
+      'keep.ts': 'k'
+    })
+    const remove = async (path, seams) =>
+      (await owned.frame('removeWorkbench', { root: bench, path, seams, intent: 'trash' })).payload
+    assert.deepEqual(await remove('src', []), {
+      ok: false,
+      error: 'That folder is not a states workbench.'
+    })
+    assert.deepEqual(await remove('trezi-states/list', ['trezi-states/list/index.html']), {
+      ok: false,
+      error: 'That path is not allowed.'
+    })
+    assert.deepEqual(await remove('trezi-states/list', ['.git/config']), {
+      ok: false,
+      error: 'That path is not allowed.'
+    })
+    assert.deepEqual(await remove('trezi-states/list', ['src/route-list.ts', 'gone.ts']), {
+      ok: true,
+      path: 'trezi-states/list'
+    })
+    assert.equal(existsSync(join(bench, 'trezi-states/list')), false)
+    assert.equal(existsSync(join(bench, 'src/route-list.ts')), false)
+    assert.equal(read(join(bench, 'keep.ts')), 'k')
     reset()
     await stop(owned)
   })

@@ -140,6 +140,7 @@ const UNIT = [
   'slash-token',
   'skills-discovery',
   'provider-skills',
+  'states-workbench',
   'github-connect',
   'html-source',
   'project-key',

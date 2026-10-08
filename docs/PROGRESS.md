@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-207: component states workbench
+
+- **What.** `/states`, Show states on the element toolbar, or its … menu ask the agent (bundled `component-states` skill, adapted from Jakub Krehel's MIT state-machine skill) to build a scratch route showing every state of one component, fed at its data boundary. The preview then shows a States island, keys switch states, All shows a grid, and the … menu lists Workbenches to open or remove. Design and file map: `docs/STATES.md`.
+- **The manifest is the record.** The agent writes `trezi-workbench.json` in the workbench folder (component, route, states, missing, seams, fixtures, chat). Bun scans the live checkout read-only for it, so no new service store or ledger domain is needed. Writes stay with the Swift owner: the new `removeWorkbench` lane method only accepts a directory holding a regular manifest, plus regular seam files outside it, and trashes them in one step.
+- **URL as truth.** Switching is a `replaceState` of `__state` plus a `trezi:state` event, so it is instant and keeps the scroll. A page that does not set `data-trezi-state` within 600 ms gets a plain navigation, so in-page switchers keep working. Main re-sends the state ids to the preload on every URL change, because a load replaces the preload.
+- **One WebKit view.** The All grid is the page's own `__state=all` layout of live frames, not extra web views, so selection and the editing island work on it.
+- **Publish.** `beforePublish` answers synchronously when there is no workbench, so LKM-187's progress-on-click holds. With one, a sheet offers Cancel / Publish Anyway / Remove and Publish.
+- **Seams.** The skill defines seams as files *created* for the workbench, because removal trashes them. Lines added to existing files show up in the leftover search instead.
+- **Tests.** Unit `states-workbench` (Publish warning included), plus additions to `source-owner` and `provider-skills`. Native smoke `states-workbench` (group `core`): a React UMD fixture with loading/empty/list.
+- **Native run.** In `core`, the route detection, keys, scroll/marker preservation and wraps passed. The island step failed twice, for two reasons:
+  - The smoke passed the state as `id`, which `NativeBridge.request` overwrites with its request id. The broker now reads `state`.
+  - With `sizingOptions = []`, an `NSHostingView` has no intrinsic size, so `fittingSize` was 0×0. The island drew, but its frame (used for hit testing and the page shield) was empty. It is now measured with an off-screen `NSHostingController.sizeThatFits`, as `SheetAlert.swift` does. A headless check gives 356×31, and the smoke asserts a real size.
+
+  Both fixes still need a native `core` run. `NativePreviewLoad` has the same `fittingSize` pattern and probably the same empty frame; it was left alone.
+- **Not done.** The optional thumbnail "states check" row. The upstream skill text could not be fetched here (`gh api` denied), so the adaptation is written from the issue's description of it.
+
 ## 2026-10-08 — LKM-205 root cause: `preview-overlay` clicked a disabled toolbar button
 
 - **Diagnostics.** The next failure reported `click false` and an empty `panelNote`, so `togglePanel` never ran. The focus-loss hypothesis below was wrong.

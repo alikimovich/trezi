@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Component states workbench (LKM-207)
+
+- [x] Bundled user-invoked skill `agent-plugin/skills/component-states` (attribution and MIT notice), `/states` in the composer, Show states on the element toolbar and the element … menu.
+- [x] `trezi-workbench.json` manifest record, read-only scans and leftover search (`src/shared/states-workbench.ts`, `src/main/states-workbench.ts`); `docs/STATES.md`.
+- [x] States island (`src/native/StatesSwitcher.swift`) and preload keys ←/→, 1-9, H (`src/preview/states-switch.ts`): `__state` replaceState in place, scroll kept, navigation fallback.
+- [x] All states grid as live in-page frames (`__state=all`).
+- [x] Preview … menu Workbenches (Open, Remove Workbench…); Swift `removeWorkbench` trashes the folder and seams in one step; Publish warns (Cancel / Publish Anyway / Remove and Publish).
+- [x] Tests: unit `states-workbench`, `source-owner`, `provider-skills`; native smoke `states-workbench` (group `core`).
+- [ ] Open: the optional thumbnail "states check" row after visual changes (the skill re-checks with `?__state=all` instead).
+
 ## Dreamer: analyze past sessions, propose improvements (LKM-202)
 
 - [x] Digest of saved chats and the product log (`src/main/dreamer-digest.ts`): slow tools, repeated failures, retries and corrections, repeated requests, turn times, landings, parks, conflicts, refusals, island steps, feedback; per-step `Tool step` debug lines from `src/main/turn-log.ts`.

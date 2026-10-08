@@ -61,8 +61,15 @@ try {
     'design',
     'linked',
     'shared',
+    'states',
     'surface-controls'
   ])
+  // LKM-207: the states workbench is listed only for explicit invocation (/states).
+  const states = skills.find((s) => s.name === 'states')
+  assert(states.path.endsWith('agent-plugin/skills/component-states/SKILL.md'))
+  assert(/^disable-model-invocation: true$/m.test(readFileSync(states.path, 'utf8')))
+  assert(readFileSync(join(states.path, '../LICENSE'), 'utf8').includes('MIT License'))
+  assert(withSkillReferences('/states OrderList', skills).includes(JSON.stringify(states.path)))
   assert.equal(skills.find((s) => s.name === 'design').description, 'Project design')
   assert.equal(skills.find((s) => s.name === 'shared').source, 'other')
   assert((await discoverProviderSkills(root, 'gemini', home)).some((s) => s.name === 'gemini-only'))

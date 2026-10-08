@@ -20,7 +20,7 @@ import type {
 import { projectKey } from '../../shared/projectKey'
 import { agentGitAccess, rawGitWrite } from '../agent-git-access'
 import { checkContrast, suggestAccessible } from '../apca'
-import { discoverPortableSkills } from '../bundled-skills'
+import { bundledSkillFolder, discoverPortableSkills } from '../bundled-skills'
 import { fluidClamp, fluidScale } from '../fluid'
 import { liveCheckoutEdit } from '../live-write-guard'
 import { recordClaudeModels } from '../model-catalog'
@@ -1381,7 +1381,7 @@ async function startSession(
     const merged = mergeSlashCommands(
       [...projectSkills, ...availablePortableSkills()],
       sdkCommandNames.filter(
-        (name) => !portableSkills.some((skill) => name === `trezi:${skill.name}`)
+        (name) => !portableSkills.some((skill) => name === `trezi:${bundledSkillFolder(skill)}`)
       )
     )
     if (merged.length) emit({ type: 'commands', commands: merged })

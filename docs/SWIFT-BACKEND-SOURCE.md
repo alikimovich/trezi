@@ -104,6 +104,7 @@ take an optional `leases` array.
 | `history` / `canRevert` | read | `{root}` / `{root, group}` | `{undo, redo}` / `{revertable}` |
 | `clearHistory` | mutation | `{root}` | `{}` |
 | `createFile` / `renameFile` / `deleteFile` | mutation | `{root, path}` / `{root, path, to}` / `{root, path, intent:"trash"}` | `{ok, path?, error?}` |
+| `removeWorkbench` | mutation | `{root, path, seams, intent:"trash"}` | `{ok, path?, error?}` — trashes a states workbench folder (it must hold a regular `trezi-workbench.json`) and its seam files, which must be regular files outside the folder (LKM-207, `docs/STATES.md`) |
 | `drafts` / `saveDraft` / `clearDraft` | read / mutation | `{root}` / `{root, path, base, text}` / `{root, path}` | `[{path, base, text, current}]` / `{}` |
 | `status` / `acknowledge` | read / mutation | `{}` / `{operationID, intent}` | `{interrupted, journal?}` / `{}` |
 

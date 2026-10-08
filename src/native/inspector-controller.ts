@@ -13,6 +13,7 @@ import type {
   NativeInspectorState
 } from '../shared/native-inspector'
 import { describeSelectionForPrompt } from '../shared/selection-context'
+import { showStatesText } from '../shared/states-workbench'
 import { tokensForProp } from '../shared/token-match'
 
 type Binding = {
@@ -246,7 +247,8 @@ export class NativeInspectorController {
     if (element)
       this.state.actions.unshift(
         { id: 'controls', label: 'Create controls…' },
-        { id: 'animation', label: 'Add animation…' }
+        { id: 'animation', label: 'Add animation…' },
+        { id: 'states', label: 'Show states…' }
       )
     if (element?.componentSource)
       this.state.actions.unshift({ id: 'owner', label: 'Inspect owning component' })
@@ -514,6 +516,11 @@ export class NativeInspectorController {
       }
       if (action.action === 'ask-agent' && this.element) {
         await this.agent(root, describeSelectionForPrompt(this.element, root))
+        return
+      }
+      if (action.action === 'states' && this.element) {
+        const selection = describeSelectionForPrompt(this.element, root)
+        await this.agent(root, showStatesText(selection, this.element.componentSource), true)
         return
       }
       if (action.action === 'controls' || action.action === 'animation') {
