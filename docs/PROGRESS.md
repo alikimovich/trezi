@@ -18,6 +18,8 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - menu key equivalents, the toolbar popover and the agent view;
   - an unchanged DOM and `previewInputs`;
   - light and dark captures.
+- **Repair: `source-syntax` p95 54 ms was load, not the overlay.** The failing run had every keystroke slow (11 ms floor, spikes to 122 ms) while other worktrees were building and running native checks. Nothing in the overlay runs in that path: its views live in the main window's canvas, `place` only runs from `WorkspaceLayout.layout()`, and the page reporter is off once nothing shows. Re-run unchanged on a quieter machine, `core` passed with `preview-overlay` and `source-syntax` in the same run (typing p95 13.96 ms, runs 13.78 / 13.96 / 14.16). No code, test or threshold changed.
+
 ## 2026-10-07 — LKM-204 repair: `source-syntax` p95 gate flaked on two slow keystrokes
 
 - **Cause.** The manager's full run failed `source-syntax` at p95 18.95 ms. `checkSourceSyntax` took one 40-keystroke pass, dropped 5 warm-up samples and used `sorted[floor(35 × 0.95)]`, the second-slowest of 35, so two isolated slow keystrokes (21.5 and 19.0 ms; steady state 10–14 ms) fail it. The same check passed in the earlier run (p95 15.03 ms) and none of the LKM-204 code is in the editor or keystroke path.
