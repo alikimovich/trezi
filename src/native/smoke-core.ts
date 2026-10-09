@@ -38,6 +38,7 @@ import { checkPreviewSpeed, restorePreviewSpeed } from './smoke-preview-speed'
 import { checkPreviewTiming, restorePreviewTiming } from './smoke-preview-timing'
 import { checkProjectSwitching } from './smoke-projects'
 import { checkPublishProgress } from './smoke-publish'
+import { checkQuitAlert } from './smoke-quit'
 import {
   formatFailureReport,
   SMOKE_EXIT_PRODUCT,
@@ -904,6 +905,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkChatUi(host, artifacts)
+      }
+    },
+    {
+      name: 'quit-alert',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkQuitAlert(host, artifacts, preference)
       }
     },
     {

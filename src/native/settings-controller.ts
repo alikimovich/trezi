@@ -31,6 +31,7 @@ import {
 } from './activity-controller'
 import { appVersion } from './app-version'
 import type { NativePreferences } from './preferences'
+import { QUIT_DONT_ASK_CHOICES, QUIT_DONT_ASK_KEY } from './quit-guard'
 import type { NativeSheetController } from './sheets-runtime'
 
 const ids = (text: string) => [...new Set(text.split(/[\s,]+/).filter(Boolean))]
@@ -201,6 +202,15 @@ export class NativeSettingsController {
             choices: ACTIVITY_AUTO_OPEN_CHOICES
           },
           {
+            id: 'quitDontAsk',
+            section: 'general',
+            label: 'Quit while agents are working',
+            help: 'A landing or publish still finishes first.',
+            kind: 'choice',
+            value: this.preferences.get(QUIT_DONT_ASK_KEY) === 'true' ? 'true' : 'false',
+            choices: QUIT_DONT_ASK_CHOICES
+          },
+          {
             id: 'workspaceUsage',
             section: 'general',
             label: 'Chat workspaces',
@@ -322,6 +332,9 @@ export class NativeSettingsController {
     const activity = action.values.activityAutoOpen
     if (activity !== undefined && !ACTIVITY_AUTO_OPEN_CHOICES.some((c) => c.value === activity))
       throw new Error('Invalid setting.')
+    const quitDontAsk = action.values.quitDontAsk
+    if (quitDontAsk !== undefined && !['true', 'false'].includes(quitDontAsk))
+      throw new Error('Invalid setting.')
     const access = action.values.agentFileAccess
     if (access !== undefined && !AGENT_FILE_ACCESS_CHOICES.some((c) => c.value === access))
       throw new Error('Invalid setting.')
@@ -352,6 +365,9 @@ export class NativeSettingsController {
         ...(plugins === undefined ? [] : [[CLAUDE_USER_PLUGINS_KEY, plugins] as [string, string]]),
         ...(idle === undefined ? [] : [[IDLE_KEY, idle] as [string, string]]),
         ...(activity === undefined ? [] : [[ACTIVITY_AUTO_OPEN_KEY, activity] as [string, string]]),
+        ...(quitDontAsk === undefined
+          ? []
+          : [[QUIT_DONT_ASK_KEY, quitDontAsk] as [string, string]]),
         ...(access === undefined ? [] : [[AGENT_FILE_ACCESS_KEY, access] as [string, string]]),
         ...(gitAccess === undefined ? [] : [[AGENT_GIT_ACCESS_KEY, gitAccess] as [string, string]]),
         ...(agentMerge === undefined ? [] : [[AGENT_MERGE_KEY, agentMerge] as [string, string]])

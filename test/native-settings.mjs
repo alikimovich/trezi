@@ -97,6 +97,7 @@ assert.deepEqual(
     ['agentMerge', 'general'],
     ['workspaceIdle', 'general'],
     ['activityAutoOpen', 'general'],
+    ['quitDontAsk', 'general'],
     ['workspaceUsage', 'general'],
     ['version', 'general'],
     ['projectUi', 'experimental'],
@@ -155,6 +156,35 @@ await action('change', {
 })
 assert.equal(values.get('trezi:activity-auto-open:v1'), 'always')
 values.delete('trezi:activity-auto-open:v1')
+await settings.open()
+// LKM-221: "Don't ask again" for the quit alert defaults to asking, persists, and validates.
+assert.equal(field('quitDontAsk').label, 'Quit while agents are working')
+assert.equal(field('quitDontAsk').value, 'false')
+assert.deepEqual(
+  field('quitDontAsk').choices.map((c) => [c.value, c.label]),
+  [
+    ['false', 'Ask first'],
+    ['true', 'Don’t ask']
+  ]
+)
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  quitDontAsk: 'true'
+})
+assert.equal(values.get('trezi:quit-dont-ask:v1'), 'true')
+await settings.open()
+assert.equal(field('quitDontAsk').value, 'true', 'reopen shows the saved choice')
+await action('change', {
+  default: 'last-used',
+  projectUi: 'false',
+  engine: 'agent',
+  quitDontAsk: 'maybe'
+})
+assert.match(sheets.current.state.message, /Invalid setting/)
+assert.equal(values.get('trezi:quit-dont-ask:v1'), 'true')
+values.delete('trezi:quit-dont-ask:v1')
 await settings.open()
 // LKM-163: Agent file access defaults to Full access, persists, and rejects other values.
 assert.equal(field('agentFileAccess').label, 'Agent file access')

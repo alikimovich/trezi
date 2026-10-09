@@ -88,6 +88,7 @@
     "test:keychain-rebuild": "bun test/keychain-rebuild.mjs",
     "test:network-volume-note": "bun test/network-volume-note.mjs",
     "test:activity-attention": "bun test/activity-attention.mjs",
+    "test:quit-guard": "bun test/quit-guard.mjs",
     "test:install-update": "bun test/install-update.mjs",
     "test:project-icon": "bun test/project-icon.mjs",
     "test:providers": "bun test/providers-store.mjs",
