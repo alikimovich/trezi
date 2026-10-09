@@ -64,6 +64,7 @@ const UNIT = [
   'preview-supervisor',
   'native-support',
   'activity-attention',
+  'quit-guard',
   'display-path',
   'native-sheets',
   'native-settings',

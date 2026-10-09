@@ -38,7 +38,11 @@ and provider-seat rules are here.
   `FileHandle.read(upToCount:)`: it waits for the full count, so short lines
   never arrive — use `readAvailable(upTo:)`. Never answer quit with
   `.terminateLater` while waiting on main-queue work (modal-panel run loop);
-  cancel, drain, terminate again. An XPC service's stderr is discarded, so
+  cancel, drain, terminate again. The one exception is the quit alert during
+  a logout or restart (LKM-221, `src/native/QuitPrompt.swift`): cancelling
+  would abort the logout, so it replies later, and the drain's backstop still
+  bounds it. A quit that must not wait (signals, Bun's `quit`) sets
+  `quitForced` first, or it shows the agent alert. An XPC service's stderr is discarded, so
   Bun's stderr is the host's, passed over XPC (`attachDiagnostics`).
 - **Bun blocks postinstall for untrusted dependencies.** `esbuild` remains in
   `package.json#trustedDependencies` for its binary.
