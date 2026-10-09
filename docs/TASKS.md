@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview Back/Forward and layout-independent shortcuts (LKM-219)
+
+- [x] View → Back (⌘[) / Forward (⌘]) enabled only when a step exists; ⌘← / ⌘→ outside text fields (host monitor, and the page script when the page left the key alone); two-finger swipe on the preview; no toolbar buttons.
+- [x] History is the preview's `backForwardList` (pushState routes count); a step stops at another project's origin and skips agent `open_preview` pages (also when swiped); the address bar follows.
+- [x] The code editor keeps ⌘[ / ⌘] for its own file history while focused.
+- [x] Every ⌘/⌃ key-down is re-read by key position under non-Latin layouts (`KeyShortcuts.swift`); in-page S, 1-9 and H use `latinKey`; Dvorak untouched.
+- [x] Unit `key-shortcuts` (synthetic Russian/Ukrainian/Hebrew/Greek/Dvorak events), native smoke `preview-history` and the source editor's ⌘х / ⌘ъ; gotchas rule; changelog.
+- [ ] Not automated: a real trackpad swipe and a real layout switch (operator check).
+
 ## Private agent browser (LKM-212)
 
 - [x] A chat/background agent reuses a session-owned offscreen WebKit page with isolated instrumentation, its own route and viewport, a three-browser cap and idle cleanup.

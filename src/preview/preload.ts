@@ -68,6 +68,8 @@ import {
 } from '../shared/preview-channels'
 import { coalesceHover } from './coalesce-hover'
 import { installDragReorder } from './drag-reorder'
+import { installHistoryKeys } from './history-keys'
+import { latinKey } from './latin-key'
 import {
   buildLayersSnapshot,
   type LayerFingerprint,
@@ -1742,7 +1744,7 @@ function onKey(e: KeyboardEvent): void {
     return
   }
   if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || isTypingTarget(e.target)) return
-  if (e.key === 's' || e.key === 'S') {
+  if (latinKey(e) === 's') {
     // S must work with the preview focused too. The renderer owns the toggle
     // (store + web/simulator routing) — relay instead of flipping locally.
     e.preventDefault()
@@ -1929,9 +1931,11 @@ if (!IS_SIM_BRIDGE) {
   window.addEventListener('mousemove', onMove, true)
   window.addEventListener('click', onClick, true)
   window.addEventListener('dblclick', onDblClick, true)
+  const busy = () => active || !!editing || !!commenting || !!commentMode || threeD.active()
+  installHistoryKeys(busy, threeD.active)
   window.addEventListener('keydown', onKey, true)
   window.addEventListener('keyup', onKeyUp, true)
-  installStatesSwitch(() => active || !!editing || !!commenting || !!commentMode || threeD.active())
+  installStatesSwitch(busy)
   if (location.protocol.startsWith('http')) watchStyles(() => ipcRenderer.send(STYLES_UPDATED))
   for (const type of [
     'keypress',

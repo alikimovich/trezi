@@ -63,7 +63,8 @@ export function installNativeInspector(
           status.kind === 'running' && entry.previewKind !== 'simulator' ? status.url : null
         return { root: entry.root, chat: entry.activeSessionKey, url }
       },
-      load: (url) => workspace.services.invoke('preview:load', url),
+      // An agent's page stays out of the user's Back/Forward (LKM-219).
+      load: (url) => workspace.services.invoke('preview:load', url, { agent: true }),
       showing: previewShows
     },
     currentTurn,

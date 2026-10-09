@@ -2,6 +2,24 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-219: preview Back/Forward and layout-independent shortcuts
+
+- **History.** `PreviewHistory` (`src/native/PreviewHistory.swift`) adds View → Back (⌘[) and Forward (⌘]), validated against the preview's `backForwardList`, and sets `allowsBackForwardNavigationGestures` on the preview. One WebKit view serves every project, so a step stops at an entry on another origin. An agent's `open_preview` into the visible preview now loads with `agent: true` (`inspector-runtime` → `preview:load` → bridge `load`). The host marks that navigation's item when it commits, and menu, keys and swipe skip it (a swipe onto one is cancelled in `decidePolicyFor` and redone as our step). The address bar follows through the existing URL KVO.
+- **⌘← / ⌘→.** A host monitor steps when focus is not a text field, the composer, the code editor or the page. With the page focused, `src/preview/history-keys.ts` sends `trezi:preview:history` (taken by the host directly) only if the page's listeners left the key unhandled and the target is not a page field; while select, comment or edit mode owns the keys it steps at once, and the 3D view keeps its arrows.
+- **Editor.** `NativeSourceEditor.performKeyEquivalent` takes ⌘[ / ⌘] as its own file Back/Forward while focused, before the menu sees them.
+- **Layouts.** Under Russian, a ⌘ key event reads "х" on the "[" key, and no key equivalent matches it. `KeyShortcut.install()` re-reads every ⌘/⌃ key-down through the ASCII-capable layout (`UCKeyTranslate`, U.S. ANSI fallback) before dispatch. A non-Latin layout is always read by position: Russian types "." on the U.S. "/" key. Latin layouts are untouched, so Dvorak keeps its own equivalents. In-page S, 1-9 and H use `latinKey` (`event.code` fallback). Rule in `docs/agent-guide/gotchas.md`.
+- **Checks.**
+  - Unit `key-shortcuts` covers `latinKey` and a Swift fixture with synthetic events: ⌘ + key 33 "х" → [, Ukrainian/Hebrew/Greek letters, ⌃ and ⇧ combinations, Dvorak, Russian ASCII punctuation, arrows, and typing never remapped.
+  - Native smoke `preview-history` (core) uses two pushState routes:
+    - ⌘х / ⌘ъ through the window and the main menu;
+    - ⌘← / ⌘→ with no focus and in the composer;
+    - the View menu's enabled state and key;
+    - the address bar after each step;
+    - the gestures flag;
+    - an agent page skipped both ways.
+  - `source-editor` adds ⌘х / ⌘ъ in the editor and ⌘[ → View → Back outside it.
+- **Not automated.** A real swipe gesture and a real layout switch: the evidence budget rules out synthetic CGEvents and system input-source changes.
+
 ## 2026-10-09 — LKM-216 repair: the stale-stylesheet check never ran in the native smoke
 
 - **Why.** The manager's `editor-freshness` smoke timed out on its stale-stylesheet step with `styleChecks: 0`. The hub skipped the comparison with the server whenever the page had reported a style mutation after the change, and a document load (its `<link>`s inserted by the parser) or any injected `<style>` counts as one. The comparison now always runs after the 500 ms clock; a page signal only rules out the hard reload (an HMR update leaves entry scripts stale on purpose). `watchStyles` also ignores mutations while `document.readyState` is `loading`. The check URL comes from the workspace entry, not the status, which can read busy or error. The smoke's timeout snapshot now includes the hub's stats, the active entry, both timestamps, the computed value and the links.
