@@ -11,6 +11,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Every ⌘/⌃ key-down is re-read by key position under non-Latin layouts (`KeyShortcuts.swift`); in-page S, 1-9 and H use `latinKey`; Dvorak untouched.
 - [x] Unit `key-shortcuts` (synthetic Russian/Ukrainian/Hebrew/Greek/Dvorak events), native smoke `preview-history` and the source editor's ⌘х / ⌘ъ; gotchas rule; changelog.
 - [ ] Not automated: a real trackpad swipe and a real layout switch (operator check).
+## Mobile viewport: page corners match the device frame (LKM-217)
+
+- [x] `src/native/DeviceFrame.swift` measures each offered bezel's screen opening and continuous corner radius from the asset's alpha; the page and overlay are clipped with it (`cornerCurve = .continuous`) at the bezel's scale.
+- [x] Unit `device-frame`: the opening matches an independent PNG decode and a CALayer continuous corner traces the asset's edge; native `device-frame` (group `core`): page rect and clip at two scales, four corner captures in light and dark.
 ## Live-change warnings: subtract Trezi's own effects (LKM-215)
 
 - [x] Bun watches the live tree for Full access Codex turns (`src/main/live-change-watch.ts`); the adapter's per-turn note is gone. Snapshots run in the repository lease.

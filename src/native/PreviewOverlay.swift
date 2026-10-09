@@ -136,7 +136,7 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
         shown = visible && key != nil && pageFrame.width > 0 && pageFrame.height > 0
         if !shown { drag = nil }
         guides.frame = pageFrame
-        guides.wantsLayer = true; guides.layer?.cornerRadius = radius; guides.layer?.masksToBounds = radius > 0
+        guides.wantsLayer = true; guides.layer?.cornerRadius = radius; guides.layer?.cornerCurve = .continuous; guides.layer?.masksToBounds = radius > 0
         let t = Self.thickness
         top.frame = NSRect(x: area.minX, y: area.minY, width: area.width, height: t)
         left.frame = NSRect(x: area.minX, y: area.minY, width: t, height: area.height)

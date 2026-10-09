@@ -11,7 +11,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- In the mobile viewport the page's corners now follow the iPhone frame's screen corners exactly (the same continuous curve and radius, at any size, in light and dark), with no gap or overlap at the bezel (LKM-217).
 - Full access Codex chats no longer warn that the live project changed outside the chat after Trezi's own landings (land now, the turn's landing), Publish, base syncs, conflict files, dependency installs or dev-server output; a real outside change is one compact row with Details, and only the agent's own commands are blamed on the agent (LKM-215).
+
 ### Added
 - Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
 

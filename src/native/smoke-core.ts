@@ -16,6 +16,7 @@ import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
 import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
+import { checkDeviceFrame, restoreDeviceFrame } from './smoke-device-frame'
 import { checkDreamerReview } from './smoke-dreamer'
 import {
   checkEditorFreshness,
@@ -576,6 +577,17 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreToolbarAddress(host)
+      }
+    },
+    {
+      name: 'device-frame',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkDeviceFrame(host, artifacts)
+        await restoreDeviceFrame(host)
+      },
+      cleanup: async () => {
+        await restoreDeviceFrame(host)
       }
     },
     {
