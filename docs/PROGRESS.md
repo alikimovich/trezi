@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-220 review repair: stored origin ports are stale
+
+- A record keeps the origin as an absolute URL, but preview ports are allocated per run (`RuntimeNet.freePort`), so after a restart or with several projects open Back could load a dead port or another project's dev server. `NativeStatesController.origin()` now rebases the stored path, query and hash onto the preview's current origin (`rebaseUrl`, `src/shared/states-records.ts`); Back, the history check, the restore comparison and the Remove reload all go through it. The stored record is unchanged. `test/states-return.mjs` restarts onto another port and asserts Back and the restore use it. Removed the unused `WorkbenchMemory.reload()`.
+
 ## 2026-10-09 — LKM-220: leave a states workbench and come back to it
 
 - **Records.** The manifest stays the agent's record. What Trezi learns (the page a workbench was opened from with scroll and the selected instance's Layers fingerprint, the last state viewed, the creating chat) goes in one preference, `trezi:states-workbenches:v1`, keyed by root and folder (`src/native/states-memory.ts`, pure parts in `src/shared/states-records.ts`). It survives restarts, and every scan prunes folders without a manifest. Show states leaves a pending origin for an hour. The next new workbench whose manifest source file holds the selection, or that was absent from the previous scan, takes it. Otherwise the previous non-workbench page is the origin.

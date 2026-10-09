@@ -5,6 +5,7 @@ import { PREVIEW_STATES, PREVIEW_STATES_SWITCH } from '../shared/preview-channel
 import {
   benchForSelection,
   pageLabel,
+  rebaseUrl,
   sameDocument,
   type WorkbenchOrigin,
   type WorkbenchSelection
@@ -214,8 +215,12 @@ export class NativeStatesController {
       })
   }
 
+  /** The recorded origin on the preview's current origin: the stored port may be stale. */
   private origin(root: string, bench: Workbench): WorkbenchOrigin | undefined {
-    return this.memory.get(root, bench.folder)?.origin
+    const origin = this.memory.get(root, bench.folder)?.origin
+    if (!origin) return undefined
+    const url = rebaseUrl(origin.url, this.location ?? this.services.active()?.url)
+    return url === origin.url ? origin : { ...origin, url }
   }
 
   private item(root: string, bench: Workbench): WorkbenchItem {

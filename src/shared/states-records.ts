@@ -183,6 +183,20 @@ export function pageLabel(origin: WorkbenchOrigin): string {
   }
 }
 
+/**
+ * `url`'s path, query and hash on `base`'s origin. Preview ports are allocated per run, so
+ * a stored absolute URL may point at a dead port or another project's dev server.
+ */
+export function rebaseUrl(url: string, base: string | null | undefined): string {
+  if (!base) return url
+  try {
+    const from = new URL(url)
+    return new URL(`${from.pathname}${from.search}${from.hash}`, base).href
+  } catch {
+    return url
+  }
+}
+
 /** Whether two URLs are the same document (the hash aside). */
 export function sameDocument(a: string, b: string): boolean {
   try {

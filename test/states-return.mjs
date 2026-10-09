@@ -249,6 +249,28 @@ states = new NativeStatesController(services())
 states.url('http://localhost:5173/orders?tab=2')
 await settle()
 assert.equal(last('workbenches').items[0].from, 'Orders')
+// Preview ports are allocated per run: Back goes to the stored page on the current port.
+viaHistory = false
+states.url('http://localhost:5174/trezi-states/order-list?__state=empty')
+await settle()
+page.href = 'http://localhost:5174/orders?tab=2'
+const scrolls = took('scroll').length
+const picks = took('pick').length
+await states.action({ action: 'back' })
+assert.deepEqual(took('back').at(-1), ['back', 'http://localhost:5174/orders?tab=2'])
+assert.deepEqual(took('load').at(-1), ['load', 'http://localhost:5174/orders?tab=2'])
+states.url('http://localhost:5174/orders?tab=2')
+await settle()
+assert.equal(took('scroll').length, scrolls + 1, 'the scroll is restored on the new port')
+assert.deepEqual(took('pick').at(-1), [
+  'pick',
+  [0, 2],
+  { tag: 'ul', source: 'src/OrderList.tsx:9:3' }
+])
+assert.equal(took('pick').length, picks + 1)
+page.href = 'http://localhost:5173/orders?tab=2'
+states.url('http://localhost:5173/orders?tab=2')
+await settle()
 // Show states on the same component opens the existing workbench at its last state.
 assert.equal(await states.show('/repo', element, 'chat-9'), true)
 assert.deepEqual(took('load').at(-1), [

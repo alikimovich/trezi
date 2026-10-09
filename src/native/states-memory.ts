@@ -48,10 +48,6 @@ export class WorkbenchMemory {
   get(root: string, folder: string): WorkbenchRecord | undefined {
     return this.all(root)[folder]
   }
-  /** Forgets the mirror: the next read takes the stored preference again (a reopened project). */
-  reload() {
-    this.mirror = null
-  }
 
   private save(root: string, next: Record<string, WorkbenchRecord>) {
     if (JSON.stringify(next) === JSON.stringify(this.all(root))) return

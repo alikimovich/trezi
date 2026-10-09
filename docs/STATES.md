@@ -88,6 +88,9 @@ no longer hold a manifest. The manifest stays the agent's record.
   to the workbench; otherwise it loads the page and restores its scroll. Either way
   the instance is selected again by Layers fingerprint once the page is up (6 s at
   most).
+- Preview ports change between runs, so the stored URL's path, query and hash are
+  rebased onto the preview's current origin before Back loads or compares them
+  (`rebaseUrl`).
 - The island's Continue in Chat focuses the creating chat when it is still open, else
   opens a new chat with a `#states-<folder>` chip; sending describes the workbench
   (`workbenchReferenceText`).
