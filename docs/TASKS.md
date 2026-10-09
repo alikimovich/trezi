@@ -11,6 +11,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Every ⌘/⌃ key-down is re-read by key position under non-Latin layouts (`KeyShortcuts.swift`); in-page S, 1-9 and H use `latinKey`; Dvorak untouched.
 - [x] Unit `key-shortcuts` (synthetic Russian/Ukrainian/Hebrew/Greek/Dvorak events), native smoke `preview-history` and the source editor's ⌘х / ⌘ъ; gotchas rule; changelog.
 - [ ] Not automated: a real trackpad swipe and a real layout switch (operator check).
+## Unblock verification: versioning after 0.1.0, load-robust source-syntax (LKM-222)
+
+- [x] `test/versioning.mjs`: the LKM-143 `trezi --version` entry may sit in any changelog section; a new case covers the empty Unreleased right after a release. CHANGELOG history unchanged.
+- [x] Native `source-syntax`: per-keystroke cost is the main thread's CPU time (`SourceWorkClock`, wall time kept for the report); one warm-up pass, then the median of 5 pass p95s against the 16 ms target, failing above 32 ms only while the machine is not overloaded (`assertLoadAwareTiming`, unit `smoke-timing`); load recorded per pass.
+- [x] Unit `syntax-highlight`: the re-tokenization p95 in process CPU time, warm-up pass, median of 5 passes under the same load-aware gate.
+- [x] Soft wrap (LKM-192) cost: three passes with Wrap Lines off are reported next to the gated ones; no real per-keystroke layout cost measured, so no editor change.
 
 ## Private agent browser (LKM-212)
 

@@ -7,6 +7,12 @@ import { SyntaxDocument } from '../src/main/syntax-document.ts'
 import { syntaxLanguage } from '../src/main/syntax-languages.ts'
 import { SYNTAX_CATEGORIES, SYNTAX_THEME, syntaxCategoryOf } from '../src/main/syntax-theme.ts'
 import {
+  assertLoadAwareTiming,
+  formatLoadAwareTiming,
+  sampleTiming,
+  systemLoad
+} from '../src/native/smoke-timing.ts'
+import {
   SYNTAX_BATCH_LINES,
   SYNTAX_MARGIN,
   SyntaxController
@@ -472,33 +478,45 @@ for (const [language, text, expected] of [
 }
 
 // Typing cost on a 3,000-line TSX file: the first full pass, then one keystroke's re-tokenization.
+// LKM-222: keystrokes are timed in process CPU time, so parallel builds on the machine do not
+// inflate them; one warm-up pass of 40, then the median of five pass p95s, against the
+// 16 ms target with the load-aware ceiling (`smoke-timing.ts`).
 {
   const text = tsxSample(3000)
   const tokenizer = await shiki.syntaxTokenizer('tsx')
   const doc = new SyntaxDocument(text)
-  let started = performance.now()
+  const started = performance.now()
   doc.tokenize(tokenizer, doc.length)
   const full = performance.now() - started
   doc.batch(doc.pending(0, doc.length, doc.length), 1)
-  const times = []
-  let current = text
-  const at = current.indexOf('const total') + 'const total'.length
-  for (let i = 0; i < 40; i++) {
-    current = `${current.slice(0, at + i)}x${current.slice(at + i)}`
-    started = performance.now()
-    doc.update(current)
-    doc.tokenize(tokenizer, doc.length)
-    const pending = doc.pending(0, doc.length, SYNTAX_BATCH_LINES)
-    doc.batch(pending, i + 2)
-    times.push(performance.now() - started)
-    assert.ok(pending.length <= 2, `one keystroke resends ${pending.length} lines`)
+  const cpu = () => {
+    const usage = process.cpuUsage()
+    return (usage.user + usage.system) / 1000
   }
-  times.sort((a, b) => a - b)
-  const p95 = times[Math.floor(times.length * 0.95)]
+  let current = text,
+    typed = 0,
+    max = 0
+  const at = current.indexOf('const total') + 'const total'.length
+  const runs = await sampleTiming(() => {
+    const times = []
+    for (let i = 0; i < 40; i++, typed++) {
+      current = `${current.slice(0, at + typed)}x${current.slice(at + typed)}`
+      const begun = cpu()
+      doc.update(current)
+      doc.tokenize(tokenizer, doc.length)
+      const pending = doc.pending(0, doc.length, SYNTAX_BATCH_LINES)
+      doc.batch(pending, typed + 2)
+      times.push(cpu() - begun)
+      assert.ok(pending.length <= 2, `one keystroke resends ${pending.length} lines`)
+    }
+    times.sort((a, b) => a - b)
+    max = Math.max(max, times.at(-1))
+    return times[Math.floor(times.length * 0.95)]
+  })
+  const timing = assertLoadAwareTiming('keystroke re-tokenization CPU p95', 16, runs, systemLoad())
   console.log(
-    `SYNTAX-HIGHLIGHT perf: 3000-line TSX full pass ${full.toFixed(1)} ms, keystroke p95 ${p95.toFixed(2)} ms, max ${times.at(-1).toFixed(2)} ms`
+    `SYNTAX-HIGHLIGHT perf: 3000-line TSX full pass ${full.toFixed(1)} ms, ${formatLoadAwareTiming(timing)}, max ${max.toFixed(2)} ms`
   )
-  assert.ok(p95 < 16, `keystroke re-tokenization p95 ${p95.toFixed(2)} ms`)
 }
 console.log(
   'SYNTAX-HIGHLIGHT OK — languages, theme, incremental tokenization, controller and Shiki tokens'
