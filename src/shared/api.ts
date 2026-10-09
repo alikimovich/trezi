@@ -378,8 +378,9 @@ export type AgentEvent = (
    *  starts either way; the chat shows a card. */
   | { type: 'dependencies'; issue: DependencyIssue | null }
   /** LKM-215: at most once per turn, what changed in the live checkout during a Full
-   *  access Codex turn that Trezi itself did not do (`live-change-watch.ts`). */
-  | { type: 'live-change'; line: string; detail: string; agent: boolean }
+   *  access Codex turn that Trezi itself did not do (`live-change-watch.ts`). `spawn`
+   *  marks a spawned comment agent's own report, a row of its own beside the turn's. */
+  | { type: 'live-change'; line: string; detail: string; agent: boolean; spawn?: boolean }
   /** Per-chat worktree isolation status (v9). A chat's turn merged back onto the live
    *  checkout ('merged'), a private worktree was forked for the chat ('isolated'), or a
    *  turn parked on its branch after mid-turn drift ('parked'). Routed by `projectKey` =

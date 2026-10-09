@@ -324,11 +324,20 @@ function summary(change: LiveChange): string {
 /**
  * The compact row for a turn's outside changes: one line, and Details with the paths
  * (repo-relative, never absolute) and what it means under the current landing model.
+ * A spawned comment agent's row (`spawn`) speaks of that agent, not of the chat's turn.
  */
-export function liveChangeRow(change: LiveChange): { line: string; detail: string } {
+export function liveChangeRow(
+  change: LiveChange,
+  { spawn = false }: { spawn?: boolean } = {}
+): { line: string; detail: string } {
+  const who = spawn ? 'The comment agent' : 'The agent'
   const line = change.agent
-    ? `The agent changed your project outside this chat's workspace: ${summary(change)}`
-    : `Your project changed outside this chat during this turn: ${summary(change)}`
+    ? spawn
+      ? `The comment agent changed your project outside its own workspace: ${summary(change)}`
+      : `The agent changed your project outside this chat's workspace: ${summary(change)}`
+    : spawn
+      ? `Your project changed outside the comment agent's workspace while it ran: ${summary(change)}`
+      : `Your project changed outside this chat during this turn: ${summary(change)}`
   const sections: string[] = []
   if (change.files.length) {
     const shown = change.files.slice(0, SHOWN_FILES).map((path) => `- \`${path}\``)
@@ -347,11 +356,13 @@ export function liveChangeRow(change: LiveChange): { line: string; detail: strin
     sections.push('The checked-out commit changed (a reset or checkout).')
   sections.push(
     change.agent
-      ? "The agent's own commands wrote to your project directly instead of this chat's workspace. Trezi did not track these changes, so Revert cannot undo them; check them with `git status` and `git log`."
-      : 'They came from outside this chat: your editor, another tool or a Git command in your project. That is fine; Trezi lands this chat’s work on top of them.'
+      ? `${who}'s own commands wrote to your project directly instead of ${spawn ? 'its own' : "this chat's"} workspace. Trezi did not track these changes, so Revert cannot undo them; check them with \`git status\` and \`git log\`.`
+      : `They came from outside ${spawn ? 'the comment agent' : 'this chat'}: your editor, another tool or a Git command in your project. That is fine; Trezi lands ${spawn ? 'its' : 'this chat’s'} work on top of them.`
   )
   sections.push(
-    'This chat edits its own workspace. Trezi lands its changes into your project during the turn (land now, Publish) and when the turn ends; those landings are not listed here.'
+    spawn
+      ? 'The comment agent edits its own workspace. Trezi lands its changes into your project when it finishes; that landing is not listed here.'
+      : 'This chat edits its own workspace. Trezi lands its changes into your project during the turn (land now, Publish) and when the turn ends; those landings are not listed here.'
   )
   return { line, detail: sections.join('\n\n') }
 }

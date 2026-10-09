@@ -261,7 +261,7 @@ try {
   const finalize = agentSource.slice(agentSource.indexOf('async function finalizeSpawn'))
   assert.match(
     finalize.slice(0, finalize.indexOf('enqueueRepoWrite(parentRoot')),
-    /finishLiveWatch\(spawnWatchKey\(id\)\)[\s\S]*type: 'live-change'/
+    /finishLiveWatch\(spawnWatchKey\(id\)\)[\s\S]*type: 'live-change'[\s\S]*spawn: true/
   )
 
   // (7) The chat shows at most one row per turn, under the reply, after the landing.
@@ -304,6 +304,48 @@ try {
   assert.match(combined[0].liveChange.detail, /run3\.md/)
   assert.match(combined[0].liveChange.detail, /run4\.md/)
   assert.equal(combined[0].liveChange.agent, true)
+
+  // A spawned comment agent finishing while the parent turn runs: its report (the
+  // agent's own direct write) and the turn's are both rows, in either arrival order.
+  const spawnChange = { files: ['spawned.md'], commits: [], headMoved: false, agent: true }
+  const spawnRow = liveChangeRow(spawnChange, { spawn: true })
+  assert.match(spawnRow.line, /^The comment agent changed your project outside its own workspace: /)
+  assert.ok(!/this chat|this turn/.test(`${spawnRow.line}${spawnRow.detail}`), 'not the turn')
+  assert.match(spawnRow.detail, /Revert cannot undo them/)
+  assert.match(
+    liveChangeRow({ ...spawnChange, agent: false }, { spawn: true }).line,
+    /^Your project changed outside the comment agent's workspace while it ran: /
+  )
+  for (const spawnFirst of [false, true]) {
+    const parent = newChat('k3')
+    parent.turn = 't3'
+    parent.isRunning = true
+    const turnReport = { files: ['turn.md'], commits: [], headMoved: false, agent: false }
+    const report = () =>
+      reduce(parent, { type: 'live-change', ...liveChangeRow(turnReport), agent: false })
+    const spawned = () =>
+      reduce(parent, {
+        type: 'live-change',
+        ...spawnRow,
+        agent: spawnChange.agent,
+        spawn: true
+      })
+    if (spawnFirst) spawned()
+    report()
+    if (!spawnFirst) spawned()
+    assert.equal(parent.messages.length, 0, 'both held while the turn runs')
+    reduce(parent, { type: 'landing-finished' })
+    const shown = parent.messages.filter((m) => m.liveChange)
+    assert.equal(shown.length, 2, `both reports are rows (spawn first: ${spawnFirst})`)
+    const turnRow = shown.find((m) => /turn\.md/.test(m.liveChange.detail))
+    const agentRow = shown.find((m) => /spawned\.md/.test(m.liveChange.detail))
+    assert.equal(turnRow?.liveChange.agent, false, "the turn's report is unchanged")
+    assert.equal(agentRow?.liveChange.agent, true, "the spawn's direct write keeps agent=true")
+  }
+  // An idle parent shows the spawn's row at once.
+  const idle = newChat('k4')
+  reduce(idle, { type: 'live-change', ...spawnRow, agent: true, spawn: true })
+  assert.equal(idle.messages.filter((m) => m.liveChange?.agent).length, 1)
 } finally {
   setRepositoryOwner(null)
   rmSync(scratch, { recursive: true, force: true })

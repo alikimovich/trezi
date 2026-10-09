@@ -618,8 +618,9 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
       if (change)
         safeSend(getWindow_, 'agent:event', {
           type: 'live-change',
-          ...liveChangeRow(change),
+          ...liveChangeRow(change, { spawn: true }),
           agent: change.agent,
+          spawn: true,
           projectKey: parentSessionKey
         } satisfies AgentEvent)
     })

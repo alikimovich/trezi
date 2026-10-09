@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-215 repair: a spawn's report is its own row
+
+- **Defect.** `finalizeSpawn` emits `live-change` with the parent's `projectKey`, and the reducer set `pendingLiveChange` for it, so a comment agent finishing during the parent's turn replaced the turn's held report, or the turn's end-of-turn report replaced the spawn's. A direct agent write could vanish without a row.
+- **Fix.** The event carries `spawn: true` (set in `finalizeSpawn`, typed in `shared/api.ts`; `ChatController` passes events through unchanged). The reducer keeps spawn reports in `pendingSpawnLiveChanges`, apart from the turn's `pendingLiveChange`, and `placeLiveChange` places the turn's row and then each spawn row after the landing (an idle chat shows it at once). `liveChangeRow(change, { spawn: true })` words it as the comment agent's change ("The comment agent changed your project outside its own workspace", Details about its own workspace and landing), not "this chat/turn". The row view is unchanged.
+- **Tests.** `test/live-change-watch.mjs`: spawn wording; parent running with a held report, then a spawn report (and the reverse order), then the parent finishes: two rows, the spawn's with `agent` true; an idle parent shows the spawn row at once; `finalizeSpawn` sets `spawn: true`.
+
 ## 2026-10-09 — LKM-215 repair: one cumulative row per turn across continuation runs
 
 - **Defect.** Each automatic continuation run opens its own watch, so its report held only that run's changes, and the reducer's "later report replaces a held one" dropped the earlier run's report. A real direct write by the agent in run 0 could vanish when run 1 reported anything.
