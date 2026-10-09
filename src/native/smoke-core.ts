@@ -18,6 +18,11 @@ import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
 import { checkDeviceFrame, restoreDeviceFrame } from './smoke-device-frame'
 import { checkDreamerReview } from './smoke-dreamer'
+import {
+  checkEditorFreshness,
+  type FreshnessSmoke,
+  restoreEditorFreshness
+} from './smoke-editor-freshness'
 import { smokeFocusHooks } from './smoke-focus'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
@@ -132,6 +137,14 @@ export async function runNativeCoreSmoke(
     cancel: () => serviceEvents.emit('event', 'preview:select-cancelled'),
     saved: () => preference('trezi:native-panel-sizes')
   }
+  const freshnessSmoke: FreshnessSmoke = {
+    fixture,
+    invoke,
+    send,
+    page,
+    props: () => serviceEvents.emit('event', 'preview:toolbar-action', 'props')
+  }
+  let freshnessURL = ''
   let layersOriginal = '',
     layersWindow = { width: 0, height: 0 },
     islandsWindow: { width: number; height: number } | undefined
@@ -760,6 +773,17 @@ export async function runNativeCoreSmoke(
         assert.ok((await invoke('edit:undo', fixture)).ok)
         assert.ok((await invoke('edit:redo', fixture)).ok)
       }
+    },
+    {
+      name: 'editor-freshness',
+      dependsOn: ['open-project'],
+      run: async () => {
+        freshnessURL = String(await page('location.href'))
+        await checkEditorFreshness(host, artifacts, freshnessSmoke)
+        // The runner's cleanup only runs after a failure: a pass leaves the page itself.
+        await restoreEditorFreshness(host, freshnessSmoke, freshnessURL)
+      },
+      cleanup: () => restoreEditorFreshness(host, freshnessSmoke, freshnessURL)
     },
     {
       name: 'chat-drafts',

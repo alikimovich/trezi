@@ -8,9 +8,22 @@ struct InspectorField: Decodable, Identifiable {
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
-struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice? }
+struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int? }
 final class InspectorModel: ObservableObject {
     @Published var state: InspectorState?
+    /// LKM-216: a re-read after a source/CSS change altered the same selection's values;
+    /// the island plays a brief "Updated" pulse instead of rebuilding its fields.
+    @Published var pulse = false
+    private(set) var pulses = 0
+    private var pulseEnd: DispatchWorkItem?
+    func show(_ next: InspectorState) {
+        let previous = state; state = next
+        guard let previous, previous.root == next.root, previous.generation == next.generation, (next.updated ?? 0) > (previous.updated ?? 0) else { return }
+        pulses += 1; pulseEnd?.cancel()
+        withAnimation(.easeOut(duration: 0.15)) { pulse = true }
+        let end = DispatchWorkItem { [weak self] in withAnimation(.easeIn(duration: 0.35)) { self?.pulse = false } }
+        pulseEnd = end; DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: end)
+    }
     func send(_ action: String, field: String? = nil, value: String? = nil) {
         guard let state else { return }
         var message: [String: Any] = ["event":"inspector-action", "root":state.root, "generation":state.generation, "action":action]
@@ -95,6 +108,16 @@ struct NativeBezier: View {
         }
     }
 }
+/// The tiny "values changed" mark (LKM-216): an accent dot and a caption, never a reload flash.
+struct UpdatedPulse: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+            Text("Updated").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+        }.padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(Color.accentColor.opacity(0.12)))
+            .padding(.trailing, 12).allowsHitTesting(false).accessibilityLabel("Values updated")
+    }
+}
 struct EditingInspectorContent: View {
     @ObservedObject var model: InspectorModel
     var body: some View {
@@ -123,7 +146,7 @@ struct EditingInspectorContent: View {
                         }
                     // Trailing room keeps units and apply buttons clear of the overlay scroller.
                     }.id("\(state.root):\(state.generation)").padding(2).padding(.trailing, 10)
-                }
+                }.overlay(alignment: .topTrailing) { if model.pulse { UpdatedPulse().transition(.opacity) } }
             }.padding(.horizontal, FloatingIsland.padding).padding(.top, 4).padding(.bottom, FloatingIsland.padding).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -158,7 +181,7 @@ final class NativeEditingInspector: FloatingIsland {
     required init?(coder: NSCoder) { fatalError() }
     func update(_ value: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: value), let state = try? JSONDecoder().decode(InspectorState.self, from: data) else { return }
-        model.state = state; isHidden = !state.visible
+        model.show(state); isHidden = !state.visible
         title.stringValue = state.title; title.toolTip = state.title
     }
     @objc func closeIsland() { model.send("close") }

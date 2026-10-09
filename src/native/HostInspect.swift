@@ -12,7 +12,7 @@ extension Host {
         case "deviceCorners":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in do { reply(id, try await captureDeviceCorners(foreground: c["foreground"] as? Bool != false)) } catch { reply(id, error: error.localizedDescription) } }
-        case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0, "title":editingInspector.model.state?.title ?? "", "tab":editingInspector.model.state?.tab ?? ""])
+        case "inspectorInspect": reply(id, ["native":true, "visible":!editingInspector.isHidden, "fields":editingInspector.model.state?.fields.count ?? 0, "error":editingInspector.model.state?.error ?? "", "generation":editingInspector.model.state?.generation ?? 0, "title":editingInspector.model.state?.title ?? "", "tab":editingInspector.model.state?.tab ?? "", "updated":editingInspector.model.state?.updated ?? 0, "pulses":editingInspector.model.pulses, "values":Dictionary((editingInspector.model.state?.fields ?? []).map { ($0.id, $0.value) }) { first, _ in first }, "tokens":Array(Set((editingInspector.model.state?.fields ?? []).flatMap { ($0.tokens ?? []).map(\.label) })).sorted()])
         case "inspectorPerform": guard ephemeral else { return true }; emit((c["action"] as? [String: Any] ?? [:]).merging(["event":"inspector-action"]) { _, new in new }); reply(id)
         case "inspectorIsland":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

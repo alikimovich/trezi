@@ -46,6 +46,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 - In the mobile viewport the page's corners now follow the iPhone frame's screen corners exactly (the same continuous curve and radius, at any size, in light and dark), with no gap or overlap at the bezel (LKM-217).
+- The editing island, Layers, chat islands and token lists no longer show stale values after a change. A landing, an editor save, an island edit, a file changed outside Trezi or a dependency update re-reads the selected element in place, and the island shows a small "Updated" pulse. A stylesheet the preview did not pick up within about half a second is reloaded on its own, with a hard reload as the fallback (LKM-216).
 - Publish and its menu are again the rightmost preview toolbar group at every window width: slow motion moved into the select/device/ruler group, and the … menu sits just before Publish (LKM-213).
 - Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).
 - Switching projects in the sidebar no longer jumps back to the previous project first: the clicked project is selected and shown ("Opening …") at once while its dev server starts, and rapid clicks end on the last one (LKM-204).
