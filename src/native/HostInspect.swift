@@ -49,7 +49,7 @@ extension Host {
             guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
             if c["prepare"] as? Bool == true { reply(id, editor.prepareForeground()) }
             else if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await editor.captureToolbar()) } catch { reply(id, error: error.localizedDescription) } } }
-            else { reply(id, editor.verifyShortcut(c["key"] as? String ?? "", focus: c["focus"] as? String ?? "code").merging(["toolbar": editor.inspectToolbar()]) { _, new in new }) }
+            else { reply(id, editor.verifyShortcut(c["key"] as? String ?? "", focus: c["focus"] as? String ?? "code", characters: c["characters"] as? String).merging(["toolbar": editor.inspectToolbar()]) { _, new in new }) }
         case "sourceSyntax":
             guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
             if let appearance = c["capture"] as? String { Task { @MainActor in do { reply(id, try await editor.captureSyntax(dark: appearance == "dark", offscreen: c["offscreen"] as? Bool == true)) } catch { reply(id, error: error.localizedDescription) } } }
@@ -66,6 +66,10 @@ extension Host {
             // Pipe test: Command-L through the main menu's key equivalents, as the keyboard sends it.
             guard ephemeral, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37) else { reply(id, error: "Test profile required"); return true }
             reply(id, ["handled":NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false])
+        case "previewHistory":
+            // LKM-219: Back/Forward state, and a synthetic key (any layout) through the real dispatch.
+            if c["keyCode"] != nil { guard ephemeral else { reply(id, error: "Test profile required"); return true }; reply(id, previewHistory.test(c)) }
+            else { reply(id, previewHistory.inspect()) }
         case "sheetInspect": reply(id, sheets.inspect())
         case "settingsVerification":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

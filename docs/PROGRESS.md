@@ -35,6 +35,46 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - The isolated preview keeps capture, camera and selection; native Swift renders Back, Code, Front, Reset, separation, layer selection, hints and capture status. A bounded session/revision contract rejects stale actions, and the visible host alone accepts scene state.
 - The host resolves semantic AppKit colors under its effective appearance and sends the palette and measured native bar insets to the shadow scene. The scene waits for that first palette before showing, without changing captured site surfaces.
 - Navigation and close clear native state. The preview keeps its original viewport, source selection path and inert capture limits.
+## 2026-10-09 — LKM-219: preview-timing "no reload" check no longer reads `timeOrigin` twice
+
+- **Why.** The manager's native run failed `preview-timing` ("viewport screenshots never reload or restart"): navigation 71 → 71 and pid unchanged, but `performance.timeOrigin` read `…807` then `…806`. WebKit derives `timeOrigin` from the wall clock (`MonotonicTime::approximateWallTime`) on every read, so the same document drifts by a millisecond; the check was flaky, and no reload happened.
+- **Change.** `src/native/smoke-preview-timing.ts` identifies the document by a token planted in the page (`window.__treziTimingDocument`), which any reload clears, next to the navigation count and dev-server pid. Both "no reload" assertions are unchanged otherwise. Rule added to `docs/agent-guide/gotchas.md`.
+- **Second flake, same run.** The verifying native `core` run passed `preview-timing` but failed `preview-overlay` on its focus-loss retry (`mobile.state.rulers && !guides.length` false). The first attempt had saved the mobile guide `m1` and gone back to desktop. Then `restorePreviewOverlay` cleared only desktop, though guides and grids are kept per viewport. Restore now clears mobile and desktop, picking the viewport by the overlay's own key. The check opens by planting a mobile guide and running restore, so its existing "mobile starts clean" assertion fails if restore regresses.
+
+## 2026-10-09 — LKM-219: CHANGELOG Unreleased headings repaired after the merge
+
+- **Why.** The merge left two `### Fixed` headings in `## [Unreleased]` and LKM-221's quit line under the second one, so a feature was listed as a fix and the release script would have carried both headings.
+- **Change.** `CHANGELOG.md`: the LKM-219 layout-shortcuts line now sits in the existing `### Fixed` list after LKM-215's; the extra heading is gone; `### Added` holds the LKM-219 Back/Forward line and LKM-221's quit line. The released `## [0.1.0]` section is untouched. No code changed; quick verification passes (208 PASS).
+
+## 2026-10-09 — LKM-219: editor-freshness step 5 baselines on a quiet page; `sheets` failure was load-sensitive
+
+- **Why.** The full native run failed `editor-freshness` step 5 ("No page reload", hard reloads 0 -> 0) and `sheets` (`expected "agent", actual "jev"`). The hub's hard-reload counter stayed 0, so the page lost `window.freshSentinel` to the fixture server's own live reload (`StaticSite.swift`: FSEvents, 80 ms debounce) of the earlier saves, which FSEvents delivers late under load (load ~23 on 12 cores). `sheets` runs `settings`' engine loop, whose failing message came from the runner's retry after a focus loss on a profile the first attempt had left on `jev`; nothing in LKM-219 touches settings.
+- **Change.** `src/native/smoke-editor-freshness.ts`: step 5 takes its sentinel baseline only after the page kept the sentinel for a quiet second, so only the dependency change can reload it. The "No page reload" assertion is unchanged. `sheets` is not modified: it did not reproduce (`core`+`settings` native run: 29 passed, 0 failed, `sheets` and `editor-freshness` PASS).
+- **Not changed.** `source-syntax`/versioning stay with LKM-222. CHANGELOG lines stay under `## [Unreleased]`.
+
+## 2026-10-09 — LKM-219: editor-freshness smoke waits for the hub before selecting the card
+
+- **Why.** Two native core runs failed at `editor-freshness` step 3: the island still showed `#fresh-box` ("prop label One" never appeared, or `#fresh-card selected` timed out). Step 2's token save leaves a re-read and a style check pending; under load one lands after `select('fresh-card')` and the previous selection returns. Step 5 already waits for the hub to be idle for the same reason. Nothing in the Back/Forward or key-layout code touches selection.
+- **Change.** `src/native/smoke-editor-freshness.ts` waits for `nativeFreshness.hub.idle` before step 3's selection. No assertion was loosened. Native core then passed 26 of 26, with `source-syntax` also passing.
+- **Changelog.** The LKM-219 lines stay under `## [Unreleased]`; the released 0.1.0 section is untouched.
+
+## 2026-10-09 — LKM-219: preview Back/Forward and layout-independent shortcuts
+
+- **History.** `PreviewHistory` (`src/native/PreviewHistory.swift`) adds View → Back (⌘[) and Forward (⌘]), validated against the preview's `backForwardList`, and sets `allowsBackForwardNavigationGestures` on the preview. One WebKit view serves every project, so a step stops at an entry on another origin. An agent's `open_preview` into the visible preview now loads with `agent: true` (`inspector-runtime` → `preview:load` → bridge `load`). The host marks that navigation's item when it commits, and menu, keys and swipe skip it (a swipe onto one is cancelled in `decidePolicyFor` and redone as our step). The address bar follows through the existing URL KVO.
+- **⌘← / ⌘→.** A host monitor steps when focus is not a text field, the composer, the code editor or the page. With the page focused, `src/preview/history-keys.ts` sends `trezi:preview:history` (taken by the host directly) only if the page's listeners left the key unhandled and the target is not a page field; while select, comment or edit mode owns the keys it steps at once, and the 3D view keeps its arrows.
+- **Editor.** `NativeSourceEditor.performKeyEquivalent` takes ⌘[ / ⌘] as its own file Back/Forward while focused, before the menu sees them.
+- **Layouts.** Under Russian, a ⌘ key event reads "х" on the "[" key, and no key equivalent matches it. `KeyShortcut.install()` re-reads every ⌘/⌃ key-down through the ASCII-capable layout (`UCKeyTranslate`, U.S. ANSI fallback) before dispatch. A non-Latin layout is always read by position: Russian types "." on the U.S. "/" key. Latin layouts are untouched, so Dvorak keeps its own equivalents. In-page S, 1-9 and H use `latinKey` (`event.code` fallback). Rule in `docs/agent-guide/gotchas.md`.
+- **Checks.**
+  - Unit `key-shortcuts` covers `latinKey` and a Swift fixture with synthetic events: ⌘ + key 33 "х" → [, Ukrainian/Hebrew/Greek letters, ⌃ and ⇧ combinations, Dvorak, Russian ASCII punctuation, arrows, and typing never remapped.
+  - Native smoke `preview-history` (core) uses two pushState routes:
+    - ⌘х / ⌘ъ through the window and the main menu;
+    - ⌘← / ⌘→ with no focus and in the composer;
+    - the View menu's enabled state and key;
+    - the address bar after each step;
+    - the gestures flag;
+    - an agent page skipped both ways.
+  - `source-editor` adds ⌘х / ⌘ъ in the editor and ⌘[ → View → Back outside it.
+- **Not automated.** A real swipe gesture and a real layout switch: the evidence budget rules out synthetic CGEvents and system input-source changes.
 ## 2026-10-09 — LKM-218 repair: review-quick failures after the LKM-215 merge
 
 - `native-long-chat-perf` and `platform-owner` failed in the manager's review-quick at load average 17–28. This change touches neither (icons, States switcher symbol, smoke capture, changelog). On the merged tree (01493f19 included) `native-long-chat-perf` passes alone (worst 4.3 ms against the 100 ms budget, so the hand-built context still matches LKM-215's shape), and the full unit tier passes (206 PASS, including `platform-owner`, `versioning` and lint). Native `core` passes 25/25. No budget or deadline was changed; the LKM-218 line stays under `## [Unreleased]` → Changed.

@@ -223,6 +223,8 @@ const host = compile(
     join(root, 'src/native/ChatTextVerification.swift'),
     join(root, 'src/native/ChatQuestion.swift'),
     join(root, 'src/native/SnappedSlider.swift'),
+    join(root, 'src/native/KeyShortcuts.swift'),
+    join(root, 'src/native/PreviewHistory.swift'),
     '-o',
     join(contents, 'MacOS/TreziHost'),
     '-framework',
@@ -234,7 +236,9 @@ const host = compile(
     '-framework',
     'CryptoKit',
     '-framework',
-    'AVKit'
+    'AVKit',
+    '-framework',
+    'Carbon'
   ]
 )
 // The Keychain helper is its own small executable (src/native/Secrets.swift) so that it

@@ -150,14 +150,17 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label); button.toolTip = label; button.setAccessibilityLabel(label); symbols[name] = symbol
     }
     /// ⌘S saves and ⌘R reloads only while focus is inside this editor, so ⌘R
-    /// elsewhere still reaches the menu's Reload Preview. The window offers key
-    /// equivalents to its views before the main menu.
+    /// elsewhere still reaches the menu's Reload Preview. ⌘[ / ⌘] step the editor's
+    /// own file history here, never the preview's (LKM-219). The window offers key
+    /// equivalents to its views before the main menu. Keys match on any layout.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command, !isHiddenOrHasHiddenAncestor,
               let focus = window?.firstResponder as? NSView, focus.isDescendant(of: self) else { return super.performKeyEquivalent(with: event) }
-        switch event.charactersIgnoringModifiers {
+        switch KeyShortcut.latin(event) {
         case "s": send("save"); return true
         case "r": perform("reload"); return true
+        case "[": if state["canBack"] as? Bool == true { send("back") }; return true
+        case "]": if state["canForward"] as? Bool == true { send("forward") }; return true
         default: return super.performKeyEquivalent(with: event)
         }
     }
@@ -232,7 +235,8 @@ extension NativeSourceEditor {
     /// the main menu) with focus in the code, the path or outside the editor. A
     /// discard prompt is answered Cancel. Path focus also selects and copies the
     /// path to a private pasteboard, never the user's clipboard.
-    func verifyShortcut(_ key: String, focus: String) -> [String: Any] {
+    /// `characters` types the key under another layout (⌘[ as Russian "х", LKM-219).
+    func verifyShortcut(_ key: String, focus: String, characters: String? = nil) -> [String: Any] {
         guard let window else { return ["error": "Source editor has no window"] }
         // A label refuses keyboard focus; a click selects it through `selectText`, as here.
         if focus == "path" { filename.selectText(nil) } else { window.makeFirstResponder(focus == "code" ? code : nil) }
@@ -244,7 +248,8 @@ extension NativeSourceEditor {
         }
         let focused = (window.firstResponder as? NSView)?.isDescendant(of: self) ?? false
         if focus == "path" { window.makeFirstResponder(code) }
-        guard !key.isEmpty, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: key == "s" ? 1 : key == "r" ? 15 : 0) else { return ["focused": focused, "copied": copied ?? NSNull()] }
+        let typed = characters ?? key, code: UInt16 = ["s": 1, "r": 15, "[": 33, "]": 30][key] ?? 0
+        guard !key.isEmpty, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: typed, charactersIgnoringModifiers: typed, isARepeat: false, keyCode: code) else { return ["focused": focused, "copied": copied ?? NSNull()] }
         let handled = window.performKeyEquivalent(with: event), sheet = window.attachedSheet
         if let sheet { window.endSheet(sheet, returnCode: .alertSecondButtonReturn) }
         let entries: [NSMenuItem] = (NSApp.mainMenu?.items ?? []).flatMap { $0.submenu?.items ?? [] }

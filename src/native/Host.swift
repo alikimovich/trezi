@@ -45,6 +45,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var nativeLayout: WorkspaceLayout!
     var previewSurface: PreviewSurface!
     var previewOverlay: PreviewOverlay!
+    lazy var previewHistory = PreviewHistory(host: self)
     let canvas = Canvas()
     let chatColumn = Canvas()
     var views: [String: WKWebView] = [:]
@@ -92,6 +93,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         if id == "preview" {
             canvas.addSubview(inspectorSlot, positioned: .above, relativeTo: view); PreviewInspector.confine(view, to: inspectorSlot)
             inspectorSlot.changed = { [weak self] in self?.nativeLayout?.layout() }
+            // LKM-219: WebKit starts a swipe only once the page cannot scroll further that way.
+            view.allowsBackForwardNavigationGestures = true
         } else {
             view.frame = NSRect(x: -10000, y: -10000, width: 1280, height: 800)
             view.wantsLayer = true
@@ -140,6 +143,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             if event.type == .keyDown, event.keyCode == 53, self?.closeThreeDOnEscape() == true { return nil }
             return event
         }
+        // LKM-219: shortcuts on any keyboard layout; ⌘← / ⌘→ step the preview's history.
+        KeyShortcut.install(); previewHistory.install()
         installMenus()
         NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = true }
         NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = false }
@@ -296,7 +301,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             targets[name] = url
             let hard = c["hard"] as? Bool == true
             ProductLog.info("preview", "Preview load \(Host.logURL(url))\(hard ? " without cache" : "")")
-            if hard { PreviewCache.reload(view, url: url) } else { view.load(URLRequest(url: url)) }
+            if hard { PreviewCache.reload(view, url: url) } else {
+                let navigation = view.load(URLRequest(url: url))
+                // An agent's open_preview never becomes a Back/Forward step (LKM-219).
+                if name == "preview" && c["agent"] as? Bool == true { previewHistory.agentNavigation = navigation }
+            }
         case "reload":
             let hard = c["hard"] as? Bool == true
             ProductLog.info("preview", "Preview reload \(Host.logURL(view?.url))\(hard ? " without cache" : "")")
@@ -411,6 +420,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
             return
         }
+        // ⌘← / ⌘→ the page left unhandled outside its fields (`src/preview/history-keys.ts`).
+        if name == "preview", body["channel"] as? String == "trezi:preview:history" {
+            if let step = (body["args"] as? [Any])?.first as? String, ["back", "forward"].contains(step) { previewHistory.go(step == "back") }
+            return
+        }
         // Source identity is supplied by the host, never by page-controlled JSON.
         emit(["event":"ipc", "view":name, "message":body])
     }
@@ -456,6 +470,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         // The app shell stays on its own URL. The preview's main frame stays on
         // its exact assigned origin; subframes never receive a privileged bridge.
         if action.targetFrame?.isMainFrame == false { decisionHandler(.allow); return }
+        if name == "preview" && previewHistory.redirect(action) { decisionHandler(.cancel); return }
         let sameOrigin = url.scheme == target.scheme && url.host == target.host && url.port == target.port
         let allowed = name == "preview" || name.hasPrefix("agent:") ? (sameOrigin || url.absoluteString == "about:blank") : (sameOrigin && url.path == target.path)
         if allowed && action.shouldPerformDownload { decisionHandler(.download) }
