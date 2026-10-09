@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-09
+
 ### Added
 - Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
 - Answer components in chat: agents can show design options (2–4 variants with preview images that appear as skeletons while they are captured; pick one and Apply, or None of these with what to change) and question forms (choice, text, number, slider, color with token swatches, toggle; one Submit) right in their message, in light and dark. Your pick or values go back as one structured message, stay with the chat, and are summarized for the agent on the next turn. Forms are now how agents ask structured questions with Claude and Codex (LKM-208).
