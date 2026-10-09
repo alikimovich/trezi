@@ -136,6 +136,48 @@ extension Host {
         // The states workbench island (LKM-207) and the toolbar's States menu (LKM-220).
         case "statesInspect": reply(id, statesSwitcher.inspect().merging(shell.workbenchesInspect()) { _, new in new })
         case "statesPerform": reply(id, statesSwitcher.perform(c["action"] as? String ?? "", c["state"] as? String ?? ""))
+        case "threeDInspect":
+            let insets = threeD.insets
+            func rect(_ r: NSRect) -> [String: Double] { ["x":Double(r.minX), "y":Double(r.minY), "width":Double(r.width), "height":Double(r.height)] }
+            reply(id, ["active":threeD.active, "session":threeD.model.session, "revision":threeD.model.revision,
+                       "title":threeD.model.title, "layers":threeD.model.layers.map(\.label),
+                       "selected":threeD.model.selected, "separation":threeD.model.separation,
+                       "compact":threeD.model.compact,
+                       "code":threeD.model.hasSource, "status":threeD.model.status,
+                       "header":NSStringFromRect(threeD.header.frame), "footer":NSStringFromRect(threeD.footer.frame),
+                       "headerRect":rect(threeD.header.frame), "footerRect":rect(threeD.footer.frame),
+                       "headerHidden":threeD.header.isHidden, "footerHidden":threeD.footer.isHidden,
+                       "inspector":NSStringFromRect(editingInspector.frame), "inspectorHidden":editingInspector.isHidden,
+                       "layersFrame":NSStringFromRect(layers.frame), "layersHidden":layers.isHidden,
+                       "inspectorRect":rect(editingInspector.frame), "layersRect":rect(layers.frame),
+                       "insets":["top":insets.top, "bottom":insets.bottom, "left":insets.left, "right":insets.right],
+                       "focus":window.firstResponder === views["preview"] ? "preview" : threeD.ownsFocus(window.firstResponder) ? "chrome" : "other",
+                       "dockedSourceRect":dockedSource.map { rect($0.frame) } ?? [:],
+                       "headerType":String(describing: type(of: threeD.header)),
+                       "footerType":String(describing: type(of: threeD.footer)),
+                       "palette":threeD.palette(threeD.header.effectiveAppearance)])
+        case "threeDPerform":
+            guard ephemeral, threeD.active, let action = c["action"] as? String,
+                  ["close", "code", "front", "reset", "separation", "layer"].contains(action) else { reply(id, false); return true }
+            threeD.model.action(action, value: c["value"] as? Int); reply(id, true)
+        case "threeDFocus":
+            guard ephemeral, threeD.active else { reply(id, false); return true }
+            let target: NSResponder = c["target"] as? String == "chat" ? composer.text : threeD.header
+            reply(id, window.makeFirstResponder(target))
+        case "threeDEscape":
+            guard ephemeral else { reply(id, false); return true }
+            reply(id, closeThreeDOnEscape())
+        case "threeDCapture":
+            guard ephemeral, threeD.active, let content = window.contentView?.superview else { reply(id, error: "No exploded scene"); return true }
+            Task { @MainActor in
+                let prior = window.appearance
+                window.appearance = NSAppearance(named: c["dark"] as? Bool == true ? .darkAqua : .aqua)
+                defer { window.appearance = prior }
+                content.layoutSubtreeIfNeeded(); content.displayIfNeeded()
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                do { reply(id, try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "welcomeInspect": reply(id, welcome.inspect())
         case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])
         case "dividerPerform":

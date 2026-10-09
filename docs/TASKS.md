@@ -1350,6 +1350,8 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
 
 ## Code access in exploded view (2026-09-18)
 
+- [x] LKM-214: Move exploded-view controls and status to native Swift; follow effective light/dark appearance with a bounded scene contract.
+
 - [x] Keep the selected layer's Code action available inside the 3D workspace.
 
 ## Composer queue action (2026-09-18)

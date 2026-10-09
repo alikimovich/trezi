@@ -1347,6 +1347,24 @@ export interface RecentMenuEntry {
   name: string
 }
 
+/** Visible preview's exploded scene. The document and session are opaque identities. */
+export interface ThreeDState {
+  session: string
+  revision: number
+  title: string
+  layers: { id: number; label: string; depth: number }[]
+  selected: number | null
+  hasSource: boolean
+  separation: number
+  limited: boolean
+  simplified: boolean
+  invalid: boolean
+}
+
+export type ThreeDAction =
+  | { session: string; revision: number; action: 'close' | 'code' | 'front' | 'reset' }
+  | { session: string; revision: number; action: 'separation' | 'layer'; value: number }
+
 /**
  * Self-update status pushed from main (`update:status`). Trezi is distributed
  * as a git checkout; the updater compares HEAD to the tracked remote.

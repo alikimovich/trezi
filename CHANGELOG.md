@@ -21,6 +21,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Added
 - Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
 - Quitting while agents work (⌘Q, Quit, closing the window, logout or restart) now asks first: a sheet lists what is still running per project, with Cancel, Wait and Quit (quits when the work ends; cancelable) and Quit Anyway (stops the agents and keeps their work in each chat’s copy, as Stop does). A landing or publish in progress always finishes first, for up to 15 seconds. “Don’t ask again” is also in Settings → General (LKM-221).
+- Native controls and light/dark appearance for the exploded component view.
 
 ## [0.1.0] - 2026-10-09
 

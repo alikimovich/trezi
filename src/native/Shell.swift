@@ -375,6 +375,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     func update(_ state: [String: Any]) {
         applying = true; defer { applying = false }
+        // Reloading rebuilds the row objects, which drops the outline's selection.
+        let highlighted = (outline.item(atRow: outline.selectedRow) as? ShellRow)?.id
         let rowData = state["rows"] as? [[String: Any]] ?? []
         let signature = (try? JSONSerialization.data(withJSONObject: rowData, options: [.sortedKeys])) ?? Data()
         let rowsChanged = signature != rowsSignature
@@ -413,6 +415,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                 let index = outline.row(forItem: selected)
                 if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
             } else if outline.selectedRow >= 0 { outline.deselectAll(nil) }
+        } else if let highlighted, let picked = allRows.first(where: { $0.id == highlighted }) {
+            let index = outline.row(forItem: picked)
+            if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
         }
         noteSelection()
         window?.subtitle = ""
