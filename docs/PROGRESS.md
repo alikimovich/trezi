@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-215 repair: watch spawns and continuation runs
+
+- **Review defects.** The old adapter compared the live tree on every Full access Codex run in a worktree. The Bun watch only covered the interactive send, so a background spawn and an automatic continuation run could write the live checkout unreported.
+- **Fix (`src/main/agent.ts`).** The reconciliation `dispatch` opens a new watch for each continuation run (the turn's first watch closes at its first terminal event, so each run reports on its own and the landing between runs is not in the second). `startSpawn` opens a watch keyed `spawn:<id>` before the spawn's send; its status lines attribute commands; `finalizeSpawn` reads it before the spawn's own landing and emits the `live-change` row to the parent chat (`projectKey` = the parent's emit key). A failed start forgets the watch.
+- **Tests.** Unit `live-change-watch`: sequential runs under one key, a spawn watched concurrently with its chat (own attribution, Trezi's landing subtracted), and the three `agent.ts` wiring points.
+
 ## 2026-10-08 — LKM-215: no live-change warnings for Trezi's own effects
 
 - **Why.** LKM-163's Codex adapter compared the live tree before and after the whole turn inside the provider helper. Mid-turn landings (LKM-203 `land_now`, publish/merge), `git_sync_base` (LKM-188), conflict markers (LKM-194), dependency restarts (LKM-197) and dev-server output all changed the live tree during that window, so almost every Full access turn ended with a ⚠️ note that blamed the agent and printed absolute paths.

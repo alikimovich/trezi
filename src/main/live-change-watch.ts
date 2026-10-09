@@ -82,6 +82,7 @@ async function inLane<T>(root: string, read: () => Promise<T>): Promise<T> {
 
 /** Full-access Codex in a chat worktree is the one session that can write live directly. */
 export function watchesLiveTree(session: LiveWatchSession): boolean {
+  if (!session.options) return false
   const codex = !!session.options.connectionId || session.options.provider === 'codex'
   return (
     codex &&

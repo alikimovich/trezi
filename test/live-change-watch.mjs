@@ -4,7 +4,7 @@
 // outside change is one compact row: one line, Details, no absolute paths.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -197,6 +197,55 @@ try {
   assert.match(agentRow.line, /agent\.txt.*1 commit/)
   assert.match(agentRow.detail, /Revert cannot undo them/)
   assert.ok(!agentRow.detail.includes(scratch))
+
+  // (6b) Continuation runs: each run of a turn opens its own watch (the first closes at
+  // the first terminal event). The landing between the runs is not in the second one,
+  // and a real outside edit during it is reported.
+  await beginLiveWatch('chat', session())
+  write(live, 'run1.md', 'run 1\n')
+  assert.deepEqual((await finishLiveWatch('chat'))?.files, ['run1.md'], 'run 1 reports its edit')
+  assert.equal(await finishLiveWatch('chat'), null, 'a closed watch reports nothing twice')
+  await beginLiveWatch('chat', session())
+  await landNow()
+  assert.equal(await finishLiveWatch('chat'), null, 'run 2: the landing before it is not news')
+  await beginLiveWatch('chat', session())
+  write(live, 'run2.md', 'run 2\n')
+  assert.deepEqual((await finishLiveWatch('chat'))?.files, ['run2.md'], 'run 2 reports its edit')
+
+  // (6c) A spawned agent runs in its own worktree under a key of its own: watched at the
+  // same time as the chat, attributed on its own, and Trezi's landing of the chat's turn
+  // is subtracted from it (the spawn's watch is open while that lane effect runs).
+  const spawnSession = { ...session(), root: join(scratch, 'spawn-wt') }
+  mkdirSync(spawnSession.root)
+  await beginLiveWatch('chat', session())
+  await beginLiveWatch('spawn:1', spawnSession)
+  noteAgentStep('spawn:1', `$ echo x > ${live}/spawned.md`)
+  write(live, 'spawned.md', 'x\n')
+  await landNow()
+  const spawned = await finishLiveWatch('spawn:1')
+  assert.deepEqual(spawned?.files, ['spawned.md'], "the spawn's direct live write is reported")
+  assert.equal(spawned?.agent, true, "and blamed on the spawn's own command")
+  const chatTurn = await finishLiveWatch('chat')
+  assert.equal(chatTurn?.agent, false, "the spawn's command is not the chat's")
+  assert.deepEqual(chatTurn?.files, ['spawned.md'], 'the chat sees the same tree change')
+  await beginLiveWatch('spawn:2', spawnSession)
+  await landNow()
+  assert.equal(await finishLiveWatch('spawn:2'), null, "a spawn's turn ignores Trezi's landing")
+  git(live, 'add', '-A')
+  git(live, 'commit', '-qm', 'settle')
+
+  // agent.ts opens a watch for every Full access send path: the interactive send, an
+  // automatic continuation run and a spawn, and a spawn reports at its end.
+  const agentSource = readFileSync(new URL('../src/main/agent.ts', import.meta.url), 'utf8')
+  const dispatch = agentSource.slice(agentSource.indexOf('dispatch: (session'))
+  assert.match(dispatch.slice(0, dispatch.indexOf('})')), /beginLiveWatch\(key, session\)/)
+  const start = agentSource.slice(agentSource.indexOf('async function startSpawn'))
+  assert.match(start.slice(0, start.indexOf('s.send(q.text)')), /beginLiveWatch\(spawnWatchKey/)
+  const finalize = agentSource.slice(agentSource.indexOf('async function finalizeSpawn'))
+  assert.match(
+    finalize.slice(0, finalize.indexOf('enqueueRepoWrite(parentRoot')),
+    /finishLiveWatch\(spawnWatchKey\(id\)\)[\s\S]*type: 'live-change'/
+  )
 
   // (7) The chat shows at most one row per turn, under the reply, after the landing.
   const chat = newChat('k')
