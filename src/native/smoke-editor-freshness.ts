@@ -144,7 +144,15 @@ export async function checkEditorFreshness(
   )
   evidence.tokens = tokens
 
-  // 3. A component edit: the props re-read.
+  // 3. A component edit: the props re-read. The earlier saves' own re-reads and style
+  // checks finish first: one that lands after the new selection (a reload under load)
+  // would put the previous element back.
+  await waitFor(
+    () => nativeFreshness.hub?.idle ?? true,
+    'freshness hub idle before the component selection',
+    5000,
+    () => ({ stats: JSON.stringify(nativeFreshness.hub?.stats) })
+  )
   await select('fresh-card')
   await tab('props')
   await waitFor(
@@ -195,7 +203,21 @@ export async function checkEditorFreshness(
       (await page(`document.readyState === 'complete'`)),
     'dependency CSS loaded'
   )
-  await page('(() => { window.freshSentinel = true; return true })()')
+  // The fixture server's live reload follows the earlier saves of this check (FSEvents can
+  // lag by seconds under load), so the baseline is a page that kept its sentinel for a
+  // quiet second: only the dependency change below may then reload it.
+  let quietSince = 0
+  await waitFor(
+    async () => {
+      if (quietSince && (await page('window.freshSentinel === true')))
+        return Date.now() - quietSince >= 1000
+      await page('(() => { window.freshSentinel = true; return true })()')
+      quietSince = Date.now()
+      return false
+    },
+    'page stable before the dependency change',
+    15000
+  )
   const reloads = nativeFreshness.hub?.stats.styleReloads ?? 0
   const hardBefore = nativeFreshness.hub?.stats.hardReloads ?? 0
   writeFileSync(

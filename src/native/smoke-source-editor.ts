@@ -150,7 +150,21 @@ export async function checkSourceEditor(
   assert.deepEqual(key.menu, ['Reload Preview'])
   key = await verify({ key: 'r', focus: 'code' })
   assert.ok(key.handled && !key.guarded, `⌘R reloads in the docked editor: ${JSON.stringify(key)}`)
+
+  // LKM-219: ⌘[ / ⌘] are the editor's own Back/Forward while it has focus, typed on a
+  // Russian layout ("х" / "ъ" on the same keys); outside it they are View → Back/Forward.
+  const shown = (await host.request('sourceInspect')).source
+  key = await verify({ key: '[', focus: 'code', characters: 'х' })
+  assert.ok(key.handled && key.focused, `Russian ⌘х is the editor's ⌘[: ${JSON.stringify(key)}`)
+  await delay(300)
+  const stepped = (await host.request('sourceInspect')).source !== shown
+  key = await verify({ key: ']', focus: 'code', characters: 'ъ' })
+  assert.ok(key.handled, `Russian ⌘ъ is the editor's ⌘]: ${JSON.stringify(key)}`)
+  if (stepped) await inspect('sourceInspect', (s) => s.source === shown)
+  key = await verify({ key: '[', focus: 'outside' })
+  assert.ok(!key.handled && !key.focused, `⌘[ outside the editor: ${JSON.stringify(key)}`)
+  assert.deepEqual(key.menu, ['Back'])
   console.log(
-    'Native source editor: icon toolbar docked/popped, selectable path, ⌘S save, ⌘R reload, conflict and discard prompt pass.'
+    'Native source editor: icon toolbar docked/popped, selectable path, ⌘S save, ⌘R reload, conflict and discard prompt, ⌘[ / ⌘] on a Russian layout pass.'
   )
 }

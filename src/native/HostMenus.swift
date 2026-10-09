@@ -34,6 +34,9 @@ extension Host {
         let find = NSMenuItem(title: "Find…", action: #selector(NSTextView.performFindPanelAction(_:)), keyEquivalent: "f"); find.tag = NSTextFinder.Action.showFindInterface.rawValue; edit.addItem(find)
         // LKM-192: the code editor's soft wrap; the focused editor, else Host, answers it.
         let view = submenu("View")
+        // LKM-219: the preview's Back (⌘[) and Forward (⌘]), enabled only when a step exists.
+        for item in previewHistory.menuItems() { view.addItem(item) }
+        view.addItem(.separator())
         view.addItem(withTitle: "Wrap Lines", action: #selector(NativeSourceEditor.toggleWrapLines(_:)), keyEquivalent: "")
         // LKM-205: rulers (⇧⌘R) and the layout grid (⌃G) over the preview.
         view.addItem(.separator())

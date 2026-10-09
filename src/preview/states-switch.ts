@@ -5,6 +5,7 @@ import {
   PREVIEW_STATES_SWITCH
 } from '../shared/preview-channels'
 import { ALL_STATES, STATE_PARAM } from '../shared/states-workbench'
+import { latinKey } from './latin-key'
 
 /** LKM-207: the page event a states workbench listens for (`detail` is the state id). */
 export const STATE_EVENT = 'trezi:state'
@@ -57,13 +58,15 @@ export function installStatesSwitch(busy: () => boolean): void {
     (e) => {
       if (!ids.length || busy() || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return
       let next: string | undefined
+      // 1-9 and H by key position on any layout (LKM-219).
+      const key = latinKey(e)
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         const at = ids.indexOf(current())
         const step = e.key === 'ArrowRight' ? 1 : -1
         next =
           at < 0 ? ids[step > 0 ? 0 : ids.length - 1] : ids[(at + step + ids.length) % ids.length]
-      } else if (/^[1-9]$/.test(e.key)) next = ids[Number(e.key) - 1]
-      else if ((e.key === 'h' || e.key === 'H') && e.isTrusted) {
+      } else if (/^[1-9]$/.test(key)) next = ids[Number(key) - 1]
+      else if (key === 'h' && e.isTrusted) {
         e.preventDefault()
         e.stopImmediatePropagation()
         ipcRenderer.send(PREVIEW_STATES_KEY, 'hide')

@@ -49,6 +49,8 @@ export const PREVIEW_OVERLAY_LINES = 'trezi:preview:overlay-lines' // → preloa
 export const PREVIEW_OVERLAY_GEOMETRY = 'trezi:preview:overlay-geometry' // → host (geometry)
 // Slow motion (LKM-206): forwarded to the page-world clock (`src/preview/speed-control.ts`).
 export const PREVIEW_SET_SPEED = 'trezi:preview:set-speed' // → preload ({speed} | {step})
+// Preview Back/Forward (LKM-219): ⌘← / ⌘→ the page left alone, taken by the host directly.
+export const PREVIEW_HISTORY = 'trezi:preview:history' // → host ('back' | 'forward')
 
 // ── Styles tab ─────────────────────────────────────────────────────────────
 export const STYLES_PREVIEW = 'styles:preview' // → preload ({prop, value})
