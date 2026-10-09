@@ -19,7 +19,7 @@ import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 37
+export const TREZI_RULES_VERSION = 38
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -132,9 +132,8 @@ export function treziRules(opts?: {
           `exactly ("Open the preview and check the Home tab") in your final message.`
         ]
       : [
-          `Trezi checks the preview by itself after a turn lands (a screenshot and console errors)`,
-          `and posts the result in this chat, so a visual check that waits for landing is not`,
-          `pending and needs nothing from the user.`
+          `A visual check of edits the preview does not serve yet is not pending either: call`,
+          `land_now so the preview serves them, then check it yourself before finishing.`
         ]),
     `Never ask the user to report back so you can continue.`,
     ``,
@@ -376,11 +375,11 @@ const previewVerification = (background: boolean) => [
   `start another dev server), and close only your own session.`
 ]
 
-/** Who owns a visual check that waits for landing: Trezi after a chat turn, the user after a background agent. */
+/** Who owns a visual check that waits for landing: the agent after land_now in a chat turn, the user after a background agent. */
 const landingOwner = (background: boolean) =>
   background
     ? `Do not call it pending either: Trezi does not check after a background agent lands, so name the user action ("Open the preview and check <what>").`
-    : `Do not call it pending either: Trezi checks the preview after landing and posts the result in this chat.`
+    : `Do not call it pending either: call land_now so the preview serves your edits, then check them before finishing.`
 
 const agentBrowserVerification = (background: boolean) => [
   ``,

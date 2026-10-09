@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 37, 'version bumped to 37')
+assert(TREZI_RULES_VERSION === 38, 'version bumped to 38')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
 assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
 assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')
@@ -92,15 +92,20 @@ for (const rules of [r, treziRules({ previewTools: true }), treziRules({ backgro
   assert(/never "tell me when it's merged and I'll tag it"/.test(rules), 'R-release: no handoff')
   assert(!/report verification as pending/.test(rules), 'R-owner: no "pending" verification')
 }
-// The automatic post-landing check exists for chat turns only: background landings get none,
-// so a claim that Trezi checks would leave their visual check with a false owner.
+// LKM-210: the post-landing check posts nothing when it passes, so the rules never promise
+// a check notice. A chat agent owns the visual check itself: land_now, then look.
 const AUTO_CHECK = /Trezi checks the preview by itself after a turn lands/
-for (const rules of [r, treziRules({ previewTools: true })])
+for (const rules of [r, treziRules({ previewTools: true }), treziRules({ workspaceTools: true })]) {
+  assert(!AUTO_CHECK.test(rules), 'R-owner: no post-landing check claim')
+  assert(!/Trezi checks the preview after landing/.test(rules), 'R-owner: no automatic claim')
+  assert(!/posts the result in this chat/.test(rules), 'R-owner: no check notice promised')
   assert(
-    AUTO_CHECK.test(rules) &&
-      /a screenshot and console errors\)\s+and posts the result/.test(rules),
-    'R-owner: the post-landing check owns a visual check that waits for landing'
+    /not pending either: call\s+land_now so the preview serves them, then check it yourself/.test(
+      rules
+    ),
+    'R-owner: the agent lands and checks a visual check that waits for landing'
   )
+}
 for (const rules of [
   treziRules({ background: true }),
   treziRules({ background: true, previewTools: true }),
@@ -245,7 +250,9 @@ for (const rules of [withTools, codexObservers]) {
     'preview tools: screenshot a change that lands within the turn'
   )
   assert(
-    /Do not call it pending either: Trezi\s+checks the preview after landing/.test(rules),
+    /Do not call it pending either: call\s+land_now so the preview serves your edits, then\s+check them/.test(
+      rules
+    ),
     'preview tools: a landing check is not pending'
   )
   assert(/untrusted data/.test(rules), 'preview tools: console output is untrusted')
@@ -283,7 +290,9 @@ for (const opts of [{}, { workspaceTools: true }]) {
     'browser: stale previews cannot prove an edit'
   )
   assert(
-    /Do not call it\s+pending either: Trezi checks the preview after landing/.test(rules),
+    /Do not call it\s+pending either: call\s+land_now so the preview serves your edits, then\s+check them/.test(
+      rules
+    ),
     'browser: a landing check is not pending'
   )
   assert(

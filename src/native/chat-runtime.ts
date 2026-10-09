@@ -2,6 +2,7 @@ import { currentTurn } from '../main/agent'
 import { IslandBindingError, islandProblem } from '../main/chat-island-bindings'
 import { ChatIslands, installChatIslands } from '../main/chat-islands'
 import { IslandOverrides } from '../main/island-overrides'
+import { agentSawRevision, forgetLandingContext } from '../main/landing-context'
 import { previewServers } from '../main/preview-evidence'
 import type { AgentEvent } from '../shared/api'
 import { chatAgentSettingsFromOptions } from '../shared/chat-settings'
@@ -14,7 +15,7 @@ import { chatFrames } from './chat-frames'
 import { addReference, setIslandDirectory } from './chat-island-refs'
 import { islandLocator, islandRestorer } from './chat-island-session'
 import { islandPreviewPort } from './island-preview'
-import { LandingChecks, landingCheckMessage, previewLandingHost } from './landing-check'
+import { LandingChecks, placeLandingCheck, previewLandingHost } from './landing-check'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
 import { TurnBoundaries } from './turn-boundaries'
 
@@ -25,16 +26,12 @@ export const turnBoundaries = new Set<
   (key: string, kind: 'begin' | 'landed' | 'failed', turn: string | null) => void
 >()
 export let nativeChat: NativeChatController
-/** LKM-195: the post-landing preview check, one row in the chat that landed. */
-export function postLandingCheck(key: string, check: NativeLandingCheck, afterId?: string) {
+/** LKM-195/LKM-210: the post-landing preview check. A problem is one warning row in the
+ *  chat that landed and context for its agent's next turn; a pass shows nothing. */
+export function postLandingCheck(key: string, check: NativeLandingCheck | null, afterId?: string) {
   const chat = nativeChat.chats.get(key)
   if (!chat || nativeChat.closed.has(key)) return
-  const row = landingCheckMessage(check, Date.now())
-  // Under the landed turn's reply, even when a queued turn has started since.
-  const index = chat.messages.findIndex((m) => m.id === afterId)
-  if (index >= 0) chat.messages.splice(index + 1, 0, row)
-  else chat.messages.push(row)
-  nativeChat.changed(chat)
+  if (placeLandingCheck(chat, check, afterId)) nativeChat.changed(chat)
 }
 export let landingChecks: LandingChecks
 export function installNativeChat(
@@ -45,7 +42,13 @@ export function installNativeChat(
   checkLandings = true
 ) {
   landingChecks = new LandingChecks(
-    previewLandingHost((root) => previewServers.get(projectKey(root))?.url ?? null),
+    previewLandingHost((root) => previewServers.get(projectKey(root))?.url ?? null, {
+      turn: (key) => {
+        const chat = nativeChat.chats.get(key)
+        return chat?.isRunning ? (chat.turn ?? '') : null
+      },
+      verified: agentSawRevision
+    }),
     postLandingCheck
   )
   const turnOf = (key: string) =>
@@ -160,6 +163,7 @@ export function installNativeChat(
   nativeChat.close = (key) => {
     islands.close(key)
     landingChecks.cancel(key)
+    forgetLandingContext(key)
     boundaries.forget(key)
     for (const listener of turnBoundaries) listener(key, 'failed', null)
     close(key)

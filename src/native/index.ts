@@ -618,7 +618,12 @@ async function main() {
     void contextController.effect(effect).catch((error) => workspaceController.reportError(error))
     if (effect.type === 'layers') void layersController.toggle()
     else if (effect.type === 'source') openSource(effect.source)
-    else projectEffect(effect)
+    else if (effect.type === 'preview') {
+      // The preview sits under the docked editor; a popped-out editor leaves it in view.
+      const root = workspaceController.active?.root
+      const editor = root ? editorController.session(root).state : null
+      if (root && editor?.visible && !editor.popped) editorAction({ root, action: 'hide' })
+    } else projectEffect(effect)
   }
   serviceEvents.on('event', (channel, value) => {
     if (channel === 'preview:element-picked') contextController.selection(value)
