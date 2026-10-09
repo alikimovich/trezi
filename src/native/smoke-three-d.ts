@@ -12,7 +12,7 @@ const intersects = (a: Rect, b: Rect) =>
   Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y)
 
 /** The real isolated preview opens the scene; actions go through native Swift. */
-export async function checkThreeD(host: NativeBridge, artifacts: string) {
+export async function checkThreeD(host: NativeBridge, artifacts: string, fixture: string) {
   const page = (code: string, isolated = false) =>
     host.request('evaluate', { view: 'preview', code, isolated })
   const inspect = () => host.request('threeDInspect')
@@ -58,6 +58,14 @@ export async function checkThreeD(host: NativeBridge, artifacts: string) {
         true
       ),
     '3D stage focused after the first appearance'
+  )
+  assert.equal(
+    await page(
+      `getComputedStyle(document.querySelector('[data-trezi-three-d]').shadowRoot.querySelector('dialog')).backgroundColor`,
+      true
+    ),
+    'rgba(0, 0, 0, 0)',
+    'the modal dialog paints nothing of its own'
   )
   const transform = () =>
     page(
@@ -106,10 +114,29 @@ export async function checkThreeD(host: NativeBridge, artifacts: string) {
     await host.request('threeDPerform', { action: 'code' })
     await waitFor(
       async () => (await host.request('sourceInspect')).visible,
-      'Code opens source drawer'
+      'Code opens source editor'
     )
+    // The drawer is the docked editor: dock it when Code popped it out.
+    if ((await host.request('sourceInspect')).popped)
+      await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
+    const docked = await waitFor(async () => {
+      const editor = await host.request('sourceInspect')
+      return editor.visible && !editor.popped && editor.height > 0 && editor
+    }, 'Code editor docked under the page')
+    const withDrawer = await waitFor(async () => {
+      const state = await inspect()
+      return state.active && state.dockedSourceRect.height > 0 && state
+    }, 'exploded view stays open with the docked editor')
+    assert.ok(!withDrawer.headerHidden && !withDrawer.footerHidden, 'native bars stay visible')
+    assert.ok(
+      withDrawer.footerRect.y + withDrawer.footerRect.height <= withDrawer.dockedSourceRect.y + 0.5,
+      `footer ends above the docked editor (${JSON.stringify(withDrawer.footerRect)} vs ${JSON.stringify(withDrawer.dockedSourceRect)})`
+    )
+    assert.ok(docked.height > 0)
     const capture = await host.request('threeDCapture', { dark: false })
     writeFileSync(join(artifacts, 'three-d-code.png'), Buffer.from(capture.png, 'base64'))
+    await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+    await waitFor(async () => !(await host.request('sourceInspect')).visible, 'editor hidden again')
   }
   const withPanels = await inspect()
   for (const [hidden, frame] of [

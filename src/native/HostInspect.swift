@@ -148,6 +148,7 @@ extension Host {
                        "inspectorRect":rect(editingInspector.frame), "layersRect":rect(layers.frame),
                        "insets":["top":insets.top, "bottom":insets.bottom, "left":insets.left, "right":insets.right],
                        "focus":window.firstResponder === views["preview"] ? "preview" : threeD.ownsFocus(window.firstResponder) ? "chrome" : "other",
+                       "dockedSourceRect":dockedSource.map { rect($0.frame) } ?? [:],
                        "headerType":String(describing: type(of: threeD.header)),
                        "footerType":String(describing: type(of: threeD.footer)),
                        "palette":threeD.palette(threeD.header.effectiveAppearance)])

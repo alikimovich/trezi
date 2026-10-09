@@ -24,4 +24,16 @@ for (const action of [
 ])
   assert.equal(accepts(action), false, JSON.stringify(action))
 
+// Nothing opaque may paint before the native palette arrives (no white flash in dark mode).
+const { THREE_D_CSS } = await import('../src/preview/three-d-styles.ts')
+assert.match(THREE_D_CSS, /dialog::backdrop\s*\{\s*background:\s*transparent;?\s*\}/)
+assert.doesNotMatch(THREE_D_CSS, /color-scheme/, 'the site and palette own the colour scheme')
+const { readFileSync } = await import('node:fs')
+const dialogStyle = readFileSync(
+  new URL('../src/preview/three-d.ts', import.meta.url),
+  'utf8'
+).match(/dialog\.style\.cssText =\s*'([^']*)'/)?.[1]
+assert.ok(dialogStyle, 'the dialog sets an inline style')
+assert.match(dialogStyle, /background:transparent/, 'the dialog itself is transparent')
+
 console.log('three-d-contract: ok')

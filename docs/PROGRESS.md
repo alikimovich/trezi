@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-214 verification repair: sidebar highlight survives a stale reload
+
+- The full native run failed `project-switching` (sidebar trail `[A, B, C, "", C]`). Cause, in the LKM-204 sidebar code, not the 3D change: `NativeShell.update` reloads the outline when the rows change, and reloading builds new `ShellRow` objects, so the outline drops its selection. A state older than the latest pick doesn't restore it (by design), so the picked row blinked to nothing until a newer state answered. It's a timing race: it only shows when such a state also changes the rows.
+- `update` now remembers the highlighted row's id before the reload and, for a state that doesn't answer the pick, selects that row again.
+- Regression: `checkSwitchOrder` (`src/native/smoke-switch-order.ts`) replays the latest shell state with `selection: -1` and one changed row title, so the reload always happens. It asserts the sidebar trail stays `[C]`, then restores the real state.
+
+## 2026-10-09 — LKM-214 review repair: no flash before the palette, real Code-drawer capture
+
+- The exploded view's `<dialog>` is now transparent and its `::backdrop` is transparent, so nothing opaque paints before the first native palette arrives (the UA default `Canvas` would have flashed white in dark appearance). `test/three-d-contract.mjs` checks both rules; the `three-d` smoke checks the dialog's computed background.
+- The `three-d` smoke now docks the source editor after Code (via the existing source `dock` action), asserts `sourceInspect` is `visible && !popped && height > 0`, that both bars stay shown and that the footer ends above the docked editor (`threeDInspect.dockedSourceRect`, new), then captures `three-d-code.png` and hides the editor again. The `three-d` cleanup restores the editor.
+
 ## 2026-10-09 — LKM-214 review repair: picker follows the scene, changelog line in Unreleased
 
 - The native layer picker no longer sets `model.selected` before the scene validates the action; only the published state moves it. A rejected action for the live session (a stale revision after a refresh) makes the scene re-publish, so the picker cannot show a layer the scene never selected.

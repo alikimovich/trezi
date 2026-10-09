@@ -88,7 +88,7 @@ export function createThreeDInspector(options: {
     const dialog = document.createElement('dialog')
     dialog.setAttribute('aria-label', '3D component inspector')
     dialog.style.cssText =
-      'position:fixed;inset:0;margin:0;padding:0;border:0;max-width:none;max-height:none;width:100vw;height:100vh;'
+      'position:fixed;inset:0;margin:0;padding:0;border:0;max-width:none;max-height:none;width:100vw;height:100vh;background:transparent;color:inherit;'
     const workspace = document.createElement('div')
     workspace.className = 'workspace'
     const stage = document.createElement('div')

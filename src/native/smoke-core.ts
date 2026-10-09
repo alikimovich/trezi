@@ -1010,10 +1010,14 @@ export async function runNativeCoreSmoke(
     {
       name: 'three-d',
       dependsOn: ['open-project'],
-      run: () => checkThreeD(host, artifacts),
+      run: () => checkThreeD(host, artifacts, fixture),
       cleanup: async () => {
         if ((await host.request('threeDInspect')).active)
           await host.request('threeDPerform', { action: 'close' })
+        if ((await host.request('sourceInspect')).popped)
+          await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
+        if ((await host.request('sourceInspect')).visible)
+          await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
       }
     },
     {
