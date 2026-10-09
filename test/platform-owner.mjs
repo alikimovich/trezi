@@ -106,6 +106,23 @@ const metros = () =>
   readdirSync(sim)
     .filter((name) => name.startsWith('metro-'))
     .map((name) => JSON.parse(readFileSync(join(sim, name), 'utf8')))
+/** Cleanup only: a record can be mid-write or gone by now (a killed or failed start), and
+ *  that must not hide the test's own result or leave the other Metros running. */
+const leftoverMetros = () => {
+  try {
+    return readdirSync(sim)
+      .filter((name) => name.startsWith('metro-'))
+      .flatMap((name) => {
+        try {
+          return [JSON.parse(readFileSync(join(sim, name), 'utf8'))]
+        } catch {
+          return []
+        }
+      })
+  } catch {
+    return []
+  }
+}
 /** A start that is expected to be refused later: handled now, inspected by `rejects`. */
 const pending = (promise) => {
   promise.catch(() => {})
@@ -686,7 +703,7 @@ try {
   )
 } finally {
   for (const started of fixtures) await started.stop().catch(() => {})
-  for (const metro of metros())
+  for (const metro of leftoverMetros())
     for (const pid of [metro.pid, metro.child]) {
       try {
         process.kill(pid, 'SIGKILL')

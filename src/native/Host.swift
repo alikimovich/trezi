@@ -71,6 +71,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var serviceSignals: [DispatchSourceSignal] = []
     var restartRequested = false
     var restartProject: String?
+    /// A quit nothing may hold up (signal, failed service, Bun's `quit`): no agent alert.
+    var quitForced = false
+    let quit = QuitPrompt()
     init(directory: String, ephemeral: Bool) { self.directory = directory; self.ephemeral = ephemeral; super.init() }
     func makeView(_ id: String) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -370,7 +373,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "quit":
             if let status = c["status"] as? Int, status != 0 { exitStatus = 1 }
             terminateHost()
-        default: if !logCommand(c, id: id) && !testBroker(c, id: id) { reply(id, error: "Unsupported native host command") }
+        default: if !logCommand(c, id: id) && !testBroker(c, id: id) && !quitCommand(c, id: id) { reply(id, error: "Unsupported native host command") }
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -431,9 +434,13 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     func windowDidEnterFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":true]) }
     func windowDidExitFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":false]) }
     func windowWillClose(_ notification: Notification) {
-        if let closed = notification.object as? NSWindow, closed === window { NSApp.terminate(nil); return }
+        // The window is gone, so nothing can ask any more (`windowShouldClose` already did).
+        if let closed = notification.object as? NSWindow, closed === window { quitForced = true; NSApp.terminate(nil); return }
     }
     func terminateHost() {
+        quitForced = true
+        dismissQuitUI()
+        if quit.later { quit.phase = .confirmed; replyLaterQuit(); return }
         for window in NSApp.windows { if let sheet = window.attachedSheet { window.endSheet(sheet); sheet.orderOut(nil) } }
         NSApp.terminate(nil)
     }

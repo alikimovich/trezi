@@ -515,6 +515,33 @@ export function projectHasRunningAgents(root: string): boolean {
     [...startingSpawns.values()].includes(key)
   )
 }
+/** LKM-221: the agent work a quit waits for or stops. A chat whose landing is in flight
+ *  is `landing`; queued and starting background agents count as `background`. */
+export interface RunningAgentWork {
+  kind: 'chat' | 'landing' | 'background'
+  /** The chat's session key or the spawn id. */
+  id: string
+  /** The project key (`projectKey(root)`) and, when known, its root. */
+  project: string
+  root: string
+}
+export function runningAgentWork(): RunningAgentWork[] {
+  const work: RunningAgentWork[] = []
+  for (const key of new Set([...runningKeys, ...preparingTurns.keys()])) {
+    const record = sessions.get(key)?.record
+    if (!record) continue
+    const kind = landingInFlight(key) ? 'landing' : 'chat'
+    work.push({ kind, id: key, project: projectKey(record.projectRoot), root: record.projectRoot })
+  }
+  const background = new Map<string, { project: string; root: string }>()
+  for (const [id, key] of startingSpawns) background.set(id, { project: key, root: '' })
+  for (const [id, spawn] of queuedSpawns)
+    background.set(id, { project: projectKey(spawn.root), root: spawn.root })
+  for (const [id, spawn] of spawns)
+    background.set(id, { project: projectKey(spawn.parentRoot), root: spawn.parentRoot })
+  for (const [id, where] of background) work.push({ kind: 'background', id, ...where })
+  return work
+}
 const worktreesDir = (): string => join(dataDir(), 'worktrees')
 const firstLine = (t: string): string => (t.split('\n')[0] || 'Trezi comment edit').slice(0, 72)
 
