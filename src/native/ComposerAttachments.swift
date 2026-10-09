@@ -119,9 +119,12 @@ private final class ComposerAttachmentTile: NSView {
         removeButton.frame = NSRect(x: bounds.width - 22, y: bounds.height - 22, width: 20, height: 20)
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateColors() }
     private func updateColors() {
-        surface.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        surface.layer?.borderColor = NSColor.separatorColor.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            surface.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            surface.layer?.borderColor = NSColor.separatorColor.cgColor
+        }
     }
     @objc private func removeClicked() { dismissPreview(); remove?() }
     func dismissPreview() { popover?.close(); popover = nil }

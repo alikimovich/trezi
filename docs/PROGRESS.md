@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-212 repair: composer attachment in dark appearance
+
+- The manager's full native run caught a blank file tile in the visible-composer capture: `index.html` existed in composer state, but its label was white on a layer background resolved as light before the tile joined the window. Resolve the tile and border colors under its effective appearance after attachment and on appearance changes. Quick verification passed 203 unit checks, typechecks and lint; the native composer group passed all 7 checks, including the foreground `index.html` capture at both widths.
+
 ## 2026-10-08 — LKM-212: private agent browser
 
 - **Isolation.** Session tools default to a host-owned WebKit page outside the window. Three may run independently; Bun reuses each for its chat and releases it after two minutes idle. The host blocks page IPC and media permission prompts. The visible preview keeps its route, size, scroll, selection and focus while the agent navigates, resizes and captures its page.
