@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findLeftovers } from '../main/states-workbench'
-import { parseWorkbench, WORKBENCH_MANIFEST } from '../shared/states-workbench'
+import { normalizeRoute, parseWorkbench, WORKBENCH_MANIFEST } from '../shared/states-workbench'
 import type { NativeBridge } from './bridge'
 import { waitFor } from './smoke-wait'
 import { nativeStates } from './states-install'
@@ -13,10 +13,11 @@ const SEAM = 'order-list.fixtures.js'
 const ROUTE = '/trezi-states/order-list'
 const STATES = ['loading', 'empty', 'list']
 
+// The component's source is the fixture page, so Show states on its `#native-title` finds it.
 const manifest = {
   version: 1,
   component: 'OrderList',
-  source: `${FOLDER}/index.html:12`,
+  source: 'index.html:3',
   route: ROUTE,
   width: 420,
   states: [
@@ -65,18 +66,25 @@ const fixtures = `window.orderListFixtures = { loading: null, empty: [], list: [
  * LKM-207: a states workbench end to end, as the component-states skill leaves one. The
  * route is detected from its manifest, the island lists the states, ←/→ and 1-9 switch
  * `__state` in place (no reload, scroll kept), the island's All shows every live frame,
- * Hide hides it, and Remove from the … menu's Workbenches deletes the folder and seam
- * after the confirmation and leaves no reference behind.
+ * Hide hides it, and Remove from the toolbar's States menu deletes the folder and seam
+ * after the confirmation and leaves no reference behind. LKM-220: Show states on the
+ * fixture's `#native-title` opens the existing workbench (no agent turn); Back returns to
+ * the same page through history with the element selected again; the States menu lists
+ * the workbench with its last state and reopens it there; the record is in the preference
+ * and pruned on removal; the Publish warning offers Open Workbench.
  */
 export async function checkStatesWorkbench(
   host: NativeBridge,
   page: Page,
   fixture: string,
   root: string,
-  artifacts: string
+  artifacts: string,
+  bus: {
+    invoke: (channel: string, ...args: any[]) => Promise<any>
+    send: (channel: string, ...args: any[]) => unknown
+  }
 ) {
   const start = String(await page('location.href'))
-  const origin = new URL(start).origin
   // Every write live-reloads the static page; wait it out so it cannot reload the workbench.
   await page('(() => { window.statesBefore = 1; return true })()')
   const folder = join(fixture, FOLDER)
@@ -125,9 +133,53 @@ export async function checkStatesWorkbench(
     10000
   )
   await new Promise((resolve) => setTimeout(resolve, 500))
-  await page(
-    `(() => { location.href = ${JSON.stringify(`${origin}${ROUTE}?__state=loading`)}; return true })()`
-  )
+  const inspector = () => host.request('inspectorInspect') as Promise<Record<string, any>>
+  const selected = () =>
+    waitFor(
+      async () => String((await inspector()).title).endsWith('#native-title'),
+      '#native-title is selected',
+      10000,
+      inspector
+    )
+  // Show states on the selected title: its component has a workbench, which opens.
+  const showStates = async () => {
+    const layers = await bus.invoke('layers:read')
+    const node = layers?.nodes.find((n: { id?: string }) => n.id === 'native-title')
+    assert.ok(node, '#native-title in the Layers tree')
+    // After Back the title is already selected: wait for this pick's own generation.
+    const before = (await inspector()).generation
+    await bus.send('layers:select', {
+      path: node.path,
+      fingerprint: { tag: node.tag, source: node.source }
+    })
+    const { generation } = await waitFor(
+      async () => {
+        const value = await inspector()
+        return value.generation !== before && String(value.title).endsWith('#native-title') && value
+      },
+      '#native-title is selected again',
+      10000,
+      inspector
+    )
+    await host.request('inspectorPerform', {
+      action: { root: fixture, generation, action: 'states' }
+    })
+  }
+  const back = async (label: string) => {
+    assert.equal(await host.request('statesPerform', { action: 'back' }), true, label)
+    await waitFor(
+      async () =>
+        (await page(
+          `location.href === ${JSON.stringify(start)} && !!document.querySelector('#native-title')`
+        ).catch(() => false)) === true,
+      `${label}: the same page`,
+      10000
+    )
+    await selected()
+    const history = await host.request('previewHistory')
+    assert.equal(history.canForward, true, `${label}: ⌘] returns to the workbench`)
+  }
+  await showStates()
   const detected = await waitFor(
     async () => {
       const value = await states()
@@ -143,11 +195,24 @@ export async function checkStatesWorkbench(
   assert.equal(detected.component, 'OrderList')
   const [width, height] = (String(detected.frame).match(/[\d.]+/g) ?? []).slice(2).map(Number)
   assert.ok(width > 100 && height > 16, `the island has a real size: ${detected.frame}`)
-  assert.deepEqual(detected.workbenches, [
-    { component: 'OrderList', folder: FOLDER, actions: ['Open', 'Remove Workbench…'] }
-  ])
-  const shell = await host.request('shellInspect')
-  assert.equal(shell.moreMenu.at(-1), 'Workbenches', 'the … menu lists Workbenches')
+  const from = new URL(start)
+  assert.equal(
+    detected.back,
+    `Back to ${normalizeRoute(from.pathname)}${from.search}`,
+    'Back names the page Show states came from'
+  )
+  assert.equal(detected.statesMenuVisible, true, 'the toolbar shows the States menu')
+  assert.equal(detected.statesMenuTitle, 'States 1')
+  assert.deepEqual(
+    detected.workbenches.map((w: Record<string, unknown>) => [w.component, w.folder, w.actions]),
+    [
+      [
+        'OrderList',
+        FOLDER,
+        ['Open', 'Open All States', 'Continue in Chat', 'Rebuild States', 'Remove Workbench…']
+      ]
+    ]
+  )
   await showing('loading', 'the loading state renders')
 
   // Keys switch in place: the page keeps its marker (no reload) and its scroll position.
@@ -195,16 +260,67 @@ export async function checkStatesWorkbench(
   assert.equal(await host.request('statesPerform', { action: 'hide' }), true)
   await waitFor(async () => (await states()).visible, 'Hide again shows the island', 5000, states)
 
-  // Remove from the … menu: confirmed first, then the folder and seam go and nothing refers to them.
+  // LKM-220: Back returns to the page with the title selected; the States menu reopens the
+  // workbench at the state last viewed; Show states on the same component does too.
+  assert.equal(await host.request('statesPerform', { action: 'select', state: 'empty' }), true)
+  await showing('empty', 'the last state viewed')
+  await back('Back')
+  const listed = await waitFor(
+    async () => {
+      const value = await states()
+      return !value.active && /Last: Empty/.test(value.workbenches?.[0]?.info ?? '') && value
+    },
+    'the States menu knows the last state',
+    5000,
+    states
+  )
+  assert.equal(listed.statesMenuVisible, true, 'the States menu stays off the workbench')
+  assert.equal(
+    await host.request('shellPerform', { action: 'states-menu', row: `open:${FOLDER}` }),
+    true,
+    'Open is in the States menu'
+  )
+  await showing('empty', 'the States menu reopens the workbench at its last state')
+  await back('Back again')
+  await showStates()
+  await showing('empty', 'Show states on the same component opens the existing workbench')
+  const active = nativeStates?.services.active()?.root ?? fixture
+  const stored = () =>
+    JSON.parse(String(nativeStates?.memory.store?.read() ?? '{}'))[active]?.[FOLDER]
+  // The preference keeps the last state and the page (and element) it came from.
+  const record = await waitFor(
+    () => {
+      const value = stored()
+      return value?.last === 'empty' && value.origin?.url === start && value
+    },
+    'the workbench record in the preference',
+    5000,
+    stored
+  )
+  assert.equal(record.origin.selection?.tag, 'h1')
+
+  // The Publish warning offers Open Workbench (no publish) next to its other actions.
+  assert.ok(nativeStates)
+  const decision = Promise.resolve(nativeStates.beforePublish(active))
+  const warning = await waitFor(
+    async () => {
+      const value = await host.request('sheetInspect')
+      return value.visible && value
+    },
+    'the Publish warning',
+    5000
+  )
+  assert.deepEqual(warning.actions, ['keep', 'open', 'publish', 'remove'])
+  await host.request('sheetPerform', { action: 'open' })
+  assert.equal(await decision, false, 'Open Workbench does not publish')
+
+  // Remove from the States menu: confirmed first, then the folder and seam go and nothing refers to them.
   const bench = parseWorkbench(JSON.stringify(manifest), FOLDER)
   assert.ok(bench)
   assert.equal(
-    await host.request('shellPerform', {
-      action: 'preview-more',
-      row: `workbench-remove:${FOLDER}`
-    }),
+    await host.request('shellPerform', { action: 'states-menu', row: `remove:${FOLDER}` }),
     true,
-    'Remove Workbench… is in the … menu'
+    'Remove Workbench… is in the States menu'
   )
   const sheet = await waitFor(
     async () => {
@@ -226,12 +342,17 @@ export async function checkStatesWorkbench(
   assert.deepEqual(await findLeftovers(fixture, bench), [], 'no references remain')
   await waitFor(
     async () => {
-      const [value, more] = await Promise.all([states(), host.request('shellInspect')])
-      return !value.active && !value.visible && more.moreMenu.at(-1) !== 'Workbenches'
+      const value = await states()
+      return !value.active && !value.visible && !value.statesMenuVisible
     },
-    'the island and the Workbenches menu go with the workbench',
+    'the island and the States menu go with the workbench',
     10000,
-    async () => ({ states: await states(), more: (await host.request('shellInspect')).moreMenu })
+    states
+  )
+  await waitFor(() => stored() === undefined, 'its record is pruned', 5000, stored)
+  writeFileSync(
+    join(artifacts, 'states-return.json'),
+    JSON.stringify({ listed, record, warning }, null, 2)
   )
   await page(`(() => { location.href = ${JSON.stringify(start)}; return true })()`)
   await waitFor(
@@ -243,7 +364,7 @@ export async function checkStatesWorkbench(
     10000
   )
   console.log(
-    'Native states workbench: route detected, keys/island/All switch in place, Remove left no references.'
+    'Native states workbench: route detected, keys/island/All switch in place, Back/States menu/Show states return, Open Workbench on Publish, Remove left no references or record.'
   )
 }
 

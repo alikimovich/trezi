@@ -1,10 +1,13 @@
 import { sourceOwner } from '../main/source-owner'
-import { chatRoot } from '../shared/states-workbench'
+import { STATES_RECORDS_PREFERENCE } from '../shared/states-records'
+import { chatRoot, workbenchReference, workbenchReferenceText } from '../shared/states-workbench'
 import type { NativeActivityController } from './activity-controller'
 import type { NativeBridge } from './bridge'
+import { addReference, setReferenceDetails } from './chat-island-refs'
 import { nativeChat, turnBoundaries } from './chat-runtime'
 import type { NativeGitController } from './git-controller'
-import { type NativeView, serviceEvents } from './platform'
+import { dispatchIPC, type NativeView, serviceEvents } from './platform'
+import type { NativePreferences } from './preferences'
 import type { NativeSheetController } from './sheets-runtime'
 import { NativeStatesController, type StatesAction } from './states-controller'
 import type { NativeWorkspaceController } from './workspace-controller'
@@ -12,10 +15,13 @@ import type { NativeWorkspaceController } from './workspace-controller'
 /** The running app's states workbench controller (the native smoke drives it). */
 export let nativeStates: NativeStatesController | null = null
 
+const PAGE = '({ href: location.href, title: document.title, x: scrollX, y: scrollY })'
+
 /**
- * LKM-207: the host's States island and the preview … menu's Workbenches send
- * `states-action`; H in a workbench page arrives as `preview:states-key`; every preview
- * URL change re-syncs; Publish asks first while a workbench exists.
+ * LKM-207: the host's States island and the toolbar's States menu send `states-action`;
+ * H in a workbench page arrives as `preview:states-key`; every preview URL change
+ * re-syncs; Publish asks first while a workbench exists. LKM-220: the records live in a
+ * preference, and Back, Continue in chat and Rebuild reach the preview and the chats here.
  */
 export function installStatesWorkbench(options: {
   host: NativeBridge
@@ -24,9 +30,19 @@ export function installStatesWorkbench(options: {
   sheets: NativeSheetController
   log: NativeActivityController
   git: NativeGitController
+  preferences: NativePreferences
 }) {
-  const { host, workspace, log } = options
+  const { host, workspace, log, preferences } = options
   const report = (error: unknown) => log.append(String(error), 'error')
+  const evaluate = (code: string) => options.preview.webContents.evaluateIn(code, 'preview', 2000)
+  const project = (root: string) => workspace.state.projects.find((p) => p.root === root)
+  const focus = async (root: string, chat: string) => {
+    const entry = project(root)
+    if (!entry?.sessionKeys.includes(chat)) return false
+    await workspace.command({ type: 'chat', key: entry.key, session: chat })
+    workspace.services.focusComposer?.()
+    return true
+  }
   const states = new NativeStatesController({
     send: (command, payload) => host.send(command, payload as Record<string, unknown>),
     preview: (channel, payload) => options.preview.webContents.send(channel, payload),
@@ -34,9 +50,64 @@ export function installStatesWorkbench(options: {
     load: (url) => workspace.services.invoke('preview:load', url),
     sheets: options.sheets,
     log: (text, kind) => log.append(text, kind),
-    remove: (root, folder, seams) => sourceOwner().removeWorkbench(root, folder, seams)
+    remove: (root, folder, seams) => sourceOwner().removeWorkbench(root, folder, seams),
+    records: {
+      read: () => preferences.get(STATES_RECORDS_PREFERENCE),
+      write: (update) =>
+        preferences.apply((values) => [
+          [STATES_RECORDS_PREFERENCE, update(values[STATES_RECORDS_PREFERENCE] ?? null)]
+        ])
+    },
+    page: async () => {
+      const page = (await evaluate(PAGE)) as {
+        href?: unknown
+        title?: unknown
+        x?: unknown
+        y?: unknown
+      } | null
+      return page && typeof page.href === 'string'
+        ? {
+            href: page.href,
+            title: typeof page.title === 'string' ? page.title : '',
+            x: Number(page.x) || 0,
+            y: Number(page.y) || 0
+          }
+        : null
+    },
+    scrollTo: (x, y) => evaluate(`scrollTo(${Math.round(x)}, ${Math.round(y)})`),
+    back: async (url) => (await host.request('statesBack', { url })) === true,
+    layers: () => workspace.services.invoke('layers:read'),
+    pick: (path, fingerprint) =>
+      dispatchIPC('main', {
+        type: 'send',
+        channel: 'layers:select',
+        args: [{ path, fingerprint }]
+      }),
+    focusChat: focus,
+    newChat: async (root, bench) => {
+      const entry = project(root)
+      if (!entry) return
+      await workspace.command({ type: 'new-chat', key: entry.key })
+      const chat = nativeChat.get(entry.activeSessionKey)
+      addReference(chat, workbenchReference(bench))
+      nativeChat.changed(chat)
+    },
+    submit: async (root, text, chat) => {
+      const entry = project(root)
+      if (!entry) return
+      const key = chat && (await focus(root, chat)) ? chat : entry.activeSessionKey
+      await nativeChat.command({ type: 'submit', chat: key, text })
+    },
+    chatTitle: (chat) => nativeChat.chats.get(chat)?.title || undefined
   })
   nativeStates = states
+  // A workbench chip tells the agent where the workbench is when the message is sent.
+  setReferenceDetails((chat, name) => {
+    if (!name.startsWith('#states-')) return undefined
+    const root = chat.root || workspace.active?.root
+    const bench = states.workbenches(root).find((b) => workbenchReference(b) === name)
+    return bench && workbenchReferenceText(bench)
+  })
   options.git.beforePublish = (root) => states.beforePublish(root)
   serviceEvents.on('event', (channel: string, value: unknown) => {
     if (channel === 'preview:url-changed') states.url(typeof value === 'string' ? value : null)

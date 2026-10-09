@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 - The selected element's toolbar shows a cube for Inspect in 3D and a stack of variants for Show states, and the States switcher's All button uses a matching stack, so neither looks like Layers or the layout grid (LKM-218).
+- States workbenches can be left and found again: the States switcher has "← Back to <page>" (same page and scroll, the component selected again, ⌘[ / ⌘] move between them) and Continue in Chat; a "States N" menu under the address lists each workbench with where it came from and its last state, with Open, Open All States, Continue in Chat, Rebuild States and Remove (replacing the … menu's Workbenches); Show states on a component that already has a workbench opens it; the list survives restarts; and the Publish warning adds Open Workbench (LKM-220).
 ### Fixed
 - In the mobile viewport the page's corners now follow the iPhone frame's screen corners exactly (the same continuous curve and radius, at any size, in light and dark), with no gap or overlap at the bezel (LKM-217).
 - Full access Codex chats no longer warn that the live project changed outside the chat after Trezi's own landings (land now, the turn's landing), Publish, base syncs, conflict files, dependency installs or dev-server output; a real outside change is one compact row with Details, and only the agent's own commands are blamed on the agent (LKM-215).

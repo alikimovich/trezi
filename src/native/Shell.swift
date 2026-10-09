@@ -61,6 +61,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var previewTextColor = NSColor.labelColor
     let address = NSTextField()
     let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
+    let statesMenu = NSPopUpButton(frame: .zero, pullsDown: true)
+    var statesMenuConstraints: [NSLayoutConstraint] = []
     var publishTitle = "Publish"
     let publishSpinner = ToolbarPublishSpinner()
     /// Toolbar frames read synchronously inside the last `window-width` test resize.
@@ -246,6 +248,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let width = header.widthAnchor.constraint(equalToConstant: ToolbarAddressLayout.minimum); addressWidth = width
             NSLayoutConstraint.activate([header.widthAnchor.constraint(greaterThanOrEqualToConstant: ToolbarAddressLayout.floor), width,
                 address.widthAnchor.constraint(equalTo: header.widthAnchor), branchMenu.widthAnchor.constraint(lessThanOrEqualTo: header.widthAnchor)])
+            configureStatesMenu(in: header)
             item.view = header; item.isBordered = false
         } else if key == "publish" {
             item.image = nil
@@ -523,6 +526,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if action == "publish-cancel" { return cancelPublish(toolbarItems["publish"] as? NSMenuToolbarItem) }
         if action == "preview-more", let id { return performMore(toolbarItems["more"] as? NSMenuToolbarItem, id) }
+        if action == "states-menu", let id { return performStatesMenu(id) }
         if action == "preview-speed", let id { return performSpeed(id) }
         if action == "publish", toolbarItems["publish"]?.action == nil { return false }
         if let button = sidebarButtons[action], button.isEnabled { sidebarAction(button); return true }

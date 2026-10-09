@@ -133,8 +133,8 @@ extension Host {
             let seconds = max(0, min(30, c["idleSeconds"] as? Double ?? 0))
             lastUserInteraction = Date().addingTimeInterval(-seconds)
             reply(id, Date().timeIntervalSince(lastUserInteraction) >= 5)
-        // The states workbench island and the … menu's Workbenches (LKM-207).
-        case "statesInspect": reply(id, statesSwitcher.inspect().merging(["workbenches":shell.workbenchesInspect()]) { _, new in new })
+        // The states workbench island (LKM-207) and the toolbar's States menu (LKM-220).
+        case "statesInspect": reply(id, statesSwitcher.inspect().merging(shell.workbenchesInspect()) { _, new in new })
         case "statesPerform": reply(id, statesSwitcher.perform(c["action"] as? String ?? "", c["state"] as? String ?? ""))
         case "welcomeInspect": reply(id, welcome.inspect())
         case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])

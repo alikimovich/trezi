@@ -40,6 +40,8 @@ export class NativeInspectorController {
   element: SelectedElement | null = null
   /** Every selection change, null when cleared; Layers follows it (LKM-179). */
   onElement: (element: SelectedElement | null) => void = () => {}
+  /** LKM-220: Show states opens the component's existing workbench (true) instead of asking. */
+  showStates: (root: string, element: SelectedElement) => Promise<boolean> = async () => false
   inspection: PropInspection | null = null
   controls: ResolvedControlPanel[] = []
   tokens: TokenSet | null = null
@@ -550,6 +552,7 @@ export class NativeInspectorController {
         return
       }
       if (action.action === 'states' && this.element) {
+        if (await this.showStates(root, this.element)) return
         const selection = describeSelectionForPrompt(this.element, root)
         await this.agent(root, showStatesText(selection, this.element.componentSource), true)
         return

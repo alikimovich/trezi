@@ -1011,7 +1011,7 @@ export async function runNativeCoreSmoke(
         statesURL = String(await page('location.href'))
         // Select mode owns the page's keys; the switcher's keys work outside it.
         await invoke('preview:set-select-mode', false)
-        await checkStatesWorkbench(host, page, fixture, root, artifacts)
+        await checkStatesWorkbench(host, page, fixture, root, artifacts, { invoke, send })
       },
       cleanup: async () => {
         if ((await host.request('sheetInspect')).visible)

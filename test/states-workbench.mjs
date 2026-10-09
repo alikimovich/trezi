@@ -150,7 +150,14 @@ states.url('http://localhost:5173/')
 await settle()
 assert.equal(last('statesState').state, null, 'not a workbench route: no island')
 assert.deepEqual(last('workbenches').items, [
-  { folder: 'trezi-states/order-list', component: 'OrderList', route: '/trezi-states/order-list' }
+  {
+    folder: 'trezi-states/order-list',
+    component: 'OrderList',
+    route: '/trezi-states/order-list',
+    from: null,
+    chat: null,
+    last: null
+  }
 ])
 
 states.url(`${url}&__state=empty`)
@@ -201,7 +208,8 @@ assert.match(logs.at(-1)[0], /Still referenced in: src\/routes\.ts/)
 assert.deepEqual(last('workbenches').items, [])
 assert.equal(last('statesState').state, null)
 
-// Publish with a workbench present warns: Cancel, Publish Anyway, Remove and Publish.
+// Publish with a workbench present warns: Cancel, Open Workbench (LKM-220), Publish
+// Anyway, Remove and Publish.
 benches = [bench]
 removed.length = 0
 leftoverHits = []
@@ -239,7 +247,7 @@ const answer = async (action) => {
   assert.match(gitSheets.current.state.title, /states workbench is still in the project/)
   assert.deepEqual(
     gitSheets.current.state.actions.map((a) => a.label),
-    ['Cancel', 'Publish Anyway', 'Remove and Publish']
+    ['Cancel', 'Open Workbench', 'Publish Anyway', 'Remove and Publish']
   )
   await gitSheets.action({ id: gitSheets.current.state.id, action, values: {} })
 }
@@ -249,6 +257,15 @@ await answer('keep')
 await publish
 assert.equal(ships(), 0, 'Cancel does not publish')
 assert.equal(removed.length, 0)
+
+const opened = loads.length
+publish = git.publish('p')
+await answer('open')
+await publish
+await settle()
+assert.equal(ships(), 0, 'Open Workbench does not publish')
+assert.equal(loads.length, opened + 1)
+assert.match(loads.at(-1), /\/trezi-states\/order-list\?__state=/, 'it opens the workbench')
 
 publish = git.publish('p')
 await answer('publish')

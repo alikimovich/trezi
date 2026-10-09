@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-220: leave a states workbench and come back to it
+
+- **Records.** The manifest stays the agent's record. What Trezi learns (the page a workbench was opened from with scroll and the selected instance's Layers fingerprint, the last state viewed, the creating chat) goes in one preference, `trezi:states-workbenches:v1`, keyed by root and folder (`src/native/states-memory.ts`, pure parts in `src/shared/states-records.ts`). It survives restarts, and every scan prunes folders without a manifest. Show states leaves a pending origin for an hour. The next new workbench whose manifest source file holds the selection, or that was absent from the previous scan, takes it. Otherwise the previous non-workbench page is the origin.
+- **Back.** It steps preview history when the entry behind is the origin, so ⌘] returns to the workbench and WebKit restores the scroll. The new `statesBack` host request compares the documents with the fragment ignored. Otherwise Back loads the origin and scrolls. Either way it reselects the instance by path plus tag/source, else a unique tag/source/id match, retrying for up to 6 s.
+- **Returning.** The `… → Workbenches` submenu became a "States N" pull-down placed beside the branch inside the address block, not as an arranged row. That keeps the address/branch geometry and the fragile toolbar insets untouched. Show states on a component that has a workbench opens it at the last state without an agent turn (`inspectorController.showStates`). Rebuild States sends a `/states` turn in the workbench's chat to update it in place. Continue in Chat focuses that chat, or opens a new one with a `#states-<folder>` chip whose sent text describes the workbench (`setReferenceDetails`).
+- **Publish.** The warning gains Open Workbench. Four buttons do not fit one row of the 448 pt alert, so `SheetAlert.swift` uses `ViewThatFits` and stacks the buttons, default on top.
+
 ## 2026-10-09 — LKM-219: preview-timing "no reload" check no longer reads `timeOrigin` twice
 
 - **Why.** The manager's native run failed `preview-timing` ("viewport screenshots never reload or restart"): navigation 71 → 71 and pid unchanged, but `performance.timeOrigin` read `…807` then `…806`. WebKit derives `timeOrigin` from the wall clock (`MonotonicTime::approximateWallTime`) on every read, so the same document drifts by a millisecond; the check was flaky, and no reload happened.

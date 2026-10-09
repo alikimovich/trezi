@@ -70,17 +70,27 @@ export function menuQuery(text: string, caret: number) {
   return hash ? `#${hash.query}` : undefined
 }
 
-/** Copy reference: a chip for the island, once. */
+let described: (chat: Chat, name: string) => string | undefined = () => undefined
+/** LKM-220: what a sent message says about a non-island chip (a states workbench's). */
+export function setReferenceDetails(describe: (chat: Chat, name: string) => string | undefined) {
+  described = describe
+}
+
+/** Copy reference: a chip for the island, once. LKM-220: or a states workbench (`#states-…`). */
 export function addReference(chat: Chat, name: string) {
-  if (!/^#island-[a-z0-9-]+$/.test(name)) return
+  if (!/^#(?:island|states)-[a-z0-9-]+$/.test(name)) return
   chat.references = [...new Set([...(chat.references ?? []), name])]
 }
 
-/** The text a message sends: chip names it does not already mention come first. */
+/** The text a message sends: chip names it does not already mention come first, and a
+ *  workbench chip's description last. */
 export function withReferences(chat: Chat, text: string) {
-  const missing = (chat.references ?? []).filter(
+  const references = chat.references ?? []
+  const missing = references.filter(
     (name) => !new RegExp(`(?:^|[^\\w#-])${name}(?![\\w-])`).test(text)
   )
+  const details = references.map((name) => described(chat, name)).filter(Boolean)
   chat.references = []
-  return missing.length ? `${missing.join(' ')} ${text}`.trim() : text
+  const sent = missing.length ? `${missing.join(' ')} ${text}`.trim() : text
+  return details.length ? `${sent}\n\n${details.join('\n')}` : sent
 }

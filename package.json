@@ -42,6 +42,7 @@
     "test:slash-token": "bun test/slash-token.mjs",
     "test:skills": "bun test/skills-discovery.mjs",
     "test:states-workbench": "bun test/states-workbench.mjs",
+    "test:states-return": "bun test/states-return.mjs",
     "test:github-connect": "bun test/github-connect.mjs",
     "test:html-source": "bun test/html-source.mjs",
     "test:project-ui-jev": "bun test/project-ui-jev.mjs",

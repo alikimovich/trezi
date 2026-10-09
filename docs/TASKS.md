@@ -83,6 +83,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Tests: unit `states-workbench`, `source-owner`, `provider-skills`; native smoke `states-workbench` (group `core`).
 - [ ] Open: the optional thumbnail "states check" row after visual changes (the skill re-checks with `?__state=all` instead).
 
+## States workbench: back to the page and return at any time (LKM-220)
+
+- [x] Per-workbench records (origin page with scroll and selection, last state, chat) in the `trezi:states-workbenches:v1` preference, pruned on every scan (`src/shared/states-records.ts`, `src/native/states-memory.ts`).
+- [x] Island "← Back to <page>": a history step when the entry behind is that page (`statesBack`, `PreviewHistory.back(to:)`), else a load with scroll; the instance is selected again by Layers fingerprint. Continue in Chat focuses the creating chat or opens one with a `#states-…` chip.
+- [x] Toolbar "States N" menu beside the branch (`src/native/ToolbarStates.swift`): Open (last state), Open All States, Continue in Chat, Rebuild States, Remove Workbench…; the … menu's Workbenches are gone.
+- [x] Show states on a component with a workbench opens it at the last state; Publish warning adds Open Workbench (the alert stacks four buttons).
+- [x] Tests: unit `states-return`, `states-workbench`; native smoke `states-workbench` (group `core`) extended.
+
 ## Dreamer: analyze past sessions, propose improvements (LKM-202)
 
 - [x] Digest of saved chats and the product log (`src/main/dreamer-digest.ts`): slow tools, repeated failures, retries and corrections, repeated requests, turn times, landings, parks, conflicts, refusals, island steps, feedback; per-step `Tool step` debug lines from `src/main/turn-log.ts`.
