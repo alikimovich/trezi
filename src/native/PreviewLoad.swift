@@ -8,6 +8,7 @@ import WebKit
 extension Host {
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard webView === views["preview"] else { return }
+        threeD.clear(); nativeLayout.layout()
         emit(["event":"navigation-start", "view":"preview", "url":webView.url?.absoluteString ?? ""])
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

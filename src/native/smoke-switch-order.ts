@@ -58,6 +58,12 @@ export async function checkSwitchOrder(
     rendered.push(state.activeKey)
     render(state)
   }
+  const send = host.send
+  let shell: Record<string, unknown> | undefined
+  host.send = (method, data = {}) => {
+    if (method === 'shellState') shell = (data as { state: Record<string, unknown> }).state
+    return send.call(host, method, data)
+  }
   const evidence: Record<string, unknown> = {}
   try {
     assert.equal(await pick(first), true)
@@ -143,9 +149,26 @@ export async function checkSwitchOrder(
       join(artifacts, 'switch-order-rapid.png'),
       Buffer.from(await host.request('captureShell'), 'base64')
     )
+    // A state older than the pick whose rows changed reloads the outline: the picked
+    // row must stay highlighted, not blink to nothing until a newer state answers.
+    const latest = shell!
+    const rows = latest.rows as { title: string }[]
+    await host.request('shellPerform', { action: 'selection-trail-reset' })
+    host.send('shellState', {
+      state: {
+        ...latest,
+        selection: -1,
+        rows: rows.map((row, i) => (i ? row : { ...row, title: `${row.title} ` }))
+      }
+    })
+    const reloaded = (await host.request('shellInspect')).sidebarTrail
+    host.send('shellState', { state: latest })
+    evidence.staleReload = reloaded
+    assert.deepEqual(reloaded, [third.key], 'Sidebar: a stale reload keeps C highlighted')
     assert.equal(await pick(first), true)
     await settled(first)
   } finally {
+    host.send = send
     nativeWorkspace.services.render = render
     writeFileSync(join(artifacts, 'switch-order.json'), JSON.stringify(evidence, null, 2))
     await nativeWorkspace.command({ type: 'close', key: third.key })

@@ -53,6 +53,7 @@ export const previewSendChannels = new Set([
   channels.PREVIEW_MOVE_NODE,
   channels.ISLAND_OVERRIDE_REPLY,
   channels.PREVIEW_STATES_KEY,
+  channels.PREVIEW_THREE_D_STATE,
   channels.PREVIEW_STYLES_UPDATED
 ])
 export async function dispatchIPC(view: string, message: any) {

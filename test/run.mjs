@@ -147,6 +147,7 @@ const UNIT = [
   'skills-discovery',
   'provider-skills',
   'states-workbench',
+  'three-d-contract',
   'github-connect',
   'html-source',
   'project-key',
