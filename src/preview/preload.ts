@@ -310,7 +310,8 @@ function ensureOverlay(): void {
     },
     'three-d': {
       title: 'Inspect in 3D',
-      svg: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/>'
+      // An isometric cube (Lucide "box"): stacked layers stay the Layers tool's glyph.
+      svg: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>'
     },
     props: {
       title: 'Edit props',
@@ -326,7 +327,9 @@ function ensureOverlay(): void {
     },
     states: {
       title: 'Show states — every state of this component side by side',
-      svg: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'
+      // A component with its variants stacked behind it, like the States switcher's
+      // square.stack; a grid would read as the layout grid overlay.
+      svg: '<rect x="3" y="10" width="18" height="11" rx="2"/><path d="M5 6.5h14"/><path d="M8 3h8"/>'
     },
     delete: {
       title: 'Ask Trezi to delete this element',

@@ -31,6 +31,22 @@ Newest first. Append a dated entry when you finish a chunk of work.
     - an agent page skipped both ways.
   - `source-editor` adds ⌘х / ⌘ъ in the editor and ⌘[ → View → Back outside it.
 - **Not automated.** A real swipe gesture and a real layout switch: the evidence budget rules out synthetic CGEvents and system input-source changes.
+## 2026-10-09 — LKM-218 repair: review-quick failures after the LKM-215 merge
+
+- `native-long-chat-perf` and `platform-owner` failed in the manager's review-quick at load average 17–28. This change touches neither (icons, States switcher symbol, smoke capture, changelog). On the merged tree (01493f19 included) `native-long-chat-perf` passes alone (worst 4.3 ms against the 100 ms budget, so the hand-built context still matches LKM-215's shape), and the full unit tier passes (206 PASS, including `platform-owner`, `versioning` and lint). Native `core` passes 25/25. No budget or deadline was changed; the LKM-218 line stays under `## [Unreleased]` → Changed.
+
+## 2026-10-09 — LKM-218 repair: editor-freshness flake, changelog placement
+
+- The manager's `editor-freshness` failure (`#fresh-card` never selected) did not reproduce as a product fault: nothing in this change touches selection, and in three further native `core` runs under a load average of 17–23 it failed once on the initial page load, then passed (3.5 s) while only the typing-latency check `source-syntax` failed. No check was relaxed.
+- After the v0.1.0 release merged in, the LKM-218 line had landed inside the dated 0.1.0 section; it is back under `## [Unreleased]` → Changed. `test/versioning.mjs` asserted that the `trezi --version` entry is in Unreleased, which the release itself made false (it failed on main too); it now looks for the entry anywhere in the changelog.
+
+- Review found `element-toolbar.png` without the toolbar: `captureShell` is an offscreen `cacheDisplay` and does not reliably paint the preview's WebKit overlay. The capture now uses `captureVisibleWindow` after `preparePreviewInput` (retried up to 3 times when focus moves), and `element-toolbar.json` records the toolbar's bounding rect and the viewport, failing the check if the toolbar has no size.
+
+## 2026-10-08 — LKM-218: distinct icons for 3D inspect and Show states
+
+- **Why.** The element toolbar's Inspect in 3D used stacked layers, the Layers tool's glyph, and Show states and the States switcher's All used a 2×2 grid, which reads as the layout grid overlay (LKM-205).
+- **Glyphs.** Inspect in 3D is Lucide's `box` (isometric cube). Show states is a rounded component with two variant edges stacked behind it; the switcher's All segment is the matching SF `square.stack` (not used elsewhere, unlike `doc.on.doc` for Copy). Same 15 px, 24-unit, 2 px round stroke as the other toolbar icons.
+- **Check.** Native `selection-input` (group `core`) reads every `button[data-kind]` in the toolbar once it shows and fails when two share an SVG or one leaves the shared size/viewBox/stroke; it writes `element-toolbar.json` and `element-toolbar.png`. The switcher is in the existing `states-workbench.png`. The artifacts are written by `smoke-core.ts` through a callback, so `smoke-input.ts` stays out of the retirement census.
 ## 2026-10-08 — LKM-217: mobile page corners match the device frame
 
 - **Cause.** The mobile page was clipped with a circular `0.12 × page width` radius (67 asset px) and fixed percentage insets. The iPhone 16 Pro bezel's opening has a continuous corner of about 85.4 px in the 606×1252 asset (62 pt on a 402 pt screen), and its top/bottom edges sit at 20.38/1231.62 px, not 21/1231. The corners missed by up to 35 asset px.

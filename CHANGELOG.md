@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+- The selected element's toolbar shows a cube for Inspect in 3D and a stack of variants for Show states, and the States switcher's All button uses a matching stack, so neither looks like Layers or the layout grid (LKM-218).
 ### Fixed
 - In the mobile viewport the page's corners now follow the iPhone frame's screen corners exactly (the same continuous curve and radius, at any size, in light and dark), with no gap or overlap at the bezel (LKM-217).
 - Full access Codex chats no longer warn that the live project changed outside the chat after Trezi's own landings (land now, the turn's landing), Publish, base syncs, conflict files, dependency installs or dev-server output; a real outside change is one compact row with Details, and only the agent's own commands are blamed on the agent (LKM-215).

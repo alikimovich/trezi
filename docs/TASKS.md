@@ -11,6 +11,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Every ⌘/⌃ key-down is re-read by key position under non-Latin layouts (`KeyShortcuts.swift`); in-page S, 1-9 and H use `latinKey`; Dvorak untouched.
 - [x] Unit `key-shortcuts` (synthetic Russian/Ukrainian/Hebrew/Greek/Dvorak events), native smoke `preview-history` and the source editor's ⌘х / ⌘ъ; gotchas rule; changelog.
 - [ ] Not automated: a real trackpad swipe and a real layout switch (operator check).
+## Element toolbar: distinct 3D inspect and Show states icons (LKM-218)
+
+- [x] Inspect in 3D is an isometric cube (Lucide `box`); the stacked-layers glyph stays Layers' (`square.3.layers.3d`).
+- [x] Show states is a component with its variants stacked behind it; the States switcher's All segment is the matching `square.stack`, not `square.grid.2x2`.
+- [x] Native `selection-input` (group `core`) asserts every element toolbar glyph is distinct and in the shared 15 px, 24-unit, 2 px stroke style, and writes `element-toolbar.png`/`.json`; `states-workbench.png` shows the switcher.
 ## Mobile viewport: page corners match the device frame (LKM-217)
 
 - [x] `src/native/DeviceFrame.swift` measures each offered bezel's screen opening and continuous corner radius from the asset's alpha; the page and overlay are clipped with it (`cornerCurve = .continuous`) at the bezel's scale.

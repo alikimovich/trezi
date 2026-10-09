@@ -21,7 +21,10 @@ export async function captureForegroundChat(host: NativeBridge): Promise<any> {
 }
 
 /** Real WebKit input: page capture listeners are registered by the HTML fixture. */
-export async function checkSelectionInput(host: NativeBridge): Promise<void> {
+export async function checkSelectionInput(
+  host: NativeBridge,
+  toolbarShown: (shown: ToolbarShown) => Promise<void>
+): Promise<void> {
   const evaluate = (code: string, isolated = false) =>
     host.request('evaluate', { view: 'preview', code, isolated })
   const wait = async (code: string): Promise<void> => {
@@ -68,6 +71,7 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   await wait(
     `document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-toolbar]')?.style.display === 'flex'`
   )
+  await toolbarShown(await toolbarIcons(evaluate))
   await input({ ...point, clicks: 2 })
   await wait(`document.querySelector('#native-title').isContentEditable`)
   await input({ key: 'ArrowRight' })
@@ -96,6 +100,37 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   console.log(
     'Native selection blocks page input; inline caret movement and normal interaction passed.'
   )
+}
+
+/** LKM-218: every element toolbar tool has its own glyph in the shared 24 px, 2 px stroke style. */
+type ToolbarIcon = { kind: string; svg: string; size: string; box: string; stroke: string }
+export type ToolbarShown = { icons: ToolbarIcon[]; rect: Record<string, number> }
+async function toolbarIcons(evaluate: (code: string) => Promise<any>): Promise<ToolbarShown> {
+  const root = `document.querySelector('[data-trezi-overlay]').shadowRoot`
+  const icons: ToolbarIcon[] =
+    await evaluate(`[...${root}.querySelectorAll('[data-trezi-toolbar] button[data-kind]')].map((b) => {
+        const svg = b.querySelector('svg');
+        return { kind: b.dataset.kind, svg: svg.innerHTML, size: svg.getAttribute('width') + 'x' + svg.getAttribute('height'),
+          box: svg.getAttribute('viewBox'), stroke: svg.getAttribute('stroke-width') };
+      })`)
+  // Where the toolbar is when the capture is taken, so the artifact proves it was showing.
+  const rect = await evaluate(`(() => {
+    const r = ${root}.querySelector('[data-trezi-toolbar]').getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height, viewportWidth: innerWidth, viewportHeight: innerHeight };
+  })()`)
+  if (!(rect.width > 0 && rect.height > 0))
+    throw new Error(`Element toolbar has no size: ${JSON.stringify(rect)}`)
+  for (const kind of ['three-d', 'states'])
+    if (!icons.some((icon) => icon.kind === kind)) throw new Error(`Element toolbar has no ${kind}`)
+  for (const icon of icons)
+    if (icon.size !== '15x15' || icon.box !== '0 0 24 24' || icon.stroke !== '2')
+      throw new Error(
+        `Element toolbar icon ${icon.kind} breaks the shared style: ${JSON.stringify(icon)}`
+      )
+  const shared = icons.filter((icon, i) => icons.findIndex((other) => other.svg === icon.svg) !== i)
+  if (shared.length)
+    throw new Error(`Element toolbar tools share a glyph: ${shared.map((icon) => icon.kind)}`)
+  return { icons, rect }
 }
 
 /** Restore the main test window after auxiliary windows before paint/input checks. */
