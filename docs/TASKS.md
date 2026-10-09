@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Element toolbar: distinct 3D inspect and Show states icons (LKM-218)
+
+- [x] Inspect in 3D is an isometric cube (Lucide `box`); the stacked-layers glyph stays Layers' (`square.3.layers.3d`).
+- [x] Show states is a component with its variants stacked behind it; the States switcher's All segment is the matching `square.stack`, not `square.grid.2x2`.
+- [x] Native `selection-input` (group `core`) asserts every element toolbar glyph is distinct and in the shared 15 px, 24-unit, 2 px stroke style, and writes `element-toolbar.png`/`.json`; `states-workbench.png` shows the switcher.
+## Mobile viewport: page corners match the device frame (LKM-217)
+
+- [x] `src/native/DeviceFrame.swift` measures each offered bezel's screen opening and continuous corner radius from the asset's alpha; the page and overlay are clipped with it (`cornerCurve = .continuous`) at the bezel's scale.
+- [x] Unit `device-frame`: the opening matches an independent PNG decode and a CALayer continuous corner traces the asset's edge; native `device-frame` (group `core`): page rect and clip at two scales, four corner captures in light and dark.
 ## Live-change warnings: subtract Trezi's own effects (LKM-215)
 
 - [x] Bun watches the live tree for Full access Codex turns (`src/main/live-change-watch.ts`); the adapter's per-turn note is gone. Snapshots run in the repository lease.

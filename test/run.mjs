@@ -194,6 +194,7 @@ const UNIT = [
   'ask-user',
   'chat-ui',
   'chat-ui-model',
+  'device-frame',
   'tw-classes',
   'tw-styles',
   'token-match',
@@ -238,6 +239,13 @@ const UNIT_TIMEOUT_MS = {
   // most service sources after nearly every service change, queued behind other swiftc runs.
   'workflow-durability': 240_000,
   'workflow-owner': 240_000,
+  // Same (LKM-217): Swift fixtures that compile the shared service or host sources. A cold
+  // 8-worker run took 120 s+ for the first two and 106–120 s for the last two, against
+  // 22–40 s on a warm tree; a longer budget separates queueing from a real hang.
+  'platform-owner': 240_000,
+  'native-settings-layout': 240_000,
+  'native-composer-layout': 240_000,
+  'native-chat-latest-settle': 240_000,
   'keychain-rebuild': 300_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,
