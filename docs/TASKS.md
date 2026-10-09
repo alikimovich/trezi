@@ -7,6 +7,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] `src/native/DeviceFrame.swift` measures each offered bezel's screen opening and continuous corner radius from the asset's alpha; the page and overlay are clipped with it (`cornerCurve = .continuous`) at the bezel's scale.
 - [x] Unit `device-frame`: the opening matches an independent PNG decode and a CALayer continuous corner traces the asset's edge; native `device-frame` (group `core`): page rect and clip at two scales, four corner captures in light and dark.
+## Unblock verification: versioning after 0.1.0, load-robust source-syntax (LKM-222)
+
+- [x] `test/versioning.mjs`: the LKM-143 `trezi --version` entry may sit in any changelog section; a new case covers the empty Unreleased right after a release. CHANGELOG history unchanged.
+- [x] Native `source-syntax`: per-keystroke cost is the main thread's CPU time (`SourceWorkClock`, wall time kept for the report); one warm-up pass, then the median of 5 pass p95s against the 16 ms target, failing above 32 ms only while the machine is not overloaded (`assertLoadAwareTiming`, unit `smoke-timing`); load recorded per pass.
+- [x] Unit `syntax-highlight`: the re-tokenization p95 in process CPU time, warm-up pass, median of 5 passes under the same load-aware gate.
+- [x] Soft wrap (LKM-192) cost: three passes with Wrap Lines off are reported next to the gated ones; no real per-keystroke layout cost measured, so no editor change.
 
 ## Private agent browser (LKM-212)
 
