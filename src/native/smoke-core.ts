@@ -572,7 +572,14 @@ export async function runNativeCoreSmoke(
           console.log(
             'SKIP real preview pointer gestures/animation timing: TREZI_NATIVE_BACKGROUND_TEST'
           )
-        else await checkSelectionInput(host)
+        else
+          await checkSelectionInput(host, async (icons) => {
+            writeFileSync(join(artifacts, 'element-toolbar.json'), JSON.stringify(icons, null, 2))
+            writeFileSync(
+              join(artifacts, 'element-toolbar.png'),
+              Buffer.from(await host.request('captureShell'), 'base64')
+            )
+          })
         await invoke('preview:set-select-mode', false)
         assert.equal(await page('typeof window.api'), 'undefined')
         await assert.rejects(() =>

@@ -35,7 +35,7 @@ struct StatesSwitcherContent: View {
                     .padding(.horizontal, 6).help("Missing in the code\(state.note.isEmpty ? "" : ": " + state.note)")
             }
             Divider().frame(height: 14).padding(.horizontal, 2)
-            segment(nil, symbol: "square.grid.2x2", selected: model.current == "all") { model.action("all") }
+            segment(nil, symbol: "square.stack", selected: model.current == "all") { model.action("all") }
                 .help("All states side by side").accessibilityLabel("All states")
             Button { model.action("hide") } label: { Image(systemName: "eye.slash").frame(width: 22, height: 20) }
                 .buttonStyle(.borderless).help("Hide for screenshots (H)").accessibilityLabel("Hide states switcher")

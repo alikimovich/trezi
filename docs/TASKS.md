@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Element toolbar: distinct 3D inspect and Show states icons (LKM-218)
+
+- [x] Inspect in 3D is an isometric cube (Lucide `box`); the stacked-layers glyph stays Layers' (`square.3.layers.3d`).
+- [x] Show states is a component with its variants stacked behind it; the States switcher's All segment is the matching `square.stack`, not `square.grid.2x2`.
+- [x] Native `selection-input` (group `core`) asserts every element toolbar glyph is distinct and in the shared 15 px, 24-unit, 2 px stroke style, and writes `element-toolbar.png`/`.json`; `states-workbench.png` shows the switcher.
+
 ## Private agent browser (LKM-212)
 
 - [x] A chat/background agent reuses a session-owned offscreen WebKit page with isolated instrumentation, its own route and viewport, a three-browser cap and idle cleanup.

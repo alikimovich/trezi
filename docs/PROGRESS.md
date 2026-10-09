@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-218: distinct icons for 3D inspect and Show states
+
+- **Why.** The element toolbar's Inspect in 3D used stacked layers, the Layers tool's glyph, and Show states and the States switcher's All used a 2×2 grid, which reads as the layout grid overlay (LKM-205).
+- **Glyphs.** Inspect in 3D is Lucide's `box` (isometric cube). Show states is a rounded component with two variant edges stacked behind it; the switcher's All segment is the matching SF `square.stack` (not used elsewhere, unlike `doc.on.doc` for Copy). Same 15 px, 24-unit, 2 px round stroke as the other toolbar icons.
+- **Check.** Native `selection-input` (group `core`) reads every `button[data-kind]` in the toolbar once it shows and fails when two share an SVG or one leaves the shared size/viewBox/stroke; it writes `element-toolbar.json` and `element-toolbar.png`. The switcher is in the existing `states-workbench.png`. The artifacts are written by `smoke-core.ts` through a callback, so `smoke-input.ts` stays out of the retirement census.
+
 ## 2026-10-08 — LKM-212 repair: agent reload, private load errors, Bun reveal gate test
 
 - **Reload.** `reload_preview` on the agent browser returned early because the page already showed the route. `AgentBrowser.open(path, { reload, hard })` now skips that early return and the host's `agentBrowserOpen` reloads from origin; `hard` clears WebKit's caches through `PreviewCache.reload`. Native smoke `agent-preview` asserts `navigation` increments after a soft and a hard reload.

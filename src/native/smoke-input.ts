@@ -21,7 +21,10 @@ export async function captureForegroundChat(host: NativeBridge): Promise<any> {
 }
 
 /** Real WebKit input: page capture listeners are registered by the HTML fixture. */
-export async function checkSelectionInput(host: NativeBridge): Promise<void> {
+export async function checkSelectionInput(
+  host: NativeBridge,
+  toolbarShown: (icons: ToolbarIcon[]) => Promise<void>
+): Promise<void> {
   const evaluate = (code: string, isolated = false) =>
     host.request('evaluate', { view: 'preview', code, isolated })
   const wait = async (code: string): Promise<void> => {
@@ -68,6 +71,7 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   await wait(
     `document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-toolbar]')?.style.display === 'flex'`
   )
+  await toolbarShown(await toolbarIcons(evaluate))
   await input({ ...point, clicks: 2 })
   await wait(`document.querySelector('#native-title').isContentEditable`)
   await input({ key: 'ArrowRight' })
@@ -96,6 +100,29 @@ export async function checkSelectionInput(host: NativeBridge): Promise<void> {
   console.log(
     'Native selection blocks page input; inline caret movement and normal interaction passed.'
   )
+}
+
+/** LKM-218: every element toolbar tool has its own glyph in the shared 24 px, 2 px stroke style. */
+type ToolbarIcon = { kind: string; svg: string; size: string; box: string; stroke: string }
+async function toolbarIcons(evaluate: (code: string) => Promise<any>): Promise<ToolbarIcon[]> {
+  const icons: ToolbarIcon[] =
+    await evaluate(`[...document.querySelector('[data-trezi-overlay]').shadowRoot
+      .querySelectorAll('[data-trezi-toolbar] button[data-kind]')].map((b) => {
+        const svg = b.querySelector('svg');
+        return { kind: b.dataset.kind, svg: svg.innerHTML, size: svg.getAttribute('width') + 'x' + svg.getAttribute('height'),
+          box: svg.getAttribute('viewBox'), stroke: svg.getAttribute('stroke-width') };
+      })`)
+  for (const kind of ['three-d', 'states'])
+    if (!icons.some((icon) => icon.kind === kind)) throw new Error(`Element toolbar has no ${kind}`)
+  for (const icon of icons)
+    if (icon.size !== '15x15' || icon.box !== '0 0 24 24' || icon.stroke !== '2')
+      throw new Error(
+        `Element toolbar icon ${icon.kind} breaks the shared style: ${JSON.stringify(icon)}`
+      )
+  const shared = icons.filter((icon, i) => icons.findIndex((other) => other.svg === icon.svg) !== i)
+  if (shared.length)
+    throw new Error(`Element toolbar tools share a glyph: ${shared.map((icon) => icon.kind)}`)
+  return icons
 }
 
 /** Restore the main test window after auxiliary windows before paint/input checks. */
