@@ -40,6 +40,19 @@ export interface StatesView {
   /** A state id, or `all` for the grid. */
   current: string
   hidden: boolean
+  /** LKM-220: "Back to <page>" when the page it was opened from is known. */
+  back: string | null
+}
+
+/** A row of the toolbar's States menu (LKM-220). */
+export interface WorkbenchItem {
+  folder: string
+  component: string
+  route: string
+  /** The page it was opened from, its chat's title and the state last viewed (labels). */
+  from: string | null
+  chat: string | null
+  last: string | null
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,39}$/
@@ -162,6 +175,27 @@ export const STATES_INVOCATION = /(?:^|\s)\/states(?=\s|$)/
 export function showStatesText(selection: string, componentSource?: string | null): string {
   const instance = componentSource ? `The component instance is at ${componentSource}. ` : ''
   return `/states ${selection}${instance}Build a states workbench for this component.`
+}
+
+/** The turn text for Rebuild States (LKM-220): the same workbench, updated in place. */
+export function rebuildStatesText(bench: Workbench): string {
+  const source = bench.source ? ` (${bench.source})` : ''
+  return `/states The ${bench.component} component${source} changed. Rebuild its states workbench in ${bench.folder} in place: keep the route ${bench.route} and the folder, update the states, fixtures and trezi-workbench.json to match the current code.`
+}
+
+/** The composer chip naming a workbench (LKM-220): `#states-order-list`. */
+export function workbenchReference(bench: Pick<Workbench, 'folder'>): string {
+  const slug = (bench.folder.split('/').pop() ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return `#states-${slug || 'workbench'}`
+}
+
+/** What a sent message says about a workbench chip. */
+export function workbenchReferenceText(bench: Workbench): string {
+  const ids = bench.states.map((state) => state.id).join(', ')
+  return `${workbenchReference(bench)} is the ${bench.component} states workbench in ${bench.folder} (route ${bench.route}, states ${ids}; its manifest is ${bench.folder}/${WORKBENCH_MANIFEST}). Keep working on its states there.`
 }
 
 /** Appended to a `/states` prompt so the manifest records the creating chat. */

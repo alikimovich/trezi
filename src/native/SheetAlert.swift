@@ -55,13 +55,22 @@ struct SheetAlertContent: View {
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                HStack(spacing: 12) {
-                    if state.busy { ProgressView().controlSize(.small).accessibilityLabel("Working") }
-                    Spacer(minLength: 0)
-                    ForEach(roles.others) { button($0, roles: roles, busy: state.busy) }
-                    if let cancel = roles.cancelAction { button(cancel, roles: roles, busy: state.busy) }
-                    if let primary = roles.defaultAction, primary.id != roles.cancelAction?.id, !roles.others.contains(where: { $0.id == primary.id }) {
-                        button(primary, roles: roles, busy: state.busy)
+                // One row; when the buttons do not fit (four, LKM-220) they stack, the default on top.
+                let primary = roles.defaultAction.flatMap { primary in
+                    primary.id != roles.cancelAction?.id && !roles.others.contains(where: { $0.id == primary.id }) ? primary : nil
+                }
+                let row = roles.others + [roles.cancelAction, primary].compactMap { $0 }
+                let column = [primary].compactMap { $0 } + roles.others + [roles.cancelAction].compactMap { $0 }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        if state.busy { ProgressView().controlSize(.small).accessibilityLabel("Working") }
+                        Spacer(minLength: 0)
+                        ForEach(row) { button($0, roles: roles, busy: state.busy) }
+                    }
+                    HStack(alignment: .bottom, spacing: 12) {
+                        if state.busy { ProgressView().controlSize(.small).accessibilityLabel("Working") }
+                        Spacer(minLength: 0)
+                        VStack(alignment: .trailing, spacing: 8) { ForEach(column) { button($0, roles: roles, busy: state.busy) } }
                     }
                 }.padding(.top, 20).frame(minHeight: 20).background {
                     // Esc when the cancel button is also the default, or there is none.

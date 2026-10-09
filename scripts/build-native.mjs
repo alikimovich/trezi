@@ -153,6 +153,7 @@ const host = compile(
     join(root, 'src/native/ToolbarAddress.swift'),
     join(root, 'src/native/ToolbarPublish.swift'),
     join(root, 'src/native/ToolbarMore.swift'),
+    join(root, 'src/native/ToolbarStates.swift'),
     join(root, 'src/native/ToolbarSpeed.swift'),
     join(root, 'src/native/Inspector.swift'),
     join(root, 'src/native/Composer.swift'),

@@ -362,17 +362,24 @@ export function installNativeInspector(
               'Delete the selected element(s) from the source. Remove wrappers, imports, and styles that exist only for them.'
           })
           .catch(report)
-      else if (value === 'states' && controller.element)
-        void chat
-          .command({
-            type: 'submit',
-            chat: entry.activeSessionKey,
-            text: showStatesText(
-              describeSelectionForPrompt(controller.element, entry.root),
-              controller.element.componentSource
-            )
+      else if (value === 'states' && controller.element) {
+        // LKM-220: a component that already has a workbench opens it instead.
+        const element = controller.element
+        void controller
+          .showStates(entry.root, element)
+          .then(async (opened) => {
+            if (opened) return
+            await chat.command({
+              type: 'submit',
+              chat: entry.activeSessionKey,
+              text: showStatesText(
+                describeSelectionForPrompt(element, entry.root),
+                element.componentSource
+              )
+            })
           })
           .catch(report)
+      }
     } else if (channel === 'preview:text-edit') {
       void workspace.services
         .invoke('text:apply', entry.root, value)

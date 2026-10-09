@@ -5,7 +5,9 @@ import SwiftUI
 /// a recorded workbench route (`src/native/states-controller.ts`); the island lists the
 /// component's states in order, plus All states and Hide. Each click goes back to Bun as a
 /// `states-action`, which switches through the page's URL (`src/preview/states-switch.ts`).
-/// It takes clicks, so the page shields it (`PreviewCover.swift`).
+/// It takes clicks, so the page shields it (`PreviewCover.swift`). LKM-220: "← Back to
+/// <page>" returns to the page the workbench was opened from; Continue in Chat focuses the
+/// chat that built it, or a new one with the workbench as a chip.
 struct StatesItem: Identifiable, Equatable {
     let id: String
     let label: String
@@ -17,6 +19,8 @@ final class StatesSwitcherModel: ObservableObject {
     @Published var states: [StatesItem] = []
     @Published var missing: [StatesItem] = []
     @Published var current = ""
+    /// "Back to <page>", empty when the page it came from is not known.
+    @Published var back = ""
     func action(_ name: String, _ id: String = "") { emit(["event":"states-action", "action":name, "id":id]) }
 }
 
@@ -24,6 +28,14 @@ struct StatesSwitcherContent: View {
     @ObservedObject var model: StatesSwitcherModel
     var body: some View {
         HStack(spacing: 4) {
+            if !model.back.isEmpty {
+                Button { model.action("back") } label: {
+                    Label(model.back, systemImage: "chevron.left").font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 200).padding(.horizontal, 6).padding(.vertical, 3).contentShape(Capsule())
+                }
+                .buttonStyle(.plain).help(model.back).accessibilityLabel(model.back)
+                Divider().frame(height: 14).padding(.horizontal, 2)
+            }
             Text(model.component).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
                 .padding(.trailing, 4)
             ForEach(Array(model.states.enumerated()), id: \.element.id) { index, state in
@@ -37,6 +49,8 @@ struct StatesSwitcherContent: View {
             Divider().frame(height: 14).padding(.horizontal, 2)
             segment(nil, symbol: "square.stack", selected: model.current == "all") { model.action("all") }
                 .help("All states side by side").accessibilityLabel("All states")
+            Button { model.action("continue") } label: { Image(systemName: "bubble.left").frame(width: 22, height: 20) }
+                .buttonStyle(.borderless).help("Continue in Chat").accessibilityLabel("Continue in Chat")
             Button { model.action("hide") } label: { Image(systemName: "eye.slash").frame(width: 22, height: 20) }
                 .buttonStyle(.borderless).help("Hide for screenshots (H)").accessibilityLabel("Hide states switcher")
         }
@@ -84,6 +98,8 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
         if model.missing != missing { model.missing = missing }
         model.component = state?["component"] as? String ?? ""
         model.current = state?["current"] as? String ?? ""
+        let back = state?["back"] as? String ?? ""
+        if model.back != back { model.back = back }
         active = state != nil && !states.isEmpty
         wanted = active && state?["hidden"] as? Bool != true
     }
@@ -111,6 +127,6 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
     }
     func inspect() -> [String: Any] {
         ["visible":!isHidden, "active":active, "hidden":active && !wanted, "component":model.component, "states":model.states.map(\.id),
-         "labels":model.states.map(\.label), "missing":model.missing.map(\.id), "current":model.current, "frame":NSStringFromRect(frame)]
+         "labels":model.states.map(\.label), "missing":model.missing.map(\.id), "current":model.current, "back":model.back, "frame":NSStringFromRect(frame)]
     }
 }
