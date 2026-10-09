@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-214: native exploded view controls and appearance
+
+- The isolated preview keeps capture, camera and selection; native Swift renders Back, Code, Front, Reset, separation, layer selection, hints and capture status. A bounded session/revision contract rejects stale actions, and the visible host alone accepts scene state.
+- The host resolves semantic AppKit colors under its effective appearance and sends the palette and measured native bar insets to the shadow scene. The scene waits for that first palette before showing, without changing captured site surfaces.
+- Navigation and close clear native state. The preview keeps its original viewport, source selection path and inert capture limits.
+
 ## 2026-10-08 — LKM-212 repair: agent reload, private load errors, Bun reveal gate test
 
 - **Reload.** `reload_preview` on the agent browser returned early because the page already showed the route. `AgentBrowser.open(path, { reload, hard })` now skips that early return and the host's `agentBrowserOpen` reloads from origin; `hard` clears WebKit's caches through `PreviewCache.reload`. Native smoke `agent-preview` asserts `navigation` increments after a soft and a hard reload.

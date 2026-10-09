@@ -129,6 +129,30 @@ extension Host {
         // The states workbench island and the … menu's Workbenches (LKM-207).
         case "statesInspect": reply(id, statesSwitcher.inspect().merging(["workbenches":shell.workbenchesInspect()]) { _, new in new })
         case "statesPerform": reply(id, statesSwitcher.perform(c["action"] as? String ?? "", c["state"] as? String ?? ""))
+        case "threeDInspect":
+            reply(id, ["active":threeD.active, "session":threeD.model.session, "revision":threeD.model.revision,
+                       "title":threeD.model.title, "layers":threeD.model.layers.map(\.label),
+                       "selected":threeD.model.selected, "separation":threeD.model.separation,
+                       "code":threeD.model.hasSource, "status":threeD.model.status,
+                       "header":NSStringFromRect(threeD.header.frame), "footer":NSStringFromRect(threeD.footer.frame),
+                       "headerType":String(describing: type(of: threeD.header)),
+                       "footerType":String(describing: type(of: threeD.footer)),
+                       "palette":threeD.palette(threeD.header.effectiveAppearance)])
+        case "threeDPerform":
+            guard ephemeral, threeD.active, let action = c["action"] as? String,
+                  ["close", "code", "front", "reset", "separation", "layer"].contains(action) else { reply(id, false); return true }
+            threeD.model.action(action, value: c["value"] as? Int); reply(id, true)
+        case "threeDCapture":
+            guard ephemeral, threeD.active, let content = window.contentView?.superview else { reply(id, error: "No exploded scene"); return true }
+            Task { @MainActor in
+                let prior = window.appearance
+                window.appearance = NSAppearance(named: c["dark"] as? Bool == true ? .darkAqua : .aqua)
+                defer { window.appearance = prior }
+                content.layoutSubtreeIfNeeded(); content.displayIfNeeded()
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                do { reply(id, try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "welcomeInspect": reply(id, welcome.inspect())
         case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])
         case "dividerPerform":

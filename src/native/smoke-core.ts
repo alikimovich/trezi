@@ -54,6 +54,7 @@ import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
+import { checkThreeD } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { checkToolbarMore } from './smoke-toolbar-more'
 import { inspectUntil, waitFor } from './smoke-wait'
@@ -945,6 +946,15 @@ export async function runNativeCoreSmoke(
         if ((await host.request('sheetInspect')).visible)
           await host.request('sheetPerform', { action: 'keep' })
         await restoreStatesWorkbench(page, fixture, statesURL)
+      }
+    },
+    {
+      name: 'three-d',
+      dependsOn: ['open-project'],
+      run: () => checkThreeD(host, artifacts),
+      cleanup: async () => {
+        if ((await host.request('threeDInspect')).active)
+          await host.request('threeDPerform', { action: 'close' })
       }
     },
     {

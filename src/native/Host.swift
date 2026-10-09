@@ -37,6 +37,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let previewLoad = NativePreviewLoad()
     let speedBadge = NativePreviewSpeed()
     let statesSwitcher = NativeStatesSwitcher()
+    let threeD = ThreeDChrome()
     var sourceEditors: [String: NativeSourceEditor] = [:]
     var sourceRoot = ""
     var dockedSource: NativeSourceEditor? { sourceEditors[sourceRoot].flatMap { $0.state["visible"] as? Bool == true && $0.state["popped"] as? Bool != true ? $0 : nil } }
@@ -52,6 +53,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var agentBrowserLoads: [String: Int] = [:]
     var agentBrowserStatuses: [String: Int] = [:]
     var lastUserInteraction = Date()
+    var menuTracking = false
     var targets: [String: URL] = [:]
     var urlObservers: [String: NSKeyValueObservation] = [:]
     var preferences: [String: Any] = [:]
@@ -111,6 +113,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
         canvas.addSubview(previewLoad); canvas.addSubview(speedBadge); canvas.addSubview(statesSwitcher)
+        canvas.addSubview(threeD.header); canvas.addSubview(threeD.footer)
+        threeD.header.appearanceChanged = { [weak self] in self?.sendThreeDAppearance() }
+        threeD.footer.appearanceChanged = { [weak self] in self?.sendThreeDAppearance() }
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
@@ -128,9 +133,16 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
             self?.lastUserInteraction = Date()
+            if event.type == .keyDown, event.keyCode == 53, let self, self.threeD.active,
+               NSApp.keyWindow === self.window, self.window.attachedSheet == nil, !self.menuTracking {
+                self.threeD.model.action("close")
+                return nil
+            }
             return event
         }
         installMenus()
+        NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = true }
+        NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = false }
         if serviceMode {
             connectService()
         } else {
@@ -324,6 +336,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
         case "previewSpeed": setPreviewSpeed(c)
         case "statesState": statesSwitcher.update(c["state"] as? [String: Any]); nativeLayout.layout()
+        case "threeDClear": threeD.clear(); nativeLayout.layout()
         case "workbenches": shell.updateWorkbenches(c["items"] as? [[String: Any]] ?? [])
         case "previewViewport":
             if name.hasPrefix("agent:"), let view {
@@ -386,6 +399,15 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         if body["channel"] as? String == "trezi:preview:element-picked" { previewPicks += 1 }
         // Scroll and selection geometry for the native rulers and guides stays in the host.
         if name == "preview", body["channel"] as? String == "trezi:preview:overlay-geometry" { previewOverlay?.receive(body["args"]); return }
+        if name == "preview", body["channel"] as? String == "trezi:preview:three-d-state" {
+            let document = body["document"] as? String ?? ""
+            guard !document.isEmpty, let args = body["args"] as? [Any], args.count == 1 else { return }
+            if args[0] is NSNull { if threeD.document == document { threeD.clear(); nativeLayout.layout() } }
+            else if let state = args[0] as? [String: Any] {
+                threeD.receive(state, document: document); nativeLayout.layout(); sendThreeDAppearance()
+            }
+            return
+        }
         // Source identity is supplied by the host, never by page-controlled JSON.
         emit(["event":"ipc", "view":name, "message":body])
     }
@@ -396,6 +418,15 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         }
         ProductLog.info("preview", "Preview loaded \(Host.logURL(webView.url))")
         emit(["event":"loaded", "view":name, "url":webView.url?.absoluteString ?? ""])
+    }
+    func sendThreeDAppearance(_ top: Double = 48, _ bottom: Double = 76) {
+        guard threeD.active, let view = views["preview"] else { return }
+        let appearance = threeD.header.effectiveAppearance
+        let scale = max(Double(view.pageZoom * view.magnification), 0.01)
+        let value: [String: Any] = ["type":"event", "channel":"trezi:preview:three-d-appearance",
+            "args":[["palette":threeD.palette(appearance), "top":top / scale, "bottom":bottom / scale]]]
+        guard let data = try? JSONSerialization.data(withJSONObject: value), let json = String(data: data, encoding: .utf8) else { return }
+        view.evaluateJavaScript("globalThis.__treziNativeDispatch?.(\(json))", in: nil, in: world) { _ in }
     }
     var recentCrashes: [TimeInterval] = []
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
