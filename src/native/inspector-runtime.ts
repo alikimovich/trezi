@@ -194,9 +194,55 @@ export function installNativeInspector(
       }, 1200)
     }
   }
+  // LKM-216: a reload of the same page (a live reload after a source edit, a hard reload
+  // past a stale stylesheet) leaves the page without a selection while the island still
+  // shows it. Pick the same element again so the island re-reads it in place.
+  let reattachPick: {
+    root: string
+    element: SelectedElement
+    sequence: number
+    at: number
+  } | null = null
+  let reattaching = false
+  const reattachSelection = async (root: string) => {
+    const element = controller.element
+    if (
+      !element ||
+      restorePick ||
+      reattaching ||
+      (reattachPick && Date.now() - reattachPick.at < 2000) ||
+      controller.state.root !== root ||
+      controller.savedElement(root) ||
+      workspace.active?.root !== root
+    )
+      return
+    reattaching = true
+    try {
+      const sequence = restoreSequence
+      const alive = await workspace.services.invoke('styles:read', ['display']).catch(() => null)
+      if (alive?.values || sequence !== restoreSequence || controller.element !== element) return
+      const snapshot = (await workspace.services.invoke('layers:read')) as LayersSnapshot | null
+      if (!snapshot || sequence !== restoreSequence || controller.element !== element) return
+      const matches = snapshot.nodes.filter(
+        (node) =>
+          node.tag === element.tag &&
+          node.source === element.source &&
+          (node.id ?? null) === (element.id ?? null)
+      )
+      if (matches.length !== 1) return
+      reattachPick = { root, element, sequence, at: Date.now() }
+      await send('layers:select', {
+        path: matches[0].path,
+        fingerprint: { tag: matches[0].tag, source: matches[0].source }
+      })
+    } finally {
+      reattaching = false
+    }
+  }
   workspace.switching = () => {
     cancelMissing()
     restorePick = null
+    reattachPick = null
     const root = controller.state.root
     if (root && pickedOn !== null) pickedPages.set(root, pickedOn)
     ++restoreSequence
@@ -235,8 +281,10 @@ export function installNativeInspector(
         dropSelection()
         void send('preview:clear-selected').catch(report)
       }
+      const reloaded = next === page
       page = next
       if (root && controller.savedElement(root)) void restoreSelection(root).catch(report)
+      else if (root && reloaded) void reattachSelection(root).catch(report)
       return
     }
     if (channel === 'preview:readiness') {
@@ -249,6 +297,8 @@ export function installNativeInspector(
         pageOf(value.url) === pageOf(workspace.state.status.url)
       ) {
         readyRoot = workspace.active.root
+        // A slow page renders its stamps after load: try the reattach again once it has.
+        if (page === pageOf(value.url)) void reattachSelection(readyRoot).catch(report)
         page = pageOf(value.url)
       }
       if (workspace.active?.root) void restoreSelection(workspace.active.root).catch(report)
@@ -262,8 +312,20 @@ export function installNativeInspector(
       pickedOn = page
       const root = entry.root
       const saved = controller.savedElement(root)
-      const restore = restorePick
-      restorePick = null
+      const restore = restorePick,
+        reattach = reattachPick
+      restorePick = reattachPick = null
+      if (
+        reattach?.root === root &&
+        reattach.sequence === restoreSequence &&
+        reattach.element === controller.element
+      ) {
+        void controller
+          .reattach(value)
+          .then((same) => (same ? undefined : controller.select(value)))
+          .catch(report)
+        return
+      }
       if (
         saved &&
         restore?.root === root &&
@@ -356,11 +418,8 @@ export function installNativeInspector(
           })
           .catch(report)
       }
-    } else if (
-      (channel === 'controls:updated' && (value?.root ?? value) === entry.root) ||
-      (channel === 'agent:event' &&
-        ['done', 'landing-finished', 'spawn-finished'].includes(value.type))
-    )
+    } else if (channel === 'controls:updated' && (value?.root ?? value) === entry.root)
+      // A landing re-reads through the editor-freshness hub (LKM-216).
       void controller.refresh().catch(report)
     else if (channel === 'controls:open' && value.root === entry.root) {
       controller.requestedFile = value.file ?? null

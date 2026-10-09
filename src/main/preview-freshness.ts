@@ -15,6 +15,8 @@ export interface PreviewFreshness {
   matches: boolean | null
   /** Paths whose loaded copy differs from what the server serves now. */
   stale: string[]
+  /** The stale stylesheets among them, which a targeted reload can replace (LKM-216). Omitted when none. */
+  staleStyles?: string[]
   note: string
 }
 
@@ -47,25 +49,36 @@ export const PAGE_FNV = `(text) => {
   return hash.toString(16).padStart(8, '0');
 }`
 
-/** Runs in the preview's isolated world: the page's own copies of its CSS/JS. */
+/**
+ * Runs in the preview's isolated world: the page's own copies of its CSS/JS. One entry
+ * per asset: an HMR timestamp (`?t=`) or Trezi's stylesheet reload (`trezi-fresh`) is a
+ * newer copy of the same file, so the latest resource replaces older ones (LKM-216),
+ * while a `<link>`/`<script>` in the document stays authoritative.
+ */
 export const PAGE_ASSETS = `(async () => {
   const fnv = ${PAGE_FNV};
   const origin = location.origin, seen = new Map();
-  const add = (raw, kind) => {
+  const add = (raw, kind, latest) => {
     try {
       const url = new URL(raw, location.href);
       url.hash = '';
-      if (url.origin !== origin || seen.has(url.href)) return;
-      seen.set(url.href, kind);
+      if (url.origin !== origin) return;
+      const key = new URL(url.href);
+      key.searchParams.delete('t');
+      key.searchParams.delete('trezi-fresh');
+      const prior = seen.get(key.href);
+      if (prior && (!latest || prior.fixed)) return;
+      seen.set(key.href, { url: url.href, kind: prior ? prior.kind : kind, fixed: !latest });
     } catch {}
   };
-  for (const link of document.querySelectorAll('link[rel~="stylesheet"][href]')) add(link.href, 'style');
-  for (const script of document.querySelectorAll('script[src]')) add(script.src, 'script');
+  for (const link of document.querySelectorAll('link[rel~="stylesheet"][href]')) add(link.href, 'style', false);
+  for (const script of document.querySelectorAll('script[src]')) add(script.src, 'script', false);
   for (const entry of performance.getEntriesByType('resource'))
     if (entry.initiatorType === 'script' || /\\.(css|m?js|jsx|tsx?|vue|svelte)$/.test(new URL(entry.name).pathname))
-      add(entry.name, ['link', 'css'].includes(entry.initiatorType) ? 'style' : 'script');
-  const picked = [...seen].filter(([, kind]) => kind === 'style').slice(0, 8)
-    .concat([...seen].filter(([, kind]) => kind === 'script').slice(0, 8));
+      add(entry.name, ['link', 'css'].includes(entry.initiatorType) ? 'style' : 'script', true);
+  const assets = [...seen.values()].map((asset) => [asset.url, asset.kind]);
+  const picked = assets.filter(([, kind]) => kind === 'style').slice(0, 8)
+    .concat(assets.filter(([, kind]) => kind === 'script').slice(0, 8));
   const sizes = new Map(performance.getEntriesByType('resource').map((e) => [e.name.split('#')[0], e.decodedBodySize || 0]));
   return Promise.all(picked.map(async ([url, kind]) => {
     let hash = null;
@@ -150,15 +163,61 @@ export async function previewFreshness(
     })
   )
   const checked = results.filter((r) => r !== null).length
-  const stale = page.filter((_asset, i) => results[i] === true).map((asset) => pathOf(asset.url))
+  const outdated = page.filter((_asset, i) => results[i] === true)
+  const stale = outdated.map((asset) => pathOf(asset.url))
+  const staleStyles = outdated
+    .filter((asset) => asset.kind === 'style')
+    .map((asset) => new URL(asset.url).pathname)
   return {
     checked,
     matches: checked ? stale.length === 0 : null,
     stale,
+    ...(staleStyles.length ? { staleStyles } : {}),
     note: !checked
       ? 'No stylesheet or script of the page could be compared with the dev server.'
       : stale.length
         ? 'The preview runs older CSS/JS than the dev server serves now: call reload_preview with hard: true; if it stays stale, restart_dev_server with cleanCache: true.'
         : 'The CSS/JS the preview loaded matches what the dev server serves now.'
+  }
+}
+
+/**
+ * LKM-216, runs in the preview's isolated world: replaces each same-origin
+ * `<link rel=stylesheet>` whose path is listed with a cache-busted copy (`trezi-fresh`),
+ * removing the old one only once the new one loaded, so the page never flashes unstyled.
+ * Answers how many links it replaced; a stale asset that is no link (a CSS module Vite
+ * injects from JS) is left for the caller's hard reload.
+ */
+export function pageReloadStyles(paths: string[]): string {
+  return `(() => {
+  const paths = new Set(${JSON.stringify(paths.slice(0, MAX_ASSETS))});
+  const stamp = String(Date.now());
+  let count = 0;
+  for (const link of document.querySelectorAll('link[rel~="stylesheet"][href]')) {
+    let url;
+    try { url = new URL(link.href, location.href); } catch { continue; }
+    if (url.origin !== location.origin || !paths.has(url.pathname)) continue;
+    url.searchParams.set('trezi-fresh', stamp);
+    const next = link.cloneNode();
+    next.href = url.href;
+    const drop = () => link.remove();
+    next.addEventListener('load', drop, { once: true });
+    next.addEventListener('error', drop, { once: true });
+    link.after(next);
+    count++;
+  }
+  return count;
+})()`
+}
+
+/** Replaces the preview's stale stylesheets in place; the number replaced, 0 when it could not. */
+export async function reloadPreviewStyles(paths: string[], timeoutMs = 1000): Promise<number> {
+  const host = previewAgentHost()
+  if (!host || !paths.length) return 0
+  try {
+    const count = await host.evaluate(pageReloadStyles(paths), 'preview', timeoutMs)
+    return typeof count === 'number' && Number.isFinite(count) ? count : 0
+  } catch {
+    return 0
   }
 }

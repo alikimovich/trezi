@@ -48,6 +48,7 @@ import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-own
 import { createProject } from '../main/scaffold'
 import { registerSetupIpc } from '../main/setup'
 import { registerSimulatorIpc } from '../main/simulator'
+import { observedSourceOwner } from '../main/source-changes'
 import { type SourceOwner, setSourceOwner } from '../main/source-owner'
 import { registerStylesIpc } from '../main/styles'
 import { registerTokensIpc } from '../main/tokens'
@@ -77,6 +78,7 @@ import { displayText, setDisplayProfile } from './display-paths'
 import { NativeDreamerController, nativeDreamer } from './dreamer-controller'
 import { serviceEditing } from './editing-service'
 import { NativeEditorController } from './editor-controller'
+import { installEditorFreshness } from './editor-freshness-runtime'
 import { NativeGitController } from './git-controller'
 import { installNativeInspector } from './inspector-runtime'
 import { NativeLayersController } from './layers-controller'
@@ -216,7 +218,8 @@ async function main() {
   // Source transactions (S08/S09): parsers propose, the service commits hash-bound
   // transactions in the repository's lane (inside the leases this chain holds) and
   // owns Undo, file operations and saved drafts.
-  const source: SourceOwner = serviceSource(host, leases)
+  // Each successful write also tells the editor's caches (LKM-216, docs/CACHES.md).
+  const source: SourceOwner = observedSourceOwner(serviceSource(host, leases))
   setSourceOwner(source)
   // Conversation state (S11): the service owns chat records and History, live-chat
   // checkpoints, turn transitions, titles, model handoff, approvals and spawn admission.
@@ -700,6 +703,13 @@ async function main() {
   installPreviewLoads(host, workspaceController, shellController)
   installPreviewRefresh(host, workspaceController, (error) =>
     activityController.append(String(error), 'error')
+  )
+  installEditorFreshness(
+    host,
+    workspaceController,
+    inspectorController,
+    layersController,
+    (error) => activityController.append(String(error), 'error')
   )
   installPreviewSpeed(host, previewView)
   installStatesWorkbench({
