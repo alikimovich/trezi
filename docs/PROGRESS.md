@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-219: editor-freshness smoke waits for the hub before selecting the card
+
+- **Why.** Two native core runs failed at `editor-freshness` step 3: the island still showed `#fresh-box` ("prop label One" never appeared, or `#fresh-card selected` timed out). Step 2's token save leaves a re-read and a style check pending; under load one lands after `select('fresh-card')` and the previous selection returns. Step 5 already waits for the hub to be idle for the same reason. Nothing in the Back/Forward or key-layout code touches selection.
+- **Change.** `src/native/smoke-editor-freshness.ts` waits for `nativeFreshness.hub.idle` before step 3's selection. No assertion was loosened. Native core then passed 26 of 26, with `source-syntax` also passing.
+- **Changelog.** The LKM-219 lines stay under `## [Unreleased]`; the released 0.1.0 section is untouched.
+
 ## 2026-10-09 — LKM-219: preview Back/Forward and layout-independent shortcuts
 
 - **History.** `PreviewHistory` (`src/native/PreviewHistory.swift`) adds View → Back (⌘[) and Forward (⌘]), validated against the preview's `backForwardList`, and sets `allowsBackForwardNavigationGestures` on the preview. One WebKit view serves every project, so a step stops at an entry on another origin. An agent's `open_preview` into the visible preview now loads with `agent: true` (`inspector-runtime` → `preview:load` → bridge `load`). The host marks that navigation's item when it commits, and menu, keys and swipe skip it (a swipe onto one is cancelled in `decidePolicyFor` and redone as our step). The address bar follows through the existing URL KVO.

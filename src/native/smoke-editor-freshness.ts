@@ -144,7 +144,15 @@ export async function checkEditorFreshness(
   )
   evidence.tokens = tokens
 
-  // 3. A component edit: the props re-read.
+  // 3. A component edit: the props re-read. The earlier saves' own re-reads and style
+  // checks finish first: one that lands after the new selection (a reload under load)
+  // would put the previous element back.
+  await waitFor(
+    () => nativeFreshness.hub?.idle ?? true,
+    'freshness hub idle before the component selection',
+    5000,
+    () => ({ stats: JSON.stringify(nativeFreshness.hub?.stats) })
+  )
   await select('fresh-card')
   await tab('props')
   await waitFor(
