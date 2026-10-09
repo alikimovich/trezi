@@ -67,6 +67,10 @@ export const LAYERS_SET_WATCH = 'layers:set-watch' // → preload (boolean)
 
 export const PREVIEW_MOVE_NODE = 'trezi:preview:move-node' // → main (MoveNodeRequest)
 
+/** → main (no payload, debounced): the page's stylesheets changed in place, i.e. an HMR
+ *  update applied CSS without a new document (LKM-216). */
+export const PREVIEW_STYLES_UPDATED = 'trezi:preview:styles-updated'
+
 export const ANIMATION_REPLAY = 'trezi:preview:animation-replay' // → preload (component name)
 
 // ── States workbench (LKM-207) ─────────────────────────────────────────────

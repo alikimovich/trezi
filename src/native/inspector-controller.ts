@@ -32,7 +32,8 @@ export class NativeInspectorController {
     fields: [],
     actions: [],
     error: '',
-    busy: false
+    busy: false,
+    updated: 0
   }
   requestedFile: string | null = null
   linked = new Set<string>()
@@ -170,7 +171,32 @@ export class NativeInspectorController {
     this.publish()
     if (element) await this.refresh()
   }
-  async refresh() {
+  /**
+   * LKM-216: the live tree, the page or its CSS changed. Re-reads everything the island
+   * shows (computed styles, props, tokens, controls) without a new generation, so open
+   * fields update in place. An edit of the island's own (busy, or reconciling its
+   * preview override) is left alone: it re-reads when it settles.
+   */
+  async invalidated() {
+    if (!this.state.root || this.state.busy || this.reconciles.size) return
+    await this.refresh(true)
+  }
+  /** The same element, picked again in a new document (a reload); false when it is another one. */
+  async reattach(element: SelectedElement): Promise<boolean> {
+    const current = this.element
+    if (
+      !current ||
+      current.tag !== element.tag ||
+      current.source !== element.source ||
+      (current.id ?? null) !== (element.id ?? null)
+    )
+      return false
+    this.element = element
+    this.onElement(element)
+    await this.refresh(true)
+    return true
+  }
+  async refresh(changed = false) {
     const root = this.state.root,
       element = this.element,
       generation = ++this.sequence
@@ -196,7 +222,9 @@ export class NativeInspectorController {
     ])
     if (generation !== this.sequence || root !== this.state.root || element !== this.element) return
     this.inspection = results[0].status === 'fulfilled' ? results[0].value : null
-    this.styles = results[1].status === 'fulfilled' ? results[1].value : null
+    const styles = results[1].status === 'fulfilled' ? results[1].value : null
+    // Mid-reload the page has no selection to read; keep the last values until it has.
+    if (!changed || styles?.values) this.styles = styles
     this.classRule = results[4].status === 'fulfilled' ? results[4].value : null
     this.tokens = results[2].status === 'fulfilled' ? results[2].value : null
     const manifests = results[3].status === 'fulfilled' ? results[3].value : []
@@ -208,7 +236,10 @@ export class NativeInspectorController {
     }).catch(() => [])
     if (generation !== this.sequence || element !== this.element || root !== this.state.root) return
     this.controls = controls
+    const before = changed ? JSON.stringify(this.state.fields) : ''
     this.build()
+    if (changed && JSON.stringify(this.state.fields) !== before)
+      this.state.updated = (this.state.updated ?? 0) + 1
     this.publish()
   }
   build() {

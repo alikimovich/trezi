@@ -25,6 +25,9 @@ export interface NativeInspectorState {
   actions: { id: string; label: string }[]
   error: string
   busy: boolean
+  /** Counts re-reads after a change that altered what the island shows; each new value
+   *  plays the island's "updated" pulse (LKM-216). */
+  updated?: number
 }
 export interface NativeInspectorAction {
   root: string
