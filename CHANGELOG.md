@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-09
+
 ### Added
 - Answer components in chat: agents can show design options (2–4 variants with preview images that appear as skeletons while they are captured; pick one and Apply, or None of these with what to change) and question forms (choice, text, number, slider, color with token swatches, toggle; one Submit) right in their message, in light and dark. Your pick or values go back as one structured message, stay with the chat, and are summarized for the agent on the next turn. Forms are now how agents ask structured questions with Claude and Codex (LKM-208).
 - Component states workbench: `/states`, Show states on the selected element's toolbar or its … menu ask the agent to build a scratch page showing every state of that component (missing states marked); on that page a States switcher (click, ←/→, 1-9, H to hide) changes the state in place, All shows every state side by side as live frames, and the preview … menu's Workbenches opens or removes a workbench (Publish warns while one exists). Adapted from Jakub Krehel's MIT-licensed state-machine skill (LKM-207).
