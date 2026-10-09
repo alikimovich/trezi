@@ -25,6 +25,10 @@ final class WorkspaceLayout {
     /// The Layers button's centre in canvas coordinates when the island was last placed.
     private(set) var layersAnchor: CGFloat?
     let device = NSImageView()
+    /// The bezel the mobile viewport shows, with its measured screen opening (LKM-217).
+    private(set) var deviceFrame: DeviceFrame?
+    /// The page's clip radius: the opening's corner at the bezel's scale, 0 on desktop.
+    private(set) var pageRadius: CGFloat = 0
     private var animation: Timer?
     private var layingOut = false
     private var lastFrame = NSRect.zero
@@ -49,7 +53,8 @@ final class WorkspaceLayout {
             if var spot = self.inspectorSpot, spot.left { spot.x = max(FloatingIsland.inset, spot.x + self.inspectorWidth - width); self.inspectorSpot = spot }
             self.inspectorWidth = width; self.layout(); self.saveSizes()
         }
-        device.image = NSImage(contentsOfFile: host.directory + "/device.png")
+        deviceFrame = DeviceFrame.offered.lazy.compactMap { DeviceFrame.load($0.0, path: host.directory + "/" + $0.1) }.first
+        device.image = deviceFrame?.image
         device.imageScaling = .scaleProportionallyUpOrDown
         device.isHidden = true
         host.canvas.addSubview(device, positioned: .below, relativeTo: host.views["preview"])
@@ -204,28 +209,31 @@ final class WorkspaceLayout {
         host.editingInspector.place(island)
         host.layers.place(placed.layers)
         let mobile = viewportWidth == nil && shellState["viewport"] as? String == "mobile"
-        var zoom: CGFloat = 1
+        var zoom: CGFloat = 1, radius: CGFloat = 0
         if let width = viewportWidth { (page, zoom) = PreviewAgent.frame(width: width, in: pageArea) }
         // Opening, setup and error own the content area: the last project's page must not cover them.
         let shown = previewVisible && host.previewStatus.isHidden
-        device.isHidden = !mobile || !shown
-        if mobile {
-            let height = min(880, max(120, available.height - 32), max(120, available.width - 32) * 1252 / 606)
-            let bezel = NSRect(x: available.midX - height * 606 / 1252 / 2, y: available.midY - height / 2, width: height * 606 / 1252, height: height)
+        device.isHidden = !mobile || !shown || deviceFrame == nil
+        if mobile, let frame = deviceFrame {
+            // The page fills the bezel's opening (its edges rounded out to whole backing pixels,
+            // so no canvas shows through the anti-aliased seam) and takes the opening's corner.
+            let bezel = frame.bezel(in: available), screen = frame.screen(in: bezel)
             device.frame = bezel
-            page = NSRect(x: bezel.minX + bezel.width * 0.0396, y: bezel.minY + bezel.height * 0.01677, width: bezel.width * (1 - 0.0396 - 0.04125), height: bezel.height * (1 - 0.01677 * 2))
+            page = host.canvas.backingAlignedRect(screen.rect, options: .alignAllEdgesOutward); radius = screen.radius
         }
+        pageRadius = radius
         if let preview = host.views["preview"] {
             preview.autoresizingMask = []; preview.frame = page
             if preview.pageZoom != zoom { preview.pageZoom = zoom }
-            preview.layer?.cornerRadius = mobile ? page.width * 0.12 : 0
-            preview.layer?.masksToBounds = mobile
+            preview.layer?.cornerRadius = radius
+            preview.layer?.cornerCurve = .continuous
+            preview.layer?.masksToBounds = radius > 0
             preview.isHidden = !shown || page.width <= 0 || page.height <= 0
         }
         // Loading and HTTP-error pill over the page (LKM-196), never over Opening or error states.
         host.previewLoad.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         // Rulers along the preview area, zeroed at the page origin; guides and grids over the page (LKM-205).
-        host.previewOverlay?.place(page: page, area: available, scale: zoom * (host.views["preview"]?.magnification ?? 1), radius: mobile ? page.width * 0.12 : 0, visible: shown && host.views["preview"]?.isHidden == false)
+        host.previewOverlay?.place(page: page, area: available, scale: zoom * (host.views["preview"]?.magnification ?? 1), radius: radius, visible: shown && host.views["preview"]?.isHidden == false)
         host.speedBadge.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         host.statesSwitcher.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
@@ -239,10 +247,21 @@ final class WorkspaceLayout {
         host.sendPreviewCover()
         if page != lastFrame || leading != lastLeading {
             lastFrame = page; lastLeading = leading
-            emit(["event":"native-layout-frame", "frame":["x":Double(page.minX), "y":Double(page.minY), "width":Double(page.width), "height":Double(page.height), "radius":mobile ? Double(page.width * 0.12) : 0, "leading":Double(leading)]])
+            emit(["event":"native-layout-frame", "frame":["x":Double(page.minX), "y":Double(page.minY), "width":Double(page.width), "height":Double(page.height), "radius":Double(radius), "leading":Double(leading)]])
         }
     }
     func inspect() -> [String: Any] { ["native":true, "windowHeight":Double(host?.window.frame.height ?? 0), "canvasHeight":Double(host?.canvas.bounds.height ?? 0), "captureHeight":Double(host?.window.contentView?.superview?.bounds.height ?? 0), "width":Double(width()), "fraction":Double(fraction), "preview":NSStringFromRect(host?.views["preview"]?.frame ?? .zero), "panel":NSStringFromRect(host?.editingInspector.frame ?? .zero),
         "leading":Double(lastLeading), "chatReady":chatReady, "chatColumnHidden":host?.chatColumn.isHidden ?? true, "chatHidden":host?.chat.isHidden ?? true,
-        "status":NSStringFromRect(host?.previewStatus.frame ?? .zero), "statusHidden":host?.previewStatus.isHidden ?? true, "previewHidden":host?.views["preview"]?.isHidden ?? true,"statusKind":host?.previewStatus.model.kind ?? ""] }
+        "status":NSStringFromRect(host?.previewStatus.frame ?? .zero), "statusHidden":host?.previewStatus.isHidden ?? true, "previewHidden":host?.views["preview"]?.isHidden ?? true,"statusKind":host?.previewStatus.model.kind ?? "", "device":deviceInspect()] }
+    /// The bezel, the page's frame and clip, and every offered frame's measured opening (LKM-217).
+    func deviceInspect() -> [String: Any] {
+        func box(_ r: NSRect) -> [String: Double] { ["x":Double(r.minX), "y":Double(r.minY), "width":Double(r.width), "height":Double(r.height)] }
+        let preview = host?.views["preview"], guides = host?.previewOverlay?.guides.layer
+        let directory = host?.directory ?? ""
+        return ["shown":!device.isHidden, "name":deviceFrame?.name ?? "", "bezel":box(device.frame), "page":box(preview?.frame ?? .zero),
+                "radius":Double(preview?.layer?.cornerRadius ?? 0), "curve":preview?.layer?.cornerCurve.rawValue ?? "", "masks":preview?.layer?.masksToBounds ?? false,
+                "guidesRadius":Double(guides?.cornerRadius ?? 0), "guidesCurve":guides?.cornerCurve.rawValue ?? "", "pageRadius":Double(pageRadius),
+                "backingScale":Double(host?.window.backingScaleFactor ?? 2),
+                "frames":DeviceFrame.offered.map { DeviceFrame.load($0.0, path: directory + "/" + $0.1)?.inspect() ?? ["name":$0.0, "missing":true] }]
+    }
 }
