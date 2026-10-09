@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-218 repair: element toolbar capture shows the toolbar
+
+- Review found `element-toolbar.png` without the toolbar: `captureShell` is an offscreen `cacheDisplay` and does not reliably paint the preview's WebKit overlay. The capture now uses `captureVisibleWindow` after `preparePreviewInput` (retried up to 3 times when focus moves), and `element-toolbar.json` records the toolbar's bounding rect and the viewport, failing the check if the toolbar has no size.
+
 ## 2026-10-08 — LKM-218: distinct icons for 3D inspect and Show states
 
 - **Why.** The element toolbar's Inspect in 3D used stacked layers, the Layers tool's glyph, and Show states and the States switcher's All used a 2×2 grid, which reads as the layout grid overlay (LKM-205).
