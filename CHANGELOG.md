@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+- Full access Codex chats no longer warn that the live project changed outside the chat after Trezi's own landings (land now, the turn's landing), Publish, base syncs, conflict files, dependency installs or dev-server output; a real outside change is one compact row with Details, and only the agent's own commands are blamed on the agent (LKM-215).
+
 ## [0.1.0] - 2026-10-09
 
 ### Added
@@ -47,7 +50,6 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
-- Full access Codex chats no longer warn that the live project changed outside the chat after Trezi's own landings (land now, the turn's landing), Publish, base syncs, conflict files, dependency installs or dev-server output; a real outside change is one compact row with Details, and only the agent's own commands are blamed on the agent (LKM-215).
 - The editing island, Layers, chat islands and token lists no longer show stale values after a change. A landing, an editor save, an island edit, a file changed outside Trezi or a dependency update re-reads the selected element in place, and the island shows a small "Updated" pulse. A stylesheet the preview did not pick up within about half a second is reloaded on its own, with a hard reload as the fallback (LKM-216).
 - Publish and its menu are again the rightmost preview toolbar group at every window width: slow motion moved into the select/device/ruler group, and the … menu sits just before Publish (LKM-213).
 - Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).

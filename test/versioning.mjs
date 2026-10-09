@@ -121,11 +121,9 @@ assert.deepEqual(
   }),
   []
 )
-assert.match(
-  unreleasedBody(read('CHANGELOG.md')),
-  /trezi --version/,
-  'CHANGELOG has an entry for this change'
-)
+// The versioning entry moves out of Unreleased into its release section (v0.1.0), so look
+// at the whole changelog: it must still record the change.
+assert.match(read('CHANGELOG.md'), /trezi --version/, 'CHANGELOG has an entry for this change')
 assert.match(read('.gitattributes'), /^CHANGELOG\.md merge=union$/m)
 assert.match(read('AGENTS.md'), /CHANGELOG\.md/, 'AGENTS.md documents the changelog rule')
 assert.match(

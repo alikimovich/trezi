@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-215 repair: source-syntax is not this ticket's
+
+- **Decision.** The manager's native run failed `source-syntax` (median p95 31 ms against 16 ms). That timing failure already exists on main and urgent ticket LKM-222 owns it, so LKM-215 does not touch the check or its harness. An earlier harness attempt here (extra waits for the freshness hub) was reverted: `src/native/smoke-source-syntax.ts` matches the base exactly, with no warm-up pass, wait or quiet stretch.
+- **Kept.** Only the LKM-215 scope: the live-change watch, its tests, the CHANGELOG line (now under `[Unreleased]`, since v0.1.0 emptied it) and this log. `test/versioning.mjs` checks the whole changelog for the versioning entry, which v0.1.0 moved out of Unreleased; the stale assertion failed the unit tier on main as well.
+- **Next.** After LKM-222 merges the manager re-verifies this run.
+
 ## 2026-10-08 — LKM-215 repair: watch spawns and continuation runs
 
 - **Review defects.** The old adapter compared the live tree on every Full access Codex run in a worktree. The Bun watch only covered the interactive send, so a background spawn and an automatic continuation run could write the live checkout unreported.
