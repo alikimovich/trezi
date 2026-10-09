@@ -15,6 +15,7 @@ import {
 import { chatUiTool } from './chat-ui'
 import { openAgentCode } from './code-tools'
 import { noteServedRevision } from './landing-context'
+import { treziLiveEffect } from './live-change-watch'
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
 import { previewServers } from './preview-evidence'
 import { identityText, isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
@@ -86,9 +87,26 @@ export function setPreviewRevealGateForTests(gate: (() => Promise<boolean>) | nu
   revealGate = gate ?? (() => bridge().request('previewRevealAllowed') as Promise<boolean>)
 }
 
+/** Tools that change the live checkout themselves: what they change is Trezi's own
+ *  effect, never an outside change in the turn's report (LKM-215). */
+export const LIVE_EFFECT_TOOLS: ReadonlySet<SessionTool> = new Set<SessionTool>([
+  'land_now',
+  'publish_update',
+  'publish_merge',
+  'git_sync_base',
+  'git_merge_continue',
+  'git_merge_abort',
+  'prepare_conflict_resolution',
+  'restart_dev_server',
+  'install_skills'
+])
+
 /** Runs one session tool; every call is timed and logged with its phases (LKM-200). */
 export function runTreziTool(action: SessionTool, args: unknown, s: ToolScope): Promise<unknown> {
-  return timedToolCall(s.emitKey, String(action), () => runTool(action, args, s))
+  const run = () => runTool(action, args, s)
+  return timedToolCall(s.emitKey, String(action), () =>
+    LIVE_EFFECT_TOOLS.has(action) ? treziLiveEffect(s.liveRoot, run) : run()
+  )
 }
 
 async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promise<unknown> {
