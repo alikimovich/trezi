@@ -22,7 +22,7 @@ const overlaps = (a: string, b: string): boolean =>
  *   the user can and has the network; there is no Seatbelt profile at all. It still
  *   works in the chat's worktree, and Trezi lands the result in the live checkout. Codex
  *   has no pre-tool hook (the Claude adapter's `live-write-guard.ts`), so a direct write
- *   to the live checkout is detected after the turn instead (`live-tree-watch.ts`).
+ *   to the live checkout is detected after the turn instead (`main/live-change-watch.ts`, LKM-215).
  * - `project` (LKM-156): `workspace-write` with the chat's worktree as the working
  *   directory. That sandbox also keeps `/tmp`, `$TMPDIR` and any `writable_roots` from
  *   the user's `~/.codex/config.toml` writable; in a worktree session the user's extra
