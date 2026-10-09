@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Mobile viewport: page corners match the device frame (LKM-217)
+
+- [x] `src/native/DeviceFrame.swift` measures each offered bezel's screen opening and continuous corner radius from the asset's alpha; the page and overlay are clipped with it (`cornerCurve = .continuous`) at the bezel's scale.
+- [x] Unit `device-frame`: the opening matches an independent PNG decode and a CALayer continuous corner traces the asset's edge; native `device-frame` (group `core`): page rect and clip at two scales, four corner captures in light and dark.
+
 ## Private agent browser (LKM-212)
 
 - [x] A chat/background agent reuses a session-owned offscreen WebKit page with isolated instrumentation, its own route and viewport, a three-browser cap and idle cleanup.

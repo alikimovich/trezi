@@ -190,6 +190,7 @@ const UNIT = [
   'ask-user',
   'chat-ui',
   'chat-ui-model',
+  'device-frame',
   'tw-classes',
   'tw-styles',
   'token-match',

@@ -45,6 +45,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
+- In the mobile viewport the page's corners now follow the iPhone frame's screen corners exactly (the same continuous curve and radius, at any size, in light and dark), with no gap or overlap at the bezel (LKM-217).
 - Publish and its menu are again the rightmost preview toolbar group at every window width: slow motion moved into the select/device/ruler group, and the … menu sits just before Publish (LKM-213).
 - Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).
 - Switching projects in the sidebar no longer jumps back to the previous project first: the clicked project is selected and shown ("Opening …") at once while its dev server starts, and rapid clicks end on the last one (LKM-204).
