@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-214 review repair: compact chrome, panel clearance and focus
+
+- Compact exploded-view bars now keep Back, Code, Front, Reset, separation and the layer picker visible without hidden scrolling. The inspector and Layers islands fit between the bars when there is camera room; the scene receives matching side insets. A scene that cannot show its bars closes.
+- The stage gains focus after its first native palette. Escape closes from WebKit or the 3D bars while leaving other native responders alone; exit returns native focus to WebKit. Session actions remain usable through page refreshes, while layer and Code still require the current revision.
+- Native `three-d` smoke now checks camera keys, inspector/Code capture, compact geometry, focus, HMR/removal, navigation, and repeated open/close.
+
 ## 2026-10-08 — LKM-214: native exploded view controls and appearance
 
 - The isolated preview keeps capture, camera and selection; native Swift renders Back, Code, Front, Reset, separation, layer selection, hints and capture status. A bounded session/revision contract rejects stale actions, and the visible host alone accepts scene state.

@@ -1,4 +1,5 @@
 import type { ThreeDAction, ThreeDState } from '../shared/api'
+import { threeDActionAllowed } from '../shared/three-d-contract'
 import { sourceSelector, sourceStamp } from './source-stamp'
 import { captureSurfaces, type Surface } from './three-d-paint'
 import { THREE_D_CSS } from './three-d-styles'
@@ -34,15 +35,29 @@ export function createThreeDInspector(options: {
   close: () => void
   selected: () => Element | null
   action: (action: ThreeDAction) => void
-  appearance: (palette: Record<string, string>, top: number, bottom: number) => void
+  key: (event: KeyboardEvent) => void
+  appearance: (
+    palette: Record<string, string>,
+    top: number,
+    bottom: number,
+    left: number,
+    right: number
+  ) => void
 } {
   let host: HTMLDivElement | null = null
   let cleanup: (() => void) | null = null
   let resolveSelected: (() => Element | null) | null = null
   let current: ThreeDState | null = null
   let runAction: ((action: ThreeDAction) => void) | null = null
+  let handleKey: ((event: KeyboardEvent) => void) | null = null
   let setAppearance:
-    | ((palette: Record<string, string>, top: number, bottom: number) => void)
+    | ((
+        palette: Record<string, string>,
+        top: number,
+        bottom: number,
+        left: number,
+        right: number
+      ) => void)
     | null = null
   const close = (): void => {
     if (!host) return
@@ -53,6 +68,7 @@ export function createThreeDInspector(options: {
     resolveSelected = null
     current = null
     runAction = null
+    handleKey = null
     setAppearance = null
     options.publish(null)
     options.close()
@@ -233,7 +249,7 @@ export function createThreeDInspector(options: {
       publish()
     }
     runAction = (message) => {
-      if (message.session !== session || message.revision !== revision || disposed) return
+      if (disposed || !threeDActionAllowed(message, session, revision, surfaces.length)) return
       switch (message.action) {
         case 'close':
           close()
@@ -260,17 +276,12 @@ export function createThreeDInspector(options: {
           publish()
           return
         case 'layer':
-          if (
-            !Number.isInteger(message.value) ||
-            message.value < 0 ||
-            message.value >= surfaces.length
-          )
-            return
           choose(message.value)
           return
       }
     }
-    setAppearance = (palette, top, bottom) => {
+    setAppearance = (palette, top, bottom, left, right) => {
+      const firstAppearance = workspace.style.visibility === 'hidden'
       for (const key of ['background', 'grid', 'outline', 'accent', 'focus']) {
         if (/^#[0-9a-fA-F]{6}$/.test(palette[key] ?? ''))
           workspace.style.setProperty(`--three-d-${key}`, palette[key])
@@ -279,8 +290,13 @@ export function createThreeDInspector(options: {
         workspace.style.setProperty('--three-d-top', `${top}px`)
       if (Number.isFinite(bottom) && bottom >= 0 && bottom <= 300)
         workspace.style.setProperty('--three-d-bottom', `${bottom}px`)
+      if (Number.isFinite(left) && left >= 0 && left <= 2000)
+        workspace.style.setProperty('--three-d-left', `${left}px`)
+      if (Number.isFinite(right) && right >= 0 && right <= 2000)
+        workspace.style.setProperty('--three-d-right', `${right}px`)
       workspace.style.visibility = 'visible'
       scheduleCamera()
+      if (firstAppearance) stage.focus({ preventScroll: true })
     }
     workspace.style.visibility = 'hidden'
     workspace.append(stage)
@@ -315,7 +331,7 @@ export function createThreeDInspector(options: {
       e.preventDefault()
       scheduleCamera()
     }
-    window.addEventListener('keydown', onKey, true)
+    handleKey = onKey
     let drag: { id: number; x: number; y: number; moved: boolean; layer: number | null } | null =
       null
     stage.addEventListener('pointerdown', (e) => {
@@ -396,7 +412,6 @@ export function createThreeDInspector(options: {
       resize.disconnect()
       clearTimeout(timer)
       cancelAnimationFrame(frame)
-      window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('resize', scheduleRefresh)
       window.removeEventListener('pagehide', onPageHide)
       document.removeEventListener('load', scheduleRefresh, true)
@@ -408,7 +423,6 @@ export function createThreeDInspector(options: {
         focusBefore.focus({ preventScroll: true })
     }
     refresh()
-    stage.focus({ preventScroll: true })
   }
   return {
     active: () => host !== null,
@@ -416,6 +430,8 @@ export function createThreeDInspector(options: {
     close,
     selected: () => resolveSelected?.() ?? null,
     action: (message) => runAction?.(message),
-    appearance: (palette, top, bottom) => setAppearance?.(palette, top, bottom)
+    key: (event) => handleKey?.(event),
+    appearance: (palette, top, bottom, left, right) =>
+      setAppearance?.(palette, top, bottom, left, right)
   }
 }

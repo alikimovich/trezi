@@ -130,11 +130,21 @@ extension Host {
         case "statesInspect": reply(id, statesSwitcher.inspect().merging(["workbenches":shell.workbenchesInspect()]) { _, new in new })
         case "statesPerform": reply(id, statesSwitcher.perform(c["action"] as? String ?? "", c["state"] as? String ?? ""))
         case "threeDInspect":
+            let insets = threeD.insets
+            func rect(_ r: NSRect) -> [String: Double] { ["x":Double(r.minX), "y":Double(r.minY), "width":Double(r.width), "height":Double(r.height)] }
             reply(id, ["active":threeD.active, "session":threeD.model.session, "revision":threeD.model.revision,
                        "title":threeD.model.title, "layers":threeD.model.layers.map(\.label),
                        "selected":threeD.model.selected, "separation":threeD.model.separation,
+                       "compact":threeD.model.compact,
                        "code":threeD.model.hasSource, "status":threeD.model.status,
                        "header":NSStringFromRect(threeD.header.frame), "footer":NSStringFromRect(threeD.footer.frame),
+                       "headerRect":rect(threeD.header.frame), "footerRect":rect(threeD.footer.frame),
+                       "headerHidden":threeD.header.isHidden, "footerHidden":threeD.footer.isHidden,
+                       "inspector":NSStringFromRect(editingInspector.frame), "inspectorHidden":editingInspector.isHidden,
+                       "layersFrame":NSStringFromRect(layers.frame), "layersHidden":layers.isHidden,
+                       "inspectorRect":rect(editingInspector.frame), "layersRect":rect(layers.frame),
+                       "insets":["top":insets.top, "bottom":insets.bottom, "left":insets.left, "right":insets.right],
+                       "focus":window.firstResponder === views["preview"] ? "preview" : threeD.ownsFocus(window.firstResponder) ? "chrome" : "other",
                        "headerType":String(describing: type(of: threeD.header)),
                        "footerType":String(describing: type(of: threeD.footer)),
                        "palette":threeD.palette(threeD.header.effectiveAppearance)])
@@ -142,6 +152,13 @@ extension Host {
             guard ephemeral, threeD.active, let action = c["action"] as? String,
                   ["close", "code", "front", "reset", "separation", "layer"].contains(action) else { reply(id, false); return true }
             threeD.model.action(action, value: c["value"] as? Int); reply(id, true)
+        case "threeDFocus":
+            guard ephemeral, threeD.active else { reply(id, false); return true }
+            let target: NSResponder = c["target"] as? String == "chat" ? composer.text : threeD.header
+            reply(id, window.makeFirstResponder(target))
+        case "threeDEscape":
+            guard ephemeral else { reply(id, false); return true }
+            reply(id, closeThreeDOnEscape())
         case "threeDCapture":
             guard ephemeral, threeD.active, let content = window.contentView?.superview else { reply(id, error: "No exploded scene"); return true }
             Task { @MainActor in

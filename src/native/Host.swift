@@ -106,6 +106,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         window.title = "Trezi"; window.minSize = NSSize(width: 850, height: 550)
         window.contentView = canvas; window.delegate = self
         _ = makeView("preview")
+        threeD.preview = views["preview"]
         shell = NativeShell(window: window, canvas: canvas)
         previewSurface = PreviewSurface(preview: views["preview"]!, canvas: canvas, container: canvas.superview!)
         previewSurface.colorChanged = { [weak self] color in self?.shell.updatePreviewColor(color) }
@@ -133,11 +134,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
             self?.lastUserInteraction = Date()
-            if event.type == .keyDown, event.keyCode == 53, let self, self.threeD.active,
-               NSApp.keyWindow === self.window, self.window.attachedSheet == nil, !self.menuTracking {
-                self.threeD.model.action("close")
-                return nil
-            }
+            if event.type == .keyDown, event.keyCode == 53, self?.closeThreeDOnEscape() == true { return nil }
             return event
         }
         installMenus()
@@ -419,12 +416,20 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         ProductLog.info("preview", "Preview loaded \(Host.logURL(webView.url))")
         emit(["event":"loaded", "view":name, "url":webView.url?.absoluteString ?? ""])
     }
-    func sendThreeDAppearance(_ top: Double = 48, _ bottom: Double = 76) {
+    @discardableResult func closeThreeDOnEscape() -> Bool {
+        guard threeD.active, NSApp.keyWindow === window, window.attachedSheet == nil, !menuTracking,
+              window.firstResponder === views["preview"] || threeD.ownsFocus(window.firstResponder) else { return false }
+        threeD.model.action("close")
+        return true
+    }
+    func sendThreeDAppearance() {
         guard threeD.active, let view = views["preview"] else { return }
         let appearance = threeD.header.effectiveAppearance
         let scale = max(Double(view.pageZoom * view.magnification), 0.01)
+        let insets = threeD.insets
         let value: [String: Any] = ["type":"event", "channel":"trezi:preview:three-d-appearance",
-            "args":[["palette":threeD.palette(appearance), "top":top / scale, "bottom":bottom / scale]]]
+            "args":[["palette":threeD.palette(appearance), "top":insets.top / scale, "bottom":insets.bottom / scale,
+                     "left":insets.left / scale, "right":insets.right / scale]]]
         guard let data = try? JSONSerialization.data(withJSONObject: value), let json = String(data: data, encoding: .utf8) else { return }
         view.evaluateJavaScript("globalThis.__treziNativeDispatch?.(\(json))", in: nil, in: world) { _ in }
     }

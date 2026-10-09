@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 /// Visible preview only. The page owns scene identity and capture; this view owns controls.
 struct ThreeDLayer: Identifiable {
@@ -15,6 +16,7 @@ final class ThreeDChromeModel: ObservableObject {
     @Published var hasSource = false
     @Published var separation = 36.0
     @Published var status = ""
+    @Published var compact = false
     var session = ""
     var revision = 0
     func action(_ name: String, value: Int? = nil) {
@@ -27,15 +29,32 @@ final class ThreeDChromeModel: ObservableObject {
 struct ThreeDHeader: View {
     @ObservedObject var model: ThreeDChromeModel
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        Group {
+          if model.compact {
+            HStack(spacing: 6) {
+                Button { model.action("close") } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel("Back to page").help("Back to page")
+                Text(model.title).font(.headline).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading).help(model.title)
+                if model.hasSource {
+                    Button { model.action("code") } label: { Image(systemName: "chevron.left.forwardslash.chevron.right") }
+                        .accessibilityLabel("Code").help("View selected layer source")
+                }
+                Button("Front") { model.action("front") }.accessibilityLabel("Front view")
+                Button { model.action("reset") } label: { Image(systemName: "arrow.counterclockwise") }
+                    .accessibilityLabel("Reset view").help("Reset view")
+            }
+          } else {
             HStack(spacing: 8) {
                 Button("Back to page") { model.action("close") }.accessibilityLabel("Back to page")
-                Text(model.title).font(.headline).lineLimit(1).help(model.title)
+                Text(model.title).font(.headline).lineLimit(1).truncationMode(.tail).help(model.title)
+                    .layoutPriority(-1)
                 Spacer(minLength: 4)
                 if model.hasSource { Button("Code") { model.action("code") }.help("View selected layer source") }
                 Button("Front") { model.action("front") }
                 Button("Reset view") { model.action("reset") }
             }
+          }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -45,27 +64,43 @@ struct ThreeDHeader: View {
 
 struct ThreeDFooter: View {
     @ObservedObject var model: ThreeDChromeModel
+    private var separation: Binding<Double> {
+        Binding(get: { model.separation }, set: { value in
+            model.separation = value
+            model.action("separation", value: Int(value.rounded()))
+        })
+    }
+    private var layer: Binding<Int> {
+        Binding(get: { model.selected }, set: { value in
+            model.selected = value
+            model.action("layer", value: value)
+        })
+    }
+    private var picker: some View {
+        Picker("Component layer", selection: layer) {
+            ForEach(model.layers) { item in
+                Text(String(repeating: "· ", count: min(item.depth, 18)) + item.label).tag(item.id)
+            }
+        }.disabled(model.layers.isEmpty)
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            if model.compact {
                 HStack(spacing: 8) {
                     Text("Separation").font(.caption)
-                    Slider(value: Binding(get: { model.separation }, set: { value in
-                        model.separation = value
-                        model.action("separation", value: Int(value.rounded()))
-                    }), in: 0...100).frame(width: 100).accessibilityLabel("Layer separation")
-                    Picker("Component layer", selection: Binding(get: { model.selected }, set: { value in
-                        model.selected = value
-                        model.action("layer", value: value)
-                    })) {
-                        ForEach(model.layers) { layer in
-                            Text(String(repeating: "· ", count: min(layer.depth, 18)) + layer.label).tag(layer.id)
-                        }
-                    }
-                    .frame(width: 230).disabled(model.layers.isEmpty)
+                    Slider(value: separation, in: 0...100).accessibilityLabel("Layer separation")
+                }
+                picker.labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+                    .help(model.layers.first(where: { $0.id == model.selected })?.label ?? "Component layer")
+            } else {
+                HStack(spacing: 8) {
+                    Text("Separation").font(.caption)
+                    Slider(value: separation, in: 0...100).frame(width: 100).accessibilityLabel("Layer separation")
+                    picker.frame(width: 230)
+                    Spacer(minLength: 0)
                 }
             }
-            Text("Drag to orbit · Shift-drag to pan · Scroll to zoom")
+            Text(model.compact ? "Drag: orbit · Shift: pan · Scroll: zoom" : "Drag to orbit · Shift-drag to pan · Scroll to zoom")
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(model.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(model.status)
@@ -79,8 +114,13 @@ struct ThreeDFooter: View {
 final class ThreeDBar<Content: View>: NSHostingView<Content> {
     var appearanceChanged: (() -> Void)?
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); appearanceChanged?() }
+    override var acceptsFirstResponder: Bool { true }
     override func scrollWheel(with event: NSEvent) {}
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+struct ThreeDInsets {
+    var top = 0.0, bottom = 0.0, left = 0.0, right = 0.0
 }
 
 final class ThreeDChrome {
@@ -89,6 +129,8 @@ final class ThreeDChrome {
     let footer: ThreeDBar<ThreeDFooter>
     var document = ""
     var active = false
+    weak var preview: WKWebView?
+    var insets = ThreeDInsets()
     private var closedSession = ""
     private var closedDocument = ""
     init() {
@@ -129,17 +171,37 @@ final class ThreeDChrome {
     }
     func clear() {
         if active { closedSession = model.session; closedDocument = document }
+        if let window = header.window, let focused = window.firstResponder as? NSView,
+           focused === header || focused.isDescendant(of: header) || focused === footer || focused.isDescendant(of: footer),
+           let preview { window.makeFirstResponder(preview) }
         active = false; document = ""; model.session = ""; model.revision = 0
+        insets = ThreeDInsets()
         header.isHidden = true; footer.isHidden = true
     }
-    func place(in page: NSRect, visible: Bool) -> (Double, Double) {
-        let show = active && visible && page.width >= 200 && page.height >= 180
+    func dismiss() { if active { model.action("close"); clear() } }
+    func ownsFocus(_ responder: NSResponder?) -> Bool {
+        guard let view = responder as? NSView else { return false }
+        return view === header || view.isDescendant(of: header) || view === footer || view.isDescendant(of: footer)
+    }
+    @discardableResult func place(in page: NSRect, visible: Bool, occluders: [NSRect]) -> Bool {
+        let show = active && visible && page.width >= 190 && page.height >= 280
         header.isHidden = !show; footer.isHidden = !show
-        guard show else { return (0, 0) }
-        let top: CGFloat = 48, bottom: CGFloat = 76
+        guard show else { insets = ThreeDInsets(); return false }
+        let compact = page.width < 520
+        if model.compact != compact { model.compact = compact }
+        let top: CGFloat = 48, bottom: CGFloat = compact ? 100 : 76
         header.frame = NSRect(x: page.minX, y: page.minY, width: page.width, height: top)
         footer.frame = NSRect(x: page.minX, y: page.maxY - bottom, width: page.width, height: bottom)
-        return (Double(top), Double(bottom))
+        var next = ThreeDInsets(top: Double(top), bottom: Double(bottom))
+        let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: page.height - top - bottom)
+        for panel in occluders {
+            let overlap = panel.intersection(stage)
+            if overlap.isNull || overlap.width <= 0 || overlap.height <= 0 { continue }
+            if overlap.midX >= page.midX { next.right = max(next.right, Double(page.maxX - overlap.minX)) }
+            else { next.left = max(next.left, Double(overlap.maxX - page.minX)) }
+        }
+        insets = next
+        return true
     }
     func palette(_ appearance: NSAppearance) -> [String: String] {
         var colors: [String: String] = [:]

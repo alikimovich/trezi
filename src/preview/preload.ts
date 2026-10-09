@@ -1707,7 +1707,10 @@ function setCommentMode(next: CommentMode, fromRenderer = false): void {
 }
 
 function onKey(e: KeyboardEvent): void {
-  if (threeD.active()) return
+  if (threeD.active()) {
+    threeD.key(e)
+    return
+  }
   // Stop page shortcuts at window capture, but retain the browser's editing
   // defaults (caret movement, selection, typing, clipboard and IME).
   if (blockPageInput(e)) {
@@ -1754,6 +1757,10 @@ function onKey(e: KeyboardEvent): void {
 /** Releasing Option (or losing the key entirely on window blur) ends the
  *  measurement — nothing else in the overlay is keyed to it. */
 function onKeyUp(e: KeyboardEvent): void {
+  if (threeD.active()) {
+    e.stopImmediatePropagation()
+    return
+  }
   blockPageInput(e)
   if (!altHeld) return
   if (e.key === 'Alt' || !e.altKey) {
@@ -1764,7 +1771,11 @@ function onKeyUp(e: KeyboardEvent): void {
 
 /** Run after our gesture handlers, before the preview application's handlers. */
 function blockPageInput(e: Event): boolean {
-  if ((!active && !editing) || threeD.active()) return false
+  if (threeD.active()) {
+    if (e.type === 'keypress') e.stopImmediatePropagation()
+    return e.type === 'keypress'
+  }
+  if (!active && !editing) return false
   const target = e.target instanceof Element ? e.target : null
   const overlayKey = target === overlayHost && e instanceof KeyboardEvent
   if (isOverlay(target) && !overlayKey) return false
@@ -2015,9 +2026,18 @@ if (!IS_SIM_BRIDGE) {
   ipcRenderer.on(PREVIEW_THREE_D_ACTION, (_e, action: ThreeDAction) => threeD.action(action))
   ipcRenderer.on(
     PREVIEW_THREE_D_APPEARANCE,
-    (_e, value: { palette: Record<string, string>; top: number; bottom: number }) => {
+    (
+      _e,
+      value: {
+        palette: Record<string, string>
+        top: number
+        bottom: number
+        left: number
+        right: number
+      }
+    ) => {
       if (value && typeof value === 'object')
-        threeD.appearance(value.palette ?? {}, value.top, value.bottom)
+        threeD.appearance(value.palette ?? {}, value.top, value.bottom, value.left, value.right)
     }
   )
   // Main sends them on every load and whenever the host's layout changes them.

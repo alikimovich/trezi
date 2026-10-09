@@ -61,6 +61,11 @@ restore its camera or promise to preserve application state.
 - Browser serving mode and the native iOS simulator do not expose this desktop
   preload feature.
 
-Native smoke checks run through `bun run test:native` under the manager's verify
-tool. Unit checks run through `node test/run.mjs unit`. The capture bounds remain
-160 surfaces, 500 visited elements and depth 18.
+The native `three-d` smoke check in `src/native/smoke-three-d.ts` belongs to the
+`core` group. It opens the scene from the real preview toolbar; checks native
+controls, camera keys, selection, Code and inspector paths, stale layer rejection,
+HMR recovery, removed targets, navigation cleanup, Back and Escape with native
+focus, repeated open/close and page input isolation; and captures foreground
+light, dark, compact and Code-drawer views. `test/three-d-contract.mjs` checks
+session, revision and action bounds in the unit tier. The capture bounds remain 160 surfaces, 500 visited
+elements and depth 18.
