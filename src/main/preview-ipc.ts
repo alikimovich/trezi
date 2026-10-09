@@ -43,6 +43,7 @@ import {
   PREVIEW_SET_PINS,
   PREVIEW_SET_STATUS,
   PREVIEW_STATES_KEY,
+  PREVIEW_STYLES_UPDATED,
   PREVIEW_TEXT_EDIT,
   PREVIEW_TOGGLE_SELECT,
   PREVIEW_TOOLBAR_ACTION,
@@ -371,6 +372,12 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
       sendToMain('preview:readiness', info)
     }
   )
+
+  // LKM-216: an HMR update replaced the page's CSS in place; no payload is trusted.
+  ipcMain.on(PREVIEW_STYLES_UPDATED, (e) => {
+    if (!fromPreview(e)) return
+    sendToMain('preview:styles-updated')
+  })
 
   // Inline text edit committed in the preview → renderer (which applies it).
   ipcMain.on(PREVIEW_TEXT_EDIT, (e, edit: { source: string; text: string }) => {
