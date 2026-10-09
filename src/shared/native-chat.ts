@@ -25,20 +25,23 @@ export interface NativeChatMessage {
   /** A comment agent's result (LKM-178): shown collapsed as "<title>: <line>", where
    *  `line` names the comment; `detail` (partial-changes note and summary) on expand. */
   comment?: { title: string; line: string; detail: string }
-  /** Trezi's own check of the preview after a turn landed (LKM-195), one compact row. */
+  /** A problem Trezi's own check of the preview found after a turn landed (LKM-195,
+   *  LKM-210: a passing check adds no row), one compact warning row. */
   landingCheck?: NativeLandingCheck
   /** Tokens this assistant turn's model calls reported (cached is part of input). */
   usage?: { input: number; output: number; cached: number }
 }
 
-/** `clean`: no console errors since the landing; `errors`: some (page text, untrusted,
- *  shown to the user only); `unchecked`: the preview could not be checked, with why. */
+/** What the post-landing check found wrong (LKM-210): the page did not load, the dev
+ *  server answered with an error, the preview serves another revision than the landed
+ *  one, the page is blank, or console errors were logged since the landing. */
+export type NativeLandingProblem = 'not-loaded' | 'server-error' | 'stale' | 'blank' | 'errors'
 export interface NativeLandingCheck {
-  status: 'clean' | 'errors' | 'unchecked'
+  problem: NativeLandingProblem
+  /** The reason, one line ("2 new console errors after landing"). */
   line: string
+  /** The first console errors or the dev server's message (page text, untrusted). */
   errors: string[]
-  /** A `data:image/jpeg;base64,` capture of the preview after the landing. */
-  thumbnail?: string
 }
 
 export interface NativeChatCard {
