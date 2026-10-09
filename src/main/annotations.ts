@@ -2,6 +2,7 @@ import { ipcMain } from '../native/platform'
 import type { AnnotationInput, PublishResult } from '../shared/api'
 import { publishProgress } from '../shared/publish-progress'
 import { createAnnotationStore } from './annotation-store'
+import { treziLiveEffect } from './live-change-watch'
 import { generatePublishDescription } from './publish-description'
 import { pullRequestStatus } from './pull-request-status'
 import { workflowOwner } from './workflow-owner'
@@ -43,8 +44,10 @@ export function registerAnnotationsIpc(): void {
   )
   ipcMain.handle('publish:ship', (_e, root: string, _summary?: string[], mode?: 'merge' | 'pr') =>
     guarded(() =>
-      workflowOwner().publish(root, mode ?? 'merge', (base, head) =>
-        generatePublishDescription(root, base, head)
+      treziLiveEffect(root, () =>
+        workflowOwner().publish(root, mode ?? 'merge', (base, head) =>
+          generatePublishDescription(root, base, head)
+        )
       )
     )
   )

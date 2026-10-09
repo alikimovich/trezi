@@ -7,6 +7,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] `src/native/DeviceFrame.swift` measures each offered bezel's screen opening and continuous corner radius from the asset's alpha; the page and overlay are clipped with it (`cornerCurve = .continuous`) at the bezel's scale.
 - [x] Unit `device-frame`: the opening matches an independent PNG decode and a CALayer continuous corner traces the asset's edge; native `device-frame` (group `core`): page rect and clip at two scales, four corner captures in light and dark.
+## Live-change warnings: subtract Trezi's own effects (LKM-215)
+
+- [x] Bun watches the live tree for Full access Codex turns (`src/main/live-change-watch.ts`); the adapter's per-turn note is gone. Snapshots run in the repository lease.
+- [x] Subtracted: every repository lease (landings, conflict markers, installs), `land_now`, publish/merge, `git_sync_base` and the merge tools, `prepare_conflict_resolution`, `restart_dev_server`, `install_skills`, user Publish; dev-server/build output never named.
+- [x] One compact row (line + Details, repo-relative, at most one per turn, after the landing; `ChatLiveChange.swift`); agent-blamed only when its own command named the live checkout.
+- [x] Tests: unit `live-change-watch` (land_now, publish, lane, generated, outside edit, attribution, native reduce), `agent-file-access`, `live-write-guard`, `retirement-census` rows.
 ## Unblock verification: versioning after 0.1.0, load-robust source-syntax (LKM-222)
 
 - [x] `test/versioning.mjs`: the LKM-143 `trezi --version` entry may sit in any changelog section; a new case covers the empty Unreleased right after a release. CHANGELOG history unchanged.

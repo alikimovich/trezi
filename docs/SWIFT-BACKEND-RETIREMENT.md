@@ -225,7 +225,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/backends/claude-login.ts` | helper | ProviderOwner (provider helper) | `claude auth status` probes (LKM-119), inside the supervised helper |
 | `src/main/backends/codex.ts` | helper | ProviderOwner (provider helper) | Codex SDK process, inside the supervised helper |
 | `src/main/backends/gemini.ts` | helper | ProviderOwner (provider helper) | Gemini CLI process, inside the supervised helper |
-| `src/main/backends/live-tree-watch.ts` | helper | ProviderOwner (provider helper) | `git status` reads of the live checkout around a Full-access Codex turn (LKM-163), inside the supervised helper |
+| `src/main/backends/live-tree-watch.ts` | helper | RepositoryOwner | `git status` and `git rev-parse` reads of the live checkout for a Full-access Codex turn's snapshots (LKM-163, LKM-215) |
 | `src/main/chat-park.ts` | helper | RepositoryOwner | Git reads (diff, show, status) |
 | `src/main/chat-agent-git.ts` | helper | RepositoryOwner / WorkflowOwner | `git rev-parse` read; mutations route through the owners (LKM-188) |
 | `src/main/chat-workspaces.ts` | helper | RepositoryOwner | `du` and `git rev-parse` reads (LKM-136 usage, old-name folders' repositories) |
@@ -236,6 +236,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/file-tree.ts` | helper | SourceOwner | `git ls-files` read |
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |
+| `src/main/live-change-watch.ts` | helper | RepositoryOwner | `git rev-list` and `git log` reads of the live checkout: commits a Full-access Codex turn's outside changes made, minus Trezi's own (LKM-215) |
 | `src/main/park-reconcile.ts` | helper | RepositoryOwner | `git show` reads of a parked chat's held files; the clear/rebuild runs through the owner (LKM-196) |
 | `src/main/preview-identity.ts` | helper | RepositoryOwner | `git rev-parse HEAD` read of the live checkout: the revision a preview document serves (LKM-200) |
 | `src/main/preview-tools.ts` | helper | PlatformOwner | `open_preview` screenshot: one scratch JPEG per chat in the system temp folder, overwritten on each call (LKM-196) |
@@ -279,6 +280,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-projects.ts` | test | — | smoke fixture |
 | `src/native/smoke-publish.ts` | test | — | smoke fixture |
 | `src/native/smoke-queue.ts` | test | — | smoke fixture |
+| `src/native/smoke-quit.ts` | test | — | smoke fixture |
 | `src/native/smoke-restore.ts` | test | — | smoke fixture |
 | `src/native/smoke-sent-attachments.ts` | test | — | smoke fixture |
 | `src/native/smoke-switch-order.ts` | test | — | smoke fixture |

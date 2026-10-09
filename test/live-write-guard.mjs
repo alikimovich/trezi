@@ -12,11 +12,7 @@ import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { codexSandbox } from '../src/main/backends/codex-sandbox.ts'
-import {
-  liveTreeChanges,
-  liveTreeSnapshot,
-  liveWriteNote
-} from '../src/main/backends/live-tree-watch.ts'
+import { liveTreeChanges, liveTreeSnapshot } from '../src/main/backends/live-tree-watch.ts'
 import { liveCheckoutCommand, liveCheckoutEdit } from '../src/main/live-write-guard.ts'
 
 // --- Claude: Bash commands that name the live root are denied with the worktree path.
@@ -207,7 +203,7 @@ try {
   await rm(links, { recursive: true, force: true })
 }
 
-// --- Codex in Full access: a live-tree change during a turn is named in one note.
+// --- Codex in Full access: the live-tree snapshot sees a change during a turn.
 const watched = realpathSync(await mkdtemp(join(tmpdir(), 'trezi-live-watch-')))
 try {
   const git = (...args) => execFileSync('git', args, { stdio: 'pipe' })
@@ -238,10 +234,6 @@ try {
     'the snapshot never writes the index'
   )
   assert.equal(await liveTreeSnapshot(join(watched, 'missing')), null, 'not a repository')
-  const note = liveWriteNote(['a.txt', 'b', 'c', 'd', 'e', 'f', 'g'], '/wt')
-  assert.match(note, /^\n\n⚠️ Your live project changed during this turn/)
-  assert.match(note, /a\.txt, b, c, d, e and 2 more/)
-  assert.match(note, /\(\/wt\)/)
 } finally {
   await rm(watched, { recursive: true, force: true })
 }
@@ -416,7 +408,7 @@ try {
         )
 
       // Full access (LKM-163): no sandbox, so the agent writes outside the project and
-      // even the live tree; the adapter's before/after snapshot names that live write.
+      // even the live tree; Bun's before/after snapshot (LKM-215) names that live write.
       const outside = join(tmp, 'outside')
       await mkdir(outside)
       const before = await liveTreeSnapshot(liveRoot)
