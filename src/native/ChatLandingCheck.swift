@@ -1,54 +1,36 @@
 import AppKit
 import SwiftUI
 
-/// Trezi's check of the preview after a turn landed (LKM-195, `NativeChatMessage.landingCheck`).
-struct ChatLandingCheck: Decodable { let status: String; let line: String; let errors: [String]; let thumbnail: String? }
+/// A problem Trezi's check of the preview found after a turn landed (LKM-195, LKM-210,
+/// `NativeChatMessage.landingCheck`). A passing check has no row.
+struct ChatLandingCheck: Decodable { let problem: String; let line: String; let errors: [String] }
 
-/// One compact row: a status symbol, "Checked after landing: …", the first console errors
-/// (page text, shown as data) and a thumbnail of the preview, in the comment rows' bubble.
+/// One compact warning row: the reason, the first console errors or the dev server's
+/// message (page text, shown as data), and Ask agent to fix / Show preview.
 struct ChatLandingCheckRow: View {
     let message: ChatMessage
     let check: ChatLandingCheck
-    static let thumbnailSize = CGSize(width: 64, height: 40)
-    private static let cache = NSCache<NSString, CGImage>()
-    private var thumbnail: CGImage? {
-        guard check.thumbnail != nil else { return nil }
-        if let image = Self.cache.object(forKey: message.id as NSString) { return image }
-        guard let image = AttachmentThumbnail.image(AttachmentThumbnail.data(url: check.thumbnail), maxPixels: Int(Self.thumbnailSize.width * 2)) else { return nil }
-        Self.cache.setObject(image, forKey: message.id as NSString)
-        return image
-    }
-    private var symbol: (name: String, color: Color) {
-        switch check.status {
-        case "clean": return ("checkmark.circle", .green)
-        case "errors": return ("exclamationmark.triangle", .orange)
-        default: return ("eye.slash", .secondary)
-        }
-    }
+    @ObservedObject var model: ChatModel
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: symbol.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(symbol.color)
-                .frame(height: 17)
+            Image(systemName: "exclamationmark.triangle").font(.system(size: 12, weight: .semibold)).foregroundStyle(.orange)
+                .frame(height: 17).accessibilityLabel("Warning")
             VStack(alignment: .leading, spacing: 4) {
-                Text(check.line).font(ChatTypography.body).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                Text(check.line).font(ChatTypography.body).lineLimit(1).truncationMode(.tail).help(check.line)
                 ForEach(Array(check.errors.enumerated()), id: \.offset) { _, error in
                     Text(error).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
                         .lineLimit(2).truncationMode(.tail).textSelection(.enabled)
                 }
+                HStack(spacing: 8) {
+                    Button("Ask agent to fix") { model.action("landing-fix", id: message.id) }
+                    Button("Show preview") { model.action("landing-preview", id: message.id) }
+                }.controlSize(.small).padding(.top, 2)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            if let thumbnail {
-                Image(decorative: thumbnail, scale: 1).resizable().interpolation(.high).scaledToFill()
-                    .frame(width: Self.thumbnailSize.width, height: Self.thumbnailSize.height).clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary) }
-                    .help("The preview after landing")
-                    .accessibilityLabel("Preview after landing")
-            }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { RoundedRectangle(cornerRadius: ChatCommentRow.cornerRadius).fill(.quaternary.opacity(0.5)) }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .help(messageTime(message.at))
     }
 }

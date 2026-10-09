@@ -73,6 +73,7 @@ import {
 } from './conversation-owner'
 import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
+import { landingCheckContext } from './landing-context'
 import { commitLiveTurn } from './live-commit'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
@@ -1668,7 +1669,8 @@ export function registerAgentIpc(
           turn?.projectUi === true && !supportsUi
             ? 'The requested project component composition mode requires Claude or Codex. Explain this limitation for UI requests.\n\n'
             : ''
-        const islandContext = (await chatIslandContext(key, text)) + chatUiContext(key)
+        const islandContext =
+          (await chatIslandContext(key, text)) + chatUiContext(key) + landingCheckContext(key)
         if (preparation.cancelled || sessions.get(key) !== session)
           throw new Error('Message cancelled before sending.')
         // A model switch: the fresh provider gets the recorded conversation, once.

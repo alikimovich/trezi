@@ -46,7 +46,9 @@ const speedNote = (action: PreviewObserver): Content[] =>
 export async function observeAgentPreview(
   action: PreviewObserver,
   args: unknown = {},
-  root?: string
+  root?: string,
+  /** Hears the identity of an answered observation (LKM-210: what the agent saw). */
+  observed?: (identity: PreviewIdentity) => void
 ): Promise<PreviewToolResult> {
   // The live HEAD read runs while the page answers (it is cached for the identity).
   if (root) void liveHead(root)
@@ -54,6 +56,7 @@ export async function observeAgentPreview(
   const { page, identity, refusal } = await previewPage(root)
   if (refusal) return { content: [{ type: 'text', text: refusal }], isError: true }
   if (action === 'preview_location') {
+    if (page) observed?.(identity)
     return {
       content: [
         {
@@ -78,12 +81,14 @@ export async function observeAgentPreview(
       ],
       isError: true
     }
-  if (page && !result.isError)
+  if (page && !result.isError) {
+    observed?.(identity)
     result.content.push(
       ...speedNote(action),
       { type: 'text', text: describePage(page) },
       { type: 'text', text: identityText(identity) }
     )
+  }
   return result
 }
 

@@ -10,6 +10,7 @@ import {
 } from './chat-isolation'
 import { chatUiTool } from './chat-ui'
 import { openAgentCode } from './code-tools'
+import { noteServedRevision } from './landing-context'
 import { isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { agentPreviewOverlay } from './preview-overlay'
 import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-tools'
@@ -84,17 +85,30 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
     return { error: 'Background edits cannot resize the user preview.' }
   if (action === 'preview_speed' && s.background)
     return { error: 'Background edits cannot change the user preview speed.' }
-  if (isPreviewObserver(action)) return observeAgentPreview(action, args, s.liveRoot)
+  // LKM-210: a landed revision the chat's agent looked at needs no automatic check.
+  const saw = (revision: string | null | undefined) => {
+    if (!s.background) noteServedRevision(s.emitKey, revision)
+  }
+  if (isPreviewObserver(action))
+    return observeAgentPreview(action, args, s.liveRoot, (identity) => saw(identity.servedRevision))
   if (action === 'project_ui_catalog' || action === 'compose_project_ui')
     return runProjectUiTool(s.root, s.emitKey, action, args as never, s.connectionId)
   if (action === 'chat_island')
     return s.background
       ? { error: 'Background edits cannot create chat islands.' }
       : runChatIslandTool(s.emitKey, s.root, args as never, s.connectionId)
-  if (action === 'open_preview')
-    return openAgentPreview(s.liveRoot, s.emitKey, args as never, s.notify, s.background)
-  if (action === 'reload_preview')
-    return reloadAgentPreview(s.liveRoot, s.emitKey, args, s.notify, s.background)
+  if (action === 'open_preview' || action === 'reload_preview') {
+    const answer = (await (action === 'open_preview'
+      ? openAgentPreview(s.liveRoot, s.emitKey, args as never, s.notify, s.background)
+      : reloadAgentPreview(s.liveRoot, s.emitKey, args, s.notify, s.background))) as {
+      loaded?: boolean
+      httpStatus?: number | null
+      preview?: { servedRevision?: string | null }
+    } | null
+    if (answer?.loaded && !(answer.httpStatus && answer.httpStatus >= 400))
+      saw(answer.preview?.servedRevision)
+    return answer
+  }
   if (action === 'restart_dev_server')
     return restartAgentDevServer(s.liveRoot, s.emitKey, args, s.notify, s.background)
   if (action === 'open_code')

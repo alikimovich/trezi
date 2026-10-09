@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Post-landing check: silent on success, warning on problems (LKM-210)
+
+- [x] A passing check adds no chat row; a problem (not loaded, dev-server error, stale revision, blank page, new console errors) is one warning row with Ask agent to fix / Show preview (`src/native/landing-check.ts`, `ChatLandingCheck.swift`).
+- [x] Skip the check when the agent observed the landed revision in the preview during its turn (land_now + preview tools; `src/main/landing-context.ts`).
+- [x] A failed check is prepended once to the agent's next prompt; rules v38 drop the post-landing check notice.
+- [x] Tests: unit `landing-check`, `rules`; native smoke `landing-check` (group `chat`).
+
 ## Native answer components in chat: options and forms (LKM-208)
 
 - [x] `chat_ui` tool (catalog/show/update) for Claude and Codex; zod catalog `bin/chat-ui-schema.mjs`, Bun validation and answers `src/main/chat-ui.ts`, option images `src/main/chat-ui-capture.ts`.

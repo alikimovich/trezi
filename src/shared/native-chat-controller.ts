@@ -66,6 +66,8 @@ export type NativeChatEffect =
   | { type: 'notes'; root: string }
   /** Show a `file:line[:column]` of the active project in the editor (LKM-193). */
   | { type: 'source'; source: string }
+  /** Bring the active project's preview into view: the docked editor steps aside (LKM-210). */
+  | { type: 'preview' }
   | { type: 'layers' | 'focus' | 'history' }
 export type NativeChatCommand =
   | { type: 'attach' }

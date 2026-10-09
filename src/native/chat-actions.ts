@@ -1,3 +1,4 @@
+import { setLandingProblem } from '../main/landing-context'
 import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatAction } from '../shared/native-chat'
 import { setupPrompt } from '../shared/setup-prompt'
@@ -7,6 +8,7 @@ import { loginAction } from './chat-login'
 import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
 import { assistant, begin, type Chat, placeUi, type Submission } from './chat-state'
+import { landingFixPrompt } from './landing-check'
 
 /** Card actions call application services directly; shell effects only refresh web panels. */
 export async function cardAction(
@@ -86,6 +88,18 @@ export async function cardAction(
       sendReply(controller, chat, reply.message)
       break
     }
+    // LKM-210: a post-landing check's warning row.
+    case 'landing-fix': {
+      const check = chat.messages.find((m) => m.id === action.id)?.landingCheck
+      if (!check) return
+      // The message names the problem: the pending context would only repeat it.
+      setLandingProblem(chat.chat, null)
+      sendReply(controller, chat, landingFixPrompt(check))
+      break
+    }
+    case 'landing-preview':
+      effect({ type: 'preview' })
+      break
     case 'spawn-open-target': {
       const spawn = chat.context?.spawns.find((s) => s.id === action.id)
       const target = spawn && requestTarget(spawn.label)
