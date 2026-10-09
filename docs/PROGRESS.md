@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-219: preview-timing "no reload" check no longer reads `timeOrigin` twice
+
+- **Why.** The manager's native run failed `preview-timing` ("viewport screenshots never reload or restart"): navigation 71 → 71 and pid unchanged, but `performance.timeOrigin` read `…807` then `…806`. WebKit derives `timeOrigin` from the wall clock (`MonotonicTime::approximateWallTime`) on every read, so the same document drifts by a millisecond; the check was flaky, and no reload happened.
+- **Change.** `src/native/smoke-preview-timing.ts` identifies the document by a token planted in the page (`window.__treziTimingDocument`), which any reload clears, next to the navigation count and dev-server pid. Both "no reload" assertions are unchanged otherwise. Rule added to `docs/agent-guide/gotchas.md`.
+- **Second flake, same run.** The verifying native `core` run passed `preview-timing` but failed `preview-overlay` on its focus-loss retry (`mobile.state.rulers && !guides.length` false). The first attempt had saved the mobile guide `m1` and gone back to desktop. Then `restorePreviewOverlay` cleared only desktop, though guides and grids are kept per viewport. Restore now clears mobile and desktop, picking the viewport by the overlay's own key. The check opens by planting a mobile guide and running restore, so its existing "mobile starts clean" assertion fails if restore regresses.
+
+## 2026-10-09 — LKM-219: CHANGELOG Unreleased headings repaired after the merge
+
+- **Why.** The merge left two `### Fixed` headings in `## [Unreleased]` and LKM-221's quit line under the second one, so a feature was listed as a fix and the release script would have carried both headings.
+- **Change.** `CHANGELOG.md`: the LKM-219 layout-shortcuts line now sits in the existing `### Fixed` list after LKM-215's; the extra heading is gone; `### Added` holds the LKM-219 Back/Forward line and LKM-221's quit line. The released `## [0.1.0]` section is untouched. No code changed; quick verification passes (208 PASS).
+
 ## 2026-10-09 — LKM-219: editor-freshness step 5 baselines on a quiet page; `sheets` failure was load-sensitive
 
 - **Why.** The full native run failed `editor-freshness` step 5 ("No page reload", hard reloads 0 -> 0) and `sheets` (`expected "agent", actual "jev"`). The hub's hard-reload counter stayed 0, so the page lost `window.freshSentinel` to the fixture server's own live reload (`StaticSite.swift`: FSEvents, 80 ms debounce) of the earlier saves, which FSEvents delivers late under load (load ~23 on 12 cores). `sheets` runs `settings`' engine loop, whose failing message came from the runner's retry after a focus loss on a profile the first attempt had left on `jev`; nothing in LKM-219 touches settings.

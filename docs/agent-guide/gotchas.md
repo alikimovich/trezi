@@ -24,6 +24,10 @@ and provider-seat rules are here.
   renderer. AppKit owns geometry and native inspectors reserve their own space.
 - **Preview instrumentation is isolated.** Keep the WKContentWorld and restricted
   message allowlist; re-send select/style/layer state after navigation.
+- **`performance.timeOrigin` is not a document identity.** WebKit converts it from
+  monotonic to wall time on every read, so one document can answer ±1 ms apart. To
+  prove "no reload", compare the navigation count and a token planted in the page
+  (`src/native/smoke-preview-timing.ts`), never equal `timeOrigin` reads.
 - **Native views over the preview don't block WebKit's pointer by hit-testing.**
   WebKit's tracking areas deliver moves anywhere in its visible rect, and the
   window hands it clicks an overlay left unhandled. Floating islands swallow

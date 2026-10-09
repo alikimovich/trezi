@@ -46,6 +46,16 @@ export async function checkPreviewOverlay(
   const key = (root: string, viewport: string) => JSON.stringify([root, viewport])
   const evidence: Record<string, unknown> = {}
   await until((s) => s.key === key(first.root, 'desktop'), 'overlay settings for the project')
+  // A focus-loss retry starts from what restore left: plant the mobile guide a run cut
+  // short after the mobile step keeps, and let restore clear it (checked below).
+  await host.request('shellPerform', { action: 'device' })
+  const leftover = await until((s) => s.key === key(first.root, 'mobile'), 'leftover mobile')
+  await test({
+    action: 'set',
+    state: { ...leftover.state, guides: [{ id: 'm0', axis: 'x', position: 20 }] }
+  })
+  await restorePreviewOverlay(host)
+  await until((s) => s.key === key(first.root, 'desktop'), 'restored to desktop')
   await test({ action: 'set', state: {} })
   const dom = await page(DOM)
   const inputs = await page('window.previewInputs.length')
@@ -222,8 +232,24 @@ export async function checkPreviewOverlay(
 
 /** Leaves the project without rulers, guides or grids at its own viewport width. */
 export async function restorePreviewOverlay(host: NativeBridge) {
-  await host.request('previewViewport', {}).catch(() => {})
-  if (nativeWorkspace.active?.viewport === 'mobile')
+  const clear = () =>
+    host.request('previewOverlayTest', { action: 'set', state: {} }).catch(() => {})
+  const shown = async () =>
+    ((await host.request('previewOverlayInspect').catch(() => null)) as State)?.key
+  const show = async (viewport: string) => {
+    const root = nativeWorkspace.active?.root
+    const key = JSON.stringify([root, viewport])
+    if (!root || (await shown()) === key) return
     await host.request('shellPerform', { action: 'device' })
-  await host.request('previewOverlayTest', { action: 'set', state: {} }).catch(() => {})
+    await waitFor(async () => (await shown()) === key, `${viewport} overlay settings`).catch(
+      () => {}
+    )
+  }
+  await host.request('previewViewport', {}).catch(() => {})
+  // Guides and grids are kept per viewport: a run cut short after the mobile step
+  // leaves its mobile guide, which a retry would find.
+  await show('mobile')
+  await clear()
+  await show('desktop')
+  await clear()
 }
