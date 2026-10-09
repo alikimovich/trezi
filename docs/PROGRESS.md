@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-215: no live-change warnings for Trezi's own effects
+
+- **Why.** LKM-163's Codex adapter compared the live tree before and after the whole turn inside the provider helper. Mid-turn landings (LKM-203 `land_now`, publish/merge), `git_sync_base` (LKM-188), conflict markers (LKM-194), dependency restarts (LKM-197) and dev-server output all changed the live tree during that window, so almost every Full access turn ended with a ⚠️ note that blamed the agent and printed absolute paths.
+- **Where.** The helper cannot see Trezi's effects, and a new helper event would need the Swift frame allowlist. So the watch moved to Bun (`src/main/live-change-watch.ts`): `beginLiveWatch` before the send, `finishLiveWatch` after the terminal hook, both snapshots inside the repository lease so a half-written landing is never seen. The adapter note and `liveTreeReport`/`liveWriteNote` are removed.
+- **Subtraction.** `treziLiveEffect(root, op)` snapshots around an effect while a watch is open on that checkout and records the paths it changed (with the state it left), the commits from `rev-list before..after` and the HEADs it left. `enqueueRepoWrite` (every lease), the effectful session tools (`LIVE_EFFECT_TOOLS`) and `publish:ship` run through it. At the end, a path whose final state equals Trezi's mark is dropped; outside commits are `git log before..after` minus Trezi's. Generated paths (`node_modules`, `.next`, `dist`, `.svelte-kit`, `*.tsbuildinfo`, …) and `.env*` are never named.
+- **Row.** `live-change` agent event → `pendingLiveChange`, placed by `finish()` after the landing, so Revert stays on the reply and there is at most one row per turn. `ChatLiveChange.swift` draws one middle-truncated line and a Details toggle (repo-relative files, short shas). It blames the agent only when one of its `$ cmd`/edit status lines named the live checkout outside its worktree; otherwise it says the project changed outside this chat, which is fine. Text describes the current landing model (land now, Publish, turn end).
+- **Checks.** Unit `live-change-watch` (new), `agent-file-access` and `live-write-guard` updated, census rows for both modules.
+
 ## 2026-10-08 — LKM-212 repair: agent reload, private load errors, Bun reveal gate test
 
 - **Reload.** `reload_preview` on the agent browser returned early because the page already showed the route. `AgentBrowser.open(path, { reload, hard })` now skips that early return and the host's `agentBrowserOpen` reloads from origin; `hard` clears WebKit's caches through `PreviewCache.reload`. Native smoke `agent-preview` asserts `navigation` increments after a soft and a hard reload.

@@ -165,6 +165,7 @@ const host = compile(
     join(root, 'src/native/ChatCommentRow.swift'),
     join(root, 'src/native/ChatCommentCapture.swift'),
     join(root, 'src/native/ChatLandingCheck.swift'),
+    join(root, 'src/native/ChatLiveChange.swift'),
     join(root, 'src/native/ChatAgentCard.swift'),
     join(root, 'src/native/ChatUiModel.swift'),
     join(root, 'src/native/ChatUi.swift'),

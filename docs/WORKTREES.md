@@ -235,17 +235,30 @@ The repository owner validates that each Git tool targets a linked chat worktree
   Trezi lands the result in the live checkout. The Claude `PreToolUse` hook is the same
   in both modes. It is a correctness rule, not a security sandbox: it blocks only the
   live checkout, and its denial names the worktree path to edit instead.
-- **Codex in Full access.** Codex has no pre-tool hook. So the adapter snapshots the live
-  tree (its HEAD, and its uncommitted files from `git --no-optional-locks status` plus
-  each file's size and mtime) before and after each turn
-  (`src/main/backends/live-tree-watch.ts`). One chat note names every file that became
-  dirty or changed again, every file that was uncommitted before and is clean after
-  (`git checkout -- f`, `restore`, `stash` or `reset --hard` discarded the user's work),
-  and, when HEAD moved, a commit made in the live checkout (with the files from
-  `git diff --name-only before..after`). Trezi did not track any of it, and Revert cannot
-  undo it. A file the user or another chat's landing changed during the turn is named
-  too, so the note says the live project changed, not that Codex changed it. Landing
-  runs after `done`, so the chat's own landing is never in the comparison.
+- **Codex in Full access.** Codex has no pre-tool hook. So Bun snapshots the live tree
+  (its HEAD, and its uncommitted files from `git --no-optional-locks status` plus each
+  file's size and mtime, `src/main/backends/live-tree-watch.ts`) before and after each
+  turn, both inside the repository lease (`src/main/live-change-watch.ts`, LKM-215). It
+  counts every file that became dirty or changed again, every file that was uncommitted
+  before and is clean after (`git checkout -- f`, `restore`, `stash` or `reset --hard`),
+  and commits made in the live checkout.
+- **Trezi's own effects are subtracted (LKM-215).** Every repository lease (any chat's
+  landing, conflict markers, installs, island writes) and every effectful agent tool
+  (`land_now`, `publish_update`/`publish_merge`, `git_sync_base`, the merge tools,
+  `prepare_conflict_resolution`, `restart_dev_server`, `install_skills`) and the user's
+  Publish run inside `treziLiveEffect`, which snapshots around the effect while a watch
+  is open. The paths it changed (with the state it left them in), the commits it made or
+  brought in and the HEADs it left are not reported. A file the user edits again after a
+  landing still is. Dev-server and build output (`node_modules`, `.next`, `dist`,
+  `.svelte-kit`, `*.tsbuildinfo`, `next-env.d.ts` and the like) and `.env` files are
+  never named.
+- **One compact row.** What is left shows as one row under the reply, after its landing:
+  one line plus Details (repo-relative files and commit subjects, no absolute paths), at
+  most one per turn. It blames the agent ("The agent changed your project outside this
+  chat's workspace", Revert cannot undo it) only when one of the agent's own commands or
+  edits named the live checkout outside its worktree; otherwise it says the project
+  changed outside this chat (the user's editor, another tool), which is normal. The row
+  is not persisted in the transcript.
 - **Symlinked paths.** Every chat worktree sits under the profile's symlink aliases on an
   upgraded Mac (`Trezi Native` and `trezi` link to the folders of an earlier name,
   `src/service/ProfilePaths.swift`), and a project may sit under a symlinked folder.

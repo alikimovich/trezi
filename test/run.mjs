@@ -78,6 +78,7 @@ const UNIT = [
   'chat-send-queue',
   'live-write-guard',
   'agent-file-access',
+  'live-change-watch',
   'project-path',
   'network-volume-note',
   'native-composer-layout',

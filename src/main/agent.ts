@@ -74,6 +74,13 @@ import {
 import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
 import { landingCheckContext } from './landing-context'
+import {
+  beginLiveWatch,
+  finishLiveWatch,
+  forgetLiveWatch,
+  liveChangeRow,
+  noteAgentStep
+} from './live-change-watch'
 import { commitLiveTurn } from './live-commit'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
@@ -415,7 +422,10 @@ const interactiveEvents =
     const at = e.turn ? null : tracker.attribute(e)
     if (at) e.turn = at.turn
     if (e.type === 'model' || e.type === 'status' || e.type === 'delta') logTurnEvent(sessionKey, e)
-    if (e.type === 'status') scheduleCheckpoint(sessionKey)
+    if (e.type === 'status') {
+      scheduleCheckpoint(sessionKey)
+      noteAgentStep(sessionKey, e.text)
+    }
     if (e.type !== 'done' && e.type !== 'error') return
     // Backends forward this same tagged event after the hook. Keep the UI busy
     // until landing (or the automatic continuation) finishes. A `done` no send
@@ -432,6 +442,13 @@ const interactiveEvents =
     const session = sessions.get(sessionKey)
     if (!at || !session || trackers.get(session) !== tracker) return
     session.finalize()
+    // LKM-215: the live tree is read in the repository lane before this turn's landing.
+    void finishLiveWatch(sessionKey)
+      .then((change) => {
+        if (change && sessions.get(sessionKey) === session)
+          session.emit({ type: 'live-change', ...liveChangeRow(change), agent: change.agent })
+      })
+      .catch(() => {})
     const record = session.record
     void conversation()
       .terminal(sessionKey, at.turn, at.run, e.type, record)
@@ -940,6 +957,7 @@ export function registerAgentIpc(
     setProjectUiEnabled(sessionKey, false)
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
+    forgetLiveWatch(sessionKey)
     reconciliation.begin(sessionKey)
   }
 
@@ -1690,6 +1708,8 @@ export function registerAgentIpc(
         trackers.get(session)?.push(id, 0)
         watchdog.touch(key)
         logTurnStart(key, id, session.options)
+        // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
+        void beginLiveWatch(key, session)
         session.send(
           handoffPrompt(
             history,
@@ -2093,6 +2113,7 @@ export function registerAgentIpc(
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
     watchdog.forget(sessionKey)
+    forgetLiveWatch(sessionKey)
     const session = sessions.get(sessionKey)
     const turn = turnIds.get(sessionKey)
     session?.emit({ type: 'status', text: note })

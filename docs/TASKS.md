@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Live-change warnings: subtract Trezi's own effects (LKM-215)
+
+- [x] Bun watches the live tree for Full access Codex turns (`src/main/live-change-watch.ts`); the adapter's per-turn note is gone. Snapshots run in the repository lease.
+- [x] Subtracted: every repository lease (landings, conflict markers, installs), `land_now`, publish/merge, `git_sync_base` and the merge tools, `prepare_conflict_resolution`, `restart_dev_server`, `install_skills`, user Publish; dev-server/build output never named.
+- [x] One compact row (line + Details, repo-relative, at most one per turn, after the landing; `ChatLiveChange.swift`); agent-blamed only when its own command named the live checkout.
+- [x] Tests: unit `live-change-watch` (land_now, publish, lane, generated, outside edit, attribution, native reduce), `agent-file-access`, `live-write-guard`, `retirement-census` rows.
+
 ## Private agent browser (LKM-212)
 
 - [x] A chat/background agent reuses a session-owned offscreen WebKit page with isolated instrumentation, its own route and viewport, a three-browser cap and idle cleanup.
