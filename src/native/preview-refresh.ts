@@ -3,6 +3,7 @@ import {
   type PreviewRefreshAnswer,
   type PreviewRefreshRequest
 } from '../main/preview-refresh-tools'
+import { noteSourceChange } from '../main/source-changes'
 import type { NativeBridge } from './bridge'
 import { DependencyWatch } from './dependency-watch'
 import { serviceEvents } from './platform'
@@ -72,7 +73,12 @@ export function installPreviewRefresh(
       const entry = running()
       return entry ? { key: entry.key, root: entry.root } : null
     },
-    (key) => void workspace.refreshEnvironment(key, undefined, true).catch(report)
+    (key) => {
+      // LKM-216: the editor's caches (tokens, the island, a stale stylesheet) follow too.
+      const root = workspace.state.projects.find((p) => p.key === key)?.root
+      if (root) noteSourceChange(root, ['package.json'], 'dependency')
+      void workspace.refreshEnvironment(key, undefined, true).catch(report)
+    }
   )
   watch.start()
   return watch

@@ -42,6 +42,11 @@ and provider-seat rules are here.
   Bun's stderr is the host's, passed over XPC (`attachDiagnostics`).
 - **Bun blocks postinstall for untrusted dependencies.** `esbuild` remains in
   `package.json#trustedDependencies` for its binary.
+- **Stale styles in the editor come from a cache someone forgot to clear.** Every cache
+  between a source file and the island, Layers, the chat islands and the preview has an
+  invalidation rule in [CACHES.md](../CACHES.md). A new cache must be added there, and
+  must listen to `onSourceChange` (`src/main/source-changes.ts`) or the freshness hub
+  (`src/native/editor-freshness.ts`), not just to a TTL (LKM-216).
 
 ## Agent SDKs and providers
 
