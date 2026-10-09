@@ -11,6 +11,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Every ⌘/⌃ key-down is re-read by key position under non-Latin layouts (`KeyShortcuts.swift`); in-page S, 1-9 and H use `latinKey`; Dvorak untouched.
 - [x] Unit `key-shortcuts` (synthetic Russian/Ukrainian/Hebrew/Greek/Dvorak events), native smoke `preview-history` and the source editor's ⌘х / ⌘ъ; gotchas rule; changelog.
 - [ ] Not automated: a real trackpad swipe and a real layout switch (operator check).
+## Live-change warnings: subtract Trezi's own effects (LKM-215)
+
+- [x] Bun watches the live tree for Full access Codex turns (`src/main/live-change-watch.ts`); the adapter's per-turn note is gone. Snapshots run in the repository lease.
+- [x] Subtracted: every repository lease (landings, conflict markers, installs), `land_now`, publish/merge, `git_sync_base` and the merge tools, `prepare_conflict_resolution`, `restart_dev_server`, `install_skills`, user Publish; dev-server/build output never named.
+- [x] One compact row (line + Details, repo-relative, at most one per turn, after the landing; `ChatLiveChange.swift`); agent-blamed only when its own command named the live checkout.
+- [x] Tests: unit `live-change-watch` (land_now, publish, lane, generated, outside edit, attribution, native reduce), `agent-file-access`, `live-write-guard`, `retirement-census` rows.
 ## Unblock verification: versioning after 0.1.0, load-robust source-syntax (LKM-222)
 
 - [x] `test/versioning.mjs`: the LKM-143 `trezi --version` entry may sit in any changelog section; a new case covers the empty Unreleased right after a release. CHANGELOG history unchanged.

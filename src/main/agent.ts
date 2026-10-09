@@ -74,6 +74,13 @@ import {
 import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
 import { landingCheckContext } from './landing-context'
+import {
+  beginLiveWatch,
+  finishLiveWatch,
+  forgetLiveWatch,
+  liveChangeRow,
+  noteAgentStep
+} from './live-change-watch'
 import { commitLiveTurn } from './live-commit'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
@@ -278,6 +285,10 @@ const reconciliation = new ReconciliationCoordinator({
   landed: async (key, turn) => (await conversation().landed(key, turn, Date.now())).completedAt,
   dispatch: (session, prompt, turn, run) => {
     trackers.get(session)?.push(turn, run)
+    // LKM-215: the turn's first watch closed at its first terminal event; each automatic
+    // continuation run is a Full access Codex run too, so it gets its own.
+    const key = [...sessions].find(([, s]) => s === session)?.[0]
+    if (key) void beginLiveWatch(key, session, true)
     session.send(prompt)
   }
 })
@@ -415,7 +426,10 @@ const interactiveEvents =
     const at = e.turn ? null : tracker.attribute(e)
     if (at) e.turn = at.turn
     if (e.type === 'model' || e.type === 'status' || e.type === 'delta') logTurnEvent(sessionKey, e)
-    if (e.type === 'status') scheduleCheckpoint(sessionKey)
+    if (e.type === 'status') {
+      scheduleCheckpoint(sessionKey)
+      noteAgentStep(sessionKey, e.text)
+    }
     if (e.type !== 'done' && e.type !== 'error') return
     // Backends forward this same tagged event after the hook. Keep the UI busy
     // until landing (or the automatic continuation) finishes. A `done` no send
@@ -432,6 +446,13 @@ const interactiveEvents =
     const session = sessions.get(sessionKey)
     if (!at || !session || trackers.get(session) !== tracker) return
     session.finalize()
+    // LKM-215: the live tree is read in the repository lane before this turn's landing.
+    void finishLiveWatch(sessionKey)
+      .then((change) => {
+        if (change && sessions.get(sessionKey) === session)
+          session.emit({ type: 'live-change', ...liveChangeRow(change), agent: change.agent })
+      })
+      .catch(() => {})
     const record = session.record
     void conversation()
       .terminal(sessionKey, at.turn, at.run, e.type, record)
@@ -476,6 +497,8 @@ interface Spawn {
   error?: string
 }
 const spawns = new Map<string, Spawn>()
+/** A spawn's live-tree watch is keyed apart from the chats' (LKM-215). */
+const spawnWatchKey = (id: string): string => `spawn:${id}`
 // v8 F1 Phase 3: bound concurrent spawns per project; the rest queue (FIFO) and start
 // as slots free, so firing many comments can't fork unbounded worktrees/subprocesses.
 // The conversation owner admits them (3 per project) and keeps the queue's order;
@@ -615,6 +638,20 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
   spawn.finalizing = true
   const { session, wt, parentSessionKey, parentRoot, text, origin } = spawn
   const label = spawn.label ? { label: spawn.label } : {}
+  // LKM-215: what the spawn wrote to the live checkout directly, read before its own
+  // landing below (which is Trezi's effect), reported in the parent chat.
+  await finishLiveWatch(spawnWatchKey(id))
+    .then((change) => {
+      if (change)
+        safeSend(getWindow_, 'agent:event', {
+          type: 'live-change',
+          ...liveChangeRow(change, { spawn: true }),
+          agent: change.agent,
+          spawn: true,
+          projectKey: parentSessionKey
+        } satisfies AgentEvent)
+    })
+    .catch(() => {})
   await enqueueRepoWrite(parentRoot, async () => {
     try {
       closeSession(session) // finalize + persist the record (removed below if we auto-apply)
@@ -772,6 +809,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
         emitKey: q.parentSessionKey,
         liveRoot: q.root,
         onEvent: (e) => {
+          if (e.type === 'status') noteAgentStep(spawnWatchKey(wt.id), e.text)
           if (e.type === 'done') void finalizeSpawn(wt.id, 'done')
           else if (e.type === 'error') {
             const spawn = spawns.get(wt.id)
@@ -801,6 +839,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       label: q.label
     })
     releaseSlot()
+    // LKM-163/LKM-215: a Full access Codex spawn can write the live tree too.
+    void beginLiveWatch(spawnWatchKey(wt.id), s)
     s.send(q.text)
     if (cancelOnStart.delete(q.id)) {
       spawns.get(wt.id)!.cancelled = true
@@ -809,6 +849,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
     return wt.branch
   } catch {
     spawns.delete(wt.id)
+    forgetLiveWatch(spawnWatchKey(wt.id))
     releaseSlot()
     await removeWorktree(q.root, wt, { keepBranch: false, intent: 'abandon' })
     safeSend(getWindow_, 'agent:event', {
@@ -967,6 +1008,7 @@ export function registerAgentIpc(
     setProjectUiEnabled(sessionKey, false)
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
+    forgetLiveWatch(sessionKey)
     reconciliation.begin(sessionKey)
   }
 
@@ -1717,6 +1759,8 @@ export function registerAgentIpc(
         trackers.get(session)?.push(id, 0)
         watchdog.touch(key)
         logTurnStart(key, id, session.options)
+        // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
+        void beginLiveWatch(key, session)
         session.send(
           handoffPrompt(
             history,
@@ -2120,6 +2164,7 @@ export function registerAgentIpc(
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
     watchdog.forget(sessionKey)
+    forgetLiveWatch(sessionKey)
     const session = sessions.get(sessionKey)
     const turn = turnIds.get(sessionKey)
     session?.emit({ type: 'status', text: note })

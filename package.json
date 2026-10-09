@@ -99,6 +99,7 @@
     "test:codex-model": "bun test/codex-model.mjs",
     "test:live-write-guard": "bun test/live-write-guard.mjs",
     "test:agent-file-access": "bun test/agent-file-access.mjs",
+    "test:live-change-watch": "bun test/live-change-watch.mjs",
     "test:interrupt": "bun test/interrupt-escalation.mjs",
     "test:chat-title": "bun test/chat-title.mjs",
     "test:chat-settings": "bun test/chat-settings.mjs",
