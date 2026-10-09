@@ -221,17 +221,18 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   })
 
   // `hard` bypasses WebKit's caches; `keepPath` keeps the route the preview showed on
-  // the restarted server's origin (LKM-197).
+  // the restarted server's origin (LKM-197); `agent` marks an agent's page, which the
+  // preview's Back/Forward skips (LKM-219).
   ipcMain.handle(
     'preview:load',
-    (_e, url: string, options?: { hard?: boolean; keepPath?: boolean }) => {
+    (_e, url: string, options?: { hard?: boolean; keepPath?: boolean; agent?: boolean }) => {
       if (!host.isLocalPreviewUrl(url)) return
       const view = host.ensurePreviewView()
       if (options?.keepPath) url = keepRoute(view.webContents.getURL(), url)
       state.url = url
       state.retries = 0
       view.setVisible(true)
-      view.webContents.loadURL(url, options?.hard ? { hard: true } : undefined)
+      view.webContents.loadURL(url, { hard: options?.hard, agent: options?.agent })
     }
   )
   function keepRoute(shown: string, url: string): string {

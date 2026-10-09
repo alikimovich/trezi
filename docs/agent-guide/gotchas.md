@@ -9,10 +9,25 @@ and provider-seat rules are here.
 - **Native shortcuts must route through AppKit menus/responders.** Preserve
   focus-based Undo/Redo and validate physical shortcuts; synthetic actions alone
   cannot prove menu/responder behavior.
+- **Shortcuts match the physical key, not the typed character (LKM-219).** Under
+  Russian, Ukrainian, Hebrew or Greek a ⌘/⌃ event carries the layout's letter (⌘ on
+  the "[" key reads "х"), which no key equivalent matches. `KeyShortcut.install()`
+  (`src/native/KeyShortcuts.swift`) re-reads every ⌘/⌃ key-down through the
+  ASCII-capable layout before AppKit dispatches it, so `NSMenuItem` key equivalents,
+  SwiftUI `.keyboardShortcut` and window monitors see Latin. Latin layouts (Dvorak,
+  AZERTY) are untouched and menu titles keep the standard symbols. A custom
+  `performKeyEquivalent` or monitor compares `KeyShortcut.latin(event)` /
+  `KeyShortcut.matches(…)`, never `charactersIgnoringModifiers`; in-page preview keys
+  compare `latinKey(e)` (`src/preview/latin-key.ts`), never `e.key` for letters,
+  digits or punctuation. Test with synthetic non-Latin events (`test/key-shortcuts.mjs`).
 - **The preview is the only WebKit view.** Do not reintroduce an application
   renderer. AppKit owns geometry and native inspectors reserve their own space.
 - **Preview instrumentation is isolated.** Keep the WKContentWorld and restricted
   message allowlist; re-send select/style/layer state after navigation.
+- **`performance.timeOrigin` is not a document identity.** WebKit converts it from
+  monotonic to wall time on every read, so one document can answer ±1 ms apart. To
+  prove "no reload", compare the navigation count and a token planted in the page
+  (`src/native/smoke-preview-timing.ts`), never equal `timeOrigin` reads.
 - **Native views over the preview don't block WebKit's pointer by hit-testing.**
   WebKit's tracking areas deliver moves anywhere in its visible rect, and the
   window hands it clicks an overlay left unhandled. Floating islands swallow

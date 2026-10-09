@@ -55,9 +55,13 @@ export async function checkPreviewTiming(page: Page, artifacts: string) {
   const { root, activeSessionKey: key } = active
   const server = previewServers.get(projectKey(root))
   assert.ok(server, 'the fixture dev server runs')
+  // WebKit re-derives `performance.timeOrigin` from the wall clock on every read, so one
+  // document can answer ±1 ms apart; a token planted in the page is gone after a reload.
   const document = async () => ({
     navigation: previewLoads.navigation,
-    origin: (await page('performance.timeOrigin')) as number,
+    token: (await page(
+      'window.__treziTimingDocument ??= String(Math.random()).slice(2)'
+    )) as string,
     pid: previewServers.get(projectKey(root))?.pid
   })
   const time = async (tool: string, run: () => Promise<unknown>) => {

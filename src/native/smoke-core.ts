@@ -33,6 +33,7 @@ import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
+import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
 import { checkPreviewSpeed, restorePreviewSpeed } from './smoke-preview-speed'
@@ -123,6 +124,7 @@ export async function runNativeCoreSmoke(
   let firstProject = '',
     originalURL = '',
     statesURL = '',
+    historyURL = '',
     firstChat = ''
   const clearComposer = async () => {
     await host.request('composerPerform', { text: '' })
@@ -982,6 +984,17 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restorePreviewSpeed(page)
+      }
+    },
+    {
+      name: 'preview-history',
+      dependsOn: ['open-project'],
+      run: async () => {
+        historyURL = String(await page('location.href'))
+        await checkPreviewHistory(host, page, invoke, historyURL, artifacts)
+      },
+      cleanup: async () => {
+        await restorePreviewHistory(page, invoke, historyURL)
       }
     },
     {
