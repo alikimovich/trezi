@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-219: editor-freshness step 5 baselines on a quiet page; `sheets` failure was load-sensitive
+
+- **Why.** The full native run failed `editor-freshness` step 5 ("No page reload", hard reloads 0 -> 0) and `sheets` (`expected "agent", actual "jev"`). The hub's hard-reload counter stayed 0, so the page lost `window.freshSentinel` to the fixture server's own live reload (`StaticSite.swift`: FSEvents, 80 ms debounce) of the earlier saves, which FSEvents delivers late under load (load ~23 on 12 cores). `sheets` runs `settings`' engine loop, whose failing message came from the runner's retry after a focus loss on a profile the first attempt had left on `jev`; nothing in LKM-219 touches settings.
+- **Change.** `src/native/smoke-editor-freshness.ts`: step 5 takes its sentinel baseline only after the page kept the sentinel for a quiet second, so only the dependency change can reload it. The "No page reload" assertion is unchanged. `sheets` is not modified: it did not reproduce (`core`+`settings` native run: 29 passed, 0 failed, `sheets` and `editor-freshness` PASS).
+- **Not changed.** `source-syntax`/versioning stay with LKM-222. CHANGELOG lines stay under `## [Unreleased]`.
+
 ## 2026-10-09 — LKM-219: editor-freshness smoke waits for the hub before selecting the card
 
 - **Why.** Two native core runs failed at `editor-freshness` step 3: the island still showed `#fresh-box` ("prop label One" never appeared, or `#fresh-card selected` timed out). Step 2's token save leaves a re-read and a style check pending; under load one lands after `select('fresh-card')` and the previous selection returns. Step 5 already waits for the hub to be idle for the same reason. Nothing in the Back/Forward or key-layout code touches selection.

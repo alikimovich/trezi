@@ -203,7 +203,21 @@ export async function checkEditorFreshness(
       (await page(`document.readyState === 'complete'`)),
     'dependency CSS loaded'
   )
-  await page('(() => { window.freshSentinel = true; return true })()')
+  // The fixture server's live reload follows the earlier saves of this check (FSEvents can
+  // lag by seconds under load), so the baseline is a page that kept its sentinel for a
+  // quiet second: only the dependency change below may then reload it.
+  let quietSince = 0
+  await waitFor(
+    async () => {
+      if (quietSince && (await page('window.freshSentinel === true')))
+        return Date.now() - quietSince >= 1000
+      await page('(() => { window.freshSentinel = true; return true })()')
+      quietSince = Date.now()
+      return false
+    },
+    'page stable before the dependency change',
+    15000
+  )
   const reloads = nativeFreshness.hub?.stats.styleReloads ?? 0
   const hardBefore = nativeFreshness.hub?.stats.hardReloads ?? 0
   writeFileSync(
