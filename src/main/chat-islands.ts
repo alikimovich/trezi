@@ -583,6 +583,19 @@ let installed: ChatIslands | undefined
 export function installChatIslands(service: ChatIslands) {
   installed = service
 }
+/**
+ * LKM-216: the live tree changed, so every island of the project re-reads its bound
+ * values. An island in a gesture is skipped; its own write refreshes it when it ends.
+ */
+export function refreshChatIslands(root: string) {
+  if (!installed) return Promise.resolve()
+  const service = installed
+  return Promise.all(
+    [...service.sessions]
+      .filter(([, session]) => session.root === root && !session.busy && !session.gestures.size)
+      .map(([chat]) => service.refresh(chat))
+  ).then(() => {})
+}
 export function runChatIslandTool(
   chat: string,
   sourceRoot: string,

@@ -61,6 +61,7 @@ import {
   STYLES_READ,
   STYLES_READ_REPLY,
   STYLES_REPLAY,
+  PREVIEW_STYLES_UPDATED as STYLES_UPDATED,
   PREVIEW_TEXT_EDIT as TEXT_EDIT,
   PREVIEW_TOGGLE_SELECT as TOGGLE_SELECT,
   PREVIEW_TOOLBAR_ACTION as TOOLBAR_ACTION
@@ -79,6 +80,7 @@ import { createOverlayGuides } from './overlay-guides'
 import { sendPageSpeed } from './speed-control'
 import { installStatesSwitch } from './states-switch'
 import { specifiedValues, varRefName } from './style-provenance'
+import { watchStyles } from './style-watch'
 import { createThreeDInspector } from './three-d'
 import { createViewportReadout } from './viewport-readout'
 
@@ -1933,6 +1935,7 @@ if (!IS_SIM_BRIDGE) {
   window.addEventListener('keydown', onKey, true)
   window.addEventListener('keyup', onKeyUp, true)
   installStatesSwitch(() => active || !!editing || !!commenting || !!commentMode || threeD.active())
+  if (location.protocol.startsWith('http')) watchStyles(() => ipcRenderer.send(STYLES_UPDATED))
   for (const type of [
     'keypress',
     'pointerdown',

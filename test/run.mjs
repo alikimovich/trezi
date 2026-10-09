@@ -124,6 +124,7 @@ const UNIT = [
   'code-reveal',
   'preview-open',
   'preview-refresh',
+  'editor-freshness',
   'preview-page',
   'preview-identity',
   'turn-timing',

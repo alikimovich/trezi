@@ -23,6 +23,11 @@ import { rewriteClassList, rewriteClassListToken } from './tw-styles'
 const DETECT_TTL_MS = 1500
 let detectMemo: { root: string; at: number; set: Promise<TokenSet> } | null = null
 
+/** LKM-216: a change in the live tree drops the memo at once, not only on the TTL. */
+export function invalidateTokenMemo(root?: string) {
+  if (!root || detectMemo?.root === root) detectMemo = null
+}
+
 function detectTokensCached(root: string, now: number): Promise<TokenSet> {
   if (detectMemo && detectMemo.root === root && now - detectMemo.at < DETECT_TTL_MS) {
     return detectMemo.set
