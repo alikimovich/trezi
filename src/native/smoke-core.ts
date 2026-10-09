@@ -505,7 +505,7 @@ export async function runNativeCoreSmoke(
         const shell = await inspect('shellInspect', (s) => s.enabled.code)
         assert.equal(shell.outlineRows, shell.rows.filter((r: any) => r.kind === 'project').length)
         assert.deepEqual(shell.toolGroup, ['code', 'layers', 'expand'])
-        assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay'])
+        assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay', 'speed'])
         assert.ok(
           shell.sidebarContainsTrafficLights && shell.chatTitlePlain && shell.publishStandard
         )

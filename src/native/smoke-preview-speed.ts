@@ -109,6 +109,7 @@ export async function checkPreviewSpeed(
   assert.equal(slowed.label, '0.25×')
   assert.equal(slowed.speedChecked, '0.25×')
   assert.equal(slowed.speedLabel, 'Slow Motion 0.25×')
+  assert.equal(slowed.speedProminent, true, 'the slow-motion segment shows the accent glyph')
   evidence.slowedState = slowed
   writeFileSync(
     join(artifacts, 'preview-speed.png'),

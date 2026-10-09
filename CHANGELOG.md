@@ -44,6 +44,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
+- Publish and its menu are again the rightmost preview toolbar group at every window width: slow motion moved into the select/device/ruler group, and the … menu sits just before Publish (LKM-213).
 - Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).
 - Switching projects in the sidebar no longer jumps back to the previous project first: the clicked project is selected and shown ("Opening …") at once while its dev server starts, and rapid clicks end on the last one (LKM-204).
 - A new chat can create chat islands again: its agent no longer gets "chat islands are not available yet" while the workspace is still being prepared; the island waits for it (LKM-199).

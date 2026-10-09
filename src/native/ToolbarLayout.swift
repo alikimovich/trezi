@@ -26,6 +26,38 @@ func toolbarSymbol(_ name: String, _ label: String? = nil, size: CGFloat = 20) -
     return image
 }
 
+/// The symbol in the accent colour, for a segment that shows a state (LKM-213: slow motion
+/// inside the interaction group, where an item's prominent style does not draw).
+func toolbarAccentSymbol(_ name: String, _ label: String? = nil) -> NSImage? {
+    guard let glyph = toolbarSymbol(name, label) else { return nil }
+    let image = NSImage(size: glyph.size, flipped: false) { rect in
+        glyph.draw(in: rect)
+        NSColor.controlAccentColor.set(); rect.fill(using: .sourceAtop)
+        return true
+    }
+    image.accessibilityDescription = label
+    return image
+}
+
+/// LKM-213: laid-out toolbar item frames (window coordinates) by identifier. NSToolbarItem has
+/// no public frame, so this reads AppKit's item views; nil-safe for inspection and estimates only.
+func toolbarItemFrames(_ window: NSWindow?) -> [String: NSRect] {
+    guard let root = window?.contentView?.superview else { return [:] }
+    var frames: [String: NSRect] = [:]
+    let key = NSSelectorFromString("item")
+    func walk(_ view: NSView) {
+        guard !view.isHidden else { return }
+        if NSStringFromClass(type(of: view)).contains("Toolbar"), view.responds(to: key),
+           let item = view.value(forKey: "item") as? NSToolbarItem, view.bounds.width > 0 {
+            frames[item.itemIdentifier.rawValue] = view.convert(view.bounds, to: nil)
+            return
+        }
+        view.subviews.forEach(walk)
+    }
+    walk(root)
+    return frames
+}
+
 /// Keep the system sidebar toggle consistent with the preview toolbar symbols.
 final class ToolbarLayout {
     init(toolbar: NSToolbar, sidebar: NSSplitViewItem) {
@@ -37,29 +69,46 @@ final class ToolbarLayout {
 /// subitems does not configure AppKit's automatically created segmented view.
 final class MomentaryToolbarGroup: NSToolbarItemGroup {
     private let control: NSSegmentedControl
+    /// Subitems without a segment (LKM-213: slow motion in a narrow window).
+    private var hiddenSegments: Set<String> = []
+    /// The subitems that have a segment, in segment order.
+    var shown: [NSToolbarItem] { subitems.filter { !hiddenSegments.contains($0.itemIdentifier.rawValue) } }
     init(identifier: NSToolbarItem.Identifier, items: [NSToolbarItem]) {
         control = NSSegmentedControl(images: items.map { $0.image ?? NSImage() }, trackingMode: .momentary, target: nil, action: nil)
         super.init(itemIdentifier: identifier)
         subitems = items; selectionMode = .momentary
         control.segmentStyle = .texturedRounded
-        for index in items.indices { control.setWidth(32, forSegment: index) }
         view = control
         target = self; action = #selector(activate(_:))
         control.target = self; control.action = #selector(activate(_:))
         refresh()
     }
     func refresh() {
-        for (index, item) in subitems.enumerated() {
+        let items = shown
+        if control.segmentCount != items.count { control.segmentCount = items.count }
+        for (index, item) in items.enumerated() {
+            control.setWidth(32, forSegment: index)
             control.setImage(item.image, forSegment: index)
             control.setEnabled(item.isEnabled, forSegment: index)
             control.setToolTip(item.toolTip ?? item.label, forSegment: index)
         }
     }
+    /// Removes or restores a subitem's segment; returns how much narrower the control got.
+    func setSegment(_ identifier: String, hidden hide: Bool) -> CGFloat {
+        guard hiddenSegments.contains(identifier) != hide else { return 0 }
+        let before = control.intrinsicContentSize.width
+        if hide { hiddenSegments.insert(identifier) } else { hiddenSegments.remove(identifier) }
+        refresh(); control.invalidateIntrinsicContentSize()
+        return before - control.intrinsicContentSize.width
+    }
     var hasMomentaryControl: Bool {
         (control.cell as? NSSegmentedCell)?.trackingMode == .momentary && control.selectedSegment == -1
     }
     func clickSegment(_ identifier: String) -> Bool {
-        guard let index = subitems.firstIndex(where: { $0.itemIdentifier.rawValue == identifier }), subitems[index].isEnabled else { return false }
+        let subitems = shown
+        // A menu segment would block the pipe in its menu; checks pick its entries directly.
+        guard let index = subitems.firstIndex(where: { $0.itemIdentifier.rawValue == identifier }), subitems[index].isEnabled,
+              !(subitems[index] is NSMenuToolbarItem) else { return false }
         // Momentary cells only expose selection during mouse tracking. Simulate
         // that transient selection for the automation action, then restore it.
         guard let cell = control.cell as? NSSegmentedCell else { return false }
@@ -71,17 +120,24 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
     }
     /// A segment's frame in window coordinates; nil while the group is not in the window.
     func segmentFrame(_ identifier: String) -> NSRect? {
+        let subitems = shown
         guard let index = subitems.firstIndex(where: { $0.itemIdentifier.rawValue == identifier }), control.window != nil, !subitems.isEmpty else { return nil }
         let width = control.bounds.width / CGFloat(subitems.count)
         return control.convert(NSRect(x: control.bounds.minX + width * CGFloat(index), y: control.bounds.minY, width: width, height: control.bounds.height), to: nil)
     }
     @objc private func activate(_ sender: NSSegmentedControl) {
-        let index = sender.selectedSegment
+        let index = sender.selectedSegment, subitems = shown
         guard subitems.indices.contains(index) else { return }
         let item = subitems[index]
-        if item.isEnabled, let action = item.action { NSApp.sendAction(action, to: item.target, from: item) }
         // Clear immediately, independent of later renderer state updates.
-        sender.setSelected(false, forSegment: index)
+        defer { sender.setSelected(false, forSegment: index) }
+        guard item.isEnabled else { return }
+        // A menu-only subitem (slow motion) opens its menu under its segment.
+        if let menuItem = item as? NSMenuToolbarItem, item.action == nil {
+            sender.setSelected(false, forSegment: index)
+            let width = sender.bounds.width / CGFloat(subitems.count)
+            menuItem.menu.popUp(positioning: nil, at: NSPoint(x: sender.bounds.minX + width * CGFloat(index), y: sender.isFlipped ? sender.bounds.maxY + 4 : sender.bounds.minY - 4), in: sender)
+        } else if let action = item.action { NSApp.sendAction(action, to: item.target, from: item) }
     }
 }
 
