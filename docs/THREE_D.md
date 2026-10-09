@@ -1,6 +1,6 @@
 # 3D component inspection
 
-In the desktop web preview, select an element and choose **Inspect in 3D** (the
+In the native desktop preview, select an element and choose **Inspect in 3D** (the
 stacked-layers icon in its selection toolbar). The selected subtree opens in an
 isolated workspace. Drag to orbit, Shift-drag to pan, and scroll to zoom. The
 focused canvas also accepts arrow keys and +/−. **Separation** spreads the layers
@@ -17,13 +17,18 @@ buttons, inputs, menus, and other live application behavior, return to the page.
 
 ## Implementation
 
-`src/preview/three-d.ts` owns the modal shadow-DOM workspace, CSS perspective
-camera, layer selection, observers, and teardown. `src/preview/three-d-paint.ts`
+`src/preview/three-d.ts` owns the modal shadow-DOM scene, CSS perspective
+camera, layer selection, observers, and teardown. `src/native/ThreeDChrome.swift`
+owns the system buttons, slider, picker, title, hint and capture status. The host
+resolves semantic AppKit colors under the window's effective appearance and sends
+the palette and measured bar insets to the isolated preview world. Appearance
+changes preserve the camera and selection. `src/preview/three-d-paint.ts`
 measures the live DOM and builds inert paint surfaces. The original component
 stays mounted in its original document, retaining inherited styles, fonts,
 application state, and layout context. Inspection never reparents or restyles it.
-No new renderer/main IPC contract or WebGL dependency is needed: selection and
-editing reuse the existing preview → main → inspector path.
+Selection and editing reuse the existing preview → main → inspector path. The
+native controls use a separate session/revision contract; delayed actions cannot
+select a layer after an index refresh or close.
 
 Each surface includes only its element's own backgrounds, borders, and direct
 text, so descendants are not duplicated on ancestor layers. Text ranges preserve
@@ -56,7 +61,11 @@ restore its camera or promise to preserve application state.
 - Browser serving mode and the native iOS simulator do not expose this desktop
   preload feature.
 
-`test/three-d-inspector.mjs` exercises the native preview, trusted camera and
-selection input, live style preview/clear, source edit/undo, simulated HMR subtree
-replacement, state-preserving exit, Escape, capture limits, and duplicate-stamp
-protection. It belongs to the Electron tier of `bun run test`.
+The native `three-d` smoke check in `src/native/smoke-three-d.ts` belongs to the
+`core` group. It opens the scene from the real preview toolbar; checks native
+controls, camera keys, selection, Code and inspector paths, stale layer rejection,
+HMR recovery, removed targets, navigation cleanup, Back and Escape with native
+focus, repeated open/close and page input isolation; and captures foreground
+light, dark, compact and Code-drawer views. `test/three-d-contract.mjs` checks
+session, revision and action bounds in the unit tier. The capture bounds remain 160 surfaces, 500 visited
+elements and depth 18.

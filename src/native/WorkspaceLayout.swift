@@ -196,13 +196,13 @@ final class WorkspaceLayout {
         var page = pageArea
         previewArea = available
         // The inspector floats over the preview, so opening it never reflows the page.
-        let editing = !host.editingInspector.isHidden
+        let editing = host.editingInspector.model.state?.visible == true
         // A moved island that no longer fits the preview goes back to its default place.
         if editing, let spot = inspectorSpot, available.width > 0, NativeEditingInspector.moved(in: available, width: inspectorWidth, spot: spot) == nil { inspectorSpot = nil }
         var island = NativeEditingInspector.frame(in: available, width: inspectorWidth, visible: editing, spot: inspectorSpot)
         // The Layers island hangs under its toolbar button and never covers the editing island.
         layersAnchor = host.shell.toolbarButtonFrame("layers").map { host.canvas.convert(NSPoint(x: $0.midX, y: $0.midY), from: nil).x }
-        var placed = LayersPlacement.frames(area: available, size: layersSize, spot: layersSpot, anchor: layersAnchor, visible: !host.layers.isHidden, inspector: island, dragging: dragging === host.layers)
+        var placed = LayersPlacement.frames(area: available, size: layersSize, spot: layersSpot, anchor: layersAnchor, visible: host.layers.wanted, inspector: island, dragging: dragging === host.layers)
         if let held = heldLayers, placed.mode != "hidden" { placed = LayersPlacement.Frames(layers: held, inspector: island, mode: layersMode, reset: false) }
         if placed.reset { layersSpot = nil }
         layersMode = placed.mode; island = placed.inspector
@@ -236,6 +236,35 @@ final class WorkspaceLayout {
         host.previewOverlay?.place(page: page, area: available, scale: zoom * (host.views["preview"]?.magnification ?? 1), radius: radius, visible: shown && host.views["preview"]?.isHidden == false)
         host.speedBadge.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         host.statesSwitcher.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
+        var occluders: [NSRect] = []
+        if host.threeD.active {
+            let compact = page.width < 520
+            let top: CGFloat = 48, bottom: CGFloat = compact ? 100 : 76
+            let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: max(0, page.height - top - bottom))
+            func confined(_ frame: NSRect) -> NSRect {
+                let lower = max(frame.minY, stage.minY), upper = min(frame.maxY, stage.maxY)
+                return NSRect(x: frame.minX, y: lower, width: frame.width, height: max(0, upper - lower))
+            }
+            var remaining = page.width
+            let inspector = confined(island)
+            let showInspector = editing && inspector.intersects(stage) && inspector.width > 0 && remaining - inspector.width >= 220
+            host.editingInspector.isHidden = !showInspector
+            if showInspector { host.editingInspector.place(inspector); occluders.append(inspector); remaining -= inspector.width }
+            let layersFrame = confined(placed.layers)
+            let showLayers = host.layers.wanted && layersFrame.intersects(stage) && layersFrame.width > 0 && remaining - layersFrame.width >= 220
+            host.layers.isHidden = !showLayers
+            if showLayers { host.layers.place(layersFrame); occluders.append(layersFrame) }
+        } else {
+            host.editingInspector.isHidden = !editing
+            host.layers.isHidden = !host.layers.wanted
+        }
+        let threeDVisible = host.threeD.place(in: page, visible: shown && host.views["preview"]?.isHidden == false, occluders: occluders)
+        if host.threeD.active && !threeDVisible { host.threeD.dismiss() }
+        if host.threeD.active {
+            host.canvas.addSubview(host.threeD.header, positioned: .above, relativeTo: nil)
+            host.canvas.addSubview(host.threeD.footer, positioned: .above, relativeTo: nil)
+        }
+        if host.threeD.active { host.sendThreeDAppearance() }
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
         // Straddles the island's left edge below and above its rounded corners.
         let corner = min(NativeEditingInspector.cornerRadius, island.height / 2)

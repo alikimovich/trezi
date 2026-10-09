@@ -22,6 +22,7 @@ final class LayerOutline: NSOutlineView {
 /// header and sized by a thin rim. Its rows follow the preview's selection, select and hover
 /// page elements, and reorder them in the source by drag.
 final class NativeLayers: FloatingIsland, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    var wanted = false
     enum Edge { case left, right, bottom }
     static let edge: CGFloat = 5
     let tree = LayerOutline(), status = NSTextField(labelWithString: ""), notice = NSTextField(labelWithString: "")
@@ -100,7 +101,7 @@ final class NativeLayers: FloatingIsland, NSOutlineViewDataSource, NSOutlineView
     @objc func refreshLayers() { send("refresh") }
     func show(notice text: String) { notice.stringValue = text; notice.toolTip = text; notice.isHidden = text.isEmpty }
     func update(_ state: [String: Any]) {
-        root = state["root"] as? String ?? ""; isHidden = state["visible"] as? Bool != true || root.isEmpty
+        root = state["root"] as? String ?? ""; wanted = state["visible"] as? Bool == true && !root.isEmpty; isHidden = !wanted
         let error = state["error"] as? String ?? ""
         status.stringValue = error.isEmpty ? "\(state["total"] as? Int ?? 0)\(state["truncated"] as? Bool == true ? " (truncated)" : "")" : error; status.toolTip = status.stringValue
         status.textColor = error.isEmpty ? .secondaryLabelColor : .systemRed

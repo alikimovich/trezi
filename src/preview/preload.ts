@@ -23,7 +23,7 @@ import './agent-inspect'
  * events from the previewed app.
  */
 import { ipcRenderer } from '../native/preview-transport'
-import type { SelectedElement } from '../shared/api'
+import type { SelectedElement, ThreeDAction, ThreeDState } from '../shared/api'
 import { CONTROL_OVERLAY_SELECTOR } from '../shared/control-overlay'
 import { isScopeClass } from '../shared/display-classes'
 import { FRAME_DATA_URI, FRAME_INSET } from '../shared/iphone-frame'
@@ -48,6 +48,9 @@ import {
   PREVIEW_MOVE_NODE,
   PREVIEW_OVERLAY_GEOMETRY,
   PREVIEW_OVERLAY_LINES,
+  PREVIEW_THREE_D_ACTION,
+  PREVIEW_THREE_D_APPEARANCE,
+  PREVIEW_THREE_D_STATE,
   PREVIEW_READINESS as READINESS,
   PREVIEW_SELECTION_LOST as SELECTION_LOST,
   PREVIEW_SET_COMMENT_MODE as SET_COMMENT_MODE,
@@ -1711,7 +1714,10 @@ function setCommentMode(next: CommentMode, fromRenderer = false): void {
 }
 
 function onKey(e: KeyboardEvent): void {
-  if (threeD.active()) return
+  if (threeD.active()) {
+    threeD.key(e)
+    return
+  }
   // Stop page shortcuts at window capture, but retain the browser's editing
   // defaults (caret movement, selection, typing, clipboard and IME).
   if (blockPageInput(e)) {
@@ -1758,6 +1764,10 @@ function onKey(e: KeyboardEvent): void {
 /** Releasing Option (or losing the key entirely on window blur) ends the
  *  measurement — nothing else in the overlay is keyed to it. */
 function onKeyUp(e: KeyboardEvent): void {
+  if (threeD.active()) {
+    e.stopImmediatePropagation()
+    return
+  }
   blockPageInput(e)
   if (!altHeld) return
   if (e.key === 'Alt' || !e.altKey) {
@@ -1768,7 +1778,11 @@ function onKeyUp(e: KeyboardEvent): void {
 
 /** Run after our gesture handlers, before the preview application's handlers. */
 function blockPageInput(e: Event): boolean {
-  if ((!active && !editing) || threeD.active()) return false
+  if (threeD.active()) {
+    if (e.type === 'keypress') e.stopImmediatePropagation()
+    return e.type === 'keypress'
+  }
+  if (!active && !editing) return false
   const target = e.target instanceof Element ? e.target : null
   const overlayKey = target === overlayHost && e instanceof KeyboardEvent
   if (isOverlay(target) && !overlayKey) return false
@@ -1879,6 +1893,7 @@ function setFrame(on: boolean): void {
 }
 
 const threeD = createThreeDInspector({
+  publish: (state: ThreeDState | null) => ipcRenderer.send(PREVIEW_THREE_D_STATE, state),
   hasSource: (el) => !!findSource(el),
   code: (el) => {
     selectedEl = el
@@ -2018,6 +2033,23 @@ if (!IS_SIM_BRIDGE) {
   )
   // After the listeners above, which see the shield as overlay and drop the hover box.
   nativeCover.install()
+  ipcRenderer.on(PREVIEW_THREE_D_ACTION, (_e, action: ThreeDAction) => threeD.action(action))
+  ipcRenderer.on(
+    PREVIEW_THREE_D_APPEARANCE,
+    (
+      _e,
+      value: {
+        palette: Record<string, string>
+        top: number
+        bottom: number
+        left: number
+        right: number
+      }
+    ) => {
+      if (value && typeof value === 'object')
+        threeD.appearance(value.palette ?? {}, value.top, value.bottom, value.left, value.right)
+    }
+  )
   // Main sends them on every load and whenever the host's layout changes them.
   ipcRenderer.on(PREVIEW_COVERED, (_e, rects: unknown) => nativeCover.set(rects))
   ipcRenderer.on(PREVIEW_OVERLAY_LINES, (_e, lines: unknown) => overlayGuides.set(lines))

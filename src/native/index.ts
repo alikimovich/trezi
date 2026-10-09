@@ -448,6 +448,11 @@ async function main() {
     previewCover = Array.isArray(rects) ? rects : []
     previewView.webContents.send(channels.PREVIEW_COVERED, previewCover)
   })
+  host.on('three-d-action', (action) => {
+    if (typeof action?.session !== 'string' || !Number.isInteger(action?.revision)) return
+    if (!['close', 'code', 'front', 'reset', 'separation', 'layer'].includes(action?.action)) return
+    previewView.webContents.send(channels.PREVIEW_THREE_D_ACTION, action)
+  })
   const chatController = installNativeChat(
     host!,
     mainView,
@@ -1003,7 +1008,10 @@ async function main() {
   host.on('url', ({ view, url }) => {
     const current = views.get(view)
     if (current) current.url = url
-    if (view === 'preview' && /^https?:/.test(url)) send('preview:url-changed', url)
+    if (view === 'preview' && /^https?:/.test(url)) {
+      host.send('threeDClear')
+      send('preview:url-changed', url)
+    }
   })
   host.on('fullscreen', ({ value }) => send('window:fullscreen', value))
   host.on('external', ({ url }) => {
