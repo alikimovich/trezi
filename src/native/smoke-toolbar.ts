@@ -10,6 +10,8 @@ const background = () => process.env.TREZI_NATIVE_BACKGROUND_TEST === '1'
 const PINNED_GAP = 16
 /** Below this window width the "…" item is not in the toolbar (`moreMinimumWindow`, ToolbarMore.swift). */
 const MORE_MINIMUM_WINDOW = 1000
+/** LKM-213: the unified toolbar's trailing inset is a few points of system margin. */
+const MAX_TRAILING_INSET = 24
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 type Toolbar = Record<string, any>
 
@@ -44,8 +46,43 @@ const pick = (state: Toolbar) => ({
   branchChevronTrailing: state.branchChevronTrailing,
   branchChevronGap: state.branchChevronGap,
   moreVisible: state.moreVisible,
+  interactionSegments: state.interactionSegments,
+  publishVisible: state.publishVisible,
+  publishMeasured: state.publishMeasured,
+  publishLeading: state.publishLeading,
+  publishTrailing: state.publishTrailing,
+  publishTrailingInset: state.publishTrailingInset,
+  beforePublishTrailing: state.beforePublishTrailing,
+  toolbarItemOrder: state.toolbarItemOrder,
   windowAppearance: state.windowAppearance
 })
+
+/** LKM-213: Publish and its chevron are the last toolbar group, never in the overflow menu,
+ *  its trailing edge on the toolbar's trailing inset (`inset`: measured at the first width). */
+function assertPublishLast(state: Toolbar, stage: string, inset: number) {
+  const detail = JSON.stringify(pick(state))
+  assert.ok(
+    state.publishVisible,
+    `Toolbar ${stage}: Publish stays out of the overflow menu: ${detail}`
+  )
+  assert.ok(state.publishMeasured, `Toolbar ${stage}: Publish's frame is laid out: ${detail}`)
+  const order: string[] = state.toolbarItemOrder
+  assert.equal(order.at(-1), 'publish', `Toolbar ${stage}: Publish is the last item: ${detail}`)
+  assert.ok(
+    state.beforePublishTrailing <= state.publishLeading + 0.5,
+    `Toolbar ${stage}: every other item ends before Publish: ${detail}`
+  )
+  if (state.moreVisible)
+    assert.equal(order.at(-2), 'more', `Toolbar ${stage}: "…" sits just before Publish: ${detail}`)
+  assert.ok(
+    state.publishTrailingInset >= 0 && state.publishTrailingInset <= MAX_TRAILING_INSET,
+    `Toolbar ${stage}: Publish is flush with the trailing inset (≤ ${MAX_TRAILING_INSET}pt): ${detail}`
+  )
+  assert.ok(
+    Math.abs(state.publishTrailingInset - inset) <= 1,
+    `Toolbar ${stage}: Publish's trailing edge equals the toolbar trailing inset (${state.publishTrailingInset} vs ${inset}): ${detail}`
+  )
+}
 
 /** LKM-184: the branch title starts on the address text's left edge (rendered text
  *  origins, window x), and the chevron follows the title inside the pop-up's frame. */
@@ -133,8 +170,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
   // The "…" item (LKM-197) leaves a window narrower than MORE_MINIMUM_WINDOW, which
   // shortens the right groups' inset by its width: each state keeps its own pinned inset.
   const pinnedInsets = new Map<boolean, number>()
+  let trailingInset: number | undefined
   for (const [name, width] of [
     ['minimum', 850],
+    ['narrow', 950],
     ['wide', 1800],
     ['default', defaultWidth]
   ] as const) {
@@ -169,12 +208,20 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
       width >= MORE_MINIMUM_WINDOW,
       `Toolbar ${name}: the "…" item shows only in windows of ${MORE_MINIMUM_WINDOW} pt or more (${width} pt)`
     )
+    // LKM-213: slow motion is the interaction group's last segment, in the same windows as "…".
+    assert.deepEqual(
+      settled.interactionSegments,
+      ['select-object', 'device', 'overlay', ...(moreShown ? ['speed'] : [])],
+      `Toolbar ${name}: select | device | ruler${moreShown ? ' | slow motion' : ''}`
+    )
     const pinnedInset = pinnedInsets.get(moreShown) ?? inset
     pinnedInsets.set(moreShown, pinnedInset)
     assert.ok(
       Math.abs(inset - pinnedInset) <= 1,
       `Toolbar ${name}: the right groups stay pinned to the trailing edge (${inset} vs ${pinnedInset}, "…" ${moreShown ? 'shown' : 'in the overflow menu'})`
     )
+    trailingInset ??= settled.publishTrailingInset
+    assertPublishLast(settled, name, trailingInset as number)
     if (name === 'wide') {
       assert.ok(
         settled.addressWidth > settled.addressMinimum + 1,
@@ -190,7 +237,7 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     assertTitles(settled, name)
     const titles: Record<string, unknown> = {}
     // LKM-184: at two widths, the titles stay aligned in a light and a dark window.
-    if (name !== 'minimum')
+    if (name !== 'minimum' && name !== 'narrow')
       for (const appearance of ['light', 'dark'] as const) {
         await host.request('shellPerform', { action: 'window-appearance', row: appearance })
         await new Promise((resolve) => setTimeout(resolve, 200))

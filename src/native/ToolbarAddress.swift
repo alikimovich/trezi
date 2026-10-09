@@ -115,6 +115,7 @@ extension NativeShell {
                       "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
             .merging(titleAlignment()) { _, new in new }
+            .merging(publishTrailingInspect()) { _, new in new }
     }
 }
 

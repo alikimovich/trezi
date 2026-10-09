@@ -1,13 +1,13 @@
 import AppKit
 
-/// LKM-197: the preview toolbar's "…" menu, after Publish. Its actions go to Bun as
-/// shell actions (`src/native/preview-refresh.ts`).
+/// LKM-197: the preview toolbar's "…" menu. LKM-213: just before Publish, which stays the
+/// last item at the trailing edge. Its actions go to Bun as shell actions (`src/native/preview-refresh.ts`).
 extension NativeShell {
     static let moreActions = [("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean")]
     func configureMore(_ item: NSMenuToolbarItem) {
         item.showsIndicator = false
         // Secondary to Publish: when the toolbar cannot fit everything (a minimum-width window)
-        // AppKit moves this into its overflow menu first instead of widening the right group.
+        // AppKit moves this into its overflow menu first; Publish (high priority) never goes there.
         item.visibilityPriority = .low
         item.image = toolbarSymbol("ellipsis.circle", item.label)
         let menu = NSMenu(); menu.autoenablesItems = false
@@ -18,20 +18,26 @@ extension NativeShell {
         }
         item.menu = menu
     }
-    /// Below this window width the slow-motion (LKM-206) and "…" items leave the toolbar: the
-    /// minimum-width window already has no room for the right groups, and they would widen
-    /// them further. Their actions stay with the menu bar, the agent tools and wider windows.
+    /// Below this window width the "…" item and the slow-motion segment (LKM-206) leave the
+    /// toolbar: the minimum-width window already has no room for the right groups, and they
+    /// would widen them further. Their actions stay with the menu bar, the agent tools and wider
+    /// windows. Publish stays, the last item at the trailing edge.
     static let moreMinimumWindow: CGFloat = 1000
-    /// `items` follow Publish, the last one at the trailing edge.
-    func fitMore(_ items: [NSToolbarItem], windowWidth: CGFloat) {
-        guard #available(macOS 15, *), !items.isEmpty else { return }
+    func fitMore(windowWidth: CGFloat) {
+        guard #available(macOS 15, *), let item = toolbarItems["more"] else { return }
         let hidden = windowWidth < Self.moreMinimumWindow
-        guard items.contains(where: { $0.isHidden != hidden }) else { return }
-        // The right groups are pinned to the trailing edge, so they move by the items' widths plus
-        // the spaces before them. Apply that to the reserved inset now: the address block is sized in
-        // this same pass, before the toolbar's next layout can be measured.
-        addressLayout.moveRightGroups(hiding: hidden, by: moreShift)
-        for item in items { item.isHidden = hidden }
+        guard item.isHidden != hidden else { return }
+        // The right groups are pinned to the trailing edge. "…" moves the groups before it by its
+        // width plus the spacing to Publish (the distance between their leading edges while it
+        // shows); the segment moves the interaction group's leading edge by its width. Apply that to
+        // the reserved inset now: the address block is sized in this same pass, before the
+        // toolbar's next layout can be measured.
+        let frames = hidden ? toolbarItemFrames(window) : [:]
+        if let more = frames["more"], let publish = frames["publish"], publish.minX > more.minX { moreShift = publish.minX - more.minX }
+        let group = toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup
+        let segment = abs(group?.setSegment("speed", hidden: hidden) ?? 0)
+        addressLayout.moveRightGroups(hiding: hidden, by: moreShift + segment)
+        item.isHidden = hidden
     }
     /// LKM-207: the project's states workbenches, as a Workbenches submenu after the actions.
     /// Absent when there are none. Open and Remove go to Bun (`src/native/states-controller.ts`);
@@ -75,7 +81,8 @@ extension NativeShell {
     }
     func moreInspect(_ item: NSMenuToolbarItem?) -> [String: Any] {
         ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
-         "moreVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false]
+         "moreVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false,
+         "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
     }
     func workbenchesInspect() -> [[String: Any]] {
         let menu = (toolbarItems["more"] as? NSMenuToolbarItem)?.menu
