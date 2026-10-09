@@ -58,7 +58,7 @@ extension NativeSourceEditor {
     /// on screen; otherwise it is dropped and the backend is told, so the lines it
     /// carried are sent again for the current revision. Marked (IME) text is left alone.
     func applyHighlight(_ value: [String: Any]) {
-        let started = CACurrentMediaTime(), messageRevision = value["revision"] as? Int ?? -1
+        let started = SourceWorkClock(), messageRevision = value["revision"] as? Int ?? -1
         guard value["root"] as? String == root, value["source"] as? String == source else { return }
         guard messageRevision == revision, let storage = code.textStorage else { send("highlight", ["dropped": messageRevision]); return }
         let spans = value["spans"] as? [Int] ?? [], runs = value["runs"] as? [Int] ?? [], length = storage.length
@@ -84,7 +84,7 @@ extension NativeSourceEditor {
         }
         storage.endEditing()
         highlighted = messageRevision
-        measure?("highlight", messageRevision, CACurrentMediaTime() - started)
+        measure?("highlight", messageRevision, started.elapsed())
     }
     /// Resets a replaced text to the plain style and tells the backend that nothing it
     /// sent before `revision` is shown.

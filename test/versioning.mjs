@@ -112,6 +112,18 @@ assert.match(
   /no "## \[Unreleased\]"/
 )
 assert.match(versioningProblems({ version: '0.1.0', changelog: null }).join(), /missing/)
+// Right after a release, Unreleased is present but empty: CI accepts it.
+const released = releaseChangelog(changelog, '0.1.0', '2026-10-01')
+assert.equal(unreleasedBody(released).trim(), '', 'a release leaves Unreleased empty')
+assert.deepEqual(versioningProblems({ version: '0.1.0', changelog: released }), [])
+assert.deepEqual(
+  versioningProblems({
+    version: '0.1.0',
+    changelog: '# C\n\n## [Unreleased]\n\n## [0.1.0] - 2026-10-09\n\n- One.\n'
+  }),
+  [],
+  'empty Unreleased after a release'
+)
 
 // --- this checkout passes its own CI check, and the changelog rule is documented ---
 assert.deepEqual(
@@ -121,8 +133,9 @@ assert.deepEqual(
   }),
   []
 )
+// The LKM-143 entry may sit under Unreleased or, after a release, any version section.
 assert.match(
-  unreleasedBody(read('CHANGELOG.md')),
+  read('CHANGELOG.md').slice(read('CHANGELOG.md').search(/^## /m)),
   /trezi --version/,
   'CHANGELOG has an entry for this change'
 )
