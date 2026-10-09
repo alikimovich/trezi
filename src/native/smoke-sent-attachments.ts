@@ -6,6 +6,7 @@ import { LIMITS, validImage, validImages } from '../main/provider-policy'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { preparePreviewInput } from './smoke-input'
+import { assertTiming, formatTiming, median, TIMING_RUNS } from './smoke-timing'
 import { inspectUntil, waitFor } from './smoke-wait'
 
 /** A minimal RGBA PNG, so the transparent fixture needs no image tooling. */
@@ -237,82 +238,114 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
       window.dispatchEvent(new Event('scroll'));
       await new Promise(resolve => requestAnimationFrame(resolve));
       if (box?.style.display !== 'none') throw new Error('Scroll restored a stale highlight');
-      metrics.enabled = true; metrics.hover.length = 0; metrics.hoverWork.length = 0;
-      metrics.hoverPaintUpperBound.length = 0;
+      metrics.enabled = true;
+      // LKM-211: one warm-up burst, then ${TIMING_RUNS} measured ones.
+      const runs = [];
+      for (let run = 0; run <= ${TIMING_RUNS}; run++) {
+        metrics.hover.length = 0; metrics.hoverWork.length = 0; metrics.hoverPaintUpperBound.length = 0;
+        const start = performance.now();
+        for (let i = 0; i < 100; i++) (i % 2 ? alternate : target).dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+        const enqueue = performance.now() - start;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        runs.push({ enqueue, hover: [...metrics.hover], work: [...metrics.hoverWork],
+          paintUpperBound: [...metrics.hoverPaintUpperBound] });
+      }
       metrics.select.length = 0; metrics.roundTrip.length = 0; metrics.hops.length = 0;
-      const start = performance.now();
-      for (let i = 0; i < 100; i++) (i % 2 ? alternate : target).dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
-      const enqueue = performance.now() - start;
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const rect = alternate.getBoundingClientRect();
-      return { enqueue, hover: metrics.hover, work: metrics.hoverWork, paintUpperBound: metrics.hoverPaintUpperBound,
+      return { runs: runs.slice(1),
         visible: box?.style.display, finalTarget: Math.abs(parseFloat(box?.style.left ?? 'NaN') - rect.left) < 1
           && Math.abs(parseFloat(box?.style.top ?? 'NaN') - rect.top) < 1
           && Math.abs(parseFloat(box?.style.width ?? 'NaN') - rect.width) < 1 };
     })()`)
-    assert.equal(
-      hoverTiming.hover.length,
-      2,
-      `100 alternating moves coalesce into two draws: ${JSON.stringify(hoverTiming)}`
-    )
+    const hoverRuns: {
+      enqueue: number
+      hover: number[]
+      work: number[]
+      paintUpperBound: number[]
+    }[] = hoverTiming.runs
+    for (const run of hoverRuns)
+      assert.equal(
+        run.hover.length,
+        2,
+        `100 alternating moves coalesce into two draws: ${JSON.stringify(run)}`
+      )
     assert.equal(hoverTiming.visible, 'block', 'hover highlight is drawn in WebContent')
     assert.ok(hoverTiming.finalTarget, 'the final highlight matches the last pointer target')
-    assert.ok(
-      hoverTiming.enqueue < 16,
-      `100 moves blocked WebContent for ${hoverTiming.enqueue} ms`
-    )
-    assert.ok(hoverTiming.hover[0] < 16, `Hover highlight took ${hoverTiming.hover[0]} ms`)
-    assert.ok(
-      hoverTiming.work[0] < 16,
-      `Hover draw blocked WebContent for ${hoverTiming.work[0]} ms`
-    )
-    assert.ok(
-      hoverTiming.enqueue + hoverTiming.work[1] < 16,
-      `100 hovers and their final draw blocked WebContent for ${hoverTiming.enqueue + hoverTiming.work[1]} ms`
-    )
+    const hoverTimings = [
+      assertTiming(
+        '100 moves blocked WebContent',
+        16,
+        hoverRuns.map((run) => run.enqueue)
+      ),
+      assertTiming(
+        'Hover highlight',
+        16,
+        hoverRuns.map((run) => run.hover[0])
+      ),
+      assertTiming(
+        'Hover draw blocked WebContent',
+        16,
+        hoverRuns.map((run) => run.work[0])
+      ),
+      assertTiming(
+        '100 hovers and their final draw blocked WebContent',
+        16,
+        hoverRuns.map((run) => run.enqueue + run.work[1])
+      )
+    ]
     const chatAfterHover = await host.request('chatInspect')
     assert.equal(
       chatAfterHover.messageBodyEvaluations,
       chatBeforeHover.messageBodyEvaluations,
       'preview hover does not render the transcript'
     )
-    await preparePreviewInput(host)
-    const point = await evaluate(
-      `(() => { const r = document.querySelector('#native-title').getBoundingClientRect(); return {x:r.x+20,y:r.y+r.height/2}; })()`
-    )
-    await host.request('previewInput', point)
-    const selectionTiming = await evaluate(`(async () => {
-      const metrics = globalThis.__treziPreviewTimings;
-      for (let i = 0; i < 60 && !metrics.roundTrip.length; i++) await new Promise(resolve => setTimeout(resolve, 10));
-      return { select: metrics.select, roundTrip: metrics.roundTrip, hops: metrics.hops };
-    })()`)
-    assert.ok(selectionTiming.select.length, 'the real click reached the preview selection handler')
-    assert.ok(
-      selectionTiming.select[0] < 50,
-      `Local selection took ${selectionTiming.select[0]} ms`
-    )
-    assert.ok(
-      selectionTiming.roundTrip.length,
-      `Selection did not return through host/service/Bun: ${JSON.stringify(selectionTiming)}`
-    )
-    assert.ok(
-      selectionTiming.roundTrip[0] < 50,
-      `Selection bridge took ${selectionTiming.roundTrip[0]} ms`
-    )
+    // LKM-211: one warm-up click, then TIMING_RUNS measured ones (single clicks: no dblclick).
+    let selectionTiming = {
+      select: [] as number[],
+      roundTrip: [] as number[],
+      hops: [] as Record<string, number>[]
+    }
+    for (let click = 1; click <= TIMING_RUNS + 1; click++) {
+      await preparePreviewInput(host)
+      const point = await evaluate(
+        `(() => { const r = document.querySelector('#native-title').getBoundingClientRect(); return {x:r.x+20,y:r.y+r.height/2}; })()`
+      )
+      await host.request('previewInput', point)
+      selectionTiming = await evaluate(`(async () => {
+        const metrics = globalThis.__treziPreviewTimings;
+        for (let i = 0; i < 60 && metrics.roundTrip.length < ${click}; i++) await new Promise(resolve => setTimeout(resolve, 10));
+        return { select: metrics.select, roundTrip: metrics.roundTrip, hops: metrics.hops };
+      })()`)
+      assert.equal(
+        selectionTiming.select.length,
+        click,
+        `real click ${click} reached the preview selection handler: ${JSON.stringify(selectionTiming)}`
+      )
+      assert.equal(
+        selectionTiming.roundTrip.length,
+        click,
+        `Selection ${click} did not return through host/service/Bun: ${JSON.stringify(selectionTiming)}`
+      )
+    }
+    const selectionTimings = [
+      assertTiming('Local selection', 50, selectionTiming.select.slice(1)),
+      assertTiming('Selection bridge', 50, selectionTiming.roundTrip.slice(1))
+    ]
     const chatAfterSelection = await host.request('chatInspect')
     assert.equal(
       chatAfterSelection.messageBodyEvaluations,
       chatBeforeHover.messageBodyEvaluations,
       'preview selection does not render the transcript'
     )
-    const hops = selectionTiming.hops[0]
+    const hops = selectionTiming.hops.at(-1)
     for (const stamp of ['pageAt', 'hostAt', 'serviceAt', 'bunAt', 'bunDoneAt', 'hostReturnAt'])
       assert.ok(
         Number.isFinite(hops?.[stamp]),
         `Missing selection ${stamp}: ${JSON.stringify(hops)}`
       )
+    const paint = median(hoverRuns.map((run) => run.paintUpperBound[0] ?? Number.NaN))
     console.log(
-      `Preview with SVG chat: 100 hover enqueue ${hoverTiming.enqueue.toFixed(1)} ms, highlight ${hoverTiming.hover[0].toFixed(1)} ms, work ${hoverTiming.work[0].toFixed(1)} ms, paint upper bound ${hoverTiming.paintUpperBound[0]?.toFixed(1)} ms; select ${selectionTiming.select[0].toFixed(1)} ms, round trip ${selectionTiming.roundTrip[0].toFixed(1)} ms; hops ${JSON.stringify(selectionTiming.hops[0])}`
+      `Preview with SVG chat: ${[...hoverTimings, ...selectionTimings].map(formatTiming).join('; ')}; hover paint upper bound median ${paint.toFixed(1)} ms; hops ${JSON.stringify(hops)}`
     )
     await host.request('shellPerform', { action: 'select-object' })
     message.text = originalText

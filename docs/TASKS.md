@@ -17,6 +17,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Pick/submit → one structured user turn; state saved with the message; summary in the next turn; rules generated from the catalog (v37); `docs/CHAT-UI.md`.
 - [x] Tests: unit `chat-ui`, `chat-ui-model`; native smoke `chat-ui` (group `chat`).
 - [ ] Open: `compare` and `changes` components.
+## Flaky timing test: chat-new-instant (LKM-211)
+
+- [x] Shared gate `src/native/smoke-timing.ts`: one warm-up, median of 5, the product target locally and 2× it with `CI` set; unit `smoke-timing`.
+- [x] `chat-new-instant`: the 100 ms composer target on the median of 5 new chats with a held worktree; the scenario chats keep only "does not wait for the worktree".
+- [x] Native `sent-attachments` (LKM-171): hover (16 ms) and selection (50 ms) budgets on the median of 5 bursts/clicks after a warm-up.
+- [x] Left unchanged, already robust: LKM-200 `preview-timing` (median of 5), LKM-183 typing (unit p95 of 40, native median of p95s), LKM-206 slow motion (fake clock).
+- [x] 20× locally plus 10× with `CI=1`, no failures.
+
 ## Flaky CI tests: versioning and workflow-durability (LKM-209)
 
 - [x] `scripts/release.mjs` reports a failed `git symbolic-ref` as itself, never as "detached HEAD"; `test/versioning.mjs` runs hermetic (private HOME and config, GIT_*/GITHUB_* scrubbed, branch asserted before each refusal, a "git fails" case).

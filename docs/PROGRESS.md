@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-211: chat-new-instant timing flake
+
+- **Cause.** `chat-new-instant` asserted one sample per scenario against 100 ms. On the shared CI runner one PR run measured 103 ms, while the push run of the same commit passed. Locally the composer is ready in 1–2 ms.
+- **One gate.** `src/native/smoke-timing.ts` (used by unit tests and the native smoke): one warm-up, then the median of `TIMING_RUNS` (5). The product target holds locally. With `CI` set the budget is 2× the target. That is 200 ms here, not the suggested 250 ms, so a 2× regression still fails. Unit `smoke-timing` pins: the budgets, that a CI median of exactly 2× fails, and that the warm-up is never counted.
+- **chat-new-instant.** A new section 0 creates five new chats after a warm-up. The repository owner holds `git worktree add` (a `hold` promise) until all are measured, and each chat is closed while pending. The test then checks that none started a provider or prewarmed a spare, and that all their worktrees were removed. The scenario chats only assert that the composer does not wait for the worktree (`ms < delay`).
+- **LKM-171 native `sent-attachments`.** The four hover budgets (16 ms) use the median of 5 bursts of 100 moves after a warm-up burst. Every burst must still coalesce into two draws. Local selection and its bridge round trip (50 ms) use the median of 5 real single clicks after a warm-up click. Native `chat`: hover medians 0 ms, selection 1 ms, round trip 5 ms.
+- **Left as is (already robust).** LKM-200 `preview-timing` (median of 5, slowest < 2×), LKM-183 typing (unit p95 of 40 keystrokes, native median of p95s), LKM-206 slow motion (fake clock, no wall time).
+- **Loops.** `chat-new-instant` 20× locally: 20/20 pass, medians 1–2 ms (runs 1–2 ms). With `CI=1`, 10×: 10/10 pass, medians 1–2 ms, max run 3 ms, budget 200.
 ## 2026-10-08 — LKM-210: post-landing check is silent on success, a warning on problems
 
 - **Why.** The LKM-195 row "✓ Checked after landing: no console errors" with a thumbnail after every landing was noise to the user.
