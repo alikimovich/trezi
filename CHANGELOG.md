@@ -10,10 +10,15 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+- Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
+
+### Fixed
+- Trezi's keyboard shortcuts work with Russian, Ukrainian, Hebrew, Greek and other non-Latin keyboard layouts: menus, the composer, the code editor, rulers and grid, slow motion, select mode (S) and the states switcher (1-9, H) follow the physical key, and Dvorak keeps its own keys (LKM-219).
+
 ## [0.1.0] - 2026-10-09
 
 ### Added
-- Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
 - Answer components in chat: agents can show design options (2–4 variants with preview images that appear as skeletons while they are captured; pick one and Apply, or None of these with what to change) and question forms (choice, text, number, slider, color with token swatches, toggle; one Submit) right in their message, in light and dark. Your pick or values go back as one structured message, stay with the chat, and are summarized for the agent on the next turn. Forms are now how agents ask structured questions with Claude and Codex (LKM-208).
 - Component states workbench: `/states`, Show states on the selected element's toolbar or its … menu ask the agent to build a scratch page showing every state of that component (missing states marked); on that page a States switcher (click, ←/→, 1-9, H to hide) changes the state in place, All shows every state side by side as live frames, and the preview … menu's Workbenches opens or removes a workbench (Publish warns while one exists). Adapted from Jakub Krehel's MIT-licensed state-machine skill (LKM-207).
 - Preview rulers, guides and layout grids: View → Show Rulers (⇧⌘R) and Show Layout Grid (⌃G) or the toolbar's Rulers and Grids popover; drag guides from the rulers (they snap to elements, grid lines and whole pixels), add column, baseline and square grids with presets, see hover distances to guides in select mode, and have it all remembered per project and viewport (LKM-205).
@@ -48,7 +53,6 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Landing commits describe the change instead of repeating your prompt: a short imperative subject and 3–6 bullets written by the provider's fast model from the turn's diff (or, after 3 s, a message listing the changed files), following Conventional Commits when the repository does, with Trezi's turn and chat ids as trailers; a published PR's title and body summarise its commits (LKM-189).
 
 ### Fixed
-- Trezi's keyboard shortcuts work with Russian, Ukrainian, Hebrew, Greek and other non-Latin keyboard layouts: menus, the composer, the code editor, rulers and grid, slow motion, select mode (S) and the states switcher (1-9, H) follow the physical key, and Dvorak keeps its own keys (LKM-219).
 - The editing island, Layers, chat islands and token lists no longer show stale values after a change. A landing, an editor save, an island edit, a file changed outside Trezi or a dependency update re-reads the selected element in place, and the island shows a small "Updated" pulse. A stylesheet the preview did not pick up within about half a second is reloaded on its own, with a hard reload as the fallback (LKM-216).
 - Publish and its menu are again the rightmost preview toolbar group at every window width: slow motion moved into the select/device/ruler group, and the … menu sits just before Publish (LKM-213).
 - Agents report the actual landing and publish result instead of promising that a PR will update after the turn ends (LKM-203).
