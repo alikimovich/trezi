@@ -74,7 +74,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     /// Grammar highlighting (`SourceSyntax.swift`): the last applied revision, the
     /// reported visible lines and a test-only main-thread timing hook.
     var highlighted = -1, viewport: [Int] = [], viewportWork: DispatchWorkItem?
-    var measure: ((String, Int, CFTimeInterval) -> Void)?
+    var measure: ((String, Int, (cpu: CFTimeInterval, wall: CFTimeInterval)) -> Void)?
     var dock: (() -> Void)?
     var controls: [String: NSButton] = [:], symbols: [String: String] = [:]
     var documentKey = "", reveal = -1
@@ -175,7 +175,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         send(action)
     }
     func update(_ value: [String: Any]) {
-        let started = CACurrentMediaTime()
+        let started = SourceWorkClock()
         state = value; root = value["root"] as? String ?? ""; source = value["source"] as? String ?? ""
         let newFiles = value["files"] as? [String] ?? []; if files != newFiles { files = newFiles; filter() }
         // Rewriting an unchanged path would drop the user's selection in it.
@@ -209,7 +209,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         tree.selectFile(source)
         // A replaced text shows plain until the backend's highlight for this revision lands.
         if replaced { resetHighlight(nextRevision); applyIndent() }
-        measure?("update", nextRevision, CACurrentMediaTime() - started)
+        measure?("update", nextRevision, started.elapsed())
     }
     /// Highlighting is the backend's (LKM-183): an edit only sends the text and revision.
     func textDidChange(_ notification: Notification) { guard !updating else { return }; applyIndent(); revision += 1; send("edit", ["text":code.string, "revision":revision]); scroll.verticalRulerView?.needsDisplay = true }

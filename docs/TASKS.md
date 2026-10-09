@@ -9,6 +9,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Subtracted: every repository lease (landings, conflict markers, installs), `land_now`, publish/merge, `git_sync_base` and the merge tools, `prepare_conflict_resolution`, `restart_dev_server`, `install_skills`, user Publish; dev-server/build output never named.
 - [x] One compact row (line + Details, repo-relative, at most one per turn, after the landing; `ChatLiveChange.swift`); agent-blamed only when its own command named the live checkout.
 - [x] Tests: unit `live-change-watch` (land_now, publish, lane, generated, outside edit, attribution, native reduce), `agent-file-access`, `live-write-guard`, `retirement-census` rows.
+## Unblock verification: versioning after 0.1.0, load-robust source-syntax (LKM-222)
+
+- [x] `test/versioning.mjs`: the LKM-143 `trezi --version` entry may sit in any changelog section; a new case covers the empty Unreleased right after a release. CHANGELOG history unchanged.
+- [x] Native `source-syntax`: per-keystroke cost is the main thread's CPU time (`SourceWorkClock`, wall time kept for the report); one warm-up pass, then the median of 5 pass p95s against the 16 ms target, failing above 32 ms only while the machine is not overloaded (`assertLoadAwareTiming`, unit `smoke-timing`); load recorded per pass.
+- [x] Unit `syntax-highlight`: the re-tokenization p95 in process CPU time, warm-up pass, median of 5 passes under the same load-aware gate.
+- [x] Soft wrap (LKM-192) cost: three passes with Wrap Lines off are reported next to the gated ones; no real per-keystroke layout cost measured, so no editor change.
 
 ## Private agent browser (LKM-212)
 
