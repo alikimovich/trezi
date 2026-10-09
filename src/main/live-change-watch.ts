@@ -58,6 +58,19 @@ interface Watch {
 }
 
 const watches = new Map<string, Watch>()
+/** What the turn's earlier runs already reported, so a continuation run's report adds to it. */
+const reported = new Map<string, LiveChange>()
+
+/** One report for the turn: the union of two runs' files and commits. */
+function combine(earlier: LiveChange, later: LiveChange): LiveChange {
+  const seen = new Set(earlier.commits.map((c) => c.sha))
+  return {
+    files: [...new Set([...earlier.files, ...later.files])].sort(),
+    commits: [...later.commits.filter((c) => !seen.has(c.sha)), ...earlier.commits],
+    headMoved: earlier.headMoved || later.headMoved,
+    agent: earlier.agent || later.agent
+  }
+}
 
 const git = (root: string, args: string[]): Promise<string | null> =>
   new Promise((resolve) => {
@@ -95,9 +108,16 @@ export function watchesLiveTree(session: LiveWatchSession): boolean {
 
 /**
  * Opens chat `key`'s watch for the turn it is about to send (replacing an earlier one).
- * The send does not wait: the first snapshot settles in the repository lane.
+ * The send does not wait: the first snapshot settles in the repository lane. A new turn
+ * forgets what the last one reported; an automatic continuation run (`continuation`)
+ * keeps it, so the turn's one row covers every run.
  */
-export async function beginLiveWatch(key: string, session: LiveWatchSession): Promise<void> {
+export async function beginLiveWatch(
+  key: string,
+  session: LiveWatchSession,
+  continuation = false
+): Promise<void> {
+  if (!continuation) reported.delete(key)
   if (!watchesLiveTree(session)) {
     watches.delete(key)
     return
@@ -268,7 +288,12 @@ export async function finishLiveWatch(key: string): Promise<LiveChange | null> {
     } else if (before.head && !after.head) headMoved = true
     const shown = [...files].filter((path) => !generatedLivePath(path)).sort()
     if (!shown.length && !commits.length && !headMoved) return null
-    return { files: shown, commits, headMoved, agent: w.agent }
+    const change: LiveChange = { files: shown, commits, headMoved, agent: w.agent }
+    // A later run reports the turn so far (the row it replaces held the earlier runs').
+    const earlier = reported.get(key)
+    const turn = earlier ? combine(earlier, change) : change
+    reported.set(key, turn)
+    return turn
   } finally {
     if (watches.get(key) === w) watches.delete(key)
   }
@@ -277,6 +302,7 @@ export async function finishLiveWatch(key: string): Promise<LiveChange | null> {
 /** Drops chat `key`'s watch without a report (the chat closed). */
 export function forgetLiveWatch(key: string): void {
   watches.delete(key)
+  reported.delete(key)
 }
 
 const SHOWN_FILES = 20

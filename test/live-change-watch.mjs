@@ -205,12 +205,29 @@ try {
   write(live, 'run1.md', 'run 1\n')
   assert.deepEqual((await finishLiveWatch('chat'))?.files, ['run1.md'], 'run 1 reports its edit')
   assert.equal(await finishLiveWatch('chat'), null, 'a closed watch reports nothing twice')
-  await beginLiveWatch('chat', session())
+  await beginLiveWatch('chat', session(), true)
   await landNow()
   assert.equal(await finishLiveWatch('chat'), null, 'run 2: the landing before it is not news')
-  await beginLiveWatch('chat', session())
+  // A continuation run's report adds to the turn's earlier one instead of replacing it.
+  await beginLiveWatch('chat', session(), true)
   write(live, 'run2.md', 'run 2\n')
-  assert.deepEqual((await finishLiveWatch('chat'))?.files, ['run2.md'], 'run 2 reports its edit')
+  assert.deepEqual(
+    (await finishLiveWatch('chat'))?.files,
+    ['run1.md', 'run2.md'],
+    'run 2 reports the turn so far'
+  )
+  // The row is blamed on the agent when any run's own command did it, and a new turn
+  // starts from nothing.
+  await beginLiveWatch('chat', session())
+  noteAgentStep('chat', `$ echo x > ${live}/run3.md`)
+  write(live, 'run3.md', 'run 3\n')
+  assert.deepEqual((await finishLiveWatch('chat'))?.files, ['run3.md'], 'a new turn starts afresh')
+  await beginLiveWatch('chat', session(), true)
+  write(live, 'run4.md', 'run 4\n')
+  const merged = await finishLiveWatch('chat')
+  assert.deepEqual(merged?.files, ['run3.md', 'run4.md'])
+  assert.equal(merged?.agent, true, "an earlier run's agent write stays blamed on the agent")
+  const firstRun = { files: ['run3.md'], commits: [], headMoved: false, agent: true }
 
   // (6c) A spawned agent runs in its own worktree under a key of its own: watched at the
   // same time as the chat, attributed on its own, and Trezi's landing of the chat's turn
@@ -238,7 +255,7 @@ try {
   // automatic continuation run and a spawn, and a spawn reports at its end.
   const agentSource = readFileSync(new URL('../src/main/agent.ts', import.meta.url), 'utf8')
   const dispatch = agentSource.slice(agentSource.indexOf('dispatch: (session'))
-  assert.match(dispatch.slice(0, dispatch.indexOf('})')), /beginLiveWatch\(key, session\)/)
+  assert.match(dispatch.slice(0, dispatch.indexOf('})')), /beginLiveWatch\(key, session, true\)/)
   const start = agentSource.slice(agentSource.indexOf('async function startSpawn'))
   assert.match(start.slice(0, start.indexOf('s.send(q.text)')), /beginLiveWatch\(spawnWatchKey/)
   const finalize = agentSource.slice(agentSource.indexOf('async function finalizeSpawn'))
@@ -272,6 +289,21 @@ try {
   assert.equal(rows[0].liveChange.line, row.line)
   reduce(chat, { type: 'live-change', ...row, agent: false })
   assert.equal(chat.messages.filter((m) => m.liveChange).length, 2, 'an idle chat shows it at once')
+
+  // A turn with two runs: the later run's report is the turn so far, so the single row
+  // names both runs' files and keeps the agent attribution.
+  const twoRuns = newChat('k2')
+  twoRuns.turn = 't2'
+  twoRuns.isRunning = true
+  reduce(twoRuns, { type: 'live-change', ...liveChangeRow(firstRun), agent: firstRun.agent })
+  reduce(twoRuns, { type: 'live-change', ...liveChangeRow(merged), agent: merged.agent })
+  assert.equal(twoRuns.messages.length, 0, 'held while the turn runs')
+  reduce(twoRuns, { type: 'landing-finished' })
+  const combined = twoRuns.messages.filter((m) => m.liveChange)
+  assert.equal(combined.length, 1, 'one row for the turn')
+  assert.match(combined[0].liveChange.detail, /run3\.md/)
+  assert.match(combined[0].liveChange.detail, /run4\.md/)
+  assert.equal(combined[0].liveChange.agent, true)
 } finally {
   setRepositoryOwner(null)
   rmSync(scratch, { recursive: true, force: true })

@@ -288,7 +288,7 @@ const reconciliation = new ReconciliationCoordinator({
     // LKM-215: the turn's first watch closed at its first terminal event; each automatic
     // continuation run is a Full access Codex run too, so it gets its own.
     const key = [...sessions].find(([, s]) => s === session)?.[0]
-    if (key) void beginLiveWatch(key, session)
+    if (key) void beginLiveWatch(key, session, true)
     session.send(prompt)
   }
 })

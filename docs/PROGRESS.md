@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-215 repair: one cumulative row per turn across continuation runs
+
+- **Defect.** Each automatic continuation run opens its own watch, so its report held only that run's changes, and the reducer's "later report replaces a held one" dropped the earlier run's report. A real direct write by the agent in run 0 could vanish when run 1 reported anything.
+- **Fix.** `live-change-watch.ts` keeps what the turn's earlier runs reported (`reported`, cleared by a new turn's `beginLiveWatch` and by `forgetLiveWatch`); `beginLiveWatch(key, session, true)` (the reconciliation `dispatch` in `agent.ts`) keeps it, and `finishLiveWatch` returns the union of files and commits, `headMoved` and `agent` OR-ed. A run that changed nothing new reports nothing, so the held row stays. The reducer still replaces, now with the cumulative row.
+- **Tests.** `test/live-change-watch.mjs`: run 2 reports `run1.md` + `run2.md`; a new turn starts afresh; the agent attribution survives a later plain run; the reducer places one row naming both runs' files with `agent` true.
+
 ## 2026-10-09 — LKM-215 repair: source-syntax is not this ticket's
 
 - **Decision.** The manager's native run failed `source-syntax` (median p95 31 ms against 16 ms). That timing failure already exists on main and urgent ticket LKM-222 owns it, so LKM-215 does not touch the check or its harness. An earlier harness attempt here (extra waits for the freshness hub) was reverted: `src/native/smoke-source-syntax.ts` matches the base exactly, with no warm-up pass, wait or quiet stretch.

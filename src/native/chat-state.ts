@@ -335,7 +335,8 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       chat.dependencies = event.issue ?? undefined
       break
     case 'live-change':
-      // One per turn: a later report for the same turn replaces a held one.
+      // One per turn: a later report for the same turn replaces a held one. Bun makes it
+      // cumulative (a continuation run's report includes the earlier runs'), so nothing is lost.
       chat.pendingLiveChange = { line: event.line, detail: event.detail, agent: event.agent }
       if (!chat.isRunning) placeLiveChange(chat)
       break
