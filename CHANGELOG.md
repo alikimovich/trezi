@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-09
+
 ### Added
 - Quitting while agents work (⌘Q, Quit, closing the window, logout or restart) now asks first: a sheet lists what is still running per project, with Cancel, Wait and Quit (quits when the work ends; cancelable) and Quit Anyway (stops the agents and keeps their work in each chat’s copy, as Stop does). A landing or publish in progress always finishes first, for up to 15 seconds. “Don’t ask again” is also in Settings → General (LKM-221).
 - Answer components in chat: agents can show design options (2–4 variants with preview images that appear as skeletons while they are captured; pick one and Apply, or None of these with what to change) and question forms (choice, text, number, slider, color with token swatches, toggle; one Submit) right in their message, in light and dark. Your pick or values go back as one structured message, stay with the chat, and are summarized for the agent on the next turn. Forms are now how agents ask structured questions with Claude and Codex (LKM-208).
