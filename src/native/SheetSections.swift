@@ -5,10 +5,10 @@ import SwiftUI
 /// the selected section's large title and its fields as grouped form rows (label and
 /// help on the left, control on the right) with the section's actions below.
 struct SectionedSheetContent: View {
-    static let defaultSize = NSSize(width: 780, height: 680)
+    static let defaultSize = NSSize(width: 780, height: 760)
     /// Full-size content: the height includes the unified toolbar over the pane. Tall
-    /// enough that every General picker is visible at the minimum width (LKM-163).
-    static let minimumSize = NSSize(width: 680, height: 650)
+    /// enough that every General picker is visible at the minimum width (LKM-163; LKM-221 added a row).
+    static let minimumSize = NSSize(width: 680, height: 760)
     @ObservedObject var model: SheetModel
     let state: SheetState
     let sections: [SheetSection]

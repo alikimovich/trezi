@@ -205,6 +205,13 @@ export async function checkVisibleSettings(
   assert.equal((await inspect()).values.activityAutoOpen, 'never')
   await choose('activityAutoOpen', 'problems')
   await reopen()
+  // LKM-221: the quit alert's "Don't ask again" shows here, defaults to asking and persists.
+  assert.equal(initial.values.quitDontAsk, 'false', 'Quit while agents work defaults to Ask first')
+  await choose('quitDontAsk', 'true')
+  await reopen()
+  assert.equal((await inspect()).values.quitDontAsk, 'true')
+  await choose('quitDontAsk', 'false')
+  await reopen()
   await select('experimental')
   for (const width of widths) {
     await capture(width, 'off', false, 'agent')
