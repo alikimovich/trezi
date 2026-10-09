@@ -17,6 +17,8 @@ src/
     ServiceClient.swift / HostService.swift   the host's versioned XPC connection to
                     the Swift service (handshake, reattach, bounded outbox) and its
                     AppKit quit/restart/exit-status integration
+    QuitPrompt.swift / quit-guard.ts   the quit alert while agents work (LKM-221):
+                    the host asks, Bun decides, then the host's drain runs
     bridge.ts       private JSON bridge to the supervising service
     Shell.swift     sidebar/project actions, project/chat navigation, split view and
                     the column-aligned toolbar (sidebar toggle, chat actions, preview

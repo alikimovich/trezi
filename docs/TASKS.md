@@ -8,6 +8,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Inspect in 3D is an isometric cube (Lucide `box`); the stacked-layers glyph stays Layers' (`square.3.layers.3d`).
 - [x] Show states is a component with its variants stacked behind it; the States switcher's All segment is the matching `square.stack`, not `square.grid.2x2`.
 - [x] Native `selection-input` (group `core`) asserts every element toolbar glyph is distinct and in the shared 15 px, 24-unit, 2 px stroke style, and writes `element-toolbar.png`/`.json`; `states-workbench.png` shows the switcher.
+## Unblock verification: versioning after 0.1.0, load-robust source-syntax (LKM-222)
+
+- [x] `test/versioning.mjs`: the LKM-143 `trezi --version` entry may sit in any changelog section; a new case covers the empty Unreleased right after a release. CHANGELOG history unchanged.
+- [x] Native `source-syntax`: per-keystroke cost is the main thread's CPU time (`SourceWorkClock`, wall time kept for the report); one warm-up pass, then the median of 5 pass p95s against the 16 ms target, failing above 32 ms only while the machine is not overloaded (`assertLoadAwareTiming`, unit `smoke-timing`); load recorded per pass.
+- [x] Unit `syntax-highlight`: the re-tokenization p95 in process CPU time, warm-up pass, median of 5 passes under the same load-aware gate.
+- [x] Soft wrap (LKM-192) cost: three passes with Wrap Lines off are reported next to the gated ones; no real per-keystroke layout cost measured, so no editor change.
 
 ## Private agent browser (LKM-212)
 

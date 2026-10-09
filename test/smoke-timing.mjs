@@ -3,11 +3,14 @@
 // still fails.
 import assert from 'node:assert/strict'
 import {
+  assertLoadAwareTiming,
   assertTiming,
+  formatLoadAwareTiming,
   formatTiming,
   measureTiming,
   median,
   sampleTiming,
+  systemLoad,
   TIMING_RUNS,
   timingBudget
 } from '../src/native/smoke-timing.ts'
@@ -55,5 +58,33 @@ assert.match(
   formatTiming(timing),
   /^async: median 12 ms of 10\/11\/12\/13\/14 \(target 100, budget/
 )
+
+// LKM-222: CPU-time gate. The median is held to the target in the report and fails only
+// above twice the target while the machine is not overloaded; the load is recorded.
+assert.deepEqual(systemLoad(5, 10), { load1: 5, cpus: 10, perCore: 0.5, overloaded: false })
+assert.equal(systemLoad(10, 10).overloaded, true, 'one runnable thread per core is overloaded')
+assert.equal(systemLoad(3, 0).perCore, 3, 'no core count reads as one core')
+const live = systemLoad()
+assert.ok(live.cpus >= 1 && live.load1 >= 0, `this machine's load: ${JSON.stringify(live)}`)
+const idle = systemLoad(2, 10),
+  busy = systemLoad(24, 10)
+const fast = assertLoadAwareTiming('typing', 16, [11, 40, 10, 12, 11], idle)
+assert.deepEqual([fast.median, fast.overTarget, fast.gated, fast.ceiling], [11, false, true, 32])
+assert.match(
+  formatLoadAwareTiming(fast),
+  /^typing: median 11 ms of 11\/40\/10\/12\/11 \(target 16, ceiling 32; load 2\.00 on 10 cores = 0\.20\/core; within target\)$/
+)
+const over = assertLoadAwareTiming('typing', 16, [20, 21, 19], idle)
+assert.ok(over.overTarget, 'over the target, under the ceiling: reported, not failed')
+assert.match(formatLoadAwareTiming(over), /over the product target/)
+assert.equal(assertLoadAwareTiming('typing', 16, [32, 32, 32], idle).median, 32, 'at 2×')
+assert.throws(
+  () => assertLoadAwareTiming('typing', 16, [33, 40, 35], idle),
+  /median 35 ms .*ceiling 32; load 2\.00 .*is over the ceiling/
+)
+const loaded = assertLoadAwareTiming('typing', 16, [57, 110, 80], busy)
+assert.equal(loaded.gated, false, 'an overloaded machine records, never fails')
+assert.match(formatLoadAwareTiming(loaded), /2\.40\/core, overloaded; not gated/)
+assert.throws(() => assertLoadAwareTiming('typing', 16, [], idle), /no measured runs/)
 
 console.log('SMOKE-TIMING OK — median after a warm-up, strict target locally, 2× budget on CI')

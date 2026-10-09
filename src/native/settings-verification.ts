@@ -36,7 +36,7 @@ export interface SourceListEvidence {
   [key: string]: unknown
 }
 /** The Settings window's content size when it opens (`SectionedSheetContent.defaultSize`). */
-export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 680 }
+export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 760 }
 export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
@@ -125,9 +125,10 @@ export function assertSectionEvidence(
         'agentMerge',
         'claudePlugins',
         'default',
+        'quitDontAsk',
         'workspaceIdle'
       ],
-      'General shows the default model, Claude plugins, agent file and Git access, PR merging, workspace cleanup and Activity pickers'
+      'General shows the default model, Claude plugins, agent file and Git access, PR merging, workspace cleanup, Activity and quit pickers'
     )
   else
     assert.ok(
@@ -193,12 +194,15 @@ export function assertSettingsEvidence(
 // SF Pro draws capital I and lowercase l as the same glyph, so Vision reads the
 // rendered "UI"/"AI" as "Ul"/"Al". Fold only that pair before lowercasing; a
 // dotted lowercase i stays distinct. Vision also reads the rendered "Default model"
-// as "Detault model" (f as t), so fold f to t after lowercasing. Both sides fold the
+// as "Detault model" (f as t), so fold f to t after lowercasing. Before a word that
+// starts with l, "UI"/"AI" is a run of identical strokes and Vision can drop the space
+// ("UI layout" read as "Ullayout"), so that one space is folded away too. Both sides fold the
 // same way, so no word can be dropped or reordered. Every comparison goes through words().
 function words(text: string): string[] {
   return text
     .replace(/I/g, 'l')
     .toLowerCase()
+    .replace(/\b([ua]l)\s+(?=l)/g, '$1')
     .replace(/f/g, 't')
     .replace(/[’']/g, '')
     .split(/[^a-z0-9]+/)

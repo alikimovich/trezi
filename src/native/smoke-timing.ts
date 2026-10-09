@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { availableParallelism, loadavg } from 'node:os'
 
 /**
  * LKM-211: wall-clock timing checks (unit tests and the native smoke) gate on the median
@@ -48,6 +49,75 @@ export function assertTiming(
   assert.ok(runs.length > 0, `${label}: no measured runs`)
   const timing = { label, target, budget: timingBudget(target, env), median: median(runs), runs }
   assert.ok(timing.median < timing.budget, `${formatTiming(timing)} is over budget`)
+  return timing
+}
+
+/**
+ * LKM-222: the machine's 1-minute load average with its core count. Other workers that
+ * build and test on the same Mac push it past one runnable thread per core; then even
+ * CPU time is unreliable (the main thread may run on efficiency cores).
+ */
+export interface SystemLoad {
+  load1: number
+  cpus: number
+  perCore: number
+  overloaded: boolean
+}
+
+export function systemLoad(load1 = loadavg()[0], cpus = availableParallelism()): SystemLoad {
+  const perCore = load1 / Math.max(1, cpus)
+  return { load1, cpus, perCore, overloaded: perCore >= 1 }
+}
+
+export interface LoadAwareTiming extends Timing {
+  /** Twice the target: the median fails above it while the machine is not overloaded. */
+  ceiling: number
+  load: SystemLoad
+  overTarget: boolean
+  gated: boolean
+}
+
+const loadText = (load: SystemLoad) =>
+  `load ${load.load1.toFixed(2)} on ${load.cpus} cores = ${load.perCore.toFixed(2)}/core${load.overloaded ? ', overloaded' : ''}`
+
+export function formatLoadAwareTiming(timing: LoadAwareTiming): string {
+  const state = !timing.gated
+    ? 'not gated: machine overloaded'
+    : timing.overTarget
+      ? 'over the product target'
+      : 'within target'
+  return `${timing.label}: median ${ms(timing.median)} ms of ${timing.runs.map(ms).join('/')} (target ${timing.target}, ceiling ${timing.ceiling}; ${loadText(timing.load)}; ${state})`
+}
+
+/**
+ * For CPU-time measurements of main-thread work (LKM-222): the median of the measured
+ * runs (warm-up excluded) is reported against the product target, and fails only above
+ * twice the target while the machine is not overloaded. The load is part of the result.
+ */
+export function assertLoadAwareTiming(
+  label: string,
+  target: number,
+  runs: number[],
+  load: SystemLoad
+): LoadAwareTiming {
+  assert.ok(runs.length > 0, `${label}: no measured runs`)
+  const value = median(runs),
+    ceiling = target * 2
+  const timing = {
+    label,
+    target,
+    budget: ceiling,
+    median: value,
+    runs,
+    ceiling,
+    load,
+    overTarget: value >= target,
+    gated: !load.overloaded
+  }
+  assert.ok(
+    !timing.gated || value <= ceiling,
+    `${formatLoadAwareTiming(timing)} is over the ceiling`
+  )
   return timing
 }
 
