@@ -137,6 +137,12 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
     const [a, b] = await Promise.all([first.open('/?agent=a'), second.open('/?agent=b')])
     assert.match(a.url, /agent=a/)
     assert.match(b.url, /agent=b/)
+    // reload_preview: the same route loads again (soft and hard) instead of returning early.
+    const loads = first.navigation
+    await first.open('/?agent=a', { reload: true })
+    assert.equal(first.navigation, loads + 1, 'a soft reload navigates the agent browser again')
+    await first.open('/?agent=a', { reload: true, hard: true })
+    assert.equal(first.navigation, loads + 2, 'a hard reload navigates the agent browser again')
     await first.host.setViewport(390)
     const width = await first.host.evaluate('innerWidth', 'preview', 1000)
     assert.equal(width, 390)

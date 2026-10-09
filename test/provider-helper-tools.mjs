@@ -495,6 +495,23 @@ try {
   assert.equal(islands.sessions.get(CHAT).records.length, before, 'no island was created')
   assert.equal(navigations(), shownBefore, 'nothing was navigated')
 
+  // --- LKM-212: target "user" moves the visible preview only while the user is idle --------
+  // The Bun gate (the host's previewRevealAllowed is checked in the native smoke).
+  setPreviewRevealGateForTests(async () => false)
+  try {
+    const widthBefore = shownWidth,
+      navigatedBefore = navigations()
+    const busy = await claude.turn('only open_preview,preview_viewport,preview_speed')
+    for (const name of ['open_preview', 'preview_viewport', 'preview_speed']) {
+      assert.equal(busy.results[name].isError, true, `${name} is refused while the user interacts`)
+      assert.match(textOf(busy.results[name]), /user is interacting/, name)
+    }
+    assert.equal(navigations(), navigatedBefore, 'the visible preview was not navigated')
+    assert.equal(shownWidth, widthBefore, 'the visible preview was not resized')
+  } finally {
+    setPreviewRevealGateForTests(async () => true)
+  }
+
   // --- Codex: every Trezi MCP bridge tool -----------------------------------------------------
   // The adapter's bridge check (`verifyTreziMcp`, while the helper is still opening) and
   // the stand-in's calls both go to main.

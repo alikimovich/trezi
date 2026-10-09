@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-212 repair: agent reload, private load errors, Bun reveal gate test
+
+- **Reload.** `reload_preview` on the agent browser returned early because the page already showed the route. `AgentBrowser.open(path, { reload, hard })` now skips that early return and the host's `agentBrowserOpen` reloads from origin; `hard` clears WebKit's caches through `PreviewCache.reload`. Native smoke `agent-preview` asserts `navigation` increments after a soft and a hard reload.
+- **Private errors.** `previewNavigationFailed` answers an `agent:` view's pending load and returns before the product log and `load-error`/`navigation-failed` events, so a failed private load never reaches the user's activity.
+- **Reveal gate.** `test/provider-helper-tools.mjs` runs `open_preview`, `preview_viewport` and `preview_speed` with `target: 'user'` while the gate says the user is interacting: all three return the error and the visible preview is not navigated or resized.
+
 ## 2026-10-08 — LKM-212 repair: composer attachment in dark appearance
 
 - The manager's full native run caught a blank file tile in the visible-composer capture: `index.html` existed in composer state, but its label was white on a layer background resolved as light before the tile joined the window. Resolve the tile and border colors under its effective appearance after attachment and on appearance changes. Quick verification passed 203 unit checks, typechecks and lint; the native composer group passed all 7 checks, including the foreground `index.html` capture at both widths.

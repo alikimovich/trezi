@@ -25,7 +25,8 @@ registerChromiumBrowser(async (key, root) => {
     async step() {
       this.speed = 0
     },
-    async open(path) {
+    async open(path, options) {
+      this.reloads = (this.reloads ?? 0) + (options?.reload ? 1 : 0)
       this.url = `http://localhost:3000${path}`
       this.navigation++
       return { url: this.url, loaded: true, identity: await this.identity() }
@@ -64,6 +65,9 @@ await Promise.all([a.open('/one'), b.open('/two')])
 assert.equal(a.url, 'http://localhost:3000/one')
 assert.equal(b.url, 'http://localhost:3000/two')
 assert.equal(c.url, null)
+await a.open('/one', { reload: true, hard: true })
+assert.equal(a.reloads, 1, 'the stub engine receives the reload request')
+assert.equal(a.navigation, 2, 'a reload is a new navigation')
 await closeAgentBrowser('chromium:a')
 await closeAgentBrowser('chromium:b')
 await closeAgentBrowser('chromium:c')

@@ -245,7 +245,12 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
                 new URL(browser.url).hash
               : '/'
         if (!path) return { error: 'Provide a project-root path starting with /.' }
-        const opened = await browser.open(path)
+        const opened = await browser.open(
+          path,
+          action === 'reload_preview'
+            ? { reload: true, hard: (args as { hard?: unknown } | null)?.hard === true }
+            : undefined
+        )
         saw(opened.identity.servedRevision)
         return {
           requested: true,

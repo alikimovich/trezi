@@ -192,7 +192,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
             if let pending = agentBrowserLoads.removeValue(forKey: name) { reply(pending, error: "Agent browser navigation superseded") }
             targets[name] = url; agentBrowserLoads[name] = id; agentBrowsers[name] = Date(); agentBrowserStatuses.removeValue(forKey: name)
-            view.load(URLRequest(url: url))
+            // A reload of the page already shown goes back to the origin; hard also drops WebKit's caches.
+            if c["hard"] as? Bool == true { PreviewCache.reload(view, url: url) }
+            else if c["reload"] as? Bool == true { view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)) }
+            else { view.load(URLRequest(url: url)) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 guard let self, self.agentBrowserLoads[name] == id else { return }
                 self.agentBrowserLoads.removeValue(forKey: name)

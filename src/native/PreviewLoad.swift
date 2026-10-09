@@ -19,8 +19,10 @@ extension Host {
         let nsError = error as NSError
         let url = nsError.userInfo[NSURLErrorFailingURLStringErrorKey] as? String ?? webView.url?.absoluteString ?? ""
         let cancelled = (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled) || (nsError.domain == "WebKitErrorDomain" && nsError.code == 102)
-        if name.hasPrefix("agent:"), let pending = agentBrowserLoads.removeValue(forKey: name) {
-            reply(pending, error: error.localizedDescription)
+        // An agent browser is private: its failed load answers the agent's call and never reaches the user's UI.
+        if name.hasPrefix("agent:") {
+            if let pending = agentBrowserLoads.removeValue(forKey: name) { reply(pending, error: error.localizedDescription) }
+            return
         }
         if cancelled { emit(["event":"navigation-cancelled", "view":name, "url":url]); return }
         ProductLog.warn("preview", "Preview load failed: \(error.localizedDescription)")

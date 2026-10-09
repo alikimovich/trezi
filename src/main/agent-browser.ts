@@ -21,8 +21,10 @@ export interface AgentBrowser {
   setSpeed(speed: number): Promise<void>
   step(frames: number): Promise<void>
   capture(full?: boolean): Promise<AgentCapture | null>
+  /** `reload` loads the page again even when it already shows `path`; `hard` also drops WebKit's caches. */
   open(
-    path: string
+    path: string,
+    options?: { reload?: boolean; hard?: boolean }
   ): Promise<{ url: string; loaded: boolean; status?: number | null; identity: PreviewIdentity }>
   identity(): Promise<PreviewIdentity>
   close(): Promise<void>
@@ -83,13 +85,13 @@ async function webkitBrowser(key: string, root: string): Promise<AgentBrowser> {
       await bridge().request('agentBrowserSpeed', { view: viewName, speed: 0, step: frames })
       browser.speed = 0
     },
-    async open(path) {
+    async open(path, options) {
       const server = previewServers.get(projectKey(root))
       if (!server) throw new Error('The project dev server is stopped.')
       const url = new URL(path, server.url).href
       if (new URL(url).origin !== new URL(server.url).origin)
         throw new Error('Route leaves the project dev server.')
-      if (browser.url === url) {
+      if (!options?.reload && browser.url === url) {
         const ready = await browser.host
           .evaluate('document.readyState', 'preview', 1000)
           .catch(() => null)
@@ -98,7 +100,7 @@ async function webkitBrowser(key: string, root: string): Promise<AgentBrowser> {
       browser.servedRevision = await liveHead(root, true)
       const loaded = (await bridge().request(
         'agentBrowserOpen',
-        { view: viewName, url },
+        { view: viewName, url, reload: !!options?.reload, hard: !!options?.hard },
         11_000
       )) as { url: string; loaded: boolean; status: number | null }
       browser.url = loaded.url
