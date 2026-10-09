@@ -185,8 +185,12 @@ server.registerTool(
   {
     annotations: { destructiveHint: false, openWorldHint: false },
     description:
-      'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Waits up to 10 s and returns the real result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); with unlanded changes in this chat it opens after the turn lands.',
-    inputSchema: { path: z.string() }
+      'Open a project page in the private agent browser. target: user reveals it in the visible preview only when idle.',
+    inputSchema: {
+      path: z.string(),
+      target: z.enum(['agent', 'user']).optional(),
+      engine: z.enum(['webkit', 'chromium']).optional()
+    }
   },
   async (args) => result(await invoke('open_preview', args))
 )
@@ -196,8 +200,12 @@ server.registerTool(
   {
     annotations: { destructiveHint: false, openWorldHint: false },
     description:
-      'Reload the page shown in the user preview, keeping its route. hard: true bypasses the browser caches (use after a dependency or CSS change the page does not show). Returns the load result and whether the loaded CSS/JS matches what the dev server serves now.',
-    inputSchema: { hard: z.boolean().optional() }
+      'Reload the private agent browser, keeping its route. target: user reloads the visible preview only when idle.',
+    inputSchema: {
+      hard: z.boolean().optional(),
+      target: z.enum(['agent', 'user']).optional(),
+      engine: z.enum(['webkit', 'chromium']).optional()
+    }
   },
   async (args) => result(await invoke('reload_preview', args))
 )
@@ -217,11 +225,14 @@ server.registerTool(
 server.registerTool(
   'preview_location',
   {
-    description: "Read the page/route currently shown in the user's live preview pane.",
-    inputSchema: {},
+    description: 'Read the private agent browser route. target: user reads the visible preview.',
+    inputSchema: {
+      target: z.enum(['agent', 'user']).optional(),
+      engine: z.enum(['webkit', 'chromium']).optional()
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   },
-  async () => invoke('preview_location')
+  async (args) => invoke('preview_location', args)
 )
 // LKM-138: isolated-world inspection of the live preview (preview-tool-schema.mjs).
 for (const name of [

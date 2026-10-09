@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 38, 'version bumped to 38')
+assert(TREZI_RULES_VERSION === 39, 'version bumped to 39')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
 assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
 assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')
@@ -51,7 +51,10 @@ assert(
   'chat_ui: background agents never show components'
 )
 // LKM-196: open_preview reports the real load; only a deferred open is "requested".
-assert(/report exactly that/.test(treziRules({ previewTools: true })), 'open_preview result rule')
+assert(
+  /report its actual load result/.test(treziRules({ previewTools: true })),
+  'open_preview result rule'
+)
 // LKM-197: stale CSS/JS → a hard reload, then a clean restart; never a self-started server.
 assert(
   /reload_preview with hard: true[\s\S]*restart_dev_server with\s+cleanCache: true/.test(
@@ -204,7 +207,10 @@ assert(
 const withTools = treziRules({ previewTools: true })
 assert(/preview_location/.test(withTools), 'previewTools: mentions preview_location')
 assert(/preview_screenshot/.test(withTools), 'previewTools: mentions preview_screenshot')
-assert(/seeing the user's preview/i.test(withTools), 'previewTools: has the preview section')
+assert(
+  /checking pages in the agent browser/i.test(withTools),
+  'previewTools: has the browser section'
+)
 assert(!/preview_location/.test(r), 'default rendering omits preview_location')
 assert(!/preview_screenshot/.test(r), 'default rendering omits preview_screenshot')
 assert(treziRules({ previewTools: true }) === withTools, 'previewTools rendering is deterministic')

@@ -68,15 +68,15 @@ const CALLS = {
     file: 'Card.tsx',
     spec: { root: 'r', elements: { r: { type: 'Text', props: { text: 'hi' }, children: [] } } }
   },
-  preview_location: {},
-  preview_screenshot: {},
-  preview_inspect: { selector: 'h1' },
-  preview_evaluate: { expression: '1 + 1' },
-  preview_console: {},
-  preview_viewport: { preset: 'mobile' },
-  preview_speed: { speed: 1 },
-  open_preview: { path: '/helper-route' },
-  reload_preview: { hard: true },
+  preview_location: { target: 'user' },
+  preview_screenshot: { target: 'user' },
+  preview_inspect: { selector: 'h1', target: 'user' },
+  preview_evaluate: { expression: '1 + 1', target: 'user' },
+  preview_console: { target: 'user' },
+  preview_viewport: { preset: 'mobile', target: 'user' },
+  preview_speed: { speed: 1, target: 'user' },
+  open_preview: { path: '/helper-route', target: 'user' },
+  reload_preview: { hard: true, target: 'user' },
   restart_dev_server: { cleanCache: true },
   open_code: { file: 'shadow.js', startLine: 1, endLine: 2 },
   chat_island: island,
@@ -232,7 +232,8 @@ const { setWorkflowOwner } = await import('../src/main/workflow-owner.ts')
 const { setProviderOwner } = await import('../src/main/provider-owner.ts')
 const { helperProvider } = await import('../src/main/backends/helper-session.ts')
 const { startProviderSession } = await import('../src/main/provider-sessions.ts')
-const { SESSION_TOOLS } = await import('../src/main/session-tools.ts')
+const { SESSION_TOOLS, setPreviewRevealGateForTests } = await import('../src/main/session-tools.ts')
+setPreviewRevealGateForTests(async () => true)
 
 const islands = new ChatIslands(() => {})
 installChatIslands(islands)
@@ -489,7 +490,7 @@ try {
   assert.deepEqual(refused.routed, ['open_preview'])
   assert.match(
     textOf(refused.results.open_preview),
-    /Background edits cannot navigate the user preview/
+    /Background agents cannot move the user preview/
   )
   assert.equal(islands.sessions.get(CHAT).records.length, before, 'no island was created')
   assert.equal(navigations(), shownBefore, 'nothing was navigated')

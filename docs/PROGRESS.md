@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-212: private agent browser
+
+- **Isolation.** Session tools default to a host-owned WebKit page outside the window. Three may run independently; Bun reuses each for its chat and releases it after two minutes idle. The host blocks page IPC and media permission prompts. The visible preview keeps its route, size, scroll, selection and focus while the agent navigates, resizes and captures its page.
+- **Tools.** Open/reload/observations and slow motion use the private page. `target: "user"` is gated by five seconds without user input for visible navigation, resizing or speed changes. The page loads Trezi's live dev server and labels observations with its own session/navigation and served revision. Chromium is an optional adapter slot, tested with a fake engine; no browser download is part of the default path.
+- **Checks.** Unit: independent Chromium stub sessions/cap/reuse/close, rules v39 and existing preview tool tests. Manager quick: 200 pass, 3 skip. Native `core`: 31 smoke pass, including two simultaneous pages, cap, screenshot and median read/screenshot targets. Native `chat` smoke passed; the separate chat-scroll fixture stopped because the chat window was not foreground. Frame stepping and per-browser viewport restore were then added for a final core recheck.
+- **Final gate.** Manager quick on the updated tree: 203 pass. Native `core` on the updated tree: 24 pass, including `agent-preview`, with no failures or skips. The prior chat-scroll foreground-window failure remains an environment-limited check; the manager's full suite will rerun it.
+
 ## 2026-10-08 — LKM-211: chat-new-instant timing flake
 
 - **Cause.** `chat-new-instant` asserted one sample per scenario against 100 ms. On the shared CI runner one PR run measured 103 ms, while the push run of the same commit passed. Locally the composer is ready in 1–2 ms.

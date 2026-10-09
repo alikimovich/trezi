@@ -31,9 +31,6 @@ enum ProviderPolicy {
     static let foregroundOnly = [
         "open_code": "Background edits cannot navigate the user editor.",
         "chat_island": "Background edits cannot create chat islands.",
-        "preview_viewport": "Background edits cannot resize the user preview.",
-        "preview_speed": "Background edits cannot change the user preview speed.",
-        "reload_preview": "Background edits cannot reload the user preview.",
         "restart_dev_server": "Background edits cannot restart the dev server.",
         "ask_user": "Background agents cannot ask with ask_user. Make the reasonable default choice and name it in your final message.",
         "chat_ui": "Background agents cannot show answer components. Make the reasonable default choice and name it in your final message.",

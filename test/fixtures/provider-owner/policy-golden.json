@@ -42,7 +42,7 @@
   }
  ],
  [
-  "open bg",
+ "open bg",
   {
    "ok": {
     "tools": [
@@ -53,7 +53,10 @@
      "preview_inspect",
      "preview_evaluate",
      "preview_console",
+     "preview_viewport",
+     "preview_speed",
      "open_preview",
+     "reload_preview",
      "spring_to_css",
      "check_contrast",
      "fluid_clamp",
@@ -613,7 +616,10 @@
      "preview_inspect",
      "preview_evaluate",
      "preview_console",
+     "preview_viewport",
+     "preview_speed",
      "open_preview",
+     "reload_preview",
      "spring_to_css",
      "check_contrast",
      "fluid_clamp",
