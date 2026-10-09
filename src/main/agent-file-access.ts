@@ -7,7 +7,7 @@ import { basename, dirname, join, normalize } from 'node:path'
  *   access. Codex runs `danger-full-access`; Claude gets no extra path limits.
  * - `project`: Codex's `workspace-write` sandbox scoped to the chat worktree (LKM-156).
  * Both keep chat worktree isolation: the agent works in its worktree and Trezi lands
- * the result in the live checkout (`live-write-guard.ts`, `live-tree-watch.ts`).
+ * the result in the live checkout (`live-write-guard.ts`, `live-change-watch.ts`).
  */
 export const AGENT_FILE_ACCESS_KEY = 'trezi:agent-file-access:v1'
 export type AgentFileAccess = 'full' | 'project'

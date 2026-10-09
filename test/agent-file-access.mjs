@@ -73,12 +73,27 @@ assert.equal(
 )
 
 // --- the live-tree snapshot sees reverted work and commits, not only new dirty files.
-const { liveHeadMoved, liveTreeChanges, liveTreeReport, liveTreeSnapshot, liveWriteNote } =
-  await import('../src/main/backends/live-tree-watch.ts')
+const { liveHeadMoved, liveTreeChanges, liveTreeSnapshot } = await import(
+  '../src/main/backends/live-tree-watch.ts'
+)
+const { beginLiveWatch, finishLiveWatch } = await import('../src/main/live-change-watch.ts')
 {
   const repo = join(scratch, 'watched')
   const commit = (message, ...extra) =>
     git('-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', message, ...extra)
+  const watchedWt = join(scratch, 'watched-wt')
+  mkdirSync(watchedWt)
+  const session = {
+    root: watchedWt,
+    options: { provider: 'codex', agentFileAccess: 'full' },
+    record: { projectRoot: repo }
+  }
+  // One turn's report of what changed in `repo` while `during` ran.
+  const report = async (during) => {
+    await beginLiveWatch('watched', session)
+    await during()
+    return finishLiveWatch('watched')
+  }
   mkdirSync(repo)
   writeFileSync(join(repo, 'f.txt'), 'f\n')
   writeFileSync(join(repo, 'g.txt'), 'g\n')
@@ -101,10 +116,10 @@ const { liveHeadMoved, liveTreeChanges, liveTreeReport, liveTreeSnapshot, liveWr
     const after = await liveTreeSnapshot(repo)
     assert.equal(after.files.size, 0, `${label} leaves the tree clean`)
     assert.deepEqual(liveTreeChanges(before, after), ['f.txt'], `${label} is reported`)
-    assert.deepEqual(await liveTreeReport(repo, before, after), {
-      files: ['f.txt'],
-      committed: false
-    })
+    writeFileSync(join(repo, 'f.txt'), 'the user, uncommitted\n')
+    const turn = await report(() => git('-C', repo, ...discard))
+    assert.deepEqual(turn?.files, ['f.txt'], `${label} is in the turn's report`)
+    assert.deepEqual(turn?.commits, [])
     git('-C', repo, 'stash', 'clear')
   }
 
@@ -115,24 +130,22 @@ const { liveHeadMoved, liveTreeChanges, liveTreeReport, liveTreeSnapshot, liveWr
   commit('direct')
   const committed = await liveTreeSnapshot(repo)
   assert.ok(liveHeadMoved(dirty, committed), 'HEAD moved')
-  assert.deepEqual(await liveTreeReport(repo, dirty, committed), {
-    files: ['g.txt'],
-    committed: true
+  writeFileSync(join(repo, 'g.txt'), 'committed again\n')
+  const direct = await report(() => {
+    git('-C', repo, 'add', 'g.txt')
+    commit('direct again')
   })
+  assert.deepEqual(direct?.files, ['g.txt'])
+  assert.deepEqual(
+    direct?.commits.map((c) => c.subject),
+    ['direct again']
+  )
   // An empty commit has no file to name.
-  const quiet = await liveTreeSnapshot(repo)
-  commit('empty', '--allow-empty')
-  const empty = await liveTreeReport(repo, quiet, await liveTreeSnapshot(repo))
-  assert.deepEqual(empty, { files: [], committed: true })
-  assert.match(liveWriteNote(empty.files, '/wt', true), /: a commit was made there\./)
-  assert.match(liveWriteNote(['x'], '/wt', true), /x, and a commit was made there\./)
-  assert.match(liveWriteNote(['x'], '/wt'), /reverted or discarded/)
+  const empty = await report(() => commit('empty', '--allow-empty'))
+  assert.deepEqual(empty?.files, [])
+  assert.equal(empty?.commits.length, 1)
   // Nothing happened: nothing to report.
-  const same = await liveTreeSnapshot(repo)
-  assert.deepEqual(await liveTreeReport(repo, same, await liveTreeSnapshot(repo)), {
-    files: [],
-    committed: false
-  })
+  assert.equal(await report(() => {}), null)
 }
 
 // --- main passes the setting to every helper session it opens.
@@ -267,44 +280,19 @@ try {
       'no workspace-write config in Full access'
     )
     assert.ok(full.run.configs.includes('approval_policy="never"'), 'never asks')
-    const notes = full.events.filter((e) => e.type === 'delta' && e.text.includes('⚠️'))
-    assert.equal(notes.length, 1, 'one note')
-    assert.match(notes[0].text, /live project changed during this turn/)
-    assert.match(notes[0].text, /direct\.txt/)
-    assert.ok(notes[0].text.includes(WT), 'names the chat workspace')
+    // LKM-215: the adapter no longer appends a live-tree note to the reply. Bun's watch
+    // (above, and test/live-change-watch.mjs) reports outside changes as one chat row.
+    assert.equal(said(full.events), 'done', 'the reply carries no live-tree note')
     assert.equal(full.events.filter((e) => e.type === 'done').length, 1)
 
-    // A Full access turn that left the live tree alone (the earlier file is still
-    // uncommitted, but unchanged) says nothing.
-    const quiet = await turn('full', null)
-    assert.equal(quiet.run.sandbox, 'danger-full-access')
-    assert.equal(said(quiet.events), 'done', 'no note when the live tree did not change')
-
-    // The user's uncommitted work discarded in the live tree leaves it clean: still one note.
-    writeFileSync(join(LIVE, 'a.txt'), 'the user, uncommitted\n')
-    const revert = await turn('full', null, [['checkout', '--', 'a.txt']])
-    const reverted = revert.events.filter((e) => e.type === 'delta' && e.text.includes('⚠️'))
-    assert.equal(reverted.length, 1, 'one note for a discarded change')
-    assert.match(reverted[0].text, /a\.txt/)
-    assert.match(reverted[0].text, /reverted or discarded/)
-
-    // A commit made directly in the live checkout moves HEAD: one note naming the file.
+    // A commit made directly in the live checkout: still no note in the reply.
     writeFileSync(join(LIVE, 'c.txt'), 'c\n')
     const commit = await turn('full', null, [
       ['add', 'c.txt'],
       ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'direct']
     ])
-    const committed = commit.events.filter((e) => e.type === 'delta' && e.text.includes('⚠️'))
-    assert.equal(committed.length, 1, 'one note for a commit')
-    assert.match(committed[0].text, /c\.txt, and a commit was made there/)
-
-    // An empty commit leaves no file to name; the note still says a commit was made.
-    const empty = await turn('full', null, [
-      ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'e']
-    ])
-    const emptied = empty.events.filter((e) => e.type === 'delta' && e.text.includes('⚠️'))
-    assert.equal(emptied.length, 1)
-    assert.match(emptied[0].text, /: a commit was made there\./)
+    assert.equal(commit.run.sandbox, 'danger-full-access')
+    assert.equal(said(commit.events), 'done')
 
     // Project only: the LKM-156 sandbox, from the worktree's real path; no note.
     const project = await turn('project', join(LIVE, 'again.txt'))
