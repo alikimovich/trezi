@@ -717,14 +717,22 @@ async function main() {
     (error) => activityController.append(String(error), 'error')
   )
   installPreviewSpeed(host, previewView)
-  installStatesWorkbench({
+  const states = installStatesWorkbench({
     host,
     preview: previewView,
     workspace: workspaceController,
     sheets: sheetController,
     log: activityController,
-    git: gitController
+    git: gitController,
+    preferences
   })
+  // LKM-220: Show states on a component that has a workbench reopens it.
+  inspectorController.showStates = (root, element) =>
+    states.show(
+      root,
+      element,
+      workspaceController.state.projects.find((p) => p.root === root)?.activeSessionKey
+    )
   const renderWorkspace = workspaceController.services.render
   workspaceController.services.render = (state) => {
     renderWorkspace(state)

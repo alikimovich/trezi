@@ -181,6 +181,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "preferences":
             preferences = c["values"] as? [String: Any] ?? [:]
         case "webViews": reply(id, views.keys.filter { !$0.hasPrefix("agent:") }.sorted())
+        case "statesBack": reply(id, previewHistory.back(to: c["url"] as? String ?? ""))
         case "previewRevealAllowed": reply(id, Date().timeIntervalSince(lastUserInteraction) >= 5)
         case "agentBrowserCreate":
             guard let session = c["session"] as? String, !session.isEmpty, session.count <= 128,

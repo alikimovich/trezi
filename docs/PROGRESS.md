@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-220 review repair: stored origin ports are stale
+
+- A record keeps the origin as an absolute URL, but preview ports are allocated per run (`RuntimeNet.freePort`), so after a restart or with several projects open Back could load a dead port or another project's dev server. `NativeStatesController.origin()` now rebases the stored path, query and hash onto the preview's current origin (`rebaseUrl`, `src/shared/states-records.ts`); Back, the history check, the restore comparison and the Remove reload all go through it. The stored record is unchanged. `test/states-return.mjs` restarts onto another port and asserts Back and the restore use it. Removed the unused `WorkbenchMemory.reload()`.
+
+## 2026-10-09 — LKM-220: leave a states workbench and come back to it
+
+- **Records.** The manifest stays the agent's record. What Trezi learns (the page a workbench was opened from with scroll and the selected instance's Layers fingerprint, the last state viewed, the creating chat) goes in one preference, `trezi:states-workbenches:v1`, keyed by root and folder (`src/native/states-memory.ts`, pure parts in `src/shared/states-records.ts`). It survives restarts, and every scan prunes folders without a manifest. Show states leaves a pending origin for an hour. The next new workbench whose manifest source file holds the selection, or that was absent from the previous scan, takes it. Otherwise the previous non-workbench page is the origin.
+- **Back.** It steps preview history when the entry behind is the origin, so ⌘] returns to the workbench and WebKit restores the scroll. The new `statesBack` host request compares the documents with the fragment ignored. Otherwise Back loads the origin and scrolls. Either way it reselects the instance by path plus tag/source, else a unique tag/source/id match, retrying for up to 6 s.
+- **Returning.** The `… → Workbenches` submenu became a "States N" pull-down placed beside the branch inside the address block, not as an arranged row. That keeps the address/branch geometry and the fragile toolbar insets untouched. Show states on a component that has a workbench opens it at the last state without an agent turn (`inspectorController.showStates`). Rebuild States sends a `/states` turn in the workbench's chat to update it in place. Continue in Chat focuses that chat, or opens a new one with a `#states-<folder>` chip whose sent text describes the workbench (`setReferenceDetails`).
+- **Publish.** The warning gains Open Workbench. Four buttons do not fit one row of the 448 pt alert, so `SheetAlert.swift` uses `ViewThatFits` and stacks the buttons, default on top.
+
 ## 2026-10-09 — LKM-214 verification repair: sidebar highlight survives a stale reload
 
 - The full native run failed `project-switching` (sidebar trail `[A, B, C, "", C]`). Cause, in the LKM-204 sidebar code, not the 3D change: `NativeShell.update` reloads the outline when the rows change, and reloading builds new `ShellRow` objects, so the outline drops its selection. A state older than the latest pick doesn't restore it (by design), so the picked row blinked to nothing until a newer state answered. It's a timing race: it only shows when such a state also changes the rows.

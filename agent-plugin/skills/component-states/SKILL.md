@@ -86,7 +86,7 @@ Trezi's native switcher (and the "All states" grid) drives the page through the 
 ## 5. Record the workbench
 
 Write `trezi-workbench.json` in the folder. Trezi reads it to show the switcher,
-the grid and the Workbenches list, and to remove the workbench later:
+the grid and the toolbar's States menu, and to remove the workbench later:
 
 ```json
 {
@@ -125,6 +125,8 @@ and the folder, so lines you added to existing files show up as leftovers.
 - After any visual change to the component while a workbench exists, re-check all
   states (open `?__state=all` and screenshot) before you finish, and say which
   states changed.
-- Never delete the workbench yourself. The user removes it from Trezi's preview
-  "…" menu (Workbenches), which deletes the folder and seams and searches for
-  leftovers. Publish warns while one exists.
+- Never delete the workbench yourself. The user removes it from Trezi's toolbar
+  States menu, which deletes the folder and seams and searches for leftovers.
+  Publish warns while one exists.
+- When asked to rebuild a workbench, update it in place: same folder and route,
+  states, fixtures and `trezi-workbench.json` brought up to date with the code.

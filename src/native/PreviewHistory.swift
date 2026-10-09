@@ -34,6 +34,15 @@ final class PreviewHistory: NSObject, NSMenuItemValidation {
         view.go(to: item)
         return true
     }
+    /// LKM-220: the workbench's Back steps back when the entry behind is that page (same
+    /// document, any fragment), so ⌘] returns to the workbench; otherwise the caller loads it.
+    func back(to url: String) -> Bool {
+        guard let item = target(true), var want = URLComponents(string: url), var have = URLComponents(url: item.url, resolvingAgainstBaseURL: false) else { return false }
+        want.fragment = nil; have.fragment = nil
+        let path = { (c: URLComponents) in c.path.isEmpty ? "/" : c.path }
+        guard want.host == have.host, want.port == have.port, path(want) == path(have), want.query == have.query else { return false }
+        return go(true)
+    }
     @objc func goBack(_ sender: Any?) { go(true) }
     @objc func goForward(_ sender: Any?) { go(false) }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
