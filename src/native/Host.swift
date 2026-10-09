@@ -47,6 +47,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let canvas = Canvas()
     let chatColumn = Canvas()
     var views: [String: WKWebView] = [:]
+    /// Session-owned pages live outside the window and never become responders.
+    var agentBrowsers: [String: Date] = [:]
+    var agentBrowserLoads: [String: Int] = [:]
+    var agentBrowserStatuses: [String: Int] = [:]
+    var lastUserInteraction = Date()
     var targets: [String: URL] = [:]
     var urlObservers: [String: NSKeyValueObservation] = [:]
     var preferences: [String: Any] = [:]
@@ -69,22 +74,27 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     init(directory: String, ephemeral: Bool) { self.directory = directory; self.ephemeral = ephemeral; super.init() }
     func makeView(_ id: String) -> WKWebView {
         let config = WKWebViewConfiguration()
-        precondition(id == "preview", "Only the project preview may create a WebView")
+        precondition(id == "preview" || id.hasPrefix("agent:"), "Unknown WebView role")
         PreviewInspector.enable(config.preferences)
         config.websiteDataStore = .nonPersistent()
         let contentWorld = world
         config.userContentController.add(self, contentWorld: contentWorld, name: "trezi")
-        installPreviewScripts(config.userContentController, speed: speedBadge.speed)
+        installPreviewScripts(config.userContentController, speed: id == "preview" ? speedBadge.speed : 1)
         // WebKit keeps its own tracking areas; the page shields what native views cover (LKM-173).
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self; view.uiDelegate = self; view.isInspectable = true
         views[id] = view; canvas.addSubview(view)
-        canvas.addSubview(inspectorSlot, positioned: .above, relativeTo: view); PreviewInspector.confine(view, to: inspectorSlot)
-        inspectorSlot.changed = { [weak self] in self?.nativeLayout?.layout() }
+        if id == "preview" {
+            canvas.addSubview(inspectorSlot, positioned: .above, relativeTo: view); PreviewInspector.confine(view, to: inspectorSlot)
+            inspectorSlot.changed = { [weak self] in self?.nativeLayout?.layout() }
+        } else {
+            view.frame = NSRect(x: -10000, y: -10000, width: 1280, height: 800)
+            view.wantsLayer = true
+        }
         urlObservers[id] = view.observe(\.url, options: [.new]) { view, _ in
             emit(["event":"url", "view":id, "url":view.url?.absoluteString ?? ""])
         }
-        view.isHidden = true; view.wantsLayer = true
+        view.isHidden = id == "preview"; view.wantsLayer = true
         return view
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -116,6 +126,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
         canvas.changed = { [weak self] in self?.nativeLayout.layout() }
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
+            self?.lastUserInteraction = Date()
+            return event
+        }
         installMenus()
         if serviceMode {
             connectService()
@@ -149,7 +163,55 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             terminateHost()
         case "preferences":
             preferences = c["values"] as? [String: Any] ?? [:]
-        case "webViews": reply(id, views.keys.sorted())
+        case "webViews": reply(id, views.keys.filter { !$0.hasPrefix("agent:") }.sorted())
+        case "previewRevealAllowed": reply(id, Date().timeIntervalSince(lastUserInteraction) >= 5)
+        case "agentBrowserCreate":
+            guard let session = c["session"] as? String, !session.isEmpty, session.count <= 128,
+                  session.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else {
+                reply(id, error: "Invalid agent browser session"); return
+            }
+            let key = "agent:" + session
+            if views[key] == nil {
+                guard agentBrowsers.count < 3 else { reply(id, error: "Agent browser limit (3) reached"); return }
+                _ = makeView(key)
+            }
+            agentBrowsers[key] = Date()
+            reply(id, ["view": key])
+        case "agentBrowserClose":
+            guard let session = c["session"] as? String else { reply(id); return }
+            let key = "agent:" + session
+            views.removeValue(forKey: key)?.removeFromSuperview()
+            urlObservers.removeValue(forKey: key); targets.removeValue(forKey: key); agentBrowsers.removeValue(forKey: key); agentBrowserStatuses.removeValue(forKey: key)
+            if let pending = agentBrowserLoads.removeValue(forKey: key) { reply(pending, error: "Agent browser closed") }
+            reply(id)
+        case "agentBrowserOpen":
+            guard name.hasPrefix("agent:"), let view, let raw = c["url"] as? String,
+                  let url = URL(string: raw), ["http", "https"].contains(url.scheme ?? ""),
+                  url.host == "127.0.0.1" || url.host == "localhost" else {
+                reply(id, error: "Agent browser requires a local dev-server URL"); return
+            }
+            if let pending = agentBrowserLoads.removeValue(forKey: name) { reply(pending, error: "Agent browser navigation superseded") }
+            targets[name] = url; agentBrowserLoads[name] = id; agentBrowsers[name] = Date(); agentBrowserStatuses.removeValue(forKey: name)
+            // A reload of the page already shown goes back to the origin; hard also drops WebKit's caches.
+            if c["hard"] as? Bool == true { PreviewCache.reload(view, url: url) }
+            else if c["reload"] as? Bool == true { view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)) }
+            else { view.load(URLRequest(url: url)) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                guard let self, self.agentBrowserLoads[name] == id else { return }
+                self.agentBrowserLoads.removeValue(forKey: name)
+                self.reply(id, error: "Agent browser load timed out")
+            }
+        case "agentBrowserSpeed":
+            guard name.hasPrefix("agent:"), let view,
+                  let speed = c["speed"] as? Double, speed.isFinite, speed >= 0, speed <= 1 else {
+                reply(id, error: "Invalid agent browser speed"); return
+            }
+            let step = c["step"] as? Int
+            if let step, !(1...600).contains(step) { reply(id, error: "Invalid frame step"); return }
+            installPreviewScripts(view.configuration.userContentController, speed: speed)
+            let detail = step.map { "step:\($0)" } ?? "rate:\(speed)"
+            view.evaluateJavaScript("document.dispatchEvent(new CustomEvent('trezi:speed', {detail:'\(detail)'}))", in: nil, in: world) { _ in }
+            reply(id, ["speed": speed, "stepped": step as Any? ?? NSNull()])
         case "securitySession": reply(id, SecuritySessionProbe.report())
         case "chatState":
             let state = c["state"] as? [String: Any] ?? [:]
@@ -263,7 +325,13 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "previewSpeed": setPreviewSpeed(c)
         case "statesState": statesSwitcher.update(c["state"] as? [String: Any]); nativeLayout.layout()
         case "workbenches": shell.updateWorkbenches(c["items"] as? [[String: Any]] ?? [])
-        case "previewViewport": reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"]))
+        case "previewViewport":
+            if name.hasPrefix("agent:"), let view {
+                let width = c["width"] as? Double
+                let cssWidth = width != nil && width!.isFinite ? min(3840, max(240, width!)) : 1280
+                view.frame = NSRect(x: -10000, y: -10000, width: cssWidth, height: 800)
+                reply(id, ["width": width == nil ? NSNull() : cssWidth as Any, "zoom": 1])
+            } else { reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"])) }
         case "previewOverlay": previewOverlay.apply(c)
         case "capture":
             if let agent = c["agent"] as? [String: Any] {
@@ -308,6 +376,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let name = views.first(where: { $0.value === message.webView })?.key,
               var body = message.body as? [String: Any], let data = try? JSONSerialization.data(withJSONObject: body), data.count <= 16 * 1024 * 1024 else { return }
+        // Private browser instrumentation is read through its isolated world. Its page
+        // cannot send commands into the application's visible preview or editor.
+        if name.hasPrefix("agent:") { return }
         if var trace = body["trace"] as? [String: Any], body["channel"] as? String == "trezi:preview:element-picked" {
             trace["hostAt"] = Date().timeIntervalSince1970 * 1000
             body["trace"] = trace
@@ -320,6 +391,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let name = views.first(where: { $0.value === webView })?.key else { return }
+        if let pending = agentBrowserLoads.removeValue(forKey: name) {
+            reply(pending, ["url": webView.url?.absoluteString ?? "", "loaded": true, "status": agentBrowserStatuses[name] as Any? ?? NSNull()])
+        }
         ProductLog.info("preview", "Preview loaded \(Host.logURL(webView.url))")
         emit(["event":"loaded", "view":name, "url":webView.url?.absoluteString ?? ""])
     }
@@ -328,6 +402,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         previewNavigationFailed(webView, error, committed: false)
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if webView !== views["preview"] { webView.reload(); return }
         let now = Date.timeIntervalSinceReferenceDate
         recentCrashes = recentCrashes.filter { now - $0 < 30 }; recentCrashes.append(now)
         ProductLog.error("preview", "Preview web content process crashed (\(recentCrashes.count) in 30 s)\(recentCrashes.count <= 2 ? "; reloading" : "")")
@@ -338,18 +413,18 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         guard let name = views.first(where: { $0.value === webView })?.key, let target = targets[name], let url = action.request.url else { decisionHandler(.cancel); return }
         // The app shell stays on its own URL. The preview's main frame stays on
         // its exact assigned origin; subframes never receive a privileged bridge.
-        if action.targetFrame?.isMainFrame == false { decisionHandler(name == "preview" ? .allow : .cancel); return }
+        if action.targetFrame?.isMainFrame == false { decisionHandler(.allow); return }
         let sameOrigin = url.scheme == target.scheme && url.host == target.host && url.port == target.port
-        let allowed = name == "preview" ? (sameOrigin || url.absoluteString == "about:blank") : (sameOrigin && url.path == target.path)
+        let allowed = name == "preview" || name.hasPrefix("agent:") ? (sameOrigin || url.absoluteString == "about:blank") : (sameOrigin && url.path == target.path)
         if allowed && action.shouldPerformDownload { decisionHandler(.download) }
         else if allowed && action.targetFrame != nil { decisionHandler(.allow) }
         else {
-            if action.navigationType == .linkActivated && ["https", "http"].contains(url.scheme ?? "") { emit(["event":"external", "url":url.absoluteString]) }
+            if name == "preview", action.navigationType == .linkActivated && ["https", "http"].contains(url.scheme ?? "") { emit(["event":"external", "url":url.absoluteString]) }
             decisionHandler(.cancel)
         }
     }
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        guard let target = targets["preview"], origin.host == target.host, origin.protocol == target.scheme, origin.port == (target.port ?? (target.scheme == "https" ? 443 : 80)) else { decisionHandler(.deny); return }
+        guard webView === views["preview"], let target = targets["preview"], origin.host == target.host, origin.protocol == target.scheme, origin.port == (target.port ?? (target.scheme == "https" ? 443 : 80)) else { decisionHandler(.deny); return }
         let alert = NSAlert(); alert.messageText = "Allow this preview to use \(type == .camera ? "your camera" : type == .microphone ? "your microphone" : "your camera and microphone")?"; alert.informativeText = "\(origin.protocol)://\(origin.host):\(origin.port)"; alert.addButton(withTitle: "Allow Once"); alert.addButton(withTitle: "Don’t Allow")
         alert.beginSheetModal(for: window) { response in decisionHandler(response == .alertFirstButtonReturn ? .grant : .deny) }
     }

@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-212 repair: agent reload, private load errors, Bun reveal gate test
+
+- **Reload.** `reload_preview` on the agent browser returned early because the page already showed the route. `AgentBrowser.open(path, { reload, hard })` now skips that early return and the host's `agentBrowserOpen` reloads from origin; `hard` clears WebKit's caches through `PreviewCache.reload`. Native smoke `agent-preview` asserts `navigation` increments after a soft and a hard reload.
+- **Private errors.** `previewNavigationFailed` answers an `agent:` view's pending load and returns before the product log and `load-error`/`navigation-failed` events, so a failed private load never reaches the user's activity.
+- **Reveal gate.** `test/provider-helper-tools.mjs` runs `open_preview`, `preview_viewport` and `preview_speed` with `target: 'user'` while the gate says the user is interacting: all three return the error and the visible preview is not navigated or resized.
+
+## 2026-10-08 — LKM-212 repair: composer attachment in dark appearance
+
+- The manager's full native run caught a blank file tile in the visible-composer capture: `index.html` existed in composer state, but its label was white on a layer background resolved as light before the tile joined the window. Resolve the tile and border colors under its effective appearance after attachment and on appearance changes. Quick verification passed 203 unit checks, typechecks and lint; the native composer group passed all 7 checks, including the foreground `index.html` capture at both widths.
+
+## 2026-10-08 — LKM-212: private agent browser
+
+- **Isolation.** Session tools default to a host-owned WebKit page outside the window. Three may run independently; Bun reuses each for its chat and releases it after two minutes idle. The host blocks page IPC and media permission prompts. The visible preview keeps its route, size, scroll, selection and focus while the agent navigates, resizes and captures its page.
+- **Tools.** Open/reload/observations and slow motion use the private page. `target: "user"` is gated by five seconds without user input for visible navigation, resizing or speed changes. The page loads Trezi's live dev server and labels observations with its own session/navigation and served revision. Chromium is an optional adapter slot, tested with a fake engine; no browser download is part of the default path.
+- **Checks.** Unit: independent Chromium stub sessions/cap/reuse/close, rules v39 and existing preview tool tests. Manager quick: 200 pass, 3 skip. Native `core`: 31 smoke pass, including two simultaneous pages, cap, screenshot and median read/screenshot targets. Native `chat` smoke passed; the separate chat-scroll fixture stopped because the chat window was not foreground. Frame stepping and per-browser viewport restore were then added for a final core recheck.
+- **Final gate.** Manager quick on the updated tree: 203 pass. Native `core` on the updated tree: 24 pass, including `agent-preview`, with no failures or skips. The prior chat-scroll foreground-window failure remains an environment-limited check; the manager's full suite will rerun it.
 ## 2026-10-08 — LKM-213: Publish is the rightmost toolbar group
 
 - **Why.** LKM-206 (slow motion) and LKM-197 ("…") were added after Publish, so Publish and its chevron were no longer at the trailing edge.

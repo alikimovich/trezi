@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Private agent browser (LKM-212)
+
+- [x] A chat/background agent reuses a session-owned offscreen WebKit page with isolated instrumentation, its own route and viewport, a three-browser cap and idle cleanup.
+- [x] Preview observations, navigation, screenshots and slow motion default to the agent page; `target: "user"` changes the visible preview only after an idle gate.
+- [x] Native smoke checks independent pages, cap, image/read timing, visible URL/scroll/selection/viewport/focus isolation and the reveal gate; Chromium factory is exercised with a unit stub.
+- [x] Agent rules v39, agent guide and Unreleased changelog line.
 ## Toolbar: Publish is the rightmost group (LKM-213)
 
 - [x] Slow motion is the last segment of the interaction group (select | device | ruler | slow motion); its click opens the speed menu, and the accent glyph marks a slowed preview.

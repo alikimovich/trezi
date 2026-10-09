@@ -665,9 +665,12 @@ async function startSession(
       ),
       tool(
         'preview_location',
-        "The page/route currently shown in the user's live preview pane.",
-        {},
-        async () => observed('preview_location')
+        'The page/route in the private agent browser. target: user reads the visible preview.',
+        {
+          target: z.enum(['agent', 'user']).optional(),
+          engine: z.enum(['webkit', 'chromium']).optional()
+        },
+        async (args) => observed('preview_location', args)
       ),
       tool(
         'preview_screenshot',
@@ -707,14 +710,22 @@ async function startSession(
       ),
       tool(
         'open_preview',
-        'Open a project page in the user preview. Pass a root-relative path with optional query/hash. Waits up to 10 s and returns the real result (final URL, HTTP status, load error, dev-server state, console errors, screenshot); with unlanded changes in this chat it opens after the turn lands.',
-        { path: z.string() },
+        'Open a project page in the private agent browser. Pass a root-relative path. target: user reveals it in the visible preview only when idle.',
+        {
+          path: z.string(),
+          target: z.enum(['agent', 'user']).optional(),
+          engine: z.enum(['webkit', 'chromium']).optional()
+        },
         async (args) => asText(treziTool('open_preview', args))
       ),
       tool(
         'reload_preview',
-        'Reload the page shown in the user preview, keeping its route. hard: true bypasses the browser caches (use after a dependency or CSS change the page does not show). Returns the load result and whether the loaded CSS/JS matches what the dev server serves now.',
-        { hard: z.boolean().optional() },
+        'Reload the private agent browser, keeping its route. target: user reloads the visible preview only when idle.',
+        {
+          hard: z.boolean().optional(),
+          target: z.enum(['agent', 'user']).optional(),
+          engine: z.enum(['webkit', 'chromium']).optional()
+        },
         async (args) => asText(treziTool('reload_preview', args))
       ),
       tool(
@@ -832,7 +843,7 @@ async function startSession(
                 ? '✓ PASS'
                 : res.verdict === 'fail'
                   ? '✗ FAIL'
-                  : `⚠ ${res.verdict.toUpperCase()}`
+                  : `! ${res.verdict.toUpperCase()}`
             const lines = [
               `${badge} — APCA Lc ${res.lc.toFixed(1)} for ${res.foreground} on ${res.background} at ${res.fontSizePx}px/${res.fontWeight}`,
               res.message

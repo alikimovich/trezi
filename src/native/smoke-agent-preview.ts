@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { agentBrowser, agentBrowserCount, closeAgentBrowser } from '../main/agent-browser'
 import { runPreviewAgentTool } from '../main/preview-agent-tools'
+import { bridge } from './bridge'
 import { waitFor } from './smoke-wait'
+import { nativeWorkspace } from './workspace-runtime'
 
 type Page = (code: string) => Promise<unknown>
 const SHADOW = 'rgb(255, 0, 0) 0px 4px 12px 0px'
@@ -117,6 +120,88 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
   assert.ok(meta.pixels.width < original * scale * 0.5, 'the capture is the element, not the page')
   writeFileSync(join(artifacts, 'agent-preview-element.png'), Buffer.from(image.data, 'base64'))
   evidence.screenshot = meta
+  const active = nativeWorkspace.active
+  assert.ok(active, 'an open project for the private browser')
+  const visible = () =>
+    page(
+      'JSON.stringify({url:location.href,width:innerWidth,x:scrollX,y:scrollY,selection:getSelection()?.toString(),focus:document.hasFocus()})'
+    )
+  const priorScroll = (await page('JSON.stringify({x:scrollX,y:scrollY})')) as string
+  await page(
+    '(() => { getSelection()?.selectAllChildren(document.body); scrollTo(0, 40); return true })()'
+  )
+  const beforePrivate = await visible()
+  const first = await agentBrowser('native-agent-a', active.root)
+  const second = await agentBrowser('native-agent-b', active.root)
+  try {
+    const [a, b] = await Promise.all([first.open('/?agent=a'), second.open('/?agent=b')])
+    assert.match(a.url, /agent=a/)
+    assert.match(b.url, /agent=b/)
+    // reload_preview: the same route loads again (soft and hard) instead of returning early.
+    const loads = first.navigation
+    await first.open('/?agent=a', { reload: true })
+    assert.equal(first.navigation, loads + 1, 'a soft reload navigates the agent browser again')
+    await first.open('/?agent=a', { reload: true, hard: true })
+    assert.equal(first.navigation, loads + 2, 'a hard reload navigates the agent browser again')
+    await first.host.setViewport(390)
+    const width = await first.host.evaluate('innerWidth', 'preview', 1000)
+    assert.equal(width, 390)
+    assert.notEqual(await second.host.evaluate('innerWidth', 'preview', 1000), 390)
+    const frame = await first.capture()
+    assert.ok(frame?.jpeg.length, 'offscreen WebKit snapshot')
+    const measure = async (run: () => Promise<unknown>) => {
+      const samples: number[] = []
+      for (let i = 0; i < 5; i++) {
+        const at = performance.now()
+        await run()
+        samples.push(performance.now() - at)
+      }
+      return samples.sort((x, y) => x - y)[2]
+    }
+    const readMs = await measure(() => first.host.evaluate('document.title', 'preview', 1000))
+    const screenshotMs = await measure(() => first.capture())
+    assert.ok(readMs < 150, `agent browser DOM read ${Math.round(readMs)} ms < 150 ms`)
+    assert.ok(
+      screenshotMs < 400,
+      `agent browser screenshot ${Math.round(screenshotMs)} ms < 400 ms`
+    )
+    await first.setSpeed(0.25)
+    await first.step(2)
+    assert.equal(first.speed, 0)
+    await first.setSpeed(1)
+    await agentBrowser('native-agent-c', active.root)
+    try {
+      await assert.rejects(agentBrowser('native-agent-d', active.root), /limit \(3\)/)
+      assert.equal(agentBrowserCount(), 3)
+    } finally {
+      await closeAgentBrowser('webkit:native-agent-c')
+    }
+    evidence.privateBrowser = {
+      first: a.url,
+      second: b.url,
+      width,
+      screenshot: frame && [frame.width, frame.height],
+      readMs,
+      screenshotMs
+    }
+  } finally {
+    await closeAgentBrowser('webkit:native-agent-a')
+    await closeAgentBrowser('webkit:native-agent-b')
+  }
+  assert.equal(
+    await visible(),
+    beforePrivate,
+    'agent navigation, resize and snapshot preserve the user preview and focus'
+  )
+  const restoreScroll = JSON.parse(priorScroll) as { x: number; y: number }
+  await page(
+    `(() => { getSelection()?.removeAllRanges(); scrollTo(${restoreScroll.x}, ${restoreScroll.y}); return true })()`
+  )
+  assert.equal(await bridge().request('agentRevealTest', { idleSeconds: 0 }), false)
+  assert.equal(await bridge().request('previewRevealAllowed'), false)
+  assert.equal(await bridge().request('agentRevealTest', { idleSeconds: 6 }), true)
+  assert.equal(await bridge().request('previewRevealAllowed'), true)
+  await bridge().request('agentRevealTest', { idleSeconds: 0 })
   writeFileSync(join(artifacts, 'agent-preview.json'), JSON.stringify(evidence, null, 2))
   console.log(
     'Native agent preview tools: inspect box-shadow, read-only bounded evaluate, console page error, viewport width/restore and element-cropped screenshot.'

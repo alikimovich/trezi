@@ -1,3 +1,7 @@
+import { bridge } from '../native/bridge'
+import { previewPath } from '../shared/preview-navigation'
+import { projectKey } from '../shared/projectKey'
+import { agentBrowser } from './agent-browser'
 import type { SessionToolHost } from './backends/types'
 import { agentGitTool } from './chat-agent-git'
 import { runChatIslandTool } from './chat-islands'
@@ -11,9 +15,13 @@ import {
 import { chatUiTool } from './chat-ui'
 import { openAgentCode } from './code-tools'
 import { noteServedRevision } from './landing-context'
-import { isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
+import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
+import { previewServers } from './preview-evidence'
+import { identityText, isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { agentPreviewOverlay } from './preview-overlay'
 import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-tools'
+import { parseSpeed } from './preview-speed'
+import { getPreviewUrl } from './preview-state'
 import { openAgentPreview } from './preview-tools'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
@@ -72,6 +80,12 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'install_skills'
 ]
 
+/** Native host is the gate; tests may supply a deterministic clock/result. */
+let revealGate = () => bridge().request('previewRevealAllowed') as Promise<boolean>
+export function setPreviewRevealGateForTests(gate: (() => Promise<boolean>) | null): void {
+  revealGate = gate ?? (() => bridge().request('previewRevealAllowed') as Promise<boolean>)
+}
+
 /** Runs one session tool; every call is timed and logged with its phases (LKM-200). */
 export function runTreziTool(action: SessionTool, args: unknown, s: ToolScope): Promise<unknown> {
   return timedToolCall(s.emitKey, String(action), () => runTool(action, args, s))
@@ -81,16 +95,137 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   // The owner grants more names than run here (the calculators run in the provider).
   if (!SESSION_TOOLS.includes(action))
     return { error: `${String(action)} is not one of Trezi's session tools.` }
-  if (action === 'preview_viewport' && s.background)
-    return { error: 'Background edits cannot resize the user preview.' }
-  if (action === 'preview_speed' && s.background)
-    return { error: 'Background edits cannot change the user preview speed.' }
+  const target = (args as { target?: unknown } | null)?.target
+  const engine = (args as { engine?: unknown } | null)?.engine
+  const browserTool =
+    isPreviewObserver(action) || action === 'open_preview' || action === 'reload_preview'
+  if (browserTool && target !== undefined && target !== 'user' && target !== 'agent')
+    return { error: 'target must be "agent" or "user".' }
+  if (browserTool && engine !== undefined && engine !== 'webkit' && engine !== 'chromium')
+    return { error: 'engine must be "webkit" or "chromium".' }
+  const browserEngine = engine === 'chromium' ? 'chromium' : 'webkit'
+  if (
+    target === 'user' &&
+    (action === 'open_preview' ||
+      action === 'reload_preview' ||
+      action === 'preview_viewport' ||
+      action === 'preview_speed')
+  ) {
+    if (s.background) return { error: 'Background agents cannot move the user preview.' }
+    if (!(await revealGate()))
+      return {
+        error:
+          'The user is interacting with the preview. Keep checking in the agent browser and reveal the result when the preview has been idle for 5 seconds.'
+      }
+  }
   // LKM-210: a landed revision the chat's agent looked at needs no automatic check.
   const saw = (revision: string | null | undefined) => {
     if (!s.background) noteServedRevision(s.emitKey, revision)
   }
-  if (isPreviewObserver(action))
-    return observeAgentPreview(action, args, s.liveRoot, (identity) => saw(identity.servedRevision))
+  if (isPreviewObserver(action)) {
+    if (target === 'user')
+      return observeAgentPreview(action, args, s.liveRoot, (identity) =>
+        saw(identity.servedRevision)
+      )
+    try {
+      const browser = await agentBrowser(s.emitKey, s.liveRoot, browserEngine)
+      if (!browser.url) {
+        const server = previewServers.get(projectKey(s.liveRoot))
+        if (!server)
+          return {
+            content: [
+              { type: 'text', text: 'The project dev server is stopped. Call restart_dev_server.' }
+            ],
+            isError: true
+          }
+        const shown = getPreviewUrl()
+        const route =
+          shown && new URL(shown).origin === new URL(server.url).origin
+            ? new URL(shown).pathname + new URL(shown).search + new URL(shown).hash
+            : '/'
+        await browser.open(route)
+      }
+      const identity = await browser.identity()
+      let result: PreviewToolResult
+      if (action === 'preview_location') {
+        result = { content: [{ type: 'text' as const, text: `Agent browser: ${browser.url}` }] }
+      } else if (action === 'preview_speed') {
+        const speedArgs = (args ?? {}) as { speed?: unknown; step?: unknown }
+        if (speedArgs.step !== undefined) {
+          if (
+            !Number.isInteger(speedArgs.step) ||
+            (speedArgs.step as number) < 1 ||
+            (speedArgs.step as number) > 600
+          )
+            return {
+              content: [{ type: 'text', text: 'Step must be 1–600 frames.' }],
+              isError: true
+            }
+          await browser.step(speedArgs.step as number)
+        } else if (speedArgs.speed !== undefined) {
+          const speed = parseSpeed(speedArgs.speed)
+          if (speed === null)
+            return {
+              content: [{ type: 'text', text: 'Use speed 1, 0.5, 0.25, 0.1 or 0.' }],
+              isError: true
+            }
+          await browser.setSpeed(speed)
+        }
+        result = {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                speed: browser.speed,
+                ...(speedArgs.step !== undefined ? { stepped: speedArgs.step } : {})
+              })
+            }
+          ]
+        }
+      } else if (
+        action === 'preview_screenshot' &&
+        !(args as { selector?: unknown; x?: unknown })?.selector &&
+        (args as { x?: unknown })?.x === undefined
+      ) {
+        const frame = await browser.capture((args as { full?: boolean })?.full === true)
+        result = frame
+          ? {
+              content: [
+                {
+                  type: 'image' as const,
+                  data: frame.jpeg.toString('base64'),
+                  mimeType: 'image/jpeg'
+                },
+                {
+                  type: 'text' as const,
+                  text: `Screenshot: ${frame.width}×${frame.height} px JPEG.`
+                }
+              ]
+            }
+          : {
+              content: [{ type: 'text' as const, text: 'Agent browser snapshot unavailable.' }],
+              isError: true
+            }
+      } else {
+        result = await runPreviewAgentTool(action, args, browser.host)
+      }
+      if (!result.isError) {
+        saw(identity.servedRevision)
+        result.content.push({ type: 'text', text: identityText(identity) })
+      }
+      return result
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Agent browser failed: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      }
+    }
+  }
   if (action === 'project_ui_catalog' || action === 'compose_project_ui')
     return runProjectUiTool(s.root, s.emitKey, action, args as never, s.connectionId)
   if (action === 'chat_island')
@@ -98,6 +233,41 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       ? { error: 'Background edits cannot create chat islands.' }
       : runChatIslandTool(s.emitKey, s.root, args as never, s.connectionId)
   if (action === 'open_preview' || action === 'reload_preview') {
+    if (target !== 'user') {
+      try {
+        const browser = await agentBrowser(s.emitKey, s.liveRoot, browserEngine)
+        const path =
+          action === 'open_preview'
+            ? previewPath((args as { path?: unknown } | null)?.path)
+            : browser.url
+              ? new URL(browser.url).pathname +
+                new URL(browser.url).search +
+                new URL(browser.url).hash
+              : '/'
+        if (!path) return { error: 'Provide a project-root path starting with /.' }
+        const opened = await browser.open(
+          path,
+          action === 'reload_preview'
+            ? { reload: true, hard: (args as { hard?: unknown } | null)?.hard === true }
+            : undefined
+        )
+        saw(opened.identity.servedRevision)
+        return {
+          requested: true,
+          path,
+          navigation: 'loaded',
+          loaded: true,
+          httpStatus: opened.status ?? null,
+          finalUrl: opened.url,
+          preview: opened.identity,
+          message: 'The agent browser loaded this route. Call preview_screenshot to check it.'
+        }
+      } catch (error) {
+        return {
+          error: `Agent browser failed: ${error instanceof Error ? error.message : String(error)}`
+        }
+      }
+    }
     const answer = (await (action === 'open_preview'
       ? openAgentPreview(s.liveRoot, s.emitKey, args as never, s.notify, s.background)
       : reloadAgentPreview(s.liveRoot, s.emitKey, args, s.notify, s.background))) as {

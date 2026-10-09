@@ -405,7 +405,10 @@ try {
       getUrl: () => 'http://localhost:5173/about',
       capture: async () => null
     })
-    assert.match(delta(await turn('tool preview_location')), /localhost:5173\/about/)
+    assert.match(
+      delta(await turn('tool preview_location {"target":"user"}')),
+      /localhost:5173\/about/
+    )
     // Permissions: the owner decides; only `ask` reaches the user, and an answer settles once.
     const asked = turn('ask Bash rm -rf build')
     await until(() => events.some((e) => e.type === 'permission-request'), 'permission card')
@@ -474,7 +477,7 @@ try {
       })
     })
     assert.equal(
-      delta(await turn('tool preview_screenshot')),
+      delta(await turn('tool preview_screenshot {"target":"user"}')),
       `image image/jpeg ${sha(jpeg.toString('base64'))}`
     )
     // Pasted images keep their bytes and media type (Claude's vision-block semantics).

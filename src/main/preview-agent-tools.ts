@@ -170,7 +170,7 @@ async function readConsole(host: PreviewAgentHost, raw: unknown) {
 
 // ---- preview_viewport ------------------------------------------------------------------
 
-let restoreTimer: ReturnType<typeof setTimeout> | null = null
+const restoreTimers = new WeakMap<PreviewAgentHost, ReturnType<typeof setTimeout>>()
 
 /** The page's size in the first frame laid out at `width` (LKM-200: one in-page wait,
  *  checked each frame, instead of polling across the bridge with sleeps). */
@@ -188,8 +188,9 @@ async function measure(host: PreviewAgentHost, width: number | null) {
 async function viewport(host: PreviewAgentHost, raw: unknown) {
   const args = (raw ?? {}) as Record<string, unknown>
   if (args.restore === true) {
-    if (restoreTimer) clearTimeout(restoreTimer)
-    restoreTimer = null
+    const timer = restoreTimers.get(host)
+    if (timer) clearTimeout(timer)
+    restoreTimers.delete(host)
     await host.setViewport(null)
     return json({ restored: true, ...(await measure(host, null)) })
   }
@@ -207,11 +208,13 @@ async function viewport(host: PreviewAgentHost, raw: unknown) {
       error: `Pass a preset or a width from ${VIEWPORT_RANGE.min} to ${VIEWPORT_RANGE.max} CSS px.`
     })
   const applied = await host.setViewport(width)
-  if (restoreTimer) clearTimeout(restoreTimer)
-  restoreTimer = setTimeout(() => {
-    restoreTimer = null
+  const previous = restoreTimers.get(host)
+  if (previous) clearTimeout(previous)
+  const restoreTimer = setTimeout(() => {
+    restoreTimers.delete(host)
     host.setViewport(null).catch(() => {})
   }, VIEWPORT_RESTORE_MS)
+  restoreTimers.set(host, restoreTimer)
   restoreTimer.unref?.()
   const size = await measure(host, width)
   return json({
