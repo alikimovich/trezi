@@ -15,6 +15,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 - Trezi's keyboard shortcuts work with Russian, Ukrainian, Hebrew, Greek and other non-Latin keyboard layouts: menus, the composer, the code editor, rulers and grid, slow motion, select mode (S) and the states switcher (1-9, H) follow the physical key, and Dvorak keeps its own keys (LKM-219).
+- Quitting while agents work (⌘Q, Quit, closing the window, logout or restart) now asks first: a sheet lists what is still running per project, with Cancel, Wait and Quit (quits when the work ends; cancelable) and Quit Anyway (stops the agents and keeps their work in each chat’s copy, as Stop does). A landing or publish in progress always finishes first, for up to 15 seconds. “Don’t ask again” is also in Settings → General (LKM-221).
 
 ## [0.1.0] - 2026-10-09
 

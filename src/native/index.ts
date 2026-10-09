@@ -97,6 +97,7 @@ import { installPreviewSpeed } from './preview-speed'
 import { NativePreviewSupervisor } from './preview-supervisor'
 import { serviceProjectMemory } from './project-memory-service'
 import { serviceProvider } from './provider-service'
+import { installQuitGuard } from './quit-install'
 import { NativeRecoveryRefs } from './repository-recovery'
 import { serviceRepository } from './repository-service'
 import { NativeReviewController } from './review-controller'
@@ -897,6 +898,16 @@ async function main() {
   })
   nativeDreamer.current = dreamerController
   if (!testing) dreamerController.schedule()
+  // LKM-221: a user quit while agents work asks first (the host shows the alert).
+  installQuitGuard({
+    host,
+    workspace: workspaceController,
+    chat: chatController,
+    git: gitController,
+    dreamer: dreamerController,
+    preferences,
+    invoke: sheetController.invoke
+  })
   host.on('menu', ({ action }) => {
     if (sheetController.current?.state.busy) return
     const fail = (error: unknown) => workspaceController.reportError(error)

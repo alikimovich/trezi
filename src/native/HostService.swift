@@ -53,12 +53,21 @@ extension Host {
         if status != 0 { fflush(stdout); fflush(stderr); exit(status) }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let client = serviceClient, !serviceTerminated else { return .terminateNow }
+        guard serviceClient != nil, !serviceTerminated else { return .terminateNow }
         // Cancel, drain, then terminate again. `.terminateLater` would park AppKit in a
         // modal-panel run loop, which is not guaranteed to service the main queue that
         // carries the client's replies and timeouts; the drain could then never finish.
         // Repeated Quit/signals join the first drain.
         guard !serviceTerminating else { return .terminateCancel }
+        // LKM-221: a user quit while agents work asks first (`QuitPrompt.swift`). Only a
+        // logout or restart uses `.terminateLater`, since cancelling would abort it; the
+        // drain's own backstop still bounds it.
+        if quitShouldAsk() { return requestQuit(later: Self.systemQuit) }
+        drainService { NSApp.terminate(nil) }
+        return .terminateCancel
+    }
+    func drainService(then finish: @escaping () -> Void) {
+        guard let client = serviceClient, !serviceTerminating else { return }
         serviceTerminating = true
         // Bounded shutdown even if the service never answers.
         DispatchQueue.global().asyncAfter(deadline: .now() + 20) {
@@ -69,8 +78,7 @@ extension Host {
             self.serviceTerminated = true
             // Shutdown acknowledgement follows drain and profile release.
             if self.restartRequested { HostLaunch.relaunch(directory: self.directory, project: self.restartProject) }
-            NSApp.terminate(nil)
+            finish()
         }
-        return .terminateCancel
     }
 }
