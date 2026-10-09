@@ -2,7 +2,8 @@
 // real agent.ts, with the real Swift conversation, repository, editing and workspace
 // owners, and a repository owner whose worktree creation takes 3 s. A scripted provider
 // (never a real SDK) records where each session starts and what it is sent.
-// - New chat shows a ready, focused composer within 100 ms, before any provider starts;
+// - New chat shows a ready, focused composer within 100 ms, before any provider starts
+//   (LKM-211: the median of five after a warm-up, twice the target on CI);
 // - its first send waits for the pending worktree ("Preparing workspace…"), then works;
 // - the next chat takes the prewarmed spare, synced from the live tree, without waiting;
 // - a chat closed while being prepared tears down what was made;
@@ -24,6 +25,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
+import { formatTiming, measureTiming, TIMING_RUNS } from '../src/native/smoke-timing.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { workspaceService } from './helpers/workspace-fixture.mjs'
 
@@ -51,18 +53,23 @@ async function until(condition, label, timeout = 15_000) {
   }
 }
 
-// A repository owner whose `git worktree add` takes `delay` ms.
+// A repository owner whose `git worktree add` waits for `hold`, then takes `delay` ms.
 const { repositoryOwner, setRepositoryOwner } = await import('../src/main/repository-owner.ts')
 const realOwner = repositoryOwner()
-let delay = 0
+let delay = 0,
+  hold = null,
+  created = 0
 setRepositoryOwner(
   new Proxy(realOwner, {
     get(target, name) {
       const value = target[name]
       if (name === 'createWorktree')
         return async (...args) => {
+          await hold
           await sleep(delay)
-          return value.apply(target, args)
+          const result = await value.apply(target, args)
+          created++
+          return result
         }
       return typeof value === 'function' ? value.bind(target) : value
     }
@@ -196,10 +203,42 @@ await until(() => providers.length === 1, 'project chat')
 assert.ok(await spareReady(repo), 'opening the project prewarms a spare')
 await releaseSpare(repo)
 delay = 3_000
+const worktrees = () =>
+  git('worktree', 'list', '--porcelain')
+    .split('\n')
+    .filter((line) => line.startsWith('worktree '))
+const onlyChatWorktrees = () => {
+  const open = new Set(providers.map((p) => p.cwd))
+  return worktrees().every((line) => open.has(line.slice(9)) || line.slice(9) === repo)
+}
+
+// 0. LKM-211: the composer's timing, as the median of five new chats after a warm-up.
+// Each chat's worktree is held until all are measured, and each is closed while pending.
+let release
+hold = new Promise((resolve) => {
+  release = resolve
+})
+const createdBefore = created
+const timing = await measureTiming('New chat composer ready', 100, async () => {
+  const { chat, ms } = await newChat()
+  await workspace.command({ type: 'close-chat', key, session: chat })
+  return ms
+})
+assert.equal(created, createdBefore, 'no worktree was created while measuring')
+delay = 0
+release()
+hold = null
+await until(
+  () => created - createdBefore === TIMING_RUNS + 1 && onlyChatWorktrees(),
+  'the measured chats’ worktrees removed'
+)
+assert.equal(providers.length, 1, 'a chat closed while pending starts no provider')
+assert.equal(await spareReady(repo), null, 'a chat closed while pending prewarms no spare')
+delay = 3_000
 
 // 1. Instant with a 3 s worktree; the first send waits for it, then works.
 const first = await newChat()
-assert.ok(first.ms < 100, `New chat composer ready in ${first.ms} ms (limit 100)`)
+assert.ok(first.ms < delay, 'the composer does not wait for the worktree')
 const sending = chats.command({ type: 'submit', chat: first.chat, text: 'hello' })
 await until(
   () =>
@@ -225,7 +264,7 @@ const spare = await spareReady(repo)
 assert.ok(spare && existsSync(spare.path), 'a spare was prewarmed after the new chat')
 writeFileSync(join(repo, 'live.txt'), 'uncommitted\n')
 const second = await newChat()
-assert.ok(second.ms < 100, `New chat composer ready in ${second.ms} ms (limit 100)`)
+assert.ok(second.ms < delay, 'the composer does not wait for the spare')
 await until(() => providers.length === 3, 'second chat provider')
 const p2 = providers[2]
 assert.equal(p2.cwd, spare.path, 'the new chat took the spare')
@@ -247,20 +286,12 @@ const closed = await agent('agent:close-chat', repo, third.sessionKey)
 assert.ok(!closed.remaining.includes(third.sessionKey))
 await sleep(delay + 500)
 assert.equal(providers.length, 3, 'a closed pending chat starts no provider')
-const worktrees = () =>
-  git('worktree', 'list', '--porcelain')
-    .split('\n')
-    .filter((line) => line.startsWith('worktree '))
-const open = new Set(providers.map((p) => p.cwd))
-await until(
-  () => worktrees().every((line) => open.has(line.slice(9)) || line.slice(9) === repo),
-  'the closed chat worktree removed'
-)
+await until(onlyChatWorktrees, 'the closed chat worktree removed')
 
 // 4. Closing the project removes its unused spare.
 assert.equal(await spareReady(repo), null, 'a closed pending chat prewarms no spare')
 const fourth = await newChat()
-assert.ok(fourth.ms < 100)
+assert.ok(fourth.ms < delay, 'the composer does not wait for the worktree')
 await chats.command({ type: 'submit', chat: fourth.chat, text: 'last' })
 await until(() => providers.length === 4 && providers[3].sent.length === 1, 'fourth send')
 providers[3].done()
@@ -272,6 +303,6 @@ await until(() => worktrees().length === 1, 'every chat worktree removed on clos
 assert.equal(await spareReady(repo), null)
 
 console.log(
-  `PASS new chat instant: composer ${first.ms}/${second.ms}/${fourth.ms} ms with a 3 s worktree, first send waits, spare reuse and cleanup`
+  `PASS new chat instant: ${formatTiming(timing)} with a held worktree; scenarios ${first.ms}/${second.ms}/${fourth.ms} ms with a 3 s worktree, first send waits, spare reuse and cleanup`
 )
 process.exit(0)

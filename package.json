@@ -66,6 +66,7 @@
     "test:source-owner": "bun test/source-owner.mjs",
     "test:conversation-owner": "bun test/conversation-owner.mjs",
     "test:chat-new-instant": "bun test/chat-new-instant.mjs",
+    "test:smoke-timing": "bun test/smoke-timing.mjs",
     "test:provider-owner": "bun test/provider-owner.mjs",
     "test:provider-data": "bun test/provider-data.mjs",
     "test:provider-login": "bun test/provider-login.mjs",

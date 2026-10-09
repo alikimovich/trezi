@@ -59,6 +59,7 @@ const UNIT = [
   'native-preview-recovery',
   'native-workspace-controller',
   'chat-new-instant',
+  'smoke-timing',
   'preview-supervisor',
   'native-support',
   'activity-attention',

@@ -62,6 +62,10 @@ pointer gestures/animation timing, which must be reported as reduced coverage.
   `workflow-durability` runs the same file's tool and durability checks in a second
   process. The composer fixture waits for the pin to land (at most 5 s) instead of
   one fixed 0.2 s run-loop turn, which flaked under 8 workers.
+- **Wall-clock budgets.** A timing check asserts the median of `TIMING_RUNS` (5) runs
+  after one warm-up through `src/native/smoke-timing.ts`, never a single sample. Locally
+  the median must meet the product target; with `CI` set the budget is twice the target,
+  so a 2× regression still fails (LKM-211).
 
 Measured on the operator Mac (12 cores, 8 workers), 2026-10-05:
 
