@@ -249,7 +249,13 @@ export function createThreeDInspector(options: {
       publish()
     }
     runAction = (message) => {
-      if (disposed || !threeDActionAllowed(message, session, revision, surfaces.length)) return
+      if (disposed) return
+      if (!threeDActionAllowed(message, session, revision, surfaces.length)) {
+        // A rejected action for the live session (a stale revision after a refresh) re-publishes
+        // the scene so the native controls show what the scene actually has.
+        if ((message as { session?: unknown } | null)?.session === session) publish()
+        return
+      }
       switch (message.action) {
         case 'close':
           close()

@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-214 review repair: picker follows the scene, changelog line in Unreleased
+
+- The native layer picker no longer sets `model.selected` before the scene validates the action; only the published state moves it. A rejected action for the live session (a stale revision after a refresh) makes the scene re-publish, so the picker cannot show a layer the scene never selected.
+- The `three-d` smoke delivers a stale-revision layer action and asserts the native selected layer still equals the scene's `[data-selected]` plane.
+- The LKM-214 changelog line moved from the released 0.1.0 section to `## [Unreleased]`; the 0.1.0 section is back to its original form.
+
 ## 2026-10-09 — LKM-214 review repair: same-document URL change closes the exploded scene
 
 - The host's `url` handler clears the native 3D bars on every preview URL change, including `history.pushState`/hash changes that fire no navigation. That left the modal scene open with no controls. `threeDClear` now sends the session's `close` action (`ThreeDChrome.dismiss()`) before clearing, so the scene and the bars always leave together; real navigations still clear as before.

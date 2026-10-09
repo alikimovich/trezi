@@ -71,8 +71,8 @@ struct ThreeDFooter: View {
         })
     }
     private var layer: Binding<Int> {
+        // The scene validates the action; only its published state moves the picker.
         Binding(get: { model.selected }, set: { value in
-            model.selected = value
             model.action("layer", value: value)
         })
     }

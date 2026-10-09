@@ -195,6 +195,38 @@ export async function checkThreeD(host: NativeBridge, artifacts: string) {
   const second = await open()
   assert.notEqual(second.session, opened.session, 'reopening creates a new session')
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 1)
+  const sceneSelected = () =>
+    page(
+      `Number(document.querySelector('[data-trezi-three-d]')?.shadowRoot?.querySelector('[data-selected]')?.dataset.layer ?? -1)`,
+      true
+    )
+  const beforeStale = await inspect()
+  assert.equal(beforeStale.selected, await sceneSelected(), 'native picker starts in sync')
+  // The fixture component can be a single layer; the stale action then targets layer 0.
+  const other = Math.max(
+    0,
+    beforeStale.layers.findIndex((_: string, index: number) => index !== beforeStale.selected)
+  )
+  host.send('deliver', {
+    view: 'preview',
+    message: {
+      type: 'event',
+      channel: PREVIEW_THREE_D_ACTION,
+      args: [
+        {
+          session: beforeStale.session,
+          revision: beforeStale.revision + 5,
+          action: 'layer',
+          value: other
+        }
+      ]
+    }
+  })
+  await page('true', true)
+  await waitFor(async () => {
+    const [native, scene] = [(await inspect()).selected, await sceneSelected()]
+    return native === scene && scene === beforeStale.selected
+  }, 'stale-revision layer action is rejected and the native picker matches the scene')
   await host.request('threeDPerform', { action: 'close' })
   await waitFor(async () => !(await inspect()).active, 'Back closes native chrome')
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 0)
