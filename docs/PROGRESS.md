@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-218 repair: review-quick failures after the LKM-215 merge
+
+- `native-long-chat-perf` and `platform-owner` failed in the manager's review-quick at load average 17–28. This change touches neither (icons, States switcher symbol, smoke capture, changelog). On the merged tree (01493f19 included) `native-long-chat-perf` passes alone (worst 4.3 ms against the 100 ms budget, so the hand-built context still matches LKM-215's shape), and the full unit tier passes (206 PASS, including `platform-owner`, `versioning` and lint). Native `core` passes 25/25. No budget or deadline was changed; the LKM-218 line stays under `## [Unreleased]` → Changed.
+
 ## 2026-10-09 — LKM-218 repair: editor-freshness flake, changelog placement
 
 - The manager's `editor-freshness` failure (`#fresh-card` never selected) did not reproduce as a product fault: nothing in this change touches selection, and in three further native `core` runs under a load average of 17–23 it failed once on the initial page load, then passed (3.5 s) while only the typing-latency check `source-syntax` failed. No check was relaxed.
