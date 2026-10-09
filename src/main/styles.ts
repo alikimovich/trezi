@@ -1,12 +1,15 @@
-import { ipcMain } from 'electron'
 import { readFile } from 'fs/promises'
+import { ipcMain } from '../native/platform'
 import type { PropEditResult, StyleEdit, StyleEditResult } from '../shared/api'
+import { projectRelative } from '../shared/project-path'
 import { STYLE_PROPS as STYLE_PROP_LIST } from '../shared/style-props'
-import { classNameStringNode, commitEdit, findElementAtLine, resolveSource } from './props'
-import { type ResolvedTokenRef, resolveTokenRef, tokenClassRewrite } from './style-tokens'
-import { looksTailwind } from './tw-styles'
 import { mergeStyleObjectSource } from './inline-style'
+import { renderJsxAttribute } from './jsx-attribute-literals'
+import { classNameStringNode, commitEdit, findElementAtLine, resolveSource } from './props'
+import { applyClassRule, resolveClassRule } from './style-class-rule'
+import { type ResolvedTokenRef, resolveTokenRef, tokenClassRewrite } from './style-tokens'
 import { applyStyleEditSvelte } from './styles-svelte'
+import { looksTailwind } from './tw-styles'
 
 /**
  * The Styles-panel commit engine (v10). A scrub previews live via CSS injection
@@ -17,7 +20,7 @@ import { applyStyleEditSvelte } from './styles-svelte'
  *    `className` is a literal string → rewrite the single family-matching class
  *    (`p-4` → `p-[13px]`) and splice the new string.
  *  - S2 inline — no/ambiguous utility path → merge into an EXISTING JSX
- *    `style={{…}}` literal. Praxis never ADDS a style attribute that wasn't
+ *    `style={{…}}` literal. Trezi never ADDS a style attribute that wasn't
  *    there: a project styling from a stylesheet/CSS module shouldn't silently
  *    grow inline styles because someone scrubbed a value, so an absent
  *    attribute is S3's problem, not something to invent a convention for.
@@ -46,8 +49,8 @@ export const STYLE_PROPS: ReadonlySet<string> = new Set(STYLE_PROP_LIST)
  * declaration, escape a style object, or break attribute quoting. Inside parens
  * (`cubic-bezier(…)`, `var(…)`) commas and dots are business as usual.
  */
-export function isSafeStyleValue(value: string): boolean {
-  if (!value.trim() || value.length > 200) return false
+export function isSafeStyleValue(value: string, maxLength = 200): boolean {
+  if (!value.trim() || value.length > maxLength) return false
   let depth = 0
   for (let i = 0; i < value.length; i++) {
     const ch = value[i]
@@ -71,6 +74,7 @@ export function isSafeStyleValue(value: string): boolean {
  */
 export function styleAgentPrompt(
   edit: StyleEdit,
+  root: string,
   element?: string,
   token?: ResolvedTokenRef | null
 ): string {
@@ -88,7 +92,7 @@ export function styleAgentPrompt(
         'idiom, converting the target value if needed.'
       : ''
   return (
-    `In ${edit.source}, set the css property \`${edit.prop}\` of the ${el} to ${what}.${unit} ` +
+    `In ${projectRelative(edit.source, root)}, set the css property \`${edit.prop}\` of the ${el} to ${what}.${unit} ` +
     'Style it the way this project already styles things — a stylesheet, CSS module, ' +
     'styled-component or utility class — and do NOT add an inline `style` prop unless ' +
     'the element already has one.'
@@ -101,7 +105,9 @@ function committed(
   strategy: 'tailwind' | 'inline',
   wroteToken = false
 ): StyleEditResult {
-  return res.applied ? { applied: true, strategy, wroteToken } : { applied: false, error: res.error }
+  return res.applied
+    ? { applied: true, strategy, wroteToken }
+    : { applied: false, error: res.error }
 }
 
 /** The static key name of a style object entry (null for computed/spread/etc). */
@@ -123,7 +129,10 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
   if (!STYLE_PROPS.has(edit.prop)) {
     return { applied: false, error: 'Unsupported style property.' }
   }
-  if (typeof edit.value !== 'string' || !isSafeStyleValue(edit.value)) {
+  if (
+    typeof edit.value !== 'string' ||
+    !isSafeStyleValue(edit.value, edit.prop === 'box-shadow' ? 1024 : 200)
+  ) {
     return { applied: false, error: 'Invalid style value.' }
   }
   const loc = resolveSource(root, edit.source)
@@ -159,7 +168,7 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
   const toAgent = (): StyleEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: styleAgentPrompt(edit, found?.name, token)
+    agentPrompt: styleAgentPrompt(edit, root, found?.name, token)
   })
   if (!found) return toAgent() // stale stamp — the agent can still find it
   // An element-level spread could carry className/style at runtime — the final
@@ -184,7 +193,11 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
       const rewritten = tokenClassRewrite(current, edit, token)
       if (rewritten != null) {
         const next =
-          code.slice(0, strNode.start) + JSON.stringify(rewritten) + code.slice(strNode.end)
+          code.slice(0, strNode.start) +
+          (classAttr?.value?.type === 'StringLiteral'
+            ? renderJsxAttribute(rewritten, code[strNode.start])
+            : JSON.stringify(rewritten)) +
+          code.slice(strNode.end)
         return committed(
           await commitEdit(root, loc.file, code, next, key, edit.group),
           'tailwind',
@@ -200,7 +213,7 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
   const styleAttr = (found.opening.attributes ?? []).find(
     (a) => a.type === 'JSXAttribute' && (a.name as { name?: string })?.name === 'style'
   )
-  // Nothing to extend. Adding `style={{…}}` here would be Praxis choosing a
+  // Nothing to extend. Adding `style={{…}}` here would be Trezi choosing a
   // styling convention on the project's behalf — the one thing a design tool
   // editing someone else's repo must not do. The agent gets it instead, and its
   // prompt explicitly forbids reaching for the inline prop.
@@ -239,4 +252,10 @@ export function registerStylesIpc(): void {
   // No sender check (matches props:*); path safety comes from resolveSource's
   // within-root containment + the allowlist/value validation above.
   ipcMain.handle('styles:apply', (_e, root: string, edit: StyleEdit) => applyStyleEdit(root, edit))
+  ipcMain.handle('styles:resolve-class', (_e, root: string, classes: string[]) =>
+    resolveClassRule(root, classes)
+  )
+  ipcMain.handle('styles:apply-class', (_e, root: string, edit: StyleEdit) =>
+    applyClassRule(root, edit.classes, edit.prop, edit.value, edit.group)
+  )
 }

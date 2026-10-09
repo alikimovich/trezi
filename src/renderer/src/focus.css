@@ -1,8 +1,0 @@
-/* Use the platform accent without Chromium's two-color auto outline.
-   Keep one ring on shared components that also supply Tailwind ring shadows. */
-:is(button, a[href], select, summary, input, [role="button"], [role="link"]):focus-visible {
-    outline: 2px solid AccentColor;
-    outline-offset: -2px;
-    --tw-ring-shadow: 0 0 #0000;
-    --tw-ring-offset-shadow: 0 0 #0000;
-}

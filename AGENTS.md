@@ -1,190 +1,147 @@
-# AGENTS.md — working guide for Praxis
+# AGENTS.md — working guide for Trezi
 
-Praxis is an Electron app: an AI chat on the left that edits a user's repo, with
-that repo's dev server live-previewed on the right. Distributed as source
-(clone + `bun install` + `bun run dev`); each user authenticates with their own
-provider subscription (`Codex setup-token` / `Codex login`; Codex and Gemini
-backends exist behind the same seam).
+Coding agent guide. `CLAUDE.md` imports this file. Linked pages in
+`docs/agent-guide/` also bind.
 
-The project's original name was **dsgn**. A repo-wide rename (2026-07) swept it
-out of the code — the stamp is `data-praxis-source`, the sidecar is `.praxis/`,
-work branches are `praxis/*`. The old name survives only in deliberate legacy
-shims: setup uninstall removes old `.dsgn/` helpers, `git.ts` recognizes
-`dsgn/*` work branches, `sidecar-migrate.ts` moves old sidecar data, `agent.ts`
-migrates the old `<userData>/dsgn` dir, and the agent sidecar write-deny covers
-both dir names. Don't "fix" those dsgn strings — and keep `docs/PROGRESS.md`
-history as written.
+## What Trezi is
+
+A native macOS app: an AI chat on the left (Swift/AppKit/SwiftUI) edits a user's
+repo, with its dev server previewed on the right in system WebKit. A
+separate Swift XPC service holds the profile lock, the operation ledger and every
+domain writer; retained JS (controllers, source parsers, provider adapters, the
+latter in supervised helpers) runs on the Bun bundled into `Trezi.app`.
+Distributed as source (clone, `bun install`, `bun run build`) and started with
+`open -a Trezi` or the thin `trezi` command (`bun run dev` for development); users authenticate with
+their own provider subscriptions or endpoint credentials. Electron, the React
+application renderer and browser/Tailscale mode are retired (`docs/NATIVE.md`).
+
+Trezi had earlier names. Their remaining strings are deliberate read-compatibility
+shims, all listed in [legacy names](#legacy-names): don't "fix" them.
 
 ## Start here every session
 
-1. Read the top of `docs/PROGRESS.md` (newest-first log — recent state + the
-   *why* behind decisions) and `docs/TASKS.md` (the roadmap / what's next).
-2. When you finish a chunk, append to `docs/PROGRESS.md` and tick `docs/TASKS.md`.
-3. **If your change contradicts something in this file or `README.md`, fix that
-   doc in the same commit** — this file is auto-loaded into every session, so a
-   stale claim here misleads every future agent. `test/docs-links.mjs` fails CI
-   if a `src/…` path referenced here or in the README no longer exists.
+1. Read only the top of `docs/PROGRESS.md` (newest-first log with the *why* behind
+   decisions), e.g. `head -80 docs/PROGRESS.md`, and find your task in
+   `docs/TASKS.md` with `grep -n '<ISSUE-ID or keyword>' docs/TASKS.md`. Both files
+   are very large: use head/grep (or a ranged read), never read either in full.
+2. When you finish a chunk, add a dated entry to the top of `docs/PROGRESS.md` and
+   tick `docs/TASKS.md`. Append; never rewrite history.
+3. If your change contradicts this file, a `docs/agent-guide/` page or `README.md`,
+   fix that doc in the same commit. `test/docs-links.mjs` fails CI when an anchored
+   path (`src/…`, `docs/…`) referenced in them no longer exists.
 
 ## Commands
 
+Use **Bun**, not npm/yarn (Node 22 remains for tooling). Native builds need macOS
+13.3+ and command-line tools with the macOS 26 SDK. Full table:
+[verification](docs/agent-guide/verification.md).
+
 | Command | What |
 | --- | --- |
-| `bun run dev` | Launch the app (electron-vite, HMR) |
-| `praxis serve <repo>` | Run the built UI in a local browser (loopback only) |
-| `praxis serve <repo> --remote` | Publish the loopback UI/preview to the private Tailscale network |
-| `bun run build` | Build main/preload/preview/renderer to `out/` |
-| `bun run typecheck` | Type-check all three tsconfig projects (node, web, preview). Run after every change |
-| `bun run test:<name>` | One test (see package.json for ~40 aliases) |
-| `bun run test` | Unit + Electron UI tiers (via `test/run.mjs`) |
-| `bun run verify` | Everything incl. live-agent e2e (needs display + creds) |
-| `bun run lint` | Biome lint over `src` + `test` |
+| `bun run dev` | Build and launch the native app |
+| `bun run build` | Build to `out/native/` |
+| `bun run typecheck` | Native/backend/shared + preview. Run after every change |
+| `bun run typecheck:native` | Native/backend/shared only |
+| `node test/run.mjs unit` | Unit tier, no desktop |
+| `bun run test:<name>` | One test (aliases in package.json) |
+| `bun run test:native` | Native desktop integration (disposable profile) |
+| `bun run test` | Unit + native |
+| `bun run verify` | All tiers incl. real provider calls (needs authorization) |
+| `bun run lint` | Biome over `src` + `test` |
+| `bun run release <major\|minor\|patch>` | Maintainers only: bump, changelog, commit, tag on main ([versioning](#versioning-and-changelog)) |
 
-Use **bun**, not npm/yarn. Node 22 (`.nvmrc`). `postinstall` runs
-`scripts/patch-electron.mjs` (macOS-only, idempotent): it rebrands the dev
-Electron.app bundle to Praxis — the dev bundle IS the product.
+## Verify your own work without asking the user
 
-## Verify your own work WITHOUT asking the user
+- Run typecheck and the relevant unit tests after every change; native changes also
+  need `bun run typecheck:native` and `bun run test:native`.
+- Lint is part of quick verification (unit tier): keep `bun run lint` at exit 0.
+- Never run real provider calls (`test:native-live`, `verify`) without authorization.
+- Tiers are `unit`, `native`, `live`, `all`; native/live runs are serial. SKIP is not
+  PASS. `--only=core,chat,…` limits native smoke groups (`src/native/smoke-groups.ts`),
+  but acceptance needs every group. Details: `docs/TESTING.md`.
+- Read captured PNGs to check UI. Offscreen captures cannot paint Liquid Glass.
+  `TREZI_NATIVE_BACKGROUND_TEST=1` is reduced coverage; report it.
 
-Tests come in three tiers, defined by the arrays in `test/run.mjs`
-(`node test/run.mjs unit|electron|live|all`) — pick the cheapest that proves
-your change:
+### Evidence budget
 
-1. **Pure-bun logic tests** (`bun test/pr-body.mjs` etc., ~15 files, the `unit`
-   tier) — no build, no display, run in seconds. Always run the relevant ones.
-2. **Playwright/Electron UI tests** (`node test/<name>.mjs` after
-   `electron-vite build`, or `bun run test:<name>` which builds first) — drive
-   the built app, screenshot to `test/artifacts/`. **Read the PNGs** to see
-   the actual UI; that's how you confirm work visually without a human.
-3. **Live e2e** (`test:agent`, `test:codex`, `test:sim-e2e`) — run a REAL
-   provider turn / iOS simulator. They self-SKIP (exit 0) without credentials
-   or a sim; they FAIL if the turn ran but didn't produce the edit.
+- A foreground window capture plus JSON geometry/state from the existing fixtures
+  is enough acceptance evidence.
+- Do not add OCR of wrapped text, synthetic CGEvent/input-routing tests, or any
+  `defaults write`/system preference change unless the ticket explicitly requires it.
+- Tests must never change the user's system settings.
 
-While iterating, run targeted `test:<name>` scripts; before declaring a chunk
-done, run `bun run typecheck && bun run test` (and `verify` when agent/sim
-behavior changed). Note: the preview is a native `WebContentsView` — a
-separate CDP target that does NOT appear in renderer screenshots; capture it
-with `capturePage()` or read its URL via
-`electronApp.evaluate(({webContents}) => ...)`.
+## Architecture map
 
-## Architecture — four process boundaries
+- `src/native/` — Swift host UI (`src/native/Host.swift`, `src/native/Shell.swift`,
+  `src/native/Chat.swift`, `src/native/WorkspaceLayout.swift`, …) and the Bun
+  controllers behind it; `src/native/index.ts` is the Bun entrypoint.
+- `src/service/` — the Swift XPC service: profile lock, ledger and the domain owners
+  (preferences, workspace, memory, runtime, repository, source, conversation,
+  providers, editing, workflows, platform); the only writers, with no Bun fallback.
+  Built-in provider adapters run in helpers it supervises.
+  [service-owners](docs/agent-guide/service-owners.md)
+- `src/main/` — retained Bun backend: provider adapters and sessions, parsers,
+  props/styles/tokens, Git/worktree orchestration and reads.
+  [backend-map](docs/agent-guide/backend-map.md)
+- `src/preview/` — isolated WKContentWorld instrumentation of the user's page, the
+  only WebKit view. `src/shared/api.ts` — every cross-process type.
+- Product log: processes write redacted lifecycle lines to `~/Library/Logs/Trezi`.
+  Never log prompts, file contents or secrets. [logs](docs/agent-guide/logs.md)
+- Tree, lifecycle, trust boundaries, design rationale:
+  [architecture](docs/agent-guide/architecture.md). Per-domain docs: the
+  `SWIFT-BACKEND-*` files in `docs/`.
 
-```
-src/
-  main/           Electron main (CJS, Node)
-    index.ts        window + native WebContentsView preview (IPC geometry sync)
-    devserver.ts    detect framework/PM, spawn dev server, parse URL, readiness
-    static-server.ts in-process static file server for vanilla HTML/JS projects
-                    (framework 'static': no package.json/dev command; live-reload)
-    agent.ts        persistent multi-turn agent session (streams over agent:* IPC)
-    backends/       provider seam: Codex.ts, codex.ts, gemini.ts behind pickProvider
-                    (gemini currently has NO SDK dep — treat as experimental)
-    simulator.ts    iOS Simulator preview (Metro/Expo detect, MJPEG sim bridge)
-    props.ts / props-svelte.ts   prop editing engines (React via react-docgen /
-                    Svelte 5); they mirror each other's splice/apply contract
-    tokens.ts       design-token detection/scaffold   annotations.ts  comments → PR
-    git.ts, worktrees.ts          setup.ts, scaffold.ts, xcode.ts
-    diagnose.ts, diag-cache.ts, diag-rules.ts         sessions-store.ts, edit-history.ts
-    update.ts       self-update detection (pure: fetch + rev-list behind-count)
-    update-ipc.ts   update:* IPC + relaunch; "apply" shells out to bin/praxis.mjs
-  preload/index.ts  contextBridge → window.api (contextIsolation on, sandboxed)
-  preview/preload.ts  SECOND preload, injected into the PREVIEWED app's
-                    WebContentsView: element select/hover, comments, annotations.
-                    Own tsconfig (tsconfig.preview.json)
-  shared/api.ts     the IPC contract — single source of truth for cross-process types
-  renderer/src/     React 18 UI: App.tsx, components/ (ChatPanel, PreviewPane,
-                    PropPanel, CodeDrawer, Rail, …), zustand store.ts, shadcn ui/
-  ../bin/praxis.mjs the `praxis` CLI (launch + `--update`); owns the update
-                    sequence (git pull + bun install + build). ../install.sh boots it.
-test/             hand-rolled .mjs tests + fixtures/ + artifacts/ (PNGs, gitignored)
-docs/             TASKS (next) / PROGRESS (log + rationale) / DESIGN (stamp spec)
-```
+Trezi **owns** the target's dev-server lifecycle: never run the target's `dev`
+yourself. Preview messages are untrusted; keep the view-identity allowlist.
 
-The concurrency/landing contract is documented in `docs/WORKTREES.md`; provider
-capability differences are documented in `docs/PROVIDERS.md`. Keep both current when
-changing lifecycle or backend behavior.
-Project-memory persistence and Main-context reset are documented in `docs/MEMORY.md`.
+## Git and worktrees
 
-- **Lifecycle:** `install.sh` (curl one-liner) clones to `~/.praxis`, builds, and
-  puts `praxis` on PATH. `praxis` launches the built app; `praxis --update` pulls
-  + rebuilds. The app checks its git remote in the background (`update-ipc.ts`)
-  and offers an in-app "Update & Restart" that runs `praxis --update` and relaunches.
+- Commit small, focused changes with a Co-Authored-By trailer. Commits are
+  pre-authorized; do not ask again before staging/committing in-scope work.
+- In user repos, the Swift repository owner performs every Trezi Git effect. Chats
+  run in per-chat worktrees (`trezi/chat-<id>`), merged and committed to the live
+  tree once per turn; the preview always serves the live checkout.
+- Exclude worktree `node_modules` (each worktree's own clone, never a link to the
+  live one) and the `.env` symlink by name, never via `.gitignore`.
+- "What did this session change?" compares against the merge base with the default
+  branch, not `HEAD`.
+- Tool callbacks get the worktree as `root`; persist state under
+  `SpawnContext.liveRoot`.
+- Details and the reasons: [git-worktrees](docs/agent-guide/git-worktrees.md),
+  `docs/WORKTREES.md`.
 
-- **Browser mode:** `praxis serve <repo>` runs the same Electron main bundle without
-  a desktop window. `web-server.ts` exposes root-scoped HTTP commands + WebSocket
-  events, while `web-api.ts` installs the browser-side `PraxisApi`. The untrusted
-  project preview is proxied onto a separate loopback origin and embedded as a
-  sandboxed iframe with a token-and-origin-checked `postMessage` selection bridge.
-  This is the mode-1 foundation; remaining native editing-tool parity is tracked in
-  `docs/TASKS.md` and the architecture/security plan is `docs/BROWSER.md`.
-  `--remote` keeps both services loopback-bound while Tailscale Serve publishes
-  separate tailnet-only HTTPS origins; it uses a single-use pairing URL, secure
-  session cookie, monotonic event replay, and graceful route cleanup.
+## Versioning and changelog
 
-- The chat runs in `main` via provider SDKs; output streams over `agent:*` IPC
-  into the zustand store. The store is the seam between transport and UI.
-- Praxis **owns** the dev-server lifecycle of the target repo (never run the
-  target's `dev` manually); it's killed on app quit.
+- `package.json` `version` is the one version source (SemVer; before 1.0, minor =
+  features or breaking changes, patch = fixes). The build stamps it, the commit count
+  of HEAD as the build number and the short sha into `Trezi.app`, its XPC service and
+  the backend/provider-helper bundles (`scripts/version.mjs`). Never hand-edit it.
+- **Every ticket that changes user-visible behaviour adds one line under
+  `## [Unreleased]` in `CHANGELOG.md`** (Keep a Changelog: Added / Changed / Fixed /
+  Removed). Internal-only changes add none. The file union-merges like the logs.
+- Releases are cut by a maintainer on a clean main with `bun run release
+  <major|minor|patch>`: it bumps, moves Unreleased into a dated section, commits
+  `Release vX.Y.Z` and tags `vX.Y.Z`, and never pushes. Agents do not run it.
+- CI fails on a non-SemVer version or a missing Unreleased section
+  (`scripts/check-version.mjs`).
 
-**Why it's built this way (non-obvious choices):**
-- **Agent core = SDK in-process** (not ACP/subprocess): the product's custom
-  tools (select element → edit props → annotate → PR) are wired to the renderer
-  and need in-process SDK tools.
-- **Electron preview = native `WebContentsView`, not an iframe**: so a preload can
-  be injected into the previewed app for element selection. Browser mode instead
-  uses a separate-origin gateway + injected `postMessage` bridge in a sandboxed
-  iframe.
-- **Prop editing is hybrid**: simple literals splice straight into source (instant
-  HMR); complex/expression values fall back to the agent. React and Svelte have
-  separate engines because their ASTs differ; selection/tokens are framework-
-  agnostic (they only need the `data-praxis-source` stamp — see `docs/DESIGN.md`).
+## Conventions (summary)
 
-## Conventions
+Full list: [conventions](docs/agent-guide/conventions.md). Hard-won traps:
+[gotchas](docs/agent-guide/gotchas.md) — read before debugging Stop/interrupt,
+XPC/quit, shortcuts, Styles, control panels or model lists.
 
-- **Tailwind CSS v4 + shadcn/ui** in the renderer (decision reversed from
-  plain-CSS on 2026-06-26). Legacy custom-property CSS still lives in
-  `renderer/src/styles.css`; prefer Tailwind utilities + shadcn primitives for
-  new UI, and migrate legacy rules out of styles.css when you touch them.
-- The Codex Agent SDK is **ESM-only** — `main` is CJS, so it's loaded via
-  dynamic `import()` in `agent.ts`/`backends/` (never static/`require`).
-- All cross-process types go in `src/shared/api.ts`; keep `PraxisApi`, the
-  preload bridge, and the ipcMain handlers in sync — a change to one is a
-  change to all three.
-- New test = new `.mjs` in `test/` **plus** its name in the right tier array in
-  `test/run.mjs` (`unit` / `electron` / `live`). `bun run test` and `verify`
-  dispatch through the runner — don't hand-edit `&&` chains.
-- Keep files under ~500 lines; extract instead of appending to `App.tsx`,
-  `store.ts`, or `styles.css` (already oversized — see `docs/TASKS.md`).
-- Auth is per-user at runtime; never commit secrets. Nothing sensitive in-repo.
-- Commit in small, focused commits with the Co-Authored-By trailer.
-- The user has pre-authorized commits for this project; do not ask for separate
-  confirmation before staging and committing completed, in-scope work.
+- Keep files under ~500 lines. SDKs are ESM-only in a CJS bundle: dynamic `import()`.
+- New `.mjs` test → register it in its tier in `test/run.mjs`.
+- Never commit secrets; a connection's API key never leaves main (UI sees `hasKey`).
+- Agents cannot write a target's `.trezi/` (or the [legacy](docs/agent-guide/legacy-names.md) sidecar folders).
+- Keep `docs/WORKTREES.md`, `docs/PROVIDERS.md` and `docs/MEMORY.md` current.
 
-## Gotchas (hard-won — read before debugging these areas)
+## Legacy names
 
-- **ESM/CJS**: the Agent SDK is ESM-only, `main` is CJS → dynamic `import()`
-  only, never static/`require`.
-- **The preview `WebContentsView` is a separate CDP target** — not in renderer
-  page screenshots (use `capturePage()`). The divider uses pointer capture to
-  keep resizing the live view throughout a drag. Drive it from a test via the
-  main process
-  (`webContents.executeJavaScript`), as `test/select-element.mjs` does.
-- **A renderer DOM panel can't float *above* the native preview** (native views
-  render over the page). Panels reserve a strip instead, shrinking the native
-  bounds via `usePanelInset`: the prop panel takes the **right** edge, the v9
-  code drawer the **bottom**.
-- **The preview overlay preload is sandboxed** — only `ipcRenderer` (no Node, no
-  contextBridge), shares the page DOM via a `pointer-events:none` shadow root,
-  and re-runs on every navigation, so `main` re-sends the current select-mode on
-  `did-finish-load`.
-- **Prop editing is gated** on `PropInspection.hasSchema` (a resolved
-  react-docgen/svelte schema). Unready components are prompt-only; the on-open
-  setup offer instruments them.
-- **Dev CDP**: `bun run dev` opens `--remote-debugging-port` 9222 (override
-  `PRAXIS_DEBUG_PORT`; dev-only). Inspect either target via Chrome
-  `chrome://inspect#devices`; Playwright's `_electron` still can't reach the
-  preview as a page target. On Chrome 111+ attach failures, add
-  `app.commandLine.appendSwitch('remote-allow-origins', 'devtools://devtools')`.
-- **bun blocks postinstall for untrusted deps** — `electron`/`esbuild` are in
-  `package.json#trustedDependencies` so their binaries install.
-- **The agent is denied writes under a target repo's `.praxis/` (and legacy `.dsgn/`)** (annotations +
-  scaffolded instrumentation live there).
+Trezi had earlier names. They survive only as read-compatibility shims. Every shim
+and every file that carries one is listed in one place:
+[legacy names](docs/agent-guide/legacy-names.md). `test/legacy-names-audit.mjs`
+enforces that list. Projects that still use the old setup names are migrated once
+on open: automatically on a clean Git tree, otherwise only after the user confirms.
+The migration never commits.

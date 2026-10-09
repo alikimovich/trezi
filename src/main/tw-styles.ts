@@ -31,7 +31,10 @@ function parseMs(value: string): number | null {
 /** Format `value` as an arbitrary-value class. Tailwind arbitrary values must
  * contain no spaces: drop them around commas, underscore any that remain. */
 function arbitrary(prefix: string, value: string): string | null {
-  const v = value.trim().replace(/\s*,\s*/g, ',').replace(/\s+/g, '_')
+  const v = value
+    .trim()
+    .replace(/\s*,\s*/g, ',')
+    .replace(/\s+/g, '_')
   if (!v || /[\]'"`;{}]/.test(v)) return null
   return `${prefix}-[${v}]`
 }
@@ -39,37 +42,82 @@ function arbitrary(prefix: string, value: string): string | null {
 // --- named scales (Tailwind v4 defaults) --------------------------------------
 
 const SPACING_PREFIX: Record<string, string> = {
-  padding: 'p', 'padding-top': 'pt', 'padding-right': 'pr',
-  'padding-bottom': 'pb', 'padding-left': 'pl',
-  margin: 'm', 'margin-top': 'mt', 'margin-right': 'mr',
-  'margin-bottom': 'mb', 'margin-left': 'ml',
-  gap: 'gap', 'column-gap': 'gap-x', 'row-gap': 'gap-y'
+  padding: 'p',
+  'padding-top': 'pt',
+  'padding-right': 'pr',
+  'padding-bottom': 'pb',
+  'padding-left': 'pl',
+  margin: 'm',
+  'margin-top': 'mt',
+  'margin-right': 'mr',
+  'margin-bottom': 'mb',
+  'margin-left': 'ml',
+  gap: 'gap',
+  'column-gap': 'gap-x',
+  'row-gap': 'gap-y'
 }
 const RADIUS_PX = new Map([
-  [0, 'none'], [2, 'xs'], [4, 'sm'], [6, 'md'], [8, 'lg'],
-  [12, 'xl'], [16, '2xl'], [24, '3xl'], [9999, 'full']
+  [0, 'none'],
+  [2, 'xs'],
+  [4, 'sm'],
+  [6, 'md'],
+  [8, 'lg'],
+  [12, 'xl'],
+  [16, '2xl'],
+  [24, '3xl'],
+  [9999, 'full']
 ])
 const FONT_SIZE_PX = new Map([
-  [12, 'xs'], [14, 'sm'], [16, 'base'], [18, 'lg'], [20, 'xl'], [24, '2xl'], [30, '3xl'],
-  [36, '4xl'], [48, '5xl'], [60, '6xl'], [72, '7xl'], [96, '8xl'], [128, '9xl']
+  [12, 'xs'],
+  [14, 'sm'],
+  [16, 'base'],
+  [18, 'lg'],
+  [20, 'xl'],
+  [24, '2xl'],
+  [30, '3xl'],
+  [36, '4xl'],
+  [48, '5xl'],
+  [60, '6xl'],
+  [72, '7xl'],
+  [96, '8xl'],
+  [128, '9xl']
 ])
 const FONT_WEIGHTS = new Map([
-  [100, 'thin'], [200, 'extralight'], [300, 'light'], [400, 'normal'], [500, 'medium'],
-  [600, 'semibold'], [700, 'bold'], [800, 'extrabold'], [900, 'black']
+  [100, 'thin'],
+  [200, 'extralight'],
+  [300, 'light'],
+  [400, 'normal'],
+  [500, 'medium'],
+  [600, 'semibold'],
+  [700, 'bold'],
+  [800, 'extrabold'],
+  [900, 'black']
 ])
 const LINE_HEIGHT_KEYWORDS = new Map([
-  [1, 'none'], [1.25, 'tight'], [1.375, 'snug'], [1.5, 'normal'], [1.625, 'relaxed'], [2, 'loose']
+  [1, 'none'],
+  [1.25, 'tight'],
+  [1.375, 'snug'],
+  [1.5, 'normal'],
+  [1.625, 'relaxed'],
+  [2, 'loose']
 ])
 const TRACKING_EM = new Map([
-  [-0.05, 'tighter'], [-0.025, 'tight'], [0, 'normal'],
-  [0.025, 'wide'], [0.05, 'wider'], [0.1, 'widest']
+  [-0.05, 'tighter'],
+  [-0.025, 'tight'],
+  [0, 'normal'],
+  [0.025, 'wide'],
+  [0.05, 'wider'],
+  [0.1, 'widest']
 ])
 const TIME_SNAP_MS = new Set([75, 100, 150, 200, 300, 500, 700, 1000])
 const EASE_KEYWORDS = new Map([
   ['linear', 'ease-linear'],
-  ['ease-in', 'ease-in'], ['cubic-bezier(0.4,0,1,1)', 'ease-in'],
-  ['ease-out', 'ease-out'], ['cubic-bezier(0,0,0.2,1)', 'ease-out'],
-  ['ease-in-out', 'ease-in-out'], ['cubic-bezier(0.4,0,0.2,1)', 'ease-in-out']
+  ['ease-in', 'ease-in'],
+  ['cubic-bezier(0.4,0,1,1)', 'ease-in'],
+  ['ease-out', 'ease-out'],
+  ['cubic-bezier(0,0,0.2,1)', 'ease-out'],
+  ['ease-in-out', 'ease-in-out'],
+  ['cubic-bezier(0.4,0,0.2,1)', 'ease-in-out']
 ])
 
 /**
@@ -86,6 +134,8 @@ export function tailwindClassFor(prop: string, value: string): string | null {
     return arbitrary(spacing, value)
   }
   switch (prop) {
+    case 'box-shadow':
+      return value.trim() === 'none' ? 'shadow-none' : arbitrary('shadow', value)
     case 'border-radius': {
       const name = v && (v.unit === 'px' || v.n === 0) ? RADIUS_PX.get(v.n) : undefined
       return name ? `rounded-${name}` : arbitrary('rounded', value)
@@ -105,7 +155,14 @@ export function tailwindClassFor(prop: string, value: string): string | null {
       return name ? `text-${name}` : arbitrary('text', value)
     }
     case 'font-weight': {
-      const n = value.trim() === 'normal' ? 400 : value.trim() === 'bold' ? 700 : v?.unit === '' ? v.n : null
+      const n =
+        value.trim() === 'normal'
+          ? 400
+          : value.trim() === 'bold'
+            ? 700
+            : v?.unit === ''
+              ? v.n
+              : null
       const name = n != null ? FONT_WEIGHTS.get(n) : undefined
       return name ? `font-${name}` : arbitrary('font', value)
     }
@@ -135,12 +192,21 @@ export function tailwindClassFor(prop: string, value: string): string | null {
     case 'transition-property': {
       const norm = value.trim().toLowerCase()
       const direct: Record<string, string> = {
-        none: 'transition-none', all: 'transition-all', opacity: 'transition-opacity',
-        transform: 'transition-transform', 'box-shadow': 'transition-shadow'
+        none: 'transition-none',
+        all: 'transition-all',
+        opacity: 'transition-opacity',
+        transform: 'transition-transform',
+        'box-shadow': 'transition-shadow'
       }
       if (direct[norm]) return direct[norm]
-      const items = norm.split(',').map((s) => s.trim()).filter(Boolean)
-      if (items.length && items.every((i) => /(^|-)color$/.test(i) || i === 'fill' || i === 'stroke')) {
+      const items = norm
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (
+        items.length &&
+        items.every((i) => /(^|-)color$/.test(i) || i === 'fill' || i === 'stroke')
+      ) {
         return 'transition-colors'
       }
       return arbitrary('transition', value)
@@ -177,13 +243,16 @@ const NAMED_COLORS = CSS_NAMED_COLORS
  * (`text-[color:red]`) and bare CSS color keywords (`text-[transparent]`). */
 function isColorInner(inner: string): boolean {
   return (
-    COLOR_VALUE_RE.test(inner) || inner.startsWith('color:') || NAMED_COLORS.has(inner.toLowerCase())
+    COLOR_VALUE_RE.test(inner) ||
+    inner.startsWith('color:') ||
+    NAMED_COLORS.has(inner.toLowerCase())
   )
 }
 const SCALE_SUFFIX_RE = /^(?:\d+(?:\.\d+)?|px|auto|full)$/
 const RADIUS_CLASS_RE = /^rounded(?:-(?:none|xs|sm|md|lg|xl|2xl|3xl|full))?$/
 const FONT_SIZE_CLASS_RE = /^text-(?:xs|sm|base|lg|xl|[2-9]xl)$/
-const FONT_WEIGHT_CLASS_RE = /^font-(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/
+const FONT_WEIGHT_CLASS_RE =
+  /^font-(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/
 const TRANSITION_CLASS_RE = /^transition(?:-(?:all|colors|opacity|transform|shadow|none))?$/
 
 /** Anything after `prefix-` (named scale or arbitrary) counts as the family —
@@ -203,6 +272,13 @@ function isFamilyMatch(prop: string, cls: string): boolean {
     return SCALE_SUFFIX_RE.test(suffix) || /^\[.+\]$/.test(suffix)
   }
   switch (prop) {
+    case 'box-shadow': {
+      const inner = arbitraryInner(cls, 'shadow')
+      return (
+        /^shadow(?:-(?:none|2xs|xs|sm|md|lg|xl|2xl|inner))?$/.test(cls) ||
+        (inner != null && !isColorInner(inner))
+      )
+    }
     case 'border-radius':
       return RADIUS_CLASS_RE.test(cls) || arbitraryInner(cls, 'rounded') != null
     case 'color': {
@@ -307,10 +383,34 @@ export function rewriteClassListToken(
 // --- heuristic -----------------------------------------------------------------
 
 const STANDALONE_UTILITIES = new Set([
-  'flex', 'grid', 'block', 'inline', 'inline-block', 'inline-flex', 'hidden', 'relative',
-  'absolute', 'fixed', 'sticky', 'static', 'container', 'transition', 'rounded', 'border',
-  'shadow', 'ring', 'italic', 'underline', 'truncate', 'uppercase', 'lowercase', 'capitalize',
-  'grow', 'shrink', 'sr-only', 'antialiased'
+  'flex',
+  'grid',
+  'block',
+  'inline',
+  'inline-block',
+  'inline-flex',
+  'hidden',
+  'relative',
+  'absolute',
+  'fixed',
+  'sticky',
+  'static',
+  'container',
+  'transition',
+  'rounded',
+  'border',
+  'shadow',
+  'ring',
+  'italic',
+  'underline',
+  'truncate',
+  'uppercase',
+  'lowercase',
+  'capitalize',
+  'grow',
+  'shrink',
+  'sr-only',
+  'antialiased'
 ])
 const NUMERIC_FAMILY_RE =
   /^-?(?:p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|w|h|z|top|right|bottom|left|inset|inset-x|inset-y|size|space-x|space-y|translate-x|translate-y|scale|rotate|duration|delay|opacity|leading|order|basis|col-span|row-span)-(?:\d+(?:\.\d+)?|px|auto|full|screen|none|\[.+\])$/
@@ -323,7 +423,11 @@ export function looksTailwind(classes: string[]): boolean {
   for (const raw of classes) {
     let cls = raw
     while (isVariant(cls)) cls = cls.slice(cls.indexOf(':') + 1)
-    if (STANDALONE_UTILITIES.has(cls) || NUMERIC_FAMILY_RE.test(cls) || UTILITY_PREFIX_RE.test(cls)) {
+    if (
+      STANDALONE_UTILITIES.has(cls) ||
+      NUMERIC_FAMILY_RE.test(cls) ||
+      UTILITY_PREFIX_RE.test(cls)
+    ) {
       return true
     }
   }

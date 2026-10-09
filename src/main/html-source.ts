@@ -2,7 +2,7 @@
  * Serve-time source stamping + text splicing for vanilla HTML projects (Tier 2
  * of the vanilla-JS editing work — see docs/PROGRESS.md).
  *
- * Framework projects get `data-praxis-source="path:line:col"` injected by a
+ * Framework projects get `data-trezi-source="path:line:col"` injected by a
  * build-time plugin so the preview can map a clicked element back to source. A
  * static site has no build step — but the static server serves the on-disk file
  * verbatim, so the DOM→source map is nearly free: parse the HTML with location
@@ -72,7 +72,7 @@ const textEscape = (v: string): string =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
- * Insert `data-praxis-source="relpath:line:col"` into every stampable element's
+ * Insert `data-trezi-source="relpath:line:col"` into every stampable element's
  * start tag. The stamp's line:col is the element's own position in `html`, so
  * `spliceHtmlText` (and the code drawer) can find it again. Returns the original
  * HTML unchanged if it can't be parsed.
@@ -94,7 +94,8 @@ export async function stampHtml(html: string, relpath: string): Promise<string> 
     if (SKIP_TAGS.has(tag)) return
     const st = el.sourceCodeLocation?.startTag
     if (!st) return // auto-inserted / unlocatable element
-    if (el.attrs?.some((a) => a.name === 'data-praxis-source')) return // already stamped
+    if (el.attrs?.some((a) => a.name === 'data-trezi-source' || a.name === 'data-praxis-source'))
+      return // already stamped
 
     // Land the attribute right after the tag name: `<tag| ...>`. Scan the raw
     // source for the name rather than trusting tagName's case/length.
@@ -102,7 +103,7 @@ export async function stampHtml(html: string, relpath: string): Promise<string> 
     const name = /^[^\s/>]+/.exec(html.slice(afterLt, st.endOffset))?.[0] ?? ''
     const at = afterLt + name.length
     const value = `${relpath}:${st.startLine}:${st.startCol}`
-    inserts.push({ at, text: ` data-praxis-source="${attrEscape(value)}"` })
+    inserts.push({ at, text: ` data-trezi-source="${attrEscape(value)}"` })
   })
 
   inserts.sort((a, b) => b.at - a.at)

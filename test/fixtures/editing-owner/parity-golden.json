@@ -1,0 +1,1424 @@
+{
+ "script": [
+  [
+   "open",
+   []
+  ],
+  [
+   "define",
+   {
+    "id": "id1",
+    "revision": 1,
+    "turn": 1,
+    "replacing": false
+   }
+  ],
+  [
+   "busy define",
+   "busy",
+   "An island operation is already in progress."
+  ],
+  [
+   "busy command",
+   "busy",
+   "Island is unavailable or busy."
+  ],
+  [
+   "commit",
+   [
+    {
+     "version": 1,
+     "id": "id1",
+     "revision": 1,
+     "turn": 1,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "one",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "one",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "waiting",
+     "initial": {
+      "x": 0
+     },
+     "origin": "T1"
+    }
+   ]
+  ],
+  [
+   "replace (same turn: same id, next revision)",
+   {
+    "id": "id1",
+    "revision": 2,
+    "turn": 1,
+    "replacing": true
+   }
+  ],
+  [
+   "commit replacement",
+   [
+    {
+     "version": 1,
+     "id": "id1",
+     "revision": 2,
+     "turn": 1,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "two",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "two",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "jev",
+     "status": "waiting",
+     "initial": {
+      "x": 0.5
+     },
+     "fallback": "fallback note",
+     "origin": "T1"
+    }
+   ]
+  ],
+  [
+   "stale definition revision",
+   "conflict",
+   "Island revision changed. Read it before updating."
+  ],
+  [
+   "not landed",
+   "conflict",
+   "Source has not landed."
+  ],
+  [
+   "another turn’s late terminal activates nothing",
+   {
+    "records": [
+     {
+      "version": 1,
+      "id": "id1",
+      "revision": 2,
+      "turn": 1,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "two",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "two",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "jev",
+      "status": "waiting",
+      "initial": {
+       "x": 0.5
+      },
+      "fallback": "fallback note",
+      "origin": "T1"
+     }
+    ],
+    "cancelled": false
+   }
+  ],
+  [
+   "its own turn lands",
+   {
+    "records": [
+     {
+      "version": 1,
+      "id": "id1",
+      "revision": 2,
+      "turn": 1,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "two",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "two",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "jev",
+      "status": "ready",
+      "initial": {
+       "x": 0.5
+      },
+      "fallback": "fallback note",
+      "origin": "T1"
+     }
+    ],
+    "cancelled": false
+   }
+  ],
+  [
+   "c1",
+   {
+    "expected": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+   }
+  ],
+  [
+   "one command at a time",
+   "busy",
+   "Island is unavailable or busy."
+  ],
+  [
+   "c2 (reordered frame)",
+   {
+    "expected": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+   }
+  ],
+  [
+   "c3",
+   {
+    "expected": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+   }
+  ],
+  [
+   "c4 (batch over: external bytes not blessed)",
+   {
+    "expected": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+   }
+  ],
+  [
+   "undo group",
+   {
+    "expected": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+    "group": "g1"
+   }
+  ],
+  [
+   "undo twice",
+   "notFound",
+   "No edit from this island is available to undo."
+  ],
+  [
+   "reset initial",
+   {
+    "expected": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+    "initial": {
+     "x": 0.5
+    }
+   }
+  ],
+  [
+   "wrong ticket",
+   "notFound",
+   "No such island command."
+  ],
+  [
+   "reload",
+   {
+    "expected": "19581e27de7ced00ff1ce50b2047e7a567c76b1cbaebabe5ef03f7c3017bb5b7"
+   }
+  ],
+  [
+   "stale island revision",
+   "conflict",
+   "Island changed. Reload its controls."
+  ],
+  [
+   "later turn gets a fresh island",
+   {
+    "id": "id2",
+    "revision": 1,
+    "turn": 2,
+    "replacing": false
+   }
+  ],
+  [
+   "commit later",
+   [
+    {
+     "version": 1,
+     "id": "id1",
+     "revision": 2,
+     "turn": 1,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "two",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "two",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "jev",
+     "status": "ready",
+     "initial": {
+      "x": 0.5
+     },
+     "fallback": "fallback note",
+     "origin": "T1"
+    },
+    {
+     "version": 1,
+     "id": "id2",
+     "revision": 1,
+     "turn": 2,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "three",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "three",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "waiting",
+     "initial": {},
+     "origin": "T2"
+    }
+   ]
+  ],
+  [
+   "stopped turn",
+   {
+    "records": [
+     {
+      "version": 1,
+      "id": "id1",
+      "revision": 2,
+      "turn": 1,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "two",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "two",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "jev",
+      "status": "ready",
+      "initial": {
+       "x": 0.5
+      },
+      "fallback": "fallback note",
+      "origin": "T1"
+     },
+     {
+      "version": 1,
+      "id": "id2",
+      "revision": 1,
+      "turn": 2,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "three",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "three",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "agent",
+      "status": "unavailable",
+      "initial": {},
+      "origin": "T2"
+     }
+    ],
+    "cancelled": true
+   }
+  ],
+  [
+   "commit after its turn ended",
+   "conflict",
+   "Chat closed or turn finished during composition."
+  ],
+  [
+   "duplicate success does not revive",
+   {
+    "records": [
+     {
+      "version": 1,
+      "id": "id1",
+      "revision": 2,
+      "turn": 1,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "two",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "two",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "jev",
+      "status": "ready",
+      "initial": {
+       "x": 0.5
+      },
+      "fallback": "fallback note",
+      "origin": "T1"
+     },
+     {
+      "version": 1,
+      "id": "id2",
+      "revision": 1,
+      "turn": 2,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "three",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "three",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "agent",
+      "status": "unavailable",
+      "initial": {},
+      "origin": "T2"
+     }
+    ],
+    "cancelled": false
+   }
+  ],
+  [
+   "origin-less",
+   {
+    "records": [
+     {
+      "version": 1,
+      "id": "id1",
+      "revision": 2,
+      "turn": 1,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "two",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "two",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "jev",
+      "status": "ready",
+      "initial": {
+       "x": 0.5
+      },
+      "fallback": "fallback note",
+      "origin": "T1"
+     },
+     {
+      "version": 1,
+      "id": "id2",
+      "revision": 1,
+      "turn": 2,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "three",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "three",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "agent",
+      "status": "unavailable",
+      "initial": {},
+      "origin": "T2"
+     },
+     {
+      "version": 1,
+      "id": "id4",
+      "revision": 1,
+      "turn": 3,
+      "manifest": {
+       "file": "shadow.js",
+       "component": "Card",
+       "title": "five",
+       "params": [
+        {
+         "id": "x",
+         "label": "x",
+         "kind": "number",
+         "apply": {
+          "strategy": "literal",
+          "anchor": "const X = "
+         }
+        }
+       ]
+      },
+      "blocks": [
+       {
+        "id": "main",
+        "title": "five",
+        "kind": "group",
+        "params": [
+         "x"
+        ]
+       }
+      ],
+      "engine": "agent",
+      "status": "ready",
+      "initial": {}
+     }
+    ],
+    "cancelled": false
+   }
+  ],
+  [
+   "another chat on the same history sees it",
+   [
+    {
+     "version": 1,
+     "id": "id1",
+     "revision": 2,
+     "turn": 1,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "two",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "two",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "jev",
+     "status": "ready",
+     "initial": {
+      "x": 0.5
+     },
+     "fallback": "fallback note",
+     "origin": "T1"
+    },
+    {
+     "version": 1,
+     "id": "id2",
+     "revision": 1,
+     "turn": 2,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "three",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "three",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "unavailable",
+     "initial": {},
+     "origin": "T2"
+    },
+    {
+     "version": 1,
+     "id": "id4",
+     "revision": 1,
+     "turn": 3,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "five",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "five",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "ready",
+     "initial": {}
+    }
+   ]
+  ],
+  [
+   "B follows A’s write",
+   [
+    {
+     "version": 1,
+     "id": "id1",
+     "revision": 2,
+     "turn": 1,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "two",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "two",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "jev",
+     "status": "ready",
+     "initial": {
+      "x": 0.5
+     },
+     "fallback": "fallback note",
+     "origin": "T1"
+    },
+    {
+     "version": 1,
+     "id": "id2",
+     "revision": 1,
+     "turn": 2,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "three",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "three",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "unavailable",
+     "initial": {},
+     "origin": "T2"
+    },
+    {
+     "version": 1,
+     "id": "id4",
+     "revision": 1,
+     "turn": 3,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "five",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "five",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "ready",
+     "initial": {}
+    },
+    {
+     "version": 1,
+     "id": "id5",
+     "revision": 1,
+     "turn": 4,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "six",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "six",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "waiting",
+     "initial": {},
+     "origin": "T4"
+    }
+   ]
+  ],
+  [
+   "reopen: waiting lost its turn",
+   [
+    {
+     "version": 1,
+     "id": "id1",
+     "revision": 2,
+     "turn": 1,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "two",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "two",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "jev",
+     "status": "ready",
+     "initial": {
+      "x": 0.5
+     },
+     "fallback": "fallback note",
+     "origin": "T1"
+    },
+    {
+     "version": 1,
+     "id": "id2",
+     "revision": 1,
+     "turn": 2,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "three",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "three",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "unavailable",
+     "initial": {},
+     "origin": "T2"
+    },
+    {
+     "version": 1,
+     "id": "id4",
+     "revision": 1,
+     "turn": 3,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "five",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "five",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "ready",
+     "initial": {}
+    },
+    {
+     "version": 1,
+     "id": "id5",
+     "revision": 1,
+     "turn": 4,
+     "manifest": {
+      "file": "shadow.js",
+      "component": "Card",
+      "title": "six",
+      "params": [
+       {
+        "id": "x",
+        "label": "x",
+        "kind": "number",
+        "apply": {
+         "strategy": "literal",
+         "anchor": "const X = "
+        }
+       }
+      ]
+     },
+     "blocks": [
+      {
+       "id": "main",
+       "title": "six",
+       "kind": "group",
+       "params": [
+        "x"
+       ]
+      }
+     ],
+     "engine": "agent",
+     "status": "unavailable",
+     "initial": {},
+     "origin": "T4"
+    }
+   ]
+  ],
+  [
+   "closed chat",
+   "notFound",
+   "Island is unavailable. Reopen this chat."
+  ],
+  [
+   "history bytes",
+   "[{\"version\":1,\"id\":\"id1\",\"revision\":2,\"turn\":1,\"manifest\":{\"file\":\"shadow.js\",\"component\":\"Card\",\"title\":\"two\",\"params\":[{\"id\":\"x\",\"label\":\"x\",\"kind\":\"number\",\"apply\":{\"strategy\":\"literal\",\"anchor\":\"const X = \"}}]},\"blocks\":[{\"id\":\"main\",\"title\":\"two\",\"kind\":\"group\",\"params\":[\"x\"]}],\"engine\":\"jev\",\"status\":\"ready\",\"initial\":{\"x\":0.5},\"fallback\":\"fallback note\",\"origin\":\"T1\"},{\"version\":1,\"id\":\"id2\",\"revision\":1,\"turn\":2,\"manifest\":{\"file\":\"shadow.js\",\"component\":\"Card\",\"title\":\"three\",\"params\":[{\"id\":\"x\",\"label\":\"x\",\"kind\":\"number\",\"apply\":{\"strategy\":\"literal\",\"anchor\":\"const X = \"}}]},\"blocks\":[{\"id\":\"main\",\"title\":\"three\",\"kind\":\"group\",\"params\":[\"x\"]}],\"engine\":\"agent\",\"status\":\"unavailable\",\"initial\":{},\"origin\":\"T2\"},{\"version\":1,\"id\":\"id4\",\"revision\":1,\"turn\":3,\"manifest\":{\"file\":\"shadow.js\",\"component\":\"Card\",\"title\":\"five\",\"params\":[{\"id\":\"x\",\"label\":\"x\",\"kind\":\"number\",\"apply\":{\"strategy\":\"literal\",\"anchor\":\"const X = \"}}]},\"blocks\":[{\"id\":\"main\",\"title\":\"five\",\"kind\":\"group\",\"params\":[\"x\"]}],\"engine\":\"agent\",\"status\":\"ready\",\"initial\":{}},{\"version\":1,\"id\":\"id5\",\"revision\":1,\"turn\":4,\"manifest\":{\"file\":\"shadow.js\",\"component\":\"Card\",\"title\":\"six\",\"params\":[{\"id\":\"x\",\"label\":\"x\",\"kind\":\"number\",\"apply\":{\"strategy\":\"literal\",\"anchor\":\"const X = \"}}]},\"blocks\":[{\"id\":\"main\",\"title\":\"six\",\"kind\":\"group\",\"params\":[\"x\"]}],\"engine\":\"agent\",\"status\":\"waiting\",\"initial\":{},\"origin\":\"T4\"}]"
+  ],
+  [
+   "nav awaits its turn",
+   false
+  ],
+  [
+   "another turn lands",
+   false
+  ],
+  [
+   "take while awaiting",
+   null
+  ],
+  [
+   "state",
+   [
+    {
+     "chat": "N",
+     "root": "<root>",
+     "path": "/work/a?view=full#x",
+     "turn": "T1",
+     "awaiting": true
+    }
+   ]
+  ],
+  [
+   "its turn lands",
+   true
+  ],
+  [
+   "take",
+   {
+    "root": "<root>",
+    "path": "/work/a?view=full#x"
+   }
+  ],
+  [
+   "taken once",
+   null
+  ],
+  [
+   "failed turn drops",
+   [
+    false,
+    false,
+    null
+   ]
+  ],
+  [
+   "newer turn drops",
+   [
+    false,
+    false,
+    false,
+    []
+   ]
+  ],
+  [
+   "idle request opens now",
+   [
+    true,
+    false,
+    null
+   ]
+  ],
+  [
+   "bad path //evil.test/",
+   "invalidRequest",
+   "Invalid preview path."
+  ],
+  [
+   "bad path https://x.test/",
+   "invalidRequest",
+   "Invalid preview path."
+  ],
+  [
+   "bad path /a b",
+   "invalidRequest",
+   "Invalid preview path."
+  ],
+  [
+   "bad path /a\\b",
+   "invalidRequest",
+   "Invalid preview path."
+  ],
+  [
+   "bad path relative",
+   "invalidRequest",
+   "Invalid preview path."
+  ]
+ ],
+ "sidecars": [
+  [
+   "create",
+   {
+    "ok": true,
+    "hash": "50208d78350a7a160dec59a82df1499b6ca7da33e54c5eb11c97e342118e68bb"
+   }
+  ],
+  [
+   "create again is stale",
+   {
+    "ok": false,
+    "conflict": true
+   }
+  ],
+  [
+   "bound update",
+   {
+    "ok": true,
+    "hash": "703108c0297fc2097b6eb3a24bba4936b93a53cf263b6811a8b5d5d127498665"
+   }
+  ],
+  [
+   "hand edit refused",
+   {
+    "ok": false,
+    "conflict": true
+   }
+  ],
+  [
+   "hand edit kept",
+   "{\"hand\":\"edit\"}\n"
+  ],
+  [
+   "not a sidecar",
+   "invalidRequest"
+  ],
+  [
+   "notes create",
+   {
+    "ok": true,
+    "hash": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+   }
+  ],
+  [
+   "notes bound update",
+   {
+    "ok": true,
+    "hash": "23a85ce60be7e2545957b5abdd04ce5b66cecc771cb40f8472c3fe22f024ec8a"
+   }
+  ],
+  [
+   "notes stale",
+   {
+    "ok": false,
+    "conflict": true
+   }
+  ],
+  [
+   "tokens create-only",
+   {
+    "ok": true,
+    "hash": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+   }
+  ],
+  [
+   "tokens exists",
+   {
+    "ok": false,
+    "conflict": true
+   }
+  ],
+  [
+   "notes kept",
+   "[{\"id\":\"a1\",\"text\":\"x\"}]\n"
+  ],
+  [
+   "symlinked file",
+   "unauthorized"
+  ],
+  [
+   "symlinked folder",
+   "unauthorized"
+  ],
+  [
+   "oversized",
+   "invalidRequest"
+  ]
+ ],
+ "project": [
+  [
+   "migrate",
+   []
+  ],
+  [
+   "migrated",
+   [
+    [
+     "annotations.json",
+     "dsgn-notes"
+    ],
+    [
+     "nested",
+     "dir"
+    ],
+    [
+     "notes.json",
+     "praxis-notes"
+    ],
+    [
+     "tokens.json",
+     "praxis-tokens"
+    ]
+   ],
+   [
+    [
+     "other.json",
+     "stays"
+    ],
+    [
+     "tokens.json",
+     "dsgn-tokens"
+    ]
+   ],
+   [
+    [
+     "nested",
+     "dir"
+    ],
+    [
+     "notes.json",
+     "praxis-notes"
+    ],
+    [
+     "tokens.json",
+     "praxis-tokens"
+    ]
+   ]
+  ],
+  [
+   "migrate again",
+   []
+  ],
+  [
+   "migrate collision",
+   [
+    "<base>/live/.praxis/notes.json"
+   ]
+  ],
+  [
+   "migrate linked .trezi",
+   "invalidRequest"
+  ],
+  [
+   "sync helpers",
+   null
+  ],
+  [
+   "helpers",
+   [
+    [
+     "setup-helpers.json",
+     "{\n  \"worktree\": \"<base>/worktree\",\n  \"helpers\": [\n    {\n      \"path\": \".trezi/trezi-source.cjs\",\n      \"sha256\": \"41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d\"\n    },\n    {\n      \"path\": \".trezi/trezi-next.cjs\",\n      \"sha256\": \"c6c1c9a9c8543f1e4cd980064cf1625eeb61a90703b2464fff039f21682508b3\"\n    }\n  ]\n}"
+    ],
+    [
+     "trezi-next.cjs",
+     "next"
+    ],
+    [
+     "trezi-source.cjs",
+     "source"
+    ]
+   ],
+   [
+    [
+     "praxis-mdx.mjs",
+     "mdx"
+    ],
+    [
+     "setup-helpers.json",
+     "{\n  \"worktree\": \"<base>/worktree\",\n  \"helpers\": [\n    {\n      \"path\": \".praxis/praxis-mdx.mjs\",\n      \"sha256\": \"c49d77a46e023fd57d713dfe5bd0cd532be9ba6a61d43e115230891527dddf78\"\n    }\n  ]\n}"
+    ]
+   ]
+  ],
+  [
+   "sync again",
+   null
+  ],
+  [
+   "helpers after removal",
+   [
+    [
+     "setup-helpers.json",
+     "{\n  \"worktree\": \"<base>/worktree\",\n  \"helpers\": [\n    {\n      \"path\": \".trezi/trezi-source.cjs\",\n      \"sha256\": \"41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d\"\n    }\n  ]\n}"
+    ],
+    [
+     "trezi-source.cjs",
+     "source"
+    ]
+   ]
+  ],
+  [
+   "sync linked target",
+   "invalidRequest"
+  ],
+  [
+   "needs install (link)",
+   true
+  ],
+  [
+   "link removed",
+   false
+  ],
+  [
+   "needs install (no marker)",
+   true
+  ],
+  [
+   "mark",
+   null
+  ],
+  [
+   "marker",
+   "59423aaa59950f8a3f604942c02c68d126f761552501ed28f80466ae45f77d1b"
+  ],
+  [
+   "skip when marked",
+   false
+  ],
+  [
+   "install after manifest change",
+   true
+  ],
+  [
+   "no live dependencies",
+   false
+  ]
+ ]
+}

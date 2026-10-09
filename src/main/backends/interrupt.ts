@@ -71,3 +71,62 @@ export async function interruptWithEscalation(opts: {
   escalate()
   return { hardStopped: true }
 }
+
+/**
+ * The same contract with the deadline held by the provider owner (S10): `cancel`
+ * tells the owner Stop was pressed and resolves with its decision — `escalate: false`
+ * once `settled` reported the graceful answer, `escalate: true` when its deadline
+ * passed first. The owner cannot kill an in-process adapter, so the kill switch
+ * stays here; it runs at most once, never after a graceful settle, and nothing is
+ * reported settled after it ran (the owner would otherwise revive a killed session).
+ *
+ * If the owner cannot answer (the service is gone), Stop must still work: the local
+ * `graceMs` bound applies, exactly as `interruptWithEscalation`.
+ */
+export async function interruptWithOwner(opts: {
+  graceful: () => Promise<unknown> | undefined
+  escalate: () => void
+  cancel: () => Promise<{ escalate: boolean }>
+  settled: () => Promise<unknown>
+  graceMs: number
+  setTimer?: (fn: () => void, ms: number) => void
+}): Promise<{ hardStopped: boolean } | undefined> {
+  const { graceful, escalate, graceMs, setTimer = setTimeout } = opts
+  let decision: Promise<{ escalate: boolean }>
+  try {
+    decision = opts.cancel()
+  } catch (error) {
+    decision = Promise.reject(error)
+  }
+  let settled = false
+  let escalated = false
+  let g: Promise<unknown> | undefined
+  try {
+    g = graceful()
+  } catch {
+    g = undefined
+  }
+  const answered = (g ?? Promise.resolve())
+    .then(
+      () => undefined,
+      () => undefined
+    )
+    .then(() => {
+      settled = true
+      if (!escalated) void opts.settled().catch(() => {})
+    })
+  let answer: { escalate: boolean }
+  try {
+    answer = await decision
+  } catch {
+    const inTime = await Promise.race([
+      answered.then(() => true),
+      new Promise<boolean>((resolve) => setTimer(() => resolve(false), graceMs))
+    ])
+    answer = { escalate: !inTime }
+  }
+  if (!answer.escalate || settled) return
+  escalated = true
+  escalate()
+  return { hardStopped: true }
+}

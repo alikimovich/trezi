@@ -8,7 +8,7 @@ const server = createServer((_req, res) => {
   res.end(
     '<!doctype html><meta charset="utf-8">' +
       '<body style="font:16px system-ui;margin:0;display:grid;place-items:center;height:100vh">' +
-      '<h1 id="fixture-ok">praxis fixture running</h1></body>'
+      '<h1 id="fixture-ok">trezi fixture running</h1></body>'
   )
 })
 

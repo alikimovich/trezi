@@ -1,15 +1,13 @@
 // Namespace import (not `{ ipcMain }`) so this module — and `style-tokens.ts`,
 // which imports `detectTokens` from here for its OWN pure re-validation logic
 // — can be loaded under plain bun for unit testing (see test/style-tokens.mjs).
-// Outside Electron, the `electron` package's CJS export is just a path string;
-// a named `{ ipcMain }` import fails to LINK at all (a bun/Node ESM error, not
-// a runtime one), whereas `ipcMain` only needs to resolve when
-// `registerTokensIpc` actually runs — i.e. inside the real Electron process,
-// where `electron`'s exports are the real API object either way.
-import * as electron from 'electron'
-import { mkdir, readFile, readdir, writeFile } from 'fs/promises'
+
+import type { Dirent } from 'fs'
+import { readdir, readFile } from 'fs/promises'
 import { join } from 'path'
+import * as platform from '../native/platform'
 import type { Token, TokenGroup, TokenScaffoldResult, TokenSet } from '../shared/api'
+import { editingOwner } from './editing-owner'
 import type { RpcHandlerRegistry } from './rpc-router'
 
 /**
@@ -17,7 +15,7 @@ import type { RpcHandlerRegistry } from './rpc-router'
  * tokens three ways; we probe them in priority order and the first that yields
  * tokens wins, so the right source is chosen per project automatically:
  *
- *   1. `.praxis/tokens.json`  — an explicit, curated manifest (highest priority)
+ *   1. `.trezi/tokens.json`  — an explicit, curated manifest (highest priority)
  *   2. `tailwind.config.*`  — the theme scale (static parse, no code execution)
  *   3. CSS custom properties — `--name: value` scanned from the repo's
  *      stylesheets (css/scss/sass/less/styl/pcss — the syntax is identical
@@ -42,12 +40,12 @@ const TAILWIND_CONFIGS = [
 const TW_CATEGORIES = ['colors', 'spacing', 'fontSize', 'borderRadius', 'fontWeight', 'boxShadow']
 
 // ---------------------------------------------------------------------------
-// 1. Manifest: .praxis/tokens.json  → { groupName: { tokenName: "value" } }
+// 1. Manifest: .trezi/tokens.json  → { groupName: { tokenName: "value" } }
 // ---------------------------------------------------------------------------
 async function fromManifest(root: string): Promise<TokenSet | null> {
   let parsed: unknown
   try {
-    parsed = JSON.parse(await readFile(join(root, '.praxis', 'tokens.json'), 'utf8'))
+    parsed = JSON.parse(await readFile(join(root, '.trezi', 'tokens.json'), 'utf8'))
   } catch {
     return null
   }
@@ -63,7 +61,7 @@ async function fromManifest(root: string): Promise<TokenSet | null> {
     }
     if (tokens.length) groups.push({ name: groupName, tokens })
   }
-  return groups.length ? { source: 'manifest', origin: '.praxis/tokens.json', groups } : null
+  return groups.length ? { source: 'manifest', origin: '.trezi/tokens.json', groups } : null
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +164,10 @@ async function fromTailwind(root: string): Promise<TokenSet | null> {
   if (code == null) return null
   try {
     const { parse } = await loadBabel()
-    const ast = parse(code, { sourceType: 'module', plugins: ['jsx', 'typescript'] }) as unknown as Node
+    const ast = parse(code, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript']
+    }) as unknown as Node
     // Scope to the config's own `theme` (not any nested `theme:` in a plugin/preset).
     const config = findConfigObject(ast)
     const theme = config && objectProp(config, 'theme')
@@ -208,7 +209,7 @@ const MAX_TOKENS = 400
 
 async function findCssFiles(root: string, depth: number, acc: string[]): Promise<void> {
   if (depth > MAX_DEPTH || acc.length >= MAX_FILES) return
-  let entries
+  let entries: Dirent[]
   try {
     entries = await readdir(root, { withFileTypes: true })
   } catch {
@@ -300,9 +301,11 @@ const STARTER_MANIFEST = {
 } as const
 
 /**
- * Write a starter `.praxis/tokens.json` so a token-less project gets an editable,
+ * Write a starter `.trezi/tokens.json` so a token-less project gets an editable,
  * canonical token source (which then wins detection). Idempotent: if a manifest
- * already exists we leave it untouched and report `written: false`.
+ * already exists we leave it untouched and report `written: false`. The editing
+ * owner creates the file (S15): create-only, so an existing file that detection
+ * could not read (damaged, or written meanwhile) is refused, never replaced.
  */
 async function scaffoldManifest(root: string): Promise<TokenScaffoldResult> {
   try {
@@ -312,12 +315,19 @@ async function scaffoldManifest(root: string): Promise<TokenScaffoldResult> {
     if (current.source !== 'none') {
       return { ok: true, written: false, set: current }
     }
-    await mkdir(join(root, '.praxis'), { recursive: true })
-    await writeFile(
-      join(root, '.praxis', 'tokens.json'),
-      JSON.stringify(STARTER_MANIFEST, null, 2) + '\n',
-      'utf8'
+    const result = await editingOwner().sidecar(
+      root,
+      'tokens.json',
+      null,
+      JSON.stringify(STARTER_MANIFEST, null, 2) + '\n'
     )
+    if (!result.ok) {
+      return {
+        ok: false,
+        written: false,
+        error: '.trezi/tokens.json already exists; it was left untouched.'
+      }
+    }
     return { ok: true, written: true, set: await detectTokens(root) }
   } catch (err) {
     return { ok: false, written: false, error: err instanceof Error ? err.message : String(err) }
@@ -325,7 +335,7 @@ async function scaffoldManifest(root: string): Promise<TokenScaffoldResult> {
 }
 
 export function registerTokensIpc(
-  router: RpcHandlerRegistry = electron.ipcMain as unknown as RpcHandlerRegistry
+  router: RpcHandlerRegistry = platform.ipcMain as unknown as RpcHandlerRegistry
 ): void {
   router.handle('tokens:detect', (_e, root: string) => detectTokens(root))
   router.handle('tokens:scaffold', (_e, root: string) => scaffoldManifest(root))

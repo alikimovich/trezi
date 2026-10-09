@@ -42,11 +42,7 @@ same(at(''), null, 'empty input')
 
 // Reads the token the CARET is in, not the whole string.
 same(parseSlashToken('/rev extra', 4), { query: 'rev', start: 0 }, 'caret mid-token')
-same(
-  parseSlashToken('/rev tail', 9),
-  null,
-  'caret past the token (in later plain text) closes',
-)
+same(parseSlashToken('/rev tail', 9), null, 'caret past the token (in later plain text) closes')
 
 // A space ends the token — caret after "/foo " is no longer in a "/" token.
 same(at('/foo '), null, 'trailing space closes the token')

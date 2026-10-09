@@ -1,0 +1,874 @@
+{
+ "log": [
+  [
+   "open c1",
+   null
+  ],
+  [
+   "open c2",
+   null
+  ],
+  [
+   "open c3",
+   null
+  ],
+  [
+   "begin c1",
+   null
+  ],
+  [
+   "begin c1 again (busy)",
+   {
+    "error": "busy"
+   }
+  ],
+  [
+   "begin c2 (concurrent)",
+   null
+  ],
+  [
+   "send c1",
+   {
+    "handoff": false
+   }
+  ],
+  [
+   "send c2",
+   {
+    "handoff": false
+   }
+  ],
+  [
+   "send unknown turn",
+   {
+    "error": "notFound"
+   }
+  ],
+  [
+   "c1 error",
+   {
+    "claimed": true,
+    "outcome": "failed",
+    "title": false,
+    "memory": false
+   }
+  ],
+  [
+   "c1 done after error (duplicate)",
+   {
+    "claimed": false,
+    "reason": "duplicate"
+   }
+  ],
+  [
+   "c1 late done of another turn (stale)",
+   {
+    "claimed": false,
+    "reason": "stale"
+   }
+  ],
+  [
+   "c1 landed",
+   {
+    "landed": true,
+    "completedAt": 5000
+   }
+  ],
+  [
+   "c1 landed again",
+   {
+    "landed": false
+   }
+  ],
+  [
+   "c2 done",
+   {
+    "claimed": true,
+    "outcome": "success",
+    "title": true,
+    "memory": true
+   }
+  ],
+  [
+   "c2 continue",
+   true
+  ],
+  [
+   "c2 late run 0 (stale)",
+   {
+    "claimed": false,
+    "reason": "stale"
+   }
+  ],
+  [
+   "c2 run 1 done",
+   {
+    "claimed": true,
+    "outcome": "success",
+    "title": false,
+    "memory": true
+   }
+  ],
+  [
+   "c2 continue out of order",
+   false
+  ],
+  [
+   "title generated",
+   {
+    "ok": true,
+    "title": "Generated name"
+   }
+  ],
+  [
+   "title generated again",
+   {
+    "ok": false
+   }
+  ],
+  [
+   "title user",
+   {
+    "ok": true,
+    "title": "Mine here"
+   }
+  ],
+  [
+   "title user empty",
+   {
+    "ok": false,
+    "error": "empty name"
+   }
+  ],
+  [
+   "c2 landed",
+   {
+    "landed": true,
+    "completedAt": 7000
+   }
+  ],
+  [
+   "checkpoint without the title",
+   true
+  ],
+  [
+   "cancel idle",
+   {
+    "phase": "idle",
+    "turn": null
+   }
+  ],
+  [
+   "begin c3",
+   null
+  ],
+  [
+   "cancel preparing",
+   {
+    "phase": "preparing",
+    "turn": "v1"
+   }
+  ],
+  [
+   "send cancelled",
+   {
+    "error": "cancelled"
+   }
+  ],
+  [
+   "abort",
+   true
+  ],
+  [
+   "abort again",
+   false
+  ],
+  [
+   "begin c3 v2",
+   null
+  ],
+  [
+   "send c3 v2",
+   {
+    "handoff": false
+   }
+  ],
+  [
+   "cancel running",
+   {
+    "phase": "running",
+    "turn": "v2"
+   }
+  ],
+  [
+   "c3 done after stop (failed)",
+   {
+    "claimed": true,
+    "outcome": "failed",
+    "title": false,
+    "memory": false
+   }
+  ],
+  [
+   "c3 continue after stop",
+   false
+  ],
+  [
+   "c3 landed",
+   {
+    "landed": true,
+    "completedAt": 8000
+   }
+  ],
+  [
+   "handoff idle",
+   null
+  ],
+  [
+   "begin c1 t2",
+   null
+  ],
+  [
+   "handoff mid-turn (busy)",
+   {
+    "error": "busy"
+   }
+  ],
+  [
+   "send t2 (handoff)",
+   {
+    "handoff": true
+   }
+  ],
+  [
+   "restart mid-turn",
+   null
+  ],
+  [
+   "begin after restart",
+   null
+  ],
+  [
+   "send t3 (handoff again)",
+   {
+    "handoff": true
+   }
+  ],
+  [
+   "t3 done",
+   {
+    "claimed": true,
+    "outcome": "success",
+    "title": true,
+    "memory": true
+   }
+  ],
+  [
+   "t3 landed",
+   {
+    "landed": true,
+    "completedAt": 9300
+   }
+  ],
+  [
+   "begin t4",
+   null
+  ],
+  [
+   "send t4 (no handoff)",
+   {
+    "handoff": false
+   }
+  ],
+  [
+   "register p1",
+   null
+  ],
+  [
+   "register p2",
+   null
+  ],
+  [
+   "register q1",
+   null
+  ],
+  [
+   "register for a closed chat",
+   {
+    "error": "notFound"
+   }
+  ],
+  [
+   "resolve p1",
+   "P1"
+  ],
+  [
+   "resolve p1 late",
+   null
+  ],
+  [
+   "resolve q1 as a permission",
+   null
+  ],
+  [
+   "mode acceptEdits",
+   []
+  ],
+  [
+   "register p3",
+   null
+  ],
+  [
+   "mode acceptEdits again",
+   [
+    "perm-3"
+   ]
+  ],
+  [
+   "mode bypass",
+   [
+    "perm-2"
+   ]
+  ],
+  [
+   "mode unknown",
+   {
+    "error": "invalidRequest"
+   }
+  ],
+  [
+   "release",
+   [
+    {
+     "id": "ask-1",
+     "kind": "question"
+    }
+   ]
+  ],
+  [
+   "spawn s1",
+   true
+  ],
+  [
+   "spawn s2",
+   true
+  ],
+  [
+   "spawn s3",
+   true
+  ],
+  [
+   "spawn s4",
+   false
+  ],
+  [
+   "spawn s5",
+   false
+  ],
+  [
+   "spawn other project",
+   true
+  ],
+  [
+   "cancel queued",
+   true
+  ],
+  [
+   "cancel running",
+   false
+  ],
+  [
+   "s1 done",
+   [
+    "s5"
+   ]
+  ],
+  [
+   "s1 done again",
+   []
+  ],
+  [
+   "snapshot",
+   {
+    "chats": [
+     {
+      "chat": "P1",
+      "project": "P1",
+      "root": "/projects/P1",
+      "active": true,
+      "phase": "running",
+      "turn": "t4",
+      "run": 0,
+      "record": {
+       "id": "chat-1",
+       "projectKey": "P1",
+       "projectRoot": "/projects/P1",
+       "projectName": "P1",
+       "startedAt": 1000,
+       "endedAt": null,
+       "filesTouched": [],
+       "transcript": [
+        {
+         "role": "user",
+         "text": "first",
+         "at": 2000
+        },
+        {
+         "role": "assistant",
+         "text": "partial",
+         "at": 2100
+        },
+        {
+         "role": "user",
+         "text": "after switch",
+         "at": 9000
+        },
+        {
+         "role": "user",
+         "text": "again",
+         "at": 9100,
+         "completedAt": 9300
+        },
+        {
+         "role": "assistant",
+         "text": "ok",
+         "at": 9200
+        },
+        {
+         "role": "user",
+         "text": "plain",
+         "at": 9400
+        }
+       ]
+      },
+      "options": {
+       "provider": "codex",
+       "model": "m2",
+       "permissionMode": "bypassPermissions"
+      }
+     },
+     {
+      "chat": "P1#2",
+      "project": "P1",
+      "root": "/projects/P1",
+      "active": false,
+      "phase": "idle",
+      "turn": null,
+      "run": 1,
+      "record": {
+       "id": "chat-2",
+       "projectKey": "P1",
+       "projectRoot": "/projects/P1",
+       "projectName": "P1",
+       "startedAt": 1000,
+       "endedAt": null,
+       "filesTouched": [],
+       "transcript": [
+        {
+         "role": "user",
+         "text": "second",
+         "at": 2001
+        },
+        {
+         "role": "assistant",
+         "text": "answer",
+         "at": 2200
+        }
+       ],
+       "title": "Mine here"
+      },
+      "options": {
+       "provider": "codex"
+      }
+     },
+     {
+      "chat": "P2",
+      "project": "P2",
+      "root": "/projects/P2",
+      "active": true,
+      "phase": "idle",
+      "turn": null,
+      "run": 0,
+      "record": {
+       "id": "chat-3",
+       "projectKey": "P2",
+       "projectRoot": "/projects/P2",
+       "projectName": "P2",
+       "startedAt": 1000,
+       "endedAt": null,
+       "filesTouched": [],
+       "transcript": [
+        {
+         "role": "user",
+         "text": "stop me",
+         "at": 3100,
+         "completedAt": 8000
+        },
+        {
+         "role": "assistant",
+         "text": "halfway",
+         "at": 3200
+        }
+       ]
+      },
+      "options": {}
+     }
+    ],
+    "spawns": {
+     "running": [
+      "s2",
+      "s3",
+      "s5",
+      "s6"
+     ],
+     "queued": []
+    }
+   }
+  ],
+  [
+   "save legacy main slot",
+   null
+  ],
+  [
+   "close c2 to History",
+   {
+    "saved": true,
+    "release": []
+   }
+  ],
+  [
+   "close c1 as current",
+   {
+    "saved": true,
+    "release": []
+   }
+  ],
+  [
+   "close c3 unsaved",
+   {
+    "saved": false,
+    "release": []
+   }
+  ],
+  [
+   "close unknown",
+   {
+    "saved": false,
+    "release": []
+   }
+  ],
+  [
+   "send after close",
+   {
+    "error": "notFound"
+   }
+  ],
+  [
+   "rename",
+   {
+    "ok": true,
+    "title": "Renamed chat"
+   }
+  ],
+  [
+   "rename missing",
+   {
+    "ok": false,
+    "error": "unknown session"
+   }
+  ],
+  [
+   "rename empty",
+   {
+    "ok": false,
+    "error": "empty name"
+   }
+  ],
+  [
+   "remove",
+   null
+  ],
+  [
+   "history 0",
+   null
+  ],
+  [
+   "history 1",
+   null
+  ],
+  [
+   "history 2",
+   null
+  ],
+  [
+   "history 3",
+   null
+  ],
+  [
+   "history 4",
+   null
+  ],
+  [
+   "history 5",
+   null
+  ],
+  [
+   "history 6",
+   null
+  ],
+  [
+   "history 7",
+   null
+  ],
+  [
+   "history 8",
+   null
+  ],
+  [
+   "history 9",
+   null
+  ],
+  [
+   "history 10",
+   null
+  ],
+  [
+   "history 11",
+   null
+  ],
+  [
+   "history 12",
+   null
+  ],
+  [
+   "history 13",
+   null
+  ],
+  [
+   "history 14",
+   null
+  ],
+  [
+   "history 15",
+   null
+  ],
+  [
+   "history 16",
+   null
+  ],
+  [
+   "history 17",
+   null
+  ],
+  [
+   "history 18",
+   null
+  ],
+  [
+   "history 19",
+   null
+  ],
+  [
+   "history 20",
+   null
+  ],
+  [
+   "history 21",
+   null
+  ],
+  [
+   "history 22",
+   null
+  ],
+  [
+   "history 23",
+   null
+  ],
+  [
+   "history 24",
+   null
+  ],
+  [
+   "history 25",
+   null
+  ],
+  [
+   "history 26",
+   null
+  ],
+  [
+   "history 27",
+   null
+  ],
+  [
+   "history 28",
+   null
+  ],
+  [
+   "history 29",
+   null
+  ],
+  [
+   "history 30",
+   null
+  ],
+  [
+   "history 31",
+   null
+  ],
+  [
+   "history 32",
+   null
+  ],
+  [
+   "history 33",
+   null
+  ],
+  [
+   "history 34",
+   null
+  ],
+  [
+   "history 35",
+   null
+  ],
+  [
+   "history 36",
+   null
+  ],
+  [
+   "history 37",
+   null
+  ],
+  [
+   "history 38",
+   null
+  ],
+  [
+   "history 39",
+   null
+  ],
+  [
+   "history 40",
+   null
+  ],
+  [
+   "history 41",
+   null
+  ],
+  [
+   "history 42",
+   null
+  ],
+  [
+   "history 43",
+   null
+  ],
+  [
+   "history 44",
+   null
+  ],
+  [
+   "history 45",
+   null
+  ],
+  [
+   "history 46",
+   null
+  ],
+  [
+   "history 47",
+   null
+  ],
+  [
+   "history 48",
+   null
+  ],
+  [
+   "history 49",
+   null
+  ],
+  [
+   "history 50",
+   null
+  ],
+  [
+   "history 51",
+   null
+  ],
+  [
+   "save current P3",
+   null
+  ],
+  [
+   "snapshot after",
+   {
+    "chats": [],
+    "spawns": {
+     "running": [
+      "s2",
+      "s3",
+      "s5",
+      "s6"
+     ],
+     "queued": []
+    }
+   }
+  ]
+ ],
+ "files": {
+  "chat-1.json": "{\"id\":\"chat-1\",\"projectKey\":\"P1\",\"projectRoot\":\"/projects/P1\",\"projectName\":\"P1\",\"startedAt\":1000,\"endedAt\":9600,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"first\",\"at\":2000},{\"role\":\"user\",\"text\":\"plain\",\"at\":9400}],\"slot\":\"current\"}",
+  "chat-2.json": "{\"id\":\"chat-2\",\"projectKey\":\"P1\",\"projectRoot\":\"/projects/P1\",\"projectName\":\"P1\",\"startedAt\":1000,\"endedAt\":9500,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"second\",\"at\":2001},{\"role\":\"assistant\",\"text\":\"answer\",\"at\":2200}],\"title\":\"Renamed chat\"}",
+  "h-10.json": "{\"id\":\"h-10\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":110,\"endedAt\":210,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q10\",\"at\":10}]}",
+  "h-11.json": "{\"id\":\"h-11\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":111,\"endedAt\":211,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q11\",\"at\":11}]}",
+  "h-12.json": "{\"id\":\"h-12\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":112,\"endedAt\":212,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q12\",\"at\":12}]}",
+  "h-13.json": "{\"id\":\"h-13\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":113,\"endedAt\":213,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q13\",\"at\":13}]}",
+  "h-14.json": "{\"id\":\"h-14\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":114,\"endedAt\":214,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q14\",\"at\":14}]}",
+  "h-15.json": "{\"id\":\"h-15\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":115,\"endedAt\":215,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q15\",\"at\":15}]}",
+  "h-16.json": "{\"id\":\"h-16\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":116,\"endedAt\":216,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q16\",\"at\":16}]}",
+  "h-17.json": "{\"id\":\"h-17\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":117,\"endedAt\":217,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q17\",\"at\":17}]}",
+  "h-18.json": "{\"id\":\"h-18\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":118,\"endedAt\":218,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q18\",\"at\":18}]}",
+  "h-19.json": "{\"id\":\"h-19\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":119,\"endedAt\":219,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q19\",\"at\":19}]}",
+  "h-2.json": "{\"id\":\"h-2\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":102,\"endedAt\":202,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q2\",\"at\":2}]}",
+  "h-20.json": "{\"id\":\"h-20\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":120,\"endedAt\":220,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q20\",\"at\":20}]}",
+  "h-21.json": "{\"id\":\"h-21\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":121,\"endedAt\":221,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q21\",\"at\":21}]}",
+  "h-22.json": "{\"id\":\"h-22\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":122,\"endedAt\":222,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q22\",\"at\":22}]}",
+  "h-23.json": "{\"id\":\"h-23\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":123,\"endedAt\":223,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q23\",\"at\":23}]}",
+  "h-24.json": "{\"id\":\"h-24\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":124,\"endedAt\":224,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q24\",\"at\":24}]}",
+  "h-25.json": "{\"id\":\"h-25\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":125,\"endedAt\":225,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q25\",\"at\":25}]}",
+  "h-26.json": "{\"id\":\"h-26\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":126,\"endedAt\":226,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q26\",\"at\":26}]}",
+  "h-27.json": "{\"id\":\"h-27\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":127,\"endedAt\":227,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q27\",\"at\":27}]}",
+  "h-28.json": "{\"id\":\"h-28\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":128,\"endedAt\":228,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q28\",\"at\":28}]}",
+  "h-29.json": "{\"id\":\"h-29\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":129,\"endedAt\":229,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q29\",\"at\":29}]}",
+  "h-3.json": "{\"id\":\"h-3\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":103,\"endedAt\":203,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q3\",\"at\":3}]}",
+  "h-30.json": "{\"id\":\"h-30\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":130,\"endedAt\":230,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q30\",\"at\":30}]}",
+  "h-31.json": "{\"id\":\"h-31\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":131,\"endedAt\":231,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q31\",\"at\":31}]}",
+  "h-32.json": "{\"id\":\"h-32\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":132,\"endedAt\":232,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q32\",\"at\":32}]}",
+  "h-33.json": "{\"id\":\"h-33\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":133,\"endedAt\":233,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q33\",\"at\":33}]}",
+  "h-34.json": "{\"id\":\"h-34\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":134,\"endedAt\":234,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q34\",\"at\":34}]}",
+  "h-35.json": "{\"id\":\"h-35\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":135,\"endedAt\":235,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q35\",\"at\":35}]}",
+  "h-36.json": "{\"id\":\"h-36\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":136,\"endedAt\":236,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q36\",\"at\":36}]}",
+  "h-37.json": "{\"id\":\"h-37\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":137,\"endedAt\":237,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q37\",\"at\":37}]}",
+  "h-38.json": "{\"id\":\"h-38\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":138,\"endedAt\":238,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q38\",\"at\":38}]}",
+  "h-39.json": "{\"id\":\"h-39\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":139,\"endedAt\":239,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q39\",\"at\":39}]}",
+  "h-4.json": "{\"id\":\"h-4\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":104,\"endedAt\":204,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q4\",\"at\":4}]}",
+  "h-40.json": "{\"id\":\"h-40\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":140,\"endedAt\":240,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q40\",\"at\":40}]}",
+  "h-41.json": "{\"id\":\"h-41\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":141,\"endedAt\":241,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q41\",\"at\":41}]}",
+  "h-42.json": "{\"id\":\"h-42\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":142,\"endedAt\":242,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q42\",\"at\":42}]}",
+  "h-43.json": "{\"id\":\"h-43\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":143,\"endedAt\":243,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q43\",\"at\":43}]}",
+  "h-44.json": "{\"id\":\"h-44\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":144,\"endedAt\":244,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q44\",\"at\":44}]}",
+  "h-45.json": "{\"id\":\"h-45\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":145,\"endedAt\":245,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q45\",\"at\":45}]}",
+  "h-46.json": "{\"id\":\"h-46\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":146,\"endedAt\":246,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q46\",\"at\":46}]}",
+  "h-47.json": "{\"id\":\"h-47\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":147,\"endedAt\":247,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q47\",\"at\":47}]}",
+  "h-48.json": "{\"id\":\"h-48\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":148,\"endedAt\":248,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q48\",\"at\":48}]}",
+  "h-49.json": "{\"id\":\"h-49\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":149,\"endedAt\":249,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q49\",\"at\":49}]}",
+  "h-5.json": "{\"id\":\"h-5\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":105,\"endedAt\":205,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q5\",\"at\":5}]}",
+  "h-50.json": "{\"id\":\"h-50\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":150,\"endedAt\":250,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q50\",\"at\":50}]}",
+  "h-51.json": "{\"id\":\"h-51\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":151,\"endedAt\":251,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q51\",\"at\":51}]}",
+  "h-6.json": "{\"id\":\"h-6\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":106,\"endedAt\":206,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q6\",\"at\":6}]}",
+  "h-7.json": "{\"id\":\"h-7\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":107,\"endedAt\":207,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q7\",\"at\":7}]}",
+  "h-8.json": "{\"id\":\"h-8\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":108,\"endedAt\":208,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q8\",\"at\":8}]}",
+  "h-9.json": "{\"id\":\"h-9\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":109,\"endedAt\":209,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"q9\",\"at\":9}]}",
+  "h-current.json": "{\"id\":\"h-current\",\"projectKey\":\"P3\",\"projectRoot\":\"/projects/P3\",\"projectName\":\"P3\",\"startedAt\":1,\"endedAt\":null,\"filesTouched\":[],\"transcript\":[{\"role\":\"user\",\"text\":\"c\",\"at\":1}],\"slot\":\"current\"}"
+ }
+}

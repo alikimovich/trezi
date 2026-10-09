@@ -3,7 +3,7 @@ name: accessible-colors
 description: Check and fix color contrast for accessibility using APCA (the perceptual model WCAG 3 is built around). Use whenever you pick, change, or review text or UI colors — hex codes, design tokens, Tailwind color classes, a button/label/background pairing — or the user asks whether a color combination is accessible, readable, or legible. Also use to derive an accessible variant of a brand/aesthetic color that still matches.
 ---
 
-# Accessible colors in Praxis
+# Accessible colors in Trezi
 
 Whenever you choose or change a text/UI color, verify it with the `check_contrast`
 tool instead of eyeballing readability or relying on the old WCAG 2 `4.5:1` ratio.

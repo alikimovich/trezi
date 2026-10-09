@@ -40,7 +40,11 @@ const close = (s) => new Promise((resolve) => s.close(resolve))
 const wildcard = await listen(0) // dual-stack, like `node server.mjs` with no host
 const wildcardPort = wildcard.address().port
 assert.equal(await isPortFree(wildcardPort), false, 'a dual-stack listener means occupied')
-assert.equal(await findFreePort(wildcardPort) === wildcardPort, false, 'findFreePort must skip it')
+assert.equal(
+  (await findFreePort(wildcardPort)) === wildcardPort,
+  false,
+  'findFreePort must skip it'
+)
 await close(wildcard)
 
 const loopback = await listen(0, '127.0.0.1')
@@ -50,7 +54,10 @@ await close(loopback)
 
 // ANSI color codes around the port (Vite prints a bold port) must be stripped,
 // or the parsed URL is garbage and readiness waits forever.
-assert.equal(stripAnsi('  ➜  Local: http://localhost:\x1b[1m5173\x1b[22m/'), '  ➜  Local: http://localhost:5173/')
+assert.equal(
+  stripAnsi('  ➜  Local: http://localhost:\x1b[1m5173\x1b[22m/'),
+  '  ➜  Local: http://localhost:5173/'
+)
 assert.equal(stripAnsi('plain http://127.0.0.1:3000/'), 'plain http://127.0.0.1:3000/')
 // Don't eat legitimate brackets (e.g. Next.js [id] routes) — needs the ESC.
 assert.equal(stripAnsi('/blog/[slug]/page'), '/blog/[slug]/page')

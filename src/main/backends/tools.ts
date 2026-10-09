@@ -1,4 +1,4 @@
-import type { BrowserWindow } from 'electron'
+import type { NativeView } from '../../native/platform'
 
 /**
  * Send an IPC message to the main renderer, guarding a destroyed webContents.
@@ -10,7 +10,7 @@ import type { BrowserWindow } from 'electron'
  * wake. `isDestroyed()` makes a late emit a safe no-op.
  */
 export function sendToRenderer(
-  getWindow: () => BrowserWindow | null,
+  getWindow: () => NativeView | null,
   channel: string,
   payload: unknown
 ): void {
@@ -35,10 +35,10 @@ export const AUTO_ALLOW_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS', 'Notebook
 // Tools that 'acceptEdits' auto-approves (mirrors the SDK's edit semantics).
 export const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
-// `.dsgn` is the sidecar's pre-rename name — old repos still carry it.
-const SIDECAR_RE = /(^|[\s/\\"'])\.(praxis|dsgn)([/\\]|$)/
+// The legacy sidecar names stay protected: old repos still carry them.
+const SIDECAR_RE = /(^|[\s/\\"'])\.(trezi|praxis|dsgn)([/\\]|$)/
 
-/** Does this tool target the .praxis/ sidecar (edit-tool path or a Bash command)? */
+/** Does this tool target the .trezi/ sidecar (edit-tool path or a Bash command)? */
 export function touchesSidecar(toolName: string, input: unknown): boolean {
   const i = input as Record<string, unknown>
   if (EDIT_TOOLS.has(toolName)) {
@@ -61,6 +61,8 @@ export function toolDetail(_name: string, input: unknown): string | undefined {
 }
 
 export function describeTool(name: string, input: unknown): string {
+  // The question itself is shown as a card; its status never names the raw tool (LKM-193).
+  if (name === 'AskUserQuestion') return 'Asking you a question'
   const detail = toolDetail(name, input)
   return detail ? `${name} · ${detail}` : name
 }

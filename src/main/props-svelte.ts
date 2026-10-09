@@ -1,29 +1,21 @@
-import { readFile, readdir } from 'fs/promises'
+import { readdir, readFile } from 'fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative } from 'path'
-import type {
-  PropEdit,
-  PropEditResult,
-  PropField,
-  PropInspection,
-  PropKind,
-  TokenEdit
-} from '../shared/api'
-import { swapTailwindClass } from './tw-classes'
-import { pickInstance, type SvelteUsage } from './svelte-instance'
+import type { PropEdit, PropEditResult, PropField, PropInspection, PropKind } from '../shared/api'
 import {
   agentPromptFor,
+  type CurrentAttr,
   commitEdit,
   isValidAttrName,
   mergeFields,
+  type ResolvedSource,
   textAgentPrompt,
-  withinRoot,
-  type CurrentAttr,
-  type ResolvedSource
+  withinRoot
 } from './props'
+import { pickInstance, type SvelteUsage } from './svelte-instance'
 
 /**
  * Svelte adapter for the prop editor — the `.svelte` counterpart of the
- * React/JSX engine in props.ts. Same contract: given a `data-praxis-source` stamp,
+ * React/JSX engine in props.ts. Same contract: given a `data-trezi-source` stamp,
  * find the element on that line/column, read its literal attributes, resolve a
  * component prop schema (`export let` for Svelte 4, `$props()` destructuring for
  * Svelte 5, with TS types → enums when present), and apply simple literal edits
@@ -81,18 +73,13 @@ function collectElements(node: unknown, out: Node[]): void {
   for (const key of Object.keys(n)) {
     if (key === 'parent') continue
     const v = (n as Record<string, unknown>)[key]
-    if (Array.isArray(v)) v.forEach((c) => collectElements(c, out))
+    if (Array.isArray(v)) for (const c of v) collectElements(c, out)
     else if (v && typeof v === 'object') collectElements(v, out)
   }
 }
 
 /** The element the stamp points at (mirrors the React findElementAtLine logic). */
-export function findElement(
-  root: Node,
-  code: string,
-  line: number,
-  column?: number
-): Node | null {
+export function findElement(root: Node, code: string, line: number, column?: number): Node | null {
   const els: Node[] = []
   collectElements((root as { fragment?: unknown }).fragment ?? root, els)
   const at = makeLocator(code)
@@ -117,7 +104,9 @@ export function findElement(
   return enclosing ?? null
 }
 
-function literalFrom(expr: Node | undefined): { kind: PropKind; value: string | number | boolean } | null {
+function literalFrom(
+  expr: Node | undefined
+): { kind: PropKind; value: string | number | boolean } | null {
   if (!expr) return null
   if (expr.type === 'Literal') {
     const v = (expr as { value?: unknown }).value
@@ -160,7 +149,13 @@ function readAttributes(el: Node): CurrentAttr[] {
       v = value as Node
     }
     if (v?.type === 'Text') {
-      out.push({ name, kind: 'string', value: String((v as { data?: string }).data ?? ''), start, end })
+      out.push({
+        name,
+        kind: 'string',
+        value: String((v as { data?: string }).data ?? ''),
+        start,
+        end
+      })
     } else if (v && (v.type === 'ExpressionTag' || v.type === 'MustacheTag')) {
       const lit = literalFrom(v.expression as Node)
       if (lit) out.push({ name, ...lit, start, end })
@@ -208,7 +203,10 @@ function collectTypeMembers(body: Node[], typeName: string): Map<string, Node> {
     }
   }
   for (const stmt of body) {
-    if (stmt.type === 'TSInterfaceDeclaration' && (stmt.id as { name?: string })?.name === typeName) {
+    if (
+      stmt.type === 'TSInterfaceDeclaration' &&
+      (stmt.id as { name?: string })?.name === typeName
+    ) {
       readSignatures((stmt.body as { body?: Node[] } | undefined)?.body)
     } else if (
       stmt.type === 'TSTypeAliasDeclaration' &&
@@ -259,7 +257,8 @@ function extractProps(program: Node | undefined): PropField[] {
       (stmt.declaration as Node)?.type === 'VariableDeclaration' &&
       (stmt.declaration as { kind?: string }).kind === 'let'
     ) {
-      for (const d of ((stmt.declaration as { declarations?: Node[] }).declarations ?? []) as Node[]) {
+      for (const d of ((stmt.declaration as { declarations?: Node[] }).declarations ??
+        []) as Node[]) {
         const id = d.id as Node
         if (id?.type !== 'Identifier' || typeof id.name !== 'string') continue
         add(fieldFrom(id.name, annotationType(id.typeAnnotation as Node), d.init as Node))
@@ -274,16 +273,15 @@ function extractProps(program: Node | undefined): PropField[] {
       const init = d.init as Node
       const isProps =
         init?.type === 'CallExpression' &&
-        ((init.callee as { name?: string } | undefined)?.name === '$props')
+        (init.callee as { name?: string } | undefined)?.name === '$props'
       const id = d.id as Node
       if (!isProps || id?.type !== 'ObjectPattern') continue
       // Resolve a Props type from `: Props` or `$props<Props>()`, else just "Props".
       const annoRef = (
         annotationType(id.typeAnnotation as Node) as { typeName?: { name?: string } } | undefined
       )?.typeName?.name
-      const targ = (
-        (init.typeArguments ?? init.typeParameters) as { params?: Node[] } | undefined
-      )?.params?.[0] as { typeName?: { name?: string } } | undefined
+      const targ = ((init.typeArguments ?? init.typeParameters) as { params?: Node[] } | undefined)
+        ?.params?.[0] as { typeName?: { name?: string } } | undefined
       const members = collectTypeMembers(body, annoRef ?? targ?.typeName?.name ?? 'Props')
       for (const p of (id.properties as Node[] | undefined) ?? []) {
         if (p.type !== 'Property') continue
@@ -357,7 +355,16 @@ export async function parseSvelte(code: string): Promise<Node | null> {
 
 // Dirs that never hold authored usage sites — skip them while scanning so a big
 // repo doesn't read its build output / deps on every inspect.
-const SCAN_SKIP = new Set(['node_modules', '.git', '.svelte-kit', '.praxis', 'dist', 'build', 'out'])
+const SCAN_SKIP = new Set([
+  'node_modules',
+  '.git',
+  '.svelte-kit',
+  '.trezi',
+  '.praxis',
+  'dist',
+  'build',
+  'out'
+])
 
 /** `.svelte` files under `root` whose text mentions `<Component` (cheap pre-filter). */
 async function svelteFilesUsing(root: string, component: string, limit = 4000): Promise<string[]> {
@@ -465,7 +472,8 @@ export async function inspectSvelteProps(
       if (file) {
         try {
           const defAst = await parseSvelte(await readFile(file, 'utf8'))
-          const defInstance = (defAst as { instance?: { content?: Node } } | null)?.instance?.content
+          const defInstance = (defAst as { instance?: { content?: Node } } | null)?.instance
+            ?.content
           schema = extractProps(defInstance)
           crossFile = schema.length > 0
         } catch {
@@ -548,18 +556,17 @@ export async function applySvelteEdit(
     return { applied: false, error: 'Could not read the source file.' }
   }
   const ast = await parseSvelte(code)
-  if (!ast) return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+  if (!ast) return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   const el = findElement(ast, code, loc.line, loc.column)
   if (!el || typeof el.name !== 'string' || typeof el.start !== 'number') {
-    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   }
 
   // Option D: editing a prop surfaced from a host element inside a component
   // *definition* is a change to that component's prop DEFAULT (the instance has no
   // DOM node to splice). Route it to the agent rather than mis-splicing it as a
   // literal attribute on the host element.
-  const isComp =
-    el.type === 'Component' || el.type === 'SvelteComponent' || /^[A-Z]/.test(el.name)
+  const isComp = el.type === 'Component' || el.type === 'SvelteComponent' || /^[A-Z]/.test(el.name)
   if (!isComp && !isRouteFile(loc.file)) {
     const selfInstance = (ast as { instance?: { content?: Node } }).instance?.content
     if (extractProps(selfInstance).some((p) => p.name === edit.name)) {
@@ -581,7 +588,7 @@ export async function applySvelteEdit(
     // Insert right after the tag name (`<Button` → after "Button").
     const insertAt = el.start + 1 + el.name.length
     if (code.slice(el.start + 1, insertAt) !== el.name) {
-      return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+      return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
     }
     next = code.slice(0, insertAt) + ' ' + attrText + code.slice(insertAt)
   }
@@ -637,7 +644,7 @@ export async function applySvelteTextEdit(
   const fallback = (): PropEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: textAgentPrompt(edit.source, edit.text)
+    agentPrompt: textAgentPrompt(edit.source, edit.text, root)
   })
   let code: string
   try {
@@ -666,42 +673,4 @@ export async function applySvelteTextEdit(
   const trail = allWs ? '' : (raw.match(/\s*$/)?.[0] ?? '')
   const next = code.slice(0, start) + lead + edit.text + trail + code.slice(end)
   return commitEdit(root, loc.file, code, next, `${edit.source}:text`)
-}
-
-/**
- * Direct token application for `.svelte` — currently the Tailwind color-class swap
- * (the JSX T2 counterpart): a tailwind color token, an element with a literal
- * `class="…"` whose single color utility is swapped to the token. Inline-style
- * (`style="…"`) and component-prop (enum) token cases route to the agent for now.
- */
-export async function applySvelteTokenEdit(
-  root: string,
-  edit: TokenEdit,
-  loc: ResolvedSource
-): Promise<PropEditResult> {
-  const toAgent = (): PropEditResult => ({
-    applied: false,
-    needsAgent: true,
-    agentPrompt: `Apply the ${edit.group} token "${edit.token.name}" (${edit.token.value}) to the selected element${edit.source ? ` in ${edit.source}` : ''}.`
-  })
-  if (edit.tokenSource !== 'tailwind') return toAgent()
-  let code: string
-  try {
-    code = await readFile(loc.file, 'utf8')
-  } catch {
-    return { applied: false, error: 'Could not read the source file.' }
-  }
-  const ast = await parseSvelte(code)
-  if (!ast) return toAgent()
-  const el = findElement(ast, code, loc.line, loc.column)
-  if (!el) return toAgent()
-
-  // The `class` attribute, read as a single literal string (`class="…"`).
-  const classAttr = readAttributes(el).find((a) => a.name === 'class')
-  if (!classAttr || classAttr.kind !== 'string' || classAttr.expression) return toAgent()
-  const swapped = swapTailwindClass(String(classAttr.value ?? ''), edit.group, edit.token.name)
-  if (swapped == null) return toAgent()
-  // readAttributes gives the WHOLE attribute span (`class="…"`); rewrite it.
-  const next = `${code.slice(0, classAttr.start)}class="${swapped}"${code.slice(classAttr.end)}`
-  return commitEdit(root, loc.file, code, next, `${edit.source}:token`)
 }

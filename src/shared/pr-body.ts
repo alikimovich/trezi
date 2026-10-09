@@ -9,7 +9,7 @@ const code = (s: string): string => `\`${s.replace(/`/g, 'ˋ')}\``
  * changed-file list is capped so a huge working tree can't bloat the body.
  */
 export function buildPrBody(annotations: Annotation[], changedFiles: string[]): string {
-  const lines: string[] = ['## Design handoff', '', '_Prepared in Praxis._', '']
+  const lines: string[] = ['## Design handoff', '', '_Prepared in Trezi._', '']
   if (changedFiles.length) {
     lines.push(`### Changed files (${changedFiles.length})`, '')
     for (const f of changedFiles.slice(0, 50)) lines.push(`- ${code(f)}`)

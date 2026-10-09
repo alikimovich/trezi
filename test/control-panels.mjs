@@ -51,6 +51,26 @@ const validManifest = (over = {}) => ({
   ...over
 })
 
+const animation = validateManifest(validManifest({ presentation: 'animation', replay: true }))
+assert(
+  !('error' in animation) && animation.presentation === 'animation' && animation.replay,
+  'native animation metadata survives validation'
+)
+assert(
+  'error' in
+    validateManifest(
+      validManifest({
+        presentation: 'animation',
+        params: [validParam({ apply: { strategy: 'prop', propName: 'delay' } })]
+      })
+    ),
+  'animation controls cannot depend on selection'
+)
+assert(
+  'error' in validateManifest(validManifest({ replay: true })),
+  'replay requires an animation panel'
+)
+
 // A maximal valid manifest — every kind, every strategy, full caps in play.
 const maximal = validManifest({
   params: [
@@ -558,14 +578,18 @@ const splice = (code, anchor, kind, rendered) => {
     'load order preserved, first id occurrence wins'
   )
   assert(preserved.length === 3, 'invalid + version-skewed + duplicate-id entries preserved')
-  assert(preserved[0] === broken && preserved[1] === skewed && preserved[2] === dup,
-    'preserved entries are the raw objects, verbatim')
+  assert(
+    preserved[0] === broken && preserved[1] === skewed && preserved[2] === dup,
+    'preserved entries are the raw objects, verbatim'
+  )
   // Over-cap valid panels are preserved too (kept out of resolution, not erased).
   const many = Array.from({ length: 22 }, (_, i) => mk({ id: `p-${i}`, file: `src/F${i}.tsx` }))
   const capped = partitionStoreEntries(many)
   assert(capped.panels.length === 20, 'load capped at 20 panels')
-  assert(capped.preserved.length === 2 && capped.preserved[0] === many[20],
-    'over-cap panels preserved verbatim')
+  assert(
+    capped.preserved.length === 2 && capped.preserved[0] === many[20],
+    'over-cap panels preserved verbatim'
+  )
 }
 
 if (failed) {

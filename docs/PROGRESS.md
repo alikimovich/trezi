@@ -2,6 +2,7017 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-216 repair: the stale-stylesheet check never ran in the native smoke
+
+- **Why.** The manager's `editor-freshness` smoke timed out on its stale-stylesheet step with `styleChecks: 0`. The hub skipped the comparison with the server whenever the page had reported a style mutation after the change, and a document load (its `<link>`s inserted by the parser) or any injected `<style>` counts as one. The comparison now always runs after the 500 ms clock; a page signal only rules out the hard reload (an HMR update leaves entry scripts stale on purpose). `watchStyles` also ignores mutations while `document.readyState` is `loading`. The check URL comes from the workspace entry, not the status, which can read busy or error. The smoke's timeout snapshot now includes the hub's stats, the active entry, both timestamps, the computed value and the links.
+- **Cleanup race.** With the check running, the manager's next native run left the preview on `/fresh.html` for `toolbar-more` and `states-workbench`: the hub was still re-checking the swap when the smoke's cleanup navigated back, and its hard reload hit the wrong page. A check that spans a new document now leaves the hard reload to that document's own check (`documents` counter), and `restoreEditorFreshness` waits for the hub to go idle (`idle`), confirms the original page is back, then removes the files and waits again.
+- **Tests.** `test/editor-freshness.mjs` replaces "an HMR signal skips the comparison" with: a fresh result after a signal does nothing; a stale stylesheet is swapped despite the signal; a stale script after a signal is no reason for a hard reload.
+- **Smoke leftovers.** The smoke runner calls a check's `cleanup` only after a failure, so once `editor-freshness` passed, the preview stayed on `/fresh.html` and `toolbar-more` and `states-workbench` timed out waiting for the fixture page. The check now restores the start page and removes its files at the end of `run`; `cleanup` stays for the failure path. Step 5 also waits for the hub to be idle and the dependency CSS to be loaded before setting its reload sentinel.
+
+## 2026-10-08 — LKM-216: the visual editor never shows stale styles
+
+- **Why.** Each cache in the editing loop cleared itself on a different signal: the 1.5 s token TTL, a landing event, Layers on `layers:changed`. An editor save, a change made outside Trezi or a stylesheet WebKit kept left the island or the preview showing old values. `docs/CACHES.md` now lists every cache and its rule, and `docs/agent-guide/gotchas.md` points to it.
+- **Signals.** `observedSourceOwner` reports the source owner's own writes as `source-edit` and recorded landings as `landing`. `LiveTreeWatch` (`fs.watch` on the active checkout, generated folders ignored) reports `file-change`. The dependency watch reports `dependency`. Agent landing events, the page's new `preview:styles-updated` (a MutationObserver on `<style>`/`<link>` in the isolated world) and `preview:url-changed` feed the same hub, `src/native/editor-freshness.ts`.
+- **Rules.** Any change drops the token memo. After a 60 ms settle, the island re-reads in place with `invalidated()` (no new generation; it keeps its last values mid-reload), Layers re-reads, and the project's idle chat islands re-read. A stylesheet or dependency change with no HMR CSS update within 500 ms compares the page with the dev server (`previewFreshness`, which now dedupes HMR `?t=` copies). Stale `<link>`s are swapped with a `trezi-fresh` query; whatever is still stale gets one hard reload, at most every 3 s. A new document restarts the 500 ms clock. Trezi's own swap is not counted as HMR.
+- **Reload keeps the selection.** A full reload of the same page empties the page's selection. `inspector-runtime` now re-picks the element with the same tag, source and id through `layers:select`, and `controller.reattach()` re-reads without rebuilding the fields.
+- **Pulse.** `NativeInspectorState.updated` counts re-reads that changed the island's values. The Swift model plays a small "Updated" capsule for 0.9 s. `inspectorInspect` adds `updated`, `pulses`, `values` and `tokens`.
+- **Checks.** Unit `editor-freshness` covers the hub (settle, root filter, HMR, swap then hard reload, rate limit, a new document), the watch, the owner's notifications, the style-mutation filter and the asset dedupe. Native smoke `editor-freshness` (core group) covers five cases: a CSS module save reaches the computed style and the island within 1 s with the pulse, a token file updates the token list, a component edit updates the props, a page edit updates Layers, and a stale `node_modules` stylesheet is swapped without a reload.
+
+## 2026-10-08 — LKM-212 repair: agent reload, private load errors, Bun reveal gate test
+
+- **Reload.** `reload_preview` on the agent browser returned early because the page already showed the route. `AgentBrowser.open(path, { reload, hard })` now skips that early return and the host's `agentBrowserOpen` reloads from origin; `hard` clears WebKit's caches through `PreviewCache.reload`. Native smoke `agent-preview` asserts `navigation` increments after a soft and a hard reload.
+- **Private errors.** `previewNavigationFailed` answers an `agent:` view's pending load and returns before the product log and `load-error`/`navigation-failed` events, so a failed private load never reaches the user's activity.
+- **Reveal gate.** `test/provider-helper-tools.mjs` runs `open_preview`, `preview_viewport` and `preview_speed` with `target: 'user'` while the gate says the user is interacting: all three return the error and the visible preview is not navigated or resized.
+
+## 2026-10-08 — LKM-212 repair: composer attachment in dark appearance
+
+- The manager's full native run caught a blank file tile in the visible-composer capture: `index.html` existed in composer state, but its label was white on a layer background resolved as light before the tile joined the window. Resolve the tile and border colors under its effective appearance after attachment and on appearance changes. Quick verification passed 203 unit checks, typechecks and lint; the native composer group passed all 7 checks, including the foreground `index.html` capture at both widths.
+
+## 2026-10-08 — LKM-212: private agent browser
+
+- **Isolation.** Session tools default to a host-owned WebKit page outside the window. Three may run independently; Bun reuses each for its chat and releases it after two minutes idle. The host blocks page IPC and media permission prompts. The visible preview keeps its route, size, scroll, selection and focus while the agent navigates, resizes and captures its page.
+- **Tools.** Open/reload/observations and slow motion use the private page. `target: "user"` is gated by five seconds without user input for visible navigation, resizing or speed changes. The page loads Trezi's live dev server and labels observations with its own session/navigation and served revision. Chromium is an optional adapter slot, tested with a fake engine; no browser download is part of the default path.
+- **Checks.** Unit: independent Chromium stub sessions/cap/reuse/close, rules v39 and existing preview tool tests. Manager quick: 200 pass, 3 skip. Native `core`: 31 smoke pass, including two simultaneous pages, cap, screenshot and median read/screenshot targets. Native `chat` smoke passed; the separate chat-scroll fixture stopped because the chat window was not foreground. Frame stepping and per-browser viewport restore were then added for a final core recheck.
+- **Final gate.** Manager quick on the updated tree: 203 pass. Native `core` on the updated tree: 24 pass, including `agent-preview`, with no failures or skips. The prior chat-scroll foreground-window failure remains an environment-limited check; the manager's full suite will rerun it.
+## 2026-10-08 — LKM-213: Publish is the rightmost toolbar group
+
+- **Why.** LKM-206 (slow motion) and LKM-197 ("…") were added after Publish, so Publish and its chevron were no longer at the trailing edge.
+- **Order.** `interaction [select | device | ruler | slow motion]` · space · `tools [code | layers | expand]` · space · `…` · `Publish`. Slow motion is an `NSMenuToolbarItem` subitem of the `MomentaryToolbarGroup`; a click on a menu-only subitem pops its menu under the segment. A subitem's `.prominent` style does not draw, so a slowed preview shows an accent-coloured `tortoise.fill` (`toolbarAccentSymbol`); `speedProminent` reports that glyph. `clickSegment` refuses menu segments (the menu would block the pipe); checks keep using `preview-speed`.
+- **Narrow windows.** As before, "…" and slow motion leave windows under 1000 pt; Publish (high priority) never overflows. A first try kept the segment at every width: at 850 pt with the sidebar open its 32 pt pushed the address block to its 80 pt floor, under the LKM-148 lower bound (100 pt). `MomentaryToolbarGroup.setSegment` now drops or restores a subitem's segment (`shown`) and returns the control's width change. The reserved inset moves by that plus the "…" shift, measured from AppKit's item views (`toolbarItemFrames`: Publish's leading edge minus "…"'s) when they can be read, else the `moreShift` estimate.
+- **Check.** `publishTrailingInspect` (in `toolbarInspect`) reports the laid-out item order, Publish's frame and the trailing inset. Native `toolbar-address` adds a 950 pt width and asserts at every width: Publish visible and last, every other item ends before it, "…" just before it when shown, the same trailing inset (±1, ≤ 24 pt) as at the first width, and the interaction segments (slow motion only from 1000 pt).
+
+## 2026-10-08 — LKM-211: chat-new-instant timing flake
+
+- **Cause.** `chat-new-instant` asserted one sample per scenario against 100 ms. On the shared CI runner one PR run measured 103 ms, while the push run of the same commit passed. Locally the composer is ready in 1–2 ms.
+- **One gate.** `src/native/smoke-timing.ts` (used by unit tests and the native smoke): one warm-up, then the median of `TIMING_RUNS` (5). The product target holds locally. With `CI` set the budget is 2× the target. That is 200 ms here, not the suggested 250 ms, so a 2× regression still fails. Unit `smoke-timing` pins: the budgets, that a CI median of exactly 2× fails, and that the warm-up is never counted.
+- **chat-new-instant.** A new section 0 creates five new chats after a warm-up. The repository owner holds `git worktree add` (a `hold` promise) until all are measured, and each chat is closed while pending. The test then checks that none started a provider or prewarmed a spare, and that all their worktrees were removed. The scenario chats only assert that the composer does not wait for the worktree (`ms < delay`).
+- **LKM-171 native `sent-attachments`.** The four hover budgets (16 ms) use the median of 5 bursts of 100 moves after a warm-up burst. Every burst must still coalesce into two draws. Local selection and its bridge round trip (50 ms) use the median of 5 real single clicks after a warm-up click. Native `chat`: hover medians 0 ms, selection 1 ms, round trip 5 ms.
+- **Left as is (already robust).** LKM-200 `preview-timing` (median of 5, slowest < 2×), LKM-183 typing (unit p95 of 40 keystrokes, native median of p95s), LKM-206 slow motion (fake clock, no wall time).
+- **Loops.** `chat-new-instant` 20× locally: 20/20 pass, medians 1–2 ms (runs 1–2 ms). With `CI=1`, 10×: 10/10 pass, medians 1–2 ms, max run 3 ms, budget 200.
+## 2026-10-08 — LKM-210: post-landing check is silent on success, a warning on problems
+
+- **Why.** The LKM-195 row "✓ Checked after landing: no console errors" with a thumbnail after every landing was noise to the user.
+- **Check** (`src/native/landing-check.ts`). The check still runs after every chat landing with files. It returns `passed`, `skipped` (no dev server for the project, or the preview shows another project, which the user already sees) or one problem: `not-loaded`, `server-error` (HTTP ≥ 400 from `previewLoads.lastStatus`, or a Vite error overlay), `stale`, `blank` (no visible text, media or controls), `errors` (console/page errors since the landing). The thumbnail is gone.
+- **Stale, without false alarms.** The document's served revision is the live HEAD when its navigation started (LKM-200), so after hot reload it is older by design. It counts as stale only when the page reloaded after the landing, or the landing restarted the environment, and the live HEAD is still the landed commit.
+- **Row.** `ChatLandingCheck.swift`: an orange warning symbol, the reason, up to three error lines, Ask agent to fix (`landing-fix`: sends `landingFixPrompt` as the user's next message) and Show preview (`landing-preview` → effect `preview`, which hides a docked editor over the preview).
+- **Agent context.** `src/main/landing-context.ts` holds the latest failed check per chat. `agent.ts` prepends it once to the next prompt, after `chatUiContext`. A later pass clears it, and so does Ask agent to fix, whose message already names the problem.
+- **Agent-verified landings.** Session tools record the `servedRevision` of each answered preview observation and of a loaded `open_preview` / `reload_preview` (chat agents only). `LandingChecks.landed` reads the landed commit, waits while the landing chat's turn is still running (land_now), then skips the check when the agent saw that commit. A commit cannot be observed before it lands, so this is always the same turn.
+- **Rules v38.** The closing guidance no longer promises a check notice: a visual check waiting for landing is the agent's (land_now, then look); background agents still name the user action.
+- **Tests.** Unit `landing-check`: pass silent, each problem type, skipped, polling, verified skip mid-turn, next-turn context once, the actions through `NativeChatController`. Unit `rules`: v38, no check claim. Native `landing-check` (group `chat`): a pass adds no row, four warning rows in light and dark (`landing-check-{light,dark}.png`).
+
+## 2026-10-08 — LKM-208: native answer components in chat (options, form)
+
+- **What.** A `chat_ui` tool for Claude and Codex with three actions: catalog, show and update. It renders `options` (2–4 variants with preview images) and `form` (typed fields, Submit) natively inside the assistant message. This is OpenUI's pattern without its runtime: catalog, schemas, rules, progressive rendering, saved state. Design: `docs/CHAT-UI.md`.
+- **One schema source.** `bin/chat-ui-schema.mjs` (zod) feeds the SDK input schemas, Bun's validation, the catalog action and the generated rules section (`src/main/chat-ui-rules.ts`). Swift's `ChatUiModel.swift` checks the same limits. A bad payload is rejected whole with `path: message` lines, never half-drawn.
+- **Returns at once, like `ask_user`.** No tool call waits for a person. The agent ends its turn, and the answer becomes the user's next message (`agent:chat-ui-answer` → `sendReply`). Its summary is prepended once to the next prompt (`chatUiContext`), which makes the pick explicit ("Apply this variant").
+- **Progressive.** show publishes immediately with skeletons. Each `update {option, capture}` captures the preview (360 px JPEG, ≤120 KB, because frames re-send messages) and re-publishes in place.
+- **State.** The record is a transcript status entry carrying `ui`, owned by the conversation owner, and hydrate rebuilds it.
+- **Rules.** Rules v37: with preview tools, structured questions go through a `chat_ui` form for every provider.
+- **Tests.** Unit `chat-ui` (with a mocked provider through `NativeChatController`) and `chat-ui-model` (Swift fixture). Native smoke `chat-ui` (group `chat`) captures options mid-turn with skeletons and both components in light and dark.
+## 2026-10-08 — LKM-209: flaky versioning and workflow-durability tests
+
+- **workflow-durability timeout, root cause.** The 120 s budget covered both the run and the fixture build. That build waits for a swiftc lane slot, then compiles most service sources cold: 25.5 s on a 12-core Mac and much longer on a 3-core runner. Service sources change in nearly every commit, so CI compiles cold every time. The checks themselves spent about 25 s on wall-clock client deadlines (3 s per injected crash, 4 s × 2 for the lost replies, plus a 50 ms cancel poll). The old `crashed()` also raced the deadline against the fault and waited on exit with no bound.
+- **Fix.** `serviceWorkflows` takes an optional `deadline` arm (wall clock by default). The test helpers pass a manual clock (`test/helpers/workflow-fixture.mjs`):
+  - `crashed()` waits for the fixture's SIGKILL, then expires the deadline;
+  - the fixture reports a dropped reply (`workflow-dropped`), and `droppingClient` expires the deadline on that event;
+  - the fake package manager signals "install started" through a FIFO.
+
+  Test git and the fixture run with `GIT_ALLOW_PROTOCOL=file`. `workflow-durability` and `workflow-owner` get 240 s in `UNIT_TIMEOUT_MS`, like the other owner fixtures, and `workflow-owner` logs how long the build took. The checks now take about 11 s instead of 37 s.
+- **versioning "detached HEAD", root cause.** It did not reproduce in 240+ concurrent runs. `release.mjs` read only the stdout of `git symbolic-ref`, so a git failure, a killed git or empty output was all reported as "this is a detached HEAD", which hid git's real error. The test also inherited the runner's git environment: with `GIT_DIR` or `GIT_WORK_TREE` set, it broke.
+- **Fix.** `release.mjs` treats only exit 1 as detached and reports any other failure with its status and stderr. `test/versioning.mjs` changes:
+  - it re-execs itself without GIT_*/GITHUB_* (Bun children ignore `delete process.env`);
+  - it uses `withRunnerEnv` (private HOME and config) plus `GIT_CEILING_DIRECTORIES`;
+  - it asserts the branch before each refusal;
+  - a new case uses a fake git whose `symbolic-ref` fails.
+- **Loops.**
+
+  | Test | Serial ×20 | CI settings ×20 (`--jobs=3 --timeout-ms=120000`) |
+  | --- | --- | --- |
+  | versioning | pass (also with `GIT_DIR`, `GIT_WORK_TREE`, `GITHUB_*` set) | pass, 1.1–1.4 s |
+  | workflow-durability | pass, 11–13 s | pass, 12.0–19.8 s |
+  | workflow-owner | — | pass, 7.8–11.6 s |
+
+## 2026-10-08 — LKM-207 repair: an empty chat root is missing, not a root
+
+- **Gap.** A chat created by an incoming event before `initialize` has `root: ''` (`chat-state.ts`, filled in by `chat-controller.ts`). `chatRoot` used `??`, so the empty string won over the project fallback and the `if (root)` guard skipped the rescan.
+- **Fix.** `chatRoot` uses `||` for the live root, and the `states-install.ts` callback returns `… || undefined` as a second safeguard. `test/states-workbench.mjs` pins `chatRoot('/repo#2', known, () => '') === '/repo'`.
+
+## 2026-10-08 — LKM-207 repair: landing hook resolves additional chats' roots
+
+- **Gap.** The `turnBoundaries` key is the chat session key, which equals the project key only for a project's first chat (`${projectKey}#…` for others). The landing hook looked it up in `workspace.state.projects`, so landings from later chats never rescanned.
+- **Fix.** `chatRoot(key, projects, live)` in `src/shared/states-workbench.ts` prefers the live chat's own root (`nativeChat.chats.get(key)?.root`, as the landing checks do), then the project matching the key or its part before `#`. `states-install.ts` uses it.
+- **Test.** `test/states-workbench.mjs` pins the mapping for first, `#`-suffixed, resumed, unknown and live-chat keys.
+
+## 2026-10-08 — LKM-207 repair: the workbench list no longer goes stale
+
+- **Gap.** The cached workbench list was rescanned only on a preview path change, after a Remove and on a cold Publish. A workbench landing under the already-open route (same-path live reload) or into a background project stayed invisible, so Publish skipped its warning and the island stayed hidden.
+- **Fix.** `NativeStatesController.landed(root)` rescans a root; `states-install.ts` calls it from the `turnBoundaries` `landed` boundary for the chat's project (open or not). `url()` also rescans on a same-path load while no cached workbench matches the URL, throttled to once per 1.5 s. Publish still answers synchronously from the cache.
+- **Test.** `test/states-workbench.mjs`: a cached empty list, then a landing, makes `beforePublish` present the warning; a same-path URL event rescans only after the throttle.
+
+## 2026-10-08 — LKM-207: component states workbench
+
+- **What.** `/states`, Show states on the element toolbar, or its … menu ask the agent (bundled `component-states` skill, adapted from Jakub Krehel's MIT state-machine skill) to build a scratch route showing every state of one component, fed at its data boundary. The preview then shows a States island, keys switch states, All shows a grid, and the … menu lists Workbenches to open or remove. Design and file map: `docs/STATES.md`.
+- **The manifest is the record.** The agent writes `trezi-workbench.json` in the workbench folder (component, route, states, missing, seams, fixtures, chat). Bun scans the live checkout read-only for it, so no new service store or ledger domain is needed. Writes stay with the Swift owner: the new `removeWorkbench` lane method only accepts a directory holding a regular manifest, plus regular seam files outside it, and trashes them in one step.
+- **URL as truth.** Switching is a `replaceState` of `__state` plus a `trezi:state` event, so it is instant and keeps the scroll. A page that does not set `data-trezi-state` within 600 ms gets a plain navigation, so in-page switchers keep working. Main re-sends the state ids to the preload on every URL change, because a load replaces the preload.
+- **One WebKit view.** The All grid is the page's own `__state=all` layout of live frames, not extra web views, so selection and the editing island work on it.
+- **Publish.** `beforePublish` answers synchronously when there is no workbench, so LKM-187's progress-on-click holds. With one, a sheet offers Cancel / Publish Anyway / Remove and Publish.
+- **Seams.** The skill defines seams as files *created* for the workbench, because removal trashes them. Lines added to existing files show up in the leftover search instead.
+- **Tests.** Unit `states-workbench` (Publish warning included), plus additions to `source-owner` and `provider-skills`. Native smoke `states-workbench` (group `core`): a React UMD fixture with loading/empty/list.
+- **Native run.** In `core`, the route detection, keys, scroll/marker preservation and wraps passed. The island step failed twice, for two reasons:
+  - The smoke passed the state as `id`, which `NativeBridge.request` overwrites with its request id. The broker now reads `state`.
+  - With `sizingOptions = []`, an `NSHostingView` has no intrinsic size, so `fittingSize` was 0×0. The island drew, but its frame (used for hit testing and the page shield) was empty. It is now measured with an off-screen `NSHostingController.sizeThatFits`, as `SheetAlert.swift` does. A headless check gives 356×31, and the smoke asserts a real size.
+
+  Both fixes still need a native `core` run. `NativePreviewLoad` has the same `fittingSize` pattern and probably the same empty frame; it was left alone.
+- **Not done.** The optional thumbnail "states check" row. The upstream skill text could not be fetched here (`gh api` denied), so the adaptation is written from the issue's description of it.
+
+## 2026-10-08 — LKM-205 root cause: `preview-overlay` clicked a disabled toolbar button
+
+- **Diagnostics.** The next failure reported `click false` and an empty `panelNote`, so `togglePanel` never ran. The focus-loss hypothesis below was wrong.
+- **Cause.** `Shell.perform("overlay")` goes through `MomentaryToolbarGroup.clickSegment`, which returns false for a disabled subitem. Preview toolbar items are enabled only while `previewReady` is true, and the check clicks right after switching from a second project back to the first and closing the second one. The overlay key comes back before the first project's preview is ready again, so a slow restart left the button disabled at click time. The product behaviour (no preview tools without a preview) is correct; the check was racing it.
+- **Fix.** `previewOverlayInspect` reports `buttonEnabled`, and the check waits for it (up to 20 s), then asserts the click returned true before it waits for the popover. The panel note diagnostics stay.
+
+## 2026-10-08 — LKM-205 repair: `preview-overlay` popover timeout after the LKM-206 merge
+
+- **Symptom.** The manager's full run timed out for 10 s waiting for the Rulers and Grids popover (`panelShown` false) on the tree merged with LKM-206 (slow motion); every other check passed.
+- **What I found.** The merged tree passes: `core` alone (23 checks) and all seven groups together (39 checks, `preview-overlay` and `source-syntax` included). I could not reproduce the timeout. The click path is unchanged by the merge (toolbar group segment → `overlayAction` → `togglePanel`), and the popover is `.transient`, so it closes when the window or app loses focus. Focus loss during the manager's run is the likely cause, but it is a hypothesis.
+- **Added for next time.** `PreviewOverlay.panelNote` records what the last click did (no window / no project / no toolbar button / shown / closed with AppKit's close reason) and `previewOverlayInspect` returns it. The smoke check appends it and the click result to the timeout message, so a repeat failure names its cause. No assertion or timeout changed.
+
+## 2026-10-08 — LKM-205: preview rulers, guides and layout grids
+
+- **What.** Rulers (⇧⌘R), guides dragged from them, and column/baseline/square layout grids (⌃G) over the preview, set in a toolbar popover and remembered per project (rulers) and per viewport (guides, grids). The design is in `docs/agent-guide/preview-overlay.md`.
+- **Native, not DOM.** Everything draws in native views over the web view (`src/native/PreviewOverlay.swift`, `src/native/PreviewRulers.swift`), so the project's DOM and CSS never change and the smoke check compares the DOM before and after. The guide layer answers hit tests only within 3 pt of an unlocked guide, so the page keeps its input everywhere else.
+- **Rulers inset the page.** They first floated over the page's top-left 16 pt, which made a guide at CSS x < 16 impossible to drop (dropping on a ruler removes it). While they show, `WorkspaceLayout` now insets the page area beside them, and the agent's viewport width is centred in that inset area.
+- **Coordinates.** All settings are page CSS px ("guide space": the document, or the viewport when Fixed to Viewport is on). The page reports scroll, client size and the selection's rect only while something shows, once per frame and only on change. The host takes that channel directly (`Host.userContentController`), so per-scroll traffic never reaches Bun. Snapping reads element rects once per drag from the isolated world, and never mid-navigation.
+- **Keys.** The host echoes main's `[root, viewport]` key with each edit, so an edit that arrives after a project switch is stored for the project it was made in. While the host's own saves are pending, main does not re-send stored settings, because an earlier save landing would briefly undo a newer edit. It also skips settings the host already shows, so an unrelated preference write never re-lays out the preview.
+- **⇧⌘R is `"R"`.** A shifted key event's characters are uppercase. A lowercase `"r"` with the Shift mask did not match it: an AppKit menu probe showed `false` for `"r"` and `true` for `"R"`, so the event fell to Reload Preview (⌘R).
+- **Agent.** `workspace_state.previewOverlay` is read-only (`src/main/preview-overlay.ts`), and the worktree rules mention it.
+- **Tests.** Unit: `preview-overlay` (Swift math fixture) and `guide-distance`. Native smoke check `preview-overlay` (group `core`):
+  - ruler drags through the window's hit testing, with a snap to the heading's x = 8 edge, a move and a removal;
+  - columns at 600 and 900 px;
+  - mobile/desktop and second-project persistence;
+  - menu key equivalents, the toolbar popover and the agent view;
+  - an unchanged DOM and `previewInputs`;
+  - light and dark captures.
+- **Repair: `source-syntax` p95 54 ms was load, not the overlay.** The failing run had every keystroke slow (11 ms floor, spikes to 122 ms) while other worktrees were building and running native checks. Nothing in the overlay runs in that path: its views live in the main window's canvas, `place` only runs from `WorkspaceLayout.layout()`, and the page reporter is off once nothing shows. Re-run unchanged on a quieter machine, `core` passed with `preview-overlay` and `source-syntax` in the same run (typing p95 13.96 ms, runs 13.78 / 13.96 / 14.16). No code, test or threshold changed.
+## 2026-10-07 — LKM-203: mid-turn landing and synchronous publish
+
+- Added `land_now` through the chat landing chain and repository owner. It returns the landing outcome, live commit and preview evidence; the ordinary turn-end pass handles later edits.
+- `publish_update` now lands first and waits for the workflow owner to push. `publish_merge` uses the owner's merge mode and observes the PR merge commit and publish workflow. Settings has Agent can merge pull requests, on by default.
+- Updated tool grants and rules so agents verify the landed preview and complete publication during the turn.
+- Verification: the manager's quick tier passed once (192 unit tests) and the first native run reached Settings smoke, where the new row required an updated evidence list. That list and its unit fixture now pass. A native confirmation was skipped by its preflight because another process held the Vite fixture's port 7777; the operator should rerun chat/settings native smoke when that port is free.
+## 2026-10-08 — LKM-203 repair: the synchronous tools finish inside the tool timeouts
+
+- **Cause.** Codex's default MCP tool timeout is 60 s and the bridge allowed 240 s, but `publish_merge` can take longer (land 60 s, push/merge, `gh pr view`, workflow polling 180 s, release lookup). A timeout reported an error while the merge carried on, so the agent could not confirm the result.
+- **Fix.** The workflow poll now ends 180 s after the tool call began (`PUBLISH_WORKFLOW_BUDGET_MS`, `startedAt` from `session-tools.ts`), not 180 s after the merge; past it a running workflow is returned as `{ state: 'in_progress', url }`. Worst case is about 225 s plus the push/merge itself. `treziMcpConfig` sets `tool_timeout_sec: SYNC_TOOL_TIMEOUT_SEC` (300) and the bridge request timeout is 300 s. Tests: `test/codex-mcp.mjs` asserts the configured value, `test/agent-git.mjs` covers the exhausted budget.
+
+## 2026-10-08 — LKM-203 repair 2: `codex-model` / `island-flicker-frameworks` failures are host load, no code change
+
+- The manager's quick run failed `codex-model` (the "every listed model rejected" case ran `[null, gpt-6-sol]`, no `gpt-6-astra`) and `island-flicker-frameworks`. `src/main/backends/codex.ts` and `codex-model.ts` are untouched by LKM-203; this ticket only adds `tool_timeout_sec` to the trezi MCP server in `codex-mcp.ts`. The fallback loop stops when `listedCodexModels()` (`codex debug models`, 8 s timeout, `[]` on any failure) comes back empty, which happens when the machine is saturated: the run took 8.5 s next to seven other workers.
+- Evidence it is load: the host's load average was 21–29 while verifying, other agent sessions held port 7777 (`dependency-refresh-vite` and `island-flicker-frameworks` hit `EADDRINUSE` there), and three identical quick reruns failed on different, unrelated tests each time (`platform-owner`, `native-long-chat-perf` 114 ms vs a 100 ms budget, `workflow-durability` at the 120 s limit). `codex-model` passed in all three reruns. The last rerun left only `island-flicker-frameworks` (a real-browser Next override check, already recorded above as load-sensitive).
+- No assertion or timeout was changed.
+- Repair 3 (same cause). The next manager run failed `provider-cold-start` (the stand-in "installed" probe started 100 ms after the "bundled" probe ended, i.e. a 600 ms spawn skew between two probes launched together), `native-long-chat-perf`, `dependency-refresh-vite` and `island-flicker-frameworks`; my reruns failed on yet other tests (`chat-new-instant`: a transient `git worktree list` error while another worker's git ran). Host load average was 23–34 throughout. Each of `provider-cold-start` (3 runs) and `chat-new-instant` (2 runs) passes alone, `claude.ts`/`provider-policy.ts` have no pending diff, and `dependency-refresh-vite`/`island-flicker-frameworks` fail on the fixed port 7777 held by other sessions. Nothing changed.
+- Repair 4 (a real test race). `source-owner` "lanes" recorded `commit` before `lease end`. The test started a held lease and proposed after a fixed `sleep(30)`, but `withLease` acquires through a service round trip (`acquire` in `src/native/repository-service.ts`), so on a loaded host the proposal reached the source owner before the lease existed. LKM-203 does not touch this lane code. The test now proposes only after the held operation signals that it holds the lease, and still asserts the same order. `repository-owner` "lanes" had the same `sleep(20)` pattern and got the same fix.
+- Repair 4, port 7777. `dependency-refresh-vite` and `island-flicker-frameworks` are unit tests that run in parallel, and both took dev-server ports from 7777 with a probe and then a bind. Running the two at once reproduced the clash: Vite took 7778, the flicker test's Next server had probed 7778 as free, and its page then loaded the other test's app before Next exited with EADDRINUSE. The flicker helper now asks the kernel for an ephemeral port, away from the 7777 range that Trezi's allocator also uses, and starts again if its server exits before it is reachable. `dependency-refresh-vite` goes through the real RuntimeOwner allocator, so it keeps 7777 but retries its first start (up to 3 tries) when Vite reports the port it was given as already in use. Both passed two concurrent runs.
+- Repair 4, native `settings/sheets`. Another app took the foreground during the check, so the runner retried it. The first attempt had failed with Settings open on AI Providers, and `restoreSmokeState` only cancelled that sheet. Settings reopens on its remembered section, so the retry's menu reopen showed "AI Providers" and could never match "General". Restore now returns an open Settings to General (leaving the provider editor first) before closing it, as a passing run does. `test/native-smoke-runner.mjs` covers this with a fake host.
+- Repair 4, `island-flicker-frameworks` "Preview override did not settle" (also seen in earlier rounds on port 7777). After the gesture the card still showed `steps[0]`, the reset source, and the run logged a hydration mismatch on the reload. Next had rendered the reset source on the server while the browser still had the previous phase's client chunk (`steps[12]`). Hydration kept the server attribute but React kept the old props, so the drag's final write of `steps[12]` changed nothing in the DOM. `openOnSource` checked only the server HTML. It now also waits for the hydrated React props of the card (Next pages only, found by their `/_next/` scripts) to render the same shadow, and reloads otherwise. A temporary probe confirmed it waits for hydration (about 0.7 s) and compares real props; Vite returns at once.
+
+## 2026-10-08 — LKM-203 repair 5: merge with the LKM-206 candidate, `native-chat-scroll` focus race
+
+- **Merge (candidate `7ae6856`).** Four conflicts. `bin/trezi-agent-mcp.mjs`: both sides kept (this ticket's long-timeout comment and tools, the candidate's `preview_speed` in the preview tool loop, read-only unless `preview_viewport`/`preview_speed`). `test/native-workspace-controller.mjs`: the candidate's deadline loop for `devserver:install`. `test/helpers/island-flicker-framework-core.mjs` and `island-flicker-frameworks.mjs`: the candidate's `findFreePort(8500)` range and `waitForNextHydration` supersede repair 4's ephemeral port and `waitForClientRender`, which are removed; only the retry when a dev server exits before it is reachable (lost its port between probe and bind) is kept.
+- **`native-chat-scroll`: `error: Chat must be foreground`.** `ChatAcceptance.swift` refuses any request unless the chat window is key in the active app. Only `prepare: true` requests activate first, and the driver sent many without it (the poll loops, captures, `checkSendVisibility`), so a worker on the same desktop taking focus between two requests failed the run. The host is unchanged.
+- **Fix (test only).** `test/helpers/chat-foreground.mjs` wraps the host bridge: every `chatAcceptance` request is sent with `prepare: true` (activate, make the window key, wait until the host reports foreground), and a request still answered `Chat must be foreground` is sent once more after a fresh activation. The refusal is the host's first check, before width/override/hover are applied, so the failed attempt leaves no state behind and the retry resends the same absolute state. A second refusal and every other error propagate. No assertion, timeout or the Swift precondition changed. A fake-host case in `test/native-smoke-runner.mjs` covers prepare on every request, one retry, no second retry, no retry of other errors, and non-acceptance requests untouched.
+
+## 2026-10-08 — LKM-206 repair: dev-server tests no longer share port 7777
+
+- **Why.** `island-flicker-frameworks` and `dependency-refresh-vite` ran in the same parallel unit batch and both asked for 7777 (`findFreePort(7777)`; the Swift `RuntimeNet.portBase`). The probe closes its socket before the dev server binds, so both were told 7777 was free (Next logged `EADDRINUSE`; Vite's page never loaded). Not slow-motion: at 1× `slow-motion.ts` is a pass-through.
+- **Fix (tests only).** `island-flicker-frameworks` probes from 8500; `dependency-refresh-vite` starts the RuntimeOwner fixture with the new `RUNTIME_PORT_BASE=8300` (`test/fixtures/runtime-owner/main.swift`: same bind probe as production, other base). Assertions and the 20 s poll are unchanged. Ports used by real dev servers in the unit tier are now disjoint; `native-next-hmr` keeps 7777 but is an exclusive native-tier test.
+- **Second failure behind the port one.** With the port fixed, `island-flicker-frameworks` failed the same way on two quick runs: "Preview override did not settle after the gesture" (the same flake an earlier ticket saw). Next's hydration warning in the log shows why: the DOM already held the dragged (final) shadow when React hydrated the initial props over it, so the drag had run before hydration, ahead of the HMR socket, and the write was never delivered. `measureFramework` now waits (best effort, 20 s, never fails) for `next-route-announcer`, which the App Router appends to the body on mount, before the Next drag (`waitForNextHydration`). Assertions unchanged.
+- **Not verified here.** Both tests need the native build, `bun install` and local binding, which the worker sandbox denies; the manager's quick run is the check.
+
+## 2026-10-07 — LKM-206: preview slow motion
+
+- **What.** A tortoise menu in the preview toolbar (`src/native/ToolbarSpeed.swift`, before "…") offers 1×, 0.5×, 0.25×, 0.1×, Paused and Step Frame. Actions → Toggle Slow Motion (⌃⇧S) switches between 1× and the last slow speed, and Step Preview Frame advances one frame. While slowed, the item is `.prominent` and a badge sits at the preview's bottom-left (`NativePreviewSpeed` in `src/native/PreviewSpeed.swift`; it returns nil from `hitTest`, so it needs no cover rect). Agents get `preview_speed`.
+- **One owner.** `previewSpeed` (`src/main/preview-speed.ts`) holds the session speed. It is not persisted, and `NativeShellController.render` scopes it to the open project, so a switch resets it to 1×. `src/native/preview-speed.ts` forwards each change to the host (badge, toolbar, scripts) and to the open page.
+- **Page world.** Libraries capture `requestAnimationFrame`/`performance.now` when they load, so `src/preview/slow-motion.ts` (bundled as `slow-motion.js`) runs at document start in the page world. It wraps performance.now, Date.now, rAF and the timers on a `VirtualClock`. Every wrapper passes straight through until the first change, so an unslowed page runs exactly as before. CSS transitions/animations and WAAPI get `playbackRate × speed`: they are swept on change, on animationstart/transitionrun, once per frame while slowed, and at `Element.animate`. Media follows the same rate and pauses with the clock. Step adds 1/60 s to the clock and to each running animation's `currentTime`, then releases held frame callbacks once.
+- **Getting the speed into the page.** WKUserScripts apply only to new documents, so each change re-registers the user scripts with the speed baked in (`installPreviewScripts`). The open document gets the change as a `trezi:speed` event with a string detail, dispatched from the isolated preload (`src/preview/speed-control.ts`), because only strings cross worlds. Nothing evaluates into the page mid-navigation, and every `loaded` re-sends the current speed.
+- **Toolbar width.** The speed item and "…" hide together below a 1000 pt window (`fitMore` now takes several items), so the 850 pt toolbar layout check is unchanged. ⌃⇧S and the Actions menu still work there. The reserved-inset shift for the pair is a fixed 84 pt. A first native run with 2 × 44 left the block 4 pt too wide inside the resize: the right groups were pushed to a 16 pt gap (inset 328, not 324). The run also failed `layers-island`, whose anchor follows that toolbar. The frame-based shift measurement (from the item views) was dropped: it did not produce the real shift for the pair. With 84 pt the second native run passed 850 pt and `layers-island`. It then missed wide (1800 pt) by 1 pt: inset 414 reserved vs 412 real, because the hidden inset was 330 this time, not 328. A forced re-measure after each toggle (`remeasureRightGroups`) was tried next and failed natively at 850 pt (a negative measured inset collapsed the block), so it is gone. Hiding now keeps the inset measured with the items showing (`ToolbarAddressLayout.shownInset`) and showing restores exactly that value, so only the hide direction uses an estimate (`moveRightGroups`, `src/native/ToolbarAddress.swift`). The native run with that left 850 pt "inside the resize" 2 pt off (gap 18, real shift 82 against 84): the real shift measured 82–84 across runs, and the check allows ±1, so the estimate is now 83. A synchronous re-measure cannot replace it, because the toolbar lays a hidden item out after `isHidden` returns. **Natively verified only up to that point:** see the limitations of the final result.
+- **Limits.** The main frame only (iframes keep real time). Timers created before the first change keep real time. `new Date()` is not scaled. Scroll-driven animations and native smooth scroll are not scaled. After returning to 1× the page clock keeps its offset until the next load; durations are exact.
+- **Tests.** Unit `preview-slow-motion` covers the clock math, the fake-window wrappers (1× passthrough, 0.25×, pause, step, animation and media rates), the store and the tool. Native smoke check `preview-speed` (group core) runs a transition, a keyframe animation, a WAAPI animation, a rAF loop and a timer at 1× and at 0.25× (each 3.6–4.8× as long; measured 1586–1626 ms against 400–418 ms), then pause/step and 1× again, measured on `document.timeline`. It also checks the badge and toolbar, and that the project files are unchanged.
+## 2026-10-07 — LKM-204 repair: `source-syntax` p95 gate flaked on two slow keystrokes
+
+- **Cause.** The manager's full run failed `source-syntax` at p95 18.95 ms. `checkSourceSyntax` took one 40-keystroke pass, dropped 5 warm-up samples and used `sorted[floor(35 × 0.95)]`, the second-slowest of 35, so two isolated slow keystrokes (21.5 and 19.0 ms; steady state 10–14 ms) fail it. The same check passed in the earlier run (p95 15.03 ms) and none of the LKM-204 code is in the editor or keystroke path.
+- **Fix (harness only).** Three typing passes, each after the highlighter converged and a 1 s settle delay; the gate is the median of the three p95s, still `< 16 ms`. Same text, anchor, pace and later asserts. A failure lists every keystroke of every pass; `source-syntax.json` gains `passes`.
+
+## 2026-10-07 — LKM-204: project switch shows the picked project at once
+
+- **Cause.** `select(B)` published "Opening B…" while `activeKey` still held A: the controller took the active project only from the store's acknowledged snapshot, after `store.select` resolved. The shell state therefore named A, and the host moved the sidebar highlight (which AppKit had already put on B) back to A. A shell state rendered before the click reached Bun did the same.
+- **Bun.** `select` makes the pick the active project in its first state, before the store saves it or any server starts (`chosen`, with a growing generation). `adopt` keeps that pick over any store snapshot until the store acknowledges this very pick; an older pick's acknowledgement or an external snapshot naming the previous project is ignored. A refused save falls back to the stored selection. While opening, the window shows B's own neutral "Opening B…" (chat column hidden as before).
+- **Host.** Each sidebar pick sends a growing `generation` (`ShellSelection`, `src/native/ShellSelection.swift`); Bun echoes the newest one it applied as the shell state's `selection`, also when it refuses the pick. A state older than the latest pick does not move the highlight. The host also records the projects its sidebar highlighted and its window showed (`shellInspect` `sidebarTrail`/`windowTrail`, reset by `shellPerform selection-trail-reset`).
+- **Tests.** Unit `native-workspace-controller`: the first state after the click names B before `project:detect`; a stale snapshot naming A while B is unsaved; rapid picks with held acknowledgements end on the last, stored. Native `project-switching` (group `sidebar`) runs `checkSwitchOrder` (`src/native/smoke-switch-order.ts`): A → B held at Opening must read [A, B] in the sidebar, window and Bun state trails; rapid A → B → C must end on C with nothing after it. Captures `switch-order-opening.png`, `switch-order.png`, `switch-order-rapid.png`, evidence `switch-order.json`.
+
+## 2026-10-07 — LKM-202 repair: Activity count after a hidden render (chat-gate retry)
+
+- **Symptom.** The full native run failed `chat-gate` with "Activity reset did not settle". Its artifacts show the check passed its first attempt's loaded and failed-open captures, so this was the runner's one focus-loss retry (`smoke-runner.ts`): the first attempt had left Activity open with "Could not open Folder Gamma", and the retry's `activity-action reset` could not bring `activityInspect.count` back to 0.
+- **Cause.** `NativeActivity.update` (`src/native/Activity.swift`) returned early for `visible: false` before it touched `count`, `fullText` or the text view, so a hidden Activity reported the lines of its last visible state. Pre-existing, not from the Dreamer code (nothing in LKM-202 writes to Activity).
+- **Fix.** A hidden state now applies its lines first (`show(lines)`), then hides the window; the visible path is unchanged. `chat-gate`'s Activity-reset wait keeps its assertion and now reports the Activity state and tail when it times out. What lost focus during the first attempt is not in the kept log; it is not known.
+
+## 2026-10-07 — LKM-202 repair: Send route, `start`, exact v1 schema
+
+- **Send.** The recorded decision overrides the ticket text: `sendToAgentOs` makes one `POST <url>/proposals` with `{projectId, file, start}` (Bearer token). The `/api/projects/<id>/proposals` attempt and its 404 retry are gone (an earlier entry below describes them). A 404 is now an ordinary `Agent OS answered 404` error that falls back to the export like any other.
+- **`start`.** Settings → Dreamer → "When tasks are created" (`trezi:dreamer:agent-os-start`, off by default) goes through `AgentOsTarget.start` into the body; the Overview's target line says "starts the tasks" when it is on.
+- **Same Mac only.** Agent OS listens on 127.0.0.1, so an unreachable endpoint now says so and the export save panel opens; `docs/DREAMER.md` documents `bun run cli import-proposals <project> <file.json> [--start]` for another Mac.
+- **Schema.** `dreamerErrors` now equals Agent OS's `proposalFileSchema`: `generatedAt` and `effort` optional, text and lists default empty, evidence items a string or any object. `normalizeProposal` no longer invents `effort: 'M'` and keeps string evidence; the report, review window and Open Chat handle missing fields and string items (`evidenceSession`).
+- **Tests.** `dreamer-export` asserts the single POST, `start` false/true, no 404 retry, the unreachable and 400 messages with the export fallback; `dreamer-digest` gained optional-field and string-evidence cases; the native smoke check expects `/proposals` and `file.proposals`.
+
+## 2026-10-07 — LKM-202: Dreamer
+
+- **What.** Trezi → Run Dreamer…, Dreamer Proposals… and Export Dreamer Report…, plus Settings → Dreamer. The format, inputs and privacy rules are in `docs/DREAMER.md`.
+- **Two stages.** `buildDigest` (`src/main/dreamer-digest.ts`) is pure and deterministic, so the statistics are tested without a model: slowest tools, repeated failures, retries and corrections, repeated request patterns, turn times, landings, parks, conflicts and feedback. The model gets only that digest, as one tool-free `complete` call on the active chat's provider (`dreamerCompletion` in `src/main/agent.ts`). A missing or unusable answer falls back to `digestProposals`, so a run always yields a valid version 1 file or an honest empty one.
+- **Tool timing.** LKM-200's per-tool timing is not in this tree. `logTurnEvent` now writes a `tool` `Tool step tool= ms=` debug line per provider status step (name and duration only), and the digest reads those. Statistics therefore exist only for turns run after this change, and for the product log's 7 days.
+- **Agent OS.** Its import route today is `POST /proposals {projectId, file}` (Bearer token, zod-stripped keys). Send tries the ticket's `/api/projects/<id>/proposals` first and falls back to `/proposals` on 404; task ids come from `created[].issue`. A failed send opens the export save panel instead.
+- **Review window.** A sectioned autosave sheet: an Overview plus one pane per proposal. Select All/None bumps an epoch in the include fields' ids, because the Swift model keeps a field's edited value while its id stays the same. The estimate per scope is a readonly field per scope with `visibleWhen`, listing every range: a non-autosave form cannot recompute as the choice changes.
+- **Not done.** The token is a preference, not a Keychain item. Open Chat opens the saved chat, not the turn. No live model run was exercised (stub completions only).
+- **Tests.** Unit `dreamer-digest` and `dreamer-export` (the zip unpacked with `ditto -x -k` and checked for emails, tokens and home paths; Send via a stub fetch and through the controller's fallback). Native smoke check `dreamer` (group `settings`) opens the window from the menu with a fixture, sends to a local `node:http` stub and captures the Overview and a proposal pane.
+- **Captures.** `captureSheet`'s cached display painted the sectioned window's split view blank, so the host gained a test-only `captureVisibleSheet` request (`src/native/HostInspect.swift`): the sheet's real pixels through the same own-process ScreenCaptureKit path as `captureVisibleSettings`, with `captureSheet` kept as a recorded fallback.
+## 2026-10-07 — LKM-200: timed, faster preview tools with one observation identity
+
+- **Measured.** `timedToolCall` (`src/main/tool-timing.ts`) wraps every Trezi tool call (`runTreziTool`) and logs `Tool call tool= ms= ok= phases=`. Phases come from `phase()`/`notePhase()`: the screenshot's `snapshot`/`encode` come from the host's reply and `transfer` is the rest of the bridge time. `TurnTimings` (`src/main/turn-timing.ts`) records a turn's received, sent, tool start/end, provider end, landing and completion. It logs `Turn timing … calls= toolMs= perTool=tool:count/ms` once per turn (or `end=superseded`), and `workspace_state` returns `timing.current`/`timing.last` to the agent. Arguments and answers are never logged.
+- **Faster.** The agent screenshot is one `takeSnapshot` at the bounded size, encoded once in Swift as JPEG ≤ 1280 px at 0.8 (`PreviewAgent.capture`; `full: true` keeps full resolution). The old path was full PNG + 900 px JPEG over the bridge, then a JPEG re-encode in Bun. Viewport waits in-page for the first frame at the asked width instead of up to 20 bridge polls with 50 ms sleeps. `open_preview` drops the fixed 400 ms settle (load + one painted frame), and on the route already shown answers `already-loaded` without a reload. That needs: the exact href, `readyState` complete, no navigation running, no unlanded work (`previewShows`, `NavigationController.open(keep)`). Its follow-up reads (freshness, console, screenshot, identity) run in parallel.
+- **Identity.** Location, screenshot, inspect and console append `Preview identity: session ps-N, navigation N, document <time>, revision <sha>` plus a JSON block (`src/main/preview-identity.ts`). The session is the dev-server instance, so a restart gives a new one. The served revision is HEAD at navigation start; a document older than the live HEAD is flagged `stale`, not refused. Another project's server is refused naming both sessions, and an observation during which the page navigated is refused and must be repeated.
+- **Numbers** (native check `preview-timing`, fixture page in a 650×776 pt preview, median of 5, ms; "before" is the pre-LKM-200 code path timed in the same run):
+
+  | Tool | Target | Before | After |
+  | --- | --- | --- | --- |
+  | `preview_screenshot` | < 400 | 69 | 4 |
+  | `preview_inspect` (body) | < 150 | — | 1 |
+  | `preview_viewport` 768 + settle | < 800 | 20 | 20 |
+  | `open_preview` on the shown route | < 300 | reload + ≥ 400 fixed settle (not timed) | 9 |
+
+  The check fails when a median misses its target or any run takes twice as long. It also fails when viewport + screenshot or `open_preview` change the navigation id, `performance.timeOrigin` or the dev-server pid. A first `settleCode` waited one frame after the width matched and measured 40 ms (worse than before); it now resolves in the first frame at the width.
+- **Tests.** Unit `turn-timing` (summary, lifecycle, supersede, limits, real log lines) and `preview-identity` (same identity across tools, stale, new navigation, mid-navigation and foreign refusals, `previewShows`). Updated: `preview-page`, `trezi-agent-tools`, `provider-helper-tools` and `chat-ghost-park` (timing in `workspace_state`). Native `preview-timing` (group `core`).
+- **Not done.** No DOM snapshot cache per revision: the DOM changes without a navigation, and inspect already reads in ~1 ms. The fixture page is small; heavy pages will snapshot slower.
+## 2026-10-07 — LKM-201: pending islands with planned bindings
+
+- **Why.** `define` read the bindings from the worktree and refused any that did not resolve, so an agent had to finish its source edits before the island existed, and definition mistakes surfaced only at the end of the turn.
+- **Validation first.** Every `define` runs `islandProblems` before it attaches, waits or reserves: all problems at once (manifest fields, each param, each block; a block naming a bad param is reported with the param only), as `{error, code: 'invalid_definition', problems}`.
+- **Planned.** `define {planned:true}` (also on `clone`) skips the resolve check; a missing or unparsable file is allowed (`IslandBindingError.fixable`), anything outside the project is not. The answer lists `bindings` as `resolved`/`planned`. The record stores `planned: true` (Swift `commit`), and `initial` holds only the values that resolved.
+- **Activation.** Landing makes the record `ready` as before; the owner still refuses commands and `show` while it is planned. `refresh` activates it when every binding resolves in the live source (`islandActivate`: landed values become `initial`), otherwise disables it as a whole with `plannedFailure` ("These controls never activated: Lift is not in card.js."), saved through `islandHealth`. All-or-nothing, because the agent promised every binding; a later edit that adds the literals still activates it. An unlanded turn keeps the existing "did not land" reason. Both show Recreate with agent.
+- **Guidance.** Rules v35 and `chatIslandGuidance`: catalog readiness, then preview identity, then only the relevant code, then an early planned define before editing source. The MCP schema gains `planned`.
+- **Tests.** Unit `chat-island-pending` on the real Swift editing owner. `trezi-agent-tools` cannot listen on its Unix socket in the worker sandbox.
+
+## 2026-10-07 — LKM-199 repair: island readiness and reason codes
+
+- **Why.** The first LKM-199 pass collapsed every "no session" outcome into "This chat is closed", which is wrong for a failed preparation or a project that is not a Git repository, and the agent had no way to ask whether a chat could host islands. The recorded scope addition asks for readiness plus a reason code and recovery step.
+- **Lookup.** `agent:chat-record(chat, wait = true)` (`chatRecordLookup`, `src/main/chat-record.ts`) now returns `{ ready: true, root, recordId, worktree }` or `{ ready: false, code, detail? }`. `PendingChats.status` exposes whether a preparation is running or failed (with its truncated error). Codes: `workspace_pending` (only without `wait`), `preparation_failed`, `not_git` (the preparation failed in a folder that is not a Git repository; the failure message stays in `detail`), `no_session` (a live chat without an owner record, or no locator), `closed` (neither pending nor live, or closed while waited for).
+- **Threaded through.** `islandLocator` passes `wait` and returns the block; `ChatIslands.attach(chat, wait)` returns `{ session }` or `{ blocked }` (`ensure` is `attach` reduced to the session). The tool's catalog uses `attach(chat, false)`: it never waits, and it attaches a ready workspace (auto-attach). `readiness` carries the root, record id and checkout, or `code`/`reason`/`recovery` (`ISLAND_REASON`, `ISLAND_RECOVERY`, `src/shared/chat-islands.ts`). Define, read, show and clone return `{ error, chat, code, reason, recovery, detail? }`.
+- **Tests.** `test/chat-island-new-chat.mjs` uses the real `PendingChats` and lookup: the catalog while pending (answers at once), ready with root/record/worktree, auto-attach by the catalog, and catalog/define/read/show/clone for `preparation_failed`, `not_git`, `closed`, `no_session` (unrecorded and no locator), plus a chat closed while waited for. The native `island-new-chat` check also asserts the catalog readiness.
+- **Limitation.** A project that is not a Git repository normally still gets a chat record (the chat runs in the project folder), so `not_git` only appears when its preparation failed.
+
+## 2026-10-07 — LKM-199: islands in new chats, one preview page, Codex questions, quieter feedback log
+
+- **Islands in new chats.** LKM-182 lists a new chat before its worktree, provider and owner record exist, with `record.id: ''`. The controller's `restoreIslands` skipped that chat and nothing registered it later, so its agent's `chat_island` answered "not available for interactive islands yet" for the whole chat. Registration is now `ChatIslands.ensure`: it finds the record through `agent:chat-record` (which waits for the pending preparation, `PendingChats.settled`) and registers once, shared by concurrent callers. Restore registers at once when the record is known and otherwise calls `ensure`; so do the first send (`chatIslandContext`), provider switch and the tool itself. The tool only refuses for a closed chat. Unit `chat-island-new-chat` drives the real `ChatIslands` and chat controller against a stub owner; native check `island-new-chat` (group `islands`) creates a new chat and an island in it.
+- **One preview page.** Route came from the view's URL, while DOM and screenshot read the page, and nothing checked that the preview showed the chat's project. An SPA route change or another server in the single preview view therefore gave answers about different pages. `src/main/preview-page.ts` reads `location.href` from the page itself (the view URL is the fallback), refuses while its origin differs from the chat project's dev server (`previewServers`), and every observer's answer ends with `Preview page: <url> (port N, route /x).` Session tools pass the chat's live root. The reporter's exact case (#232/#233) was not readable from the worker, so this cause is inferred from the code.
+- **Codex asks on question cards.** Codex had no question tool and asked in text or chose for the user. `ask_user` (`src/main/question-tool.ts`, foreground only, policy golden updated) emits the same `question-request` card as AskUserQuestion. The MCP bridge (30 s) and the owner (120 s) cannot hold a call open for a person, so the tool returns at once and says to end the turn. The answer (`agent:respond-question` → `answerAsked`) is sent as the user's next message through the chat queue, and a dismissed card sends nothing. Rules v34 add the "Asking the user (ask_user)" section with the LKM-195 rule: ask only for the user's choices, otherwise proceed with a stated default. Unit `ask-user`.
+- **Feedback log.** A dev server that printed the same status line every few seconds filled the product log. `outputLogger` (`src/main/devserver-log.ts`) drops a line of the same kind and length as the one before, and the next different line carries `skipped=N`. The diagnostics' system log section was every message of every Trezi process. It is now `SYSTEM_LOG_PREDICATE`: Trezi processes or `dev.trezi` subsystems, error/fault only. Consecutive repeats are collapsed and the section holds the last 200 lines. The predicate was checked once with a real `log show` outside the sandbox.
+## 2026-10-07 — LKM-198: composer queue spacing and alignment
+
+- **Cause.** Each row was a `GeometryReader` in a 34 pt frame, and a GeometryReader places its child at the top leading corner, so the row hugged the box's top edge once LKM-191 dropped the note line. The box tucked 16 pt under the composer with an 18 pt radius, so its lower corners started curving 2 pt above the composer's edge.
+- **Layout** (`src/native/ComposerQueue.swift`). No list glyph. The note line and rows are 24 pt with centred content, 4 pt apart, inside 10 pt vertical padding; three rows show, more scroll. `ComposerQueueHost.height` follows (44/72/100 pt, +28 with a note). The box sits 10 pt inside the composer (the controls' inset) and tucks 24 pt (the composer's radius) under it at every count, so its corners always hide. Text starts at the placeholder's x (19 pt into the composer: 12 pt scroll inset + 7 pt draw origin) and the "…" menu takes Send's 30 pt column. Rows use `maxWidth: .infinity` text instead of width arithmetic.
+- **Checks.** The rows report their SwiftUI frames (`QueueFrames`), and `composerInspect` returns `queueGeometry`, `placeholderX` and `sendMidX`. `checkQueueGeometry` (`src/native/smoke-queue.ts`, chat group) asserts even padding, centred rows and both alignments for 1 row, 3 rows and the Resolve note at both widths. It writes composer captures with the composer forced light and dark (`composerAppearance`, the view only). The composer-layout fixture checks heights, overlap and insets without a window.
+
+## 2026-10-07 — LKM-197 repair: end-to-end test, menu smoke, toolbar width
+
+- **End to end.** `test/dependency-refresh-vite.mjs` (fixture `test/fixtures/dependency-refresh-vite/{app,ui}`) installs the fixture with Bun (`"ui": "file:../ui"`, normalised to a real copy because Vite refuses symlinks outside its root), starts real Vite through `devserver:start` on the compiled Swift RuntimeOwner, and shows it in system WebKit. It plants a marker in `node_modules/.vite`, rewrites `ui`'s CSS and version, and ticks `DependencyWatch` (quiet, then change seen once, then fired on the second poll). The refresh is the same pair the controller issues: a `cleanCache` start and a hard `reload`. It asserts the marker is gone, the path is kept, `getComputedStyle` has the new colour and every page asset equals what Vite serves (`staleAsset`, the `assets.matches` rule). It does not drive `NativeWorkspaceController.refreshEnvironment`; that wiring stays covered by `native-workspace-controller`. It SKIPs without TreziHost, a working install or local port binding, so it never ran in the worker sandbox.
+- **Menu smoke.** Native check `toolbar-more` (group `core`): menu titles and enabled state, an unknown row refused, Reload Without Cache loads the page again, Restart Dev Server (clean cache) passes through its busy label and back to running with the planted `node_modules/.vite` removed.
+- **Toolbar width.** `.low` alone changed nothing: at 850 pt AppKit still fits every item (the address block just shrinks), so the right group stayed 374 pt wide. The "…" item now leaves the toolbar in windows narrower than 1000 pt (`NSToolbarItem.isHidden`, macOS 15+, `fitMore`), taking the right group's inset from 374 to 330 pt at the minimum. The address block is sized in the same resize pass, so `fitMore` moves the reserved inset by the item's measured shift first (a first attempt without that left the block 44 pt short inside the resize). `shellInspect` reports `moreVisible`; `toolbar-address` asserts the state per width and pins the inset per state. Below 1000 pt the two actions remain with the agent tools.
+
+## 2026-10-07 — LKM-197: clean restart and hard reload after dependency changes
+
+- **Cause.** After a dependency upgrade the preview kept the old CSS. Vite serves pre-bundled dependencies from `node_modules/.vite`, and WebKit kept its memory/disk caches, so a plain restart plus a normal reload could still show the old styles.
+- **Detection.** A landed package.json or lockfile change already restarted the environment; now that restart, and every restart after an install (by Trezi or the agent), carries `cleanCache: 'dependencies'` (`refreshEnvironment` in `src/native/workspace-controller.ts`). `src/native/dependency-watch.ts` polls every 2 s while the project's server runs: the manifest, the lockfiles and each direct dependency's `node_modules/<dep>/package.json`. A change must hold for two polls, and the baseline resets whenever the server is not running, so a landing's own restart does not fire a second one.
+- **Clean restart.** `RuntimeOwner.start` takes `cleanCache` and, after retiring the previous server, removes `node_modules/.vite` (plus `.next/cache` for Next) inside the project root and logs it; other frameworks get a plain restart. The preview then loads with `hard` (`PreviewCache`: clears WebKit memory/disk/fetch caches, `reloadFromOrigin` on the same URL, otherwise a load that ignores local and remote cache data), and `keepPath` puts the shown route on the new origin. Status: "Dependencies changed — restarting preview…".
+- **Agent tools.** `reload_preview {hard}` and `restart_dev_server {cleanCache}` (`src/main/preview-refresh-tools.ts`) ask the native side over `preview:refresh` (`src/native/preview-refresh.ts`): a 2 s acknowledgement, then the result (25 s budget under the bridge's 30 s). Both are foreground-only and refused for background agents. A restart is the agent's way to bring back a stopped server; rules v33 still forbid starting a server any other way.
+- **Freshness.** `open_preview` and the two tools return `assets`: the page lists up to 8 same-origin stylesheets and 8 scripts with an FNV-1a hash of what it has (a `force-cache` fetch) and Bun fetches the same URLs fresh from the dev-server origin only. `matches: false` names the stale files and tells the agent to hard-reload, then clean-restart.
+- **Toolbar.** A "…" menu after Publish (`src/native/ToolbarMore.swift`) with Reload Without Cache and Restart Dev Server (clean cache).
+- **Tests.** Unit `test/preview-refresh.mjs` (watch, signature, freshness, both tools against a stub host), `native-workspace-controller` (clean restarts and labels), `runtime-owner` (cache removal per framework), `rules` (v33), the policy golden and tool inventories. No native fixture with a real Vite `file:` dependency yet; see TASKS.
+
+## 2026-10-07 — LKM-196: ghost parked state and a real open_preview result
+
+- **Ghost park, cause.** Nothing ever re-checked a park against the live tree. A drift park whose content later reached live another way stayed parked with an empty diff, and `sendRefusal` blocked the chat. A `failed` landing whose base moved on also stayed parked with nothing to land. Separately, a park could lose `parkedFiles` or its record while the worktree still held work, which left a card with no working action.
+- **Reconcile.** `src/main/park-reconcile.ts` runs on the chat's chain at turn start (folding uncommitted work first), at chat open (the `agent:workspace-snapshot` handler, idle chats only, bounded to 2 s) and before `workspace_state` / `prepare_conflict_resolution`.
+  - An empty park is cleared and logged ("Stale park cleared").
+  - Pending files the park does not list rebuild the batch and the record, and re-emit the card ("Park batch rebuilt").
+  - A merge in progress, a revert, a resolution or a reclaim is left alone.
+  - The test is `test/chat-ghost-park.mjs`, in the Swift repository-owner suites.
+- **open_preview, cause.** The tool sent `preview:open` and answered "requested". The navigation was also deferred until a landing even when the chat had nothing unlanded, so the agent reported pages it never saw.
+- **Real result.**
+  - The request now carries an id and `now` (true when `hasUnlandedWork` is false). `NavigationController.request` reports how it handled the request: loading, deferred, no-server, elsewhere or dropped.
+  - The host now reports main-frame start, HTTP response, finish, failure and cancel (`PreviewLoad.swift`, `PreviewPlatform.swift`), and `previewLoads` (`src/main/preview-loads.ts`) tracks them.
+  - The tool waits up to 10 s. It returns the final URL, HTTP status, load error, dev-server state (with a bounded probe when the preview cannot say), console errors and a screenshot path. A stopped server gives the Restart text; the agent must not start it.
+  - The rules are at v31.
+- **UI.**
+  - A navigation slower than 350 ms shows a loading pill over the page.
+  - HTTP ≥ 400 shows an error pill with Reload and dismiss (it is in `previewCoverRects`).
+  - A failed load shows the status overlay naming the path, with Restart (`loadErrorStatus`).
+  - Cancelled navigations no longer raise errors.
+  - The test is `test/preview-open.mjs`: a stub server answering 500, a server that is down, no server, and deferred.
+## 2026-10-07 — LKM-195 repair: no false owner for background agents, small thumbnail
+
+- **Background agents.** The check skips background landings (`sessionId`), yet rules v31 told every agent that Trezi checks after landing. `treziRules({ background: true })` now says Trezi does not check and the visual check is a user action to name ("Open the preview and check the Home tab"): the "Trezi checks…" sentences in the ownerless section and in both verification blocks are for chat turns only (`landingOwner` in `src/main/rules.ts`). `test/rules.mjs` asserts the background variants make no such claim (with or without preview tools) and name the user action.
+- **Thumbnail.** The row now carries a 160 px wide JPEG (quality 0.6, tens of KB) from a new `thumbnail` option of the host's `capture` request (`Host.swift`, `NativeView.webContents.captureThumbnail`), instead of the agent's 900 px frame; `LANDING_CHECK.thumbnailBytes` is 48 KB. Rows stay in `chat.messages`, so every chat frame no longer carries and decodes the large capture.
+
+## 2026-10-07 — LKM-195: no ownerless pending items; Trezi checks the preview after landing
+
+- **Why.** Replies ended with "visual verification remains pending" or "v0.2.8 still needs tagging. Tell me when it's there and I'll tag it." The user could not tell whether something was still running or whether they had to act.
+- **Rules v31** (`src/main/rules.ts`). "No ownerless pending items": for each unfinished step, do it now, name a concrete user action ("Click Publish"), or say "Trezi will X automatically when Y" only when true; never ask the user to report back. "Releases and version bumps": bump, publish (`publish_update`), merge when settings allow, tag unless the workflow tags; ask only for the version number or a merge approval the settings require. Preview verification: a change already in the preview is checked with `preview_screenshot`; a stale preview is never "passed" and no longer "pending", because Trezi checks after landing. The surface-controls skill drops its "report verification as pending".
+- **Post-landing check** (`src/native/landing-check.ts`, wired in `chat-runtime.ts`). On a chat turn's `isolation: merged` with files (background spawns excluded), it waits 2.5 s for the reload, then polls until the preview shows this project's dev-server origin and its console buffer answers (10 s; 120 s when the landing restarts the environment). It counts console and page errors logged since the landing (older ones are ignored), captures the preview as a JPEG thumbnail (left out above 256 KB) and posts one row under the landed turn's reply: "Checked after landing: no console errors" / "N console errors" with the first three, or "Not checked after landing: <why>". A newer landing in the same chat replaces a waiting check; closing the chat cancels it. It never starts a turn, and page text is shown, never sent to the agent. The smoke suite turns it off (`installNativeChat(…, !testing)`) because its landings are fixtures.
+- **Row.** `ChatLandingCheck.swift`: a status symbol, the line, errors in monospace caption, a 64×40 thumbnail, in the comment rows' bubble. `chatInspect` reports `landingChecks`.
+- **Tests.** `test/rules.mjs` (v31, ownerless items, release, screenshot-in-turn, no "pending"); unit `test/landing-check.mjs` (clean, errors since landing, cut and counted, four unchecked reasons, polling and the restart deadline, thumbnail cap, cancellation, the row through `snapshot`); native `landing-check` (group `chat`): the real check and post path with fixture console output and the real preview capture, rows in light and dark (`landing-check-{light,dark}.png`).
+- **Not built.** No new tagging or PR-creation tool: the rules tell the agent to name the exact user action when no tool can do a step. A broken preview could also offer the LKM-151 recovery card; see TASKS.
+## 2026-10-07 — LKM-194: conflict markers in package.json no longer block every send
+
+- **Why.** A publish reconcile left conflict markers in the live package.json, by design at the time (main bumped `version` to 0.2.7 and the chat to 0.2.8). The next turn's sync copied them into the chat worktree. `provisionDependencies` ran `bun install`, which failed, and `agent:send` refused the turn ("Worked for 0s"). The user could not even ask the agent to fix it.
+- **Turns.** `syncFromLive` no longer throws for dependencies. It runs `markerConflict` (one `git grep --untracked`, each hit confirmed by reading all three marker lines, manifests first) and catches the provisioning failure. Both come back as `dependencies: { conflict?, install? }`. `beforeTurn` returns them. `agent:send` puts `dependencyNotice` into the prompt, replacing the "still installing" note, and sends a `dependencies` agent event. `provisionDependencies` checks the manifests and lockfiles for markers before it starts the job and refuses with `DependencyConflictError`, so no install runs. The check sits before the job so a background install still starts in the same tick (`chat-spare` asserts that). `createWorktree` (spawns) logs a provisioning failure instead of abandoning the worktree.
+- **Chat card.** `chat-recovery.ts` shows "Conflicts in package.json" (or "Conflicts in N files"): whether dependencies were installed, the version hint, Show conflict (opens `file:line` of the first marker through the `source` effect) and Resolve with agent (`resolveConflictPrompt`). A failed install shows "Dependencies aren’t installed" with its reason, Dismiss and Fix with agent. The next turn's event replaces or clears it.
+- **Publish.** `WorkflowPublish.reconcileOnce` reads both tips' package.json `version` and then runs `git merge --abort` on a content conflict. The live checkout keeps its committed work with no markers, and the recovery refs hold both tips. The result adds `branch` and `versionConflict`. `git-controller.ts` routes a conflict that has recovery refs to the Resolve card (with the higher SemVer) instead of the failure sheet. Its agent facts say to run `git_sync_base` with `origin/<branch>`, `git_merge_continue`, then `publish_update` or Publish again. A conflict that was already in the checkout, with no refs, keeps the failure sheet.
+- **Version.** `compareSemver`/`versionConflict` in `src/shared/dependency-issue.ts` (pre-release aware). `markerVersion` reads ours/theirs from the hunks, ignoring a diff3 base.
+- **Legacy path.** `Praxis Native/praxis/worktrees/<id>` in the error is the physical profile from before the rename: `Trezi Native` and `trezi` are aliases made by `ProfilePaths.swift`, and tools print the resolved path. It is not a stale build, and it keeps working. Noted in `docs/agent-guide/legacy-names.md`.
+- **Tests.** New unit `test/dependency-issue.mjs`: SemVer, markers and version (plain and diff3), a real-repo scan that ignores a lone marker in a doc, prompt facts, the card, Show conflict, Resolve, Fix and the event clearing it. `chat-worktrees` repo16 (Swift owner): a marked live package.json syncs, no install runs, and the conflict and version are reported. Once resolved it installs. A failing install is reported, not thrown. `workflow-owner` publish-version-conflict: no markers, no `MERGE_HEAD`, a clean status, two recovery refs and `versionConflict`. `native-git`: the Resolve card and its facts.
+
+## 2026-10-06 — LKM-192: soft wrap in the code editor
+
+- **Why.** Long lines (an MDX paragraph) ran past the right edge and the editor scrolled sideways. The text view was already set to track its width, but the scroll view kept a horizontal scroller and nothing re-synced the text view to the clip view after the ruler and resizes re-tiled it.
+- **Wrap.** `SourceWrap.swift` owns the mode. Wrapping: no horizontal scroller, the container tracks the text view, and a clip-view frame observer (`fitWidth`) keeps the text view exactly the visible width. Off: an unbounded container, a horizontally resizable text view at least the visible width, and the horizontal scroller back. Layout stays non-contiguous.
+- **Hanging indent.** Each edited line gets a shared paragraph style whose `headIndent` is its leading whitespace (tabs every four columns, capped at 32 columns so deep lines still wrap). An `NSTextStorageDelegate` only records the edited range (`didProcessEditing`, characters only); `applyIndent` sets the style in `textDidChange` and after a replaced text. Setting it inside `willProcessEditing` while typing moved the insertion point and scattered typed characters (this broke "Highlights survive typing" in the first native run). The typing attributes carry the insertion line's style, so a keystroke usually changes nothing; an unchanged run is skipped. Colours from LKM-183 never touch the paragraph style.
+- **Ruler.** `SourceLineRuler.labels()` numbers each logical line at its first line fragment, counts lines before the visible top with the existing newline counter instead of a `filter` over a substring, and numbers the empty line after a final newline.
+- **Toggle.** View › Wrap Lines (responder chain: the focused editor, else `Host` routes to the docked or any open editor) and the header's new "…" menu send `wrap` to the backend. `NativeEditorController` stores `trezi:source-wrap` (`'0'` = off, default on) through the service preferences and republishes every session, so all editors follow and the state survives relaunch.
+- **Keys.** Home/End move to the logical line's start/end (with Shift extending); arrow up/down stay per visual line; ⌘←/⌘→ keep AppKit's visual-line behaviour.
+- **Tests.** `test/native-editor.mjs`: default on, persisted, reaches every editor. New smoke `source-wrap` (group `core`): a 300-character line wraps with no horizontal scroller and every fragment within the container, continuation lines start where the code starts, ruler numbers are consecutive, on each first fragment and absent from continuations; Home/End/arrow-down; View menu off (scroller back, one fragment), "…" menu on; `source-wrap.png`. `source-editor` expects the "…" button. `source-syntax` now types on the 3,000-line TSX with wrapping on.
+
+## 2026-10-06 — LKM-183: real Shiki, shipped in the app, sizes and startup
+
+- **Shiki installed.** The operator added `shiki@^3` (3.23.0) to package.json/bun.lock, so the "Still blocked"/"Open" notes in the two entries below no longer apply. Both tests now run against real Shiki and neither skips.
+- **Categories tuned against real scopes.** Several rules were adjusted after comparing with Shiki's actual scopes:
+  - `=>` and Swift argument labels (`by` in `moved(by delta:)`) are plain.
+  - CSS/SCSS units (`4px`) take the number colour.
+  - Svelte directives (`on:click`, `class:x`) are one attribute, like Vue's `@click`.
+  - Svelte `{#if}`/`{/if}` are keywords.
+  - Embedded-expression braces (JSX `{}`, `${}`, Svelte `{}`, Swift `\(`) keep the one embedded colour.
+  - `test/syntax-highlight.mjs` asserts these rules and now has multi-line HTML/Svelte/Vue samples. A one-line `<script>…</script>` never closes in those grammars, so the rest of the line parsed as JS. It also asserts several categories per language for JSON, Markdown, YAML, shell, HTML (with `<script>`/`<style>`), Svelte, Vue and SCSS.
+- **Shiki was resolving from the checkout.** The backend's packages are external (LKM-111), so the built `index.cjs` reached `shiki/*` through the checkout's `node_modules`. A copy of the built backend outside the checkout failed with `Cannot find module 'shiki/core'`; without `--no-install`, Bun even tried to auto-install it.
+- **The fix.** `scripts/syntax-bundle.mjs` builds `src/main/syntax-shiki-bundle.ts` into `Resources/backend/syntax/` as its own ESM bundle, split into one lazy chunk per grammar plus the WASM. It contains Shiki core, the Oniguruma engine and only the editor's grammars. The CJS backend finds it through `TREZI_SYNTAX_BUNDLE`, which the build banner sets to `join(__dirname, "syntax/shiki.mjs")`. Unbuilt runs load the source module instead.
+- **Build checks.** `build-native.mjs` fails if the backend bundle imports or inlines `shiki`/`@shikijs`. `buildSyntaxBundle` fails if the Shiki bundle has any non-`node:` external import.
+- **The new unit test.** `test/syntax-bundle.mjs` builds the bundle and the loader the same way into a temp folder outside the checkout. It highlights TSX there in a child `bun --no-install` and asserts that grammars stay lazy and that unused grammars and themes are not shipped.
+- **Proof against the built app.** After `bun run build`, `Trezi.app` was copied to `/tmp/claude/trezi-app-copy`. Loading its `backend/syntax/shiki.mjs` with `--no-install` returned TSX tokens. Only `tsx` was loaded, after an import of 9 ms, 10.4 ms to create the WASM engine and 4.1 ms for the TSX grammar.
+- **Bundle size.**
+  - **Before.** Shiki was not shipped, and the backend did not reference it.
+  - **After, backend.** `index.cjs` gains about 23.6 KB of LKM-183 code (`syntax-*.ts`, controller, smoke fixture), measured from the esbuild metafile. It has no Shiki code and no static Shiki import.
+  - **After, Shiki bundle.** The app gains `backend/syntax/` at 1.9 MB on disk, against an 83 MB test-profile app. Its parts:
+    - `shiki.mjs` entry: 113 KB (core and engine glue, no grammar).
+    - WASM chunk: 622 KB (the base64-inlined 467 KB `onig.wasm`).
+    - 22 grammar modules in 23 chunks (tsx 176 KB, jsx 178 KB, mdx 136 KB, swift 88 KB, markdown 59 KB, shared JS/TS/CSS/HTML chunks 175–181 KB, yaml 11 KB, …).
+  - **Grammars.** typescript, tsx, javascript, jsx, css, scss, postcss, html, html-derivative, json, jsonc, markdown, markdown-vue, mdx, svelte, vue and its three injection grammars, swift, yaml and shellscript.
+  - **Themes.** None of Shiki's bundled themes ship; the only theme is the generated category theme. For scale, `node_modules/@shikijs/langs` is 9.8 MB and `@shikijs/themes` is 1.8 MB.
+- **Startup.**
+  - **Cold start.** App start loads nothing: `loadCore` runs with the first highlighted document, and each grammar loads with its first file.
+  - **First highlight.** The first TSX tokenizer in a fresh Bun outside the checkout takes 57 ms in `test/syntax-bundle.mjs` (import, WASM engine and TSX grammar).
+  - **Full pass and typing.** A full 3,000-line TSX pass takes 131–145 ms of Bun time, in 8 ms slices. Keystroke re-tokenization has a p95 of 0.27–0.33 ms (unit).
+- **Native results.** `core` passed 18/18, including `source-syntax` on the test-profile (`-Onone`) build.
+  - Typing 40 keystrokes on the 3,000-line TSX file, the main-thread time per keystroke (insert, display, state update and highlight apply) had a p95 of 14.73 ms and a worst of 18.32 ms. Every highlight was applied: 41 of 41 revisions.
+  - `source-syntax-light.png` and `-dark.png` show real colours.
+
+## 2026-10-06 — LKM-183 repair: Shiki is required, tests no longer skip
+
+- **Review finding.** `shiki` was not a dependency, so the editor showed plain text (`highlighted -1/41`) and the tests passed by skipping. The unit test and the `source-syntax` smoke check now fail when Shiki cannot load, and the smoke check also asserts `highlighted` reaches the final revision, that the probe categories are still shown after typing, and that the p95 includes applying highlights.
+- **Still blocked.** `bun add shiki@^3` was retried and the registry was denied again (`registry.npmjs.org:443`, user denied) in the worker sandbox; nothing was worked around. A maintainer must run `bun add shiki@^3` (package.json + bun.lock), confirm `shiki/core`, `shiki/engine/oniguruma`, `shiki/langs` and `shiki/wasm` resolve, run `bun test/syntax-highlight.mjs` (fix any scope-to-category mismatch in `src/main/syntax-theme.ts`; the TSX/CSS/Swift probes were written without Shiki), then the `core` native group, and record here the on-disk size of `shiki` plus the loaded grammars, the first-highlight load time and the backend start time before/after as bundle and startup evidence. Until then the unit test and `source-syntax` fail by design.
+
+## 2026-10-06 — LKM-183: grammar-based syntax highlighting in the code editor
+
+- **Why.** The editor coloured code with a handful of regexes on the main thread, re-ran them over the whole text on every keystroke, and gave up above 500 KB. Highlighting now uses real TextMate grammars, off the main thread.
+- **Backend.** `src/native/syntax-controller.ts` gets each published editor state (root, source, text, revision) and keeps a `SyntaxDocument` (`src/main/syntax-document.ts`) per editor. An edit splices only the changed lines. Each line stores the grammar state it started from, so re-tokenizing stops as soon as a following line's stored state matches again (`StateStack.equals`). Opening a block comment re-tokenizes to the end of the file; a one-line edit re-tokenizes one line. Passes run in 8 ms slices with `setImmediate` yields: the visible lines ± 100 are tokenized and sent first, then the rest, at most 400 lines per message and one message per slice. Lines over 20,000 characters stay plain, as in VS Code.
+- **Shiki.** `src/main/syntax-shiki.ts` loads `shiki/core`, the Oniguruma engine and `shiki/langs` with dynamic `import()` on the first highlighted file (ESM in the CJS bundle, kept external like the other SDKs). Each grammar loads with its first file, so app start pays nothing. Rather than colours, the theme (`src/main/syntax-theme.ts`) maps TextMate scopes to 20 categories encoded as `#0000NN`; the colour map index in each token's metadata gives the category. Languages are detected by extension and a few names (`src/main/syntax-languages.ts`).
+- **Swift.** `SourceSyntax.swift` applies `sourceHighlight` spans/runs (absolute UTF-16 offsets) only when the message revision is the editor's current revision. Otherwise it reports `dropped` and the backend resends those lines for the current text. Replacing the text (open, reload) resets attributes to plain and reports `reset` with the revision. Scrolling reports the visible lines (60 ms debounce). Colours are dynamic `NSColor`s with an Xcode-like palette, so a system appearance change only redraws and never re-tokenizes. The `textDidChange` regex pass and the 500 KB cut-off are gone. Find, the line ruler, component jump and edits/revisions are unchanged.
+- **Tests.** `test/syntax-highlight.mjs` (unit) covers detection, the theme, and incremental tokenization, convergence, slicing, drop/reset and controller ordering with a fake grammar. When Shiki is present it also runs TSX/CSS/Swift (and other) token probes and a 3,000-line TSX typing cost (p95 < 16 ms, ≤ 2 lines resent per keystroke). The new `source-syntax` smoke check (group `core`, `smoke-source-syntax.ts`, host command `sourceSyntax` in `SourceSyntaxVerification.swift`) opens a 3,000-line TSX sample, checks the categories at probe texts, types 40 characters and asserts p95 main-thread time per keystroke < 16 ms (insertion, layout/display, state update and highlight apply), and captures `source-syntax-light.png` / `-dark.png`.
+- **Open.** The worker sandbox could not reach the npm registry, so `shiki` is not yet in package.json/bun.lock: run `bun add shiki@^3`. Until then the Shiki halves of both tests print SKIP and the editor shows plain text (one product-log warning). Bundle and startup cost are not yet measured. Shiki stays outside the esbuild bundle and loads only with the first highlighted file.
+## 2026-10-06 — LKM-193: background agent questions on the card
+
+- **Cause.** A background (comment or text-edit) agent's AskUserQuestion was emitted with its `sessionId`, so the chat routed it to the spawn effect, and `context-controller.spawn()` dropped it. The card showed only the raw "AskUserQuestion" status. An answer could not have settled it anyway: the conversation owner registers only interactive chats' questions.
+- **Change.** `NativeSpawn.question` holds the pending question. `agentCard` (`src/native/chat-agent-card.ts`) builds the card with the request, its preview cut at a whole word, the `file:line` target, status and question. `ChatAgentCardView` (`src/native/ChatAgentCard.swift`) renders the question with the chat's `NativeQuestionCard`, with no second frame. The `question` card action answers a spawn's question through `agent:respond-question`, which now looks in `spawns` first. `agent:spawn-interrupt` dismisses a waiting question so that Cancel still cancels. `describeTool` never shows the raw tool name.
+- **Attention.** The chat scrolls to the card once for each new question. Activity gets a needs-action line ("A background agent needs your answer in the chat.", event `background-question`) with no question text. A hidden chat is marked for review. The comment's element gets a blue "?" pin (`label` on preview pins) while the question waits.
+- **Rules.** v29 adds a `## Background agents` section for spawned sessions (`background: !!ctx.sessionId` in the Claude and Codex providers): ask only when the choice is truly the user's, otherwise choose a reasonable default and name it in the result.
+- **Not covered.** Done and Failed remain the existing comment result rows, which replace the card. Text-edit agents post no row. A click on a "?" pin is not handled.
+- **Checks.** Unit tests `chat-agent-card` (new) and `comment-agents` (a spawn's question settles with the answers, and Cancel dismisses it). Native smoke `agent-question` (group `chat`) writes `agent-question-light.png` and `agent-question-dark.png`, expands the request, answers, and checks that the card returns to Running.
+
+## 2026-10-06 — LKM-188 review repair: PR conflict route and Git command policy
+
+- Publish now checks the PR's `mergeable` state after its normal ship workflow and offers Resolve with agent for a PR/base conflict. Local-vs-remote publish reconcile conflicts keep their manual recovery message because the live checkout is mid-merge. The resolve action selects a chat whose root matches the published project.
+- Claude and Codex use one command policy. Managed allows read-only branch, stash, tag and worktree queries; Full refuses raw pushes and commands that rewrite the live branch. Scheduled `publish_update` runs only after the same turn lands and is cleared otherwise.
+- `test/native-git.mjs` covers the PR/base conflict and project-specific chat selection. `test/agent-git.mjs` calls the session tools for `pr_status` and `publish_update` against real repositories and a stub `gh`, then checks that the PR branch advances through the normal workflow path. The Swift-backed chat-landing suite takes a Full-mode raw merge through `afterTurn` and checks its ancestry on the live branch.
+
+## 2026-10-06 — LKM-188: agents resolve conflicting PRs
+
+- Swift repository-owner effects `gitSyncBase`, `gitMergeContinue` and `gitMergeAbort` operate only on a validated linked chat worktree. They fetch an origin base, keep conflict markers for the agent, and journal recovery refs before merges and aborts.
+- Turn completion preserves chat merge and raw-commit history; the live landing records an unseen chat merge/commit as a second parent while keeping the live checkout's resulting tree. Publish updates use the existing workflow owner after the turn lands.
+- Settings gains Managed (default) and Full Agent Git access. Claude and Codex PreToolUse hooks deny raw Git writes in Managed mode, naming the Trezi tool; Full allows worktree Git and keeps raw pushes routed through Publish. Publish offers Resolve with agent and sends the conflict facts as a chat turn.
+- `test/agent-git.mjs` reproduces the package.json 0.2.5/0.2.6 conflict in real Git repositories, tests two-parent ancestry, live landing and a normal push, and tests Full raw merge/commit reconciliation and the command guard. Native Settings unit/evidence tests cover the saved choice.
+
+## 2026-10-06 — LKM-187 repair: `sheets` smoke "did not reach expected state"
+
+- **Failure.** The manager's `test:native` failed `sheets` (group `settings`) with a bare "Native sheet did not reach expected state"; the capture showed only the "Project memory change undone" toast left by the alerts check. Everything else, including `publish-progress`, passed. LKM-187 does not touch the sheets or the alerts smoke.
+- **Cause (not proven).** The wait names no check, so the failing step is unknown. The first wait after the alerts, for the "Running servers" sheet to stop being busy, depends on the service's `lsof`/`ps` scan and had a fixed 4 s budget, which a loaded machine can exceed.
+- **Change.** `smoke-sheets.ts`: `wait` takes a timeout (default 4 s, unchanged), the "Running servers" wait gets 20 s, and a timeout now reports the check's source and the last `sheetInspect` state. No assertion was removed or loosened.
+- **Checks.** Quick passed. Native `settings` passed twice in a row (6/6 plus `native-chat-scroll`). Full suite left to the manager.
+
+## 2026-10-06 — LKM-187 repair: chat-gate "retry loads the project" diagnosis
+
+- **Failure.** The manager's `test:native` failed once in `chat-gate` (group `sidebar`): "retry loads the project did not settle", status `Dev server exited (code 1) before printing a URL`. Nothing in LKM-187 touches the chat gate, the workspace controller or the runtime owner.
+- **Reproduction.** Not reproduced: the `sidebar` group passed on three native runs after the change (the third run's later `native-chat-scroll` step failed with the known foreground-focus environment error, after the smoke itself passed 6/6). The root cause of the one failure is therefore not proven; it looks like Retry running before the failed open had settled on the project, or the custom command (`sleep 8; exit 1`) being run again.
+- **Change.** `smoke-chat-gate.ts` asserts that the failed project is still active before Retry and the "retry loads the project" wait now reports `activeKey`, the project key, `launchSpec`, `url`, the status view kind, status and the Activity tail when it times out. No check was weakened; the next occurrence names its cause.
+
+## 2026-10-06 — LKM-187: Publish shows progress
+
+- **Why.** After clicking Publish nothing changed until the whole workflow returned, which can take a minute (sync, push, `gh pr create`, merge, cleanup). There was no way to tell it was running, no cancel, and a failure only reached the Activity log.
+- **Owner** (`WorkflowOwner.swift`, `WorkflowContext.phase`, `WorkflowPublish.swift`):
+  - The publish reports its step through `context.phase`. The step is kept in memory per workflow id, not in the journal; after a service restart the journal's open intent step stands in.
+  - The `workflows` summary carries `step`/`stepSince` while the record is open. A failed result is merged with `step`.
+  - The product log gets `Publish started`, one `Publish step … ms=` per step and a final `Publish <state> … total=`.
+  - `check()` now also runs before sync, push and the describe hand-off, so Cancel takes effect between those steps.
+- **Bun** (`git-controller.ts`, `src/shared/publish-progress.ts`):
+  - `runs` per root replaces the `publishing` set. The button label is set synchronously on click, and Bun polls `publish:progress` every 400 ms; the poll also advances the elapsed seconds.
+  - `refresh()` adopts a running publish it did not start, which covers a reload.
+  - Results end in a toast with "View on GitHub", or a standard sheet (Copy details, Close, Retry) that names the step and classifies the reason as conflict, auth or network.
+- **Toolbar** (`ToolbarPublish.swift`):
+  - The item stays a standard `NSMenuToolbarItem` (no custom view, so Liquid Glass and overflow still work). Template spinner frames are swapped on a common-mode timer.
+  - While publishing, `action = nil`, so a click can't start a second publish; the chevron menu shows the status and, while it's allowed, Cancel Publish.
+- **Tests.**
+  - New core smoke check `publish-progress` stubs the workflow owner and GitHub status. It covers feedback under 1 s, every step label, the elapsed time, Cancel only before the PR, the success toast, the cancel toast and the failure sheet, and writes `publish-progress.png`, `publish-toast.png` and `publish-failure.png`.
+  - Unit: `publish-progress` (new), `native-git` (immediate state, per-project indicator, cancel, toast, failure sheet, Retry, adopt) and `workflow-owner` (the real owner tags a conflict with `step: sync`). The workflow fixture now compiles `ProductLog.swift`; when unconfigured it writes nothing.
+## 2026-10-06 — LKM-186: select text across a whole chat message
+
+- **Why.** Each Markdown block was its own SwiftUI `Text` with `.textSelection`, so a selection stopped at every paragraph and Cmd-A selected one paragraph.
+- **One text view per segment.** `ChatRichText.swift` turns a reply's Markdown into one `NSAttributedString` (inline Markdown via `AttributedString`, code blocks as `NSTextBlock`s, tables as `NSTextTable`s) plus a block list. `ChatTextView.swift` is a non-editable TextKit 1 `NSTextView` that draws the rounded code/table backgrounds, places the code Copy buttons, sizes itself for SwiftUI (`sizeThatFits`) and replaces `StreamingText.swift`'s reveal with a fade of newly appended words (no blur; skipped under Reduce Motion). Selecting in one view clears the others.
+- **Copy.** `writeSelection` copies the shown text with blocks joined by blank lines; a wholly selected code block copies with its fence, a table as its Markdown source.
+- **Repair (manager run).** `sent-attachments` failed once in the full native run with "preview hover does not render the transcript (expected 237, actual 238)": one row body evaluation landed after the baseline `chatInspect`, from the follow/pin pass that follows the check's own message edit (it waited only for the attachment frames). The baseline now waits until `messageBodyEvaluations` has been unchanged for 500 ms; the hover and selection assertions are unchanged. I could not reproduce the failure (chat and core+chat native runs passed before and after), so the cause is inferred, not proven.
+- **Repair 2 (chat-gate).** The full native run failed `chat-gate` ("failed open shows Activity did not settle"): the failed open ran (status=error) but Activity never became visible. Activity's automatic open is a once-per-event-kind latch (`NativeActivityController.opened`) for the whole process and `chat-gate` neither reset it nor Activity's window, so it depended on what ran before; it was not an LKM-186 change (the diff touches none of that code). `activity-action` now has a verification-only `reset` (hide, clear lines, forget the latch, clear unread; `test/activity-attention.mjs` covers it); `checkChatGate` resets before opening Folder Gamma and its cleanup resets again so the failed-open line cannot leak into `sheets`. The wait's timeout now reports the full `activityInspect` (minus text, with a 300-char tail) and the Show Activity automatically preference. The assertion itself is unchanged.
+- **Repair 3 (unit tier under load).** The manager's unit run timed out `repository-owner` (120 s, empty log) and failed `island-flicker-frameworks` ("Preview override did not settle after the gesture"). Neither touches chat code: `repository-owner` compiles only `src/service` sources and queues behind the 2-wide swiftc lane while 8 workers run, and the framework test is a real-browser Next shadow-override check that failed after a 6.5 s cold compile. Alone, `repository-owner` passes in 87 s (close to the 120 s default), so it gets a longer budget in `UNIT_TIMEOUT_MS` in `test/run.mjs` (a time budget, not a weaker test; another ticket landed the same entry at 240 s and the merge kept that value). `island-flicker-frameworks` is unchanged: it cannot install its fixture in the worker sandbox (SKIP), so I could not reproduce it; it is an unrelated load-sensitive flake to re-check on the manager's machine.
+- **Repair 4 (review-quick on the merged tree).** `runtime-owner` was killed at the 120 s default in a cold 8-worker run (it builds a Swift fixture through the same saturated swiftc lane; 17.8 s warm). `UNIT_TIMEOUT_MS` in `test/run.mjs` now gives it 240 s like `repository-owner`; no assertion changed.
+- **Limits.** Selection spans one text segment: tool rows and other messages split it. Long code lines wrap instead of scrolling.
+- **Tests.** `test/native-chat-text.mjs` (unit, offscreen fixture: geometry, point drag, Copy, Select All, Copy buttons, streaming) and the `chat-text` smoke check (group `chat`): a point selection from the first paragraph to past the last code block, Copy through the responder chain into a private pasteboard, Select All and the code Copy button, captured in light and dark.
+## 2026-10-06 — LKM-190: chat text scrolls behind the composer
+
+- **Cause.** LKM-141 masked the conversation (`LatestClearanceMask`) while the latest button showed: the bottom band (composer, button, a gap either side) was transparent with a 14 pt fade above, so text faded into the background above the composer instead of passing under its glass.
+- **Fix.** The mask, `ChatModel.latestClearHeight` and `ChatLatestButton.fade`/`clearHeight` are gone; history scrolls under the composer and the button exactly as when the button is hidden. `ChatLatestButton` keeps its NSButton tracking, size and place but draws no opaque circle: a backdrop subview (`NSGlassEffectView` like the composer, `NSVisualEffectView` `.popover` with the old shadow before macOS 26) holds the chevron, a custom cell tints it while pressed, and `hitTest` returns the button for every point of its circle, so the text under it is never clicked.
+- **Tests.** The acceptance checks drop the masked-band assertions and require the backdrop, `latestButtonHit == ChatLatestButton` and, in new `acceptance-{440,320}-scrolled-up-{light,dark}` captures (window appearance forced), more than 40 text pixels beside the button between `gap` above it and the composer top (`latestBandInk`, computed in `ChatAcceptance` from the capture); the old mask left that band empty. The composer-layout fixture checks the backdrop and hit-tests three off-centre points in the circle.
+
+## 2026-10-06 — LKM-191: composer queue has no note for the normal wait
+
+- **Why.** "Sends when this turn finishes" / "Sends after this turn's changes land" above a queued message only restated the obvious (user request).
+- **Change.** `BLOCK_NOTES` in `src/native/chat-queue.ts` maps `running` and `landing` to `''`; `queueCanSend` stays false while blocked. `ComposerQueue.hasHeader` already drops the 28 pt header for an empty note on an unpaused queue, so the box is one 34 pt row. Resolve, sign-in, paused and landing-error notes are unchanged.
+- **Tests.** `test/chat-send-queue.mjs` expects an empty note while running and landing. `smoke-chat` expects `queueNote === ''` and `queueHeight` 34 before the `-queue-stack` capture; the Resolve check keeps 62.
+## 2026-10-06 — LKM-189: landing commit messages describe the change
+
+- **Why.** A landing commit's subject was the user's prompt (capped at 72 chars), so `git log` read as chat text, sometimes with "[Attached files]", and the PR description started from the first prompt.
+- **Message.** `chat-commit.ts` builds it before the squash from the worktree diff against `baseSha` (`changeEvidence`: name-status, stat, bounded `-U2` excerpt plus new files) and the final reply, and asks the chat's provider through a new optional `ModelProvider.complete` one-shot (tool-less Claude `query` with no setting sources; Codex thread) on the background model (`describeAgentOptions`). `parseCommitMessage` rejects prompt echoes, chatter, attachments, long subjects and bullet-less answers. A 3 s deadline aborts the call and falls back to `fallbackCommitMessage` ("Update a, b and c", bullets, changed areas). The same text is the branch commit and the live commit; trailers `Trezi-Turn`/`Trezi-Chat` replace the old "Trezi turn N (branch)." body. Conventional Commits are followed when >= 3 of the last 20 subjects (60%) use them.
+- **Re-squash.** Parked turns don't advance `baseSha`, so the next landing's evidence is the combined diff; `test/live-commit.mjs` 10b checks the model sees both turns and no prompt.
+- **Publish.** `generatePublishDescription` now gives the model the branch's commit subjects (`describedCommitSubjects` drops legacy prompt-subject commits) and asks it to summarise them against the diff.
+- **Tests.** New `test/commit-message.mjs` (unit); updated chat-landing, live-commit, stop-recovery, auto-reconciliation, conversation-owner and publish-description expectations. No real provider call was made, so the 3 s budget for Haiku/Sol is unmeasured; a slow model simply falls back.
+
+## 2026-10-06 — LKM-185: landed chat commits stay reachable after publish
+
+- **Why.** After a publish, landed chat commits were unreachable from `trezi/main`. Its reflog said `branch: Created from refs/remotes/origin/trezi/main`, which is Git's DWIM `checkout <branch>` after the local branch was deleted while a stale remote-tracking ref survived.
+  - In Trezi that checkout was `WorkflowPublish.recoverShip`.
+  - Three things set it up:
+    - `gh pr merge --delete-branch`, run in the live checkout, checks out the base and `branch -D`s the work branch, including a landing made while the description was written;
+    - the deletion on GitHub leaves the tracking ref stale;
+    - the old cleanup (`checkout base` → `pull --ff-only` → `branch -D` → `checkout -b`) fails on a diverged base and falls into `recoverShip`.
+  - Separately, the open-time `git:ensure` / publish heal switched a checkout that was left on main onto an existing stale `trezi/main`.
+  - The exact original timeline is not known. The test reproduces these mechanisms.
+- **Publish** (`WorkflowPublish.swift`):
+  - The merge runs without `--delete-branch`. Cleanup deletes the remote branch itself (`push --force-with-lease=refs/heads/B:<pushed head> --delete`) and fetches with `--prune`.
+  - It fast-forwards the local base only when that is a fast-forward, and never checks out, deletes or recreates a branch.
+  - The work branch fast-forwards to the merged base or merges it (`Sync … with the merged …`), with recovery refs for both tips first. If that merge fails, it is aborted, the branch is kept and the result carries a `notice` (logged as a warning).
+  - `recoverShip` is gone.
+  - "Nothing to publish" also covers a branch whose tree equals the base, which is what a squash-synced branch looks like.
+- **Repository owner** (`RepositoryBranches.swift`):
+  - `switchBranch` onto an existing branch fast-forwards it to HEAD (old tip at a recovery ref) or, when it diverged, refuses and stays (`joinBranch`).
+  - New read `strandedLandings`: other local branches with commits by `trezi@local` (not chat or comment worktree branches) that HEAD lacks, skipping ones whose merge would change nothing (`merge-tree --write-tree`).
+  - New mutation `restoreLandings` (intent `restore`): recovery refs for both tips, then a `--no-ff` merge. A conflict is left for per-file resolution.
+- **UI.** `src/native/stranded-landings.ts` runs once per project per launch from activation. It shows a 30 s toast with Bring them back and Ignore; Ignore is stored per tip in `trezi:stranded-landings-ignored`. After a merge it refreshes the branch label and the environment.
+- **Tests.**
+  - New `test/branch-safety.mjs` (unit) runs the real Swift owners with `fake-gh`, which now does real gh's local `--delete-branch` effects. It covers:
+    - a landing during describe;
+    - the same with the merge reply lost and a landing between attempts;
+    - an overlapping base;
+    - ensure refuse and fast-forward;
+    - the reported state (landings on main, `trezi/main` recreated by DWIM), found by the notice and merged back;
+    - a conflict, Ignore, and a cherry-picked change that is not listed.
+  - Against the old `WorkflowPublish.swift` its first scenario fails: both landings are unreachable.
+  - `workflow-durability` now expects the kept, synced branch instead of a reset to main.
+## 2026-10-06 — LKM-184: branch menu aligned with the address text
+
+- **Cause.** The borderless pull-down's alignment rect starts 5 pt inside its frame (the stack view puts that edge on the address's), but its stock cell draws the title at x = 8, 3 pt further right; squeezed, it moves the title by varying amounts (measured 3–8 pt depending on width). The address field's text starts on its own alignment edge (frame −2 pt plus the cell's 2 pt padding).
+- **Fix.** `BranchPopUpButton` (`ToolbarAddress.swift`) uses `BranchPopUpCell`, whose `titleRect`/`drawTitle` start the title at the alignment edge at every width, keeping the stock 16 pt for the chevron. The control's intrinsic width is 3 pt narrower, so at its natural size the chevron stays the same ~4 pt after the title and the frame (the click target) keeps its size. Tail truncation is unchanged; squeezed, the title gets the room the stock cell gave it.
+- **Test.** `toolbarInspect` adds `titleAlignment()`: both controls are drawn at 8x, the first inked column found and the first glyph's side bearing subtracted (bold "h" vs regular "t"), giving text origins in window x, plus the title–chevron gap. The `toolbar-address` check requires |dx| <= 0.5 pt and a 1–6.5 pt gap (16 when truncated) at all three widths, and at the wide and default widths forces the window's own appearance (`window-appearance`, never the system's) for `toolbar-{wide,default}-{light,dark}.png`. Standalone AppKit measurement: dx 0.04–0.07 pt (was 3 pt).
+## 2026-10-06 — Reconcile local rules with candidate updates
+
+- Preserved the five local files, fast-forwarded candidate from `5671e1c6` to `4140f60c`, and combined the local closing-turn guidance with upstream project-memory guidance as rules v28. Both sets of assertions and all changelog/task entries remain; the post-turn preview check is still planned.
+- Verification: `bun run typecheck`, `bun test/rules.mjs`, and `bun run lint --diagnostic-level=error` passed. Fixed formatting of the preserved reload assertion.
+
+## 2026-10-06 — LKM-182 repair: wait for a background install before removing a checkout
+
+- `releaseChat` and the failed-spare-sync path in `isolatedCwd` now `await dependencyInstall(path)` before `removeWorktree` (as `releaseSpare` already did), so a chat or project closed soon after New chat cannot leave a package manager writing into a deleted checkout. `test/chat-spare.mjs` closes a chat whose stub install is pending: the checkout stays until the install settles, then is gone and unlisted (fails without the fix). `docs/WORKTREES.md` now says a chat's later sync skips re-provisioning during a running install; only a non-chat foreground `provisionDependencies` waits.
+
+## 2026-10-06 — LKM-182: New chat opens instantly
+
+- **Why.** `agent:new-chat` created the chat's worktree, synced and provisioned its dependencies and started the provider before returning, so New chat waited for Git (and on a large project for seconds) before the composer appeared.
+- **Pending chats.** `agent:new-chat` now registers a pending chat (`chat-pending.ts`) and returns; the snapshot lists it, the native workspace controller shows it and focuses the composer (`focusComposer`). `prepareChat` builds checkout → provider → registration in the background and honours a close at every step. Send, restart, rename and permission changes wait for it; the send shows "Preparing workspace…" after 300 ms and Stop cancels the wait.
+- **Spare.** `chat-spare.ts` keeps one prewarmed detached chat worktree per open repository project (after open when it has chats, and after each new chat is ready). `isolatedCwd` takes it and syncs it from live; orphan recovery treats it as live; project close removes it unused, with no recovery ref.
+- **Dependencies.** The new-chat path keeps the copy-on-write `node_modules` clone but runs a needed install in the background, deduplicated (`dependenciesInstalling`, `dependencyInstall`); the turn prompt tells the agent not to run commands needing `node_modules` until it finishes. This is a prompt notice, not a tool gate.
+- **Timing.** Product-log lines for each step (`New chat composer ready` with snapshot/created/listed/active/shown ms, workspace/provider/registered/ready, first send wait). Measured here with a stub provider and the Swift repository owner, three runs each. Before = the `isolatedCwd` that New chat awaited; after = composer ready, with the spare take done in the background:
+  - small (20 files, 50 in `node_modules`): before 195–216 ms; after 2–3 ms (spare take 146–156 ms);
+  - large (6,000 files, 8,000 in `node_modules`): before 0.90–1.30 s; after 2–3 ms (spare take 0.31–0.44 s).
+  - Real provider start time came on top of "before" and is now off the path too; it was not measured (no live provider calls).
+- **Tests.** New `test/chat-new-instant.mjs` (unit): with worktree creation slowed to 3 s, New chat gives a ready, focused composer in < 100 ms with no provider started; the first send shows "Preparing workspace…", waits, and lands in the chat's worktree; the next chat takes the synced spare; a pending chat closed at once starts nothing and leaves no worktree; project close removes the spare and every chat worktree. New Git suite `test/chat-spare.mjs` (through the Swift owner). `setup-next.mjs` covers the background install; `conversation-owner.mjs` waits for the second chat's provider.
+
+## 2026-10-06 — LKM-181: chat islands disable, hide and references
+
+- **Why.** An island kept offering controls after the code moved on (a literal became a token, a declaration was deleted). The only signal was raw exception text, and there was no way to put an island aside or point the agent at one.
+- **Binding check.** `chat-island-bindings.ts` re-reads every binding on landing, after writes, on `layers:changed` (debounced 400 ms) and on `read`. Anchors are found anywhere in the file, so simple moves are followed. A token, variable, expression, ambiguous anchor or removed declaration disables the field with one line; compound blocks are disabled whole. All fields broken disables the island. `writeIsland` refuses a broken field before writing.
+- **Status split.** The record's lifecycle `status` (waiting/ready/unavailable) stays as the service's admission state. Bun's check persists `health`/`reason`/`reasons` through the new `islandHealth` owner method, and the user's choice is `user` (`islandMark`). The view merges them into ready / partially-disabled / disabled (code or user) / hidden / waiting, so Swift and Bun read the same thing after a restart. The service refuses commands on disabled islands with one line, and UI errors go through `islandProblem`, never exception text.
+- **UI.** The header shows the short name and a … menu (Disable/Enable, Hide, Show all hidden islands, Copy reference). User-disabled islands collapse to the title row. Code-disabled ones show the reason, Recreate with agent and Hide; broken fields are grayed with the reason on hover. Hidden islands are a one-line "Hidden island: <title> — Show" placeholder.
+- **References.** Records get a stable `island-<word>-<n>` name (older ones are named by position). "#" in the composer lists the chat's islands, and Copy reference adds a chip whose name is prepended on send. A message naming an island adds its full definition to the agent context (`chat-island-context.ts`). `chat_island` gains `show {id}` (`islandShow`: same id, current turn) and `clone {id, rebind?}` (through the define path). Operating rules v27.
+- **Tests.** New `test/chat-island-status.mjs` (unit) covers the token-replaced field, the deleted element, hide/disable across a restart, reference context, clone with rebind, show, `islandProblem` and the "#" menu/chips. The islands smoke group (`smoke-island-status.ts`) checks partial, whole and user disable, hide and show-hidden, and captures `chat-island-disabled.png` and `chat-island-hidden.png`.
+
+## 2026-10-06 — LKM-180: movable islands
+
+- **Shared island.** `FloatingIsland.swift` holds what the editing and Layers islands share: glass (NSGlassEffectView, `.popover` fallback), the opaque face, an AppKit `IslandHeader` and a frame that claims every click, scroll and hover (LKM-162/173). The editing island's SwiftUI title row became that AppKit header, so its … and Close buttons are real NSControls: the header's open-hand cursor rects and its drag skip them, labels drag, a 3 pt threshold keeps clicks clicks, and a double-click resets. The … menu gains Reset Position.
+- **Placement.** `IslandLayout.swift` is pure geometry. `IslandSpot` stores a place relative to the area's nearest corner, so on a window resize an island keeps its corner; one that no longer fits is forgotten and returns to its default (as in LKM-179). `IslandPlacement.snap` snaps each axis within 8 pt to the inner edges and to the other island's edges or a 10 pt gap beside them; `free` moves a drop that overlaps the other island to the nearest clear spot (left, right, above, below) or back to default. The editing island keeps its full height and moves sideways only; while it is dragged the Layers frame is held so neither pushes the other until the drop.
+- **Saved.** `trezi:native-panel-sizes` gains `inspectorX`, `inspectorCorner` and `layersCorner`. `layersX`/`layersY` without a corner read as LKM-179's top-right offset. There is one main window, so "per window" is that preference.
+- **Test.** New `movable-islands` smoke check (group `core`, `smoke-movable-islands.ts`, host command `movableIslands` in `IslandVerification.swift`): header hit testing (title and blank space hit the header, … and Close hit their buttons, no hand over controls), drag moves and is saved, a 5 pt snap to the edge, close/reopen and saved-preference restore, resize keeps the corner, both drop-onto cases end with no overlap, Layers snaps beside the editing island, Reset Position and double-click reset, captures `movable-islands-light.png` / `-dark.png`. Drags go through the header's own drag path with window points, not synthetic CGEvents (evidence budget).
+- **Repair (manager run: native-chat, sent-attachments, comment-rows failed).** The `movable-islands` check resizes the window to 1280 and 1000 pt, and its cleanup left it at 1280 (canvas 1050), so the chat was clamped to 426 pt instead of 440. native-chat's ±20 divider step then stored 426 as the chat's desired width, and the Resolve width, attachment and comment-bubble checks after it failed. The check now restores the window first, inside its own `finally` (before anything that can fail), with `prepare`, and asserts the window and chat width came back; its cleanup restores the window first too. Verified with the `core` and `chat` groups together (19 of 19).
+
+## 2026-10-06 — LKM-179: Layers island, selection sync and drag to reorder
+
+- **Island.** `Layers.swift` is now a floating island like the editing inspector (NSGlassEffectView on macOS 26, `.popover` visual effect otherwise, radius 24, opaque face under the rows). Header with title, count, Refresh and Close; the header drags it, the 5 pt rim resizes it, double-click on the header resets. Its whole frame is a hit target and it is in `previewCoverRects()`, so the page beneath gets no hover, clicks or scrolls (LKM-162/173).
+- **Placement.** `LayersLayout.swift` (`LayersPlacement.frames`) is pure geometry: by default Layers is centred under the toolbar's Layers segment (`Shell.toolbarButtonFrame`, flush right when the segment is in overflow), clamped to the region left of the editing island; when that region is under 220 pt and the editing island is open, Layers stacks on top of the editing island's column and the editing island moves below it. A custom position is kept as an offset from the area's top-right; one that would be off-screen or would cover the editing island falls back to the default (and an off-screen one is forgotten). The docked `layersHeight`/divider are gone; the saved `layers` size migrates to the island height, with `layersWidth`, `layersX`, `layersY` beside it in `trezi:native-panel-sizes`.
+- **Sync.** The preview's `describe()` carries `layerPath` (child-index path from body). `layers-controller.ts` resolves a selection by source location first, then path + tag fingerprint, so it survives refreshes; the inspector controller's `onElement` feeds it. The island's programmatic select sets an `updating` flag so it never echoes back; a row selection sends `layers:select`, the same path a click takes. Clearing the preview selection clears the row.
+- **Reorder.** Outline drag-and-drop with insertion line and container highlight. Refusals (body, into itself, library/generated markup, loop-generated, no-op) show one line in the island. Accepted drops send `layers:move` (MoveNodeRequest, undoable through `commitEdit`; inside/cross-parent goes to the agent as before) and the moved element is reselected after the reload (`movedLayerPath`, 8 s pending window).
+- **Test.** New `layers-island` smoke check (group `core`, `smoke-layers.ts`, host command `layersIsland` in `LayersVerification.swift`): placement under the button with no overlap at 1280 and 900 pt, move/resize/reset and saved sizes, sync both ways without echo, dragging `p` before `h1` changes the source and Undo restores it, a refused unstamped drop, and no page hover through the island. Captures `layers-island-light.png` / `layers-island-dark.png` force only this window's appearance and restore it.
+
+## 2026-10-06 — LKM-178: collapsed comment result rows
+
+- **Why.** A finished preview comment posted "Comment applied." plus the agent's whole summary as an ordinary assistant message, which dominated the chat.
+- **Data.** `agent:spawn-comment` takes an optional sixth argument, the comment's one-line label (the comment text, else `<tag>`), sanitised with `oneLine` and capped at 300. It rides on the queued spawn and every `spawn-finished` emit as `label`. The chat controller keeps `text` unchanged (Copy) and adds `comment: { title, line, detail }`: the title without its period, `line` = label or else the summary's first non-empty line (older events, spawns that never started), `detail` = partial-changes note + summary. These messages are in-memory only (never in the transcript), so there is no persisted legacy shape.
+- **UI.** `ChatCommentRow.swift`: one line "<title>: <line>" (title medium, line secondary, tail-truncated) with a chevron; the whole line is the toggle. Expanded shows the detail as Markdown and Copy/Revert (`ChatActionButtonStyle`, now internal). The bubble is full chat-column width, radius 14 like the user bubble, filled with `.quaternary.opacity(0.5)` (the user bubble's semantic fill at half strength). Expansion is `ChatModel.expandedComments`, per message and per session.
+- **Test.** New `comment-rows` smoke check (group `chat`, `smoke-comment-rows.ts`) posts all five outcomes (one without a label) through `nativeChat.event`, then the test-only `chatCommentRows` host command forces the window's own appearance (never the system's), toggles rows through the same `toggleComment` a click uses, captures the foreground chat and samples each bubble's fill against the chat background and a reference user bubble. It asserts single-line equal collapsed heights (including a long comment), expansion/collapse per row, and 2 ≤ fill contrast < user-bubble contrast in light and dark. Captures: `comment-rows-{light,dark}-{collapsed,expanded}.png`.
+## 2026-10-06 — LKM-177: project memory principles, rule format, cleanup and Undo
+
+- **Why.** Real memory kept one-off change requests that were already built ("The Themer preview should show only the Home screen…") and now acted as stale constraints. In issue #230 an agent that could not edit files reported "--radius-pill: 9999px is saved in project memory", and a later chat applied it "per project memory".
+- **Prompt.** `projectMemoryEvaluationPrompt` now states the principles from `docs/MEMORY.md`: the three-question test, what to store and never store, one-line imperative rules under `## Preferences / Design rules / Constraints / Project facts / Pitfalls`, about 40 items, newer replaces older, requests become rules only when stated as general, plus a CLEANUP section and good/bad examples. The `{"memory": … | null}` protocol is unchanged.
+- **Trezi's pass** (`project-memory-evaluation.ts`, `project-memory-format.ts`). A new rule under a design heading (or written `var(--x)`) that names a CSS custom property is dropped unless `git grep --untracked` finds the token in the chat's worktree or the live checkout; a search that cannot run keeps it. Trezi, not the model, writes the source tags `<!-- added YYYY-MM-DD -->`: kept rules keep theirs, new or reworded rules get the day's date, user-typed rules stay untagged. Chats see memory without tags.
+- **Not work.** `treziRules` (v26) always carries "Project memory is not work": saving to memory applies nothing, and a requested change is never reported as "saved in memory". The memory section adds that a rule is not a change to the code.
+- **Note and Undo.** The update queue reports each committed change; the host shows "Project memory updated: +1 rule" (or "−3 rules" after a cleanup) with View and Undo. The toast now takes up to two actions (`actions`, click `index`). Undo is `store.restore`: a save on the update's own revision, never retried, so a later edit makes it a no-op that says so. It may restore an empty memory.
+- **Checks.** `test/project-memory-evaluation.mjs` (mocked evaluator): Themer items dropped and Undo restores them, `--radius-pill` stored only once the token exists, a working preference kept, a `--force` preference not mistaken for a token, tags, the note and a refused Undo, and the `git grep` search in a temporary repository. `test/memory-owner.mjs` runs Undo against the real Swift owner. `test/rules.mjs` pins v26 and the not-work section. The settings smoke shows the memory note, inspects View/Undo and clicks Undo (`memory-note-toast.png`).
+
+## 2026-10-06 — Rules v26: no "preview will reload" notes; post-turn preview check planned
+
+- **Why.** In Trezi chats the agent ended turns with lines like "Updated to v0.2.5. Preview will reload once this turn lands." That text came from the agent, not from Trezi. A subagent cannot monitor the reload inside the turn: the worktree reaches the live checkout, which the preview serves, only when the turn lands.
+- **Done.** `src/main/rules.ts` is v26 with a "Closing a turn" section (no reload, install or restart announcements; short summary; mention the preview only for something that needs attention). `test/rules.mjs` pins v26 and the new text. CHANGELOG line under Changed.
+- **Planned, not built.** A post-turn runtime check of the reloaded preview that reuses the LKM-151 preview-error card. Scoped in `docs/TASKS.md` ("Post-turn preview check"); no ticket ID yet.
+
+## 2026-10-05 — LKM-176: native smoke focus guard and fixed failure lines
+
+- **Why.** Agent OS triage of 16 native failures found 5 `env_focus` ("Chat was not foreground": another app or a system dialog took focus mid-run). One more was unclassifiable because the log tail had no assertion text.
+- **Focus guard.** The new host test command `smokeFocus` (`SmokeFocus.swift`, test profile only) counts focus losses (the app resigning active, or the simulation). When focus is missing or was lost, it activates Trezi and makes a window key, waiting at most 2 s. The runner calls it before and after every foreground check. A check that failed after losing focus is cleaned up, restored and retried once. Each restore logs `FOCUS [smoke] <check> — focus restored …`. An open sheet keeps key status; nothing touches system settings.
+- **Simulation.** `TREZI_NATIVE_SMOKE_STEAL_FOCUS=<check>` makes an invisible in-process 1×1 window key before the check runs. `test:native` defaults it to `chat-ready`, so every native run proves restoration: the later foreground checks must pass.
+- **Failure lines and exit codes.** `smoke-report.ts` formats `SMOKE FAIL <group>/<check>: <message> (expected …, actual …) [artifact: …]` from assertion values. `waitFor` now throws `SmokeTimeoutError` with its label, the waiting step's `smoke-*.ts:line` and the last state. Bun prints the lines after the summary and writes `smoke-result.json`; `start-native.mjs` prints them again as the run's last lines. When the host died without a result, the launcher adds `SMOKE FAIL host/exit` with the code or signal and the host's last log lines. If every failure is an environment failure, the run prints `SMOKE ENV <reason>` and exits 3; otherwise it exits 1.
+- **Checks.** Quick passed (typecheck, typecheck:native, unit tier incl. the new `native-smoke-report` and the extended `native-smoke-runner`, lint). Native `core,chat,composer` passed 19/19 with `focus taken away (simulated …)` and `focus restored during the check` in the log. Full suite left to the manager.
+
+## 2026-10-05 — LKM-175 repair: foreground flakiness in native acceptance
+
+- The manager's native run failed `visible-composer` ("Chat must be foreground") and then `native-chat` ("Native divider needs renderer delivery"); a later chat-scroll run failed the same way. Both were harness issues, not the build: the window lost key status or activation was deferred, and the 2 s wait in `chatAcceptance` `prepare` gave up. The divider failure was a cascade: `visible-composer` died before restoring the 440 width, the chat stayed at the 320 minimum, and the divider check's `-20, +20` steps clamp there, so it ended 20 pt wider.
+- `smoke-composer.ts` now passes `prepare: true` on the per-pass and restoring `chatAcceptance` width calls (the restore always runs). `smoke-chat.ts` steps away from the minimum first (`+20, -20` below 340). `ChatAcceptance.swift` re-requests activation every 0.5 s for up to 5 s instead of one request and a 2 s wait. Activation is still required; nothing was relaxed.
+
+## 2026-10-05 — LKM-175: fast native test builds
+
+- **Why it was slow.** Every verification compiled all three Swift products one after another with `-O` in a fresh worktree whose Clang module cache (`out/native/module-cache`) was empty. The Swift driver ran one frontend at a time without `-j`, even though `-O` is not whole-module here.
+- **Binary cache.** `scripts/native-swift.mjs` keys each product on its sorted repo-relative source names and bytes, its flags (profile, target, frameworks), `swiftc --version` and the SDK version/build. The unsigned binary is stored in `~/Library/Caches/Trezi/build/<product>/<hash>`, the last 20 per product. A hit removes the old output and copies the cached binary in its place, so the kernel never sees new bytes written over a signed binary it may have cached. Bun bundling and signing still run. `TREZI_BUILD_CACHE=<dir|off>` overrides the location. A cache that cannot be created is reported once, then the build compiles.
+- **Test profile.** `TREZI_BUILD_PROFILE=test` uses `-Onone -no-whole-module-optimization -j<cores>`. `bun run test:native`, `test/native-runtime.mjs` and `dev:native --test` set it. `bun run build`/`dev` keep exactly `-O`. TreziSecrets always compiles release, so its bytes and Keychain approval don't depend on the profile. `-enable-batch-mode` was tried and dropped: with Swift 6.3 its frontends returned success without writing objects, and the link failed on every `.o`.
+- **Parallel, shared module cache.** The three swiftc runs and the three esbuild bundles start together (`Promise.allSettled`). Each swiftc has a private temp folder under `out/native/swift-tmp/` and prints its output as one block. The module cache is `~/Library/Caches/Trezi/module-cache`. Each step prints `[build] <step>: <s> s (cache hit|compiled …)`, then the total; the native suites print `[timing]` lines.
+- **Chat-scroll.** It never built: `--require-build` only fails when the host native-runtime just built is missing. So there was no second build to skip. Its 68.9 s is mostly foreground captures and deliberate time-point samples. The 80 ms pause before each visibility poll and the fixed 1.2 s timer-tick wait (now a poll) were removed.
+- **Keychain.** `TREZI_SIGN_IDENTITY=-` now returns ad hoc before `security find-identity` runs, so a test build with it touches no keychain. Test builds still never create an identity.
+
+| Build (12-core operator Mac, agent sandbox) | Before | After, test profile | After, release |
+| --- | --- | --- | --- |
+| Cold: fresh `out/`, empty caches | 154 s | 45.8 s | 92.0 s |
+| Warm, no Swift change (fresh or same worktree) | 121 s same worktree, 154 s fresh | 0.4 s | 0.4 s |
+| One Swift file changed (`src/native/Toast.swift`) | 114 s | 6.0 s | — |
+| `ServiceContract.swift` changed (host and service) | — | 9.1 s | — |
+| Manager native verification, all groups + chat-scroll | ~8 min (issue) | 231 s (build 72.7 s with empty caches on a loaded machine, smoke 88 s, chat-scroll 68.9 s) | — |
+
+- **Checks.** `test/native-build-cache.mjs` (unit tier) covers the key, pruning, hit/miss, the unusable-cache fallback and the profile wiring, using a stand-in compiler. The signing test asserts that `-` makes no keychain call. Quick verification passed with 170 unit checks. Native verification passed for all seven groups (24/24 smoke checks) plus chat-scroll.
+
+## 2026-10-05 — LKM-173 repair 4: island entry follows the native pointer path
+
+- **Full-suite failure.** The manager's native run timed out clearing select-mode hover over the island, while the unchanged `core` group passed. The page-to-island fixture sent one synthetic jump; its return leg already traversed a short path because WebKit can coalesce a single move under load. The failure capture did not expose the page's event target.
+- **Fixture repair.** The entry leg now sends the same frame-spaced AppKit moves through the window and WebKit's own tracking-area owners, in both select and interact modes. The existing assertions still require the page hover box to clear, CSS `:hover` and `mouseenter` to stay off the covered island, and clicks and wheels not to reach the page. An entry timeout now records the shield's connected state and rectangle beside the native move report.
+- **Verification.** Quick passed (170 unit checks, lint and typechecks). Native `core` passed 14/14 checks with no skips on the changed tree. The manager's full native suite remains the acceptance gate.
+
+## 2026-10-05 — LKM-173 repair 3: return hover follows the pointer path
+
+- **Manager failure.** The full native run again timed out on select-mode hover returning from the island. The heading was the page hit target (`H1`) and scrollY was 0, but one synthetic move to a point only four pixels from the earlier page point did not reliably produce a new WebKit hover update under the full smoke load.
+- **Fixture repair.** The test broker's optional return gesture now sends 12 AppKit mouse moves from the island toward a new point on the heading, spaced one frame apart. Each move still goes through WebKit's own tracking-area owner; the page assertion still reads the real isolated-world hover box, and the island click, wheel and interact-mode checks remain. Production pointer handling is unchanged.
+- **Verification.** Quick passed (169 unit checks, lint and typechecks). Two consecutive native `core` runs on the same code passed 14/14 checks with no skips. The manager retains the full-suite run.
+
+## 2026-10-05 — LKM-173 review repair: cover the native toast over the preview
+
+- **Review gap.** The replacement for LKM-162's pointer gate covered the editing island and resize edge but omitted `NativeToast`, which floats above the preview. WebKit could still hover the page behind a visible toast.
+- **Fix.** `previewCoverRects` includes the toast. The toast resolves its constraint frame and reports a cover change when shown, then reports again when its fade finishes and it becomes hidden. Its frame hit test keeps transparent padding native-owned while preserving `NSHostingView`'s button handling.
+- **Evidence.** The settings smoke now checks the toast's native hit target, the sent rect against the preview shield, and removal of that shield after dismissal. Quick verification passed (168 unit checks and typechecks). Native settings verification was unavailable: the shared desktop lock stayed busy for 600 seconds, so manager verification remains pending.
+
+## 2026-10-05 — LKM-173 repair 2: isolate hover travel from island click and wheel
+
+- **Manager failure.** The full native suite timed out when hover returned from the island to the page; the later visible-composer capture also failed after the inspector check left the island open. The hover fixture had posted a click and wheel during the island leg, before checking pointer return. Those queued events could run during the return move. A scoped native run had passed once, so the test order was timing-dependent.
+- **Test repair.** `checkPointer` now checks page → island → page hover first. It then posts the island click and wheel and checks the cumulative element-pick count and that the page did not scroll. The inspector fixture restores the island's initial open state in `finally`, including after an assertion fails, so later checks get their intended layout. A return-hover timeout now reports the heading geometry, hit target, scroll position and move result.
+- **Verification.** Manager quick passed (167 unit checks and typechecks). Native `core,composer` passed: 17 checks, 0 failed, 0 skipped, including the inspector and visible-composer checks. The foreground `inspector-island-default-open.png` was inspected.
+
+## 2026-10-05 — LKM-173 repair: pointer verification survives navigation and covers interact mode
+
+- **Manager failure.** The full native run exited 139 at the inspector check. Its pointer command evaluated JavaScript through WebKit's Swift async overlay while the fixture could reload. The repair removes JavaScript evaluation from that command; the existing test bridge reads the page between one-move commands.
+- **Event path.** A synthetic move sent only through `NSWindow.sendEvent` did not reach WebKit's hover handler. The test now also delivers it to WebKit's own tracking-area owners, without replacing any area. It moves to a new coordinate on returning from the island, matching a real pointer gesture and avoiding WebKit coalescing a repeated point.
+- **Coverage.** The native `core` inspector check now asserts page → island → page select hover, shield hit target and rectangle, no click-through pick, and interact-mode CSS `:hover`, cursor and `mouseenter` on the page with neither hover nor handler over the island. Manager quick passed (166 unit checks and typechecks); native `core` passed (14 checks, 0 failed, 0 skipped). Full suite remains for manager verification.
+
+## 2026-10-05 — LKM-173: select mode hover restored; the island is shielded in the page
+
+- **Regression.** Build 835 (with LKM-162): select mode picked on click but never highlighted on hover, and the tool felt slow. LKM-162's `PreviewWebView` replaced WebKit's tracking areas with `PreviewPointerGate` replacements and ran a full-window `hitTest` on every move. WebKit's moves now arrived through a foreign owner, and the hover was lost.
+- **Fix.** Removed `src/native/PreviewPointer.swift`; the preview is a plain `WKWebView` again and WebKit keeps its own tracking areas.
+  - Clicks and scrolls: unchanged from LKM-162. `NativeEditingInspector` hit-tests its frame to itself and swallows them.
+  - Moves: `Host.previewCoverRects` (`src/native/PreviewCover.swift`) converts the island's and its resize edge's frames to the page's viewport in CSS px (pageZoom × magnification). `WorkspaceLayout.layout()` emits them to main (`native-cover`) only when they change. Main forwards them on `trezi:preview:covered` and re-sends the last ones on every `loaded`.
+  - Why through main: a first version had Swift evaluate the rects into the page itself, answering a document-start request from the preload. Two native runs crashed TreziHost with SIGSEGV in `swift_task_isMainExecutorImpl` under WebKit's Swift `evaluateJavaScript` overlay, at a source edit that reloads the page. Main's `deliver` path is the one every other preview message already takes.
+  - The preview script lays a transparent `pointer-events:auto; cursor:default` shield per rect (`src/preview/native-cover.ts`, its own open shadow root at max z-index). WebKit's own hit test lands on it, so `onMove` sees an overlay target and drops the hover box. Window capture listeners, installed after the preload's own, stop the page's pointer listeners for events on the shield. The page's `:hover` never matches under the island either.
+- **Cost.** Nothing per move: no AppKit hit test, no JS rect math. The browser's own hit test does the work.
+- **Test.** `checkPointer` step `moves` now delivers `mouseMoved` through the owners of WebKit's own `.mouseMoved` tracking areas (the path a real pointer takes). It reads the page's hover box (`[data-trezi-hover]`) from the isolated world: beside the island → shown, over the island (5 points, plus a posted click and wheel) → hidden, beside again → shown. It also checks that the page's shield matches the rect the host laid out and that no `element-picked` was sent.
+## 2026-10-05 — LKM-172 verification repair: attachment upload fixture timing
+
+- Manager quick verification reached the unrelated `platform-owner` attachment check and found an empty save path during a 3 MB chunked upload. That fixture used a one-second upload idle limit for the whole attachment suite; parallel unit load can leave more than one second between chunks, making the client correctly return an empty path after the service expires the upload.
+- The full upload now uses the service's normal idle limit. Separate disposable fixtures keep the explicit one-second expiry and four-upload capacity checks, so both refusal cases remain covered without imposing that timeout on the multi-megabyte transfer.
+
+## 2026-10-05 — LKM-172 repair: inspector reads do not hold project activation
+
+- `NativeInspectorController.activate` hides the old island and sets the new root synchronously, then refreshes tokens and controls asynchronously. The runtime now starts that refresh without awaiting it, and reports any rejection through the existing error handler. Chat context, Git refresh and the rest of project activation can proceed while inspector reads finish; saved-element resolution still starts after project activation.
+
+## 2026-10-05 — LKM-172 repair: a new pick cannot consume an invalid snapshot
+
+- Manager native verification found that after A's source stamp changed while B was active, selecting the changed element could still restore A's old Props tab. The later core inspector check then also saw Props rather than Styles. The visible island and chip were hidden, but the saved inspector snapshot had not yet been discarded.
+- The returning preview now uses its readiness URL as well as document start time to identify A's loaded page, even when a separate URL-change callback is absent. An inspector snapshot is applied only to the matching element-picked event requested by restore; an ordinary new pick discards that snapshot. The native switch check waits until both the inspector snapshot and stored composer selection are empty before picking the changed element anew.
+- Verification: agentos quick passed (167 unit checks, lint and typechecks); native `core,sidebar` passed 16/16 checks, including `project-switching` and the following inspector check. The Opening capture shows no inspector island.
+
+## 2026-10-05 — LKM-172 repair: project selections return when their element still exists
+
+- The user decision supersedes the original issue's optional "restore nothing" reading. A switch now hides A's island and chip immediately, stores its element and tab in memory, then checks A's page on return. A unique matching layer restores the selection and tab; a missing source stamp clears them quietly. The native switch check covers both return paths.
+- The preceding LKM-172 entry describes the earlier implementation and its tests; its "none restored" expectation was replaced by this repair.
+- Native verification passed `project-switching` after the document-readiness gate, but the following inspector check exposed a retained snapshot after the removed-element case. Repeated readiness events had invalidated each pending missing-element timer. The timer now stays live across those events and checks the saved element again before clearing it. The native test also selects the changed element anew and checks that the old Props tab does not return. Quick verification passed before this last fix; the session's native call limit was reached, so this final revision still needs native confirmation.
+
+## 2026-10-05 — LKM-172: the selection and the editing island belong to one project and one page
+
+- **Problem.** With an element selected and the editing island open in project A, switching to project B left A's island (A's element values) on screen through "Opening B…" and after. The inspector only reset in `services.activate`, which runs once B has opened, and it published only after its async reads. The chat chip of A stayed in A's context, so coming back restored it.
+- **Project switch.** `NativeWorkspaceController.switching` is called at the start of `select()` for any project other than the loaded one (a restart or a re-select of the loaded project is not a switch), before "Opening …" renders. `inspector-runtime.ts` then:
+  - calls `NativeInspectorController.clear()`, which drops the element, discards any refresh in flight, publishes the hidden island synchronously and clears live style previews (`activate` uses it too);
+  - calls `NativeContextController.clearSelections()`, so no project keeps a chip and returning restores nothing (the issue's preferred option);
+  - turns select mode off (`preview:set-select-mode false`), which drops the old page's selection outlines, toolbar and hover box.
+- **Navigation.** `preview:url-changed` to a different page (origin, path and query; the hash is ignored) than the one the element was picked on drops the selection, the chip and the island and clears the page's selection. A reload of the same page keeps it, because a source write live-reloads the page and the element re-resolves by its stamp; the Styles edit flow depends on that.
+- **Removed element.** The preload's 600 ms layout tick (`checkSelectionGone`) treats a pick as gone when none of its elements is connected and no element carries the same source stamp (HMR swaps nodes), on two ticks in a row. It drops its own outlines and toolbar and sends the new `trezi:preview:selection-lost` (`PREVIEW_SELECTION_LOST`, relayed as `preview:selection-lost`); unlike `select-cancelled` it leaves select mode as it is.
+- **Tests.** Unit: `native-inspector` (synchronous hidden publish, stale refresh discarded), `native-context` (`clearSelections`), `native-workspace-controller` (switch heard before Opening renders, not on restart/re-select). Native (`project-switching`, group `sidebar`): selects the first project's heading through Layers, opens the island, draws the hover box, then holds the second project's `project:detect` so the app stays at "Opening …" and checks that the island is hidden with no element (`inspectorInspect.title` is "Project controls"), both chats have no chip and the old page shows no outline, toolbar or hover box; after returning, nothing is restored. Evidence: `switch-selection.json`, `switch-selection-opening.png`.
+## 2026-10-05 — LKM-168 native chat gate verification repair
+
+- A failed project selection now clears its loaded chat key, including when a restart fails after the project was previously loaded. The shell also closes the chat gate for a preview error that arrives after selection, such as a dev server exit. Unit checks cover both paths; this addresses the failed-open chat-gate smoke from manager verification.
+
+## 2026-10-05 — LKM-168 native smoke after the LKM-169 merge
+
+- The Resolve queue smoke now checks that the second provider call is made exactly once and its prompt ends with the queued composer text. The real `agent:send` path prepends Trezi UI instructions even when UI composition is off; comparing the full prompt to the bare text failed before emitting the queued turn's `done` event, which left the next attachment smoke waiting behind a running turn.
+
+## 2026-10-05 — LKM-168 review repair: private output, hard cap, real turn path
+
+- The dev-server product log now records only a fixed output category and length. Raw lines still reach Activity but cannot put target source excerpts into the persisted log. Helper crash lines keep provider and exit status, not the stderr tail.
+- Bun and Swift take the same advisory lock on the UTC day file while checking the remaining bytes and appending. When the next line cannot fit with its limit marker, the marker fills the file to the exact cap. The unit test checks both writers and a shared-file race.
+- The native chat smoke stubs only the provider's outbound send. It invokes the real `agent:send` RPC and emits through the existing provider event hook, so removing either production log hook fails its start/end assertion.
+
+## 2026-10-05 — LKM-168: product logging, one folder, Copy Logs for Support, `trezi logs`
+
+- **One folder, every process.** Each process appends straight to `~/Library/Logs/Trezi/trezi-YYYY-MM-DD.log` with `O_APPEND`; `TREZI_LOG_DIR` overrides the folder.
+  - I chose direct writes over relaying lines through the service because a relay would lose the lines that matter most when the service or XPC fails.
+  - The 20 MB cap reads the shared file's size, so it holds across processes. Old days are pruned when a day file opens.
+  - Writers: `src/main/product-log.ts` (Bun backend, provider helpers, plus `preview` and `devserver` lines written on their behalf) and `src/service/ProductLog.swift` (host `app`, `service`, written on a private queue). Both are no-ops until configured, so owner tests write nothing.
+- **Events.**
+  - Turns: start, end and failure with provider and resolved model (`src/main/turn-log.ts`, hooked into `agent.ts`).
+  - Landing outcome with the Git result and landing failures (`chat-isolation.ts`); parked apply, resolve staging and discard (`chat-worktrees.ts`); worktree create, sync, remove and reclaim (`worktrees.ts`).
+  - Helpers and backend: provider helper start, exit and crash. A crash is an exit of the current session that the owner had not stopped (`ProviderOwner.exited`). Backend start and exit (`ServiceRuntime`).
+  - Preview: load, reload, failed load and web-content crash (`Host.swift`); a once-a-minute preview bridge message count (`log-support.ts`).
+  - Host and XPC: host commands slower than 250 ms (`Host.dispatch`, `HostLogs.swift`); XPC failures and lost connections (`ServiceClient`, `ServiceRuntime`).
+  - Dev server lines cut to 300 characters.
+- **Privacy.** One `redact` (token shapes, `key=value` secrets, URL credentials, private keys, home → `~`) used by the log and by the LKM-165 feedback diagnostics, mirrored in Swift. `test/product-log.mjs` checks the two writers produce identical output. Console output is deliberately not copied into the log: provider and SDK messages there can carry prompt text.
+- **Help menu and CLI.**
+  - The Help menu, the pasteboard and the save panel are native (`HostLogs.swift`, host commands `copyText` and `pickLogExport`). Bun builds the text and the zip (`src/native/log-support.ts`, `ditto`). Show Logs in Finder is native only.
+  - Export Logs… writes `Trezi Logs/trezi.log` (24 h) and `summary.txt` (version, macOS, Bun, harness versions, project framework).
+  - `trezi logs [--since 30m] [--follow]` (`bin/trezi`, `bin/trezi.mjs`).
+  - The feedback diagnostics' main part is now the last 30 minutes of the log.
+- **Tests.**
+  - The provider helper's scrubbed environment keeps `TREZI_LOG_DIR`.
+  - `scripts/start-native.mjs` sends `--test` runs to `<test dir>/logs`, and the unit runner gives each test its own log folder.
+  - New `test/product-log.mjs` (unit). The native chat smoke (`src/native/smoke-logs.ts`) checks a turn's start and end lines and that host, service and backend share the run's folder. The smoke's stubbed send calls the same `turn-log` functions `agent.ts` calls, because no real provider runs in the smoke.
+## 2026-10-05 — LKM-171 review repair: transcript render signal and alternating hover targets
+
+- Review found two vacuous assertions: `chatInspect` had no `revision`, and 100 moves over the same heading returned early after the first. `ChatModel.messageBodyEvaluations` now counts actual SwiftUI message-row body evaluations and `chatInspect` exposes it. The fixture asserts that the count is positive and unchanged after hover and after the real preview selection click.
+- The native fixture alternates 100 moves between the heading and its parent, requires one immediate plus one frame-coalesced draw, checks the final box against the parent rect, and budgets enqueue plus the trailing draw at under 16 ms. The first native run exposed an actual selection-triggered transcript re-render. `NativeChat.update` now publishes visibility only when it changes, and `ChatLayoutModel` carries composer height separately from the transcript rows' observable model.
+- Quick verification passed (168 unit checks, lint, typechecks). Native `chat,core` passed 16/16 selected checks on retry. Foreground synthetic-chat timings: 100 moves enqueued in 1.0 ms, highlight update 0.0 ms, local selection 1.0 ms, page → host → service → Bun → host → page round trip 3.0 ms. The next-frame paint upper bound was 20.0 ms; it is not an exact paint timestamp. Exact hop stamps are in `worker-verify-5.log`.
+
+## 2026-10-05 — LKM-171 repair verified: immediate hover and traced selection
+
+- The first foreground native run measured a 20 ms first hover: scheduling every highlight at the next animation frame introduced a full-frame wait. The coalescer now draws the first target immediately and keeps later targets to one per frame. The native `chat,core` retry passed all 16 selected smoke checks, including under-16 ms WebContent hover enqueue/highlight/draw and under-50 ms local select and page → host → service → Bun → host → page timing in the rendered two-SVG, 2 KB code chat. The fixture prints exact durations and hop stamps in the verifier log (`worker-verify-6.log`); the tool response reported only its final 60 lines. The next-frame paint timestamp is reported as an upper bound, not an exact compositor timestamp.
+- Quick verification passed: all 167 unit checks, lint and typechecks. The native run was filtered to `chat,core`; the manager retains full-suite verification.
+
+## 2026-10-05 — LKM-171 review repair: real preview timing and stale hover
+
+- Pending hover frames are cancelled on mouseout, scroll and blur, so a hidden highlight cannot return on the next animation frame.
+- The sent-attachment native fixture now renders two SVGs and a >2 KB code block in the chat, dispatches 100 moves inside isolated WebContent, checks one draw and unchanged chat revision, then sends a real click. It asserts under 16 ms for hover enqueue/draw/highlight and under 50 ms for local selection and its diagnostic bridge round trip. A second frame gives a conservative pointer-to-paint upper bound.
+- Opt-in selection timing stamps page send, host receipt, XPC service acceptance, Bun dispatch start/end, host return and page receipt. They travel only on the diagnostic pick message and its acknowledgement; hover stays local to WebContent.
+- The earlier unit test is now explicitly a coalescing contract (`test/preview-hover-coalesce.mjs`), not a latency claim. The native fixture holds the latency budgets.
+
+## 2026-10-05 — LKM-171: preview hover coalescing
+
+- LKM-165 already omits unchanged transcript payloads, and LKM-166 caches decoded sent thumbnails. Preview pointer hover stays in WebContent: `onMove` draws its own overlay and sends no hover frame through the host, service or Bun. This rules out a per-hover chat snapshot update as the current cause.
+- `coalesceHover` keeps the latest element and draws once per display frame; click, leaving the page overlay and mode exit cancel stale work. `?treziPerf=1` records WebContent hover and local selection durations in the Performance timeline for on-device investigation.
+- `test/preview-hover-perf.mjs` queues 100 synthetic moves against a chat fixture with two SVG attachments and more than 2 KB of pasted code, asserts one paint and a 16 ms enqueue budget.
+- The `TreziService` binary also runs as `--guard-backend` and `--watch-group`; four processes can be the XPC service plus guardian and watchdogs. Process command lines could not be confirmed here because `ps` is blocked by the sandbox.
+## 2026-10-05 — LKM-174 review repair: match CSS classes to the right stylesheet kind
+
+- A Vite-generated module class now searches only `*.module.css`; a plain class searches only global `.css`. This prevents a lone same-named rule in the wrong stylesheet kind from becoming an editable target. The resolver test covers both wrong-kind cases and a valid plain global class.
+
+## 2026-10-05 — LKM-174: unstamped inspector explanation and CSS class fallback
+
+- An element without a source stamp now shows the missing-source explanation, a reason from project readiness, and visible Connect project to Trezi / Ask the agent actions above the style values. The first uses the existing setup flow; the second places the selected element in the composer.
+- For an unstamped element, the Styles tab resolves a unique matching class rule in project CSS or CSS modules (including Vite's `_accountAvatar_vc9o5_17` naming). It re-resolves before writing through the source owner, so a newly ambiguous rule cannot receive an edit. Unresolved fields remain read-only.
+- The Vite 8 React setup fixtures now include `src/themer-admin`, a CSS module and an `img`; unit coverage checks that the JSX stamp is emitted, while the existing context test covers the no-stamp Connect card. The test Mac's actual project and config were not available in this worktree, so its specific missing-stamp cause remains unverified.
+## 2026-10-05 — LKM-169 review evidence: Resolve queue in the native window
+
+- The `native-chat` smoke now parks the chat after a completed turn, sends one message, and captures the foreground shell at 440 pt and 320 pt chat widths (`test/artifacts/native/swift-chat-resolve-{440,320}.png` with matching JSON). It asserts the Swift-rendered conflict card explains the held changes, lists the file and offers Resolve; the composer queue contains exactly one message and says “Waiting for Resolve”; the transcript contains no copy or send error. Clearing the park sends that message exactly once. The capture uses ScreenCaptureKit without OCR or system preference changes. The first narrow capture exposed clipped queue labels, so the queue now gives its text explicit width within the available row.
+
+## 2026-10-05 — LKM-169: a message sent while a chat needs Resolve is queued, never refused
+
+- **Cause.** `submit` ran a message directly whenever no turn was running, so a drift-parked chat sent it to `agent:send`, whose `sendRefusal` threw. `run` then appended "Unable to send" to an assistant message and called `finish`, which stamped "Worked for 0s", and the optimistic user message stayed in the transcript. A drift park also set `paused`, so even a queued message did not send after Resolve.
+- **One send rule.** `sendBlock` (`src/native/chat-queue.ts`) names what keeps a message from sending: `running`, `landing` (phase applying), `resolve` (a drift park, same test as the backend's `sendRefusal`) or `login` (the login card). `submit` queues while any block holds, and `drain` waits for none. The composer queue shows the reason in a row above the queued messages: "Sends when this turn finishes", "Sends after this turn’s changes land", "Waiting for Resolve — sends once the held changes land", "Waiting for sign-in — sends after Retry on the login card". Send now appears only for a paused queue. The send button says "Queue message" while blocked.
+- **Resolve.** A drift park no longer pauses the queue; it blocks it until an isolation event clears the park, and that event now drains the queue (after the resolution turn lands, a clean Resolve, Retry or Discard). Resolve, Discard and Retry also lift an earlier pause. A stopped or failed-landing park still pauses as before.
+- **Refusal race.** If the backend refuses with `RESOLVE_NEEDED` (`src/shared/chat-busy.ts`, now shared with `sendRefusal`) before the park event arrives, `run` takes back the optimistic messages, puts the submission back at the head of the queue and marks the chat parked. There is no error turn, no worked time and no duplicate.
+- **Edit.** A queued message has Edit (pencil and menu item, `queue-edit`). It moves the text back into the composer ahead of any draft, with its attachments, and its selection is kept in `draftSelection` until the next send or until the chip is cleared.
+- **Tests.** `test/chat-send-queue.mjs` (unit tier) covers five cases: Resolve with edit, remove, Send now refused and in-order sends after the resolution turn lands; a clean Resolve; the refusal race then Discard; a running turn and its landing; and login with Retry. `test/stop-recovery-ui.mjs` expects the new Resolve note. `src/native/smoke-chat.ts` (group `chat`) edits a queued message back into the composer and queues it again. It also expects the 62 pt queue height (one row plus the reason row).
+
+## 2026-10-05 — LKM-170: feedback toast and standard alert sheets
+
+- **Problem.** After Send feedback, the generic presenter opened a titled, resizable "Feedback sent" window (traffic lights, empty body, a lone "View issue" button). Every field-less sheet (updates, preview problem, delete and restart confirmations) used that same form window.
+- **Toast.** `NativeSheetController.toast(message, action)` sends `toastState`. `src/native/Toast.swift` shows a capsule at the top center of the workspace canvas with at most one link action and hides it after `seconds` (6). A click sends `toast-action` with the toast's id only, and Bun runs the action it kept. Successful feedback closes the form and shows "Feedback sent — View on GitHub".
+- **Feedback errors.** A failed post (or a thrown invoke) opens "Couldn’t send feedback" with Copy details, Cancel and Retry (default). Retry posts the same input again. A second failure updates the detail and the copy text. Copy details is a `copy` action field: the host writes the text to the pasteboard, and Bun only sets the confirmation line.
+- **Alerts.** `present()` marks a state `alert` when it has no fields, sections or autosave, unless the caller sets `alert`. Alerts keep their visible Close, since there is no traffic light. `src/native/SheetAlert.swift` lays them out like a sheet NSAlert: 64 pt app icon, bold 13 pt title, 11 pt informative text, optional read-only accessory text, right-aligned buttons with the default rightmost. The `SheetAlertPanel` is attached with `beginSheet`, has no chrome and is fitted to the SwiftUI content after each update.
+- **Keys.** Return runs the primary action unless it is destructive; then it runs the cancel button, so the 2026-09-25 rule (no Return on destructive confirmations) still holds. Esc runs the action marked `cancel` (review's "Back", diagnosis "Not now"), or else `cancel`.
+- **Audit.** These are alerts now: Preview problem, Suggested fix (opts in with its steps as accessory text), Trezi updates, Updating, Update could not finish (Retry is now primary), the delete-history and discard confirmations, Stop and restart, Delete recovery refs, and Update setup files (opts in). These stay form windows: Running servers and Git updates (`alert: false`, because their lists come and go), New project, memory, Settings, Send feedback, Saved chat, publish and recovery-ref selection.
+- **Tests.** `test/native-support-sheets.mjs` covers the toast, stale and repeated toast actions, the error alert, Copy, Retry twice and Esc. `test/native-sheets.mjs` covers alert derivation and the opt-out. The native check `src/native/smoke-alerts.ts` runs in the `sheets` check (group `settings`). It opens the real updates alert, then runs feedback on its own controller with GitHub and the browser stubbed. It asserts that each sheet is attached with no chrome and fits its content, checks the default and Esc actions, and captures `alert-updates.png`, `alert-feedback-error.png` and `feedback-toast.png`.
+
+## 2026-10-05 — LKM-165 repair 3: an island reveal must hold its edge, not touch it once
+
+- **Manager failure.** `test:native` (chat-scroll, first 440pt top reveal) failed with `Island reveal did not settle at top; revision=1, applied=1, attempts=1, frame={{32, 44.237}, {376, 16}}`. This round's changes touch no Swift chat layout; the `chat-snapshot`/`chat-controller` files named by triage only changed the activity row text. My earlier native run (chat, core) passed the same test, so this is a race in the reveal loop.
+- **Cause.** `reveal()` (`src/native/Chat.swift`) marked the revision applied on the first measurement within 8pt of the edge and stopped scrolling. The lazy stack can still re-measure rows above the target after that hit (the island's row had been unrealized), so the anchor drifted to 44pt, and the host, which checks the frame again, waited out its 2 s and failed with `applied=1, attempts=1`.
+- **Fix.** The loop now needs `islandRevealStableChecks` (3) consecutive on-edge measurements (`islandRevealStreak`, `src/native/ChatReveal.swift`); a drift resets the streak and it scrolls again (still bounded by 80 attempts). Fixture `test/fixtures/chat-reveal/main.swift` covers the streak restart and the recorded 44pt frame. `bun test/native-chat-reveal.mjs` passes. I could not reproduce the race here, so the fix is reasoned from the recorded numbers and confirmed only by the native run.
+
+## 2026-10-05 — LKM-165 repair 2: an abandoned landing never overlaps, and the resume cwd is stored
+
+- **Defect found in review.** When Stop or the 3-minute guard ended a landing, `afterTurn` returned and released the repository lease and the chat's chain while the real `landBatch` kept writing the worktree and live tree. A Retry or the next turn's landing could run beside it, and it could merge after the card said "failed".
+- **Fix (`src/main/chat-isolation.ts`).** The chat's wait still ends at once and shows the work held with Retry. The lease and the chain now stay held until the batch settles, so nothing overlaps it (the next landing queues behind it; `retryLanding` answers "still finishing" meanwhile). The batch's own outcome is then the truth: merged clears the card, a parked outcome shows the conflict card, and a late failure replaces the stall note with the real error. `landingFailed` skips its write if the batch finished while it was reading. A batch that never settles holds its project's lease, like the Swift owner call under it.
+- **Test.** `test/chat-landing-recovery.mjs` (it runs against the Swift repository owner in `test/repository-owner.mjs`; `afterTurn` has no fake owner, so the case lives there rather than in `test/chat-stuck-turn.mjs`): a gated `completeTurn` is abandoned, the chat shows failed, Retry is refused, the next landing waits (one `completeTurn` call), and after release the work merges once (two commits in the live repository) with the state clean; a second case where the abandoned batch fails late shows its real error, and Retry then lands.
+- **Resume cwd stored with the session id.** `SessionRecord.sdkCwd` is set with `sdkSessionId` (`record.ts`), relayed in the helper's `record` delta (`helper-host.ts`, `helper-session.ts`, `ProviderFrames.swift` allow-list) and returned as the `resumeCwd` context key (`startChat`, `reopen`, `ProviderOwner.swift` allow-list). `sessionCwd` (`claude-resume.ts`) resumes with it while it is still the chat's directory, else the canonical worktree path. `test/claude-cwd.mjs` asserts the stored value is the one passed on resume, and the fallbacks.
+
+## 2026-10-05 — LKM-165 repair: stuck turns recover, and a failed Claude resume restarts itself
+
+- **Gap found in review.** Two user-approved items had been left out of the first submission, and the report did not say so.
+  - Issue #230's chat showed "Worked for 3s" and then "Unable to send: Error: This chat is already running." with nothing running in the UI.
+  - After a restart it showed "Claude Code returned an error result: No conversation found with session ID …".
+- **Stuck turns (`src/main/chat-watchdog.ts`, `src/shared/chat-busy.ts`).**
+  - One source of truth: Bun's `runningKeys` and the service phase are reconciled. `agent:send` settles a chat the service holds but Bun does not (`releaseOwnerTurn`, one retry of `begin`), and `agent:interrupt` settles a chat that is still held after Stop (`staleChat`, `settleChat`), through the existing service ops `abort` and `landed`.
+  - `afterTurn` runs the landing inside `LandingGuard` (3 minutes without finishing). A timeout or Stop ends the wait; `landingFailed` holds the work with Retry and frees the chain and the repo lease. The hung `landBatch` itself is abandoned, not cancelled.
+  - `TurnWatchdog` (10 minutes without any event, checked every 30 s, unref'd, cleared on quit) ends a silent turn with the `STUCK_NOTE` chat note.
+  - The activity row names the step: `Chat.operation` is `landing`, `parking`, `resolving` or `waiting` (`chat-snapshot.ts` labels).
+  - A backend busy refusal is not shown. `NativeChatController.run` takes back the optimistic messages, queues the submission (LKM-151 composer queue) and shows "Finishing the previous step…" until the step ends. `drain` no longer waits on a park that came from a failed landing, matching `sendRefusal`.
+  - `test/chat-stuck-turn.mjs` (unit tier): a landing that never completes shows as running and names the landing, Stop frees it, and the next message is queued then sent, never refused; a stalled landing ends itself; a busy refusal queues.
+- **Claude resume (`src/main/backends/claude-resume.ts`).**
+  - Start and resume use one cwd, `canonicalCwd` (the realpath of the chat worktree), so the session id is found again. It is derived each time rather than stored beside the id.
+  - When a resumed session fails before completing a turn ("No conversation found", an unusable `--resume`, an `is_error` result with that text, a CLI exit), the adapter opens a new session in the same worktree and seeds the user's turn with `resumeSummary` (last 12 messages and the last 40 changed files, at most 6,000 characters), computed host-side and sent as a new context key (allow-listed in `ProviderOwner.swift`). It emits one status note, "Started a new session; earlier context was summarized", and never the raw error.
+  - `test/claude-resume.mjs` and `test/claude-cwd.mjs` (mocked SDK, `test/helpers/claude-sdk-mock.mjs`, unit tier) cover the recovery, an `is_error` result, an unresumed session still reporting its error, and the symlinked-worktree cwd.
+- **Housekeeping.** My `biome --write` over `src test` reformatted six unrelated files; I restored them by hand.
+
+## 2026-10-05 — LKM-165: long chats stay fast, and parked edits always land (issue #230)
+
+- **Root cause: edits never landed.**
+  - Failed Codex turns hold their work in the chat worktree. The live base moved on, so the next successful turn, after the switch to Claude, drift-parked.
+  - The `agent:send` guard then refused every turn on a drift-parked chat. Native always passes the chat key, so the guard also refused the Resolve card's own resolution turn. The chat could never land again.
+  - Separately, `afterTurn` swallowed landing exceptions. The chat stayed "isolated" with nothing landed and no card.
+  - Codex could not call `workspace_state`: approval-free sessions refused the tool because it was not pre-approved. So the agent guessed the edits were "pending".
+  - The symlinked project path was checked and is not a cause: the Swift owner resolves real paths.
+- **Fix.**
+  - `sendRefusal` (new `src/main/chat-status.ts`, which holds the read-only views moved out of `chat-isolation.ts`) refuses only an unresolved drift park. After Resolve stages markers, the resolution turn sends.
+  - A landing exception parks the chat with `reason: 'failed'` and its error (`landingError`, cleared by `clearPark`).
+  - The card is now "This turn’s changes didn’t land", with Discard / Retry / Resolve. Retry is `agent:retry-landing` → `retryLanding`.
+  - The queue note names all three ways out.
+  - `workspace_state` reports `lastLanding` and never says "pending".
+  - `src/main/backends/codex-mcp.ts` pre-approves every Trezi MCP tool. `test/codex-mcp-approvals.mjs` checks the generated config.
+  - `test/chat-landing-recovery.mjs` (Swift owner harness, in `test/repository-owner.mjs`) covers four cases:
+    - two failed Codex turns, then a successful Claude turn on the same worktree, landing both files;
+    - a stuck drift park that Resolve unblocks;
+    - a stale park, cleared by the user, that Retry lands;
+    - an `index.lock` landing failure that shows the failed card and lands on Retry.
+- **Root cause: the slowdown.**
+  - Every `chatState` frame (a keystroke, an attachment, a card, a stream delta, the mode switch's re-render) carried the whole transcript.
+  - `ChatView.update` then re-serialized and decoded all of it on the main thread, computed the follow signature over every message, and reassigned the snapshot, so SwiftUI re-diffed the transcript.
+  - Bun's side was only about 2 ms even at 2.4 MB.
+- **Fix.**
+  - `chatFrames` (`src/native/chat-frames.ts`) omits `messages` when they equal the last frame sent for that chat.
+  - `Chat.swift` decodes a `ChatFrame` and keeps the previous messages in that case. It skips the update entirely when only composer-owned keys changed, and compares a cheap `followHead` when the messages are kept.
+  - The shell's `select-object` renders the toolbar before awaiting the preview round trip.
+  - `test/native-long-chat-perf.mjs` (2,000 messages) holds the mode switch and attachment add under 100 ms (about 3–4 ms measured, bridge payload included). It also asserts that composer frames carry no transcript.
+- **Feedback diagnostics.**
+  - The feedback sheet has an "Include diagnostics" consent choice, off by default, with a readonly line saying what it covers.
+  - With consent, `src/main/feedback-diagnostics.ts` attaches:
+    - Bun's console output from the last hour (a bounded ring buffer, since Trezi keeps no log files and `open -a` discards the host and service stderr);
+    - `log show --last 1h` for the Trezi processes;
+    - the chat's landing state;
+    - `git status` of its worktree;
+    - a 3-second `sample` of the host when a `webViews` ping takes 250 ms or more or times out. The host now sends its pid in the `ready` event.
+  - Everything is redacted (token shapes, `key=value` secrets, URL credentials, private keys) and the home folder becomes `~`, capped at 24,000 characters. `test/feedback-diagnostics.mjs` uses injected commands, so no real `log` or `sample` runs.
+  - Bun never reads the service-private repository journal, so the "ledger state" is the chat's landing state as Bun holds it.
+## 2026-10-05 — LKM-167: unit tier and quick verification about 4x faster
+
+- **Why.** Quick verification (typecheck, typecheck:native, unit tier) took 5-7 min. The unit tier alone took 328.6 s on the operator Mac. About 25 Swift tests each compiled their fixture with a private, cold Clang module cache, at about 25 s per compile. Only 4 workers ran, and `service-process` and `keychain-rebuild` were exclusive barriers.
+- **Swift build cache.** `test/helpers/swift-build.mjs`:
+  - `swiftBuild` caches each fixture binary under `.local/test-cache/swift`, keyed by toolchain, flags and source bytes, with one shared module cache.
+  - At most 2 compiles run across all test processes (lock-file slots, dead owners taken over).
+  - Every unit-tier swiftc call site now goes through it: the fixture helpers, the owner tests, the AppKit layout fixtures and `service-process` (copies, since it signs them).
+  - `keychain-rebuild` uses the uncached `swiftCompile` with the shared module cache, so its three builds still really happen.
+- **Runner.** `test/run.mjs`:
+  - Workers: `max(min(4, cores), min(cores - 2, 8))`, with no exclusive barriers.
+  - `--report` prints the 20 slowest tests and merges PASS durations into `.local/test-times.json`. The next run starts the slowest tests first.
+  - `--typecheck` runs both typechecks next to the tier.
+  - `bun run test:quick` combines them, and CI uses the same command with an `actions/cache` of `.local/test-cache`.
+- **Slow tests.**
+  - `workflow-owner` is split in two processes. The scenarios stay; `test/workflow-durability.mjs` runs the same file's tool and durability checks.
+  - The composer-layout fixture waited one fixed 0.2 s run-loop turn for the pin and flaked under 8 workers. It now waits for the condition, at most 5 s.
+  - `island-flicker-frameworks` failed once under load: the Vite "before" run reloads the preview page on every source write, and with no frame sample in a gap it saw no swap and no mismatch. The sampler now counts reloaded documents (kept in `sessionStorage`, since a reload drops window counters) and a reload mid-drag counts as the flicker signal. The "after" checks are unchanged.
+- **Result.**
+  - Manager quick verification: 87.2 s (unit tier 83.1 s, 156 PASS, 2 SKIP; before, 155 PASS, 2 SKIP plus the split).
+  - Locally, warm: 55.7 s with typechecks. Cold cache: 122.1 s.
+  - Table in `docs/TESTING.md` "Unit tier speed".
+  - Still slow, from runtime rather than compiles: the durability half (client deadlines after injected crashes) and the composer/settings layout fixtures.
+## 2026-10-05 — LKM-166 (repair): attachments never fail the turn
+
+- **Problem.** An SVG attachment was sent inline as `image/svg+xml`; `validImages` (png/jpeg/gif/webp only) rejected it and the turn failed with "The pasted images are not supported or too large." Oversized images and files had the same cliff.
+- **Planner.** `src/native/chat-attachments.ts` `planAttachments` replaces the inline logic in `chat-controller.run()`: provider images are sent and listed by path; SVG/other formats list the original by path and send the composer's PNG `preview`; other files are listed by path; leftovers go in a `[Not attached: …]` line. `sendableImages` in `provider-policy.ts` filters to the limits; `provider-service` and the Swift owner stay strict.
+- **Composer.** `AttachmentPayload` (`AttachmentThumbnail.swift`) rasterizes the 512 px PNG preview and downscales rasters over 7 MiB raw instead of refusing them (the 10 MiB picker error is gone; files over 64 MiB go by path).
+- **Decision.** No `.trezi-attachments` folder in the worktree: files are referenced by their own path (picked) or the profile's private attachments folder (pasted), so the Swift repository owner and the exclusion lists are untouched. File bytes never cross the bridge, so copying non-images would have needed a new service writer.
+- **Tests.** `test/chat-attachments.mjs` (unit tier) covers SVG, pasted SVG, oversized PNG, files, too many images and failed saves, and a controller turn into `agent:send`; the `sent-attachments` smoke check also sends an SVG (path text, 512 px PNG preview) and a 2600×1000 noise PNG (downscaled under the limit) through the real composer.
+
+## 2026-10-05 — LKM-166: compact attachment thumbnails in the sent bubble and composer
+
+- **Problem.** The sent bubble drew each image attachment with `NSImage` at up to 200×160 pt, one per line, so SVG icons with a large intrinsic size stacked as huge black shapes and pushed the text down.
+- **Shared thumbnail.** `src/native/AttachmentThumbnail.swift`: 72 pt square cells, decoded at 2x. Raster images use ImageIO. Anything else `NSImage` reads (SVG) is drawn at the requested pixel size, so a vector with any intrinsic size yields a bounded, sharp bitmap. Images with alpha sit on a checkerboard; opaque ones sit on a neutral fill.
+- **Sent bubble.** `src/native/ChatAttachments.swift`: `AttachmentFlow` (a SwiftUI `Layout`) wraps thumbnails and file chips into rows and reports the widest row, so a short row keeps the bubble narrow. Thumbnails decode once per attachment id (`NSCache`), not on every streamed re-render. Hover shows the file name (`.help`). A click sets `ChatModel.attachmentPreview`, which opens a popover with a larger preview and the name.
+- **Composer.** Tiles use the same 72 pt aspect-fit cells and checkerboard (was 96 pt aspect-fill). The strip is 84 pt (was 108) and still scrolls horizontally. The click preview also uses the shared decoder, so SVGs preview too.
+- **Tests.** New `sent-attachments` smoke check (`src/native/smoke-sent-attachments.ts`, group `chat`): sends 8 SVG/PNG/JPG attachments with the provider call intercepted. Composer tiles are ≤96 pt and checkerboards appear only on transparent tiles. In the sent bubble, each thumbnail is 48–96 pt and inside the bubble, the cells form at least 2 packed rows, and the text ends <80 pt below the last row (42 pt in the run). Opening the preview through `chatAttachmentPreview` (test profile only) shows a popover window, and closing it removes it. Captures: `sent-attachments.png`. The existing composer check now expects the 84 pt strip and overflows with seven tiles.
+## 2026-10-05 — LKM-162: editing inspector island owns the pointer and renders opaque
+
+- **Symptom.** With an element selected, the island's fields, slider and tabs ignored input; the page under it kept hovering and selecting, and the page showed through the controls.
+- **Causes (probed in an offscreen AppKit harness).** The static hit-test was already right (`hits.inside === 'inspector'`), so that check could not catch this bug.
+  - A click AppKit left unhandled on a view floating over the page (glass, padding, labels) still reached the `WKWebView` beneath.
+  - WebKit's own tracking areas (owned by `WKMouseTrackingObserver`, `mouseMoved` | `enteredExited` | `inVisibleRect`) deliver every move in the web view's visible rect and ignore sibling overlays. The window also sends every `mouseMoved` to the page while it is first responder.
+- **Fix.**
+  - `NativeEditingInspector` hit-tests its whole frame to itself where no control does, and swallows mouse-downs and scrolls.
+  - `PreviewWebView` (`src/native/PreviewPointer.swift`) replaces each WebKit tracking area with one owned by `PreviewPointerGate`. The gate forwards a move, enter or cursor update only when the window's hit view at that point is the page, and gates the first-responder moves, clicks and scrolls the same way.
+  - When the pointer leaves the page for a native view, one synthesized exit outside the page clears its hover box (preload's `mouseout` with no `relatedTarget`) and the cursor resets to the arrow.
+  - `_setIgnoresNonWheelEvents:` was rejected because it would also cut keys.
+- **Ghosting.** The island's controls sit on an opaque `windowBackgroundColor` rounded surface; the Liquid Glass stays as the edge.
+- **Tests.** `checkPointer` in `src/native/smoke-inspector-island.ts` runs in the foreground only (it needs the key window); `TREZI_NATIVE_BACKGROUND_TEST` logs a SKIP. It:
+  - switches to Styles and hit-tests the padding-top field, its slider and the tabs to the controls inside the island;
+  - in select mode with the page first responder, posts moves, a padding click and a wheel inside the island and feeds the gated tracking areas the same moves. No move, enter, down or wheel reaches WebKit and no `element-picked` is sent, while tracking-area moves beside the island do reach it. In the real app AppKit did not route posted moves to the first responder even with `acceptsMouseMovedEvents`, so that path is recorded (`besideWindow`) but not asserted;
+  - before that, clicks padding-top (the click must focus its field editor), types 12, submits, and waits for the source and the element's computed `padding-top`. It runs first because turning select mode off (preload `setActive(false)`) drops the page's selection, which a Styles preview targets.
+- **Native runs (worker).** Three runs of chat, composer, core, islands, settings, shadow-light and sidebar, each stopping at the first failing new assertion:
+  - Run 1: the posted move beside the island never reached the page.
+  - Run 2: the cause was the window path. Even with `acceptsMouseMovedEvents`, AppKit did not hand posted moves to the first responder (`besideWindow: {}`), while the tracking-area path worked both ways (`besideTracking: {enter 4, move 4}`, inside `{exit 1}`).
+  - Run 3: the hit targets, moves, clicks, wheel and `picks: 0` passed, and the click focused padding-top and wrote `paddingTop: "12px"` to the source. The computed style never read 12px, because the moves check had already turned select mode off and on, clearing the page's selection.
+  - Repair runs (manager `test:native` failed on `padding-top 12px on the element`): the reorder did not help. Diagnostics showed `styles:read` null (no page selection) and, after a re-select, the island error `SyntaxError: Unexpected token (1:0)`. Cause: the fixture's static server live-reloads the page on every write under the root. The opacity edit earlier in the `inspector` step reloaded it, dropping the page's selection and the `native-style.tsx:1:36` stamp the step set by hand, so the heading's own `index.html:3:1` stamp (not JSX) was parsed. The padding edit's own write would reload the page again and drop the preview override.
+  - Fix, test-side only: `checkPointer` re-stamps and re-selects the heading (`IslandPage.select`) and waits for the island's field list to settle before typing. The fixture `index.html` re-reads `native-style.tsx` padding-top on load, standing in for HMR, so the edit reaches the element through the reload.
+  - These repair changes were not re-run natively: the worker's native budget was spent. Only typecheck and lint were run.
+## 2026-10-05 — LKM-164: current Claude and Codex models, resolved model in the picker
+
+- **Why.** A Claude chat said it was "Sonnet 4.6", then "Opus 4.8". The picker sends aliases and the bundled Claude Code CLI (SDK 0.3.186) resolves them; the model list was cached on disk without knowing which SDK wrote it, and the Codex fallback still listed `gpt-5.6-*`.
+- **SDKs updated.** `@anthropic-ai/claude-agent-sdk` 0.3.186 → 0.3.289 and `@openai/codex-sdk` with its `@openai/codex` CLI 0.154.0 → 0.160.1 (`package.json`, `bun.lock`). No API change was needed: typecheck is clean, the init message still carries `model`, `codex debug models` (the catalog probe) still exists, and the bundled CLIs know `claude-opus-5-5`/`claude-sonnet-5-5`/`claude-fable-5-1` and `gpt-6-sol`/`gpt-6-astra`. The steps for the next bump are in `docs/PROVIDERS.md` ("Bumping the SDKs").
+- **Cache invalidation.** Each `model-catalog.json` entry carries `harness`, the seat's installed SDK and CLI versions (`harnessStamp`, read from `node_modules` once per run). A different or missing stamp reads as no list (fallback, due for discovery). The Swift writer stores the optional `harness`; old callers write the same bytes as before.
+- **Daily refresh.** `CATALOG_TTL_MS` is one day. `providers.ts` checks hourly (unref'd timer) whether the Codex probe is due. `recordClaudeModels` writes only a stale list, so not every session rewrites the file.
+- **Resolved model.** `backends/claude.ts` emits `{type: 'model', model}` from the init message. `ProviderFrames.swift` relays it (bounded to 256, not counted as turn output). `chat-state.ts` keeps it as `resolvedModel`, `changeModel` clears it, and `chat-snapshot.ts` labels the selected Model row with `pickerLabel` ("Opus 5.5", "Default · Opus 5.5"). Codex reports no resolved model; its picker ids are already concrete.
+- **Hardcoded ids.** `CODEX_FALLBACK` is `gpt-6-sol`, `gpt-6-astra`; background comments (`background-model.ts`) and PR descriptions (`publish-description.ts`) moved from `gpt-5.6-sol`/`gpt-5.6-luna` to `gpt-6-sol`.
+- **Tests.** `test/model-catalog.mjs` (stamp per seat, bump drops only that seat, unstamped legacy entry, day TTL, Claude written once a day; the checkout's SDKs are at least these versions and lists stamped by 0.3.186/0.154.0 are dropped), `test/model-label.mjs` (labels, the picker row after a `model` event), `test/provider-data.mjs` (Swift stores the stamp), `test/provider-owner.mjs` (the event is relayed; an oversized one is a violation).
+
+## 2026-10-05 — LKM-163 repair: Codex live-write note also covers reverts and commits
+
+- **Gap found in review.** `liveTreeChanges` only walked the after-snapshot, so a live file that was dirty before the turn and clean after it (`git checkout -- f`, `restore`, `stash`, `reset --hard`) and a commit made in the live checkout produced no note, although the ticket says direct live writes must not fail silently.
+- **Fix.** `live-tree-watch.ts`: a snapshot is now `{head, files}` (`git rev-parse HEAD` plus the dirty files). `liveTreeChanges` also reports paths that vanished from the dirty set. `liveTreeReport` adds the files of `git diff --name-only before..after` when HEAD moved and returns `{files, committed}`. `liveWriteNote` says the changes may be reverted or discarded and names a commit (with no file list for an empty commit). The adapter still appends one note per turn.
+- **Tests.** `test/agent-file-access.mjs` covers `checkout`, `restore`, `stash` and `reset --hard` of dirty work, a commit, an empty commit and a quiet tree against real repositories, and its stand-in-CLI turns run a discard, a commit and an empty commit in the live tree, each giving exactly one note. `test/live-write-guard.mjs` follows the new snapshot shape.
+
+## 2026-10-05 — LKM-163: agent file access, full by default; symlinked paths in the Codex sandbox
+
+- **Bug.** On the test Mac, a Codex chat said "the workspace path contains a symlink" and could not run any file command. Every chat worktree sits under the profile aliases `Trezi Native` → `Praxis Native` and `trezi` → `praxis` (`ProfilePaths.swift`). The Codex CLI's Seatbelt builder normalizes only the top-level `/tmp`/`/var` aliases. Any other symlink component in a writable root, the working directory included, fails with "symlinked writable roots are not supported" (found in the CLI binary). The LKM-156 test passed because its worktree was under `/var/folders` only.
+- **Fix.** `realPath` (`src/main/agent-file-access.ts`) resolves a path, keeping a missing tail on the nearest existing ancestor. `codexSandbox` gives Codex the worktree's real path in both modes. The Claude guard (`live-write-guard.ts`) compares Edit targets and both roots as given and resolved, and its Bash spellings use the same helper.
+- **Setting.** Settings → General → Agent file access (`trezi:agent-file-access:v1`): Full access (default; unknown values read as it) or Project only. `helper-session.ts` passes `agentFileAccess` to every helper session, read when the session opens. The extra General row pushed Show Activity automatically below the fold at the 680×460 minimum, so the Settings minimum height is now 520 (`SheetSections.swift`; default 780×540 unchanged).
+  - Full access: Codex `danger-full-access` with no sandbox config, `approvalPolicy: 'never'`.
+  - Project only: the LKM-156 sandbox unchanged.
+  - The Claude guard is the same in both modes, a correctness rule for the live checkout only.
+- **Codex live writes in Full access.** `live-tree-watch.ts` snapshots the live tree's uncommitted files before and after each turn: `git --no-optional-locks status -z` plus size and mtime, so the index is never written. Files that became dirty or changed again are named in one ⚠️ note, appended to the transcript. The note says the files changed, not that Codex changed them (the user or another chat's landing could have). A direct commit is not caught.
+- **Tests.**
+  - `test/live-write-guard.mjs` (unit): Project only as before, Full access thread options, a symlinked profile worktree and symlinked project in both modes, and the guard with every as-given/resolved combination.
+  - It also covers the live-tree snapshot (no index write) and the note. Its real-CLI half now runs from a worktree behind a symlink alias, and a Codex symlink refusal fails instead of skipping. It adds a Full-access run that writes outside the project and is detected in the live tree.
+  - New `test/agent-file-access.mjs` (unit): the setting and its helper plumbing. It also drives the real adapter with a stand-in CLI to check `--sandbox danger-full-access`, the real `--cd`, the single note and no note in Project only.
+  - `native-settings`, `native-settings-evidence` and the native Settings smoke add the field.
+  - The real-CLI and adapter halves need a local port or a Unix-socket listen. They print SKIP in the worker sandbox.
+## 2026-10-04 — LKM-158: clean Biome lint baseline, lint in quick verification (F4)
+
+- **Why.** Review L8 (`docs/REVIEW-2026-10.md`): `biome check src test` reported 579 errors, mostly format and import order, so `bun run lint` failed repo-wide and new lint debt went unnoticed.
+- **Mechanical pass.** `bunx biome check --write --linter-enabled=false src test`: formatter and organizeImports only, no lint fixes, 359 files. It ran after the `test/fixtures/**` override below, so fixtures were not touched.
+- **Hand fixes (no behaviour change).** The 20 remaining errors:
+  - `forEach` callbacks that returned a value became `for … of` loops (`src/main/agent.ts`, `props.ts`, `props-svelte.ts`, `test/native-context.mjs`, `test/run.mjs`).
+  - Assignments in expressions were split out (`backends/claude.ts`, `backends/gemini.ts`, `src/native/chat-state.ts`, `display-paths.ts`, `smoke-composer.ts`).
+  - `tokens.ts` types `entries` as `Dirent[]`.
+  - `test/native-smoke-groups.mjs` read smoke-core's checks with a one-line `{ name: …, dependsOn: … }` regex; it now matches the formatted multi-line literal and still finds the same 23 checks. `scripts/build-native.mjs` reads `FRAME_DATA_URI` from `src/shared/iphone-frame.ts`, whose string the formatter moved to the next line; its regex now allows that.
+  - `biome-ignore` with a reason: the deliberate control characters in `devserver-net.ts` (ANSI) and `src/shared/preview-navigation.ts`, and `useRunnerEnv`, which is not a React hook, in `test/rename-compat.mjs` and `test/repository-owner.mjs`.
+- **Overrides in `biome.json`.**
+  - `test/fixtures/**`: no formatter, no assist (import sorting), no `a11y`, no `noUnusedVariables`. Fixtures stand in for user apps; tests depend on their bytes and line numbers (source stamps, golden JSON), and the island reads the unused `SHADOW_*` constants in `island-flicker-vite/src/phone.js` and `next-app/app/shadow-flicker/ShadowPhone.tsx` from source. The other lint rules still apply there.
+  - `src/native/assets/**`: no `a11y`. The cat SVGs are image assets, not DOM, and stay byte-identical.
+  - Nothing else in `src` or `test` is generated; `src/shared/service-contract/schema.json` is hand-written and only parsed.
+- **Gate.** `test/lint.mjs` (unit tier, so the manager's quick verification) runs `bun run lint` on the checkout. In a disposable repo with this `biome.json` and lint script it also checks that a lint error and unformatted code fail, and that an unused `SHADOW_*` constant in a fixture passes. A temporary `src/shared` file with an assignment in a condition made `node test/run.mjs unit --filter=lint` fail. Warnings (mostly `noExplicitAny`, `noNonNullAssertion`) and infos remain and do not fail.
+
+## 2026-10-04 — LKM-159: split chat-isolation.ts, one unpark and one landing (F5)
+
+- **Why.** Review M1, M2 and L6 (`docs/REVIEW-2026-10.md`): `src/main/chat-isolation.ts` was 953 lines, the unpark reset was copied at 9 sites with small differences, `keepStoppedTurn` copied the merged branch of `afterTurn`, and `stoppedTurnSeam` exported the mutable `ChatState` as `IsolatedChat`.
+- **Split.** `chat-isolation.ts` (417 lines) keeps the lifecycle (open, turn start/end, idle cleanup, release, status) and re-exports what callers and tests already import from it.
+  - `chat-state.ts`: `ChatState`, the injected seam, `emitIsolation`, `recreateWorkspace` and `onChain` (the chat's chain plus the repository lease, the former inline pattern).
+  - `chat-park.ts`: park records, `clearPark` and crash recovery (`handleReclaimed`, `hasParkRecord`). It now carries the `praxis/chat-*` shim, so `docs/agent-guide/legacy-names.md` and the census row in `docs/SWIFT-BACKEND-RETIREMENT.md` name it.
+  - `chat-landing.ts`: `landTurn`. `parked-chat.ts`: Apply, Discard, Resolve it and the stopped-turn hold. `chat-helpers.ts`: `syncChatHelpers`, which `setup.ts` now imports instead of chat-isolation.
+- **clearPark.** The only `parked = false`. It resets `interrupted`, `reverted`, `parkedFiles` and `resolvingFiles` and drops the park record.
+  - `settleReverted` drops no record: Revert already dropped it (commented).
+  - `afterTurn`'s merged and no-op branches and Keep did not reset `reverted`. It was already false there (cleared at turn start, checked inside Keep's lease), unless the user clicked Revert while that landing was running. Then the chat stayed `reverted` after its work had landed and the next turn start discarded an empty hold. It is now cleared with the rest.
+  - `afterTurn`'s merged branch dropped the record only when parked. A record exists only while parked, so the unconditional drop is the same.
+  - `discardParkedBranch` still unparks when the reset fails (commented).
+- **landTurn.** The undo group `chat:<id>:<turn>`, the advanced fork point, the live commit, `clearPark`, retiring the branch and the `merged` event (not revertable after a PR). `afterTurn`, Keep and a clean "Resolve it" (`turn = 'resolve'`, conflict-resolution body) use it. Keep advanced the fork point after the commit, now before. `commitLiveTurn` never throws and does not read it. `releaseChat` keeps its own final landing: the chat is gone, so there is nothing to unpark, retire or tell (commented).
+- **Stopped turns.** `stopped-turn.ts` keeps its results and messages and uses `stoppedHold`, `markStoppedReverted` and `landStoppedTurn` from `parked-chat.ts`. `IsolatedChat` and `stoppedTurnSeam` are gone.
+- **Tests.** `test/chat-landing.mjs` (in `test/repository-owner.mjs`'s suites) lands a finished turn and a kept stopped turn and checks the same event, undo group, commit subject/body, clean tree, unpark and Revert. It also checks that work pushed through a PR is not revertable on either path, and that no `src/main` file but `chat-park.ts` sets `parked = false`. The existing suites are unchanged.
+
+## 2026-10-04 — LKM-156: guard Bash and Codex against writes to the live checkout (F2)
+
+- **Claude Bash.** `liveCheckoutEdit` now also handles `Bash` through `liveCheckoutCommand` (`src/main/live-write-guard.ts`), so the existing `PreToolUse` hook covers it in every permission mode. A worktree chat's command that names the live root is denied, and the denial names the worktree path of the first live path in it.
+  - The root is matched as given, resolved, shell-escaped and as `~/`, `$HOME/` or `${HOME}/`. Siblings (`app-other`, `app2`), longer paths that only contain the string and the worktree's own paths do not match.
+  - Reads are denied too. Telling reads from writes in a shell command is unreliable (`sed -i`, redirections, `tee`, `find -exec`, `xargs`, formatters, `git -C`, `cd … &&`), and the worktree holds the same files. A command that reaches the live tree without spelling it (`../..`, a runtime variable) is not caught.
+- **Codex and Responses connections.** Both run on the Codex harness, which has no pre-tool hook. `codexSandbox` (`src/main/backends/codex-sandbox.ts`) keeps the existing `workspace-write` sandbox with the worktree as cwd and `approvalPolicy: 'never'`. In a worktree session it also overrides the user's `writable_roots` to none and excludes `/tmp`/`$TMPDIR` when they overlap the live tree.
+  - Probed first: Codex's `sandbox` debug command now takes permission profiles and does not mirror `exec --sandbox`, so the test drives `codex exec` itself against a local fake Responses endpoint. Without the override, a live tree under `/tmp` was writable.
+- **Tests.** `test/live-write-guard.mjs` (unit):
+  - `sed -i`, `>`, `>>`, `cp`, `mv`, `tee` and a formatter onto the live root are denied with the worktree path; the same commands on worktree and relative paths are allowed, and a non-worktree project is unchanged.
+  - The real Codex CLI, given the adapter's thread options and config and a fake endpoint that returns `exec_command` calls, cannot write the live tree or its `.git` with any of those commands (a real `git worktree`, user config listing the live root as writable). A `require_escalated` call is refused, the worktree stays writable, and a non-worktree session still writes its own tree.
+  - It prints SKIP without a local port or nested sandbox (the worker sandbox); the manager's quick tier ran it in full.
+- **Not done.** Gemini (experimental, off by default) is not covered.
+## 2026-10-04 — LKM-157: re-offer Connect to Trezi when a connected project loses its stamps
+
+- **Problem (review M3, follow-up F3).** `offer` returned false once `sourceSetup.state === 'done'`, so a project whose wiring was later removed, or whose dev server stopped stamping, never showed the card again.
+- **Trigger.** `NativeWorkspaceController.restarted` hears every dev-server restart of the active project (the `restart` command, which environment refreshes and recovery also use). For a `done` project, `NativeContextController.restarted` records the time. Readiness samples from a page that started before it are ignored. If the restarted page shows 0 stamps for a full `verifyGraceMs` while the project stays active, the state moves to `unstamped` and the card offers **Reconnect** with the title "Source links stopped working".
+- **Why only after a restart.** A page that legitimately has no elements must not raise the card, so a 0-stamp sample without a restart is never judged. Any stamped sample cancels the check. A landed setup turn's restart is excluded: its own verification owns that restart.
+- **State.** `unstamped` is a fourth `SourceSetupState` value, validated by `METADATA_FIELDS` and `WorkspaceFile.swift`. It survives relaunch, where the Reconnect card shows again on an unstamped page. Stamps returning record `done` and hide the card. They also clear an in-session Not now, because losing stamps later is a new question. Not now on the re-offer records `declined`, as on the first-run card.
+- **Tests.** `test/native-context.mjs` covers no offer on an unstamped page without a restart, loss after restart plus grace, a stale pre-restart sample, stamps returning, a stamped sample within the grace period, the landed-turn exclusion, the loss across relaunch, and Not now across relaunch. `test/workspace-owner.mjs` round-trips `unstamped` through the Swift owner.
+## 2026-10-04 — LKM-155: project-relative sources in every agent prompt (review F1)
+
+- **Why.** LKM-151 fixed only the selection prompt. The other prompt builders still interpolated the raw stamp source, so an absolute stamp sent a worktree chat to the live checkout (review H2). Root stripping was also duplicated in two places (L4).
+- **Helper.** `projectRelative(path, root, { served })` in `src/shared/project-path.ts`:
+  - keeps `:line[:col]`, ignores trailing separators on the root and returns a path outside the root unchanged;
+  - compares Windows-style roots case-insensitively with `\` read as `/`, while a POSIX root keeps a backslash in a file name;
+  - `served` also drops a leading `./` or `/`, as the former `projectPath` did for dev-server file names.
+  - It replaces `projectRelativeSource` (`src/shared/selection-context.ts`) and `projectPath` (`src/shared/dev-error.ts`).
+- **Prompts.** These now take the project root and name sources relative to it:
+  - `controlsPrompt`/`animationControlsPrompt` (selection and owning-component source);
+  - `agentPromptFor`/`textAgentPrompt` (`src/main/props.ts`, also used by the Svelte engine);
+  - `styleAgentPrompt` (`src/main/styles.ts`, `src/main/styles-svelte.ts`);
+  - the Layers move fallback, now one `toAgent` in `src/main/move-node-agent.ts` instead of three copies;
+  - the inspector's inline-text fallback in `src/native/inspector-runtime.ts`.
+  - `resolveSource` still rejects absolute stamps for direct edits. Nothing changed except the paths in prompts.
+- **Tests.** `test/project-path.mjs` (unit) covers the helper cases. It also builds every prompt from absolute stamps under a temporary live root, through the builders and through the apply paths that fall back to the agent, and asserts that none contains the root. `test/stop-recovery-ui.mjs` uses the shared helper.
+## 2026-10-04 — LKM-161: typed island override wire format (F8)
+
+- **Type.** `IslandOverrideMessage` moved from `src/preview/island-override.ts` to `src/shared/preview-channels.ts`, next to the `ISLAND_OVERRIDE` channel. `IslandOverrideRequest` adds the reply `id`. It stays the written description of the wire format.
+- **Sender.** `islandPreviewPort`'s `ask` (`src/native/island-preview.ts`) takes the union instead of `Record<string, string>`, so a wrong op or a missing field no longer compiles.
+- **Receiver.** The preview's `parse` turns the untrusted payload into an `IslandOverrideMessage` with the same checks as before (key ≤ 200, css/from ≤ 8192 without `<>{};`). `handle` switches on `op` exhaustively. No behaviour change: `test/island-override.mjs` and `test/island-flicker.mjs` pass unchanged. The type import is erased, so the transpiled module the framework harness injects has no import.
+- **Type-level test.** `test/types/island-override-wire.ts` holds well-formed messages and `@ts-expect-error` cases (missing `from`/`css`/`key`, unknown op, non-string css, request without id). `tsconfig.node.json` and `tsconfig.native.json` now include `test/types/`, so `typecheck` and `typecheck:native` fail if a malformed message ever compiles.
+## 2026-10-04 — LKM-160: split Host.swift into menu and test-broker extensions (review F6)
+
+- **Why.** `src/native/Host.swift` was 618 lines (guideline about 500) and mixed the menu bar with the test broker (`docs/REVIEW-2026-10.md` M5, L7).
+- **Split.** Refactor only; the command set and every handler body are unchanged.
+  - `src/native/HostMenus.swift`: `installMenus` (Trezi, File, Edit, Actions, Develop, Window with Activity ⌘L and the unread badge item), `showAbout`, `menuAction`, `recentAction`, and `updateRecents` (the former inline `recents` case).
+  - `src/native/HostInspect.swift`: `testBroker(_:id:)` holds the inspect, perform, verification and capture cases (incl. `activityInspect`, `activityMenu`, `settingsMenu`, `revealChatIsland`, `previewInput`). `command`'s `default:` calls it and only replies "Unsupported native host command" when it returns false. Early `return`s became `return true`, so the no-reply guards behave as before.
+  - Product commands stay in `Host.swift`, including `captureFeedback`, `capture`, `previewViewport` and `securitySession` (`test/service-session.mjs` matches that line).
+  - `Host.swift` is 325 lines. The two files are in the `scripts/build-native.mjs` host list. `typecheck:native` is TypeScript only and has no Swift list.
+- **Docs.** All Host/Activity rows in `docs/SWIFT-BACKEND-EVENTS.md` point at the current file and line (checked row by row against the source). Rows for cases removed earlier (`contentState`/`contentInspect`/`captureContent` in LKM-114, `trash` in LKM-111, `mediaReply` and the `media` event in LKM-101) no longer link to a line and name the ticket that removed them. The dated anchor in `docs/SWIFT-BACKEND-AUDIT.md` is a snapshot and was left as it is.
+
+## 2026-10-04 — LKM-154: review of LKM-140/144/151/152/153 and commit audit
+
+- **Report.** `docs/REVIEW-2026-10.md` contains findings by severity, an audit table for all 29 commits in `ee301e2..515779b`, and follow-ups F1–F8.
+- **Audit result.**
+  - No commit is a no-op, reverted later, an artifact or a duplicate that could be removed without rewriting history.
+  - The LKM-140 iterations that later commits partly superseded still own live lines (`git blame`).
+  - Each candidate merge has the same tree as its second parent, and `--remerge-diff` shows no hand edits. The two conflicted sync merges (`f27a60f`, `de633fe`) were resolved correctly.
+  - The only candidate for removal is the two diagnostic keys `84e436a` added to `chatAcceptance`. The report recommends keeping them. Nothing was reverted and no SHA changed.
+- **Cleanups.**
+  - Removed the unused `unread`/`unreadLevel` from `NativeActivity` (`src/native/Activity.swift`). The unread state lives in `ActivityIndicator` and the controller.
+  - Removed the unused `readFile` import from `src/main/backends/claude.ts`.
+- **Test fix.** In `test/setup-vite.mjs`, the bare-project case had no `node_modules`. Bun therefore auto-installed `@babel/core` from its global cache when the plugin required it. The warning then depended on that cache, and quick verification failed on a broken cache entry. The fixture now has Vite installed, as a real Vite project would.
+- **Not done (follow-ups in the report):**
+  - relative sources in every agent prompt;
+  - Bash and non-Claude live-write guards;
+  - re-offering setup after `done`;
+  - the lint baseline (546 → 576 Biome errors over the range, mostly format and import order in new files);
+  - splitting `chat-isolation.ts` (953 lines) and `Host.swift` (618 lines);
+  - commit subjects for worker iterations;
+  - typing the island-override wire format.
+
+## 2026-10-02 — LKM-153: Connect to Trezi from chat worktrees, Vite 8 stamping, remembered state
+
+- **Root cause.** The swiftly-demos chat had a stopped (parked) turn. `beforeTurn` returned early for a parked chat, so it skipped the helper sync too. The setup agent found no `.trezi/trezi-source.cjs` in its worktree and stopped. The card then fell back to "no elements got stamped". The project is also React on Vite 8, where `react({ babel })` cannot stamp at all.
+- **Helpers in worktrees (option 1: Trezi writes them).**
+  - `beforeTurn` syncs helpers for parked chats too. This is safe because `.trezi/` is excluded from snapshots, landings and cleans.
+  - `setup:scaffold` now takes the chat key. After the live write it runs `syncChatHelpers` (on the chat's repository queue, recreating an idle-removed worktree) and checks every SHA-256 in the checkout. It fails with the exact path otherwise.
+  - The prompt says the helpers were copied there and never to write `.trezi/`.
+  - Rejected: pointing the agent at the live absolute path, because the relative import and its own checks resolve in the checkout. Also rejected: letting agents write `.trezi/`. Reasons in `docs/WORKTREES.md`.
+- **Vite.**
+  - One `enforce: 'pre'`, `apply: 'serve'` plugin, `.trezi/trezi-vite.mjs` (`src/main/setup-vite.ts`), serves every Vite version and React plugin. It runs the unchanged `trezi-source.cjs` visitor through the project's `@babel/core` before esbuild/Oxc, so the stamps match.
+  - The plugin logs `[trezi-source] …` when `@babel/core` or the helper is missing.
+  - Detection reads the installed Vite and React plugin versions from `node_modules` folders, not the resolver, which would make Bun try an auto-install.
+  - Swift `WorkflowSetup`/`EditingProject` allowlists include the new helper.
+  - Next keeps its loader and plain HTML its serve-time stamping (no card).
+- **Remembered state.**
+  - `ProjectEntry.sourceSetup` (`done` / `declined` / `failed` + reason + at) is validated by both `METADATA_FIELDS` and `WorkspaceOperation.validField`. It persists through the workspace store, so it survives relaunch.
+  - The card shows only while stamps are 0, the user has not declined and the project was never seen stamped. Stamps hide it and record `done`.
+  - Failures show `Setup failed: <reason>` with **Retry**:
+    - a scaffold or copy error;
+    - a setup turn that errored, was stopped or was held;
+    - a landed turn whose restarted preview still has no stamps after `verifyGraceMs`. This one quotes the dev server's `[trezi-source]` line (via `runtimeOwner.onLog`) or notes that the turn changed no file.
+- **Tests.**
+  - `test/setup-worktree.mjs` (repository-owner suites, Swift owners) parks a chat on a Vite 8 React fixture, then:
+    - Set up copies byte-identical helpers into the parked worktree;
+    - a parked `beforeTurn` restores a deleted helper;
+    - the wiring lands live without any `.trezi` file;
+    - the live plugin stamps the JSX.
+  - `test/setup-vite.mjs` (unit) covers Vite 7/8, SWC, non-Vite React, Next and HTML detection, the prompt, and plugin transforms and warnings.
+  - `test/setup-vite-real.mjs` (unit) installs real Vite 7 and 8 fixtures and checks served modules through `createServer`. It prints SKIP without the registry.
+  - `test/native-context.mjs` covers Not now across relaunch, failure plus Retry across relaunch, the dev-server reason, the verified card disappearing and `done`.
+  - `test/workflow-owner.mjs` covers write and remove of the Vite helper.
+  - `test/workspace-owner.mjs` covers field validation.
+- **Limits.**
+  - The state lives in the workspace entry, so closing the project forgets it.
+  - A project recorded `done` is not offered the card again on an unstamped page. Its stamps reappearing, or removing and re-adding the project, resets that.
+## 2026-10-02 — LKM-152: Activity opens only when attention is needed
+
+- **Why.** Activity opened for every error line, including startup recovery reports and dev-server output, so it popped up on most launches and taught people to close it unread.
+- **Severity.** `append(text, kind, { event, group })` classifies each line as info, warning or needs-action (`severityOf`).
+  - Only needs-action may open the window, at most once per `event` kind per app session (`opened`).
+  - Needs-action events: `project-open-failed` (workspace `select` failure and `openRequested`), `devserver-crash-loop` (new `gaveUp` callback when `NativePreviewSupervisor` exhausts its restarts), `repository-journal` and `source-journal` (damaged journals that need a decision).
+  - An automatic open sends `raise`: Swift orders the window front without making it key, so the main window keeps focus (and the smoke captures that need it). Show/⌘L sends `focus`.
+- **Recovery notices.** `src/native/activity-startup.ts` moved the startup reports out of `index.ts`. They are gray `notice` lines; restored chats and rolled-back source changes collapse into one line ("Restored 4 interrupted chats.") whose tooltip and Copy All keep every original line.
+- **Unread.** Warnings and needs-action lines added while Activity is hidden count as unread (`activityUnread`). `ActivityIndicator.swift` shows a sidebar dot (red for needs-action, orange for warnings) and a badge on Window → Activity (macOS 14+). Clicking it opens Activity; showing Activity clears both.
+- **Menu.** A Window menu (Minimize, Zoom, Activity ⌘L) replaces Actions → Toggle Logs; ⌘L now always shows Activity.
+- **Setting.** Settings → General → "Show Activity automatically" (`trezi:activity-auto-open:v1`): Never, For problems that need me (default), Always (the old behaviour: any error opens a hidden window). The controller reads it on every append, so a change applies at once.
+- **Tests.** `test/activity-attention.mjs` (unit): recovery notices and Vite output never open in any mode, once per kind, collapse count and gray kind, unread and clearing, Never/Always, supervisor gave-up. `test/native-settings.mjs` covers the field, persistence and validation. Native: `sheets` checks the dot and menu badge with Activity hidden, then ⌘L through the main menu; `chat-gate` checks a failed open raises Activity without taking key; `settings` round-trips the choice.
+
+## 2026-10-02 — LKM-151: Stop never leaves a broken project; one-click recovery
+
+- **Root cause.** The swiftly-demos incident was a background comment agent that wrote the live file:
+  - The selection prompt (`describeSelectionForPrompt`) gave the picked element's *absolute live* source path.
+  - Background spawns run with `bypassPermissions` (no `canUseTool`), so the agent edited `liveRoot/…/top-app-bar.tsx` directly by absolute path. That bypassed its worktree and the "interrupted turns park" rule.
+  - Stopping between the fragment-open edit and its closing edit left the live JSX unbalanced.
+- **Fix.**
+  - Selection sources are project-relative: `projectRelativeSource`, with the root passed by the context controller and inspector.
+  - A Claude `PreToolUse` hook (`src/main/live-write-guard.ts`) denies edit tools that target the live checkout from a worktree chat and names the worktree path. Hooks run even under bypass.
+- **Post-Stop card.**
+  - A failed or interrupted park carries `reason: 'interrupted'`. A drift conflict stays a conflict even if a later turn on top of it stops.
+  - `src/main/stopped-turn.ts` adds Revert, Undo and Keep:
+    - **Revert** is deferred: the held work is hidden at once and discarded at the next `beforeTurn`, `afterTurn` or `releaseChat`. Undo is a re-hold, so no new Swift API was needed.
+    - **Keep** lands through `completeTurn(land)` plus `recordEdit`, so its Revert group restores bytes.
+  - The stopped message's hover Revert maps to the same revert through a `stopped:` marker group.
+  - `agent:send` is no longer refused while held, so the next message, "Ask agent to finish" and "Send now" all continue the held work.
+- **Preview errors.** `src/shared/dev-error.ts` reads the dev-server log (`runtimeOwner.onLog` → `chatController.devServerLog`). An error naming a file in the chat's last landed turn shows a card with "Revert last turn" (its edit group) and "Fix with agent". A rebuild of the file clears it.
+- **Queue.** The paused row states whether its messages will send. "Resume" is now "Send now", disabled while a conflict blocks it.
+- **Tests.**
+  - `test/stop-recovery.mjs` runs through the Swift owners, in the repository-owner suites. It checks:
+    - stop mid-edit leaves the live checkout byte-identical (CRLF/UTF-8 fixture);
+    - revert, undo and settle;
+    - Keep followed by `revertGroup` is byte-exact;
+    - finish lands everything;
+    - the drift case.
+  - `test/stop-recovery-ui.mjs` (unit) covers the guard, relative sources, the reader, the controller cards and actions, and the queue note and Send now.
+- **Limits.**
+  - Non-Git or subdirectory projects still write live.
+  - Shell and non-Claude edits are not covered by the guard.
+  - Error detection is a log heuristic.
+
+## 2026-10-02 — LKM-140 (review fix): only a Shadow block's own gesture takes the override path
+
+- **Regression found in review.** `ChatIslands.gestureFrame` sent every gesture of an island through the override path when the island had any Shadow block. The schema allows a Shadow block together with group/point blocks and more than one Shadow block, which led to two problems:
+  - Dragging a non-shadow control (slider, point) lost its LKM-133 live preview: the write was held until release or 600 ms idle.
+  - Dragging a second Shadow block derived the first block's CSS, so the wrong element was held.
+- **Fix.** `gestureFrame` merges the gesture's values (`Session.gestures`) and takes the override path only when every merged key belongs to one Shadow block's `params`, using that block for `from` and `css`. Otherwise the gesture is `live` and writes every frame as before. If a gesture moves from a Shadow block to another control mid-drag, `IslandOverrides.holds` finds the held override, which is cleared, and the merged values are written so nothing is lost.
+- **Test.** `test/island-flicker.mjs` has a new case with a Shadow block plus a group slider:
+  - slider frames are written at once and never reach the preview port;
+  - a shadow gesture is still shown, and its write deferred;
+  - a gesture that moves from shadow to slider clears the override and writes the held values.
+
+## 2026-10-01 — LKM-140 (reopened): override lifecycle under Next HMR, real-fixture numbers
+
+- **Cause of the reopened failures (diagnosis run 09df9ede).** Two defects shared the HMR/override lifecycle.
+  - (A) `settle()` in `src/preview/island-override.ts` (and the hand-kept copy in the test harness) treated an empty target list as settled. Next HMR can remount `#shadow-phone`, which disconnects every target, so the override was dropped while the new node still showed an older value. That produced `next-after` `outOfOrder: 1` and `waitForGestureSettled` timeouts in earlier runs.
+  - (B) `resetPreviewSource` reloaded the preview right after writing the initial source back. The dev server could still serve the last drag value, and React hydration does not patch a mismatched server style attribute (Next forwards "This won't be patched up" from the preview). The card then never matched, and the run failed with "Preview shadow did not match the island source" after `next-before`.
+- **Fix (A).** `settle()` now:
+  - re-resolves the bound elements: the connected targets, plus the elements that show the gesture's start value or the written value;
+  - returns false for an empty list (the backend's 8 s timeout still drops the override);
+  - holds remounted elements before reading anything;
+  - removes the override only when both the shown and the own value equal `computed(css)`.
+- **Mid-gesture HMR is covered too.** While an override is held, a `MutationObserver` (style attribute and child list, under body) re-holds a target whose inline style React rewrote, and any remounted node. This runs at the microtask checkpoint, before paint.
+- **Fix (B).** The harness:
+  - injects the production module, transpiled with `Bun.Transpiler`, instead of a copy;
+  - waits until the dev server serves the expected literal (the Next page HTML; Vite `/src/phone.js`);
+  - loads with a cache-busting query and waits for the new document;
+  - reloads until the card computes to the source value;
+  - names observed vs expected in every timeout error.
+- **Other harness fixes.**
+  - Rewriting identical text in setup is skipped, so it cannot start a spurious HMR update mid-drag.
+  - `hmrStyleSwaps` counts every computed-shadow change over the run. Before, re-attaching the sampler after each live-write step reset it.
+- **Numbers.** These come from `test/island-flicker-frameworks.mjs`, 12-step Light pad drag, system WebKit, worker quick verification run `run-ExycIO`:
+  - `next-before` (Next 16.3.5 Webpack, LKM-133 live writes): 12 source writes, 8 computed-shadow changes, 0 gaps, 0 out-of-order, 53 foreign frames. HMR lags the 40 ms drag steps, so the card shows values 2+ steps old, and it never catches up within a step.
+  - `next-after` (override): 1 write, 11 changes (one per frame shown), 0 gaps, 0 out-of-order, 0 foreign.
+  - `vite-before`: 12 writes, 0 gaps, 0 out-of-order, 5 foreign. Each write is a full reload (no HMR boundary), which also kills the sampler, so only spot samples count.
+  - `vite-after`: 1 write, 0 gaps, 0 out-of-order, 0 foreign.
+  - The reset served the stale page on the first fetch and the reverted one on the second, then matched on the first load.
+  - Repeated on 4 unit runs, including after the LKM-149 merge (`run-ExycIO`, `run-ZpPZGh`, `run-cHneHz`, `run-tvxx0d`):
+    - `next-after` and `vite-after` were 1 write, 0 gaps, 0 out of order and 0 foreign every time.
+    - `next-before` showed 23–53 foreign frames and 5–10 shadow changes.
+    - `vite-before` showed 4–5 foreign spot samples.
+  - Full `bun run test:native` passed on the merged tree (23/23 smoke checks plus chat acceptance).
+  - Unit model (`test/island-flicker.mjs`): unchanged (H3 refuted on 1681 points; before 12 HMR / 12 gaps; after 1 write, 0 gaps).
+- **Tests.**
+  - `test/island-override.mjs` (new, unit) runs the production module on a small fake DOM. It covers:
+    - start-value hold;
+    - a stale write never settling;
+    - a remount held before paint;
+    - disconnected and empty targets never settled;
+    - Fast Refresh rewrite held until settle;
+    - a CSS-module gap frame staying covered;
+    - removal only on the final value;
+    - clear restoring the page value.
+  - It fails on the previous `settle()`.
+- **Captured frames.** These are unchanged from the native `shadow-light` group: `shadow-light-drag.png`, `shadow-light-released.png` and `shadow-light-drag.json`.
+
+## 2026-10-01 — LKM-140: Shadow Light drags without flicker
+
+- **Measured, hypothesis by hypothesis.** `test/island-flicker.mjs` (unit) records these numbers. It uses the real `ChatIslands` and the Swift owners, with a modelled page ticking every 16 ms.
+  - **H3: the formula produces near-invisible values. Refuted.** I swept the light over a 41×41 grid (1681 points) with the fixture values. Moving the light never changes alpha or blur: there was 1 alpha set (0.35/0.21/0.126) and 1 blur set across the whole grid. A 0.04 pad step moves any offset by at most 0.48 px.
+  - **H2: writes arrive out of order or coalesced. Refuted inside the island pipeline.** I replayed the LKM-133 live writes for a 12-step drag. This wrote 12 literals and caused 12 HMR events. The literals were in drag order, with 0 out-of-order values and 0 foreign values.
+  - **H1: the HMR CSS swap leaves a gap. This is the remaining cause.** In the model, each style swap leaves one frame with no shadow. That gives 12 gap frames for 12 steps, because every drag frame was a source write and an HMR update.
+  - **Real Next.js and Vite fixtures.** `test/island-flicker-frameworks.mjs` (same 12-step Light pad drag as the unit model) runs against `test/fixtures/next-app` at `/shadow-flicker` with Next 16.3.5 Webpack dev + HMR in system WebKit, and `test/fixtures/island-flicker-vite` with Vite 6.3.5 + a CSS module card. It logs `ISLAND-FLICKER next-before`, `next-after`, `vite-before`, and `vite-after` with `steps`, `hmrStyleSwaps`, `sourceWrites`, `gaps`, `outOfOrder`, and `foreign`. Before the fix (LKM-133 live writes) each run expects multiple source writes and HMR swap gaps; after the override path it expects one write and zero gaps/out-of-order/foreign. The manager records the printed JSON in verification logs when the test runs (TreziHost built + registry access).
+  - **Unit model** (unchanged): H3 refuted on 1681 grid points; H2 refuted (12 writes, 12 HMR, in order); H1 confirmed (12 gap frames); after fix 1 write, 1 HMR, 0 gaps.
+- **Fix.** Drag frames of a Shadow block no longer write the source.
+  - `IslandOverrides` (`src/main/island-overrides.ts`) sends each frame's derived box-shadow to the preview (`ISLAND_OVERRIDE`). The preview's isolated world, `src/preview/island-override.ts`, applies it as an inline `!important` override.
+    - It applies the override only to elements whose computed box-shadow equals the island's current value. A display:none probe computes that value; transparent Tailwind ring layers are ignored when comparing.
+    - It does not touch the page's scripts.
+  - The source is written once:
+    - when the gesture ends (Swift now sends `ended` with the release batch), or
+    - after 600 ms with no new frame.
+  - The write goes through the existing queue with the same gesture id, so a gesture is still one Undo group.
+  - Removing the override:
+    - The backend then polls `settle`. In one task the preview removes the override, reads the element's own computed shadow (with box-shadow transitions cancelled), and puts the override back.
+    - The override is removed only when every target shows the final value on its own, after the HMR update or reload.
+    - It is dropped after 8 s without that.
+  - LKM-133's per-binding conflict rules still apply:
+    - A conflicting write or an outside edit drops the override and shows the notice, with nothing written.
+    - Reload, Reset and Undo clear the override first.
+  - Fallback: if the preview can't take the override (no preview view, or no matching element), the gesture falls back to the old live writes.
+- **Numbers after the fix**, for the same 12-step drag:
+  - 1 write and 1 HMR event; all 12 frames shown.
+  - 0 gaps, 0 out-of-order values, 0 foreign values.
+  - The write lands at frame 15–16 (the exact frame depends on timer timing from run to run). The override is removed 1–2 frames later, once the page's own style matches.
+- **Native evidence.** The Shadow Light smoke check (`src/native/smoke-shadow-island.ts`, `shadow-light` group) drags 8 frames through Swift with one gesture id. A requestAnimationFrame sampler in the page world records each frame.
+  - It asserts:
+    - The source file stays unchanged until the release.
+    - Gaps, out-of-order values and foreign values are all 0.
+    - The inline override is gone after the release.
+    - One Undo restores the source and the preview.
+  - Captured frames: `shadow-light-drag.png` (mid-drag), `shadow-light-released.png`, and `shadow-light-drag.json` (the counts) in `test/artifacts/native/`.
+  - This fixture is the static site, which reloads the whole page; it is not Next.js HMR.
+  - Worker run (native groups `islands`, `shadow-light`):
+    - 8 steps, 4 sampled frames, 0 gaps, 0 out of order, 0 foreign, and no source write during the drag. WebKit throttled requestAnimationFrame, so there are fewer samples than steps.
+    - In `shadow-light-drag.png` the card's shadow already follows the light at the last step (offset up and left). The chat panel still shows the initial x/y: the harness sends `islandPerform` straight to the host, so no Swift draft moves the pad.
+## 2026-10-02 — LKM-144 resumed on the LKM-149 candidate
+
+- The `acceptance-440-1-lines` regression below was fixed in LKM-149 (merged as `ee301e2`), not in LKM-144; the entry below is history. LKM-144 carries no layout change. Its scope is unchanged: keychain serialization and tests, the one-time network-volume note, docs.
+
+## 2026-10-01 — LKM-144 repair: `acceptance-440-1-lines` fails on the merged LKM-145/147 layout (open)
+
+- **Failure.** `test/native-chat-scroll.mjs` stops at `acceptance-440-1-lines: complete latest row above composer clearance`, deterministically (three native runs: manager, and two here). The 40-history fixture sits pinned (`pinned` true, `scrollY` ≈ `documentHeight − viewportHeight`), but the latest row's frame is at y ≈ 1144 against a 776 pt viewport, and rows realized after it have irregular gaps (60 and 20 pt extra between rows 38/39/latest). The pin reports 379 pins. The same test passed on `a542012`, before the LKM-145/147 merge.
+- **Not LKM-144.** The fixture pushes `chatState` straight to the host with a Codex provider, bypassing `NativeChatController.run`, the only controller code LKM-144 touched. The merge (`df1a327`) changed `ChatTurnFooter` to always reserve a 14 pt counter row, so every finished assistant row went from 158 to 174 pt, and the lazy stack's estimated document height (6595) is now far under the real one (about 7280). That layout change is the leading suspect; it is not confirmed.
+- **Tried, did not work.** (1) A layout nudge on repeated `.bottom` settle steps in `Chat.settleLatest`: no change in the failure. (2) Every third `.bottom` step scrolling to the latest through SwiftUI with the pin held: acceptance was not reached because it broke `send-visibility` (blank rows at 320 pt, `no visible transcript rows`). Both are reverted; `Chat.swift` equals HEAD.
+- **Kept.** `chatAcceptance` now also reports `bottomPosition` and `settleAttempts`, so the next failing run shows whether the end marker was settled while the row frames were not.
+- **Next step for the LKM-145/147 owner.** Reproduce with `bun test/native-chat-scroll.mjs --require-build`. First try keeping the counter row only for the live or latest turn (history footers back to 28 pt), or make `ChatLatestSettle.step` refuse `.settled` while the latest row's frame is below the reading edge.
+
+## 2026-10-01 — LKM-144: Keychain rebuild loop, one migration prompt, network-volume note
+
+- **Rebuild loop.** `test/keychain-rebuild.mjs` (unit, exclusive, 300 s budget). Two builds of `Secrets.swift` from different folders with the build's swiftc flags are byte-identical (CDHash `7afd5eab…` ad hoc here). Its `rebuild-read` part, on a password-made temporary keychain, has the rebuild read the first build's item with UI disabled and refuses changed code. A manual probe on a temporary keychain showed:
+  - with "Trezi Local", the item's decrypt entry trusts the designated requirement, so first, rebuilt and changed builds all read with UI disabled;
+  - ad hoc, the entry names the CDHash and changed code is refused.
+
+  The test keeps to no-UI calls only. There is no "Trezi Local" signing in it (codesign needs the keychain search list) and no item delete or ACL dump (a non-owner delete can prompt). `keychain-migration` and `keychain-rebuild` bound every `security` call at 30 s. In this worker's sandbox the keychain part SKIPs (it refuses `create-keychain`). Verify quick ran it for real: `rebuild-read` PASS, and `keychain-migration` migrate/fresh/invalid/repeated PASS. The login keychain's `cdhash:` partition (LKM-137) is matched by the unchanged CDHash; the operator steps confirm it.
+- **Rule after the first run.** The first LKM-144 run probed with `security add-generic-password -T`, which hung on a Keychain dialog and blocked the operator's security agent. Workers now never touch the login keychain or run anything that can prompt; such checks are operator steps.
+- **Why prompts repeated.** The service ran `TreziSecrets` on a concurrent queue, killed after 30 s. Reading the old item (owned by the old ad hoc TreziHost) asks for the login password, so each parallel call opened its own dialog, and a kill while the user typed lost the approval. `ProviderData.crypto` serializes the calls with a 180 s timeout. The `keychain-serial` test fails without the lock (negative control run). `Secrets.swift` is unchanged, since every edit there costs users an approval.
+- **Migration.** Already idempotent (`keychain-migration`). Deleting the old item is an owner change, which can prompt once (-25244 with UI off). A denial leaves an unused item. The manual cleanup is documented.
+- **Network volume.** The TCC accessing process is the Claude CLI itself. `sandboxd` as requester is how macOS reports these requests, not proof the Bash sandbox did it, and sandbox settings only confine Claude's commands. No Trezi setting can stop it with the sandbox on, so the first Claude turn of a profile shows one status line explaining it (`src/native/network-volume-note.ts`, `ChatServices.notice`).
+- **Bundle ID** `dev.praxis.native` kept (a rename resets every grant). Recorded in `docs/agent-guide/legacy-names.md`. Details and operator steps: `docs/PROVIDERS.md` (LKM-144).
+## 2026-10-02 — LKM-149: chat footer regression from LKM-145/147
+
+- **Failure.** Candidate failed `acceptance-440-1-lines: complete latest row above composer clearance` intermittently. The same tree had passed once before. The failure capture showed AppKit at the document end (`scrollY = documentHeight − viewport`) while SwiftUI still measured the latest row 650 pt below the reading edge. Every history footer was 44 pt, because LKM-147 reserved the counter line on all responses.
+- **Footers.** `ChatLayout.footerHeight(running:latest:)` has three cases:
+  - The running turn shows the counter line.
+  - The latest response keeps that line empty once done, so completion still moves nothing (LKM-145).
+  - Older responses have one 28 pt row, as before LKM-147.
+
+  `ChatTurnFooter` takes `latest` and fixes its frame to that height.
+- **Settle.** `ChatLatestSettle.step` checked only the end marker. It now also needs the latest row to end at the reading edge. When the marker is at the edge but the row is not (or the row is unmeasured), it returns `.relayout`: the 1 pt marker change in place, then a pin, and the next frames re-measure. LKM-139 noted that a row's frame can be stale after an AppKit pin.
+  - A first attempt sent the "row below" case through the SwiftUI `.realize` scroll. The native run then exhausted the settle (80 attempts) and blanked `send-visibility` at 320 pt, because that scroll anchors the row under the composer.
+  - `.bottom` unresolved three times in a row (the pin has nothing left to move) also escalates to `.relayout`.
+  - `run` accepts settled only on two consecutive frames.
+  - The marker resets to 1 pt when a settle ends. Without the reset, the nudge parity left a 1 pt offset between the running and done captures.
+  - While the marker is nudged to 2 pt, the bottom padding gives back 1 pt. The document height and every row's place stay the same even mid-settle. Without this, a hover capture taken mid-settle read all frames 1 pt higher.
+- **Tests.**
+  - `native-chat-latest-settle --cases` pins the step, relayout and escalation decisions and the 28/44 pt footer heights. Its offscreen samples now also require the latest row at the reading edge and a settle that did not exhaust its attempts.
+  - `native-chat-scroll`: the progress stage asserts a 44 pt running footer and 28 pt history footers. Every chat acceptance capture asserts 28 pt history and 44 pt latest footers.
+- **Verification.** The worker had 3 native calls. Call 1 (chat group) failed on send-visibility, which led to the `.relayout` design. Call 2 (chat group) passed send-visibility and the 28 pt history assertion, then failed on the 1 pt nudge offset, which led to the reset. Call 3 was the full native suite.
+  - The smoke suite passed 23/23.
+  - At 440 pt, the whole chat-scroll progress stage passed, including the completion checks.
+  - At 320 pt, the hover check failed because every frame was 1 pt higher (a capture taken mid-nudge). That led to the padding compensation, which is unverified natively.
+
+  Five consecutive chat-acceptance passes were not possible within the call limit and are left to the manager.
+## 2026-10-02 — LKM-150: Git-version-independent patch error messages
+
+- **Cause.** Git 2.55 (the GitHub runner) names the patch file in a location: "corrupt patch at <scratch>/apply-<uuid>.patch:7", where 2.50 (the operator Mac) says "corrupt patch at line 7". The LKM-130 mapping knew only "at line N", so on the runner the message kept the long temporary path and `malformed-patch` failed.
+- **Parser.** `src/service/GitMessages.swift` turns each `git apply` `error:` line into reason, file and line (`corrupt patch`, `unreadable`, `patch failed`, `does not apply`, `already exists`, `does not exist`, `does not match index`, `missing blob`, `other`). It first rewrites every location to "line N": the exact scratch path, then any `apply-<uuid>.patch` spelling after "at", "on" or "(". Remaining mentions become "the patch". A reason Git gives by patch line gets the file whose part of the patch that is. The missing-blob notice (reworded in 2.32) is shown in one fixed wording and only when nothing else explains the failure. The file is Foundation-only, so `test/git-messages.mjs` compiles it alone.
+- **Audit.** Two other places read Git's text:
+  - `applyToWorkingTree`'s three-way conflict check matched "with conflicts", `<<<<<<<` or `U \w`. It now asks the private index for unmerged entries, which Git writes for a conflict and never for a refused patch.
+  - The publish push retry (`WorkflowPublish.pushReconciled`) matched the summary line, which Git translates. `GitMessages.pushRejected` keys on the per-ref status (` ! [rejected]`, `[remote rejected]`, `(fetch first)`, `(non-fast-forward)`), which is printed untranslated in every version. A failure without a rejected ref (an unknown refspec) no longer retries.
+
+  `src/main` has no remaining match on Git's stderr. Locale is not pinned: a translated Git still breaks the apply message wording (the reason then shows as Git printed it).
+- **Tests.** `test/git-messages.mjs` (unit tier) feeds recorded stderr: 2.50.1 from fixture repos, the runner's 2.55 corrupt-patch line, and 2.55 / 2.31 spellings of the other messages. Every version of a case must give the same fields and message, with no scratch path. The real-git `malformed-patch` section asserts `{reason: 'corrupt patch', file: 'a.txt', line}` and the message built from them. It also passed locally with a PATH wrapper that rewrites the local Git's apply locations to the 2.55 spelling.
+- **CI.** The Toolchain step prints `git --version`.
+
+## 2026-10-01 — LKM-148: the address bar fills the free toolbar width
+
+- **Layout.** `src/native/ToolbarAddress.swift` (`ToolbarAddressLayout`) sizes the preview address/branch block so its trailing edge sits 20 pt before the select/device group. The width comes from the window width and offsets measured after a toolbar layout: the right groups' inset from the trailing edge, the chat header offset, and the block's laid-out extra. So `NSWindow.didResizeNotification` sets the final width synchronously, in the resize's own layout pass, with no frame-late reflow and no jump on mouse-up. Measuring is skipped during a live resize, then repeated at its end, after the split resizes, and after Publish label changes. The chat header gives way (down to its 100 pt floor) before the block gets narrower than its former 180 pt. The block's absolute floor stays at the former 80 pt.
+- **Why 20 pt and a measured inset.** Probes on macOS 26 showed:
+  - NSToolbar keeps the high-priority right groups pinned only while 14–16 pt (depending on the items) separate them from the block. Closer, it shifts them and drops the `.space` items; about 30 pt short, it moves the address item into overflow.
+  - An overflowed item cannot be measured. A startup guess below the real inset (the first try used 300 pt) therefore left the block overflowed at every width.
+
+  The guess now starts at 400 pt. While the block is overflowed, `backOff()` widens the inset in 40 pt steps until the toolbar shows the block again. A layout counts as pinned only at the requested gap, so a pushed layout cannot be mistaken for one.
+- **Truncation.** The URL field truncates in the middle and the branch pop-up at its tail (cell `lineBreakMode` plus the attributed title's paragraph style), only when the text is wider than the block.
+- **Proof.** Native smoke check `toolbar-address` (core group, `src/native/smoke-toolbar.ts`) resizes to 850, 1800 and the default width. For each, it asserts the frames both inside the resize (`resizeSnapshot`, taken before returning to the run loop) and once settled:
+  - the block stays visible and is never narrower than the pre-LKM-148 formula gave at that geometry;
+  - the gap to the first right group is the fixed 20 pt (at least 16 pt at the floor);
+  - the right groups keep one pinned inset that equals the measured one;
+  - the trailing edges match inside the resize and once settled;
+  - at the wide width, neither URL nor branch is truncated.
+
+  It writes `toolbar-{minimum,wide,default}.png` and `toolbar-address.json`.
+## 2026-10-01 — LKM-146: dependency changes never break the preview
+
+- **Reproduction findings.** These come from the code paths and fixture tests. Real Next/Vite servers with network installs could not run in this sandbox: no local port binding, no registry.
+  - **Vite and every other non-Next project.** The chat worktree's `node_modules` was a symlink to the live one. An agent's `npm install x` / `bun add x` / `pnpm remove x` in the chat wrote straight into the live `node_modules` mid-turn, under the running dev server, while the live `package.json` and lockfile were unchanged. Vite's prebundled deps went stale for a package that changed underneath. A removed package that live code still imports stops resolving before anything lands. A parked or discarded turn leaves the live dependencies changed anyway.
+  - **Next.** Next already installed into the worktree because Turbopack cannot follow the link, so the live tree was safe.
+  - **Landing (both).** Landing manifests already restarted the server, but the install ran inside `devserver:start` under "Opening X…". There was no install state and no explicit reload step.
+  - **Crashes.** A dev server that crashed or hung after it was ready left the preview dead. The runtime `exit` event only cleared the agent-evidence URL mirror, the status stayed `running`, and nothing restarted the server.
+- **Chosen isolation: every worktree gets its own `node_modules`.** Blocking installs and routing them through landing was rejected: the agent could not build or test with the dependency it just added. Detaching only when an install starts cannot be enforced either, because Trezi never sees the agent's shell commands before they run. `EditingProject.dependencyState` (Swift, repository lane) does three things:
+  - removes a legacy link;
+  - when the live folder is Git-ignored and the manifests and lockfile match, clones it with one APFS `clonefile(CLONE_NOFOLLOW)` and marks it;
+  - otherwise reports that an install is needed, which `provisionDependencies` runs in the worktree and then marks.
+
+  Measured: 0.36 s for a 12.6k-file `node_modules`, against 1.6 s for a file-by-file copy, with near-zero extra disk until either side writes. An unignored `node_modules` is never copied. The marker in the worktree's `.trezi/` is excluded by name like the rest of `.trezi/`. `createWorktree` never asks the repository owner for the link any more; the `linkNodeModules` flag stays in the protocol and is always false.
+- **Landing.** `select()` stops the server, then sets `{busy: 'Installing dependencies…'}` while the new `devserver:install` route installs in the live checkout (repository write queue). It then starts the server and reloads the preview (`preview:load`).
+- **Recovery.**
+  - The runtime owner's `exit` event now carries a `reason`: the exit code plus the output tail.
+  - A ready server is health-probed every 10 s with a 10 s timeout. Three misses stop its group, with the reason "The dev server stopped responding." Any HTTP status counts as alive.
+  - `src/native/preview-supervisor.ts` turns the exit into an error status with the reason, "Restarting in N s…" and `restart: true` (PreviewStatus shows **Restart** instead of Retry), and restarts the server after 1, 2, 4, 8 and 16 s. After that it leaves Restart to the user. A manual Restart, a landing or another project cancels the pending attempt, and a server that stayed up for 60 s starts the backoff over. The reason is also appended to Activity.
+- **Exit tails.** `ManagedProcess` read output and observed the exit on separate threads, so `onExit` sometimes ran before the last output line (the error) arrived. Once the group is gone, it now waits for the reader's EOF, up to 0.5 s, before `onExit`. This improves the pre-ready failure messages too.
+- **Tests.**
+  - `editing-owner` `dependencies`: the clone, its isolation from live, the marker, changed manifests and unignored folders.
+  - `chat-worktrees`: a chat's add or remove leaves live `node_modules` untouched until landing, and landing moves no `node_modules` file.
+  - `native-workspace-controller`: stop → install (shown) → start → load.
+  - `preview-supervisor` (new, unit): backoff, give-up, cancel and stable reset.
+  - `runtime-owner` `exit and health`: the exit reason, an unresponsive stop, and no event on stop. It uses the fixture's `RUNTIME_PROBE_FILE` so it needs no socket.
+## 2026-10-01 — LKM-145: Token counter only while working; Copy/Revert on hover
+
+- **Counter.** `ChatTurnFooter` (`ChatActivity.swift`) puts the running counter (LKM-147's per-turn `activity.tokens`) on its own 14 pt line under the status, never after the tool name. Finished responses render no counter, and the footer always reserves that line, so completion keeps its frame. Completion also adds the "Worked for …" caption at the top of the response, which pushed the pinned transcript up; a hidden placeholder of the same caption now holds that line while the turn runs.
+- **Copy/Revert.** Always laid out. `ChatActionButtonStyle(revealed:)` draws the glyph (and hover fill) clear until the row is hovered (`onHover` over the whole row, `contentShape`) or one of its buttons has keyboard focus (`@FocusState`). Opacity and `hidden()` were avoided so the buttons stay focusable accessibility elements; each has an explicit `accessibilityLabel` matching its tooltip. User messages have no action buttons today; the hover rule lives on the shared row.
+- **Verification hook.** `chatAcceptance` takes `hoverMessage` (id, `""` = none, `null` = real pointer) → `ChatModel.hoverOverride`, so captures do not depend on where the cursor rests. `chatInspect`/`chatAcceptance` report `revealedActions`.
+- **Proof.** The `native-chat-scroll` `progress` stage at 440/320 pt (merged with LKM-147's checks): on completion no `-tokens` frame, footer, question and response top unchanged; Copy/Revert not revealed; with the hover override revealed, and the message and footer frames identical with and without hover. Captures `progress-running-*`, `progress-done-*`, `progress-hover-*`.
+- **Limit.** The SwiftUI accessibility tree is empty without an assistive client (checked with an offscreen probe), so VoiceOver labels and Full Keyboard Access reachability are not asserted at runtime. The first native attempt was blocked by an operator Keychain prompt (`SecurityAgent` frontmost); after it cleared, `bun run test:native` passed in full (22 smokes + native-chat-scroll). The footer is compared by position and height, since its width follows its content (status label, then the buttons). Those results and captures are from before merging candidate b677d649 (LKM-147); the merged Swift is re-proved by the manager's native run.
+## 2026-10-01 — LKM-147: live turn progress (step timer, streaming tokens, heartbeat)
+
+- **Two status lines.** The owner's "Still thinking…" (LKM-135) was a `status` event, so it became both a transcript tools row and the activity label. It is now a `progress` event with a `step`: `reduce` shows the step as the label and appends nothing. `ProviderFrames.swift` accepts `progress` (optional bounded `step`) and, like `commands`, does not count it as heard, so the first-event deadline is unchanged.
+- **Timer.** The chat state stamps `stepAt` when a step starts (turn begin, first delta, each tool status) and `aliveAt` on every event while running. The snapshot passes both as `since`/`aliveAt` on the thinking, writing and working activities. `ChatActivity` wraps its label in a one-second `TimelineView` and formats with `ChatActivityClock` (Foundation only, so a unit test compiles it): no timer under 2 s, `m:ss`, `h:mm:ss`. The swap transition stays keyed by the base label, so a tick does not animate.
+- **Heartbeat and idle hint.** `runProviderHelper` writes a bare `progress` event every 5 s from `send` until `done`/`error`/shutdown; the controller drops one that races the end, so it cannot flag review. The hint appears when `aliveAt` is 60 s old (12 missed beats) and stops the shimmer. The heartbeat lives in the helper rather than the owner because the helper is what can be stuck; it does not renew any owner deadline.
+- **Live tokens.** `includePartialMessages` was already on, but `message_delta` usage only arrives at a message's end. `streamUsage` keeps the running max of what it sent and adds `floor(chars / 4)` of streamed text, thinking and tool-input JSON at most every 250 ms; the real report adds only the remainder, and `message_start` resets it. Four characters per token is low for Claude, so the estimate rarely overshoots; when it does, the report adds nothing and the turn's count stays slightly high.
+- **Counter placement (LKM-145 layout).** The counter moved from `messages[].tokens` to `activity.tokens`, so it exists only while the turn runs. `ChatTurnFooter` always reserves its 14 pt row under the 28 pt status/actions row, so the footer height is the same running and done; the standalone thinking row (no response yet) uses the same footer. LKM-145 was not in this tree, so its layout is implemented here from the issue text.
+- **Evidence.** `test/turn-progress.mjs` (new, unit), controller and cold-start updates, and the native-chat-scroll progress stage: a fake 84 s tool run at 440/320 pt shows exactly one `statusLines` entry that ticks without a new snapshot, the counter frame under the status row and leading-aligned, the idle hint for a 3 min old `aliveAt` and not for a fresh one, and no counter with an unchanged footer once done.
+
+## 2026-10-01 — LKM-137 repair: `service-process` unit timeout under parallel swiftc
+
+- Manager quick verification timed out `service-process` at 120 s right after the control-codec PASS line while `service-contract`, `operation-ledger` and `preferences-owner` compiled Swift in parallel. The XPC half had not started yet; this was wall-clock contention, not a new service hang.
+- `test/run.mjs` now runs `service-process` as an exclusive unit barrier (no parallel workers) with a 240 s budget. `docs/TESTING.md` documents both.
+
+## 2026-10-01 — LKM-137 (review fixes): a failing identity falls back to ad hoc; real-signature proof
+
+- **Build regression.** A chosen identity that could not sign (locked login keychain over SSH, a denied key-access prompt, a deleted certificate) made the build exit 1, where the ad hoc build always worked. `signWithFallback` (`scripts/signing.mjs`) now runs the whole signing step (bundled Bun, `TreziSecrets`, the service, the app) and, when any piece fails with an identity, runs it again ad hoc for every piece. It prints the one `warning: signing Trezi ad hoc (signing with "<identity>" failed: <codesign message>)…` line, so a build never prints more than one warning (`signingIdentity` returns ad hoc without it re-warning). An ad hoc failure is still a real error.
+- **Proof of the main criterion.** `test/signing-identity.mjs` `local-signature` signs two different binaries with the real "Trezi Local" identity from a temporary keychain and requires the same `codesign -d -r-` output, equal to `identifier "dev.trezi.secrets" and certificate leaf = H"<hash>"`, and `Authority=Trezi Local`. `--keychain` does not make codesign find an identity (it fails with "no identity found"), so it runs with a private `HOME` whose keychain search list is the temporary keychain; the user's search list is not touched. The `sign-fallback` part uses a stub `run` that fails the identity on the second piece and checks that every piece is signed again ad hoc with exactly one warning.
+
+## 2026-10-01 — LKM-137: stable app identity, one Keychain approval, no Photos prompt
+
+- **Why every rebuild asked again.** The build signed ad hoc, so every rebuild was a new app to macOS. `scripts/signing.mjs` now picks one identity: `TREZI_SIGN_IDENTITY` (`-` = ad hoc), else a valid Apple Development identity, else "Trezi Local". The first build (or `install.sh`) creates "Trezi Local" once in the login keychain: a self-signed code-signing certificate whose key only codesign may use. `build-native.mjs` signs `Helpers/TreziSecrets`, the XPC service and Trezi.app with it, and the bundled Bun unless Bun keeps its own Developer ID signature. A "Trezi Local" build pins the designated requirement to `identifier … and certificate leaf = H"…"`. When no identity can be used or created, the build signs ad hoc and prints one `warning: signing Trezi ad hoc (…)` line. `dev-native --test` builds never create the identity (`TREZI_SIGN_CREATE=0`).
+- **Why the signature alone was not enough for the Keychain.** A throwaway probe item showed this. In the login keychain, an item made by a binary without an Apple team ID gets a `cdhash:` partition. A rebuilt self-signed binary therefore cannot read it (-25293), even when its ACL requirement matches; a custom SecAccess did not help. So the Keychain work left TreziHost (`--crypto` removed) for its own executable, `Contents/Helpers/TreziSecrets` (`src/native/Secrets.swift`). swiftc builds it to the same bytes each time (checked across paths), so its code hash, and an "Always Allow", survive rebuilds. The service resolves it in `ServiceRuntime.swift`.
+- **Migration.** The key moves from the earlier item to `dev.trezi.native.secrets` once: read the old item, write the new one (access list trusting the helper), and delete the old one only after that write worked. If another helper wrote first, its key is used. If the write fails, the old item stays and is used. Users approve the Keychain once more after this change, then not again (README "Code signing").
+- **Photos.** Settings → Check login sent no root, so `providers:check-login` used `homedir()`. The service then started the provider helper, and `claude auth status`, with cwd `$HOME`. From there the CLI's look through its cwd reaches `~/Pictures/Photos Library.photoslibrary`, which matches the reported cwd `/Users/<user>`. The TCC log on hand (about 24 h) had no Trezi Photos request, so this comes from the code path, not a captured event. Fixes:
+  - `ProviderHelperProcess.workingDirectory` refuses a home (any spelling), `/`, an ancestor of a home, or a missing folder, and uses a private 0700 `$TMPDIR/trezi-helper` instead;
+  - Check login without a project passes `tmpdir()`;
+  - `HostLaunch.run` (the login-shell probe) and `npx skills add -g` run in the temporary folder.
+
+  File pickers were already NSOpenPanel/NSSavePanel, and chats already run in their worktree.
+- **Proof.**
+  - `test/signing-identity.mjs` (unit, new): choice and override, every ad hoc fallback with exactly one warning, a stable DR, a real ad hoc sign, and a real "Trezi Local" in a temporary keychain.
+  - `test/keychain-migration.mjs` (unit, new): the compiled helper on a temporary keychain migrates once with no data loss; a later old item is not migrated again; a fresh profile and an invalid old key are covered.
+  - `test/provider-login.mjs` `helper-cwd`: a home, `/`, an ancestor or a missing root never becomes the helper's cwd, and a project root is kept.
+  - `test/distribution.mjs`: the signer, the helper path and no hard-coded ad hoc signing.
+  - The keychain parts need a session that can create a keychain. In a sandbox they print SKIP; the agent ran them unsandboxed and they passed. Verify quick ran them for real.
+## 2026-10-01 — LKM-139: Chat no longer goes blank after sending
+
+- **Cause.** Following the latest row ends in the probe's AppKit pin (`clip.scroll(to:)`, LKM-103), which moves the clip view outside SwiftUI's scroll machinery. The `LazyVStack` estimates the heights of rows it has not measured. When those estimates are far off, the jump lands where the stack realizes no row: the viewport is empty while the offset is still within the document. Examples are long answers above a short tail, or a send that inserts a short prompt and an empty reply. Only a user scroll re-synced it. Of the three suspected causes, (b) is triggered by (a)'s pin. The offset never exceeded the maximum, and (c), view identity, stayed stable: `documentID` and `scrollID` were unchanged across sends.
+- **Fix (`ChatLatestSettle`, `src/native/ChatScrollStyle.swift`; wiring in `src/native/Chat.swift`).** After a send, stream update, chat switch, latest button or pin, the conversation checks each frame while it follows:
+  - No row in the viewport: the AppKit pin is held (`holdsPin`), the 1pt bottom marker toggles height to force a relayout, and SwiftUI scrolls to the latest row. Every fourth stuck attempt it scrolls to the first row instead, whose position the stack knows exactly.
+  - Rows in view: the pin's short jump lands on the end. It stops once the realized 1pt end marker sits at the reading edge. Stopping on the latest row's frame instead blanked the fixture again: that frame can still come from the layout made before the pin moved the clip.
+  - Requests that arrive while settling extend the run instead of restarting it. Metrics are read live. A user scroll ends it.
+  - An offset left outside a shrunken document is clamped (`clampToContent`).
+  - LKM-103 behaviour is unchanged: the probe still owns pinned state, the latest row sits above the composer, and the latest button and scrolling away still work.
+- **What did not work.** These AppKit nudges did not recover the stack: `documentView.scroll`, posting live-scroll notifications, `tile`, `scrollToVisible`, and a 1pt clip move. `scrollTo(latest)` alone stayed blank under load and on a chat switch.
+- **Proof.**
+  - New unit test `test/native-chat-latest-settle.mjs` with `test/fixtures/chat-latest-settle/main.swift`. It hosts the conversation's lazy stack, probe and settle in an offscreen window: transcripts of 40×2000pt and 60×3000pt answers with a 10-row tail, plus a mixed one with a composer that grows to 420pt and shrinks. Each is sampled after load, send, mid-stream and stream end.
+  - Without the settle (`--no-settle`, the negative control), 3 of 13 samples are blank: no rows realized, and drawn leaf layers agree. With it, all 13 samples show rows and the latest row, and offset − maxOffset ≤ 0. It also passes with four instances running concurrently. The first version failed under the unit tier's parallel load, which is what led to the first-row reset.
+  - Native: the new `send-visibility` stage of native-chat-scroll (`test/helpers/chat-send-visibility.mjs`) runs at 440/320pt with a fixed and a growing composer. It asserts visible rows > 0, offset ≤ max and a stable scroll identity after send, mid-stream and done. It writes `send-after-send.png`, `send-mid-stream.png` and `send-visibility.json`. Before the fix this real-app fixture did not reproduce the blank, so the windowless fixture is the before/after evidence.
+  - Limit: in exploratory runs, a 120×2000pt transcript load could show a single older row for about 0.6s before the latest settled.
+  - Limit: in the real app the end marker's preference rarely reports the reading edge, so a settle usually runs to its cap (`latestSettleAttempts` 40–80 in `send-visibility.json`). Those steps are idempotent end pins; rows stayed visible in all 44 samples.
+
+## 2026-10-01 — LKM-141: Token counter inline; centered scroll-to-latest button
+
+- **Review repair: no overlap, no empty responses.**
+  - The latest button only shows while history scrolls under it, so the first version drew over transcript text. While it is shown, the conversation now masks the bottom band that holds it (`ChatLatestButton.clearHeight`: composer, button and a gap either side, with a 14 pt fade above). Content scrolling past is not painted there. The mask is only active while the button shows, so the pinned reading area is untouched. The acceptance fixture asserts the band is masked, the button lies inside it, and that no row reaching the button is painted below the band's top. It also asserts there is no band while the button is hidden.
+  - Usage that arrives before the response exists is held in `chat.pendingUsage` and attached when `assistant()` creates the message. The `usage` reducer no longer creates a message. A turn that ends with no text or status leaves no empty assistant message, and its usage still counts in the chat total (unit test added).
+  - Merged the candidate's display-path `collapse` step into `chat-snapshot.ts`: the per-turn token mapping now runs on its output.
+
+- **Counter moves into the turn.** The pinned `↑ … ↓ …` overlay above the composer is gone (with `status`/`statusDetail` in the snapshot). Its number was the chat's running total. Now each `usage` event also adds to the running response's `usage`; a report after `done` goes to the last response. `chat.usage`, the chat total, is still kept and mirrored, and each counter's tooltip ends with "This chat so far". `chat-snapshot.ts` formats `tokens: {label, detail}` per message; the mirrored state stays unformatted. Responses restored from a transcript have no per-turn count, because transcripts never stored one.
+- **One footer, one height.** `ChatTurnFooter` (`ChatActivity.swift`) ends an assistant response. While running, a 28 pt row holds the live status with the counter after it, and a 14 pt row is reserved below. Once done, the 28 pt row holds Copy/Revert and the 14 pt row holds the counter. The footer is the same height in both states, so the final message replaces the status line without moving anything. The counter uses the old secondary 11 pt monospaced style and scrolls with the transcript.
+- **Latest button.** `ChatLatestButton` is a 30 pt round button with `chevron.down`. It uses the control background, a separator stroke, a soft shadow and a circular focus ring. `place(over:composerHeight:visible:)` centers it on the chat column, 8 pt above the composer bubble. That is inside the 68 pt clearance the reading area already keeps (`ChatLayout.latestClearance`, formerly `statusHeight`), so it never covers pinned text. Visibility (probe-driven), the native NSButton click path and the accessibility label are unchanged.
+- **Proof.**
+  - `native-composer-layout` checks the placement at 320/440/521 pt and with composers of several heights: round, centered, gap above the composer, below the reading area, labelled. It still checks the click tracking loop.
+  - The chat acceptance asserts the same geometry before every latest click. It adds scrolled-up foreground captures at 440 and 320 pt.
+  - `native-chat-scroll` adds foreground captures of a running turn (counter on the Thinking… line) and of the completed turn (counter under Copy/Revert) at 440 and 320 pt. The footer's height and bottom must not change.
+  - The `native-chat-controller` unit test covers per-turn accumulation, late reports and the tooltip total.
+## 2026-10-01 — LKM-142: CI log tails and runner-only unit failures
+
+- **CI visibility.** `node test/run.mjs` accepts `--log-tail=N`; on FAIL/ERROR it prints the last N lines of that test's log into the job output (CI passes `--log-tail=150`). The `test/artifacts/runs` upload step uses `if: always()` with 7-day retention so logs survive cancelled runs too.
+- **Runner-like tests.** New `test/helpers/runner-env.mjs` installs an isolated HOME (no Git identity, `user.useConfigOnly`, `init.defaultBranch=trunk`, no system Git config) and a TMPDIR/HOME with spaces. `repository-owner`, `rename-compat` and the provider-login `no-keychain` part call it so those suites pass under GitHub Actions conditions locally, not only on a developer Mac.
+- **repository-owner.** The parity preload runs seven Git suites in parallel; CI only showed this file's log tail, so a single failing suite was hard to see. Failed suites are now all listed in the assertion. Scratch and temp paths include spaces so quoting bugs surface in CI.
+- **provider-login (flake).** Two causes: (1) `PROVIDER_FIRST_EVENT=0.5` in the deadline test did not cover helper cold start on a loaded runner — raised to 2 s with matching assertions. (2) `ProviderHelperProcess` could call `onExit` before the stdout reader drained the helper's last login frame — it now waits up to 2 s for both readers after `waitpid`, like `RepositoryGit.run`. New `no-keychain` part exercises real `security` with an empty HOME.
+- **rename-compat.** Same runner Git/HOME setup; commits that relied on a global identity use explicit `-c user.name/user.email`.
+- **Proof.** `test/test-runner.mjs` covers `--log-tail`; typecheck and the affected unit tests are in the PR notes. Candidate CI green is for the operator to confirm.
+## 2026-10-01 — LKM-143: Versioning: SemVer, changelog, tags and app version
+
+- **One source.** package.json `version` (SemVer). `scripts/version.mjs` adds the build number (`git rev-list --count HEAD`, so it only grows on main) and the short sha (`--short=7`), and formats `Trezi X.Y.Z (build N, sha)`. Outside Git the build is 0 and the sha "unknown". package.json stays 0.0.1 here: the first release from main is `bun run release minor` → 0.1.0.
+- **Stamped into the build.** The app plist moved from `build-native.mjs` into `scripts/service-info.mjs` (`appInfoPlist`, beside `serviceInfoPlist`); both carry CFBundleShortVersionString, CFBundleVersion and `TreziCommit`. The backend and provider-helper bundles get the label as a banner and as the esbuild define `TREZI_VERSION` (`src/native/app-version.ts`). The bundled Bun in `Contents/Helpers` is a copied binary and has no plist of its own.
+- **Shown.** Settings › General has a read-only Version row; Trezi › About Trezi opens the standard panel with "Version X.Y.Z (build N, sha)"; `trezi --version` reads the built app's plist, or the checkout when there is no stamped build.
+- **CHANGELOG.md** (Keep a Changelog) with a seeded Unreleased section, `merge=union` like TASKS/PROGRESS; AGENTS.md "Versioning and changelog" makes one Unreleased line per user-visible change a rule.
+- **Release.** `scripts/release.mjs` refuses a bad bump, a branch other than main (or detached HEAD), any modified or untracked file, an empty Unreleased and an existing tag, all before writing. Otherwise it rewrites only the `version` line, moves Unreleased under `## [X.Y.Z] - date`, commits `Release vX.Y.Z`, creates the annotated tag and prints the push command.
+- **CI** runs `scripts/check-version.mjs` (SemVer version, Unreleased section) before the toolchain step.
+- **Proof.** New `test/versioning.mjs` (unit): SemVer/bump/changelog cases; both plists through `plutil`; the build script has no literal build number; a present build's app/service plists and both bundles agree; `check-version` fails on bad version, missing Unreleased and missing file; the release script in a temp repo (refusals change nothing; minor then patch bump, move, commit, annotated tag on HEAD, no remote). `trezi-cli`, `distribution`, `service-session`, `native-settings` and `docs-merge-union` were updated; the native settings smoke asserts the stamped label in General.
+## 2026-10-01 — LKM-136: short paths in chat, Activity and error cards; chat worktree cleanup
+
+- **Why.** Collapsed chat tool rows, Activity lines, error and conflict cards and the preview error showed absolute profile paths such as `…/Application Support/Trezi Native/trezi/worktrees/1a2b3c4d/src/App.tsx`. They were long, wrapped mid-path and named internals. Chat checkouts also piled up: one per chat, kept until the chat closed, plus Electron-era worktree folders under the old app names.
+- **One formatter.** `src/shared/display-path.ts` (pure) turns a path inside a project or chat checkout into its project-relative form. Internal locations get a label: "chat workspace", "temporary patch" (the repository scratch), "recovery copy" (`refs/trezi/recovery/*`) and "Trezi data". It rewrites paths inside free text, never cuts a path in the middle, and leaves unknown paths alone. `src/native/display-paths.ts` gives it the profile (with its real path and the old-name profiles beside it) and the open projects.
+- **Where it applies.** Only collapsed surfaces use it: tool-row labels (`labels` beside the full `statuses` in `chat-snapshot.ts`), the activity line, card details, Activity lines (`display` beside `text`) and the preview error status. The full text stays in the expanded tool rows, tooltips, the card's new Copy button and Activity's Copy All. Logs, the ledger and stored chats are unchanged.
+- **Cleanup.** See "Chat workspace cleanup" in `docs/WORKTREES.md`.
+  - Closing (archiving) a chat already removed its clean checkout.
+  - New: an hourly idle sweep (Settings → General, default 7 days) removes the checkout of a chat with no recent turn, through the new Swift `reclaimWorktree`. Parked, resolving and running chats are skipped, re-checked inside the chat's chain and the repository lease. A dirty checkout stays, and its work goes to one `idle-<id>` recovery ref per distinct content. `beforeTurn` recreates a removed checkout at the same path from the live tree.
+  - Old-name worktree folders go through orphan recovery once after launch (the service accepts them through `legacyRoots`). A folder is removed only when it is then empty, by the service's `removeLegacyFolder` (`rmdir`, so nothing that appears meanwhile is lost); Bun only reads (`du`, `git rev-parse`), as its retirement census row says.
+  - Settings shows the chat workspaces' disk use (`du`, read after the window opens) and a "Clean up now" button that runs the same sweep with no idle period.
+- **Proof.**
+  - `test/display-path.mjs`: the formatter, free text, the native context, the snapshot (labels, full detail, activity detail, no profile path in any collapsed field) and Activity display vs full text.
+  - `test/chat-workspace-cleanup.mjs` (through the Swift owner, run by `test/repository-owner.mjs`):
+    - idle removal;
+    - parked, running and dirty checkouts kept, with one ref for the dirty work across two sweeps;
+    - the next turn recreates the checkout and lands;
+    - Clean up now;
+    - close removes the checkout and keeps a parked chat's branch;
+    - legacy folders: migrated and empty ones removed, an unknown folder kept, the old app's other data untouched, dirty old work recoverable.
+  - `test/native-settings.mjs`: the rows, the usage figure, Clean up now and the saved idle period.
+- **Limits.** A provider process that is still open keeps its original working directory across a recreate. It works because the path is the same. Old-name profile folders that hold other data (Electron caches) are not removed. Assistant prose and transcript warnings are not shortened.
+## 2026-10-01 — LKM-138: Preview inspection tools; the WebKit preview over external browsers
+
+- **Why.** Agents could only see the preview's route and a whole-view screenshot. For anything finer (a box-shadow, a console error, a phone-width check) the rules sent them to agent-browser or a headed browser: a second copy of the app, often at the wrong route and state, and sometimes a DevTools window on the user's screen. Claude chats also loaded the user's personal Claude Code plugins and MCP servers, so a Trezi chat could start unrelated servers and tools.
+- **Tools.** New `preview_inspect`, `preview_evaluate`, `preview_console` and `preview_viewport`, and `preview_screenshot` with `selector`/`padding` for an element crop. The page-side code (`src/preview/agent-inspect.ts`, `agent-evaluate.ts`, `agent-console.ts`) runs in a new `TreziAgent` WKContentWorld with no message handler, so the page can neither see it nor reach Trezi through it. The console recorder lives in the preview world, fed by a page-world forwarder. WebKit's `Error.stack` has frames but no message, so errors are sent as `String(error)` plus the stack. `src/main/preview-agent-tools.ts` validates, routes and bounds every call; `src/native/PreviewAgent.swift` picks the world. Claude (in-process and helper) and Codex (MCP bridge) share one schema (`bin/preview-tool-schema.mjs`) and one handler; the policy lists in `provider-policy.ts`, `ProviderPolicy.swift` and the golden fixture name the four new tools.
+- **Read-only evaluate, by construction.** `@babel/parser` rejects loops, labels, `with`, `debugger`, dynamic `import()` and HTML comments before the code is sent. In the page, the expression only sees a membrane: intrinsics are frozen, the Function constructors are neutered, set/define/delete throw, and a call passes only if it is in an identity allowlist of read-only DOM methods. Arrays are copies. Results are JSON with a 64 KB cap and a 2 s race plus an elapsed check. Remaining gap: unbounded async recursion can keep the page busy until the limit returns the tool (TASKS).
+- **Viewport.** `preview_viewport` uses page zoom (`WorkspaceLayout.viewportWidth`) to lay the page out at the requested CSS width, and `restore` returns it. It only works on the foreground preview.
+- **Rules.** Rules v25: with preview tools, visual verification MUST use them. agent-browser is only for scripted multi-step interactions (availability check, named session, no install without permission). Providers without the tools keep the old agent-browser rule. The trezi-preview skill, README and PROVIDERS say the same.
+- **Claude isolation.** `claudeIsolationOptions` (`src/main/backends/claude-isolation.ts`) sends `strictMcpConfig: true` and turns off every plugin the user's config or the repo's `.claude/settings*.json` lists (`settings.enabledPlugins`), keeping `settingSources` (CLAUDE.md, skills) and Trezi's bundled plugin. `strictMcpConfig` also skips the repo's `.mcp.json`. New Settings › General picker "Allow my Claude Code plugins in Trezi chats" (`trezi:claude-user-plugins:v1`, default Don't allow). The helper reads it whenever a session opens.
+- **Proof.** New `test/preview-agent-tools.mjs` (unit) covers:
+  - expression validation;
+  - the membrane in a `node:vm` realm (reads, copies, rejected writes, navigation, storage, Function tricks, size, timeout);
+  - fake-host routing for every tool, including viewport restore and the screenshot crop rect;
+  - Claude isolation options against a fixture config dir.
+
+  `test/native-settings.mjs` checks the toggle's default, persistence and validation. `test/rules.mjs` checks v25. `provider-helper-tools`, `trezi-agent-tools` and `codex-mcp` list and call the new tools. The native `agent-preview` check (core group) runs every tool against the real WebKit preview: box-shadow, eight rejected evaluations with the page unchanged, a captured page error, mobile 390, 768 and restore, and a 120×60 element crop (`agent-preview-element.png`, `agent-preview.json`).
+
+## 2026-09-30 — LKM-135: Claude first turn: no false "did not respond"
+
+- **Why healthy cold turns failed.** The LKM-119 deadline (90 s with no first event) covered the whole cold path as one silence: helper spawn, the bundled and installed `claude auth status` probes one after the other, a cold CLI start, and the model thinking. The init's resume-id record also counted as "heard", so the deadline was really "until the session init" and nothing after it.
+- **Phases, not one timer.**
+  - The Claude adapter sends `phase` frames through the helper host:
+    - `auth`: probed or cached, with the chosen CLI;
+    - `cli`: `supportedCommands()` answered, or the first SDK message;
+    - `init`: system init;
+    - `progress`: any other system message, at most one per second.
+  - The owner (`ProviderLaunch.swift`) waits for each turn in one of three states: `cli`, `initialization` or `model`.
+    - Only `cli` uses `firstEventTimeout` (90 s).
+    - The others use `replyTimeout` (600 s), which every phase or progress frame renews.
+    - After `stillThinking` (20 s), once the CLI is up, it relays one "Still starting Claude…" or "Still thinking…" status.
+  - The no-response message names the phase, e.g. "Stopped while starting the Claude CLI (no answer in 90 s)". A helper exit before any output appends "It exited while …".
+  - A resume-only record (no entries, no files) no longer counts as output. Phase frames are validated: an unknown phase or malformed field is a grant violation.
+- **Debug timings.** `options.log` (the service diagnostics file under XPC, stderr in the fixture) gets `debug provider claude <id8>: helper ready N ms after launch`, `auth probe N ms (probed|cached choice)`, `CLI started …`, `session init N ms after send`, `first model event N ms after send`, `no-response while …` and `helper exited … while …`. No token or environment is logged.
+- **Fewer probes.**
+  - `resolveClaudeCli` probes the bundled and installed CLIs with one `Promise.all`.
+  - The owner caches a logged-in choice (`claudeCli`, validated: bundled, or an absolute `…/claude` that is still executable) and passes it as `cli` in the next Claude helper's `open`. That helper skips the probes.
+  - An `auth` error event, `seatTokenSave` and `diagnose` clear the cache; the adapter also forgets its own copy on a sign-in failure.
+- **Pre-warm** was already structural: sessions start on project/chat open, so the helper and CLI warm while the user types. The `cli` phase, logged before any send, now proves it.
+- **Proof.** New `test/provider-cold-start.mjs` (unit) runs the real adapter in the real helper under the owner fixture, with stand-in bundled/installed CLIs and scaled deadlines (0.5 s for 90 s, 2.5 s for 600 s, 0.3 s for 20 s).
+  - Prewarm: the CLI starts before any send; the two probes overlap in time.
+  - Slow but healthy turns finish without an error and show the right "Still …" status: an init 3× the short deadline, a 1.5 s think, and 4 s of progress (longer than the reply deadline).
+  - The cache: a second chat probes nothing and runs on the cached installed CLI; after an `auth` error the next chat probes again.
+  - Real hangs still end with the card, naming the phase: no `initialize` answer (in under 2 s), no init, and init without output.
+  - `test/provider-login.mjs` was updated for the phase-named messages and asserts the exit phase.
+- `test/provider-helper-tools.mjs` fails at its Codex bridge check (`workspace_state` not routed while opening). It fails the same way on an untouched HEAD export, so it is not caused by this change.
+## 2026-09-30 — LKM-134: Startup recovery reports each interrupted operation once
+
+- **Why the same five red lines came back at every launch.** The repository journal moved an interrupted operation to `interrupted` and kept it there until an explicit `acknowledge`, which nothing in the app ever sent. Bun printed the whole `interrupted` list at each launch, at error level. The entries were the Resolve attempts made before LKM-130; their recovery refs existed, so no work was lost. Nothing was ever replayed for them; only the report repeated.
+- **Fix: resolve on open, durably, before reporting.** `RepositoryJournal` is now version 2 and an interrupted entry carries `resolved`. `open()` resolves every open entry (crash-interrupted active ones and ones a failed effect interrupted mid-session) and syncs that before `status` can be read. `status.recovered` is this launch's report, so an entry appears at exactly one launch however often Trezi restarts. If the app dies before Bun shows the line, only the line is lost; the refs stay and are listed under Recovery Refs.
+- **Migration.** A version 1 journal reported its open entries at every launch, so those are resolved without a new report and counted in `status.closedEarlier`. Bun shows one summary line ("Closed 5 interrupted repository operations that earlier launches already reported; their recovery refs are kept."). No ref is touched.
+- **Levels.** `recoveryNotices` (`src/native/repository-recovery.ts`): saved work is info (it no longer opens the Activity window). A journaled ref that is not in the repository (deleted since, or never created because the crash came before the step it guarded) and an unreadable repository are warnings (orange). Only a damaged journal, which blocks repository changes, stays red.
+- **View and delete.** New Activity button **Recovery Refs…** opens a sheet listing every `refs/trezi/recovery/*` ref of the open projects and the journal's repositories (owner read `recoveryRefs`: ref, commit, date, subject). The user checks refs, chooses Delete Selected…, and confirms in a second sheet. `deleteRecoveryRefs` (mutation, `intent:"discard"`, in the repository's lane) runs `update-ref -d <ref> <sha>` per ref, so a ref that moved since it was listed is kept. It refuses any name outside the namespace. Nothing deletes recovery refs automatically. The multichoice sheet field gained a `placeholder` (it said "Filter models").
+- **Proof.** New `test/repository-recovery.mjs` (unit, real Swift owner fixture + Bun client):
+  - a stageResolve killed at `resolve.reset` is in `recovered` once (info, names its `-parked` ref, journal entry `resolved`), and at the next two launches `recovered` is empty, the entry stays resolved and the ref is kept;
+  - a hand-written version 1 journal with five open stageResolve entries whose refs exist: first launch reports none, `closedEarlier` 5, exactly one info line, journal rewritten as version 2 with all resolved, all five refs kept; the second launch reports nothing;
+  - `recoveryRefs` lists the five refs (also with no roots, from the journal); deleting `refs/heads/main` or without intent fails; a stale sha keeps the ref; the sheet refuses an empty selection, deletes nothing before confirmation, then deletes exactly the selected ref and reports "Deleted 1 recovery ref." at info;
+  - notice levels: saved/no-ref → info, missing/unreadable → warning, damaged journal → error.
+  - `repository-owner` (including the crash, relaunch and parity suites) passes unchanged. Native GUI groups run through the manager tool.
+
+## 2026-09-30 — LKM-133: Shadow Light has no preview box; island controls apply live
+
+- **Why "Source changed" kept coming back, even after Reload.** Reload did read the same root and file the write uses, and it returned the current revision. The problem was the next write. Each command carries the source revision the UI last rendered, a hash of the whole file. The owner maps a stale revision to the batch's own last write (`chain`), but drops that map when the command queue drains (`last`). That happens before the refreshed view reaches Swift. So any command computed before the new revision arrived carried the old hash and was refused: a drag's second frame, a blur right after Return, the first slider drag after Reload. An agent edit, formatter or HMR write anywhere else in the file did the same.
+- **Fix: check per binding, not per file.** `writeIsland` (`src/main/chat-island-source.ts`) no longer compares file hashes. `ChatIslands` keeps, per island, the bound values it last saw (`seen`: from its last refresh or its own last write, which returns the values it left). If the island's literals still hold those values, the write applies on top of the current file and keeps edits elsewhere. If a bound value itself changed outside the island, nothing is written and there is no error: the controls refresh to the source values, the view carries a `notice` that Swift shows inline, and the rest of that gesture is dropped. Reset still restores the initial values whatever the source holds. The closed/changed-island guard, the hash-bound source proposal and the 2 MB limit stay. The owner's admission is unchanged; its `expected` revision is no longer used for commits.
+- **Serialized and coalesced.** One chat's island commands already ran one at a time. A queued commit that has not started is now replaced by the next frame of the same gesture (values merged, latest wins), so a fast drag never races itself.
+- **One live path in Swift.** New `src/native/IslandEditing.swift` (Foundation only): `IslandLiveWrites` throttles frames to 80 ms, keeps held-back values for the next batch, always writes the release, and gives every write of a gesture one id (one Undo group). `IslandEntry` is the typed-field policy: Return and blur both apply, an invalid or out-of-range draft is never written (shown red), and a draft already sent or already in the source is not written again. In `ChatIsland.swift` the XY pad, sliders, bezier handles and presets, typed number/text fields, toggles and pickers all go through `live(...)`. No island has a stepper control today; one would use the same path.
+- **No preview box.** `ShadowIsland.swift` loses the Preview section (rounded rectangle and sun). The Light Source pad with its X/Y fields, the Shadow controls, swatch and CSS text stay, so the panel is about 160 pt shorter. `missingShadowCaptureSemantics` now needs "Light Source" in the top viewport and fails on a standalone "Preview" line.
+- **Proof.**
+  - `test/chat-islands.mjs` (unit, Swift owner fixture):
+    - a command with the pre-write UI revision applies;
+    - Reload then one adjustment applies;
+    - four throttled drag frames with the pre-drag revision each write live, one Undo restores the pre-drag source, and a second Undo finds nothing;
+    - an 8-frame burst coalesces (fewer admissions than frames), never errors, ends on the last value, and one Undo restores it;
+    - an unrelated edit made while a frame waits for the write lease is kept and the frame applies;
+    - an external change of a bound value keeps the file, refreshes the field and sets the notice, drops that gesture's next frame, and the next gesture applies and clears the notice;
+    - non-finite and non-number values are refused without a write.
+  - New `test/native-island-editing.mjs` (unit) compiles `IslandEditing.swift` with `test/fixtures/island-editing/main.swift`: throttling, held-back values, one gesture id per drag, a new id per discrete change, Return/blur, invalid and out-of-range drafts, and text and bezier fields.
+  - Native `shadow-light`: three live drag frames through Swift `islandPerform` with one gesture each reach the source and the computed preview CSS, and one Undo restores both. The captures `shadow-light-*.png` show the panel without the box.
+
+## 2026-09-30 — LKM-132: Trezi names only; the earlier names are read-compat shims
+
+- **Why.** After the LKM-84/85 rename, the Praxis name was still live across Trezi. It was in the XPC service ID, the MCP server and tool names (`mcp__praxis__*`), the `praxis` command, preview IPC aliases, code identifiers, and docs pointing at a `docs/rename/` audit. Old projects kept `.praxis/praxis-*` helpers and `data-praxis-*` stamps with no path forward.
+- **Renamed.**
+  - The service is now `dev.trezi.service`. The build removes any other `.xpc` from `Trezi.app/Contents/XPCServices`, so launchd can't find the old one.
+  - MCP server, tools, plugin and Codex provider ID are `trezi` / `mcp__trezi__*` / `trezi-connection`. A CLI can't call tools of a server that no longer runs, so no old prefix is kept. Old sessions get the Trezi tools on their next turn.
+  - Removed: `bin/praxis`, `bin/praxis-agent-mcp.mjs`, the duplicate `praxis-preview` skill, the preview `praxis:` channel and handler aliases, `__praxisNativeDispatch`, `praxis-media:` tokens and the `praxisSim` flag. Media grants are in-memory, so no old token outlives a launch.
+  - `install.sh` and the README use `alikimovich/trezi`. The installer removes a `~/.local/bin/praxis` link, but only when it points at its own `bin/trezi`.
+  - The service-contract golden uses `trezi:` preference keys.
+  - `docs/rename/` and `scripts/audit-rename.mjs` are deleted.
+- **Kept, on purpose.** Every remaining earlier-name string is a read shim listed with its files in `docs/agent-guide/legacy-names.md` (linked from AGENTS.md). That includes:
+  - the bundle ID `dev.praxis.native` and Keychain service `dev.praxis.native.secrets`: changing them detaches WebKit data, TCC grants and the master key;
+  - `PRAXIS_*` env, and `PRAXIS_HOME`/`~/.praxis` installs through the `TREZI_HOME` fallback;
+  - profile and store aliases, preference keys, work branches, sidecar folders, stamps, React Native test IDs and the replay event.
+
+  The new `test/legacy-names-audit.mjs` (unit) fails when `git grep -i 'praxis|dsgn'` hits a file the page does not list. Tests, PROGRESS/TASKS and `build/Assets.car` are exempt. It also fails when a listed file has no hit left.
+- **Project migration.** New `EditingLegacyNames.swift`, with editing-owner methods `legacyNames`/`migrateNames` that run in the repository lane.
+  - What it rewrites: `.praxis/praxis-*` helpers become `.trezi/trezi-*`, with case-preserving content. `.praxis/` imports, `data-praxis-*` stamps and `praxis:animation-replay` listeners are rewritten in the files `git grep --untracked` finds; a folder outside git gets a bounded walk. Binary, ignored and linked files and the metadata folders are skipped.
+  - Order: new helpers are published first, then references, then the old helpers are retired, so an interrupted run leaves a working, resumable project.
+  - A helper that differs from the current one is kept under `.trezi/legacy/praxis/`.
+  - When: `project:detect` migrates only a clean tree (no meaningful `git status` change). A dirty tree is refused before any file is read, and a folder outside git is never clean. On activation, `src/native/legacy-names.ts` offers a dirty project an "Update files?" sheet once per launch, which calls `project:migrate-names` (confirmed). Nothing is committed.
+- **Proof.**
+  - New `test/legacy-names-migrate.mjs` (unit), against the Swift owner fixture:
+    - a dirty tree is refused byte-for-byte unchanged, and confirmation rewrites it and keeps the user's edit;
+    - a clean tree migrates automatically, keeping a differing helper;
+    - binary files are untouched, and nothing is committed;
+    - a second run changes nothing;
+    - a folder outside git needs confirmation.
+  - `rename-compat`, `sidecar-migrate`, `editing-owner`, `service-contract`, `install-update` (alias removal), `distribution` (single `.xpc`) and `docs-links` pass. `codex-mcp`, `codex-model` and `provider-helper-tools` pass unsandboxed; in the sandbox they can't listen on their Unix socket.
+  - Native smoke, `text-edit` check (`src/native/smoke-legacy-project.ts`): the live fixture gets a `.praxis/praxis-source.cjs` helper and an element with only a `data-praxis-source` stamp. The fixture is not a git repo, so it is never clean and the migration leaves it alone. The check asserts that `project:legacy-names` reports `legacy: true` with the helper listed and `clean: false`, that the preview renders the element after the managed reload, that `sourceStamp` returns the old stamp and nothing restamps it, that `text:apply` on that location edits the element in the preview and `edit:undo` reverts it. It logs `Native legacy project: .praxis/ helper and data-praxis-* stamp open, preview and edit` and restores the fixture afterwards. Not run by the worker (the manager runs GUI checks).
+
+## 2026-09-30 — LKM-131: Trezi tools work from provider helpers
+
+- **Why.** In Claude chats, `chat_island` answered "Native chat islands are not available." Since LKM-111 the Claude and Codex adapters run in a provider helper, and they still called their Trezi tools in place, where main's services do not exist: the island service, the preview registry, Gen UI state, the window, chat isolation and the workflow owner. The helper host already offered `ctx.tools.invoke`, and the owner already relayed and authorized `tool` frames, but no adapter used them. So in helper mode the preview observers found nothing, Gen UI read as off, `open_preview`/`open_code` went nowhere and `install_skills` had no owner.
+- **Fix.** `sessionTool` (`src/main/session-tools.ts`) sends every tool that needs main through `ctx.tools` when a helper hosts the session, and otherwise runs it in place. Both adapters use it: Claude's `praxis` MCP tools and the Codex bridge handler. The Swift owner authorizes each frame against the grant (a refusal never reaches Bun). Main runs it through `runTreziTool` with the helper session's scope, which now also covers `install_skills` and rejects names that are not its own. Pure calculators stay in the helper. The helper host settles `tool-result`/`tool-error` outside its ordered frame queue: Codex checks its bridge (`workspace_state`) during `open`, and that call deadlocked behind the `open` frame it was part of.
+- **Proof.** New unit test `test/provider-helper-tools.mjs`: the real helper entry runs under the Swift owner fixture with stand-in `claude` (stream-json control protocol, SDK MCP) and `codex` (MCP client on the bridge) CLIs. Each calls every listed tool. The test fails if a tool is unclassified, if it answers with a missing-service error, or if a tool that needs main does not reach it. It checks the island (attached, ready, commit and undo rewrite and restore the source), the preview URL and capture, navigation, code reveal, Gen UI, the install, and owner refusal of a background session's `chat_island`/`open_code`. It passes unsandboxed. In the sandbox the Codex half cannot listen on its Unix socket. Audit and routing: `docs/PROVIDERS.md`.
+
+## 2026-09-30 — LKM-130: Resolve handles add/add, modify/delete and rename conflicts
+
+- **Why.** Resolve on a parked chat failed with "couldn't re-apply this chat's changes … Command failed: git apply --3way …", cut at 200 characters before any path or reason. `git apply --3way` refuses the whole patch, writing nothing, when a file the chat adds already exists live (add/add), one side deleted a file the other changed, or a rename's source is gone. The owner treated every such refusal as an error. A mixed failure (conflicts plus `error:` lines) was also reported as a conflict although nothing was written. Separately, a turn's file list used `diff --name-only` with rename detection, so it named only a rename's new name. Landing then added the new file and left the old one on live, even when live had edited it.
+- **Fix.** `applyToWorkingTree` is a conflict only when Git wrote its conflicts with no `error:` line. Otherwise `applyParked`, `applyBranch` and `stageResolve` fall back to `RepositoryMerge.swift`, a file-by-file three-way merge from the commits the patch came from (`diff-tree -M`, `ls-tree`, `git merge-file`), computed in full before anything is written:
+  - every conflict ends as markers, and a deleted side is an empty side labelled `live (deleted)` / `chat (deleted)`;
+  - the chat's rename wins, and a live rename is followed;
+  - binary or symlink conflicts keep the chat's version under Resolve (existing policy) and the project's version under explicit apply, reported as a conflict;
+  - an unreadable patch, a submodule, or a folder or symlinked folder in the way still errors.
+
+  The error names the path and Git's reason (`a.txt: corrupt patch at line 7`), bounded at 600 characters, and `chat-isolation.ts` no longer cuts it to 200. Git's full output goes to the service log (`RepositoryOwner.Options.log`, the session diagnostics file under XPC). The turn and parked file lists use `--no-renames`. The resolver prompt explains "(deleted)" sides.
+- **Proof.** New suite `test/resolve-conflicts.mjs`, run by `test/repository-owner.mjs` against the Swift owner:
+  - Resolve end to end for add/add, modify/delete, delete/modify, rename/delete, a rename with an overlapping live edit, a live rename (clean), and a mixed chat (add/add + delete + content conflict + binary + uncontested delete);
+  - each ends with markers in the worktree, and the reconciled result lands;
+  - Discard restores the prior state, with a `discarded` recovery ref;
+  - explicit apply onto live gives a conflict naming both files.
+
+  New `malformed-patch` section: a corrupt patch errors with `a.txt: corrupt patch at line N`, `git apply --3way refused a patch` plus Git's stderr is in the service log, and the file is unchanged. `bun run test:repository-owner` passes every section (chat-worktrees included). Not handled: rename/rename to two different names (the chat's name wins, content merged).
+
+## 2026-09-30 — LKM-129: the docked Web Inspector stays in the preview area
+
+- **Why.** A docked Web Inspector spanned the whole window bottom, over the chat. WebKit docks beside the page's *attachment view*, inside that view's superview, and resizes both to that superview's bounds. The default attachment view was the preview `WKWebView`, and its superview is the window's content canvas. The `detach` sent before `show` did nothing before the first open, so the inspector opened docked.
+- **Fix.** `PreviewInspector.confine` points `_setInspectorAttachmentView:` (guarded SPI) at an empty view inside `PreviewInspectorSlot`. The slot is unflipped, as WebKit's docking math expects, and passes the pointer through except over the docked inspector. `WorkspaceLayout` sizes the slot to the preview area (right of the chat, below the toolbar, above a docked source editor). The page, the device bezel, the status view and the LKM-122 island use what the docked inspector leaves. WebKit docks and resizes asynchronously, so the slot relayouts once it does. `show` keeps WebKit's docked/detached choice, and the pre-show `detach` is gone. The detached-window fallback was not needed.
+- **Proof.** Core smoke `preview-inspector` (`src/native/smoke-preview-inspector.ts`) opens and docks the inspector and asserts, in window coordinates, that it lies within the slot and does not overlap the chat column or the page. It also checks that the slot does not reach under the toolbar, that the open island stays off the inspector and the chat, and that the chat's bottom-left hits the chat. These checks run at the default, minimum, wider and restored window sizes. Then it closes the inspector, checks that the page takes the whole area again, and reopens it. Evidence: `preview-inspector-docked.png` (foreground), `preview-inspector.json`. Native `core` passed.
+
+## 2026-09-30 — LKM-127: provider-login test does not depend on the machine's keychain
+
+- **Why.** CI run 36684523667 (5b72bf2) failed only `[unit] provider-login` on `macos-26`, and the suspect was the real `security` probe from LKM-124/125. Most fixtures in the test still ran the machine's own `security` through Check login.
+- **Reproduction attempt.** `HOME=<empty dir>` gives a session with no default keychain without touching the user's search list (`security default-keychain` exits 1, `list-keychains -d user` prints nothing). The unchanged test **passed** there, and `test/provider-login.mjs` is identical in the green run 985af1d and the red run 5b72bf2 (that diff only adds LKM-126's Codex files and `codex-model` to the unit tier). So the keychain cause is not confirmed. The CI log could not be read from the worker.
+- **Change (test only).** `fixture()` now passes a stand-in `security` by default (`--claude-security=`, the existing seam); `security: null` keeps the PATH lookup for the fake-`security` keychain part. The loose "real `security` gives a number or null" check in diagnose moved to a new `real-keychain` part. That part runs `/usr/bin/security` in the test and through Check login and requires the same `keychain` codes, list, default and item-lookup exit. With no user keychain it prints `PROVIDER-LOGIN real-keychain SKIP — …` with both exit codes. No temporary keychain and no `list-keychains -s`: those write the user's keychain preferences, and tests must not change system settings.
+- **Proof.** On the operator Mac every part passes, including `real-keychain`. With `HOME=<empty dir>` the other parts pass and `real-keychain` says SKIP (`default-keychain exit 1`).
+- **Manager's native failure (harness, not product).** `bun run test:native` failed only smoke `sheets`: "Missing complete foreground text: Default model". The captured `settings-visible-680-general.png` shows the General pane rendered correctly; Vision (`.accurate`, no language correction) returned "Detault model" for the small "f". The same pixels give the same misread every run. Nothing in `src` or the Settings UI changed, so this is the checker, like the existing `I`/`l` fold ("Ul"/"Al"). `words()` in `src/native/settings-verification.ts` now also folds `f`/`t` on both sides, so every word is still required in order. The candidate's LKM-128 repair (next entry) made the identical fold and test at the same time; after merging, this branch keeps the candidate's version of both files unchanged. On this branch alone, `bun run test:native` passed 21/21 smoke checks and the unit tier 129/129.
+## 2026-09-30 — LKM-128 (repair): Settings OCR check folds Vision's f/t misread
+
+- **Why.** Manager verification failed the native `sheets` step with "Missing complete foreground text: Default model". The capture's PNG shows the label correctly; Vision read "Detault model". The label (`src/native/settings-controller.ts`) has nothing to do with Codex fallback.
+- **Fix.** `words()` in `src/native/settings-verification.ts` also folds f to t after lowercasing, documented next to the existing I/l fold. It applies to the OCR text and the required text alike, so the comparison stays word for word: no word can be dropped or reordered, and there is no fuzzy matching.
+- **Proof.** `test/native-settings-evidence.mjs`: a General fixture with "Detault model" passes at both widths; "Model", "Detault" and "Detault models" still throw. Full `bun run test:native` passed (21/21, `sheets` included). The LKM-128 changes in `codex-model.ts`, `codex.ts` and `test/codex-model.mjs` are unchanged.
+
+## 2026-09-30 — LKM-128: Codex model fallback reads the real CLI's error stream
+
+- **Why.** Live on candidate 5b72bf2 (CLI 0.159.1, ChatGPT login), both Codex paths ended empty with two stream errors carrying the API's 400 JSON body, then "Codex Exec exited with code 1: Reading prompt from stdin...". The LKM-126 fallback never started.
+- **Cause (inferred from a reproduction).** The rejection text matched, but the adapter retries only before any output, and it counted every item as output, including warning items the CLI can emit before the request (the skills-budget note, hidden from the chat). The stand-in with a warning item first gives exactly the operator's three errors under the old rule.
+- **Fix.** `unsupportedCodexModel` takes a message, an event or its `error`, and also reads JSON text and nested `message`/`detail`/`error` fields (bounded), with `'`-escaped or typographic quotes. `codex.ts` passes whole `error` events and `turn.failed`'s `error`, and only `OUTPUT_ITEMS` (items it shows) count as output. An `error` event without a string message is shown as its JSON instead of throwing. The status line and the no-model-left error are unchanged.
+- **Proof.** `test/codex-model.mjs`: the stand-in emits the real sequence (two stream `error` events with the JSON body, exit 1, "Reading prompt from stdin..." on stderr), or the body only in `turn.failed` or only in the exec error, optionally after a warning item. In-process: the default (no model) and every variant fall back and answer, as does an explicit `gpt-6.1-sol` pick; all models rejected still ends in the no-model-left error. Helper: warning item plus stream errors, the full LKM-126 fallback checks. With the old output rule restored, the warning run fails with the operator's exact errors. Needs an unsandboxed run (tool-bridge Unix socket). No live calls; the operator reruns `test:provider-live`.
+
+## 2026-09-30 — LKM-126: Codex seat model fallback and plugin MCP isolation
+
+- **Why.** After a CLI update, Codex seat turns (in-process and in the helper) failed with "The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account": the CLI's priority-1 model, which is also its default. Separately, the user's `mcp.vercel.com` server (rmcp `AuthRequired`) still started despite LKM-113 part 1.
+- **MCP root cause.** That server comes from an installed Codex plugin's `.mcp.json` (`[plugins."vercel@…"]`), not from `mcp_servers`, so LKM-113's name-based `enabled=false` never saw it. The `apps` feature likewise starts account connectors. `isolatedCodexConfig` now always adds `features.plugins=false` and `features.apps=false`, keeping any other caller features. Chat turns and the project-memory pass use it in-process and in the helper.
+- **Model.** `codex debug models` has no per-plan field, so the adapter falls back rather than filtering:
+  - A seat run that fails with that 400 before any output retries on a fresh thread with the next listed model (up to 3 times). It emits the status line "Codex: X isn't available with your ChatGPT login, so this chat uses Y." and keeps Y for the chat.
+  - If nothing is accepted, the turn ends with a plain `error` telling the user to choose another model. It has no code, so it is not a login card.
+  - The rejection is remembered in the process (`src/main/backends/codex-model.ts`). Main learns it from the status line that a helper forwards: `provider-sessions.ts` calls `noteCodexFallback` in `src/main/codex-seat.ts`. New chats that ask for the rejected model or Default start on the fallback (`supportedSeatOptions`), while the session still reports the model the chat asked for.
+  - The picker and the persisted catalog drop the model until the next probe.
+  - `TREZI_CODEX_BIN`, already the probe's binary, now also names the binary for turns.
+- **Proof.**
+  - `test/codex-mcp.mjs` adds an installed-plugin fixture: the real CLI lists `vercel-plugin` without isolation and not at all with it, and the app-server session does not start it.
+  - New `test/codex-model.mjs` (unit tier) covers the pure rules, then drives the real adapter in-process and in the real helper host under the Swift owner fixture, against a stand-in CLI that rejects `gpt-6.1-sol`. It checks the fallback notice, the answer and one `done`; turn 2 resuming on the fallback; new chats skipping the model; the picker; the all-rejected error as shown by `chat-state`; and, per run, the real CLI's MCP inventory under that run's `--config`.
+  - In the worker sandbox, the tool bridge's Unix socket is refused. With only that bridge mocked, the in-process half passed; the helper half ran up to that `listen`. Both tests need an unsandboxed run.
+## 2026-09-30 — LKM-124: merged with the LKM-125 candidate (Check login `keychain` field)
+
+- **Overlap.** LKM-125 (candidate) added `ProviderLoginReport.keychain` as `{listKeychains, defaultKeychain}` exit codes, a "Keychain in this helper" detail line and `JoinExistingSession` for the service. LKM-124 had used `keychain` for the item lookup. Kept the candidate's name and shape; the item lookup is now `keychainItem`/`keychainItemExit` (`ProviderLaunch.loginReport` allows both).
+- **One probe.** `probeKeychain(security?)` runs `find-generic-password`, `list-keychains -d user` and `default-keychain` once each; the two exit codes fill the LKM-125 `keychain` object and the two output lines fill `keychainList`/`keychainDefault`. `securityExit`/`keychainAccess` are gone; the stand-in `security` is `candidates.security` (the fake helper takes `--claude-security=`), else the first on PATH.
+- **Tests.** The LKM-125 assertions in `test/provider-login.mjs` are kept, moved to the helper-argument fixture (`bundled`/`security`); the check that the report never contains the keychain path is dropped, because LKM-124 shows the list and default paths on purpose (security's error output is still asserted absent).
+- **Docs.** `docs/PROVIDERS.md` keeps both sections; the LKM-124 text now points at the LKM-125 fix, still unverified live.
+
+## 2026-09-30 — LKM-124 (revision): Check login shows the Keychain and credentials file
+
+- **Why.** The user's terminal has no `CLAUDE_*`/`ANTHROPIC_*` variables, so the allowlist hardening (kept) does not explain their `loggedIn: false` inside the helper. The review asked for diagnostics from inside the helper context, and for the three-context reproduction to be recorded.
+- **Probes** (`src/main/backends/claude-login.ts`). `probeKeychain`: exit status of `security find-generic-password -s "Claude Code-credentials"` (no `-w`/`-g`, output discarded), plus `security list-keychains -d user` and `security default-keychain`. `probeCredentials`: existence, readability, size and mode of `<CLAUDE_CONFIG_DIR or $HOME/.claude>/.credentials.json`, with its absolute path, stat only. Both feed `detail` ("Keychain: readable / not readable from this context") and typed `ProviderLoginReport` fields (`keychain`, `keychainExit`, `keychainList`, `keychainDefault`, `credentialsPath/Exists/Readable/Size`). The seat token is removed from the environment of the `security` child. `security` missing or hung is "unknown", not a failure.
+- **Owner.** `loginReport` in `ProviderLaunch.swift` accepts the new fields (types and ranges checked, text fields refused if they contain the token) and allows up to 20.
+- **Proof.** `test/provider-login.mjs` (keychain): fake `security` (exit 0 and 44) that prints a secret on both streams, fixture HOMEs with, without and with an unreadable `.credentials.json`; asserts the lines and fields, the calls made (no `-w`/`-g`), and that no secret is in the report, service log or pipe.
+- **Docs.** `docs/PROVIDERS.md` "Keychain and credentials-file diagnostics" has the three-context table with who verified each cell. Only the Terminal and the `claude auth status` results come from the operator; the helper's Keychain and file lines and the TreziHost `OSStatus` are pending a live Check login, and no fix for the service context is chosen yet (LKM-125 direction).
+
+## 2026-09-29 — LKM-124: helpers drop a parent Claude Code or Codex session's variables
+
+- **Why.** On the user's Mac both Claude CLIs said "not logged in" inside the helper and logged in from Terminal. The cause was not the Keychain but the helper allowlist: it passed every `CLAUDE_*` variable, and a Trezi started from a Claude Code session inherits `CLAUDE_CODE_SIMPLE=1` (bare mode, which never reads the login). `CLAUDE_CODE_SIMPLE=1 claude auth status` says logged out in Terminal too. The Keychain and host-spawn plan in the issue was dropped per the feedback. Note: `docs/PROVIDERS.md` "Claude seat login from a Claude Code session".
+- **Allowlist.** `ProviderHelperProcess.providerVariables` lists names per provider instead of the `CLAUDE_`/`CODEX_` prefixes. Claude: `ANTHROPIC_*`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`, Bedrock/Vertex/Foundry switches and regions, and a few output, mTLS and traffic settings. Codex: `OPENAI_*`, `CODEX_HOME`, `CODEX_API_KEY`, `CODEX_CA_CERTIFICATE`. Proxy and CA variables go to every helper. Session variables (`CLAUDE_CODE_SIMPLE`, `CLAUDECODE`, `CLAUDE_CODE_MESSAGING_*`, `CLAUDE_PID`, `CODEX_SANDBOX*`, `CODEX_THREAD_ID`, …) are dropped. Gemini is unchanged.
+- **Check login.** The owner adds which provider variable names were passed and which were dropped (`inherited`, `dropped`, `bare`), never values, and flags `CLAUDE_CODE_SIMPLE`.
+- **Proof.** `test/provider-login.mjs` parent-session: the fixture environment carries a parent session's variables and user settings. The Claude helper gets only the settings. A stand-in CLI that is logged out in bare mode lets the chat log in. The Codex names come from a new fixture `environment` command. The report lists names and never values. The setup-token path works under the same parent session (refused without a token, logged in with one). The stand-in CLIs are now helper arguments, because `CLAUDE_TEST_*` is dropped too. provider-owner and provider-data still pass. No live calls.
+- **Open.** `src/main/diagnose.ts` (the preview's "Find a fix…") still runs the Claude SDK in Bun with Bun's own environment. It is outside the helper allowlist, so an inherited `CLAUDE_CODE_SIMPLE` can still sign it out.
+## 2026-09-29 — LKM-125: the service keeps the user's Keychain
+
+- **Why.** Save token, adding or updating a connection key, chats on a saved connection key and the Claude CLI's own login all failed inside Trezi on the user's Mac, while Terminal worked. Every one of them uses the Keychain from a process the XPC service started.
+- **Root cause.** The service's `Info.plist` had no `XPCService.JoinExistingSession`, so launchd started it in a new security session with no login keychain. Bun, the `TreziHost --crypto` helper and the provider helpers inherit it. `bun run dev` and `open -a` both reach the service through XPC, so both were affected.
+- **Fix.** `scripts/service-info.mjs` writes the plist with `JoinExistingSession` (`build-native.mjs` uses it). The service now runs in the host's session and so do its children.
+- **Check login.** The Claude helper's report adds `keychain: { listKeychains, defaultKeychain }`, the exit codes of `security list-keychains` and `security default-keychain`, with a detail line (output never read). `ProviderLaunch.loginReport` accepts only those two integer fields.
+- **Proof.** `test/service-session.mjs` (unit): the plist as built, the build wiring, and `SecuritySessionProbe` (`src/native/SecuritySession.swift`: session id, graphic bit, both exit codes; a child reports the same session). Native settings step `security-session` (`src/native/smoke-session.ts`): `TreziHost --session`, started by Bun under the real service, must match the host's `securitySession` report (`security-session.json`). `test/provider-login.mjs`: reachable, lost and absent `security` stand-ins; the report never carries their output. No test writes to the user's keychain. Root-cause note: `docs/PROVIDERS.md`.
+
+## 2026-09-29 — LKM-122: the inspector floats over the preview
+
+- **Why.** The inspector was a docked right column: `WorkspaceLayout` subtracted its width from the preview, so opening it reflowed the user's page and could change its breakpoint.
+- **Island.** `NativeEditingInspector` (`src/native/EditingInspector.swift`) is now an `NSView` holding an `NSGlassEffectView` (`.regular`, radius 24) around the SwiftUI content, with the `NSVisualEffectView` popover fallback before macOS 26, like the composer. The content's opaque window background is gone. `NativeEditingInspector.frame(in:)` places it 10 pt (the composer inset) from the preview area's right, top and bottom edges. The canvas starts below the toolbar, so the island never covers the toolbar or address bar; with a docked source editor it stops above it. Its width is `inspectorWidth` (220–500), clamped to the preview area minus the insets in very narrow windows, so it never covers the chat or layers.
+- **Preview.** The preview frame is the full area whether the inspector is open or not, and the layout-frame event no longer fires on toggle. Everything outside the island's frame hit-tests to the preview. The resize handle (`inspectorDivider`) straddles the island's left edge between its rounded corners and still saves through `native-layout-sizes`.
+- **Proof.** The core `inspector` step now runs `src/native/smoke-inspector-island.ts` through a test-only `inspectorIsland` host command (`src/native/InspectorIslandVerification.swift`). At the default and the minimum window size it checks that the preview frame is identical open and closed, the insets, the toolbar gap in window coordinates, and hit targets: inside → inspector, left edge → divider, above and left of the island → preview. At the default size it drags the edge past both limits (500, 220, then back), checking that the preview does not move and that `trezi:native-panel-sizes` follows, as read from the Bun preferences mirror once the service acknowledges the write. The host's own preferences dict is not refreshed by its own writes, so `runNativeCoreSmoke` now takes a preference reader. At the minimum size it checks that the fields scroll inside the island. Foreground captures (without OCR: the candidate's `captureVisibleRegion(recognize: false)`): `inspector-island-{default,narrow}-{open,closed}.png`, with `inspector-island.json`.
+## 2026-09-29 — LKM-123: Settings uses the native split-view sidebar
+
+- **Why.** LKM-121's Settings sidebar was a SwiftUI `List(.sidebar)` in an `HStack`, and it did not look like the projects sidebar (an `NSSplitViewItem` sidebar with a `.sourceList` outline).
+- **Window.** A sectioned sheet now installs `SheetSplit` (`src/native/SheetSidebar.swift`), an `NSSplitViewController`. The window gets `.fullSizeContentView` and a unified toolbar whose only item is `.sidebarTrackingSeparator`, so the title sits over the pane. The first item is a non-collapsible `NSSplitViewItem(sidebarWithViewController:)` (200 points, 180–260) under the traffic lights. The second is an `NSHostingController` with `sizingOptions = []`, so the window sets its own minimum. `SectionedSheetContent` is now only the pane. The minimum height went from 420 to 460, because the toolbar now covers the top of the content. A switch between a sectioned state and a plain form rebuilds the window.
+- **Shared setup.** `src/native/SourceList.swift` has the outline configuration, `SourceListCell` (symbol and label with the `SidebarIconLayout` rhythm and selection tint; `ProjectCell` subclasses it), `SourceListScrollView` (it was `ProjectScrollView`) and the sidebar split item. `NativeShell` and `SheetSplit` both use it. `SourceList.inspect` reports style, behavior, row height, highlight, and the first row's icon and label geometry. It does not report the scroller style, because AppKit resets that to the system preference on the long-lived main sidebar.
+- **Selection.** The outline's items are stable `NSString` ids. A click or an arrow key calls `SheetModel.select`, which switches the pane and tells Bun. A Combine sink on `section`/`state` updates the outline selection and the window title, with a `syncing` guard so it does not emit. The outline is the initial first responder. Escape reaches `cancelOperation` on the split controller.
+- **Proof.**
+  - `native-settings-layout`: `.sidebar` behavior, `.sourceList` style, the shared row geometry, the traffic lights over a full-height sidebar, the fixed range, and focus. Arrow keys sent through `NSWindow.sendEvent` go down, down, up, up, and the section, title and Bun event follow each one.
+  - `native-settings-evidence`: rejects a wrong title, style or behavior, and a parity mismatch.
+  - The native `sheets` step captures the projects sidebar in the foreground (`settings-parity-projects-sidebar.png` and `.json`). It then asserts `SourceList.inspect` is equal for both sidebars (`settings-sidebar-parity.json`), runs the arrow keys, and keeps every earlier Settings capture and autosave check. The settings group passes. Earlier, core and sidebar passed alongside it on the first run.
+
+## 2026-09-29 — LKM-119: Claude seat login detection and stuck turns
+
+- **Why.** Claude chats in the helper answered "Not logged in · Please run /login" as assistant text or sat on "Thinking…" forever while `claude` worked in Terminal, and `/login` in the chat did the same. Root-cause note: `docs/PROVIDERS.md` "Claude seat login". Short version: the bundled and installed CLIs share one credential store (version skew not reproduced), but both are logged out without `USER`; shell-only tokens or `CLAUDE_CONFIG_DIR` are the other candidates; there was no first-event deadline.
+- **Helper launch** (`src/service/ProviderLaunch.swift`, split out of `ProviderOwner.swift`). `USER`/`LOGNAME`/`HOME` come from the account record when missing and `PATH` gets a default. A Claude helper also gets the Settings subscription token as `CLAUDE_CODE_OAUTH_TOKEN` (encrypted in `<profile>/trezi/seat-tokens.json` through the Keychain crypto helper); no other helper, `TREZI_*` variable, log or report sees it.
+- **Deadline.** `firstEventTimeout` (90 s): a helper turn with nothing but its command list ends with a `no-response` error ("Claude did not respond — check login (claude auth status) and retry") and the helper stops. `helper-session.ts` reopens a stopped or crashed helper (resuming the thread) on the next message, except after a violation or in a background run.
+- **Auth.** `claude-login.ts` probes `claude auth status --json`; a logged-out bundled CLI falls back to a logged-in installed `claude` (`pathToClaudeCodeExecutable`). A sign-in failure and `/login`/`/logout` typed in the chat are `code: "auth"` errors, which the chat shows as a login card (steps, Check login, Retry) instead of text. The owner allows only `auth` and `no-response` codes.
+- **Check login.** New `diagnose` owner method and helper frame: one helper, started like a chat's, reports each CLI's status, which one chats use, token set or not, `USER`/`HOME`/`PATH`/cwd; a report that contains the token is refused. Reachable from the card and Settings → AI providers → Claude… (which also saves or removes the token).
+- **Proof.** `test/provider-login.mjs` (unit): a silent helper ends by the deadline with the error and the chat recovers; missing and invalid auth give one `auth` error, not text; the token reaches only the Claude helper; the diagnosis through the real helper host against stand-in CLIs (logged out, logged in, invalid, installed fallback, token-leak refusal); the card's steps and Retry. provider-owner, provider-data, native-settings and native-chat-controller still pass. No live calls; the real SDK path is covered through pure functions and the fake helper.
+- **Merge with the sectioned Settings.** The Claude pane's code lives in `src/native/settings-claude.ts`, its test in `test/native-settings-claude.mjs`. `settings-controller.ts`, `test/native-settings.mjs` and `docs/NATIVE.md` are byte-identical to the sectioned-Settings versions, so they merge without conflict. `withClaudePane` (called once in `src/native/index.ts`) decorates each opened Settings sheet: it adds the **Claude…** entry to the provider list and routes `claude*` actions to the pane, which swaps the AI Providers fields in place like the provider editor. The unit test for the base controller therefore still sees only **Add provider…**.
+## 2026-09-29 — LKM-120: chat only for a loaded project; no titles from errors
+
+- **Why.** The chat column appeared while a project was still opening, and after an open had failed. A signed-out Claude also answered the title prompt with "Not logged in · Please run /login", and that text became the chat's name.
+- **Gate.** The workspace snapshot has `loadedKey`, the project whose open finished (running or setup). `select()` clears it for any other project and sets it on success. Shell state carries `chatReady`, and when it is false Swift hides the transcript, composer, token counters, chat title, and the history and new-chat actions.
+  - The column keeps its width and the toolbar keeps its chat item, so nothing moves.
+  - The preview status (opening, or the error with Retry) covers the whole content area. The last project's page is hidden while that status shows, so it no longer covers the loading or error view.
+  - A failed open retries the whole open. A later preview load error, or a restart of the same project, keeps the chat.
+  - Diagnose → "Draft fix in chat" reveals the chat for a failed project.
+- **Titles.** `src/shared/chat-title.ts` matches error, auth and system text. Error-only assistant turns are dropped from the title digest, and `sanitizeTitle` rejects such text. On load, `sessions-store` renames stored error titles to "New chat" through the conversation owner, and the chat mirror shows the neutral title at once.
+- **Proof.** `test/chat-title.mjs` covers the rule, real-title false positives and the migration. `test/sessions-store.mjs` covers the persisted rename.
+  - The native `startup` and `chat-gate` checks (sidebar group) save foreground window captures and JSON for four states: `chat-gate-{no-project,loaded,opening,failed-open}`. The failing project uses the custom command `sleep 8; exit 1`.
+  - They assert the chat is hidden, the status covers the column, and the preview is hidden. They check that the leading edge, preview frame and detail pane stay put. They also check that Retry loads the project with its chat, and that switching back hides the chat until the project is ready.
+- **Candidate sync.** After LKM-121 (no sidebar gear, `settingsMenu` hook) the chat-gate keys moved out of `NativeShell.inspect()` into `gateInspect()`, merged by the `shellInspect` route, so the `sidebarActions` line stays as the candidate has it. The `no-project` capture runs before the Settings prelude in `startup`. A 3-way `git merge-file` of Shell.swift, Host.swift and smoke-core.ts against the candidate is conflict-free. The full native suite passes 20/20 on the merged tree.
+## 2026-09-29 — LKM-121: standard macOS Settings window with a sidebar
+
+- **Why.** Settings was a single form with a separate "AI providers…" sheet, and it opened from a gear at the bottom of the main sidebar. The issue asked for a standard macOS settings window.
+- **Window.** `src/native/SheetSections.swift` is the sectioned layout: a SwiftUI source list (`.sidebar`) with SF Symbols on the left. On the right, the selected section's large title and description, then grouped rows (label and help on the left, control on the right), with the section's actions below. The default size is 780×540 and the minimum 680×420. Any sheet state with `sections` uses it, and forms without sections are unchanged. A grouped Form draws its own Picker without an `NSPopUpButton`, so `ChoicePopUp` is a real AppKit popup whose menu items carry target/action. That keeps the foreground fixture driving the rendered control.
+- **Sections.** General has the default model (the app has no appearance setting). AI Providers is the old providers sheet, now inline: list, add, edit and remove, with confirmation. It swaps its own fields in place, in the same window, via `NativeSheetController.refresh()`. Its fields are `draft`: the model neither autosaves nor sends them until the pane's own action. Experimental has Gen UI, its explanation and the engine choice. No setting was dropped, and the keys and the autosave batch are unchanged. The last section is remembered in `trezi:settings-section:v1`; unknown sections are ignored.
+- **Entry point.** The gear and its glass surface are gone from the main sidebar (`shellInspect.sidebarActions` is now `new-project`/`open-project`). Settings opens from Trezi → Settings… (Command-,), with or without a project. A new ephemeral-only `settingsMenu` host hook reads that menu item and chooses it through `NSMenu.performActionForItem`. The smoke `startup` prelude uses it on the Welcome screen, with no project open, and saves `settings-no-project.png`.
+- **Evidence.**
+  - `checkVisibleSettings` selects sections through the rendered source list. It captures General and AI Providers in the foreground at 680×420 and 780×540, and runs the Experimental Off/On/Chat/Jev sequence at 680, 780 and 960 points: 28 PNG/JSON pairs. Every reopen must restore the last section.
+  - `smoke-sheets` adds a provider inline, then goes back (`settings-provider-editor.png`).
+  - The sidebar fixture asserts there is no gear.
+  - Unit: `native-settings` (sections, the remembered section, the inline provider flow, drafts never autosaved, key handling), `native-settings-evidence` (wrong section, sidebar and size evidence rejected) and `native-settings-layout` (a real source-list selection in the windowless host).
+  - Native groups chat/composer/core/islands/settings/shadow-light/sidebar: 19/19 passed.
+- **Not done.** No back/forward buttons: the issue asked for them only if cheap, and a source list already reaches every section in one click.
+
+## 2026-09-29 — LKM-118: simpler code editor toolbar
+
+- **Toolbar.** The native editor header is now back and forward icons, the file path, then pop out/dock and close icons on the right edge. Save, Reload and Open in Editor are gone (with the controller's unused `external` action). Pop out uses `arrow.up.left.and.arrow.down.right` and turns into dock, `arrow.down.right.and.arrow.up.left`, while popped out. Every icon has a tooltip and an accessibility label. The path is a selectable label, so ⌘C copies it. The unsaved marker `•` is a separate label, so a copied path never includes it.
+- **Shortcuts.** `NativeSourceEditor.performKeyEquivalent` handles plain ⌘S (save) and ⌘R (reload, with the existing discard prompt when dirty), but only while the window's first responder is inside the editor. The window offers key equivalents to its views before the main menu, so with focus elsewhere ⌘R still reaches Actions ▸ Reload Preview. The old ⌘S override on the text view caught ⌘S anywhere in the window, including ⌘⇧S; it is removed.
+- **Proof.** The core `source-editor` smoke step now runs `src/native/smoke-source-editor.ts`. It checks the toolbar order, symbols, tooltips, labels and right-edge placement both popped out and docked. Through a test-only `sourceVerification` host command, it offers ⌘S and ⌘R to the window's key-equivalent pass. It checks that ⌘S saves, that ⌘R reloads a file changed on disk, that ⌘S over a conflicting draft refuses to overwrite, and that ⌘R over a draft opens the prompt (Cancel keeps the draft). It also checks that ⌘R with focus outside the docked editor is left to Reload Preview, and that the path selects and copies (to a private pasteboard, not the user's clipboard). Foreground captures: `source-toolbar-popped.png` and `source-toolbar-docked.png`, with JSON.
+## 2026-09-29 — LKM-117: GitHub CI on macOS 26, clean Swift skips off macOS
+
+- **Why.** CI had been red since the Swift migration. It ran on `ubuntu-latest`, where about 20 unit tests that compile the Swift service owners (through `xcrun swiftc`) failed instead of skipping.
+- **Runner.** The workflow now runs on `macos-26`. That image's default Xcode 26 ships the macOS 26 SDK the owners need (`MIN_SDK`), so the job has no `xcode-select` step. The "Toolchain" step runs `bun scripts/requirements.mjs --build` and fails the job if the image ever ships an older SDK. The steps are a frozen install, `typecheck`, `typecheck:native` and `node test/run.mjs unit --timeout-ms=120000`. If a step fails, the run uploads the logs. There is no GUI tier.
+- **Triggers.** Push to `main`/`candidate` and `pull_request` only. Worker and throwaway branches no longer start runs.
+- **Skips.** `test/helpers/darwin.mjs`: `skipUnlessDarwin` sits at every owner-fixture compile site (the eight `test/helpers/*-fixture.mjs` files plus the ledger, preferences, memory, workspace and platform owner tests). Off macOS it prints `<NAME> SKIP — <reason>` and exits 0, which `test/run.mjs` reports as SKIP. `service-contract` uses `skipUnlessSwift`: it still runs on Linux when `swiftc` is on `PATH`. On macOS nothing skips, so a broken toolchain stays red.
+- **Proof.** I had no Linux machine. A simulated Linux unit run used a Bun preload that sets `process.platform = 'linux'` and a `PATH` without `xcrun`, `swiftc` or the macOS tools. Before the fix it showed 28 FAIL; after it, 34 SKIP (each with a reason), 87 PASS and 4 FAIL. Those four were simulation or sandbox artifacts: `native-boundary` hit esbuild's platform check under the spoof and passes unspoofed; `codex-mcp`, `trezi-agent-tools` and `devserver-net` fail the same way unspoofed because the worker sandbox refuses to listen. On macOS the gated tests still PASS. `actionlint` was not installed; the workflow was checked by parsing it with `Bun.YAML`.
+## 2026-09-29 — LKM-116: one install command for users and development
+
+- **Why.** `install.sh` stopped when Bun or the command-line tools were missing, always cloned main (the pre-native app, far behind candidate), always used `~/.trezi`, and left `claude setup-token` and the first launch as manual steps.
+- **Installer.** Everything runs from `main`, so a piped script is read completely before it starts. Missing command-line tools: `xcode-select --install`, a message, then it polls `xcode-select -p` until they are there. Missing Bun: an existing `~/.bun/bin/bun` or `curl -fsSL https://bun.sh/install | bash`, then `$BUN_INSTALL/bin` goes on PATH. `scripts/requirements.mjs --build` still checks the versions.
+- **Channels.** `--channel main|candidate` (or `TREZI_CHANNEL`) clones that branch; on an existing install it switches only when a channel is given, so a tester's re-run without the flag stays on candidate. The installer also discards `bun.lock` drift before pulling, like `trezi --update`.
+- **Dev mode.** When the script sits in a checkout (`.git`, `bin/trezi`, `package.json` beside it), it uses that checkout: no clone, fetch, branch switch or pull unless `--update`. `bun run setup` runs it. The `trezi`/`praxis` links and the Applications link go to the last-installed checkout, and the summary names it (and the previous one).
+- **Finish.** If `claude auth --help` lists `status` and `claude auth status` fails, it offers `claude setup-token` on `/dev/tty`; without a terminal it prints the command instead. Then `open -a` the built app unless `--no-open`.
+- **Proof.** `test/install-update.mjs` pipes the real script into `bash -s --` like the one-liner and runs `./install.sh` in a clone. Fake `curl` serves a fake Bun installer, fake `xcode-select` simulates a missing-then-installed toolchain, and fake `git` logs every call and redirects the clone. Fake `claude` is signed out. It checks the default main clone, `TREZI_CHANNEL`, a kept channel, `--channel=main`, a fresh `--channel candidate`, an unknown channel refused, the dev checkout untouched without `--update` and pulled with it, the idempotent re-run, `--no-open`, and `setup-token` never running unattended.
+- **Open.** The documented one-liner downloads `install.sh` from main, so the tester variant works from that URL once this reaches main.
+
+## 2026-09-29 — LKM-115: no tick marks under inspector and chat-island sliders
+
+- **Why.** A SwiftUI `Slider` with `step:` makes AppKit draw one tick mark per step. The inspector (`step ?? 1`, e.g. 0…200 px padding) and chat islands (`step ?? range/1000`) drew hundreds of them, a dense dotted line under the track.
+- **Fix.** `SnappedSlider` (`src/native/SnappedSlider.swift`) wraps an unstepped `Slider` and snaps in its binding setter with `snapSliderValue`. The snapping is SwiftUI's own, measured in a probe: `lower + k * step`, where `k` stops at the last whole step (1…20 by 4 tops out at 17). Both call sites keep their default steps, live updates and `onEditingChanged` applies.
+- **Proof.** `test/native-slider-ticks.mjs` (unit tier) fails on any `Slider(` in `src/native` that passes `step:` at the top level. Its windowless fixture (`test/fixtures/slider-ticks/main.swift`) first checks that a stepped SwiftUI slider does report ticks. Then it hosts the real `InspectorFieldView` and an island-default `SnappedSlider`, finds each `NSSlider` with `numberOfTickMarks == 0`, and drags it through its action: the inspector previews `37.0` (default step) and `35.0` (step 5), and the island value snaps to 1/1000 of the range. The core `inspector` smoke step now saves `inspector.png`; the island captures are the existing `chat-island.png` and `shadow-light-*.png`.
+## 2026-09-29 — LKM-114: content controls removed
+
+- **Why.** The user did not like how the content-editor panels looked, so the feature is removed end to end instead of restyled.
+- **Removed.**
+  - The `content_controls` agent tool: the Claude in-process tool, the Codex MCP bridge (`bin/trezi-agent-mcp.mjs`, `bin/content-control-tool-schema.*`), the custom-endpoint dispatch, and the provider policy lists in TS, Swift and the golden.
+  - `src/main/content-controls.ts`, `content-control-tools.ts` and `content-controls-ipc.ts`.
+  - The native content controller, `ContentWindow.swift`, the "Content Editors" menu, the host cases, the inspector "content" channel and the `content-editor` smoke check.
+  - The Swift content-drafts store (`EditingDrafts` and the `contentDrafts`/`saveContentDraft`/`clearContentDraft` methods).
+  - `content-controls.json` from the sidecar allowlist (Swift and TS).
+  - `PanelRecipe` and the content-control types in `src/shared/api.ts`.
+  - `vendor/content-controls`, including its package.json/bun.lock entries, `.gitignore` exceptions and the build's recipe plugin.
+  - `test/content-controls.mjs` and `test/native-content.mjs`.
+  - `docs/CONTENT_CONTROLS.md`, the README section and the agent-guide mentions.
+- **Rules v24.** Routing now covers only components, styling and animations. The Jev guidance moved into the chat_island section. The surface-controls skill no longer points to content editors.
+- **User data.** A project's `.trezi/content-controls.json` and a profile's `service/editing/content-drafts/` are never deleted or rewritten; nothing reads them any more.
+- **Kept.** Control panels, chat islands, the inspector and Styles are unchanged. `control-selection.ts` stays because chat islands use it.
+- **Tests.**
+  - The editing-owner parity golden lost its four draft steps (52 → 48).
+  - The sidecar and rename tests use other sidecars.
+  - The smoke-group floor is 19.
+- **History left in place.** The dated inventories (`SWIFT-BACKEND-AUDIT`, `MODULES`, `ROUTES`, `EVENTS`, `CONTRACTS`, `PLAN`, `ROADMAP`, `ELECTRON-REMOVAL`, `rename/*.json`) still mention the old files. `SWIFT-BACKEND-EDITING.md` has an LKM-114 banner, and its current-state rows are updated.
+
+## 2026-09-29 — LKM-113 part 1: Trezi's Codex sessions ignore the user's personal MCP servers
+
+- **Why.** In LKM-111's parity run, the Codex session loaded `mcp.vercel.com` from the user's `~/.codex/config.toml` and logged `AuthRequired`. The SDK flattens `config` into dotted `--config` keys, and the CLI merges them into the user's tables. So adding Trezi's `praxis` server never replaced the user's servers, and even `-c mcp_servers={…}` merges (checked against the vendored CLI 0.154.0).
+- **Fix.** `isolatedCodexConfig` (`src/main/backends/codex-mcp.ts`) parses `$CODEX_HOME/config.toml` (default `~/.codex`) with Bun's TOML parser and adds `mcp_servers.<name>.enabled=false` for every declared server except Trezi's. It names only declared servers, because an unknown name makes the CLI reject the whole config ("invalid transport"). The SDK starts a new `codex exec` for every turn, so `codex.ts` rebuilds the `Codex` instance per turn (`resumeThread(id)`). That way a server added or removed mid-chat is handled. The project-memory pass gets the same treatment. Project `.codex/config.toml` layers are not changed: they load only for trusted projects, and naming a server the CLI didn't load would break the turn.
+- **Proof (no provider calls).** `test/codex-mcp.mjs` writes a fixture `CODEX_HOME/config.toml` with a `vercel` URL server (pointed at 127.0.0.1) and a stdio server. `codex mcp list --json` shows both enabled with Trezi's config alone and both disabled with the isolated config. The real `app-server` session reports them `disabled` with no tools while `praxis` connects. Missing, invalid and changed configs are covered too. The test needs a local unix socket, so in the worker sandbox it ran outside the sandbox.
+- **Part 2** (Codex live parity) stays with the operator after the quota reset; see `docs/TASKS.md`.
+
+## 2026-09-30 — LKM-111 repair: Claude live parity recorded (operator run); Codex deferred to LKM-113
+
+- **Claude parity passed.** The operator ran `TREZI_LIVE_PROVIDERS=1 bun run test:provider-live` outside the worker sandbox on 2026-09-29 (`haiku`, low effort, one no-tool prompt, no Gemini). Both hosts answered `PONG` with one `delta` and one `done`, so the supervised helper emits the events the in-process adapter did:
+  - in-process: 3066 ms, 32665 input / 53 output tokens (32655 cached);
+  - helper: 1886 ms, 32447 input / 59 output tokens (32437 cached).
+- **Codex did not run.** It hit its ChatGPT/Codex usage limit (until 2026-10-03 10:10), so both Codex runs returned no answer and 0 tokens. The Codex live parity moves to LKM-113, together with isolating Trezi's Codex sessions from the user's personal Codex MCP config (the SDK loaded `mcp.vercel.com` during the run; its `AuthRequired` noise is in the Codex errors).
+- Decision (user): LKM-111 is accepted on the Claude parity. The evidence file `test/artifacts/provider-live-parity.json` is gitignored (`test/artifacts/`), so it is cited and its numbers copied here and into `docs/SWIFT-BACKEND-RETIREMENT.md`, not committed. `test/provider-live-parity.mjs` is unchanged; no rerun is needed.
+- Supersedes the entry below ("still blocked by the worker sandbox"); that entry stays as history. `docs/TASKS.md` ticks the Claude item and keeps Codex open under LKM-113.
+
+## 2026-09-29 — LKM-111 repair: live parity attempted, still blocked by the worker sandbox
+
+- Ran `TREZI_LIVE_PROVIDERS=1 bun run test:provider-live` for real. The harness itself had a bug (it never created the fixture's profile directory, so the Swift fixture hit a precondition before any provider call); fixed in `test/provider-live-parity.mjs`.
+- With that fixed, the run reached the providers but the sandbox refused them: `api.anthropic.com` was denied ("user denied") for Claude, and Codex could not open its local unix socket (`EPERM` on `/tmp/trezi-agent-tools-*.sock`). All four runs returned no answer and 0 tokens, so this is **not** a parity result. No provider call succeeded.
+- The live-parity item in `docs/TASKS.md` stays open: run the command above on a machine that can reach Anthropic and OpenAI, then tick it and record the `PROVIDER-LIVE-PARITY OK` line, the total token count and `test/artifacts/provider-live-parity.json` here.
+- Also removed the last comment naming the deleted `src/native/preview-processes.ts` (`src/service/PlatformTools.swift`).
+
+## 2026-09-29 — LKM-111: adapters in supervised helpers, the Bun rollback removed, a self-contained Trezi.app and one start path
+
+Scope A (user decision): the plan scope, no JS-to-Swift rewrite.
+
+- **Helpers by default.** `ServiceRuntime` always installs
+  `ProviderHelperCommand.builtIn(backend:bun:)`: the bundled Bun running
+  `provider-helper.cjs` for Claude, Codex and Gemini. `pickProvider` returns
+  `helperProvider` for every built-in seat and throws outside the service; v10
+  connections keep their Codex-SDK adapter in Bun (the key is resolved in Bun's main).
+  Why: the helper runtime and its policing were proven in LKM-98/102 with a fake
+  provider; keeping an opt-in meant two provider paths to maintain.
+- **Rollback removed.** `TREZI_BACKEND_OWNER`, `TREZI_PROVIDER_HELPERS`,
+  `TreziService --legacy` (`LegacySupervisor.swift`) and every Bun twin it ran are
+  deleted (list in TASKS). Each seam (`xxxOwner()`) throws "Trezi’s service is not
+  running, so …". Parity-vs-twin tests became goldens under `test/fixtures/*/`, and the
+  suites that used the preloads now start the real Swift owners
+  (`test/helpers/with-service-owners.mjs`, `with-provider-owner.mjs`,
+  `with-repository-owner.mjs`; `repository-owner-preload.mjs` starts the editing
+  fixture too). The XPC kinds `legacy`/`legacy.ui` and the `native.lock` legacy
+  reservation are protocol names, not the rollback, and stay.
+- **Census.** Classes are helper/test/bun (13 helper, 11 test, 0 Bun-owned: gate open).
+  The census also fails if src/scripts/bin, package.json or install.sh name a removed
+  switch or pass `--legacy`, and it now compares the worktree setup helpers with
+  `WorkflowSetup.helpers`.
+- **Self-contained app.** The build writes the backend to
+  `Trezi.app/Contents/Resources/backend/` and copies its Bun to
+  `Contents/Helpers/bun` (`scripts/bundle-bun.mjs`; a copy, not
+  `bun build --compile`). `HostLaunch.swift` derives the launch when LaunchServices
+  starts the host. `ServiceRuntime` finds the Keychain helper and checkout from the
+  new backend path.
+- **One start path.** `open -a Trezi` or `bin/trezi` (a shell front for `open -a`
+  that builds a missing app and hands `--update` to `bin/trezi.mjs`). `install.sh`
+  links the app into Applications. `bun run dev` stays the development launcher.
+- **Live parity.** `test/provider-live-parity.mjs` (live tier) runs Claude haiku/low and
+  Codex low, each in-process and in a supervised helper, with one no-tool prompt. It
+  compares events and answers and records token usage. It was **not run**: the worker
+  sandbox denied network to api.anthropic.com and chatgpt.com. Live parity is SKIP, not
+  PASS, and the fake-helper suite is the current proof.
+- **Docs.** README, AGENTS.md, the agent guide (docs-links now validates against the
+  working tree, so a deleted file fails before its deletion is committed), RETIREMENT
+  (status, gate, census, launcher, evidence), PROVIDERS, SERVICE, PLAN (current status),
+  NATIVE, MEMORY and WORKTREES. The other SWIFT-BACKEND docs carry an LKM-111 note, and
+  their rollback passages are history.
+
+## 2026-09-29 — LKM-102 review repair: agent guide and TASKS brought up to the reduced scope
+
+Docs only. With LKM-112 merged, the byte-identical constraint on `docs/agent-guide/` is
+gone, so the pages now describe LKM-102: `service-owners.md` (an LKM-102 row and owner
+blocks for `ProviderData`, `PlatformOpen`, `ProfilePaths`, `EditingProject`,
+`WorkflowTools`/`WorkflowContext`, the service-held profile lock; adapters in Bun by
+default, helpers opt-in via `TREZI_PROVIDER_HELPERS=1`, connections in-process; the stale
+"everything else remains in Bun" sentence is replaced by the 0-row census), `architecture.md`
+(`platform.ts` has no Keychain helper, `profile-path.ts` only resolves),
+`backend-map.md` (providers-store, model-catalog, codex-models are rollback twins of
+`provider-data.ts`; annotation-store renders, the editing owner commits) and
+`verification.md` (`scripts/requirements.mjs`, the retirement census). `docs/TASKS.md`:
+the LKM-98 helper item no longer claims the adapters moved (helper runtime built, routing
+opt-in, adapter move deferred to LKM-111), the stale scroller-style note is gone.
+
+## 2026-09-29 — LKM-102 reconciled with LKM-112's agent guide (merge conflict repair)
+
+The candidate merge aborted on `AGENTS.md` and `CLAUDE.md`: LKM-112 rewrote both
+(AGENTS.md canonical, CLAUDE.md = `@AGENTS.md`) and moved the long material into
+`docs/agent-guide/`, while LKM-102 had edited the old long versions. Root cause: two
+branches editing the same rewritten regions; PROGRESS/TASKS merge with `merge=union` and
+were never the problem. Fix: `AGENTS.md`, `CLAUDE.md`, `test/docs-links.mjs` and the seven
+`docs/agent-guide/*.md` pages are byte-identical to LKM-112's (an identical add/add or
+identical change merges cleanly; any divergence in a file absent from the merge base
+conflicts again), so LKM-102's old CLAUDE/AGENTS wording is dropped. The candidate
+`AGENTS.md` makes no claim LKM-102 contradicts. The guide pages still describe the
+pre-LKM-102 owners (listed as an open item under LKM-102 in `docs/TASKS.md`); they are
+updated after the merge, not here. The authoritative LKM-102 state stays in
+`docs/SWIFT-BACKEND-RETIREMENT.md`, `SWIFT-BACKEND-PLAN.md`, `-PROVIDERS.md` and
+`-PLATFORM.md`. `test/docs-links.mjs` (LKM-112's version, which also scans AGENTS.md and
+the guide) passes on this tree.
+
+## 2026-09-29 — LKM-102 reduced acceptance: the last seven Bun rows, helper opt-in (census 0 Bun-owned; adapters → LKM-111)
+
+Scope reduced by a recorded decision (option A): the SDK adapter move, the live provider
+parity run (not authorized) and removal of the legacy launch path and old Bun copies are
+LKM-111. What LKM-102 now delivers:
+
+- Helper routing is opt-in again. The earlier repair ran built-in adapters in helpers by
+  default; with no live parity run that changed real chats unverified. `ServiceRuntime`
+  installs a helper only on `TREZI_PROVIDER_HELPERS=1` (`ProviderHelperCommand.builtIn`),
+  `backends/index.ts` routes on the same opt-in, and v10 connections stay in-process
+  whatever the setting (a helper would carry the user's API key into another process).
+- Seven rows moved, each with its legacy twin and Swift/TS parity tests:
+  - `ProviderData.swift`: connections store (key through `TreziHost --crypto` on stdin),
+    catalog cache (file order kept for byte parity), Codex probe
+    (`test/provider-data.mjs`).
+  - `PlatformOpen.swift`: links, files, open-in-editor (`checkOpen` in
+    `platform-owner.mjs`). Twins: `platform-legacy.ts`, `open-in-editor-legacy.ts`.
+  - `ProfilePaths.swift`: the launcher asks `TreziService --resolve-profile`, and the
+    service makes the session alias under the lock before Bun
+    (`rename-compat.mjs` parity). Twin: `profile-path-legacy.ts`, which refuses under a
+    service launch.
+  - `native/index.ts`: no `native.lock` of its own. It refuses without the service's
+    lock and moved its test fixture to `smoke-fixture.ts` and the legacy restart to
+    `legacy-restart.ts`.
+- Census: 7 → 0 Bun-owned rows. The gate line reads open, but the census test keeps
+  `TREZI_BACKEND_OWNER=legacy`, `TreziService --legacy` and the rollback rows while the
+  LKM-111 deferral is recorded.
+
+## 2026-09-29 — LKM-102 repair: service-process epoch resume test
+
+- `service-process.mjs`: after production shutdown, the XPC client first-launches a
+  fresh service and resumes its epoch (reconnect + new connection id, same as the
+  earlier XPC resume case; cannot handshake while production still holds the service).
+
+## 2026-09-29 — LKM-102 repair: feedback crash resume + stale test runner lock
+
+- `WorkflowTools.feedback` resumes after `WORKFLOW_FAULT=feedback.issue` by comparing
+  `title`/`body` fields on the prior record (not `JSValue` params equality), so the
+  retry reconciles `issues/1` instead of filing a duplicate.
+- `acquireRunLock` removes a stale `.runner-lock` when its `pid=` owner is gone.
+
+## 2026-09-29 — LKM-102 review repair: provider helpers, feedback parity, service-process (gate still blocked, 7 Bun-owned)
+
+- Built-in Claude, Codex and Gemini adapters run in supervised provider helpers under the
+  Swift launch (`provider-helper.cjs`, `pickProvider` + `ServiceRuntime` helper command).
+  Parity uses the existing fake-provider helper fixtures; live Claude/Codex inside helpers
+  is SKIP (not PASS).
+- `feedback-legacy.ts` accepts an injectable `gh`; `workflow-owner.mjs` parity covers
+  feedback argv/body/dedupe against the Swift owner with `fake-gh.mjs`.
+- `service-process.mjs`: Swift service restart with epoch resume, stale-resume
+  `recoveryRequired`, and `native.lock` not owned by the supervised Bun backend.
+- Retirement gate unchanged: seven Bun-owned census rows and legacy rollback remain.
+
+## 2026-09-29 — LKM-102 second repair: feedback and skills to the workflow owner, launcher and recovery tests (gate still blocked, 7 Bun-owned)
+
+- WorkflowOwner recorded workflows `feedback` (`gh issue create`) and `skills` (`npx skills
+  add`) in `WorkflowTools.swift` (the shared step/runner code moved to
+  `WorkflowContext.swift`). The intent is journaled before the effect. A feedback retry
+  after a crash (the step comes back `uncertain`) or a `gh` failure lists issues and
+  answers the identical one instead of filing another. The owner validates the
+  `owner/name` repo and skill names and builds the argv. Largest composer body (65,536
+  units) is tested through the pipe. Legacy twins: `feedback-legacy.ts`,
+  `skills-install.ts`.
+- `test/install-update.mjs`: install.sh / `trezi` / `trezi --update` against a local
+  origin, including an interrupted update and a diverged checkout. `service-process`:
+  profile recovery after the lock holder is SIGKILLed.
+- Census: 9 → 7 Bun-owned rows (`codex-models`, `model-catalog`, `providers-store`,
+  `props`, `native/platform`, `native/profile-path`, `native/index`).
+- Not done: those seven rows, the provider adapters' move into helpers (needs an
+  authorized live parity run: UNVERIFIED, not passed), and removal of
+  `TREZI_BACKEND_OWNER=legacy`/`TreziService --legacy` (the census forbids it while any
+  row is Bun-owned). No live provider, GitHub, hardware or real Xcode build was run.
+
+## 2026-09-29 — LKM-102 repair round: four census rows moved (gate still blocked, 9 Bun-owned)
+
+Review found the retirement gate blocked by 13 Bun-owned rows. This round moves the
+ones that fit an existing owner, keeping each TS module as its legacy twin:
+
+- EditingOwner (`EditingProject.swift`, repository lane): the `.dsgn`/`.praxis` sidecar
+  migration, the setup helpers a chat worktree carries (`setup-helpers.json` bytes
+  unchanged) and the Next dependency marker (`.trezi/dependencies.sha256`). Bun's
+  `worktree-dependencies.ts` is now effect-free: it asks the owner, runs the install
+  through the service installer, then asks it to record the marker. Swift/TS parity in
+  `test/editing-owner.mjs`. A linked `.trezi`, `.praxis` or `.dsgn` is refused.
+- WorkflowOwner: Trezi's own update check (`updateCheck`, a lane request; the fetch keeps
+  its 15 s bound). `update-controller.ts` uses `checkForUpdate` only without an owner.
+- Census: Bun-owned rows 13 → 9; setup-artifacts, sidecar-migrate and update are rollback
+  twins now, worktree-dependencies has no effect left.
+
+Still Bun-owned: `codex-models`, `model-catalog`, `providers-store` (provider helper
+move), `feedback`, `skills-install`, `props` editor CLIs, `native/platform`,
+`native/profile-path`, `native/index`. The provider SDK adapters still run in Bun; that
+move needs an authorized live parity run, which was not available (unverified, not
+passed). No legacy owner or `TREZI_BACKEND_OWNER=legacy` was removed.
+
+## 2026-09-29 — Retirement census, last sidecar writers, one platform source (LKM-102 / S15, partial)
+
+The last step of the migration, on the LKM-101 candidate. Details are in
+`docs/SWIFT-BACKEND-RETIREMENT.md`.
+
+S15 may remove Bun's application orchestration only once the census shows every module
+has its final owner. It does not yet, so nothing the rollback switch needs was removed.
+What this step does instead:
+
+- The census is executable. `test/retirement-census.mjs` finds every module under
+  `src/main`, `src/native` and `src/shared` that writes files, runs a process or sends a
+  signal. Each one must have a row (rollback twin, retained helper, smoke fixture, or
+  Bun-owned), and each row must still have an effect. The gate line must count the
+  Bun-owned rows, and while any remain the legacy switch must stay. Today: 58 modules,
+  28 rollback, 7 helper, 10 test, 13 Bun-owned.
+- The reviewer notes sidecar (`.trezi/annotations.json`), which S05 held back for the
+  S07 repository lane, and the starter `tokens.json` now go through the editing owner's
+  hash-bound sidecar commit, in the repository lane. The bytes are unchanged. A hand
+  edit between read and commit is read again and never overwritten. A linked `.trezi`
+  is refused, and a damaged `tokens.json` is no longer replaced by the starter.
+  `annotation-store` also runs on the real Swift owner inside `test/editing-owner.mjs`,
+  with Swift/TS parity for the new sidecar steps.
+- The supported platform has one source, `scripts/requirements.mjs`: macOS 13.3, the
+  macOS 26.0 SDK to build, and Bun 1.3.0. The build stamps it into both bundles, and the
+  build, launcher, `bun run dev`, the CLI and `install.sh` refuse early with one message.
+  `test/distribution.mjs` checks this and the package layout the launch spec expects.
+- `agent.ts` had an unused Git runner and unused fs writers; both are removed.
+
+The gate is still blocked. There are 13 Bun-owned rows: provider catalogs and store,
+Codex probe, feedback issues, skills install, the editor CLIs, the update check's fetch,
+worktree setup helpers and dependency markers, the legacy sidecar migration,
+orchestration, Keychain/`open`, and profile migration. The provider SDK adapters also
+still run in Bun, and moving them needs an authorized live parity run. No live provider,
+GitHub, package manager or simulator was used.
+
+Verification (worker): the quick tier passes, with 141 unit checks (including the two
+new tests and the extended `annotation-store` and `editing-owner`) and both typechecks.
+`docs-links` fails until the new files are staged: it checks tracked paths.
+
+Native verification (staged, desktop lock), from the run logs because the tool calls
+timed out on the worker's side. Full run: 141 unit checks, the native build (both
+bundles at the unchanged `macosx13.3` target), native smoke 20 of 20 (islands, Shadow
+Light, sidebar and settings included) and NATIVE CORE PASS. Then chat acceptance failed
+at "Latest message remains clear after native scroller style change": `latestVisible`
+was false and `latestTop`/`latestBottom` were 0 while pinned. A rerun of the chat and
+islands groups failed at the same step; its smoke passed 6 of 6. The probe reports
+`systemPreferredStyle: "legacy"`. This change touches no host or UI Swift code, so the
+cause is LKM-103's scroller-style path under a legacy system scroller, not this step.
+This is an inference; the manager should confirm it.
+## 2026-09-29 — AGENTS.md is the short canonical agent guide (LKM-112)
+
+`CLAUDE.md` (41 KB) and `AGENTS.md` (15 KB) had drifted into two long, overlapping
+guides; every Claude session loaded 41 KB, and Cursor/Codex agents read a different,
+shorter set of rules. `AGENTS.md` is now the one tool-neutral guide (about 6 KB),
+`CLAUDE.md` is `@AGENTS.md` plus two Claude notes, and the long material moved,
+wording kept, into `docs/agent-guide/`. New rule: read PROGRESS/TASKS with head/grep only.
+`test/docs-links.mjs` now scans `AGENTS.md` and every `docs/agent-guide/*.md` too, and fails
+if `AGENTS.md` exceeds 8 KB, `CLAUDE.md` exceeds 1 KB or `CLAUDE.md` stops starting with
+`@AGENTS.md`. Docs and that check only; no product code.
+
+Section checklist (old → new; "AG" = `docs/agent-guide/`):
+
+- [x] CLAUDE intro (purpose, distribution, auth) → AGENTS "What Trezi is"; AG/conventions.md "Auth and secrets"
+- [x] CLAUDE intro (dsgn rename, legacy shims) → AGENTS "What Trezi is" (pointer); AG/conventions.md "The old name"
+- [x] CLAUDE "Start here every session" → AGENTS "Start here every session"
+- [x] CLAUDE "Commands" → AGENTS "Commands" (short); AG/verification.md "Commands" (full)
+- [x] CLAUDE "Verify your own work WITHOUT asking the user" → AGENTS "Verify your own work…"; AG/verification.md
+- [x] CLAUDE "Evidence budget" → AGENTS "Evidence budget" (verbatim)
+- [x] CLAUDE Electron/Tailscale retirement note → AGENTS "What Trezi is"; AG/architecture.md "Trust boundaries"
+- [x] CLAUDE architecture tree: `native/`, `preview/`, `shared/`, `bin/`, `test/`, `docs/` → AG/architecture.md; `service/` → AG/service-owners.md; `main/` → AG/backend-map.md
+- [x] CLAUDE lifecycle bullets (install/update, Swift launch, chat streaming, dev-server ownership) → AG/architecture.md "Lifecycle"; AG/service-owners.md "The launch path"
+- [x] CLAUDE "Why it's built this way" → AG/architecture.md
+- [x] CLAUDE "Conventions" → AGENTS "Conventions (summary)"; AG/conventions.md; commit rule → AG/git-worktrees.md
+- [x] CLAUDE Gotchas (shortcuts, interrupt/Stop, ESM/CJS, only WebKit view, isolation, prop gating, Styles ladder, Web Inspector, service exit status/XPC, Bun postinstall, `.trezi/` deny, manifests store no values, tool `root`, model lists) → AG/gotchas.md
+- [x] CLAUDE Gotchas (per-chat worktrees, symlinked node_modules/.env, one live commit per turn) → AGENTS "Git and worktrees"; AG/git-worktrees.md
+- [x] AGENTS intro (Swift service history LKM-91…101, Bun remaining writers, annotation storage) → AG/service-owners.md "Who writes what"
+- [x] AGENTS "Start here every session" → AGENTS "Start here every session"
+- [x] AGENTS "Commands and verification" (table incl. `start`, `trezi --project`, `--serial`, run logs) → AG/verification.md; AGENTS summary
+- [x] AGENTS "Evidence budget" → AGENTS (verbatim)
+- [x] AGENTS "Architecture" bullets (native files, service owners, `bridge.ts`, Sheets, Shadow Light, Gen UI, build script, CLI) → AG/architecture.md, AG/service-owners.md, AG/backend-map.md
+- [x] AGENTS transport/rollback, preview trust, profiles → AG/service-owners.md "The launch path"; AG/architecture.md "Trust boundaries"
+- [x] AGENTS dev-server ownership (one-second grace, drain, watchdogs, Swift rebuild) → AG/architecture.md "Lifecycle"
+- [x] AGENTS preview observation (Claude/Codex screenshots) and in-process SDKs/parsers/vendored package → AG/architecture.md "Trust boundaries"
+- [x] AGENTS "Conventions and hard-won constraints" (500 lines, ESM, secrets, test tiers, commits pre-authorized, prop gating, `.trezi/`/`.praxis/`/`.dsgn/` deny, dsgn strings, WORKTREES/PROVIDERS/MEMORY docs, rename MIGRATION) → AGENTS "Conventions (summary)" + "Git and worktrees"; AG/conventions.md; AG/git-worktrees.md; AG/gotchas.md
+
+## 2026-09-29 — Swift platform owner: Simulator, media, attachments, server recovery (LKM-101 / S14)
+
+The eleventh transfer, on the LKM-100 candidate. Details, the protocol and the tightened
+rollback plan are in `docs/SWIFT-BACKEND-PLATFORM.md`.
+
+A census of the OS effects Bun still performed under the Swift launch found four clusters
+in this step's scope: the whole Simulator preview (simctl/idb runs, `pkill idb_companion`,
+`rm -rf /tmp/idb`, `open -a Simulator`, the Metro process group and a Node HTTP bridge),
+pasted-image writes and pruning, the running-servers sheet's SIGTERM, and the editor's media
+registry. The Simulator had real lifecycle gaps: Stop could not reach a start still in
+`bootstatus` (up to 120 s) or a build, and that start then installed its bridge anyway;
+tool runs had timeouts but nothing stopped what they left behind.
+
+Under the Swift launch the service's platform owner now does all of it. Every tool run is
+bounded (deadline, own process group, output caps) and belongs to a `ToolScope`, so a stop or
+a newer start ends the waiting boot or build and the start answers `cancelled`; a restart never
+overlaps its predecessor; Metro runs as a journaled group (watchdog + runtime journal), so a
+crash never leaves it behind. The bridge moved to Swift with the same page, token, Host check,
+body and viewer limits. Media access for the native editor became a scoped grant (view, file
+identity, size, SHA-256, expiry, bounded) instead of a path registry; the client re-grants an
+expired or changed one. Pasted images arrive in hash-checked 1 MiB chunks (a 25 MiB image as
+one line would have exceeded the pipe's 32 MiB line limit and closed the bridge). The
+`trezi-media` WebKit scheme route was unreachable (no view registered it) and is removed.
+
+Bun keeps the views, the sheet and the bezel artwork it sends with each start. The remaining
+Bun-owned OS effects (provider CLIs, the Codex tool socket, skill installs, Keychain crypto,
+`open`/editor CLIs, profile migration, provider store, feedback issues, the update check's
+fetch, and the project `.trezi/` writers for annotations, tokens and worktree setup) are
+listed in TASKS for S15.
+
+Verification (worker): `test/platform-owner.mjs` passes in about 12 s (cached fixture; four
+repeated runs): pure and preflight parity with the TS code in seven modes, unavailable, the
+view-only and interactive bridges, stale-companion recovery, restart, cancel during boot and
+during Metro, supersede, build failure, early exit, no frames, drain, a crashed owner's group
+swept at the next launch, media grants, attachments, server recovery and schema. It binds
+loopback ports, which this worker sandbox forbids, so it was run outside the sandbox. Related
+suites (`service-process`, `runtime-owner`, `native-preview-recovery`, `media-types`,
+`attachments`, `docs-links`) pass; both typechecks pass; `bun run build:native` succeeds; the
+new Swift files have zero diagnostics under `-strict-concurrency=complete`. Worker native
+verification (staged, desktop lock, groups core, chat, composer): 139 unit checks including
+`platform-owner` and `service-process`, both typechecks, native smoke 17 of 17, CHAT ACCEPTANCE
+PASS (read from the run log; the tool call timed out client-side after 300 s). No real Xcode,
+simulator or idb was used.
+
+## 2026-09-29 — Workflow owner repair: bounded journal, best-effort diagnosis memory (LKM-100 / S13)
+
+Independent review found two defects. First, the journal grew without limit: `prune()` kept
+every failed/cancelled/interrupted record, and runs refused before their first effect
+(pull with busy agents or a dirty tree, "Not signed in", a dirty Trezi checkout) can never be
+resumed or pruned. Now such stepless runs keep the newest 20, runs that began a step keep the
+newest 5 per repository and kind, superseded/dismissed keep 10, results 100. Second,
+`diagnose:run` failed outright when the diagnosis memory refused a write (a damaged
+`diagnostics.json`, an oversized proposal, the service stopping), where the legacy write could
+never suppress the diagnosis. The memory read, write and `diagnose:record` are now best-effort
+(logged). `test/workflow-owner.mjs` gained a bounded-journal case (25 refused pulls, repeated
+"nothing to publish", refused Trezi updates, restart) and extends the damaged-file case
+through the real `diagnose:*` handlers.
+
+## 2026-09-29 — Swift workflow owner: publishing, remote Git, setup, diagnostics, update (LKM-100 / S13)
+
+The tenth transfer, on the LKM-99 candidate. Details, the protocol, the partial-effect
+table and the tightened rollback plan are in `docs/SWIFT-BACKEND-WORKFLOWS.md`.
+
+These workflows had no memory. Publish kept an in-process lock and nothing else: a crash
+after `gh pr create`, or a reply lost after it, left a PR the next click could not know
+about, and a crash after `gh pr merge` was worse. The branch looked unpublished, so the
+next Publish re-pushed the already merged branch and opened a second PR for merged work.
+Trezi's update and the new-project install had the same shape: a failed install left a
+checkout the retry pulled again, and a project folder the retry refused as "not empty".
+
+Under the Swift launch the service now runs them as durable workflows. Every step's intent
+is on disk before its effect and its receipt after. Requests carry an operation ID, and
+Bun's client asks again with the same ID when a reply does not come, so the owner answers
+from the receipt or joins the run. A later request resumes an unfinished run from what
+GitHub and Git hold. An open PR is adopted, and a merge is checked on the PR number the
+journal holds (if it merged, only the local cleanup runs). A repository this run asked
+GitHub for is adopted rather than failing on "already exists". A pull whose receipt still
+matches HEAD is skipped, and a project install resumes where it failed. Cancellation stops a
+running install or build and never starts another step. Stored messages and answers are
+redacted (URL credentials, GitHub tokens).
+
+Bun keeps the helpers that only propose: the PR description (a publication is two
+requests around it), framework detection and helper sources, starter files, diagnoses. It
+also keeps the sheets. The legacy publish code moved out of `annotations.ts` and `agent.ts`
+into `src/main/publish.ts`, and with the other original modules it is the rollback twin
+(`src/main/workflow-legacy.ts`). The diagnosis memory keeps its file and bytes; a damaged
+one is now kept instead of silently replaced. The setup writer refuses a linked `.trezi`.
+
+Still in Bun: feedback issues (`feedback:submit`), sheet routing and autosave, the read-only
+probes. Recorded in TASKS. No real GitHub or package-manager call was made: the fixture's
+`gh`, `bun` and `npm` are scripts, and the test re-runs itself with them on PATH and Bun's
+auto-install off. Bun resolves a spawned command with the PATH it started with, so setting
+PATH at runtime would have reached the real tools.
+
+Verification (worker sandbox): `test/workflow-owner.mjs` passes in about 35 s (cached
+fixture): 12 parity scenarios give identical answers and Git/GitHub state on the legacy twin
+and the Swift owner. The durability checks also pass: lost replies in both phases, crashes
+after the PR, merge, repository and pull, GitHub failing after acting, install/build
+failures resumed, cancellation, busy, restart/dismiss, rollback both ways, redaction, drain
+and schema. The related legacy suites (`git-remote`, `publish-reconcile`, `project-create`,
+`diag-cache`, `native-updates`, `github-connect`, `setup-stamps`) pass unchanged. Both
+typechecks pass, `bun run build:native` succeeds, and the new Swift files have zero
+diagnostics under `-strict-concurrency=complete`. Worker native verification (staged,
+desktop lock, full run): 138 unit checks including `workflow-owner` and `service-process`,
+both typechecks, native smoke 20 of 20, CHAT ACCEPTANCE PASS and chat scroll. The tool call
+itself timed out on the worker's side after 300 s; the result is from that run's log
+(`worker-verify-2.log`).
+
+## 2026-09-29 — Swift editing coordinator: islands, controls sidecars, content drafts, navigation (LKM-99 / S12)
+
+The ninth transfer, on the LKM-98 candidate. Details, the protocol and the tightened
+rollback plan are in `docs/SWIFT-BACKEND-EDITING.md`.
+
+S12's controllers are mostly views: the inspector, layers and styles controllers hold
+no state beyond their generation checks, and the DOM work stays in the isolated WebKit
+world. The state that decides what an edit does moved: the chat islands, the controls
+sidecars, content drafts and deferred navigation.
+
+Islands had a turn-isolation bug. Any `done` (including a late one, which S11 marks
+`stale` but the island code never looked at) activated every waiting island of the
+chat, so turn 1's late terminal could activate turn 2's island before turn 2 landed.
+Now the service binds each definition to the turn the conversation owner says is in
+flight (`origin`), and only that turn's terminal settles it. Bun attributes terminals
+with `TurnBoundaries` (`src/native/turn-boundaries.ts`): the landing's untagged
+`isolation` event belongs to the `done` that asked for it, and a stale terminal ends
+nothing. The service is the only writer of the island histories (same files and
+format) and decides admission, the revision chain of a queued gesture batch (frames
+arriving before the previous write settled still apply, an external edit's revision
+is never blessed) and each island's Undo group. Composition (Jev), literal resolution
+and the hash-bound source proposals stay JS.
+
+The controls sidecars (`.trezi/control-panels.json`, `content-controls.json`) are now
+committed by the owner only against the bytes Bun read, in the repository lane: a hand
+edit between read and write is refused and kept. A symlinked `.trezi` or store file is
+refused (the legacy writer followed an in-project link). Content-editor drafts, which
+lived in Bun memory, are persisted and restored after a restart; a restored draft stays
+bound to its own base revision, so it cannot be saved over content that changed
+meanwhile. `open_preview` asked to navigate "after this turn lands", but no native code
+consumed it since Electron was retired; the owner now holds it until the requesting
+turn lands (dropped on failure, park, a newer turn, leaving the chat), and
+`NavigationController` loads it in that chat's project once its server runs.
+
+Still in Bun: the composer's queue, drafts and attachments; the workspace controller's
+server fields; project UI composition enablement; the preview DOM instrumentation (JS
+by design). Recorded in TASKS.
+
+Verification (worker sandbox): `test/editing-owner.mjs` passes in about 3 s (cached
+fixture): parity (52 island/navigation/draft steps and 9 sidecar steps identical on the
+legacy twin and the Swift owner, including history bytes), turns (conversation-owned
+origin, navigation, `TurnBoundaries` reordering), the `chat-islands`,
+`shadow-controls`, `control-panels`, `content-controls` and `native-content` suites
+re-run unchanged on the Swift owners, drafts, lanes, crash (SIGKILL before and after the
+history rename), rollback both ways, drain and schema. `chat-islands.mjs` now waits for
+its repository lease explicitly and handles one refusal at once (both needed only when
+the lease is a service round trip). The manager's quick verification (both typechecks,
+137 unit checks) passes; the new Swift files have zero diagnostics under
+`-strict-concurrency=complete`. The native smoke's islands now use scratch histories
+through `register`, so the chat's own history is untouched.
+
+Worker native verification (staged, desktop lock): a run filtered to chat, core, islands
+and shadow-light failed `shell-layout` (1 of 15). The preview was still reloading after
+the islands check restored `index.html`, so its injected background never took. The
+composer checks that normally sit between them were filtered out. The islands check now
+waits for that reload. The full run then passed: native smoke 20 of 20 (NATIVE ISLANDS,
+SHADOW LIGHT, SIDEBAR, SETTINGS and CORE PASS) and CHAT ACCEPTANCE PASS.
+
+## 2026-09-29 — Swift provider owner and helper capability enforcement (LKM-98 / S10)
+
+The eighth transfer, on the LKM-97 candidate. Details, the protocols and the tightened
+rollback plan are in `docs/SWIFT-BACKEND-PROVIDERS.md`.
+
+The plan's open question (native protocol or SDK helper) is answered: SDK adapters, and
+in the end state one supervised helper process per session. Neither SDK exposes a
+protocol Trezi could speak natively with established parity. Moving the real adapters
+into helpers needs a live parity run, which is not authorized. So this step builds and
+proves the helper runtime with a scripted fake provider, and puts the in-process
+adapters under the owner's authority now.
+
+Every provider session agent.ts starts is opened with the owner first
+(`provider-sessions.ts`). Its grant is fixed there from the provider, whether it is a
+background edit, and its roots. Claude's `canUseTool` no longer decides: the owner
+answers, with the same order and messages. It adds one rule: an edit inside Trezi's
+profile but outside the session's own roots (another chat's worktree, the session
+files, the service stores) is denied. Claude's in-process Trezi tools and Codex's MCP
+bridge are authorized against the grant before they run. Codex's bridge handler moved to
+`session-tools.ts`, where helper tool calls run too. Stop's deadline is the owner's: it
+answers `escalate` when the graceful stop has not settled in 3 s, and the adapter's kill
+switch (Claude's force-stop, now `ProviderSession.forceStop`) runs once. An unreachable
+owner falls back to the same local bound. Thread ids are persisted per session record, so
+a crash between the provider reporting one and the record being saved no longer loses
+the resume.
+
+Helpers are held to their grant by what the service checks, not by the pipe. A helper
+inherits only its stdio, gets an allowlisted environment (no `TREZI_*` variable, no
+other provider's key), and runs in its own process group with a watchdog and a journal
+entry. Its lines are bounded, and every frame is validated. It cannot address another
+chat, emit an approval or a title itself, write what the user said, or send anything
+off-protocol: each is a violation that stops it and ends its turn once. Tool results
+(screenshots) are validated before it gets them. Crashes, hangs past Stop's deadline,
+stalled and failed starts each end the turn exactly once.
+
+Verification (worker sandbox): `test/provider-owner.mjs` passes in about 8 s (cached
+fixture), with sections policy parity, helper, images, privilege, failure, recovery,
+rollback, drain, wrapper and schema. `conversation-owner`, `comment-agents`,
+`native-chat-controller`, `auto-reconciliation`, `interrupt-escalation`, `codex-stream`
+and `provider-skills` (its routing check now follows `session-tools.ts`) pass, and both
+typechecks pass. The new Swift files have zero diagnostics under
+`-strict-concurrency=complete`, and the full service compiles. Worker verification
+tool: native tier (staged) 136 unit checks and the native smoke (20 passed, 0 failed, 0
+skipped, with islands, Shadow Light, sidebar, settings, chat acceptance and chat scroll).
+After that run `ProviderOwner.swift` was split mechanically (`ProviderFrames.swift`) and
+docs were edited; the quick tier (136 unit checks, both typechecks) passes on the final
+revision. Real Claude/Codex sessions under the owner are not verified (live provider
+calls need authorization).
+
+## 2026-09-29 — Swift conversation state and chat orchestration (LKM-97 / S11)
+
+The seventh transfer, on the LKM-96 candidate. Under the Swift launch the service
+decides what a chat is between provider events; details and the tightened rollback
+plan are in `docs/SWIFT-BACKEND-CONVERSATION.md`.
+
+Turn identity came first, because nothing identified turns before. Each provider
+session emits one `done` per send, in order, so `TurnTracker` (`src/main/chat-turns.ts`)
+attributes every event to the send it belongs to. Events carry their turn
+(`AgentEvent.turn`), whose id is the composer's submission id. The owner claims at most
+one terminal per run of a turn. Codex's `error`→`done` is claimed once. A `done` that
+arrives after the next turn began (the async gap in Codex between a failed turn's error
+and its done) is refused as stale, and so is a `done` no send accounts for. The chat
+controller ignores any terminal tagged with another turn, so a late event can no longer
+complete the wrong turn in either place. Before, the tracker was keyed by chat, and
+`begin` reset it.
+
+The owner decides every transition agent.ts used to make locally: admitting one turn
+per chat, recording the user entry, cancellation (a stopped turn lands as failed and
+never continues), the single reconciliation continuation, landing, and the completion
+policy (whether to name the chat and evaluate memory). A generated title never replaces
+a name the user chose, even from a stale record. A model switch is refused mid-turn,
+and the next turn carries the history exactly once. Approvals are settled once; a late
+answer finds nothing. Spawn admission (3 per project, FIFO) moved too. Bun still runs the
+provider sessions and performs the effects: landing goes through the repository
+coordinator, Undo records through the source owner.
+
+Persistence: the owner is the only writer of `sessions/*.json`, byte-identical to the
+legacy store, which still reads them (with an overlay for writes not yet acknowledged).
+New: every live chat is checkpointed at each transition and at tool boundaries while it
+streams. A chat a crash cut off is restored at the next launch, with a note if it was
+mid-turn, as the project's current chat if it was active. A record written later by
+either owner is kept, and the checkpoint copied aside.
+
+Still in Bun: provider sessions and prompts (S10), and the composer's queued-message
+list, drafts and attachments (S12). Recorded in TASKS.
+
+Verification (worker sandbox): `test/conversation-owner.mjs` passes in about 14 s
+(cached fixture). Its sections cover owner parity (identical answers and session-file
+bytes on both owners); streaming through agent.ts and the chat controller on both
+owners, with identical outcomes and the Swift run landing through the Swift repository
+and source owners; crash (SIGKILL mid-turn, inside a checkpoint, inside a History
+write); rollback, schema and drain; `comment-agents` re-run on the Swift owners; and the
+adapter boundary. `native-chat-controller`, `auto-reconciliation`,
+`conversation-handoff` and `comment-agents` pass unchanged, and both typechecks pass.
+The new Swift files have zero diagnostics under `-strict-concurrency=complete`.
+
+## 2026-09-29 — Swift source transactions, file operations, Undo and parser proposals (LKM-96 / S08+S09)
+
+The sixth transfer, on the LKM-95 candidate. Under the Swift launch the service is the
+only writer of a user's source files for Trezi's own edits. Details and the tightened
+rollback plan are in `docs/SWIFT-BACKEND-SOURCE.md`.
+
+Parsers now only propose. Every engine (props, text, styles, moves, islands, content,
+controls) already had the text it parsed, so `commitEdit` became `proposeEdit`
+(`src/main/source-commit.ts`): the file, the SHA-256 of those bytes, and the new text.
+The service commits only if the file still holds them. That one rule covers an
+external edit, two parses of the same text landing out of order, and a stale island.
+A proposal also carries Bun's deadline; one that waited past it behind a lease (an
+install) is refused, not committed after Bun reported failure. A static check keeps
+file writes and Undo state out of the engine modules.
+
+Commits are journaled multi-file transactions in the repository coordinator's lane,
+or inside the lease the calling chain holds, so Repository stays the serialization
+authority. Files are replaced atomically. A failure midway puts back what was written;
+a crash midway is rolled back at the next launch, but only for files that still hold
+the transaction's bytes. A file changed since is kept, and its previous content is
+copied beside the report. Undo, redo and revert are transactions too, so an
+interrupted Undo recovers the same way. The history (grouping, coalescing, addressable
+turn revert, drift refusal) moved with them; landed chat turns are recorded into it.
+
+Paths are authorized once, in Swift: repo-relative or under the root, no traversal,
+nothing in `.git`/`.trezi`/`.praxis`/`.dsgn`/`node_modules`, and inside the resolved
+root after symlinks. Before, a props edit or a save wrote through a symlink wherever it
+pointed. The editor's reads come from the owner with a hash, saves are bound to that
+hash, and unsaved drafts are saved to the service and restored after a restart. A
+draft whose file changed meanwhile opens as a conflict and cannot be saved over it.
+File-tree create/rename/delete moved too.
+
+Still in Bun: parsing itself (in-process, behind the seam; a separate helper process is
+a follow-up), file-tree listing, media and component resolution (read-only), sidecar
+stores, and setup/scaffold writers (S13). Recorded in TASKS.
+
+Verification (worker sandbox): `test/source-owner.mjs` passes parity on the real
+React, Svelte, HTML and layers fixtures (legacy and Swift byte-identical after every
+edit, Undo and redo) and re-runs `shadow-controls` on the owner, plus proposals, paths,
+transactions, crash (SIGKILL inside a commit and a grouped Undo, with a later user
+edit), history, files, drafts, lanes, rollback and drain, in about 12 s. The manager's
+quick verification (both typechecks, 134 unit checks) passes; the new Swift files have
+zero diagnostics under `-strict-concurrency=complete`.
+
+## 2026-09-29 — Repository recovery review repairs (LKM-95 / S07)
+
+Independent review found startup orphan recovery could lose work. For a dirty
+leftover worktree it ignored whether the recovery commit succeeded and then
+force-removed the checkout; a parked chat's fold (`reset --soft HEAD^`) had already
+moved its branch back a commit. Now the orphan's HEAD and a private-index snapshot of
+its dirty state each get a recovery ref first. If the commit fails (for example
+signing that cannot run in the background service) the fold is undone and the
+checkout is moved aside, never force-removed; a ref that cannot be made leaves the
+orphan as found. Recovery ref names also gained a random suffix: several orphans in
+one sweep share kind and label and would have overwritten each other's refs. The
+documented 100-ref cap never existed in code; it is removed instead of implemented,
+because deleting refs silently is exactly what recovery refs must not do, so refs are
+never pruned automatically. `test/repository-owner.mjs` has a new `orphans` section
+with a failing signing program (two dirty orphans, one parked).
+
+## 2026-09-29 — Swift repository coordinator: Git, worktrees and recovery (LKM-95 / S07)
+
+The fifth transfer, on the LKM-94 candidate. Under the Swift launch the service is the
+serialization authority for every user repository and performs every Git effect
+Trezi makes there. Details and the tightened rollback plan are in
+`docs/SWIFT-BACKEND-REPOSITORY.md`.
+
+Serialization moved first. `enqueueRepoWrite` now takes a lease on the service's lane
+for the repository's common directory, so the live checkout and all its worktrees share
+one FIFO, and the service's own effects run in the same lane. Bun tracks held leases
+per async chain, so effects inside a lease run in it and a nested lease on the same
+repository is re-entrant. Branch switches, orphan recovery, branch pruning and the
+spawn-branch apply were outside the old queue; they are serialized now.
+
+The effects are Swift twins of the TS Git code, reached through the unchanged
+functions in `worktrees.ts`, `chat-worktrees.ts`, `live-commit.ts` and `git.ts` (the
+seam is `src/main/repository-owner.ts`). The strongest parity check re-runs the legacy
+suites (`chat-worktrees`, `worktrees`, `live-commit`, `git`, `chat-recovery`,
+`auto-reconciliation`, `setup-next`) with the Swift owner preloaded; all pass
+unchanged. Chat state, park records, Undo history and setup helpers stay in Bun.
+
+Recovery: each mutation's intent is journaled and synced before its first effect. A
+recovery ref is named in the journal and created before anything could orphan work:
+dirty or unlanded worktree state before a sync reset, removal or discard, the parked
+tip before reconciliation, the target of a landing, the live pre-image of a three-way
+apply. An operation cut short is reported at the next launch (and in the Activity log)
+with its refs; nothing is replayed or reset. Removing, discarding and landing need
+their explicit intent. Worktree operations are refused unless the path is a linked
+worktree of that repository under the profile, so the main checkout is never reset.
+
+Behavior changes: landing compares bytes, never writes through a symlink or outside
+the checkout, creates missing directories, restores already-written files if a write
+fails, and parks batches over 16 MiB. `checkout` accepts only an existing local branch
+(a non-ref name could be read by Git as a path and discard that file's changes). Git
+paths are read NUL-separated, so non-ASCII names are exact. An orphan of another
+repository is left for that repository's lane, and a folder that is no longer a
+worktree is moved aside instead of deleted. A clean fork point is HEAD itself.
+
+Still in Bun, inside the Swift lease: remote fetch/pull/checkout and publishing (S13),
+the annotation sidecar writer (now unblocked), and content/island/control source writes
+(S08). Recorded in TASKS.
+
+Verification (worker sandbox): `test/repository-owner.mjs` passes parity, lanes,
+external changes (foreign index lock, external commit, the user's staged work), intent
+and scope refusals, crash recovery (SIGKILL inside a landing, after reconciliation's
+reset, during removal), rollback (legacy lands on a Swift-made worktree with journal
+and refs untouched; damaged journal refused untouched) and drain, in about 20 s. Both
+typechecks pass and the new Swift files have zero diagnostics under
+`-strict-concurrency=complete`. `service-process` builds the real service with the
+owner and passes its supervision and rollback sections; its XPC section needs the
+manager's unsandboxed run.
+
+## 2026-09-29 — Swift-owned managed project runtime (LKM-94 / S06)
+
+The fourth transfer, on the LKM-93 candidate, and the first that moves processes
+rather than a file. Under the Swift launch the service owns everything that serves
+a user's project, as one unit: runtime detection, dependency installs, dev-server
+process groups, ports, readiness, the static site with its FSEvents watcher and
+live-reload stream, and shutdown and crash recovery. Details and the tightened
+rollback plan are in `docs/SWIFT-BACKEND-RUNTIME.md`.
+
+Bun still decides what to run: the detected command or the user's custom one. The
+service runs it with the launch environment Bun was given, so the user's PATH still
+selects the project's Bun, Node, pnpm or Yarn. The package manager still comes from
+the project's `packageManager` field or lockfile. Two things stay in Bun on purpose.
+The repository write lease around an install stays until S07, so Bun holds it while
+the service runs the install. HTML stamping (parse5) stays a JS helper, which the
+static site asks over the pipe; after 5 s, or on an error, it serves the page
+unstamped. Detection, commands and URL parsing are written twice
+(`RuntimeDetect.swift`/`project-detect.ts`, `RuntimeNet.swift`/`devserver-net.ts`)
+and tested against each other.
+
+Process ownership got stricter. Each server or install leads its own group. When the
+leader exits on its own, the rest of the group is stopped before the leader is
+reaped, so a descendant never outlives it and the group ID cannot be reused while
+anything could still signal it. Each group has a watchdog (`--watch-group`) holding
+a lifetime pipe from the service, and a journal entry with the leader's kernel start
+time. A service crash stops the group through the watchdog. If the watchdog died
+too, the next launch's sweep stops it: Swift, or the `--legacy` launcher before Bun
+starts. A recorded pid now held by an unrelated process is left alone. Nothing is
+adopted: a new service starts fresh servers.
+
+Behavior changes: `stop` answers once the group has ended, and a restart waits for
+its predecessor. Failed readiness is answered after the group is gone. A stop no
+longer races an install; Bun discards the start that was waiting on it. Install
+output reaches the Activity log. Port allocation also probes the IPv4 wildcard. The
+static site refuses a symlink that leads out of the project (403). Before, only the
+lexical path was checked, so a repository could serve any file on the machine to its
+own preview. Oversized (431) and malformed (400) requests are refused, and responses
+are `Connection: close`.
+
+What stays in Bun: the workspace controller's persisted server fields (`url`,
+`launchSpec`, dependency flags) stay on the S04 adapter. They are relaunch
+decisions and move with that controller. The "Servers" recovery sheet stays too: it
+owns no process, and signals a foreign listener only when the user picks it. The
+Simulator stays with S14. Each is recorded in TASKS.
+
+Verification (worker sandbox): `test/runtime-owner.mjs` passes parity (20 detection
+cases, launch commands, failure messages, URL helpers), process lifecycle, installs,
+routes, crash recovery, drain, static HTTP over a socketpair and the stamping helper.
+Its watcher section needs FSEvents and its socket section needs local port binding;
+the sandbox allows neither (Node and Bun get no FSEvents here either), so the test
+reports SKIP rather than PASS. `service-process --supervision-only` builds the real
+service with the owner and passes, including a new check that the legacy launcher
+sweeps the journal without signalling an unrelated pid. Both typechecks pass, and
+the new Swift files have zero diagnostics under `-strict-concurrency=complete`.
+`devserver-net` still fails here only on port binding. The manager's unsandboxed run
+covers the watcher and socket sections, the full `service-process`, and
+`test:native`, whose fixture project is a static site served by the Swift owner.
+## 2026-09-28 — App is "Trezi", not "Trezi Native" (LKM-108)
+
+The app is native-only, so the qualifier was noise. The build now produces
+`out/native/Trezi.app` with `CFBundleName` and `CFBundleDisplayName` `Trezi` (the
+Dock, menu bar and About panel read these), and the main window title is `Trezi`
+instead of `Trezi · Native`. The app menu already said `Trezi`/`Quit Trezi`. Build
+and startup console lines, the profile-lock error, the restart error and the
+Safari Develop-menu hint drop "Native" too. `start-native.mjs`, `bin/trezi.mjs`,
+`native/index.ts` and the native test helpers find the new bundle path. The build
+deletes an old `out/native/Trezi Native.app` so no second app stays around.
+
+Unchanged on purpose: the bundle identifier `dev.praxis.native` (WebKit data,
+permissions, Keychain), the `TreziHost`/`TreziService` executables, and the
+profile directory `~/Library/Application Support/Trezi Native`. Renaming the
+profile would need a migration like LKM-85's alias, and the ticket doesn't ask for
+one. The preview fixture strings in the native smoke (`Native Trezi fixture`,
+`Edited through Trezi Native`) are test content, not the app name, so they stay.
+The LKM-84/85 records under `docs/rename/` stay as written; COORDINATION and
+MIGRATION note the later rename.
+
+LKM-94 verification repair: the manager's unit run timed out `runtime-owner` at the
+120 s cap. Its `sockets` section used the 90 s default readiness timeout, and its
+port-conflict case bound `127.0.0.1` beside a `0.0.0.0` listener, which macOS
+allows under `SO_REUSEADDR`. The child stayed alive and silent, so readiness ended
+only on the 90 s timer with `deadlineExceeded`, not `conflict`. The runtime is
+unchanged. The test now uses a 12 s readiness timeout for that section, holds the
+port at the exact address the child binds so `EADDRINUSE` is certain, and asserts
+`conflict` within 10 s. It also caches the compiled fixture by source hash and
+compiler version. Cold under three other Swift compiles it takes 33 s and warm 9 s.
+The sockets section itself still cannot run in the worker sandbox (no local port
+binding), so it is the manager's check.
+
+## 2026-09-29 — Swift-owned project memory; annotation storage split (LKM-93 / S05)
+
+The third writer transfer, on the LKM-92 candidate. Under the Swift launch the
+service is the only writer of project memory (`<profile>/trezi/project-memories/<id>.json`,
+format unchanged). Each project gets its own ledger domain `memory/<id>`, so
+revisions and FIFO lanes are per project. Details and the rollback plan are in
+`docs/SWIFT-BACKEND-MEMORY.md`.
+
+Ordering moved with the writer. The editor's `save` and an evaluation's `propose`
+are separate methods, and both commit only on the revision they name. A proposal
+evaluated before a manual save therefore fails `conflict`, and the Bun queue
+re-evaluates once against the new text. A manual save that loses a race is an
+intent: the client retries it on the newer revision, so the user's text wins in
+either order. Evaluation (model call, prompt, parse) stays in Bun as a helper that
+can only propose. It never erases memory, and a failed evaluation is a no-op.
+
+Behavior changes, shared by both owners: a damaged memory file is refused and left
+untouched. Before, it read as empty and the next save or evaluation replaced it.
+A save with unchanged content writes nothing; before, it re-stamped `updatedAt`
+and re-injected the same memory. Injection now compares the owner's digest instead
+of `updatedAt`. It moved into `createProjectMemoryInjection`, and unreadable
+memory never fails a chat. The service creates `<profile>/trezi` only on a fresh
+profile, never beside an older `praxis`/`dsgn` store. Bun resolves that alias
+before its first memory request.
+
+Annotations: the issue asked for annotation CRUD in Swift. The canonical roadmap
+keeps `.trezi/` sidecars legacy-owned until S07's repository lane, because
+publication runs Git on the same tree. The writer therefore stays in Bun, and the
+blocked sub-boundary is recorded in TASKS. What moved is storage:
+`annotation-store.ts` is now separate from publication and runs no Git. It
+serializes per project, keeps entries it does not understand, and refuses a
+damaged file instead of letting the next note overwrite it. Publication stops
+before any Git mutation if the notes file is damaged. The native context
+controller now drops stale note-list responses.
+
+Verification (worker sandbox): `test/memory-owner.mjs` passes all nine sections.
+They cover parity, basics, ordering, strict frames, damaged/external files, the
+session-store guard, injected faults plus SIGKILL at each boundary, restart and
+rollback, and Bun's client, queue and editor on the real owner. The editor check
+includes failed autosave keeping and then saving the draft. `project-memory`,
+`annotation-store` and `native-context` pass, the last with the new stale-response
+check. Both typechecks pass. The new Swift files have zero diagnostics under
+`-strict-concurrency=complete`. The unit tier passed 121 of 127. The 6 failures
+are sandbox limits: local port binding (`trezi-agent-tools`, `codex-mcp`,
+`native-shutdown`, `native-preview-recovery`, `devserver-net`) and the XPC lookup
+in `service-process`. `service-process` still built the real service with the
+memory owner and passed its supervision and rollback sections. `test:native` needs
+the manager's desktop run.
+## 2026-09-28 — Merge candidate into LKM-104 (LKM-103/109/110)
+
+Candidate owns chat scroll (LKM-103), the all-failures runner (LKM-109) and `--only`
+groups plus the evidence budget (LKM-110). Conflicts: `smoke-core.ts` keeps
+candidate's `selectSmokeChecks(parseSmokeGroups(...))` with LKM-104's 9-line and
+40-repeat smoke drafts; `smoke-composer.ts` keeps LKM-104's Send/Return/Stop
+matrix; `test/run.mjs` is candidate's list. The duplicate latest-row clearance
+machinery is dropped: `composerVerification`'s `latest` field,
+`captureVisibleChatColumn`, `smoke-composer-latest.ts`, `test/native-composer-latest.mjs`
+and the latest-line OCR (evidence budget). The `sending`/`submitted` captures now wait
+on `chatAcceptance`'s `latestBottom`/`readingHeight` and save its full-column capture
+plus JSON (`-chat.png`/`-chat.json`). The layout fixture's shrink-after-submit block
+keeps the composer checks and drops the reading-inset assertion (LKM-103's).
+No GUI suite ran.
+
+## 2026-09-28 — Rebase composer evidence on LKM-103's scroll work (LKM-104 repair)
+
+Manager verification failed with "latest message did not settle above composer".
+Its saved state (`composerInset` 196 = 128pt compact composer + 68, latest reply in
+`visibleMessageIDs`, `bottomPosition` 0, `revealAppliedRevision` 6) shows the
+composer HAD returned to compact height after the submit. `bottomPosition` is the
+lazily-realized "bottom" anchor's frame; a tall reply left it unpublished (0), so
+the old readiness check (`bottomPosition > 0`) could never pass. That was the wrong
+observable in the harness, not a composer that failed to shrink. Pinning the
+conversation to the latest row is now LKM-103's (candidate 4e3c4bf: the AppKit pin
+in ChatScrollStyle, latest button, chat acceptance).
+
+Merged onto candidate, LKM-104 keeps only the row/Send work. Dropped as LKM-103's:
+the `latestRevision` scroll hook and the scroller/inset reporting in Chat.swift and
+Host.swift. `smoke-composer.ts` now sits inside candidate's per-width structure
+(`chatAcceptance` sets 440/320pt); `smoke-core.ts`, `Composer.swift`, the layout
+fixture and `test/run.mjs` are candidate's plus LKM-104's edits only.
+
+The check stays strict but uses the right observable: `composerVerification` reports
+the newest message's measured frame and the composer top in one space; the fixture
+waits (no fixed sleep) until the message ends above the composer, rejects an
+unmeasured row, and requires the last painted line in a full-column capture
+(`captureVisibleChatColumn`) for the `sending` and `submitted` captures. At each width
+it also proves: Send disabled and inert (click and Return) when empty; Return submit at
+440pt, Send-click at 320pt; the compact composer and locked model while sending
+(Stop enabled); attachment, model and Auto interactions. Windowless regressions cover
+shrink-after-submit at both widths (`test/fixtures/composer-layout/main.swift`: compact
+height, bottom anchor and reading inset) and the settle logic
+(`test/native-composer-latest.mjs`).
+
+Checked in a scratch tree of candidate + these edits: typecheck, native typecheck,
+native build, composer layout/latest/controller pass. Unit tier there: only sandbox
+socket failures and the docs-link check (scratch has no git). No GUI suite ran.
+
+## 2026-09-28 — Return LKM-103 scope; keep LKM-107 reveal intact (LKM-104 review)
+
+After updating onto candidate (LKM-107, LKM-89), remove everything this branch
+had borrowed from LKM-103 commit `d0c6803` so the two land independently:
+`src/native/ChatScrollStyle.swift` (ChatLayout + scroller probe) deleted; the
+Chat.swift ChatLayout insets, status padding, `.background(ChatScrollStyle())`
+and viewport-size follow reverted; the `scripts/build-native.mjs` source entry
+and `test/native-composer-layout.mjs` compile-list entry reverted; the
+fixture's exterior-spacing and scroller-policy blocks removed. The foreground
+capture no longer flashes or asserts scroller style. It requires 10pt side
+insets and a bottom gap that is either flush (before LKM-103) or equal to the
+sides (after), and only reports scroller facts as evidence.
+
+LKM-104 keeps its own row/matrix work. Chat.swift now differs from candidate
+only by the test-only `latestRevision` scroll-to-latest hook; the LKM-107
+`reveal(...)`/`ChatReveal.swift` path, its revision-settled `revealChatIsland`
+reply and the removed Shadow Light 350ms sleep are untouched. The Shadow Light
+fixture runs before the composer matrix and no longer sees any spacing change
+from this branch, so the recorded failure is not reachable from it; the
+existing `native-chat-reveal` regression passes. The capture-readiness helper
+is renamed `smoke-composer-latest.ts` / `test/native-composer-latest.mjs` to
+make clear it is latest-message reachability, not scroll styling.
+
+Typechecks, native build, composer layout/latest, chat reveal, controller and
+docs-link checks pass. No GUI suite was run by this worker.
+
+## 2026-09-28 — Foreground matrix produces interaction evidence (LKM-104 review)
+
+Independent review asked that manager verification itself prove the
+interactions at the required widths/states, not only at the original width.
+At each of 440pt (normal) and 320pt (narrow) the foreground fixture now:
+captures empty; asserts Send is disabled and that both a Send click and a
+window-delivered Return leave an empty draft unsent (and insert no newline);
+opens/cancels the attachment sheet; switches Model A→B and Permission
+Ask→Auto; types a five-line draft and captures it, asserting Send enabled,
+growth past the compact form and no inner scrolling; submits it (Return at
+normal, row Send click at narrow) and checks the exact multiline payload; then
+captures `-sending`, asserting Stop is enabled, the form is compact again,
+Provider/Model lock while Permission stays usable, and the submitted message is
+visible. A distinct long reply ends each turn so the next capture's OCR proves
+the newest reply stays reachable; a final `restored` capture repeats it at the
+original width. `composerVerification` gains `keySubmit` plus Send/picker
+state, composer height and text-fit fields. The windowless layout fixture
+mirrors the five-line draft at 440/320pt chat widths (grows, fits, keeps the row).
+
+Windowless composer layout/scroll, full native build and TypeScript/native
+typechecks pass. Unit tier: 103 pass; the 5 failures are sandbox `listen`
+denials (trezi-agent-tools, codex-mcp, native-shutdown, native-preview-recovery,
+devserver-net). No GUI suite was run by this worker.
+
+## 2026-09-28 — Diagnose initial composer capture timeout (LKM-104 escalation)
+
+Map the manager stack at bundled index.cjs:18696/18747 to the initial
+capture's newly added latest-message wait. The recorded state has zero
+messages, a tokens setup card and bottomPosition 0; the old predicate rejects
+that state for all 100 polls. This is a fixture precondition failure before
+the first capture, not evidence of failed control alignment.
+
+Extract capture scroll readiness and reveal/wait only when messages exist.
+Preserve the populated-conversation geometry requirement, foreground captures,
+scrollbar assertions and final-reply OCR. Timeout errors now name the capture
+and retain its last chat geometry. Register a non-GUI regression for the
+recorded empty state, delayed populated geometry, and rejection of zero or
+occluded populated positions. Same-row layout and LKM-103 spacing remain intact.
+
+Focused composer layout/scroll, controller, boundary and TypeScript/native
+checks pass. No native GUI suite or manager verification command was run;
+foreground matrix execution and screenshot inspection remain manager-owned.
+
+## 2026-09-28 — Reconcile composer spacing and foreground matrix (LKM-104 review)
+
+Candidate remains 771ce3d, but repository history contains LKM-103 commit
+`d0c6803`. Reuse its ChatLayout, ChatScrollStyle, Chat.swift integration and
+windowless tests in this worktree without changing Git history. The composer
+now has equal 10pt exterior bottom/side insets; status and follow clearance
+include that bottom gap. The conversation uses the small system scrollbar,
+respects Always-show preferences, and keeps the resize follow behavior.
+Preserve LKM-104's same-row controls and wrapped-draft sizing repairs.
+
+Extend the manager foreground fixture to 440pt normal and 320pt narrow chat
+widths, each with empty and multiline input. Save composer PNGs plus full-column
+`-chat.png` companions and JSON geometry/OCR for `normal-empty`,
+`normal-multiline`, `narrow-empty` and `narrow-multiline`. Full-column captures
+include the exterior gaps and flashed conversation scrollbar. Add a deterministic
+long reply, assert scrolling is available, reveal the latest message through an
+ephemeral-only command, and require its final line in foreground OCR. Preserve
+attachment/model/permission/submission checks and restore the original width.
+
+Windowless composer/spacing/scroller checks, native controller, native boundary,
+TypeScript/native checks, full Swift source typechecking, docs links and diff
+whitespace checks pass. No GUI suite or new foreground captures were run by this
+worker. Manager must execute the added matrix and inspect all four PNG pairs
+for centered controls, equal outer gaps, subdued scrollbar and no gradient.
+
+## 2026-09-28 — Measure wrapped drafts with native scrollbar geometry (LKM-104 feedback)
+
+Reproduce an uncapped wrapping overflow through the real composer update path
+without opening a window: after a capped draft, a legacy scrollbar retains a
+17pt gutter, producing a 144pt document in a 127pt viewport at 420pt width.
+Measure the draft with AppKit's content-size API and the actual scroller style;
+settle the scroll subtree before TextKit sizing so viewport/minimum-size changes
+precede document fitting. Preserve scrollbar styling, row layout and fit checks.
+
+Replace the older manually assigned test viewport with actual Auto Layout.
+Add fresh bridge-update sequences at 320/420/520pt for overlay and legacy
+scrollers, including IME marking/unmarking, the preceding capped paint and
+empty reset. The new regression failed before the repair and now passes.
+Report actual clip viewport dimensions, scroller style and text minimum height
+in composer inspection; retain these in the desktop fit assertion's failure.
+
+Candidate remains 771ce3d and contains no equivalent repair. Focused windowless
+AppKit, composer controller, TypeScript/native, docs-link and whitespace checks
+pass. The manager failure did not log its viewport/scroller dimensions, so the
+reproduced legacy-scroller cause still needs confirmation by the desktop rerun.
+Foreground captures and LKM-103 integration remain manager-owned; this worker
+ran no GUI suites or configured manager verification command.
+
+## 2026-09-28 — Repair composer growth smoke fixtures (LKM-104 feedback)
+
+Trace the manager's bundled failure at index.cjs:19816 to the smoke fixture's
+requirement that six draft lines grow the form by more than 60 points. The
+same-row layout gives the minimum-height form more text space, so that fixture
+no longer exercises the asserted growth. Keep the growth assertion and use
+nine lines; lengthen the soft-wrap fixture to exercise growth at wider widths.
+No product layout or behavior changes were needed in this feedback pass.
+
+Mirror the smoke draft sequence in windowless AppKit checks at 320/420/520pt,
+using actual Auto Layout viewports. Require >60pt growth, a further capped
+increase, uncapped soft-wrap growth, fitting short documents and scrollable
+capped content. All pass: compact/grown/capped heights are 128/235/368pt;
+wrapped heights are 235/184/167pt respectively. TypeScript/native checks,
+composer controller, docs links and diff whitespace checks pass.
+
+Compared candidate 771ce3d: no equivalent smoke fixture repair is present.
+Manager must rerun desktop verification and inspect foreground captures, then
+reconcile LKM-103 as previously noted. No GUI suite or configured manager
+verification command was run by this worker.
+
+## 2026-09-28 — Composer Send shares the bottom row (LKM-104)
+
+Move Send into the attachment/provider/model/permission stack, centered on the
+same horizontal row with Send at the far right and text above. Retain selector
+compression/minimum widths, native controls and action handlers; account for the
+removed raised-button space in draft height measurement. Keep the existing
+minimum/capped form heights and exterior layout/scrollbar treatment unchanged.
+
+Include Send in foreground verification geometry and require every control to
+share the row center. Windowless AppKit checks pass at 240/320/420/520 points for
+empty, multiline and capped drafts, including deliberate overlap/raised-Send
+rejection. Bun TypeScript/native checks, composer controller and docs links pass.
+
+Inspected local candidate 771ce3d before editing: it matches this worktree base;
+LKM-103 is absent from its task notes and composer/chat changes. Manager must
+reconcile LKM-103 exterior equal insets and quieter scrollbar, then capture
+normal/narrow empty/multiline states and verify interactions, latest-message
+reachability and absence of gradients under the desktop lock. No GUI suite,
+configured manager verification, staging or commit was performed by this worker.
+## 2026-09-28 — Merge-friendly docs and native smoke groups (LKM-110)
+
+Six of the last eight merge conflicts were only in the two append-style logs, so
+`.gitattributes` now union-merges `docs/TASKS.md` as well as `docs/PROGRESS.md`.
+`test/docs-merge-union.mjs` builds a disposable repo with this checkout's
+attributes, appends different lines on two branches and merges them: no conflict,
+both sets kept (it fails without the TASKS rule). Union can keep both versions of
+a line both sides edited, e.g. a checkbox ticked differently, so review those.
+
+AGENTS.md and CLAUDE.md gain an Evidence budget: a foreground capture plus JSON
+geometry/state from existing fixtures is enough. OCR of wrapped text, synthetic
+CGEvent/input-routing tests and `defaults write`/system preference changes need
+an explicit ticket requirement, and tests must never change the user's system
+settings.
+
+`--only=group,group` (`src/native/smoke-groups.ts`) filters which native smoke
+groups run: `core`, `islands`, `shadow-light`, `sidebar`, `settings`, `chat`,
+`composer`. With LKM-109's collect-all runner merged, `runNativeCoreSmoke` only
+filters its named check list (`selectSmokeChecks`). The hook is one import
+after the last existing one and a filter at the `runSmokeChecks` call site. It
+stays out of the top-of-file imports and the `wait`/`inspect` helpers, which the
+candidate rewrote (smoke-wait), so the merge is clean. An earlier version put a
+function-local shadow of `runSmokeChecks` next to those helpers, and that
+conflicted. Failure collection, capture/restore and skipping are untouched.
+`SMOKE_CHECK_GROUPS` maps each check to its group(s), and a check with
+no group (or prelude entry) throws, so new checks can't escape `--only`;
+`test/native-smoke-groups.mjs` parses smoke-core.ts and asserts this plus that
+no selection filters out a dependency. The prelude (`startup`, `open-project`,
+`chat-ready`, `final-shell`) always runs, and a filtered run prints a
+`NATIVE SMOKE FILTERED` notice saying it is not full-suite acceptance. `checkChatIslands` reads the selection
+itself so `islands` and `shadow-light` share the one `chat-islands` check and its
+fixture scope. `dev-native.mjs` rejects an unknown/empty group, or
+`--only` without `--test`, before building; `--live` requires `core`.
+`native-runtime` asserts sidebar evidence only when `sidebar` ran. With no flag,
+every group runs exactly as before. Group names are listed in `--help` and
+docs/TESTING.md.
+Manager verification then failed `native-boundary` with exit 0 and its PASS line
+in the log: `runCommand` (test/helpers/test-runner.mjs) SIGKILLs the test's
+process group after exit to reap descendants, and macOS answers EPERM, not ESRCH,
+when the group holds only unreaped zombies (esbuild's service child, which that
+test starts, racing the exit). The runner recorded that as a spawn error and
+marked a passing test FAIL. `killTargetGone` now treats EPERM as "gone" only for
+those post-exit reaps on darwin; stop/timeout kills stay strict, and
+`test/test-runner.mjs` covers the matrix. It could not be reproduced on demand
+(240 fast/esbuild runs passed), so this is fixed from the mechanism and evidence.
+
+## 2026-09-29 — Swift-owned workspace identity and persistence (LKM-92 / S04)
+
+The second writer transfer, on the accepted LKM-91 base. Under the Swift launch
+the service is the only writer of `workspace.json` (format unchanged). It owns
+project identity (root → key), membership, order, the selected project and
+recents, through the ledger domain `workspace`. Details and the tightened
+rollback plan are in `docs/SWIFT-BACKEND-WORKSPACE.md`.
+
+The file mixed the domain with fields owned by later slices: session keys and
+chat settings (S11), URL, launch spec and dependency flags (S06), and the branch
+(S07). Moving the whole file would have transferred those early; splitting it
+would have broken rollback to the old format. Instead Bun's controllers still
+decide those values, and the workspace controller sends only their differences
+through a typed `update` adapter. It validates each field and refuses `root`,
+`key` and `touchedAt`. Swift persists them without interpreting them. One writer
+per datum, one writer of the file.
+
+Identity, order and selection now come from the store, never from a local
+mutation. `open`, `select` and `close` are awaited before anything that depends
+on them: agent sessions, Git, detection, dev servers, activation and teardown.
+A selection that cannot be persisted shows the error and starts nothing. Keys
+keep their string form, so no session store or agent map changes. Canonical-root
+identity is added on `open`: a root that `realpath`s to a stored project's
+folder (a symlink, or `/tmp` vs `/private/tmp`) returns that project instead of
+creating a duplicate.
+
+The operations are written twice, in `src/service/WorkspaceFile.swift` and
+`src/native/workspace-model.ts`, and tested byte for byte. The TS copy backs
+the `TREZI_BACKEND_OWNER=legacy` writer. Four profile fixtures (current, old,
+odd, empty) go through 18 operations with identical results and bytes. To make
+that possible, the shared `JSValue` writer now formats numbers and orders
+integer-like keys exactly as `JSON.stringify` does; preferences output is
+unaffected. Both owners now keep invalid entries, unknown fields and old
+recents where the old writer dropped them. `close` also removes duplicate
+copies of a key. The unused attach-time `legacy` raw-workspace parameter is gone.
+
+The preferences pipe inbox and drain became the generic `DomainChannel`, and the
+service routes `{"service":"workspace"` lines to the second owner. Bun's
+client sends operations as intents, one at a time. A conflict caused by an
+adopted external edit is retried on the newer revision; it never falls back to
+a local write.
+
+Verification (worker sandbox): `test/workspace-owner.mjs` passes all seven
+sections. That covers parity, operations and concurrency, external edits and
+damage, injected write faults, SIGKILL at each durable boundary, rollback in
+both directions, and Bun's client plus the controller on the real owner across
+a service restart and UI reattach. `native-workspace-controller`,
+`native-workspace`, `preferences-owner`, `operation-ledger` and
+`service-process --supervision-only` also pass, the last with the real service
+executable built from the new sources. New Swift files have zero diagnostics
+under `-strict-concurrency=complete`. Both typechecks pass. The full
+`service-process` XPC section, which adds a workspace round trip through the
+real service, and `test:native` need the manager's unsandboxed run.
+## 2026-09-28 — Native smoke reports every failure in one pass (LKM-109)
+
+Before this change, `runNativeCoreSmoke` was one long async function, so the
+first failing assertion ended the run. Each agent loop therefore found only one
+problem. The function is now a list of named checks (`startup`, `open-project`,
+`mobile-viewport`, `chat-ready`, …, `final-shell`, plus `live-provider` under
+`--live`). They run through the new pure `smoke-runner.ts`. Each check keeps its
+assertions verbatim, moved as-is. A check declares `dependsOn` only for the checks
+whose state it builds on. In practice almost everything needs `open-project`, and
+the chat checks need `chat-ready`. When a dependency does not pass, the check is
+skipped with an explicit `skipped: depends on X`. Independent checks still run.
+
+After a failure the runner captures `failure-<check>.png`. It then runs that
+check's own cleanup, for example closing its sheet or content window, docking
+and hiding the editor, clearing the composer or leaving mobile/History-API
+navigation. Last, it runs a shared restore (`smoke-restore.ts`). The restore
+reuses the sidebar fixture's `sidebarFocus` cleanup and `preparePreviewInput`,
+turns select mode off, and returns to the first fixture project in desktop
+viewport on its own page. That way one broken check leaves the app in the state
+a passing run would have left it. Restore runs only after failures, so a passing
+run follows the same sequence as before. At the end the smoke prints the
+summary documented in `docs/TESTING.md` and throws if anything did not pass.
+`index.ts` already turns that throw into exit status 1.
+
+To prove the behaviour without breaking a real check, `TREZI_NATIVE_SMOKE_FAIL`
+names checks that fail deliberately. `test/native-smoke-runner.mjs` covers the
+runner with a fixture list. Also, `test/run.mjs` now kills each test after
+120 s by default instead of 600 s, which matches what Agent OS passes.
+
+## 2026-09-28 — Settings OCR returns wrapped lines out of order (LKM-106 repair)
+
+`settings-visible-800-on-chat` failed although its PNG shows the engine help
+in full. Vision returned the wrapped help's continuation (`Gateway API key.`)
+before its first line (`… requires an Al`), and the checker joined observations
+in result order and then looked for each sentence as one contiguous run. The
+capture carries text only, with no observation boxes to sort by. So
+`assertSettingsEvidence` now chains a required sentence across line
+observations anchored at line edges: it starts at the end of one line, passes
+through any whole lines, and finishes at the start of another. The pieces must
+concatenate to exactly the sentence, so every word is still required, in order.
+Only the observation order is free. The I/l fold is kept, and the Off-state
+absence checks use the same matcher, so split engine text is still caught.
+`test/native-settings-evidence.mjs` replays that capture's verbatim OCR (it fails
+on the previous checker) and rejects dropped, misspelled and reordered words and
+fragments that don't sit at line edges. All 18 saved `settings-visible-*`
+captures pass the new checker; only this one failed the old one.
+
+## 2026-09-29 — Latest button click never ran its action: native NSButton (LKM-103)
+
+`acceptance-WhenScrolling-6-latest` failed with `probeShowsLatest` true and
+`latestVisible` false (latestTop 0, readingHeight 542). Neither measurement
+was wrong. The dump shows `lastLatest.buttonClickCount` 0 and `distanceAfter`
+1673.5 pt: the reader was still 1673 pt up in history because the latest
+click never ran the button's action. The click itself was correct:
+`{519.5, 229}` is the exact window point of `latestButtonFrame
+{{271,508},{37,22}}` (chat x 230, flipped 748 − 519), and it hit the hosting
+view (`NativeChat`). A SwiftUI Button rendered inside NSHostingView offers no
+AppKit control there. No run has ever shown this click working: the b35c7def
+failure blamed on a stale `didEnd` had the same symptom before click counts
+existed.
+
+Offscreen (no WindowServer), `NSButtonCell`'s own tracking loop consumes a
+queued `mouseUp` and fires the action, which is the path the visible chat
+window uses (the NSScroller drag works the same way). A SwiftUI Button fired
+for neither delivery order. So the latest affordance is now a native
+`ChatLatestButton` (`src/native/ChatLatestButton.swift`):
+- It is an NSButton sibling above the chat in `chatColumn`, placed `margin`
+  (12) above the composer clearance at the trailing edge, with the same
+  geometry as before.
+- The probe's `showsLatest` still drives it. Its real frame (chat top-left
+  space) feeds `latestButtonFrame`, and it hides with the chat.
+- A press bumps `model.latestRequest`; SwiftUI then follows, scrolls to latest
+  and attaches, exactly as the old action did.
+- The SwiftUI overlay, the `reportsFrame` modifier and the `chatRoot` space
+  are removed.
+
+The harness now also asserts that each latest click runs the button action
+(`latestButtonClickCount` + 1) before the unchanged latest-row clearance check.
+
+Fixture: the shown button reports a real frame at the exact clearance
+position. A click at that frame hit-tests to the button, and its tracking loop
+consumes the queued mouseUp and runs the action once. Hidden/chat-hidden
+states report zero. Negative control: the SwiftUI button's hit is not a
+native control. On head the test fails because no native control exists.
+
+Candidate 922eca70 conflicts (TASKS, smoke-core): the smoke-wait import moved
+to the top of smoke-core and the chat context is applied inside `inspect`, so
+only lines the candidate leaves untouched change. The LKM-103 TASKS section now
+sits after LKM-106, so the candidate's inserts at the top don't collide. Both
+three-way merges were simulated clean with `git merge-file`.
+
+## 2026-09-29 — composerInspect timeout during the TIFF paste: diagnosis (LKM-103)
+
+Manager verification failed in the core smoke right after NATIVE ISLANDS PASS
+with `Native check timed out: composerInspect; false`. Diagnosis from the
+saved log and artifacts:
+
+- **Which wait:** the bundle stack (`index.cjs:20489`) is the clipboard-paste
+  loop's `attachments.length === count && enabled && text === ''` wait
+  (smoke-core.ts:87). `paste-png.png` was written in this run and
+  `paste-tiff.png` is from an earlier run, so the PNG paste passed and the
+  **TIFF** paste timed out.
+- **No LKM-103 code on that path:** it runs no code from the last two attempts.
+  `chatAcceptance`, `ScrollerDrag`/`revealKnob` and the drag/latest harness
+  steps first run at smoke-core.ts:212 (`checkVisibleComposer`) and in the
+  later chat-scroll acceptance. The only LKM-103 code active there is the
+  conversation layout/probe, which passed this same step in earlier runs.
+  Nothing else in the repo writes `NSPasteboard.general`, and the paste is
+  synchronous (write → `sendAction(paste)` → read), so there is no internal race.
+- **Anomaly:** `failure.png` shows the window had lost key status (grey traffic
+  lights, dimmed toolbar), while `paste-png.png` shows it key. Something
+  outside the app took focus during the wait.
+- **Ambiguous evidence:** the dumped chat state's `composerInset: 314` implies
+  composerHeight 236. That fits either one attachment row (128 + 108) or about
+  seven lines of pasted text. The old helper printed only the predicate's
+  `false`, so the run cannot say whether `attachments`, `enabled` (chat
+  `ready`/`switching`) or `text` failed.
+
+Given that evidence I could not attribute this to LKM-103 code, so no product
+change is claimed as its fix. I did not weaken, skip or lengthen any check.
+Instead the step is now self-diagnosing:
+
+- `src/native/smoke-wait.ts` replaces smoke-core's inline `wait`/`inspect`
+  (same 10 s timeout and 80 ms interval). A timeout still prints the label and
+  predicate result, then appends the last inspected state: scalars, array
+  lengths, truncated strings, no attachment payloads.
+- The paste wait adds Bun-side `ready`/`switching`/`running`/text
+  length/attachment count.
+- `composerInspect` also reports `windowKey`, `appActive` and
+  `inputIsFirstResponder`.
+- `test/native-smoke-wait.mjs` (unit tier) feeds the failing predicate a
+  timed-out state and requires the message to name each field. It reproduces
+  the old `composerInspect; false` message as a negative control and fails if
+  the diagnostic detail is removed.
+
+## 2026-09-29 — Reveal the overlay knob before the acceptance drag (LKM-103)
+
+The latest-button fix held, but "Native thumb dragging moves content" failed
+intermittently: the hit target was NSClipView, not NSScroller, and scrollY
+stayed at 3306 (run b35c7def had passed with NSScroller). The chat's
+autohiding overlay knob had faded before the synthetic mouseDown, so the click
+fell through to the clip view.
+
+Harness-only fix; product style and autohide are unchanged.
+- `ScrollerDrag.revealKnob` calls `flashScrollers()`, as scrolling does, then
+  polls with a bounded wait (1.5 s) until a hit-test at the knob's window
+  location returns NSScroller.
+- The acceptance fails with the hit class, knob rect and elapsed wait if it
+  never does. `lastDrag` records hit-before/after-reveal and `revealWait`.
+- `ScrollerDrag.perform` refuses (queues and delivers nothing) unless the knob
+  hit-tests to NSScroller at mouseDown, so a drag can never land on the clip
+  view.
+- The drag must still go through NSScroller and move content toward history.
+
+Fixture: a view covering the knob stands in for the faded scroller. The drag is
+refused before mouseDown, the reveal wait times out within bounds and reports
+the blocker, and once the knob is uncovered it hit-tests to NSScroller and the
+drag moves content, in both modes. Removing the refusal guard fails the fixture.
+
+## 2026-09-29 — Ignore stale live-scroll end after latest attach (LKM-103)
+
+Manager verification passed wheel and thumb drag in both Always and
+WhenScrolling, then failed `acceptance-WhenScrolling-6-latest`. After the
+latest-button click it showed `pinned=false`, the latest button still visible,
+`scrollY=2688.5` / `documentHeight=4774` and `latestVisible=false`.
+
+Likely cause (inferred from code, not yet confirmed by counters, which did not
+exist in that run): an overlay (WhenScrolling) thumb drag can post
+`didEndLiveScrollNotification` after the click's `attach()`. The old handler
+then called `userScrolled()`: it detached, bumped the pin generation (dropping
+attach's queued pin) and reported `follows=false`. The windowless replay of
+that order reproduces the failure exactly: detached, 900 pt from the end.
+
+Fix: a Cursor repair patch, reviewed and corrected here.
+- `didEndLiveScroll` detaches only when a live scroll is open. Otherwise it is
+  ignored and counted (`ignoredLiveScrollEndCount`).
+- `attach()` closes any open live scroll, counts attaches and sets `isPinned`
+  directly. The patch had used `setPinned(true)`, which synchronously called
+  `onPinnedChange` (SwiftUI `@State`) and `onLatestButtonChange` (published
+  `showsLatest`) from inside `updateNSView`: a state mutation during a view
+  update. The button already sets `follows = true`, and the pin's bounds change
+  refreshes the button afterwards.
+- The patch did not compile: `latestButtonClickCount` was `private(set)` but
+  incremented from `ChatConversation`.
+- Acceptance `lastLatest` records hit target, click point, and click/attach
+  counts, distance, pinned, live-scroll and ignored-end counters before the
+  click. It adds the "after" values only once the queued click and pin have run.
+  The patch had read them right after `postEvent`, when the click was merely
+  queued, and hit-tested in the content view's own (possibly flipped) space
+  instead of its superview's.
+
+Fixture regression, three orders: a live scroll open at attach; only a stale
+end; and the stale end landing before attach's queued pin. It asserts `attach()`
+makes no synchronous SwiftUI callbacks, the probe stays pinned at the end, and
+the stale end is counted. Negative controls: with the old handler the
+queued-pin order fails ("stale didEnd must not detach (false, distance 900.0)");
+with the patch's `setPinned(true)` it fails "attach pins without calling back
+into SwiftUI (2 callbacks)".
+
+## 2026-09-29 — Thumb drag through the scroller's own tracking loop (LKM-103)
+
+Manager verification now passes wheel and latest-button checks (frame
+{{271,508},{37,22}}, no system settings touched). It next failed "Native thumb
+dragging moves content": scrollY stayed at 3306.
+
+The drag was no longer pid-posted: it already used window-targeted
+`NSEvent.mouseEvent`s through `NSApp.postEvent`, the path that makes the
+latest-button click work. What differs is that NSScroller runs its own
+tracking loop inside `mouseDown` and dequeues the drag from the app queue.
+The harness posted each `mouseDragged`/`mouseUp` from async code after 25 ms
+sleeps, so the tracker never had the events it needed.
+
+Offscreen diagnosis (sandbox, no WindowServer, window number 0):
+- A real NSScroller hit-tests at its knob centre in both Always and
+  WhenScrolling (overlay) modes, even when the overlay is not revealed.
+- With the dragged/up events queued first and the mouseDown delivered to the
+  hit-tested scroller, scrollY went 3000 → 2187 for a 96-point upward drag in
+  both modes.
+- Posting the same events without routing the mouseDown left it at 3000.
+
+Fix: `src/native/ScrollerDrag.swift`, compiled into the app and the fixture.
+- It builds window-targeted down/dragged/up events at the knob centre (window
+  coordinates) and queues the dragged/up events.
+- It then delivers the mouseDown with `window.sendEvent`: AppKit hit-tests it
+  to the scroller, and the scroller's tracking loop consumes the queued drag.
+- Scroll position is never set directly.
+- Every acceptance inspection now carries `lastDrag` diagnostics (and each
+  mode writes `acceptance-<mode>-<n>-drag.json`): hit-test target, hit-is-scroller,
+  scroller style, knob rect, window number, whether events resolve to the chat
+  window, queued / consumed-by-tracker / leftover counts, scrollY before/after,
+  and live-scroll inputs seen by the probe.
+- The drag assertion now also requires the expected direction: scrollY must
+  decrease by more than 40 points, in both Always and WhenScrolling.
+
+Fixture regression, in an offscreen window that is never shown, for both modes:
+- The knob hit-tests to the scroller.
+- The events are window-targeted, the tracker consumes all 9 queued events,
+  and content moves toward history.
+- Negative control: the same drag posted without routing the mouseDown leaves
+  scrollY unchanged with 0 consumed, which is how the acceptance check fails
+  without routing.
+
+## 2026-09-29 — Accessibility/scroller modes via an in-process override (LKM-103)
+
+Manager verification failed in `test/helpers/chat-preferences.mjs`. The
+acceptance ran `defaults write com.apple.universalaccess` (increaseContrast,
+reduceTransparency, reduceMotion) and `defaults write -g AppleShowScrollBars`,
+which changes the user's real macOS settings. Restoring then failed with
+"Domain (com.apple.universalaccess) not found". The user confirmed their Mac
+is back to its original state; the protected domain probably never took the
+writes. Hard rule from now on: verification never reads-modify-writes or
+otherwise changes system settings.
+
+- **Removed:** the helper and its mocked unit test. `ChatAcceptance`'s
+  `UserDefaults`/`CFPreferencesAppSynchronize("com.apple.universalaccess")`
+  calls, and its `DistributedNotificationCenter` broadcasts of
+  `AppleShowScrollBarsSettingChanged`/`com.apple.accessibility.api` (a
+  system-wide side effect).
+- **Added:** `ChatSystemEnvironment` (`src/native/ChatEnvironment.swift`).
+  Production returns the live `NSScroller.preferredScrollerStyle` and
+  `NSWorkspace` Increase Contrast / Reduce Transparency / Reduce Motion values,
+  and republishes on their change notifications. The ephemeral `chatAcceptance`
+  command can override the scroller style and/or accessibility in-process. The
+  probe reads the scroller style (overrides reconfigure it through the same
+  notification path as the real setting). The conversation root and the
+  composer beam feed accessibility into the SwiftUI environment keys their
+  views read (`_colorSchemeContrast`, `_accessibilityReduceTransparency`,
+  `_accessibilityReduceMotion`: SwiftUI's public setters for those values).
+- **Not overridable:** AppKit's high-contrast drawing of native controls.
+  `NSAppearance(named: .accessibilityHighContrastAqua)` returns plain Aqua
+  (checked offscreen), so per-view emulation would only force Aqua/DarkAqua.
+  The scroll view's appearance is therefore never replaced; the native scroller
+  keeps following macOS itself, and the acceptance asserts it (`scrollAppearance`
+  empty).
+- **Acceptance:** switches Always/WhenScrolling and all three accessibility modes
+  through the override. It keeps every capture, geometry, wheel, drag,
+  latest-button and layout assertion, and additionally requires each mode to
+  reach the SwiftUI environment the chat renders with (`rendered`). It clears
+  the override in `finally`. Diagnostics report the real system values
+  read-only.
+- **Tests:** `test/no-system-preferences.mjs` (unit tier) scans src/test/scripts/bin
+  for the `defaults` tool, CFPreferences/other-domain writes, persistent-domain
+  writes, preference broadcasts, and the system domains/keys. It self-tests its
+  detector; a temporary helper using the old calls fails it. The composer-layout
+  fixture checks that:
+  - the default provider (shared and fresh) equals the real NSWorkspace/NSScroller
+    values;
+  - partial overrides, clearing, live system reads and change notifications work;
+  - the probe reconfigures to Always/overlay without touching the appearance;
+  - an offscreen NSHostingView's SwiftUI views receive each overridden
+    combination (removing the environment modifier fails it).
+
+## 2026-09-28 — Report the latest button's rendered frame directly (LKM-103)
+
+The native check then showed the button rendered (acceptance-failure.png;
+probeShowsLatest and model.showsLatest both true), but `latestButtonFrame`
+stayed zero. The `LatestButtonPosition` PreferenceKey never arrived through the
+NSHostingView / GeometryReader / ScrollViewReader / overlay nesting, even when
+observed on the root VStack, so the harness could neither report nor click it.
+The PreferenceKey, its emitter and its consumer are removed. The button now
+calls `reportsFrame(in: ChatLayout.rootSpace)`, a small modifier in
+ChatScrollStyle.swift built on `onGeometryChange` (back-deployed to macOS 13)
+plus `onDisappear` → `.zero`. It reports the real rendered frame in the root
+`chatRoot` space, which fills the hosting view with a top-left origin, so
+ChatAcceptance's click conversion is unchanged. The harness still measures
+that frame; it is never derived from a model flag. A zero frame while
+`showsLatest` is true now fails with its own message, and diagnostics include
+`latestButtonFrame`.
+
+A new fixture section hosts the same nesting in an offscreen NSHostingView (in
+a borderless window that is never shown). The shown button must report a
+nonzero frame at the exact bottom-trailing position in chatRoot points, with a
+click point inside the host; hiding resets the frame to zero; re-showing
+reports again. With the modifier turned into a no-op, the section fails:
+"Shown latest button reports a nonzero rendered frame ((0,0,0,0))".
+
+## 2026-09-28 — Latest button driven by the scroll probe (LKM-103)
+
+With input routing fixed, the native check reached the probe (monitorCallbacks
+1, pinned false, userScrollCount 3, scrollY 3943→3243), but `latestButton`
+stayed false. Two defects:
+
+- The harness reads `model.latestButtonFrame`. Its `.onPreferenceChange` was
+  attached to the scroll view before the `.bottomTrailing` overlay that hosts
+  the button. Preferences only flow up from a modifier's own subtree, so the
+  button's frame never reached it. The frame was also measured in `chatScroll`,
+  a coordinate space the overlay isn't inside.
+- Visibility came from the SwiftUI `follows` flag, written back from an AppKit
+  callback, rather than from the probe's own state.
+
+The button's visibility is now `ChatScrollStyleProbe.showsLatestButton`:
+(unpinned or not following) and at least 1pt from the end. The probe refreshes
+it on every clip/document bounds change, on pinned changes, and (deferred) after
+SwiftUI updates, and publishes it to `ChatModel.showsLatest`. The button appears
+as soon as a detached reader scrolls away, and hides the moment they return to
+the bottom (before the settle re-pins) or click latest. Reveal/control
+interaction away from the end still offers it. Its frame is observed on the root
+`VStack` in a new `chatRoot` coordinate space. Acceptance diagnostics add
+`probeShowsLatest`/`modelShowsLatest`; the native checks are unchanged.
+
+The windowless regression has a visibility table, plus wheel and live-scroll
+sequences: following hides it; unpinned and scrolled away shows it; it stays
+visible after rest and composer changes; back at the bottom hides it; re-pin
+keeps it hidden; history shows it again; the latest click hides it. A reveal
+away from the end shows it. Removing the position-driven refresh fails the
+regression ("unpinned and scrolled away shows latest ([])").
+
+## 2026-09-28 — Acceptance wheel never reached the scroll view (LKM-103 input routing)
+
+The native wheel/latest-button check failed again. The log showed
+userScrollCount 0, pinned true and scrollY exactly at the bottom: the wheel
+never reached the scroll logic at all, and there was no re-pin loop (pinCount
+counts only real moves). The acceptance posted a CGEvent with `postToPid`, and
+such events arrive with `NSEvent.window == nil`. The probe's window guard
+dropped them, and AppKit never hit-tested them to the NSScrollView. Tagging
+the public `mouseEventWindowUnderMousePointer*` fields does not change that.
+The `NSApp.currentEvent` re-pin theory in the entry below is wrong. The
+probe-owned pinned state it introduced is still correct and is kept.
+
+- **Diagnostics:** the acceptance inspect result now reports the probe's
+  input-monitor callbacks, scroll-wheel events examined, the last rejection
+  reason (e.g. `nil window: pointer outside conversation`, `other window`,
+  `other window number`, `no vertical delta`, `conversation not in a window`)
+  and the chat window number.
+- **Probe:** `ChatScrollStyleProbe.wheelRejection` accepts a nil-window wheel
+  whose pointer is over the conversation. The pointer comes from the event's
+  Quartz location converted to screen, window and scroll coordinates, falling
+  back to `NSEvent.mouseLocation`. It still rejects events for any other window
+  object or window number.
+- **Acceptance:** AppKit has no window-targeted scroll-wheel constructor, but a
+  window-targeted `NSEvent.mouseEvent`'s CGEvent carries the window number
+  (field 51) and a window-local location; checked offscreen. The fixture
+  retypes that as a precise pixel wheel event and fails loudly unless it
+  resolves to the chat window. It posts the event with `NSApp.postEvent`, so
+  it passes through the event queue, the local monitor, `NSApplication.sendEvent`
+  and NSWindow hit-testing to the scroll view. Hover, thumb drag (still toward
+  history) and the latest click use the same path, so the scroller's own
+  tracking loop dequeues the drags. The harness never calls the probe. Native
+  assertions and thresholds are unchanged.
+- **Windowless regression:** a classifier table (accepted: chat window, nil
+  window over the conversation; rejected: outside, other window or number, no
+  window, no pointer) and the Quartz flip. The real `handleInput` path runs on
+  an offscreen, never-shown window: a nil-window pid-style wheel over the
+  conversation detaches and survives growth; wheels outside it, for another
+  window number, with no delta, or with no window are dropped with the stated
+  reason; non-scroll input is ignored. Restoring the old window guard fails the
+  table.
+
+## 2026-09-28 — Only user input detaches from latest (LKM-103 wheel fix)
+
+(Correction: the root cause below was misdiagnosed; see the entry above. The
+wheel event never reached the probe.) The resize fix passed natively, but
+"Wheel scrolls history and reveals latest button" failed: after a wheel scroll
+up, the view stayed pinned (scrollY 3943, no latest button). The original
+theory was that SwiftUI's `NSApp.currentEvent` check re-pinned the view after
+the probe's programmatic pin; that `currentEvent` logic is removed.
+
+The probe now owns "pinned to latest", and it changes only on user input:
+- A local wheel/key monitor (wheel over the conversation, or scrolling keys
+  with focus inside it) and NSScrollView live-scroll notifications (trackpad
+  gestures, scroller drag) detach immediately. They also invalidate queued
+  pins and report the change to SwiftUI, which shows the latest button.
+- Pins require pinned && `follows`.
+- Re-attach happens only when user input comes to rest at the end
+  (0.35 s settle, not during live scroll), or on an explicit attach (latest
+  button, chat switch).
+- Pins, SwiftUI scrollTo and AppKit clamping never change the state. The
+  `currentEvent` logic is removed.
+
+The acceptance fixture's pid-posted events now name the target window
+(`mouseEventWindowUnderMousePointer…` fields), so AppKit and the monitor see
+`event.window`. Diagnostics include `pinned` and `userScrollCount`. Native
+thresholds and assertions are unchanged.
+
+The windowless regression covers both the wheel and live-scroll paths:
+- A queued pin is dropped.
+- Settle, document/viewport configuration, composer growth/shrink, a
+  composer-height pin request and a resize all leave scrollY unchanged and
+  not pinned.
+- Returning to the end re-attaches only after the input rests.
+- Latest re-attaches.
+- Programmatic pins leave `userScrollCount` at 0.
+
+An in-fixture negative control shows the previous gate re-pins history on
+growth, and removing the detach from `userScrolled` fails the regression.
+
+## 2026-09-28 — Pin following chats from settled AppKit metrics (LKM-103 resize fix)
+
+Manager native verification failed `acceptance-440-resized-short`. The draft was
+capped, then the window was made short: latest bottom 220.9 vs reading height ~211,
+scrollY 4456, document 5055, viewport 568. The composer cap follows the viewport
+(368 at 776, 279 at 568), so the clearance changes with the resize. SwiftUI's
+follow anchor is a *fraction* of the viewport. Applying the tall layout's
+fraction to the short viewport stops ~31pt of scroll and ~10pt of row short,
+which matches the capture. The stale value can come from the probe's stored
+closure, or from a scrollTo resolved after layout.
+
+Following no longer depends on that fraction. The document's bottom padding
+equals the composer clearance, so "following" is exactly "scrolled to the
+document end". The probe now pins the NSScrollView to its end in AppKit, reading
+the document/viewport bounds current at that moment. It does this on every
+settled document/viewport size change, and on an explicit request (composer
+height, viewport, streaming, chat switch, latest button), but only while
+`follows` is true. A reader in history is never moved. The metric-only paths
+(composer height, viewport) no longer issue a SwiftUI scrollTo at all.
+
+The windowless regression replays 440pt with real composer cap heights, in both
+orders (grow→resize, resize→grow). It applies the stale fractional anchor after
+each step before layout settles. It asserts the latest row sits below the top
+edge and above composer top minus status+gap. A negative control reproduces the
+manager's ~10pt shortfall, and removing the settled pin fails the regression. It
+also checks that history position survives growth/resize and ignores pin
+requests. The native acceptance adds the resize→grow order at both widths
+(`short-1-line`, `short-then-grow`, `short-then-grow-tall`). The existing
+assertions are unchanged.
+
+## 2026-09-28 — Rewire LKM-103 acceptance onto the merged candidate
+
+Candidate 0b8037a (LKM-88/LKM-107) now runs native-chat-scroll directly in
+`test:native` with `--require-build`. The earlier LKM-103 chaining from
+native-runtime would have run the fixture twice, so it is removed. The
+acceptance matrix still runs at the end of native-chat-scroll, after the
+candidate's reveal checks, so the configured manager command still produces
+every capture. The wrapper timeout rises from 180 s to 360 s because the
+acceptance matrix now follows the reveal matrix. The Swift build, typechecks,
+composer/acceptance/reveal/docs unit checks all pass. The unit tier failed only
+on sandbox socket/port EPERM.
+
+## 2026-09-28 — Hand-off check of manager acceptance fixtures (LKM-103)
+
+A fresh session resumed the preserved worktree after the previous run stopped
+on a quota limit, and re-checked the staged fixtures against the reviewer's
+evidence list. The list asked for: the real SwiftUI probe, idle/hover/active/drag/
+wheel, live Always-show and accessibility preferences, 440/320-point 1/6/80-line
+drafts, short/tall resize, and native-chat-scroll running under test:native.
+All of these are covered. One change: `chatAcceptance {prepare}` now waits up to
+2 s for AppKit's asynchronous activation before its foreground guard. It still
+fails if activation is denied. Swift build, typechecks, composer/acceptance/docs
+unit checks pass. The unit tier failed only on sandbox socket/port EPERM. No GUI
+suite or preference mutation was run.
+
+## 2026-09-28 — Follow settled chat document bounds (LKM-103 diagnostic repair)
+
+Inspect the retained foreground failure PNG and one/six-line JSON captures. The
+composer and document grow by 83 points (128→211 and 7413→7496), but scrollY
+remains 6636 and the latest row stays at y=549.32, overlapping status clearance.
+The composer-height scroll request runs before AppKit installs the enlarged
+SwiftUI document; it clamps against old bounds with no post-layout retry.
+
+Observe actual conversation document/viewport dimensions through the existing
+native scroller probe and retry SwiftUI scrollTo after AppKit layout changes,
+only while following remains enabled. Ignore origin-only scrolling, preserve
+native scroller policy and controls, and detach observers when the document
+changes or the probe is destroyed. No fixed-delay production retry is used.
+
+The windowless regression replays the captured dimensions, demonstrates the
+stale offset, then checks settled growth/shrink, viewport resize and absence of
+history-scroll feedback. Removing settled-layout delivery makes this regression
+fail at the stale-bottom assertion. Focused composer, acceptance-preference and
+controller checks plus TypeScript/native and full Swift typechecks pass.
+Desktop acceptance assertions are unchanged;
+manager must rerun the native suite and inspect its foreground captures.
+No GUI suite, preference mutation, staging or commit was performed.
+
+## 2026-09-28 — Manager acceptance fixtures (LKM-103 review feedback)
+
+Compare candidate 771ce3d before editing: it has no newer composer/capture fixture
+repair. Wire the separate chat-scroll fixture into test:native's native-runtime
+entrypoint, after the core host exits, so the configured manager command actually
+runs growth/resize/scroll acceptance. Preserve the prior shrinking/streaming checks.
+
+Add ephemeral-only inspection of the probe inside the real SwiftUI conversation:
+assert its configured scroll view identity, native small size, overflowing content,
+live preferred/effective styles and Always-show visibility. Send wheel, hover,
+thumb-drag and actual scroll-to-latest button mouse events to this process.
+Record full-column foreground PNG/OCR and geometry for 440/320-point widths,
+1/6/80-line drafts, short/tall viewport resizing and idle/active/hover/drag states.
+Require equal exterior gaps and the complete latest row above composer clearance.
+Run the existing attachment/model/Auto/send fixture at both widths, with multiline
+and capped draft submission respectively.
+
+The manager desktop-lock fixture temporarily toggles Show scroll bars and the
+actual Increase Contrast/Reduce Transparency/Reduce Motion preferences. Require
+native getters to observe each change and exercise scrolling afterward. Snapshot
+exact prior values/absence, restore in finally and SIGINT/SIGTERM handlers, and
+write restoration journals before mutations. Denied writes or unobserved native
+changes fail explicitly; there is no simulated-preference pass or capture fallback.
+See docs/TESTING.md for capture paths, assertions and crash recovery records.
+
+Worker checks pass: registered preference-restoration unit test (mocked commands,
+no system writes), windowless composer, test runner, TypeScript/native and full
+Swift source typechecking (deprecation warnings), helper bundling, docs links and
+whitespace. No GUI suite, foreground capture or system preference mutation was
+performed by this worker. These are fixtures ready for manager execution; native
+interaction and visual acceptance are not yet claimed.
+
+## 2026-09-28 — Repair composer bounds handoff (LKM-103 feedback)
+
+Reproduce the manager's empty composer capture without opening a window: the
+new CGRect-derived bounds dictionary held CGFloat values, while composer.update
+requires Double values. The failed cast silently retained the initial zero frame.
+Encode placement bounds explicitly as Double and test that exact handoff through
+the real composer update/layout path at each covered width and draft height.
+The new regression fails with the previous CGFloat payload and passes after the
+fix, including nonempty bubble geometry. Keep capture, foreground, OCR and
+interaction assertions unchanged.
+
+Compared candidate 771ce3d: relevant composer/capture fixtures match this branch's
+base and contain no newer repair. Windowless composer checks, chat-controller,
+TypeScript/native checks, full Swift source typechecking (deprecation warnings),
+docs links and whitespace checks pass. Manager must rerun native verification
+and inspect foreground captures; this worker ran no GUI suites or captures.
+
+## 2026-09-28 — Composer exterior spacing and native chat scroller (LKM-103)
+
+Match the composer's exterior bottom gap to its existing 10-point side inset.
+Include that gap in height budgeting, status placement and message clearance;
+keep following the latest message when the viewport resizes as well as when the
+composer grows. Preserve the bubble's controls and gradient-free background.
+
+The conversation is a SwiftUI ScrollView, distinct from the composer's AppKit
+text editor. Configure only its backing NSScrollView with the small native
+scroller and the system's preferred style. AppKit retains fading/hover/dragging
+and accessibility drawing; Always-show uses the native legacy scroller. Observe
+system style changes without replacing the document or handling scroll events.
+
+Windowless composer coverage passes for exterior gaps and message clearance at
+320/420/520-point widths with wrapped/capped drafts, context, attachments and a
+queue. Native overlay/legacy policy, scroll-position preservation and repeated
+configuration checks pass, as do chat-controller, TypeScript/native, full Swift
+source typechecking (deprecation warnings only), docs links and diff whitespace.
+Manager owns desktop verification: foreground normal/narrow/multiline captures,
+latest-message reachability, idle/hover/drag/wheel states and Always-show plus
+accessibility preference checks. No GUI suite or foreground capture was run by
+this worker.
+
+## 2026-09-28 — Settings OCR reads SF Pro "I" as "l" (LKM-106 diagnostic repair)
+
+The manager's `test:native` failed at the first foreground capture
+(`settings-visible-540-off`) with "Missing complete foreground text: Generate UI
+using…". The PNG renders the help correctly; the fault was the comparator.
+SF Pro draws capital I and lowercase l with the same glyph, so Vision returned
+`Generate Ul using…` (and `Al providers…`), while the bold `Experimental Gen UI`
+happened to read correctly. `assertSettingsEvidence` now folds only that
+glyph-identical pair before lowercasing (dotted i stays distinct), and the
+Off-state "engine text is absent" checks go through the same normalizer, so the
+fold cannot make them vacuous. `test/native-settings-evidence.mjs` replays the
+capture's verbatim OCR output (fails on the old comparator) and still rejects a
+dropped word, an i→l misspelling, and homoglyph-read engine text while Off.
+
+## 2026-09-28 — Manager-run Settings evidence, existing checks retained (LKM-106 review)
+
+Addresses the reviewer's recorded-evidence findings: `bun run test:native`
+now produces the Settings evidence itself (native-runtime → smoke-core →
+`checkNativeSheets` → `checkVisibleSettings` in `src/native/smoke-settings.ts`).
+Restore the two Settings steps the earlier repair had replaced: the original
+`settings.png` sheet capture (before the new fixture) and the
+`sheetPerform change` autosave round-trip (after it). No check was removed.
+
+Fixture steps, run per width in the live minimum (540), 600 and 800 points plan:
+foreground Off capture → native On action → Chat model capture → native Jev
+action → capture → Off (engine hidden, Jev preserved) → close/reopen → capture →
+On (Jev restored) → Chat model then immediate close/reopen → capture → Off then
+close/reopen → capture. Each capture asserts foreground ownership, requested
+width ≥ minimum, stable minimum, rendered picker set, contained/hit-testable
+pickers, selected labels, saved values and complete OCR of both explanations
+(engine text absent while Off). Reopens assert a fresh sheet ID with unchanged
+values. Evidence is written before assertions.
+
+Manager should inspect `test/artifacts/native/settings-visible-{540,600,800}-{off,
+on-chat,on-jev,off-preserved-jev,reopened-off-jev,restored-on-jev,
+reopened-on-chat,reopened-off-chat}.{png,json}` (24 pairs),
+`settings-visible-interactions.json`, and the retained `settings.png`.
+Worker checks: typechecks, Swift host build, `native-settings-layout`,
+`native-settings-evidence`, `native-settings`, `native-sheets`, `docs-links`.
+Native GUI execution and PNG inspection remain manager-owned.
+
+## 2026-09-28 — Use the live Settings minimum width (LKM-106 verification repair)
+
+Reproduce the manager's `540 !== 600` failure without a visible window. Production
+uses NSHostingController, which propagates SheetContent's 540-point minimum to
+NSWindow; the prior windowless fixture used NSHostingView and retained the
+manually assigned 600-point minimum. Candidate `51fb928` has the same production
+hosting setup and no equivalent fixture correction.
+
+Match the production hosting controller in the windowless test, assert the
+540-point effective minimum, and exercise actual layouts/picker interactions at
+540, 600 and 800 points. The manager fixture derives its narrow width from the
+live window, retaining normal 600 and wider 800 coverage. Reject invalid minimums,
+assert the minimum remains stable across states/reopens, and retain every OCR,
+foreground, visibility, hit-target, preservation and autosave assertion.
+
+The current capture plan is 24 PNG/JSON pairs named
+`test/artifacts/native/settings-visible-{540,600,800}-*.{png,json}`, plus the
+interaction log with its explicit width plan. Focused windowless and evidence
+checks and TypeScript checks pass. Native execution and new capture inspection
+remain manager-owned; this worker did not run GUI suites.
+
+## 2026-09-28 — Foreground Settings acceptance fixture (LKM-106 review)
+
+Compare candidate `51fb928`: its visible-region capture helper and Settings smoke
+fixture match this checkout; it has no newer Settings acceptance fixture to reuse.
+Reuse the shared ScreenCaptureKit/Vision helper, replacing only the Settings
+cacheDisplay capture with foreground evidence. The existing native suite now
+exercises real SwiftUI picker menu-item target/actions at 600-point minimum and
+800-point wider widths, Off/On, Chat model/Jev, hidden engine preservation, and
+close/reopen autosave (including immediate close after changing the engine).
+
+Save 16 `test/artifacts/native/settings-visible-{600,800}-*.png` captures with
+matching OCR/geometry/value JSON plus `settings-visible-interactions.json`.
+Assert full helper text, engine absence/presence, selected labels, unclipped
+picker geometry, hit targets and foreground ownership. Write evidence before
+assertions so manager failures retain inspection artifacts. No direct form-value
+injection is used by the new Settings fixture.
+
+Add windowless SwiftUI picker/binding checks and negative evidence-validation
+checks to the unit tier. Non-GUI checks and Swift/TypeScript typechecks pass.
+The worker has not run foreground/native smoke verification or inspected these
+new captures; manager execution and independent PNG inspection remain required.
+
+## 2026-09-28 — Experimental Gen UI and Svelte composition (LKM-106)
+
+Rename the native setting, add wrapping help text and conditionally show the
+explained layout method without clearing its saved choice. Preserve default-off,
+autosave and next-message/queued turn settings.
+
+Add bounded compiler-backed Svelte discovery for literal legacy/rune props,
+default slots and zero-argument children snippets. Both Chat model and Jev export
+real `.svelte` imports/source, retain React TSX, reject mixed frameworks and
+unsupported contracts, and keep json-render out of target runtime dependencies.
+Guard output symlinks and reject late results across cancellation or same-engine
+turn replacement. Update both provider tool descriptions and scope documentation.
+
+Focused React/Svelte SSR, deterministic Jev, settings and queue tests pass, as do
+TypeScript/native and non-GUI Swift typechecks. The Svelte fixture compiles and
+renders integrated generated source without paid calls. Native foreground
+readability/interaction checks and the configured verification remain manager-owned;
+no GUI suite, provider calls, staging or commits were performed by this worker.
+## 2026-09-29 — Manager verification: `native-sheets` timeout (LKM-91 / S03)
+
+119 unit checks passed; `native-sheets` hung until the 600 s cap (its first line
+printed, the autosave section never finished). Cause: an earlier repair made a
+cancelled autosaving sheet loop on `flushPending()` until a save succeeded. The
+existing check saves 16,001 characters, which can never succeed, so close retried
+forever instead of staying open with the failed draft ("try closing again to
+retry"). That loop was also unnecessary: `SheetAutosave.enqueue` on the next
+close already retries the retained draft, which `native-settings` proves (failed
+batch keeps the draft, close waits for the retried save). Reverted
+`sheet-autosave.ts` and `sheets-runtime.ts` to their original behavior; kept the
+`native-settings` synchronization hardening (wait for the blocked apply instead
+of a fixed sleep). `native-sheets` and `native-settings` (three repeats) pass.
+
+## 2026-09-28 — Preferences move to the Swift service (LKM-91 / S03)
+
+The first writer transfer. Under the default launch the Swift service is the only
+writer of `preferences.json`, through the operation ledger. Bun keeps the
+controllers that decide what to save, sends awaited batches over its supervised
+pipe and reads acknowledged snapshots. `TREZI_BACKEND_OWNER=legacy` keeps Bun's
+writer as the rollback owner. Nothing else moves. Details and the domain's
+rollback plan: `docs/SWIFT-BACKEND-PREFERENCES.md`.
+
+The file format does not change, down to the bytes, because it is the rollback
+artifact. Swift reads and writes it as insertion-ordered JSON over UTF-16 code
+units with `JSON.parse`/`JSON.stringify` semantics. That keeps key order,
+repeated keys, lone surrogates and the JS `.length` limits exactly as Bun had
+them. The test compares Swift's written bytes with Bun's for the same batch.
+
+The ledger checkpoint is only the file's digest, so the file stays the one copy of
+the values. A batch re-reads the file first. A different digest is an external
+edit: the batch conflicts and the file is adopted as a new revision. The same
+adoption at launch is how newer writes by the legacy owner survive a return to
+Swift. An invalid external file is never replaced. The target digest is journaled
+with the effect record (a new optional `pending` field on ledger operations), so a
+crash between the rename and the receipt is reconciled from the file instead of
+replayed.
+
+The callers were re-inventoried: settings (one atomic batch built from the
+committed state when sent, so a newer last-used model is not clobbered), last-used
+model, publish mode, chat hidden, chat width and panel sizes. Bun's client sends
+one batch at a time on the last committed revision. A timeout or failure rejects;
+there is no local fallback write. Autosave keeps a failed draft and close waits
+for the save. Startup now awaits the snapshot, so the bridge holds host events
+until every handler is registered. On quit the service lets Bun finish, then
+drains accepted preference requests (bounded) before releasing the ledger.
+
+Verification (worker): `test/preferences-owner.mjs` passes, three runs in a row.
+It compiles the real sources into a fixture and covers parity, batches,
+idempotency, concurrency, external edits, injected temp/flush/rename failures,
+SIGKILL at each durable boundary, rollback both ways, and Bun's real client
+against the real owner. The fixture blocks after its own SIGKILL: in a
+multithreaded process `kill(getpid())` can return before the process dies, which
+let a rename slip past an injected crash in one run. The full unsandboxed
+`test/service-process.mjs` passes, and now sends a batch from the supervised
+backend through the real XPC service. `native-settings` adds the failed-draft and
+close-waits cases. Both typechecks and `bun run build` pass. The native GUI tier
+was not run by the worker.
+
+## 2026-09-28 — Durable operation ledger in the Swift service (LKM-90 / S03)
+
+S03's first half: the substrate every writer transfer needs. No domain writer
+moves. Bun still writes preferences and everything else. The preferences
+transfer waits for this to be verified, behind the adoption gate in
+`docs/SWIFT-BACKEND-LEDGER.md`.
+
+`OperationLedger` (an actor) persists intent before effects. The intent digest
+is SHA-256 over canonical domain/mode/service/method/scope/expected
+revision/body. Identity is checked before the revision, so a retry of a
+successful operation returns its receipt instead of conflicting with the
+revision it advanced. Swift actors are reentrant, so each domain has a FIFO lane
+held across the effect's suspensions. `beginEffect()` splits cancellable
+preparation from a non-idempotent effect, which is what makes the restart rule
+exact: an intent without an effect is abandoned (never run later), and an effect
+without a receipt is `uncertain`. An uncertain operation blocks its domain until
+the owner reconciles it against the external world. Blind replay was the thing
+to avoid. Cancel before the effect discards the late result; after the effect,
+cancel returns `tooLate`.
+
+`LedgerStore` keeps `<profile>/service/ledger/`: a checksummed, `F_FULLFSYNC`ed
+journal and an atomically replaced snapshot, with generations so a crash
+mid-compaction is unambiguous. Only an unterminated final line counts as a torn
+write. It is copied to `quarantine/` and truncated. Any other damage, and any
+other format (a newer build's store), refuses to open with the files untouched.
+A fresh store would forget receipts and execute duplicates, so replacing one is
+an explicit `quarantineLedgerStore` call, never automatic.
+
+The ledger epoch is persisted, so event cursors survive restart. Gaps older than
+the 1,024-event window, foreign epochs and future cursors need a snapshot.
+`LedgerMirror` pins the consumer rule: a reply never writes state, so a late one
+can't overwrite a newer snapshot. Receipts are retained for a 7-day horizon
+(earlier past 4,096 operations). Expired IDs answer `recoveryRequired`, never
+execute.
+
+`ServiceRuntime` opens the ledger once, at the first launch hello, after
+`ProfileExclusion` and before Bun. If it can't be opened, the service logs that
+and keeps running legacy Bun. The `--legacy` owner never opens it. Nothing is
+exposed over XPC yet, since typed domain dispatch arrives with the first writer.
+
+Verification (worker sandbox): `test/operation-ledger.mjs` passes. It compiles
+the real sources into a fixture process and SIGKILLs it at every durable
+boundary and at arbitrary times, then restarts. `service-process
+--supervision-only` passes with the ledger linked into the real service
+executable. The ledger files also pass a `-strict-concurrency=complete`
+typecheck. The XPC assertions (ledger created at launch, epoch kept across a
+second service instance) need the manager's unsandboxed run.
+
+## 2026-09-28 — Live reload can no longer miss a change (LKM-89 / S02)
+
+Manager verification of the merged tree: 114 unit checks passed, then
+`test:native` timed out at `managed reload` (`src/native/smoke-core.ts`). That step
+`text:apply`s `index.html` and waits for the preview to show the new text.
+
+The watcher under the supervised service was not failing. Earlier in the same run
+the islands smoke rewrote `index.html` and waited for the element its new script
+adds; only a live reload can produce it, and it passed. The pre-LKM-107 LKM-89
+run also passed `managed reload` through the service. Diagnosis from code (this
+worker's sandbox cannot bind ports, reach XPC or receive FSEvents; not
+reproduced here): live reload was edge-triggered with no memory. The step before
+`managed reload` edits `native-style.tsx`, and every fixture change reloads the
+page. The `index.html` write follows a few host round trips later, which now
+cross XPC. A `change` sent while the old page's EventSource has closed and the
+new page's has not opened goes to zero clients. A page that fetched `index.html`
+just before the write then stays stale for good.
+
+`static-server.ts` is now level-triggered. Each watched change bumps a version.
+A served page embeds the version it was read at (captured before the read) and
+connects with `?v=`. The stream announces the current version immediately when
+it differs, and clients reload only on a mismatch. Watcher `error` and setup
+failures are now written to the project log and stderr instead of being
+swallowed. `service-process` now runs the real static server inside the
+backend launched by the real XPC service and checks four things. An edit
+broadcasts a reload. A page that missed the broadcast reloads when its stream
+connects. A current page never reloads. The watcher reports no failure.
+`managed reload` is unchanged.
+
+## 2026-09-28 — Resolve the S02 candidate merge against LKM-107 (LKM-89 / S02)
+
+The previous manager verification passed: 113 unit checks, both typechecks and
+`test:native` (NATIVE CORE PASS). Review and merge stopped at the candidate merge
+instead, because `candidate` had meanwhile taken LKM-107. Both branches changed the
+Shadow Light reveal, so `src/native/Chat.swift` and
+`src/native/smoke-shadow-island.ts` conflicted. A trial merge of `candidate` into
+the S02 head, done in a throwaway clone, reproduced exactly those two conflicts.
+
+LKM-107 fixes the race that S02's capture retry only worked around: a reveal is
+re-issued against measured anchor geometry until SwiftUI applies it. The smoke then
+asserts the acknowledged `revealAppliedRevision` before capturing. S02 now takes
+LKM-107's version of both files, so the `messageTops` inspect field and the
+three-attempt re-reveal loop are gone. Every other file came from the clean
+auto-merge (service build/sign steps, `Host.swift` service mode, test tiers,
+docs). The worktree now holds that merged tree, so `native-chat-reveal` joins
+the unit tier here. The service code is unchanged. Per-file `git merge-file`
+(with the `merge=union` driver for this log) shows candidate ← this tree merges
+with no conflicts and yields exactly this tree.
+
+Verifying the merged tree also turned up a real `service-process` flake. One
+parallel unit run killed it with SIGKILL right after its final PASS line; it
+passed alone. The cause: the fixture polled for a pid file and read it as soon
+as it *existed*. A backend can create that file before writing its digits (a
+racing probe saw it empty in 164 of 300 reads), and `Number('')` is 0. That 0
+stayed in the cleanup set after the real pid was removed, and the `finally`
+ran `process.kill(-0, 'SIGKILL')`, which is `kill(0)`: the test's own process
+group. The Swift guardian fixture had the same race, where the force-unwrapped
+`Int32("")!` crashes instead. Fixed: the backend fixture renames its pid files
+into place, both readers wait for a complete pid > 1, and group cleanup refuses
+pids ≤ 1. A regression check at the top of `service-process` asserts that an
+empty file and a `0` are both rejected and that killing group 0 or NaN is a
+no-op.
+
+## 2026-09-28 — Native smoke through the service: quit hang, lost logs, capture race (LKM-89 / S02)
+
+Manager verification: all 113 unit checks pass; `test:native` ran through
+the service path, failed its first Shadow Light capture at 15:31:26 (5 s into
+the smoke) and then hung until the 300 s spawn timeout. The error text was
+lost: an XPC service's stderr is discarded, and Bun inherited it. Diagnosed
+from artifacts and code, without running the GUI tier:
+- **Shutdown hang.** Quit answered `.terminateLater`, which runs AppKit in a
+  modal-panel run loop. The client's shutdown reply, callbacks and its own 10 s
+  timeout all hop through `DispatchQueue.main`; if that queue is not serviced
+  there, nothing can finish the drain. The host now returns `.terminateCancel`,
+  drains in the normal run loop, then terminates again, and a 20 s watchdog
+  bounds shutdown. A windowless probe could not settle the run-loop question
+  here (the sandbox denies WindowServer), so this removes the dependency rather
+  than relying on it.
+- **Lost diagnostics.** The client passes its stderr over XPC before the first
+  hello, and the supervisor gives it to Bun as fd 2 (duplicated above the
+  reserved slots, like the profile lease). The fixture asserts a backend stderr
+  line reaches the client.
+- **Deadlock hazard.** The owner queue wrote to Bun's stdin synchronously while
+  the stdout reader waited on the same queue (`queue.sync`), so two full pipes
+  could deadlock. Writes moved to a serial writer queue, and delivery is async;
+  stop drains accepted writes (bounded 2 s) before EOF.
+- **Capture race.** `failure.png` and `shadow-light-initial.png` show the "top"
+  capture scrolled to the bottom (token-offer card visible, island header cut
+  off), while the bottom capture was placed correctly. `chatInspect` now reports
+  message tops. The smoke re-reveals (up to three attempts) when the revealed
+  top is not held before and after capture. All OCR label assertions are
+  unchanged. The underlying late scroll is not identified. (Superseded by
+  LKM-107's acknowledged reveal; see the merge-resolution entry above.)
+
+Worker checks: both typechecks, `bun run build`, and the full unit tier (113
+pass) outside the sandbox, including `service-process` with its new diagnostics
+assertion. The native tier was not run by the worker.
+
+## 2026-09-28 — Fix XPC relay stall found by manager verification (LKM-89 / S02)
+
+Manager verification: 112 unit checks passed; `service-process` timed out in its
+XPC section, which the worker sandbox cannot reach (launchd lookup denied).
+Reproduced outside the sandbox and gave each fixture wait the calling step, which
+named the legacy relay. Root cause: `FileHandle.read(upToCount: 65536)` blocks on
+a pipe until the full count or EOF (a standalone probe stays blocked with a short
+line pending), so no Bun → host line was ever relayed. Both the XPC relay
+and the rollback launcher's stdout copier now use `readAvailable(upTo:)` (POSIX
+`read`, EINTR-safe); the guardian fixture pins short-line and EOF reads.
+
+The next failure was in this session's own backend-death case: after
+`serviceStopped` the client reconnected, and launchd's respawn throttle held the
+hello until the client's 10 s timeout. The real host would likewise have waited
+~10 s to quit after a backend crash. `serviceStopped` is now final in the client:
+it invalidates, never reconnects, does not report a failure over the service's
+status, and completes shutdown locally. The fixture requires that shutdown within
+3 s. The raw-client case still proves a fresh instance refuses `resume`.
+
+`test/service-process.mjs` now passes in full (supervision, rollback, codec and
+the XPC half) twice in a row through the unit runner, alongside service-contract,
+managed-child, native-service-launch and native-supervised-bridge. Both
+typechecks and `bun run build` pass. The native GUI tier is left to the manager.
+
+## 2026-09-28 — Separate Swift service, XPC and legacy supervision (LKM-89 / S02)
+
+S01 is accepted and merged into the candidate (51fb928); S02 builds on it. The
+host now connects over versioned, signed XPC to a bundled Swift service, which
+takes the profile lock and supervises Bun over private pipes. No domain writer
+moved: this step changes process ownership and profile exclusion only. Details,
+protocol and rollback: `docs/SWIFT-BACKEND-SERVICE.md`.
+
+Continuing a prior session's implementation, review found and fixed four
+behaviours that the fixture did not cover:
+- **Masked test failures.** The launcher returns the host's exit status, but
+  the host always exited 0 (`NSApp.terminate` exits before code after
+  `application.run()`). Bun now sends its status in `quit`, the service in
+  `serviceStopped`, and the host applies it in `applicationWillTerminate`. Test
+  mode sets `exitCode` before cleanup so the status is known when `quit` is sent.
+- **Second Bun after a service restart.** launchd restarts a lost XPC service
+  on demand; the reconnect hello launched a fresh Bun before the client noticed
+  the epoch change. Reattach now names the epoch (`resume`) and a fresh instance
+  refuses with `recoveryRequired` without launching.
+- **Fatal UI events during reconnect.** Any emit in the 0.25 s reconnect window
+  terminated the app. Never-submitted frames (pre-handshake and reconnecting)
+  now queue in a bounded outbox, still never replaying uncertain sends.
+  Setup-time emits before the client existed went to the terminal; they are
+  buffered too.
+- **Clean exit reported as failure.** Bun's stdout EOF raced its reaped status;
+  the EOF stop is deferred 1 s so the real status wins. Terminal signals to the
+  host now drain through the service.
+
+The fixture adds stale-epoch/duplicate hello refusals, a frame queued mid
+reconnect, backend death → `serviceStopped {status: 1}` → fail-closed reconnect
+with no replacement Bun, and a peer-rejection assertion that a lookup failure
+cannot satisfy. The guardian fixture honours `TMPDIR` and avoids atomic writes
+that stage outside it. Production XPC plist uses `dispatch_main`, matching the
+tested fixture.
+
+Worker checks: both typechecks; `bun run build`; `test/service-process.mjs
+--supervision-only` (profile contention, legacy-lock refusal, startup failure,
+child death, repeated shutdown, descendant/detached cleanup, service-crash drain,
+codec, rollback); managed-child, native-service-launch, native-supervised-bridge,
+native-bridge-close, trezi-cli. Not run by the worker: the XPC half (Seatbelt
+blocks launchd lookup: "Sandbox restriction"), native-shutdown (sandbox denies
+port binding) and the native GUI tier — manager verification required.
+## 2026-09-28 — CLAUDE.md favicon entry corrected (LKM-105 review)
+
+Independent review found CLAUDE.md still described `project-icon.ts` as the
+sidebar row's favicon. The entry now says the favicon is kept as project metadata
+(`project:icon`) and no longer drawn: project rows use the shared folder symbol
+from `src/native/SidebarIcon.swift`. No code changes.
+
+## 2026-09-28 — Sidebar fixture restores the foreground (LKM-105 feedback)
+
+Manager verification failed twice in `test:native` with "Chat window is not in the
+foreground". That text is `captureVisibleRegion`'s shared guard message, so the
+sidebar capture raises it too. `NATIVE SIDEBAR PASS` never printed. The worktree's
+artifacts from the last run hold every 260-point capture plus 180-0-rest,
+180-0-hover and 180-1-rest, but no 180-1-hover. So the capture that failed was the
+last sidebar hover capture, not a later chat capture. It ran about 350 ms after
+`preparePreviewInput` confirmed the window was key and the app active. That
+capture came after the 260-point context-menu step (which opens the Project Memory
+sheet window) and the reorder step. The icon geometry in those captures was
+correct (16×16, integral origin, 7-point gap, aligned with Open Project).
+
+The fixture had no focus teardown. New `src/native/SidebarFocus.swift` records NSMenu
+tracking notifications. `sidebarFocusCleanup` cancels tracking menus, ends attached
+sheets/modals, sends Trezi's sheet window through Bun's cancel, dismisses popovers
+with `cancelOperation`, clears row hover, then activates the app and re-keys the
+main window. `sidebarFocusReport` names each leftover: a tracking menu, an
+attached/Trezi sheet, a popover, a modal, a non-key/non-main main window with the
+window that holds focus, or an inactive app with the frontmost app. The fixture
+restores and asserts after the menu/Project Memory step, after reorder, and in a
+`withSidebarCleanup` teardown that also runs on failure without masking the
+original error. Before each capture it asserts the report is clean. A failed capture keeps the
+guard's message and appends the report. It is never retried, and the capture guard and
+all geometry assertions are unchanged. `test/sidebar-focus.mjs` (unit tier) tests
+the TS teardown with a fake host. It also runs a windowless Swift fixture for
+leftover naming and cleanup order; that fixture fails if menu cancellation is
+removed. The desktop run that will confirm which leftover was responsible is
+manager-owned.
+
+## 2026-09-28 — Sidebar folder icons draw at exactly 16 points (LKM-105 feedback)
+
+The manager's native run measured the row folder at 16.5×21 with a 4.5-point
+text gap. Cause: `NSImageView` reports an SF Symbol's alignment insets (the 19×14
+folder adds 3/2 points vertically; the extra half point of width appeared only
+in-window), and Auto Layout's 16-point constraints size that alignment
+rect, so the frame the glyph is drawn in grew and sat at a half-point origin.
+New `src/native/SidebarIcon.swift`: `SidebarIconView` zeroes those insets, and `SidebarIconLayout` holds the
+16-point/7-point rhythm shared by project rows and Open/New Project, which had the
+same defect. `SidebarRowStyle` and `SidebarProjectButton` moved there so a
+windowless test can compile them. Icon and label x-positions are unchanged, and the
+glyph now sits in an integral 16×16 frame.
+
+The fixture's text gap measured the label's frame, which includes AppKit's
+2-point label cell padding, so a correct icon still reads as 5. It now measures
+to the label's alignment rect, the edge the 7-point constraint and Open Project
+use. It also adds strict checks for an integral icon origin and for exact icon/label
+alignment with Open Project. The 16×16 expectation is unchanged. New unit test
+`test/sidebar-icon.mjs` fails against a plain image view (16×21) and passes with
+the fix. The GUI suite, capture inspection and commit are manager-owned.
+
+## 2026-09-28 — Sidebar evidence enforced by the native suite (LKM-105 feedback)
+
+Rechecked after merging candidate `0b8037a` (LKM-107 Shadow Light fix): the
+folder presentation and sidebar fixture merged cleanly, and `test:native` still
+reaches `checkVisibleSidebar` through `checkProjectSwitching`. To stop the
+configured verification from passing without evidence, `test/native-runtime.mjs`
+now requires that a passing smoke run freshly wrote all eight `sidebar-*` captures and JSON,
+`sidebar-selection.json`, and menu/memory/reorder records at both 260 and 180 points.
+Full Swift typecheck, TypeScript/native typechecks and the unit tier pass. GUI
+runs and capture inspection remain manager-owned.
+
+## 2026-09-28 — Sidebar fixture width diagnosis (LKM-105 escalation)
+
+Mapped the manager's bundled line 19558 to the content-width wait, after the
+artwork readiness check. A windowless AppKit reproduction requests divider
+position 260 but measures sidebar content at 252: this SDK wraps the sidebar
+with an 8-point inset. The fixture incorrectly equated divider position and
+content width. Measure the wrapper/content difference when setting test widths;
+keep the strict 260/180 capture requirements and all visual assertions intact.
+Timeouts now include the stage and native sidebar state.
+
+Added a registered windowless Swift regression exercising collapse/reveal,
+260/180 widths and restoration. It fails against the old setter (252 versus
+260) and passes with the repair. No folder presentation or composer changes.
+Desktop captures and the configured verification remain manager-owned.
+TypeScript/native and full Swift typechecks, sidebar sizing/evidence,
+shell-controller, native-boundary, docs-links and whitespace checks pass.
+
+## 2026-09-28 — Foreground sidebar acceptance fixture (LKM-105 feedback)
+
+Compared candidate `771ce3d`: its project-switching fixture only writes an
+offscreen whole-window image and has no sidebar acceptance fixture. Replace
+that evidence with eight foreground sidebar-only captures at 260/180 points,
+each project selected in turn with the other row hovered/resting. Use a decoded
+raster favicon for the first disposable project and no artwork for the second.
+Require visible action/project OCR, folder image equality, native template/tint
+and scaling, icon/text geometry, containment and action accessibility labels.
+Write PNGs and geometry/OCR JSON as `test/artifacts/native/sidebar-*.{png,json}`.
+
+An ephemeral-only host hook tracks/cancels the native project menu and invokes
+its memory action, then runs real pasteboard/validate/accept-drop callbacks with
+a local test drag object. Assert no-op/nested rejection, backend order changes
+and preserved selection at both widths; record `sidebar-interactions.json`.
+These are native control/delegate checks, not physical pointer drag automation.
+The configured native suite invokes the fixture; the unit tier includes negative
+evidence tests rejecting blank captures, missing labels, wrong artwork, clipping
+and incorrect selection/hover/menu state. Manager must execute and inspect these
+new artifacts under the desktop lock; no GUI execution is claimed by this worker.
+Use distinct Folder Alpha/Beta row labels so Open Project cannot satisfy a
+missing project-label OCR assertion. Full Swift source typechecking,
+TypeScript/native checks, sidebar negative-evidence, shell-controller, native
+boundary, docs-link and whitespace checks pass.
+
+## 2026-09-28 — Sidebar review verification fixture (LKM-105 feedback)
+
+Manager's worktree verification passed, but the independent review run failed
+before Shadow Light capture with "Chat window is not in the foreground".
+The fixture requested activation during island reveal, then waited for message
+visibility and a fixed delay without checking activation completion. Candidate
+`771ce3d` has the same fixture and no foreground-readiness fix.
+
+Reuse the existing bounded `preparePreviewInput` readiness check before each
+Shadow Light capture, preserving the responder. Keep foreground checks before
+and after capture, OCR assertions and failure behavior intact. No product or
+folder-icon changes are needed. Manager must rerun desktop verification under
+the shared lock; this worker runs only focused non-GUI checks.
+TypeScript/native typechecks, native boundary, shell-controller, docs-link and
+diff whitespace checks pass. Desktop behavior remains manager-unverified for
+this repair.
+
+## 2026-09-28 — Consistent sidebar folder icons (LKM-105)
+
+Render every project row with the native outline `folder` symbol used by Open
+Project, bypassing supplied artwork and removing the unused animal fallback.
+Preserve stored icon metadata and other row kinds, the 16-point icon frame,
+proportional scaling, text spacing, selection tint, accessibility labels and
+existing selection/menu/reorder handlers.
+
+Full Swift source typechecking, TypeScript/native checks, the focused
+shell-controller check, docs links and diff whitespace validation pass.
+Manager owns foreground capture inspection at standard/narrow widths, native
+interaction checks and the configured verification suite; no GUI checks were run
+by this worker.
+## 2026-09-28 — Scroll a reveal's row in by its own edge (LKM-107)
+
+The reading-area rule in the entry below broke the Shadow Light smoke (before
+chat-scroll even ran): `Island reveal did not settle at bottom; revision=2,
+applied=1, attempts=80, frame={{36, 718.5}, {368, 1}}`, every attempt at the
+same frame. `scrollTo(id, anchor:)` aligns the SAME unit point of the target
+and the viewport, so the reading-edge point (580/776) lands a view's bottom at
+the reading edge only for the ~1pt anchors. For the ~620pt Shadow Light row it
+parked the end anchor at 718.5 — on screen, behind the composer, outside the
+reading area — so the rule picked the row again forever. The old frame-only rule
+had passed because it targeted that on-screen anchor directly.
+`islandRevealScroll` (replacing `islandRevealTarget`) now falls back to the row
+only while the anchor is outside the whole viewport, and scrolls the row by its
+own near edge (`.top`/`.bottom`), which leaves the anchor on screen; only
+anchors use the reading-edge point. The Swift unit fixture drives the attempt
+loop against that alignment model from the recorded 718.5 fixed point plus the
+1760pt, above-viewport and taller-than-viewport rows; last round's rule fails it.
+
+## 2026-09-28 — Reveal islands whose retained row is offscreen (LKM-107)
+
+The next manager run passed the whole 440pt reveal matrix (revisions 1–8) and
+then failed the first 320pt reveal: `revision=9, applied=8, attempts=80,
+frame={{32, 1760}, {256, 16}}`. The lazy stack had kept the island's row from
+the 440pt pass, so the anchor still published a frame. But narrowing the chat
+reflowed the history above it, and `scrollTo` on a nested anchor inside a
+retained offscreen row does not move. "Has a frame" was the wrong test for
+falling back to the message row. `islandRevealTarget` now targets the message
+row until the anchor is within the reading area (±8pt), then the anchor. The
+Swift unit fixture adds the recorded 1760pt frame, an anchor above the viewport
+and the tolerance boundary. Restoring the frame-only rule fails it.
+
+## 2026-09-28 — Reveal islands whose lazy row is offscreen (LKM-107)
+
+The first manager run of the chat-scroll reveal matrix failed at once:
+`Island reveal did not settle at top; revision=1, applied=0, attempts=80,
+frame=missing`. The island sat in a message row the lazy stack had never
+realized (the chat followed to the bottom), so its nested `island-start-` anchor
+published no frame and `scrollTo` had nothing to find — each of the 80 attempts
+missed. The Shadow Light smoke passed only because its island was already on
+screen. Removing `revealMessage` in the entry below was the wrong call: the
+request carries the containing message ID again, and `islandRevealTarget`
+(`src/native/ChatReveal.swift`) scrolls that direct lazy-stack child in while
+the anchor has no frame, then targets the anchor. The Swift unit fixture covers
+both targets (mutation-checked). The chat-scroll fixture also had the island as
+the first message, where a bottom reveal is clamped at the scroll top and can
+never reach the reading edge; it now has 20 messages on each side, and each
+`reveal-<width>.json` records whether the row had published frames beforehand.
+
+## 2026-09-28 — Put the native reveal overlap case in `test:native` (LKM-107)
+
+Independent review: the manager's `bun run test:native` only ran
+native-runtime, so the native overlap case in `test/helpers/native-chat-scroll.mjs`
+never executed. `test:native` now also runs `test/native-chat-scroll.mjs
+--require-build` (a missing host after the build fails instead of SKIP). The
+reveal section is now a matrix at 440pt and the 320pt minimum chat width: top and
+bottom reveals must settle with the acknowledged anchor within 8pt of the reading
+edge; overlapping pairs top→bottom, bottom→top and top→top (stale anchor already
+at its edge) must reject the older request with `superseded` naming exactly the
+newest revision, and the newest must settle against its own anchor. Evidence:
+`test/artifacts/native/chat-scroll/reveal-{440,320}-{top,bottom}.png`,
+`reveal-{440,320}-overlap-*.png` and `reveal-{440,320}.json`. Checked here:
+syntax, the `--require-build` FAIL/SKIP paths, typechecks and the unit tier;
+the GUI fixture itself is for the manager's desktop-locked run.
+
+## 2026-09-28 — Resolve superseded island reveals (LKM-107, LKM-86 follow-up)
+
+Review found that a still-polling reveal request accepted any
+`revealAppliedRevision >= revision`, so a newer request's settlement could
+acknowledge an older one whose stale anchor happened to sit at its edge. Move
+the decision into `src/native/ChatReveal.swift`: a request is superseded as soon
+as the model's revision differs from its own, and settles only when its exact
+revision is applied and its own anchor frame reaches the requested edge. The
+host now publishes the request synchronously so overlapping requests take
+revisions in arrival order, and replies with a `superseded` error instead of an
+acknowledgement. `test/native-chat-reveal.mjs` (unit tier) compiles the pure
+logic and covers overlap, same-edge supersession, older applied revisions,
+unsettled/missing frames and the tolerance boundary; a mutation restoring the
+old check fails it. The native chat-scroll fixture adds an overlapping top/bottom
+pair. The now write-only `revealMessage` model field is removed (top reveals
+target the island title anchor). Verified: both typechecks, `build:native`,
+`native-chat-reveal`, `native-visible-capture`, docs links, and the unit tier
+(105 PASS; the 5 FAILs — trezi-agent-tools, codex-mcp, native-shutdown,
+native-preview-recovery, devserver-net — are sandbox socket/port denials, not this
+change). `bun run test:native`, including the overlap case, is left to the
+manager's desktop-locked verification.
+
+## 2026-09-28 — Retry Shadow Light reveal after nested layout settles
+
+Reproduce the deterministic native failure after the earlier acknowledgement
+gate: the title anchor remains 122 points above the viewport because the
+one-shot `scrollTo` runs from `onChange` before SwiftUI commits the nested lazy
+message/island geometry. Move reveal completion into a bounded main-actor loop:
+yield past that update, reissue the same semantic top or composer-safe bottom
+anchor, and mark the revision applied only after the named-coordinate-space
+frame reaches the requested edge. Expose the attempt count in inspection and
+failure diagnostics.
+
+Extend the native chat-scroll fixture to reveal a nested island at both edges
+and require the acknowledged revision to have settled. No title, capture
+semantics or UI layout was relaxed. Verification remains blocked: this session
+and a read-only verification worker both reject every shell command before
+launch with the literal result `Rejected:`, including the focused visible
+capture test, both typechecks, native build and native suite. Consequently no
+fresh Shadow Light PNG, OCR, diagnostic JSON or run ID exists to inspect.
+
+## 2026-09-28 — Gate Shadow Light captures on settled island geometry
+
+Read the retained visible pixels and OCR together. The requested top image starts
+halfway through Light Source and includes the following token card, while the
+requested bottom image starts higher, at the preview tail and Light Source. The
+reveal request previously replied immediately after publishing Swift state, and
+the smoke's readiness check only proved that the containing message intersected
+the viewport; neither proved SwiftUI handled `scrollTo` or reached an anchor.
+
+Measure the island title and end anchors in the scroll coordinate space. Record
+the requested and applied reveal revisions plus anchor frames in chat inspection.
+Delay the host acknowledgement until SwiftUI has handled that revision and the
+requested anchor is within eight points of the top or composer-safe bottom edge;
+otherwise fail with the applied revision and last frame. Capture artifacts now
+persist the acknowledgement and measured frames, and the smoke no longer uses a
+fixed 350 ms delay or the unrelated visible-message predicate. Existing title,
+Preview, controls, output and Undo assertions remain unchanged.
+
+Executable verification is blocked in this session: every shell invocation is
+rejected before process launch with the literal result `Rejected:`, including
+`bun run typecheck:native`, the focused visible-capture regression and
+`bun run test:native`. A separate verification worker encountered the identical
+pre-launch rejection. No fresh run ID, PNG or OCR artifact was generated.
+
+## 2026-09-28 — Reveal the actual top of Shadow Light
+
+Inspect the saved pixels instead of inferring layout from OCR. The initial image
+begins halfway through the light controls and the bottom image begins at the end
+of Preview; the product title exists above both captures. The top reveal targets
+the containing message rather than the tall island, so it does not establish a
+panel-top viewport. Add an explicit island-start anchor and target it directly.
+The visible UI itself is consistent with the intended product structure.
+
+Split capture semantics by viewport. Require `Shadow Light` and `Preview` in the
+top image, then require Light Source, all controls, CSS output and Undo across
+the two real visible captures. Add a non-GUI regression proving `Shadow` in one
+capture plus `Light Source` in another cannot synthesize the title. Command
+execution was unavailable because the runner rejected every Bun invocation
+before launch; no new PNGs or executable test results were produced.
+
+## 2026-09-28 — Local Apple Intelligence exploration
+
+Audit auxiliary provider calls, native text/content editing, control selection
+and the Swift/Bun bridge. Record ranked opportunities, platform constraints and
+a bounded first experiment in `docs/APPLE-INTELLIGENCE.md`. Chat titles are the
+recommended first slice, followed by content drafts and prepared-control selection.
+Separate the installed macOS/SDK 26.4.1 baseline from newer image APIs and
+local inference from server models. This is a proposal, not an implementation;
+no inference, provider calls or GUI verification were performed.
+TypeScript checks, the docs-link check and diff whitespace validation pass.
+## 2026-09-28 — Reject non-finite values before contract encoding (LKM-88)
+
+Reproduce the reviewed TypeScript defect for NaN, Infinity and -Infinity: each
+encodes as null because validation previously ran only after JSON.stringify.
+Add encoder-side regression assertions and observe the pre-fix missing-exception
+failure. Reuse the recursive value validator before serialization, preserving
+operation intent by rejecting invalid numeric values with invalidRequest.
+
+Nine rejection checks cover each value directly, in nested objects and in nested
+arrays. Fifteen positive controls preserve finite numbers and explicit null.
+The focused contract runner passes these checks and all 100 cross-language
+fixtures (run-SEjBB1); full/native TypeScript checks pass. No domain writer,
+Swift implementation, composer or desktop behavior changed. Manager verification
+and independent re-review remain pending for this revision; no GUI suite or Git
+metadata mutation was performed by this worker.
+
+## 2026-09-28 — Fix reviewed contract authorization and slash encoding (LKM-88)
+
+Independent review reports manager verification passed 109 unit checks and native
+integration, then identifies two contract defects. Reproduce TypeScript accepting
+both source/read.file and source.read/file for one dotted allowlist entry. Replace
+concatenated identifiers with typed service/method pairs in both languages and
+the fixture context; retain exact matching and empty-list denial.
+
+Reproduce Swift rejecting the 65,536-byte slash-heavy fixture during re-encoding.
+Configure JSONEncoder withoutEscapingSlashes to match JSON.stringify. Add exact
+and over-limit slash frames plus the reported 40,000-slash case. Five new golden
+authorization cases cover both exact pairs, both collision rejections and an empty
+allowlist. No runtime domain writer, composer or desktop fixture changes.
+
+All 100 cross-language cases pass through the focused unit runner (run-mO2nhC),
+including Swift compilation and process cleanup. Full/native TypeScript checks
+pass. Manager verification and independent re-review of this revision remain
+required; no GUI suite or Git metadata mutation was performed by this worker.
+
+## 2026-09-28 — Reconcile candidate task tracking (LKM-88)
+
+Reproduce the TASKS conflict using read-only Git blobs from common base
+`927b6db`, candidate `771ce3d` and worker `086cab2`. Both branches inserted
+tracking at the same position. Preserve the candidate Apple Intelligence section
+verbatim and move the intact S01 section below Composer tracking, making the
+three-way file merge clean. Existing implementation and task checkboxes remain
+unchanged; the candidate-owned exploration link resolves on candidate integration.
+
+Check preservation of both input documents, absence of conflict markers, and
+three-way merge output equality with the resolved file. Desktop verification,
+independent review and candidate merge remain manager-owned and pending; this
+worker has not created a candidate merge commit or changed Git metadata.
+
+## 2026-09-28 — Recover capture-time foreground loss (LKM-88 escalation)
+
+Inspect all four prior artifact logs: the earlier esbuild cleanup failure is
+resolved; manager run `run-Qe4PVo` passes 109 unit checks but fails Swift's
+post-ScreenCaptureKit foreground guard. The preceding readiness repair cannot
+hold foreground across the asynchronous capture. A deterministic bridge fixture
+reproduces this gap before repair: readiness succeeds, capture loses foreground,
+and the helper aborts even though a fresh capture could succeed. The logs do not
+identify the external focus owner; actual desktop behavior remains unverified.
+
+Reacquire foreground and request fresh pixels after either explicit foreground
+rejection, up to three capture attempts. Keep Swift's pre/post guards unchanged;
+never return rejected pixels or retry crop, permission, timeout or OCR failures.
+Log each reacquisition and propagate persistent focus loss. Extend the non-GUI
+regression to cover both race windows, fresh evidence, bounded exhaustion and
+immediate propagation of unrelated failures. No composer or domain-writer changes.
+
+Focused capture regression (`run-2sUWaV`), cross-language contract suite
+(`run-4od9tP`, 92 cases), full/native TypeScript checks, docs links and diff
+whitespace checks pass. Manager must run desktop verification and inspect the PNG/OCR evidence before acceptance. No GUI suite,
+Git staging/commit, provider call or user-data operation was performed.
+
+## 2026-09-28 — Await foreground readiness before chat capture (LKM-88 feedback)
+
+Manager run `run-V4xG4K` passes all 108 unit tests and both typecheck tiers,
+including the contract fixture cleanup repair. Native verification then fails at
+Shadow Light's visible chat capture: the window is not foreground. The fixture
+requests activation when revealing an island but only waits for message visibility
+and a fixed paint delay, neither of which proves window activation completed.
+Candidate `771ce3d` has the same capture/activation code and no equivalent repair.
+
+Before each visible chat capture, reuse the bounded main-window readiness helper
+with responder preservation. Require active/key/focused/visible state, then invoke
+the existing capture command. Preserve Swift's before/after foreground guards,
+ScreenCaptureKit capture, PNG/OCR assertions and all source/Undo checks. Failure
+to acquire foreground still fails; capture errors propagate without fallback.
+No production UI or composer changes.
+
+Add a non-GUI regression covering each readiness flag, delayed activation,
+100-attempt bounded failure without capture, and focus loss during capture.
+`bun test/run.mjs unit --filter=native-visible-capture` passes (`run-z8IIZK`),
+as do full/native TypeScript checks and docs links. Actual desktop activation,
+captures and full configured verification remain manager-owned and unverified by
+this worker; no GUI suite was run.
+
+## 2026-09-28 — Close the contract fixture's build service (LKM-88 feedback)
+
+Reproduce the manager failure through the real unit runner with only
+`service-contract` selected: all 92 assertions passed and the test exited zero,
+but process-group cleanup failed with EPERM. The fixture left esbuild's unref'd
+background service alive. Stop that service in a finally block immediately after
+bundling, including when the build fails; retain every contract assertion and the
+runner's strict descendant cleanup/error handling. Candidate `771ce3d` has no
+service-contract fixture or equivalent fix; its runner matches this worktree.
+
+Before repair, focused runner report `run-SxAU6y` records the same cleanup failure.
+After repair, `bun test/run.mjs unit --filter=service-contract` passes all 92 cases
+and runner cleanup (`run-bHNzUH`). Full TypeScript checks and docs links pass.
+No product, codec, composer or domain-owner changes. The full configured command,
+GUI checks, staging and commits remain manager-owned.
+
+## 2026-09-28 — Swift migration contract foundation (LKM-88)
+
+Add inert versioned DTOs and strict TypeScript/Foundation Swift codecs for
+requests, replies/errors, events, identities/revisions, capability negotiation,
+cancellation and snapshots. Register the non-GUI cross-language fixture test in
+the unit tier. Ninety-two cases cover Unicode/null/absence, UInt64 boundaries,
+malformed JSON/UTF-8, frame/depth/collection limits, scope and stale revisions,
+plus operation identity across request attempts. Reject duplicate and canonically
+equivalent Unicode keys before Swift can collapse them; reject Foundation's
+otherwise-permitted trailing commas. Both encoders round-trip the golden values.
+
+Reconcile staging prose to the canonical separate Swift service/XPC architecture,
+Swift supervision and durable intent. Map all 146 audited modules, 133 routes and
+240 event sites to 15 local migration tasks and future owners; a test enforces
+coverage. Document the implemented wire subset and future domain validation,
+durable ledger, snapshot/cancel execution and rollback gates. No domain writer,
+launcher, store, bridge dispatch or composer behavior changes in this step.
+
+Focused cross-language fixtures (including Swift compilation), full/native
+TypeScript checks and docs links pass. Manager owns configured verification,
+desktop checks, independent review and integration. No GUI/native smoke, provider
+calls, Git staging/commits, publishing or user-data changes were performed.
+
+## 2026-09-28 — Correct composer alignment verification (LKM-87)
+
+Reproduce the manager's alignment assertion without a window: borderless
+NSPopUpButton frames extend five points left of their alignment rectangles.
+A four-point NSStackView gap therefore produces one point of frame overlap.
+Measure AppKit alignment rectangles in composer coordinates instead; require
+positive sizes and every adjacent gap to retain the configured stack spacing.
+Containment, bottom inset, foreground, hit testing and OCR checks remain required.
+
+Extend the windowless composer test with real Auto Layout at 320/420/520 points,
+and deliberately overlap model/permission and attachment/provider controls to
+prove rejection. Save foreground PNG/OCR/geometry before layout assertions so
+manager failures retain evidence. No product layout changes were needed.
+Compared candidate 99b6cb6: it has neither this fixture nor an equivalent fix.
+
+Focused composer layout and controller checks, TypeScript/native typechecks and
+docs links pass. The composer test compiles the changed Swift verification code.
+Manager must rerun the desktop suite and inspect the new captures; this worker
+did not run GUI verification.
+
+## 2026-09-28 — Foreground composer verification (LKM-87 feedback)
+
+Add a dedicated composer fixture to the existing native smoke sequence.
+Capture the actual composited window through the existing ScreenCaptureKit path,
+including surrounding chat pixels, with PNG/OCR/geometry records for initial,
+Ask mode, attached Auto draft and submitted states. Require input/control
+containment, bottom inset, left/right alignment and unobstructed control hit
+targets. Missing foreground or missing rendered labels fail the fixture.
+
+Exercise the real attachment menu action and open/cancel its NSOpenPanel; use
+the existing file hook for deterministic file selection. Dispatch model and
+permission changes through the native picker target/action, insert text through
+AppKit, and click the native send control. Intercept provider service calls,
+assert one submission includes the draft/file, and restore choices/settings.
+Test-only host commands require an ephemeral profile. This is control-level
+automation plus hit testing; manual pointer/menu inspection remains part of
+manager review.
+
+Worker non-GUI checks pass: full Swift source typechecking, TypeScript/native
+checks, existing windowless composer/controller tests, native boundary and docs
+links. Desktop execution,
+actual PNG inspection, full configured verification and independent review
+remain manager-owned; no new GUI captures are claimed by this worker.
+
+## 2026-09-28 — One rounded composer container (LKM-87)
+
+Move the existing attachment/provider/model/permission control row into the
+composer's native glass content and extend the rounded surface below it.
+Preserve the row's left/right alignment, text viewport, send-button position,
+draft sizing and existing action handlers. Remove the chat's external gradient
+and footer fill, plus the unused fade view/build entry; retain message/status
+clearance so scrolling behavior stays unchanged.
+
+Full Swift source typechecking, Bun TypeScript/native checks, the windowless
+composer layout regression, native chat-controller checks and docs-links pass.
+No GUI suite or manager verification command was run. Manager must verify
+rendering and attachment/model/Auto/composition/submission interactions under
+the shared desktop lock, then complete independent review and integration.
+
+## 2026-09-28 — Capture the native fixture within its owning process
+
+Manager verification passed all unit checks but the external screencapture
+process failed to capture Trezi's window. Replace that subprocess with
+ScreenCaptureKit's current-process content API and asynchronous screenshot
+capture of the exact NSWindow ID. The SDK documents this API as exposing content
+available to the current process without TCC consent. Keep foreground checks,
+chat-only pixel cropping, OCR assertions and all source/Undo checks unchanged;
+there is no offscreen-cache fallback. This visible test requires macOS 14.4+.
+Candidate ed9b312 has no equivalent capture fix.
+
+Also wait for host exit and drained stdio before deleting the disposable profile,
+preventing the reported late workspace write from hitting a removed directory.
+A Bun fake-host regression covers the final persistence event and close ordering.
+Focused tests, TypeScript checks and full Swift typechecking pass. The GUI suite
+was not run by this worker; manager must rerun it and inspect the captures.
+
+## 2026-09-28 — Preserve TypeScript controls and require visible Shadow Light evidence
+
+Exclude non-JSX .ts/.mts/.cts files from JSX attribute indexing and select JSX
+versus TSX parser plugins by source extension. Add read/edit/Undo regressions for
+angle-bracket assertions and generic arrows alongside the JSX quoting tests.
+
+Replace Shadow Light's offscreen AppKit cache capture with a foreground window
+screenshot. Ephemeral-only host commands reveal the real island in the chat
+scroll view and capture its composited pixels. The native fixture captures both
+top and bottom for initial/adjusted/restored states and requires OCR of the
+panel labels, CSS and Undo from chat pixels only. Empty images and missing
+Screen Recording access fail rather than count as rendering coverage. Save OCR
+JSON next to each PNG for review; layout fidelity still requires manager visual
+comparison with the approved mockup.
+
+Focused Bun regression/boundary tests, TypeScript checks and full Swift source
+typechecking pass. No GUI suite was run and no new screenshots were generated or
+visually approved by this worker; manager desktop verification remains pending.
+
+## 2026-09-28 — Shadow Light review corrections (LKM-86)
+
+Fix direct JSX attribute writes by identifying attribute literals with the Babel
+parser, reading their decoded values and emitting entity-escaped quoted text.
+JavaScript expression strings retain JS quoting. Apply the same quoting fix to
+the Styles Tailwind path. Regression tests parse edited JSX and preserve quoted
+content utilities, backslashes and ampersands through repeated edits and Undo.
+
+Add a dedicated native Shadow Light fixture after the existing point/group smoke
+coverage. It defines the actual shadow block, checks all six controls against
+computed WebKit box-shadow, waits for Swift to receive each source revision, and
+checks Undo restores both source and preview. It captures shadow-light-initial,
+-adjusted and -restored PNGs for comparison with the approved mockup. Worker ran
+focused Bun tests, TypeScript checks and Swift syntax parsing only; the manager
+must run desktop verification and inspect these new captures under its lock.
+
+## 2026-09-27 — Shadow Light chat island (LKM-86)
+
+Add a native Shadow Light compound block through the current `chat_island`
+agent tool (which shares the legacy define-controls manifest schema). The panel
+includes a local shadow preview, bounded light point, distance/blur/layers/decay,
+rgba color and CSS readout. Seven input literals and the real CSS or Tailwind
+output literal update atomically through existing source/HMR, Reset and Undo.
+Integer layers and rgba channels are validated before writes; generated CSS uses
+the exact persisted input precision. Add box-shadow to the Styles engine and
+Tailwind family rewrite without removing shadow-color or variant utilities.
+
+Focused Bun generation, source round-trip, island lifecycle, existing controls,
+CSS metadata and native-boundary checks pass, as do TypeScript checks and a
+focused Swift typecheck using a minimal ChatModel stub. Desktop fidelity/HMR,
+full native integration and independent review remain manager-owned. No `check`
+script exists in this native checkout. The mockup's small gray labels failed
+APCA; use native system foreground styling for labels.
+
+## 2026-09-27 — Preserve legacy instance locations through nested spreads
+
+Normalize copied JSX spread props before forwarding so legacy instance locations
+can override generated inner canonical defaults. Preserve canonical precedence,
+argument evaluation order and single getter evaluation; generated wrappers are
+idempotent. Rendered nested-component tests cover plain Babel and the full Next
+loader through repeated instrumentation.
+
+## 2026-09-27 — Preserve component-only legacy JSX locations
+
+Guard JSX component-source generation independently of host stamps so a legacy
+component-only location cannot be shadowed by generated canonical coordinates.
+Extend the full Next loader/rendered-output matrix to both component-only and
+host-plus-component legacy stamps, including repeated transforms.
+
+## 2026-09-27 — Forward legacy Next component instance stamps
+
+The generated Next loader now reads canonical component-source props with legacy
+fallback for identifier and destructured/defaulted parameters. Reuse existing
+bindings and preserve already stamped hosts. Full loader plus JSX-render regression
+checks legacy/current/conflicting/empty canonical values and repeated transforms.
+
+## 2026-09-27 — Preserve legacy Svelte and MDX instrumentation
+
+Extend existing-stamp preservation to Svelte and both MDX JSX/Markdown node
+paths. The new generated-helper regression reproduces the legacy overwrite,
+preserves current/legacy authored mappings on repeated processing, and confirms
+unstamped content still receives canonical stamps. Register it in the unit tier.
+
+## 2026-09-27 — Preserve legacy publish bases and JSX mappings
+
+Route GitHub connection planning through one legacy/current-aware ancestry probe;
+praxis/main now checks main before choosing the default and fast-forward plan.
+Preserve existing data-praxis-source JSX attributes during Babel instrumentation,
+including component tags and repeated transforms. Add focused regressions for
+both findings; no remote repositories are created by these checks.
+
+## 2026-09-27 — Preserve relative profile override migration
+
+Independent review found that relative profile overrides created a relative
+session alias target interpreted from the wrong directory. Resolve the existing
+legacy store to its absolute physical path before creating the alias. Regression
+fixtures cover TREZI_USER_DATA and PRAXIS_USER_DATA with praxis/dsgn stores,
+repeated migration, interruption and preserved content; they fail before the fix.
+
+## 2026-09-27 — Keep source selector precedence consistent
+
+Independent review found that matching a legacy stamp could include an element
+whose canonical stamp pointed elsewhere. Restrict legacy selector matches to
+nodes without a canonical attribute, including when that attribute is empty.
+Reproduce the conflicting-stamp failure with Bun's HTML selector engine and add
+native DOM coverage for grouping, HMR lookup, legacy-only stamps and escaping.
+Focused checks are recorded in rename/VERIFICATION.md; the added desktop DOM
+check remains manager-owned and was not run by this worker.
+
+## 2026-09-27 — Reconcile latest candidate composer fade
+
+Merge candidate d34b91e into the rename branch, preserving its bottom fade overlay
+and button/status ordering while retaining the extracted conversation builders.
+Use Color(NSColor.windowBackgroundColor) for its gradient stops; the candidate
+used a nonexistent NSColor.swiftUIColor member.
+Full manager verification and independent review remain required before landing.
+
+## 2026-09-27 — Bound SwiftUI sticky-request type checking
+
+The manager's clean integration build exceeded Swift's expression type-checking
+budget in the sticky request overlay. Extract that unchanged view into a typed
+ViewBuilder helper and separate conversation content/scroll helpers so their
+constraint solving is independent of the surrounding view modifiers.
+The preceding worker verification passed all 103 unit tests and both native suites;
+the manager will repeat verification on this correction before independent review.
+Prepare the reload-route HTML before starting the managed server, avoiding an
+unrelated filesystem-triggered reload during the navigation/sentinel assertion.
+Reassert test-window activation before real preview gestures while preserving the
+WebKit editing responder, and still require document focus and all input assertions.
+
+## 2026-09-27 — Diagnose capped-to-wrapped composer verification failure
+
+Reproduce the manager's soft-wrap assertion in a windowless AppKit fixture using
+production NativeComposer. Text replacement invalidates TextKit lazily: the
+composer frame shrinks before the document releases its previous capped height.
+Resolve nonempty text sizing during layout, retaining the existing empty-field
+handling and all desktop smoke assertions. Add a registered non-GUI regression
+for capped-to-short replacements, multiple widths, empty text and trailing newlines.
+The reproduction fails before the fix and passes afterward. Manager retains the
+shared-desktop suite and acceptance; no GUI suite or configured verification loop
+was run in this diagnostic follow-up. See rename/VERIFICATION.md.
+
+## 2026-09-27 — Preserve legacy recovery and template source mappings
+
+Independent review found that reclaimed praxis/chat branches lost their recovery
+records and serve-time HTML stamping shadowed existing data-praxis-source mappings.
+Add real Git crash fixtures for dirty and clean-unmerged legacy/current branches,
+including repeat recovery, and template-stamp preservation/idempotence fixtures.
+Both regressions fail before the fixes and pass after accepting both legacy names.
+
+Pin rename implementation 567e696 and candidate/merge-base c4b1aad in the coordination
+map and residual generator. Candidate already includes the LKM-84 audit; its seven
+Swift backend documents match the implementation head exactly. No backend changes
+or other-worktree edits. Focused checks are recorded in rename/VERIFICATION.md;
+manager retains full-suite and desktop verification ownership.
+
+## 2026-09-27 — Repair native verification handoffs for LKM-85
+
+Restore the actual original preview document after the History API reload check,
+so the island fixture edits the document being displayed. Use the real preview
+source stamp for the style fixture and await inspector relayout before capturing
+its action generation; a synthetic selection raced with WebKit selection refresh.
+Keep stale-generation guards, source-write assertions and real pointer/keyboard
+coverage. A test host closing before completion now exits unsuccessfully.
+
+Validation: full/native typechecks pass. The real native smoke suite reaches
+NATIVE ISLANDS PASS and NATIVE CORE PASS, including gestures, style source edits,
+Undo, content editing, chat streaming and preview isolation. The disposable window
+needed foreground activation through desktop automation; no background-test flag
+or live provider calls were used. Manager verification and review follow.
+
+## 2026-09-27 — Prepare native smoke focus and lock React fixture types
+
+Manager run run-eFpM7F passed all 101 unit tests but timed out entering inline edit.
+Compare candidate eb02154: its pointer helper likewise sends input without a
+foreground/focus prerequisite. Add test-only activation and WebKit responder setup
+before gestures, await document focus and the first selection, and report DOM focus,
+hit target and heading markup on timeouts. Retain trusted double-click, input
+isolation, caret, Escape and Enter assertions. Inspect the manager's failure PNG;
+offscreen capture alone cannot prove the exact input failure cause.
+
+Align the MCP declaration with candidate's existing ^1.29.0 fix. Declare React 18
+fixture types and lock their transitive types using cached registry metadata and
+published integrity evidence. Bun validates the frozen lock and installs all three
+type packages into an empty temporary fixture. Full/native typechecks, native
+compilation and focused non-GUI checks pass. No GUI/smoke or configured manager
+verification command was run; the focus repair still needs the shared-desktop run.
+
+## 2026-09-27 — Diagnose LKM-85 manager verification failures
+
+Reproduce all three reported failures against native base 94b6dd6. Declare the
+existing MCP SDK as a direct runtime dependency and regenerate Bun's lockfile.
+Repair the runner self-test's missing native stubs, preserving its assertions and
+using console-only fixtures. Record baseline evidence in
+`docs/rename/BASELINE-FAILURES.md`. The unchanged Next fixture passes when supplied
+cached React types, but its baseline missing dev dependency remains a clean-install
+limitation because registry resolution is unavailable here. No incomplete package
+addition or override is left behind. No GUI, provider or manager verification suite
+was run; manager owns final desktop checks and commits.
+
+Validation: full/native typechecks, native-boundary, test-runner and docs-links
+pass. setup-next passes with local cached fixture types; clean-install gap remains.
+
+## 2026-09-27 — Trezi rename and legacy compatibility (LKM-85)
+
+Rename the native product, CLI/package, source paths, setup helpers, new metadata,
+preview stamps, runtime names and current documentation to Trezi. Inventory the
+native base and residual exceptions in `docs/rename/`. Keep legacy CLI/environment,
+preferences, stamps, branches and provider identities usable. Alias native profile
+and session directories in place to preserve absolute Git/worktree references and
+writer locks; copy project sidecars without overwriting canonical data. Preserve
+stable OS/Keychain identities and public repository URLs. Document collision,
+rollback and LKM-84 integration policy. No other worktrees or real user data changed.
+
+Validation: full/native typechecks and configured native build/test command exit 0;
+no smoke PNG/completion evidence, so visible integration remains unverified.
+Migration, Git-path/lock and CLI-alias fixtures pass. Unit suite: 92 pass, 9 fail
+(socket/network sandbox limits, baseline dependency failures, runner assertion,
+and index-based docs links awaiting manager staging). See `docs/rename/VERIFICATION.md`.
+No provider calls; manager owns staging, commits and final review.
+## 2026-09-27 — Preserve candidate audit and contracts (LKM-84 compatibility)
+
+Read the second preserved review conflict without editing that checkout. Restore
+candidate `eb02154cb9e4ceee6a9fac0c872145a8a8edeb94` audit and contract files
+exactly; all six candidate Swift-backend documents now match byte-for-byte.
+Move the compatibility qualifications into the separate
+[audit proposal and reading guide](SWIFT-BACKEND-AUDIT-PROPOSAL.md), preserving
+its entire prior content and updating the task entrypoint. The companion explains
+the canonical XPC/service/recovery requirements and where the detailed slice
+analysis lives without rewriting the candidate's document snapshots.
+
+Validation: Bun docs-links and focused compatibility checks pass: six candidate
+documents identical, complete prior companion retained, 739 local links/line
+bounds valid, no audit conflict markers, documentation-only changes and clean
+whitespace. Candidate differences are limited to the new companion and progress/
+task entries. No Git mutations or other-worktree edits. Manager merge retry and
+configured verification remain pending; no GUI/smoke suites were run.
+
+## 2026-09-27 — Preserve canonical Swift migration plan (LKM-84 compatibility)
+
+Inspected the preserved review checkout read-only and compared candidate
+`eb02154cb9e4ceee6a9fac0c872145a8a8edeb94`. Restore
+[the canonical plan](SWIFT-BACKEND-PLAN.md) byte-for-byte from that candidate;
+retain the entire audit slice/dependency proposal in
+[its own document](SWIFT-BACKEND-AUDIT-PROPOSAL.md) and update audit/task links.
+Clarify that host-local pipes, Bun-first launch and deferred durable operation
+records are review alternatives, not changes to the canonical separate Swift
+service/XPC, supervision and persisted-recovery requirements.
+
+Validation: Bun documentation checks pass; candidate equality and preservation
+of the entire original audit proposal pass; 740 local links/line bounds resolve;
+no audit conflict markers or diff whitespace errors. No runtime changes or Git
+mutations. No GUI/smoke or configured manager verification was run for this repair.
+The previous worker's exit-0 native command remains limited evidence as recorded
+below; subsequent manager verification reported exit 1. Full verification and
+merge retry remain with the manager under the shared desktop lock.
+
+## 2026-09-27 — Swift backend ownership audit and contract proposal (LKM-84)
+
+Document the current native Swift/Bun baseline (`94b6dd6`) in
+[the ownership audit](SWIFT-BACKEND-AUDIT.md), with 133 registration sites,
+146 production Bun modules, dependency edges, native dispatch/event references,
+provider tools and background lifecycle responsibilities. Separate existing
+behavior from proposed typed/versioned Swift ownership, revision/cancellation/
+reconnection rules and narrow helper privileges. Recommend native preferences as
+the first bounded ownership transfer, with failure injection, rollback and ordered
+follow-ups. No runtime, storage or protocol implementation changes.
+
+Validation: configured full/native typechecks and `bun run test:native` exit 0;
+the native command builds and checks direct-launch guards but emits no smoke
+completion marker or PNG artifacts here, so full desktop coverage is unconfirmed.
+Focused preferences, sheets/autosave, workspace-controller and shell-controller
+checks pass. Docs-links, 735 local audit links/line bounds, complete 146-module
+census, 133-registration count and whitespace checks pass. Additional native-boundary
+check fails on the existing undeclared MCP SDK runtime dependency (also recorded
+2026-09-25). No real provider calls or Swift migration parity claims. Files left
+for manager review/staging/commit; no Git metadata changes.
+
+## 2026-09-25 — Single viewport dimension readout
+
+Remove the AppKit drag readout that overlapped the isolated preview's CSS-pixel
+badge. Keep the page badge for all viewport resizes and its one-second expiry.
+The reported transient page shift is consistent with asynchronous WebKit painting
+after the native frame moves; no width rollback was found. Paint synchronization
+remains unverified and is not changed by this fix.
+
+Validation: full/native typechecks, native-shell-controller, docs-links and
+`bun run test:native` pass. A disposable WebKit fixture verifies one badge with
+matching CSS dimensions across four resizes and expiry; inspected its PNG.
+Native-boundary fails on the existing undeclared MCP SDK runtime dependency.
+No provider calls or pointer-driven animation verification.
+
+## 2026-09-25 — Keep revised islands with their response and preserve scroll
+
+A define call targeting an earlier turn now creates a fresh island ID on the
+current turn, preserving the old definition. Same-turn updates remain in place;
+new instances reset to their own creation values and count toward the island limit.
+
+Native chat follows conversation-content changes rather than every state refresh.
+Island values/source revisions do not trigger scroll-to-bottom, and control
+interaction pauses following until the user returns to the latest message.
+
+Validation: full/native typechecks, chat-islands, chat-controller and docs-links
+pass. Native build and focused chat-scroll integration pass, including repeated
+control-value refreshes with later messages and continued following of new content.
+The full native smoke run failed waiting for its shadow preview fixture to appear,
+before island creation. No provider calls; pointer-driven mid-history gestures
+were not exercised by the focused follow-revision regression.
+
+## 2026-09-25 — Earlier control panels and visible chat timing
+
+Publish validated, disabled control drafts before Jev selection completes; retain
+landing gates and discard cancelled/failed drafts. Tighten shared rules (v23) and
+surface-controls guidance to bind existing behavior promptly, avoid unrequested
+effect work and skip redundant builds for definitions without source changes.
+Jev still arranges bindings; this does not remove source discovery or landing time.
+
+Show per-turn “Worked for…” duration and native hover timestamps for messages and
+commentary. Persist completion on user transcript entries, preserve first-chunk
+assistant timestamps, and leave unknown legacy durations absent. Include landing
+and waits in elapsed time; ignore duplicate terminal timing updates.
+
+Validation: full/native typechecks, native rebuild/test command, chat-controller,
+chat-islands, rules, reconciliation, comment-agent, provider-skills and docs-link
+checks pass. Skill validation passes. Native chat-scroll integration passes and its
+PNG visibly shows “Worked for 1m 44s”. No real provider/Jev latency benchmark or
+provider calls; tooltip rendering was not pointer-tested.
+
+## 2026-09-25 — Remove the cat from chat activity
+
+Make the live thinking/writing/tool status line text-only, retaining its shimmer,
+label transitions and accessibility label. Remove the unused animator input from
+both chat activity call sites; keep cats on other app surfaces. Update README
+and the working guide.
+
+Validation: full/native typechecks, native-chat-controller, docs-links and
+`bun run test:native` pass, including the native rebuild. No provider calls.
+
+## 2026-09-25 — Verify live controls on an imperative website effect
+
+Reproduce the reload-only pixelation update on lkmv.ch: source writes and Fast
+Refresh succeed, but installed hover callbacks retain old constants. Repair the
+website's lazy effect with a component refresh boundary and explicit initializer
+dependency, preserving cleanup and original parameter values. Verify radius
+32 → 80 → Undo 32 in the actual Praxis preview without Cmd+R. Inspect the about
+route in light/dark desktop and mobile layouts, then restore dark desktop.
+
+Extend native-next-hmr with a lazy imperative hover-effect fixture, source-bound
+radius commit/Undo and a window sentinel proving no navigation. The old callback
+pattern fails at radius 80; the corrected lifecycle passes in system WebKit.
+Website check, lint, 52 tests and production build pass. Praxis full/native
+typechecks and docs-link checks pass. No provider calls.
+
+## 2026-09-25 — Restore source-editor popout sizing
+
+Reproduce the code window collapsing from its requested 700-point content height
+to 125 points. Lower intrinsic sizing priorities on the overlapping image, video
+and binary viewers so hidden alternatives cannot shrink or constrain the window.
+Pin the editor to its window and set a 760 × 420 content minimum; initial content
+remains 1000 × 700, with resized dimensions retained through docking and reopening.
+
+Validation: full/native typechecks, native build, native-editor and docs-link unit
+checks pass. A new native-tier regression reproduces the original collapse and
+passes opening height, programmatic width/height resizing, code viewport expansion,
+state refresh, docking/reopening and unsaved-text retention. Inspected its PNG.
+Native integration reaches the existing soft-wrapped composer sizing failure.
+No real provider calls; pointer-driven edge resizing was not exercised.
+
+## 2026-09-25 — Apply control-selection lessons to agent guidance
+
+Share purpose-based selection and verification rules between control-capable
+provider instructions and the chat-island catalog. Publish purposes for each
+supported control, distinguish scalar smoothing from timing curves/springs, require
+actual binding consumption and targeted replay, and report preview verification
+as pending until observable. Update the portable surface-controls skill, including
+its stale release-only description, and bump operating rules to v22. Unsupported
+rich editors remain explicitly unavailable; no target dependencies are installed.
+
+Validation: full/native typechecks and rules, chat-islands, provider-skills,
+real stdio MCP bridge and docs-link checks pass. The skill validator passes.
+Coverage verifies shared guidance delivery and catalog/schema alignment, not live
+model compliance. No provider calls or native UI changes.
+
+## 2026-09-25 — Hide scrollbars in the native mobile preview
+
+Decouple preview scrollbar suppression from the retired in-page bezel. Send the
+mobile policy on native shell updates and replay it after navigation; hide page
+and nested scrollbars without disabling overflow or injecting another phone frame.
+Desktop mode removes the injected style and restores the project's scrollbar CSS.
+
+Validation: full/native typechecks, native build, shell-controller and docs-link
+checks pass. Native integration verifies page/nested scrollbar CSS, actual scroll
+movement, reload persistence, desktop restoration and absence of a second bezel;
+inspected its mobile capture. The suite then reaches the existing soft-wrapped
+composer sizing assertion. No real provider calls ran.
+
+## 2026-09-25 — Keep chat scrolling anchored to message content
+
+Remove the eager wrapper and detached blank scroll target introduced with the
+composer fade. Keep a one-point anchor in the lazy message stack, reserve input
+clearance as bottom padding, and align follow/jump actions to the readable area
+above the composer. Expose visible row geometry for native regression checks.
+
+Add a native-tier fixture test covering 12 send/stream sequences across empty,
+short and long histories, an oversized pasted message, and one/eight/80-line
+drafts that shrink on send. The exact reported blank viewport did not reproduce
+before the change, so the detached anchor is a suspected cause, not a confirmed
+reproduction. The new checks pass and the sending/streamed captures retain text.
+Full/native typechecks, build and three focused unit checks pass. Full native
+integration still stops at its existing soft-wrapped composer sizing assertion.
+No real provider calls ran.
+
+## 2026-09-25 — Review DialKit control purposes
+
+Review DialKit's official control examples, API reference and timeline guide,
+and inspect the rendered examples/accessibility tree. Record the inventory,
+control-selection rules, Praxis gaps and proposed priorities in DIALKIT-REVIEW.md;
+link it from the chat-island plan. Apply the lessons to the pixel-reveal example,
+especially real binding consumption, scalar-versus-spring semantics and replay.
+
+Validation: documentation-only review; checked local capabilities against Swift
+rendering, shared contracts and island schema. No runtime changes, dependency
+installation or provider calls. Browser inspection was not a full gesture test.
+
+## 2026-09-25 — Apply chat controls while dragging
+
+Apply slider, point and Bézier changes through throttled source writes during a
+native drag, with a final write on release. Serialize overlapping island commands
+instead of rejecting them as busy; advance queued revisions only through successful
+writes in that pending batch. External source changes still fail closed. Keep a
+continuous gesture in one Undo group, including pauses between adjustments.
+Move the native island check ahead of unrelated composer checks.
+
+Validation: full/native typechecks, native build, chat-island/edit-history/chat-
+controller/docs-link checks pass. Regression coverage includes overlapping slider
+updates, grouped Undo and concurrent external edits. The native island source/Undo
+check passes and its PNG was inspected. A disposable Next 16.3.5 Webpack fixture
+confirms source controls and Undo reach WebKit through Fast Refresh without page
+reload. Full native integration still fails the existing soft-wrapped composer
+sizing assertion. Pointer-driven continuous scrubbing was not exercised; no real
+provider calls ran. Refresh latency remains dependent on the project's dev server.
+
+## 2026-09-25 — Float the composer over a fading conversation
+
+Extend the native conversation viewport through the full chat column. Mask its
+lower edge with a progressive gradient into the window surface as messages scroll
+behind the composer, replacing the hard cutoff above the form. Keep token totals
+above the input, and reserve scrollable clearance for the composer, footer and
+fade so the final response/actions stay readable. Growing drafts update clearance
+and keep following the latest response when already following it.
+
+Validation: full/native typechecks, native build and chat-controller/workspace/
+docs-link checks pass. A disposable native-host probe checks full-height chat,
+bottom alignment and clearance for compact and grown drafts. Inspected native
+captures and visible scrolling in a separate temporary app: text fades smoothly,
+token totals stay clear and the final response remains readable at the bottom.
+Full native integration still stops at the existing soft-wrapped-draft sizing
+assertion. No real provider calls ran.
+
+## 2026-09-25 — Clearer dialog copy
+
+Rewrite app dialog instructions, field labels, action names and errors around what
+users need to do. Explain automatic saving and when changes take effect; distinguish
+React scaffolding from planning; name provider model loading, chat-draft preparation,
+PR creation and branch switching accurately. Clarify feedback destination, destructive
+outcomes and file paths. Simplify update/recovery wording and omit redundant Error:
+prefixes. Provider model labels follow manual-entry versus catalog selection mode.
+
+Validation: full/native typechecks, native build and eight focused unit checks pass.
+Inspected five native captures covering Settings, provider setup, memory, New Project
+and feedback. Full native integration still stops at the existing soft-wrapped composer
+sizing assertion. No real provider calls ran.
+
+## 2026-09-25 — Await managed dev-server shutdown
+
+Reproduce a managed server surviving SIGINT because it ignores the single SIGTERM
+sent by the old cleanup. Track owned process groups beyond shell exit, wait one
+second for graceful termination, then SIGKILL survivors. Await cleanup before
+backend exit, terminal exit and update restart; repeated signals share the
+same shutdown. Explicit process.exit retains a synchronous forced-stop fallback.
+
+Validation: full/native typechecks, native build and four focused unit checks pass.
+Expanded native-shutdown covers all three terminal signals, bun script wrappers,
+process-group delivery, signal-resistant descendants, shell death, explicit exit,
+closed listener ports and an unrelated server remaining available. Full native
+integration still stops at the existing soft-wrapped composer sizing assertion.
+No real provider calls ran; the failing reproduction's fixture was cleaned up.
+
+## 2026-09-25 — Autosave routine dialog edits
+
+Remove redundant Close actions from app forms and omit empty action bars. Settings
+and project memory autosave with coalesced, serialized writes; closing or navigating
+within the form waits for the latest draft. Failed writes retain the open draft and
+show an error. Keep provider credential changes explicit with Add/Update provider,
+and preserve confirmation actions for creation, source commits and destructive work.
+
+Validation: full/native typechecks, native build and six focused unit checks pass,
+including delayed-write/close races, failed-save retention and actionless dismissal.
+A disposable native host verifies automatic persistence and the final edit on
+traffic-light close; inspected its button-free memory capture. Full native integration
+still stops at the existing soft-wrapped composer sizing assertion. No provider calls.
+
+## 2026-09-25 — Native dialog windows and conventional actions
+
+Move app forms from attached sheets into titled, closable, minimizable and
+resizable AppKit windows. Keep instructions and fields in a scrolling body with
+a fixed bottom action bar: auxiliary actions left, Cancel before the primary
+action on the right. Route traffic-light/Command-W dismissal through Bun, keep
+non-dismissible operations protected, and remove Return shortcuts from destructive
+confirmations. System file pickers and permission alerts retain AppKit behavior.
+
+Validation: full/native typechecks, native build and six focused unit checks pass.
+Direct disposable-host window checks cover native chrome and traffic-light dismissal;
+inspected short and long form captures. Full native integration still stops at the
+previously recorded soft-wrapped composer sizing assertion before dialog checks.
+No real provider calls ran.
+
+## 2026-09-25 — Rotate the button energy highlight
+
+Rotate the active button gradient every 2.4 seconds while preserving its full
+thin rim, broad 135° highlight and uneven pulses. Keep chat-ready fading even
+and Reduce Motion static.
+
+Validation: full/native typechecks, native build, chat-controller and docs-link
+checks pass. Direct native-host checks pass; inspected captures show the highlight
+moving around the rim. Full native integration still stops at the previously
+observed soft-wrapped-draft sizing assertion. No real provider calls ran.
+
+## 2026-09-25 — Broader button energy glow and softer chat-ready breath
+
+Give the active Stop/Send button a thin glow around its full perimeter, with a
+broad highlight centered at 135° and overlapping smooth waves for uneven energy
+pulses. Replace the chat-ready rotating sweep with a softer, evenly fading
+2.4-second breath. Preserve reduced-motion behavior and existing activity gating.
+
+Validation: full/native typechecks, native build, chat-controller and docs-link
+unit checks pass. A disposable native-host probe passes button activation/removal
+and chat-ready expiry checks; inspected captures at multiple pulse phases and
+chat-ready peak. AppKit captures omit the underlying Liquid Glass controls, so
+these establish glow coverage rather than complete visible compositing. The full
+native integration test and a retry both stop at the soft-wrapped-draft sizing
+assertion before reaching chat activity checks. No real provider calls ran.
+
+## 2026-09-25 — Chat action feedback and comment-agent lifecycle checks
+
+Add explicit hover/pressed backgrounds to response Copy/Revert buttons. Show
+background tool activity, preserve comment labels, distinguish applied/no-change/
+failed/cancelled/review outcomes, and attach the actual comment Undo group.
+Ignore late start responses after completion. Surface finalizer failures while
+preserving recovery worktrees; serialize comment snapshots/landing through the
+repository writer and retain the busy slot until landing finishes. Startup failures
+no longer silently resubmit into a potentially different interactive chat.
+
+Validation: full/native typechecks and eight focused unit checks pass. New tests
+use real temporary Git repos with a stub provider to cover successful/concurrent
+landing, the three-agent cap, queued/running cancellation, duplicate terminals,
+no-change, failed edits and finalizer failure. Background native integration passes;
+inspected its chat capture. Pointer/animation checks remain skipped while the Mac
+is locked. Native-boundary still fails on the pre-existing undeclared runtime
+import @modelcontextprotocol/sdk/client/index.js. No real provider calls ran.
+The user's slow comments eventually completed; available local records could not
+be matched to those runs, so no exact latency cause or speed improvement is claimed.
+
+## 2026-09-25 — Detect missing Codex tool connections before chat starts
+
+Extract the session MCP configuration, root its helper/cwd at the Praxis install,
+and mark the server required for every Codex turn/resume. Check the real MCP tool
+inventory and authenticated workspace socket before creating a provider thread;
+failures surface as connection errors rather than starting a tool-less session.
+
+Validation: native build, full/native typechecks and all four targeted unit checks
+pass. The new unit test runs the real Codex CLI with an isolated home and unrelated checkout,
+verifies inline-control/preview/workspace inventory, and rejects missing helpers
+and invalid credentials without model calls. The quoted failure was not reproduced;
+its originating app/session remains unconfirmed. No live provider calls ran.
+
+## 2026-09-25 — Diagnose stale Next previews and verify the Webpack fallback
+
+Reproduced missing client updates in the affected Next 16.3.5 project despite a
+connected HMR socket and serverComponentChanges messages. Rebuilding the dev cache
+did not fix it. The symptom matches upstream Next PR #98215's client subscription
+race (still unmerged when checked). Saved `bun run dev --webpack` as this project's
+Praxis custom launch command; other projects and source scripts are unchanged.
+Verified the same iPhone source edit and its restoration update immediately while
+a page sentinel remains intact. Restored all source probes and the original cache.
+
+Added a native-tier Next/WebKit test for component edits, chat-island literal
+commits and Undo without full-page reload. Its managed-server fixture passes in
+Webpack mode; simple Turbopack fixtures also passed, so this is a scoped workaround,
+not a claim to have repaired Turbopack. Full/native typechecks, docs links and the
+native runner entry passed. No real provider calls ran.
+
+## 2026-09-25 — Route requested controls exclusively into chat
+
+Remove the legacy define_controls/open_controls provider registrations and socket
+actions, delete their unused implementation and retire the animation-controls
+skill. Surface-controls and spring guidance now require chat_island, reuse existing
+literal constants, and prohibit substituting a separate panel for chat controls.
+Provider rules v21 and README/capability docs reflect the single route.
+
+Validation: typechecks, rules, provider-skills, MCP transport/rejection, chat-island
+and docs-link checks passed. Background native integration passed, including
+inline rendering, typed light-point source edits, preview update and Undo. Inspected
+the generated chat-island screenshot. Real pointer/animation checks were skipped
+in background mode; no live provider calls ran.
+
+## 2026-09-25 — Visual composer attachment previews
+
+Replace the attachment-name menu with a horizontal strip of rounded image
+thumbnails and named file cards. Each tile has an accessible remove button;
+images open a larger, aspect-preserving popover. ImageIO bounds decoded image
+sizes and tiles remain cached across draft/stream updates. Composer sizing reserves
+the full strip height without shrinking the draft, and restores the compact form
+when the last attachment is removed.
+
+Validation: typechecks, native build, chat-controller, native boundary and docs-link
+checks passed. Native integration verified PNG/TIFF paste, mixed images/files,
+horizontal overflow, targeted removal and height restoration before encountering
+the existing style-inspector source-edit timeout. Background native integration
+passed with reduced pointer/animation coverage. Inspected a visible native fixture
+capture to verify thumbnails, labels and remove controls; offscreen Liquid Glass
+captures remain incomplete. No real provider calls ran.
+
+## 2026-09-25 — Short PR descriptions from the code diff
+
+Publish now uses a separate read-only Codex/Luna turn to analyze the committed
+merge-base diff after remote reconciliation. Generated titles are limited to 72
+characters and bodies to 120 words; no chat or commit subjects are supplied.
+Handoff and comment-agent PRs share the generator. Existing PR update errors now
+surface instead of silently retaining stale descriptions. Generation has a
+60-second timeout and explicit retry errors; Codex sign-in is required.
+
+Validation: typecheck and publish-description, publish-message, publish-reconcile
+and docs-link checks passed. Regression coverage uses real Git histories and a
+stubbed model, checking committed/reconciled code, exclusion of unpublished edits
+and chat-derived subjects, invalid output, and provider failure. No live provider
+calls ran.
+
+## 2026-09-25 — Remove confirmed native retirement leftovers
+
+Remove the unused thinking-orb vendor/build inputs, standalone runtime prototype,
+renderer freeze-frame handlers/state, obsolete privileged media registration, and
+uncalled props token-edit endpoint with its private React/Svelte adapters. Keep
+active style/token editing, native media, provider screenshots and migration paths.
+Trim vendored content-controls to recipe/API entrypoints plus supporting types;
+remove Motion and four transitive packages from the lockfile. Existing ignored
+prototype build artifacts remain ignored rather than deleting local output.
+
+Retain experimental Gemini because its opt-in path remains reachable. Preserve all
+reviewed shared helpers at the user's request; docs/UNUSED-HELPERS.md explains their
+purpose, missing consumers and current alternatives. Update active architecture
+and retirement docs; historical progress entries remain untouched.
+
+Validation: both typechecks and all 97 unit checks passed. Initial sandbox-only
+socket failures passed when rerun with local listener access. Frozen offline Bun
+install passed. Native build passed; full integration passed islands and selection
+before the previously documented native style-source-edit timeout. Inspected the
+failure capture. Reduced-coverage retry could not build because another concurrent
+build modified out/native/main.swift; no background pass is claimed. Concurrent
+composer and other unrelated workspace edits are excluded from this commit.
+
+## 2026-09-25 — Keep live activity labels on one line
+
+Limit the live chat activity label to one line and truncate long paths at the
+tail. The complete label remains available in its tooltip.
+
+Validation: `bun run typecheck` passed.
+## 2026-09-25 — Native chat islands with Jev-selected blocks
+
+Added scoped chat_island catalog/define/read tools for Claude and Codex, a versioned
+profile store, turn-associated inline SwiftUI rendering, grouped controls, 2D light
+position and Bézier editors. Jev chooses/orders prepared blocks; missing credentials
+retain the agent layout with explicit reporting. Provider-only next-turn context
+includes current values. Source writes are bounded literal edits in one file, with
+revision checks, repository serialization, grouped Undo/Reset and landing gates.
+Closing/stopping a chat cancels pending composition. Follow-up definitions revise
+the same island; pending revisions disable it until landing.
+
+Validation: typechecks; composition, source batches, drift/closed guards, undo,
+restoration and existing controls/controller/provider-skill tests; real MCP transport;
+native build and background integration passed. Swift actions changed both light
+coordinates and the fixture's real multilayer shadow via managed reload. Inspected
+the native capture. Full native run passed island/selection checks, then hit the
+previously recorded style-inspector source-edit timeout. Background coverage skips
+real preview pointer/animation checks. No live provider/Jev network calls ran.
+
+This is the first working slice, not completion of every plan stage: arbitrary
+nested Jev layouts, native dynamic shadow-layer collections, specialized spring
+samples, runtime-live scrubbing and full visible gesture/accessibility acceptance
+remain tracked. Refreshed the plan for the now native-only application.
+
+## 2026-09-25 — Clean exit for unsupported host launches
+
+The reported crash came from the disposable /tmp/Praxis Sidebar Check.app visual
+fixture launched without Bun arguments. Replace the startup fatalError with a
+clear stderr message and exit code 64, preventing a Swift trap and Crash Reporter
+popup. Remove the inactive disposable app. Normal Bun-launched startup is unchanged.
+
+Validation: typechecks, native boundary and docs-link checks, native build and
+background integration passed (reduced pointer/animation coverage). Native runtime
+now checks zero- and one-argument direct launches: both exit 64, no signal, with
+the expected message. Full integration later hit the known preview style-edit
+timeout; direct-launch regression checks passed independently of that failure.
+
+## 2026-09-25 — Reload the current preview page
+
+Route Reload Preview / Command-R to WKWebView.reload() instead of loading the
+workspace's base URL. WebKit retains the current route, query and fragment,
+including History API navigation that does not replace the original load target.
+
+Validation: typechecks, shell controller checks and native build passed. Added
+native regression coverage that pushes /about.html?tab=details#section, dispatches
+the reload menu event, verifies a fresh document and asserts the unchanged URL.
+This passed in both native runs. Background integration passed with reduced
+pointer/animation coverage; the full suite later hit the known preview style-edit
+timeout.
+
+## 2026-09-25 — Keep the preview page URL visible
+
+Show the complete current preview URL in the unfocused address field instead of
+reducing it to host and port. Editing, blur and Escape now retain the same URL;
+existing middle truncation and the full-URL tooltip handle long addresses.
+
+Validation: typechecks, shell controller checks, native build and background native
+integration passed (reduced pointer/animation coverage). Full native integration
+hit the known preview style-edit timeout. Visually verified /about is displayed
+before focusing the address field in a separate provider-free native fixture.
+
+## 2026-09-25 — Composer selector bottom inset
+
+Add 8 points below the provider/model/permission selector row. Increase compact
+and capped composer heights by the same amount to preserve the text entry area.
+Update the existing native maximum-height assertion from 360 to 368 points.
+
+Validation: typechecks, chat controller checks, native build and background native
+integration passed (reduced pointer/animation coverage). Full native integration
+hit the known preview style-edit timeout. Inspected the generated chat capture.
+
+## 2026-09-25 — Grouped chat toolbar actions
+
+Combine History and New Chat in a momentary segmented control with the same
+symbol sizing and rounded glass capsule treatment as the preview controls.
+Preserve the chat-column alignment and title. History opens immediately on click;
+its menu keeps chat selection, rename and close actions. New Chat keeps its
+existing project-scoped action. Older macOS uses the native segmented fallback.
+
+Validation: native builds, typechecks, shell controller and docs-link checks
+passed. Final background native integration passed with reduced pointer/animation
+coverage; the full run hit the known preview style-edit timeout. Visually checked
+the shared capsule and verified one-click History, menu selection and New Chat
+in a separate provider-free native fixture.
+
+## 2026-09-25 — Compact token footer
+
+Remove “Chat total ·” from the footer; show only input/output arrows and counts.
+Keep the detailed usage tooltip. Updated the existing snapshot assertion.
+
+Validation: typechecks, chat controller checks, native build and background native
+integration passed (reduced pointer/animation coverage). Full native integration
+hit the known preview style-edit timeout. Inspected the generated chat capture.
+
+## 2026-09-25 — Native sidebar project drag reordering
+
+Register local project-row drags in the native outline with move semantics and
+between-row insertion targets. Send the dragged key and destination key to Bun;
+the workspace controller validates the destination, persists the new order and
+leaves active sessions untouched. Remove Move Up/Down from project menus and the
+bridge action type. Correct README's outdated chat-drag and keyboard claims.
+
+Validation: native build, typechecks, workspace/shell controller and docs-link
+checks passed. Added controller coverage for moving both directions, persistence,
+invalid/no-op destinations and no provider/preview calls. Background native
+integration passed with reduced pointer/animation coverage. Full native testing
+hit the preview text-selection timeout. A separate visible fixture rendered
+correctly, but automated drag gestures did not deliver a drop event; real pointer
+drag verification remains unconfirmed in this environment.
+
+## 2026-09-25 — Simple sidebar symbols and animal project icons
+
+Open Project now uses a plain folder and New Project a plain plus. Projects
+without a favicon use an animal emoji selected by a stable project-path hash,
+so their identity survives refreshes and launches. Favicon and emoji artwork
+remain untinted in selected and unselected rows.
+
+Validation: native build, typechecks, shell controller and docs-link checks
+passed. Background native integration passed with reduced pointer/animation
+coverage. Full native integration timed out in preview text-selection input.
+Visually checked plain action icons and two different animal fallbacks in a
+separate provider-free native window.
+
+## 2026-09-25 — Consistent sidebar action rows
+
+Use the same explicit 28-point row height and system font for Open/New Project
+and project entries. Replace custom-painted action text and symbols with the
+same native label/image views used by projects, align their leading edges and
+use label-color symbol tint with selected-row contrast. Project favicons keep
+their original artwork.
+
+Validation: native build, typechecks, shell controller and docs-link checks
+passed. Background native integration passed with reduced pointer/animation
+coverage; the full suite again timed out at the existing preview style-edit
+check. Verified the actual sidebar in a separate provider-free native window;
+labels and icon columns align, and action rows match project row height.
+
+## 2026-09-25 — Pixel cat in live chat activity
+
+Move the animated cat from the token footer into the live response status row,
+replacing the thinking orb at the same 20-point size. Keep the existing running
+and waiting poses, status text and Reduce Motion behavior. Other cat surfaces
+retain their default 32-point size; the footer now contains token totals only.
+
+Validation: native build, both typechecks, chat controller and docs-link checks
+passed. Background native integration passed, including animated cat frames and
+permission/question states (reduced pointer/animation coverage). Inspected the
+streaming capture to confirm the small cat below output and no footer cat. Full
+native integration hit the existing unrelated preview style source-edit timeout.
+No provider calls.
+
+## 2026-09-25 — Queue messages behind the composer
+
+Move queued messages out of conversation cards into a rounded native stack
+behind the glass composer, following the supplied screenshot: measured ~33-point
+rows snap to 34 points, with 14-point side insets and 16-point overlap. Each row
+has a single-line preview, link styling for web URLs, attachment count, delete
+and copy menu. Three rows fit before scrolling; paused queues show Resume.
+Composer height includes the stack without shrinking the text entry area, and
+removing the last row restores the original compact form. Queue ordering and
+provider behavior are unchanged; no unsupported Steer action is added.
+
+Validation: native build, all typechecks, controller and docs-link checks passed.
+Background native integration passed, including stack geometry, removal and no
+duplicate conversation cards (reduced pointer/animation coverage). Full native
+integration again timed out at the separate preview style source-edit check.
+Inspected captures and the visible two-link stack plus a five-item paused queue;
+verified the 130-point height cap, scroll area and unchanged editor height.
+No provider calls.
+
+## 2026-09-25 — Streamed word reveals and live thinking status
+
+Halve the composer beam cycle/readiness sweep to 1.5 seconds and separate active
+generation from turn bookkeeping: idle drafts, approval/question waits, stopping
+and landing completed changes have no button beam. Show one live activity row
+below the active response, with the Libraries.dev SwiftUI Thinking Orb and a
+shimmering label that swaps with a short vertical blur. Thinking, writing, latest
+tool activity, waiting, stopping and applying are derived from actual events.
+
+Batch delta-only updates at 33 ms; status and terminal events flush immediately.
+New prose words resolve through a 350 ms fade/1-point blur on macOS 15+, preserving
+native text layout, Markdown, links and selection. Existing text stays still;
+older systems and Reduce Motion show text immediately. Hidden activity pauses;
+completed responses remove the orb. Vendored MIT orb sources retain attribution
+and match the recorded upstream revision. Motion references: Transitions.dev
+Thinking states and Streaming text.
+
+Validation: native build, all typechecks, docs-link and chat-controller tests
+passed, including render batching/final flush, close cancellation, idle drafts,
+permission/question waits, stopping and landing. Background native integration
+passed with pointer/animation timing skipped. Full integration passed pointer
+checks then timed out at the separate native style source-edit assertion. Inspected
+thinking/streaming captures and a visible native streaming fixture with Liquid
+Glass, word wrapping, bold text, orb states and status swaps. No provider calls.
+
+## 2026-09-25 — Native composer border beam
+
+Add a SwiftUI border beam inspired by libraries.dev/beam, using a colored angular
+gradient, highlight and soft bloom over the existing Liquid Glass composer. The
+Stop/Queue button loops throughout the active turn, preserving its phase when a
+draft changes the icon. Each chat gets one three-second readiness sweep per app
+launch; switching back does not replay it. Reduce Motion uses a still highlight,
+and idle/hidden overlays remove their animation timelines. No Metal dependency.
+
+Validation: native build, all typechecks, chat-controller and docs-link checks
+passed. Native integration covered readiness expiry, chat switching, Stop/Queue
+continuity and completion cleanup. Full integration hit the previously recorded
+preview content-editable pointer timeout; the background rerun passed with real
+pointer/animation timing skipped. Inspected generated beam captures and the
+visible Liquid Glass composer in a disposable native fixture. No provider calls.
+
+## 2026-09-25 — Relax native chat typography
+
+Use a shared 13-point regular body font with 4 points of extra line spacing for
+user and assistant prose. Increase paragraph separation to 12 points and segment
+separation to 14; collapsed and expanded tool activity use consistent 11-point
+monospaced text, keeping commands visually secondary to the conversation.
+
+Validation: all typechecks, native build, chat-controller and docs-link checks
+passed. Inspected narrow light/dark typography renders and the native chat capture.
+Full native integration stopped at the preview content-editable pointer check;
+the background rerun passed, with pointer/animation timing coverage skipped.
+No real provider calls were made.
+
+## 2026-09-25 — Explain cumulative chat token usage
+
+Label the native footer as Chat total and reuse compact token formatting instead
+of showing ungrouped seven-digit input counts. Hover exposes exact input, cached
+input (a subset of input), and output, explicitly distinguishing accumulated model
+call usage from current context size. Token accounting itself is unchanged.
+
+Validation: native chat-controller and Codex usage tests, all typechecks and
+native build passed; inspected the footer capture. Native background integration
+failed twice at the existing soft-wrapped-composer-fit assertion, not usage.
+
+
+## 2026-09-24 — Keep routine Codex skill-budget advice out of chat
+
+Suppress the SDK's recurring “Skill descriptions were shortened” advisory in
+new chat activity. This does not alter skill discovery or the provider's context
+budget. Other item-level warnings now retain their full multiline text instead
+of being cut off at 120 characters, and repeat events for an item appear once.
+Previously saved activity remains unchanged.
+
+Validation: Codex stream regressions, all typechecks and native background
+integration passed. Background mode skips pointer/animation checks; no live
+provider call was made.
+
+
+## 2026-09-24 — Open the inspector only from the selection toolbar
+
+Element picking updates inspection data without opening the right sidebar.
+The selection toolbar's Properties action toggles it; an already-open inspector
+continues following selection, while Close remains closed on subsequent picks.
+Clearing selection or switching projects hides it. Animation-control discovery
+and generated-control notifications no longer open the sidebar implicitly.
+
+Validation: inspector unit tests, all typechecks and native background integration
+passed, including hidden selection and explicit toolbar open/close. Background
+mode skips real pointer gestures/animation timing.
+
+
+## 2026-09-24 — Expand the native composer with its draft
+
+Measure composer text using TextKit with the editor's font, wrapping width,
+padding and trailing empty line. Include the full control/chip spacing in the
+height calculation so short multiline drafts fit instead of scrolling early.
+The composer grows upward to 360 points or half the available chat height,
+whichever is smaller, then scrolls internally; clearing returns to compact size.
+
+Validation: typechecks and isolated native background integration passed, including
+anchored growth, trailing newlines, soft wraps, the height cap, overflow and shrink.
+Inspected the content-only expanded composer capture; offscreen Liquid Glass is
+not faithfully captured. Background mode skips real pointer/animation checks.
+
+## 2026-09-24 — Codex live preview observation
+
+Added preview_location and preview_screenshot to the session-scoped Codex MCP
+bridge, including custom endpoint sessions. The stdio helper preserves MCP image
+content rather than wrapping screenshots in JSON text. Claude and Codex now share
+one native preview observation helper, with safe unavailable/empty capture results.
+Codex receives observer instructions without advertising Claude-only calculators.
+
+Validation: real Bun MCP subprocess/socket test passed for tool discovery, route
+query/hash, JPEG content transport, capture failure/absence, and token isolation.
+Rules, native boundary, Codex streaming, docs links and backend/preview/native
+typechecks and the native build passed. No live provider calls were run; custom endpoints still need
+image-capable models. Existing sessions must restart to load new tools/rules.
+
+
+## 2026-09-24 — Retire Electron and audit unused application code
+
+Made Swift/AppKit/SwiftUI + Bun the default and only application runtime. Removed
+Electron entrypoints/preloads, the React app, browser/Tailscale mode, application
+UI dependencies and obsolete tests. Services import native platform types and
+routing directly; isolated WebKit instrumentation retains its restricted message
+boundary. Removed dead web-panel/window.api bridges and renderer port/MCP flags.
+
+Moved native cat artwork out of the renderer, retained source parsers/provider
+SDKs, and preserved generator tests with React as a development fixture. The MCP
+stdio test now runs under Bun. CLI, source installer, updates, scripts, typechecks,
+test tiers and current guides now target native. Existing user profiles are untouched.
+
+The review is in ELECTRON-REMOVAL.md, including retained dependencies, coverage
+limits, the unused UI exports still shipped by the vendor package, and the separate
+native prototype. Thirty-two direct dependency declarations were removed.
+
+Validation: 96 retained unit tests passed, including the new native build-boundary
+check and Bun MCP helper. Backend/native/preview typechecks, frozen-lockfile
+installation and native background integration passed. Native captures were
+inspected. Background mode skips real pointer gestures/animation timing; no live
+provider calls or claims of full former Electron/Simulator parity were made.
+
+
+## 2026-09-24 — In-app preview server recovery
+
+Added Running Servers to the native preview error screen and Actions menu. The
+local inspector lists this user's TCP listeners whose working directory matches
+the selected project, including address, PID, command and start time. Stop & Retry
+shows a confirmation, revalidates the process identity and project ownership,
+sends SIGTERM, waits for the listener to stop and retries through Praxis's normal
+workspace lifecycle. Other projects and changed/reused PIDs are refused. Errors
+stay in the sheet with Refresh/Retry available; no provider login is required.
+Long preview errors now scroll so the recovery controls remain reachable.
+
+Validation: current TypeScript targets and native recovery tests passed. Native
+background integration and screenshot inspection passed from an isolated source
+snapshot because a concurrent task was removing Electron/build inputs. Tests cover
+real listener discovery, unrelated-process isolation, changed process identities,
+confirmation/cancellation, stale project actions and restart routing.
+
+## 2026-09-24 — Correct undersized chat toolbar icons
+
+The previous change misread the size discrepancy and made History/New Chat
+smaller. Increase both custom-control images from 16 to 22 points, above their
+original 20-point size; retain the sidebar toggle as the reference and leave
+button hit areas unchanged.
+
+Validation: native typecheck, build and background integration passed; inspected
+the enlarged chat glyphs in a fresh capture. General typecheck failed on preview
+listener signatures being changed by the concurrent migration.
+
+## 2026-09-24 — Match chat toolbar glyph sizes to the sidebar toggle
+
+History and New Chat now use 16-point template images in their custom controls,
+matching the smaller system sidebar toggle visually. Other toolbar symbols keep
+their existing size, and button hit areas are unchanged. The symbol cache includes
+image size so callers cannot accidentally share differently sized artwork.
+
+Validation: all TypeScript targets and native background integration passed.
+Inspected the rebuilt chat toolbar capture; offscreen glass prevents a reliable
+full-toolbar capture, and the live inspector resolved to the existing app.
+
+## 2026-09-24 — Align sidebar actions and preserve symbol proportions
+
+Moved action labels and icon slots four points left to align
+with the project rows. SF Symbols now fit proportionally inside their 16-point
+slots instead of stretching into squares, preserving folder-plus and plus-square
+artwork proportions.
+
+Validation: all TypeScript targets, native background integration and direct
+sidebar action dispatch passed. Inspected the final sidebar capture; pointer
+gestures/animation timing were skipped by the background integration mode.
+
+## 2026-09-24 — Restore native sidebar project switching
+
+Native outline selection sends a `project:` row ID without a separate project
+field. Workspace routing previously fell back to the active project, so clicking
+another open project simply reselected the current one. Resolve project actions
+from their row ID before falling back to the explicit or active project.
+
+Added a native integration regression that opens two static projects and selects
+first/second/first through the AppKit outline callback, checking the active
+workspace, chat and preview at every step. Confirmed it fails before the fix.
+
+Validation: all TypeScript targets, workspace-controller unit checks, docs links
+and native background integration passed. Foreground runs passed switching but
+timed out at the later style edit after pointer-selection checks; background mode
+skips those real pointer gestures. Inspected the project-switching capture.
+
+## 2026-09-24 — Native chat clipboard attachments
+
+The plain AppKit composer now advertises file URL, PNG and TIFF pasteboard types
+and routes AppKit selection reads into the existing attachment handler. Previously,
+AppKit disabled Paste for image-only clipboards before the custom paste handler
+could run. Copied files and images now use the same attachment path as the picker.
+
+Added native regression checks for Paste menu validation/responder dispatch,
+PNG/TIFF attachments, multiple file URLs, removal, Unicode text fallback and an
+empty clipboard. The check preserves and restores clipboard contents and is only
+available to the ephemeral integration profile. The image Paste assertion was
+confirmed failing before the fix.
+
+Validation: all TypeScript targets, native chat-controller tests, docs links and
+native background integration passed. Integration ran from an isolated snapshot
+because another task was editing/building the same native files; that task's
+unfinished project-switching check was excluded. Screenshot captures were read,
+but offscreen Liquid Glass does not paint the composer reliably; attachment state
+and Paste dispatch were asserted directly. No paid provider turns were run.
+
+## 2026-09-24 — Project actions in the native sidebar
+
+Replaced the toolbar project menu with full-width Open Project and New Project
+sidebar buttons. Regular system-label text and distinct folder-plus/plus-square
+icons match the project rows, with a 16-point gap before the project list.
+Both buttons use the existing project action handlers.
+
+Validation: TypeScript/native typechecks, isolated native build, direct button
+action dispatch and sidebar image inspection passed. The full native integration
+run stopped in a concurrently added project-switching check, outside this change.
+
+
+## 2026-09-24 — Let the native window surface show through
+
+Removed the explicit windowBackgroundColor fill from the welcome and preview
+loading/setup/error views. These SwiftUI surfaces now stay transparent, like the
+chat, so the main area inherits the native window surface instead of painting a
+separate dark rectangle. Buttons and the cat retain their native presentation.
+
+Validation: rebuilt Swift and ran the native-only integration checks.
+
+## 2026-09-24 — Complete native UI migration; remove the React runtime
+
+The native build now compiles Bun services, Swift/AppKit/SwiftUI surfaces and the
+isolated project-preview script only. Removed the native Vite/React/Tailwind
+build, main/panel/editor WebViews, app asset server and obsolete renderer bridge.
+A build-input audit rejects application renderer dependencies and deletes stale
+hybrid assets. Electron keeps its independent build and shared service APIs.
+
+Finished native source file tree/history, panel resizing/persistence, chat tables
+and code coloring, sticky request context, attachment errors, chat rename/close
+and project ordering. Added content draft undo, linked spacing controls, HMR style
+reconciliation, native update/restart with dirty-work guards, downloads/media
+permission prompts and bounded WebKit crash recovery. The cat/loading surfaces
+remain Swift-owned. Bun stays as the shared backend; WebKit is only the project
+preview and its Inspector.
+
+Native geometry checks exposed an AppKit bug: assigning the source editor itself
+as a pop-out window content view let its window-sizing behavior follow it back
+into the workspace and collapse the main window. A dedicated pop-out container
+keeps that ownership separate. Regression checks preserve the 828-point window
+and 776-point canvas after docking; full-size chat captures show Markdown,
+tables, code and question cards correctly. Offscreen AppKit image caching does
+not capture Liquid Glass materials faithfully; those require visible checks.
+
+Validation: all four TypeScript targets, native controller tests, docs links and
+native integration passed. Integration asserts exactly one project-preview
+WebView throughout; verifies native sheets, source/content/style writes, conflict
+and revision handling, queue/stream/question/permission behavior, marked-text
+input, cat frames and repeated resize/dock paths. Terminal shutdown checks pass
+SIGINT/SIGTERM/SIGHUP. Foreground checks covered Unicode paste, source tree/find,
+repeated chat divider drags, selection inspector, source pop-out/dock and download cancellation.
+A missing-style snapshot exposed by the foreground fixture now defaults to empty
+computed values instead of opening Activity with an exception; regression covered.
+A transient computed-style read on one integration rerun also exposed a test
+readiness assumption; that check now waits for the asynchronous selection result.
+No Electron tests, real update pulls, publishing, credential writes or paid
+provider turns were run. Broader IME, accessibility, large-project and older
+macOS/iOS Simulator release testing remain separate verification work.
+
+Three fresh-profile native benchmark launches passed: median 0.606 s to native
+ready, 0.676 s to preview, 787 MiB total process RSS (411 MiB without the provider
+helper), 1.43% of one core idle, six processes. Application files are 3.98 MiB,
+64.13 MiB including Bun, excluding dependencies and system WebKit. This is a new
+snapshot, not a paired Electron comparison; see RUNTIME_BENCHMARK.md for limits.
+
+## 2026-09-24 — Native visual inspector and content forms
+
+Selection now opens SwiftUI property/style/custom controls without a property
+WebView. Shared CSS metadata and control prompts are extracted from React. Native
+controls include sliders, color/token pickers, Bézier handles, literal/prop/style
+writes, reset and animation replay. Bun routes inline text, comments and annotation
+creation directly. Recipe-driven native content windows preserve drafts, extra
+JSON fields, collection IDs/order, and revision-checked saves. The pure recipe
+validator is bundled because its package export cannot be required from CJS.
+
+Validation: inspector targeting/token/schema/stale-action tests, recipe validation
+and save-conflict tests, shared CSS tests, all typechecks and native background
+integration passed. The integration verifies no property WebView is created.
+Foreground controls/scrubbing and full content-form visual checks remain pending.
+The main React view/build are the next removal step.
+
+## 2026-09-24 — AppKit source editing and layers
+
+Native source editing now uses NSTextView with line numbers, native find/replace,
+syntax coloring, file filtering/create/rename/trash, component navigation, native
+media display and reusable dock/pop-out windows. Bun retains per-file drafts and
+baseline-checked saves; clean documents refresh when reopened. Source WebViews
+are no longer created. Layers now uses NSOutlineView, including hover/selection,
+source-backed drag reordering and background-agent fallback. React duplicate
+reorder handlers are disabled in native mode.
+
+Validation: editor race/conflict/draft and layers scope/cancellation tests passed,
+as did typechecks and native background integration. The integration saved a real
+file through the native editor and exercised dock/pop-out reuse. Foreground drag,
+find/replace, IME, large-file responsiveness and visual verification remain; the
+property/custom/content panels and main renderer are still pending migration.
+
+## 2026-09-24 — Native shell state and preview recovery
+
+Bun now constructs project/history rows, favicons, chat titles, toolbar state and
+preview location directly. Selection/device/expand/address actions no longer run
+through App.tsx; a temporary projection keeps the remaining web tools aligned.
+Swift owns preview loading, setup, failure and retry surfaces. Annotation pins
+and selection clearing now use the event-only preview bridge directly.
+
+Validation: shell navigation/origin/persistence tests and context tests passed,
+as did typechecks and native background integration. Native resize also runs
+with renderer event delivery disabled. Main WebView creation and React editing
+panels remain until their replacements are complete.
+
+## 2026-09-24 — AppKit-owned workspace geometry
+
+AppKit now places the chat/composer, preview, mobile device artwork, divider and
+legacy property-panel view. Column clipping retains the conversation's text width
+during expand/restore. Native chat and preview no longer receive DOM rectangles;
+remaining web tools report only desired panel insets. Native widths persist in the
+profile. Shell state and editing panels are still transitional renderer clients.
+
+Validation: all typechecks and native background integration passed, including
+repeat divider drags, expansion, toolbar alignment, mobile and panel operations.
+Background captures were inspected, but system glass content capture is incomplete;
+foreground pointer/animation/visual checks remain required before final parity.
+
+## 2026-09-24 — Native Git workflows and environment refresh
+
+Bun now owns native branch switching/creation, publish mode and publishing,
+including conflict/recovery output. Git updates and GitHub connection use native
+sheets. Feedback now previews optional screenshot/conversation attachments in a
+native sheet; diagnosis offers a repo-only draft for review before sending. Git mutations share the project's operation queue; results stay scoped
+to their original root when the active project changes. Native landed environment
+changes restart the managed preview through Bun, including dependency installs.
+Closing Activity restores the main window's focus (a background-color integration
+check exposed the missing restoration).
+
+Validation: Git workflow/scope/conflict tests and workspace tests passed, as did
+all typechecks and native background integration after the focus fix. Feedback
+attachment opt-outs and diagnosis draft scoping also passed pure tests; native
+feedback/diagnosis presentation was exercised without submitting. Live GitHub
+creation/publishing was not executed; those operations use service stubs in tests.
+
+## 2026-09-24 — Bun-owned native chat context
+
+Native selected-object prompt context, setup/token offers, annotations, background
+spawn state and history refresh now come from Bun service events. React no longer
+publishes whole chat contexts or chooses the native active chat. Remaining visual
+panels temporarily forward selection changes only. Setup completion restarts the
+active native project and verifies source stamps. Shared selection formatting is
+extracted for both runtimes.
+
+Validation: context race/scope tests, native chat tests, all typechecks and native
+background integration passed. The desktop check disables renderer delivery,
+injects preview selection, sends via Swift and verifies selection is cleared.
+Branch/publish and window geometry still need migration; no Electron tests ran.
+
+## 2026-09-24 — Native activity and session review
+
+Moved activity presentation to a selectable AppKit window with Copy All/Clear,
+direct Bun server-event ingestion, capped buffering and throttled repaint. Saved
+session review now uses a native sheet with transcript/files, resume, apply,
+PR actions and confirmed discard. Electron retains its existing surfaces.
+
+Validation: all typechecks, bounded-buffer/review lifecycle tests and native
+background integration passed. Native activity show/clear/hide was exercised.
+Review operations used service stubs; no live PR or provider call was made.
+Background mode still skips actual preview mouse/animation verification.
+
+## 2026-09-24 — Native project and provider sheets
+
+New Project, project memory, Settings and provider connection management now use
+SwiftUI sheets backed by Bun controllers. Provider catalog selection, manual IDs,
+saved-key preservation and delete confirmation reuse the existing services.
+Canceled asynchronous requests cannot reopen a dismissed sheet. Native New Chat
+also passed with renderer event delivery disabled; React remains a projection
+for the panels and layout that have not migrated yet.
+
+Validation: sheet/settings controller tests, all typechecks and native background
+integration passed. Inspected native sheet captures. Real preview input and
+animation sampling were skipped by background mode; no Electron tests ran.
+
+## 2026-09-24 — Plan Jev-composed native chat islands
+
+Added CHAT-ISLANDS.md and staged roadmap items for on-demand interactive UI inside
+assistant messages. The plan separates agent-discovered bindings, Jev block/group
+composition, Bun state/source transactions and native SwiftUI rendering. Includes
+follow-up revisions, durable history, landing/stale-source behavior, engine failure
+handling and tween/spring/combined-animation plus typography acceptance scenarios.
+Initial controls commit on release through HMR; runtime-live preview adapters are
+a later extension. Planning only; no island implementation or live model call.
+Validation: all TypeScript projects including native, existing documentation-link
+check and diff whitespace check passed. No runtime suites ran for this docs change.
+
+## 2026-09-24 — Bun workspace navigation and native preference storage
+
+Added a Bun workspace controller for open/select/close, restore, history loading,
+new/switch/close/resume chat and warm-project eviction. Native sidebar/menu
+navigation calls it directly. React receives a temporary projection for the
+remaining panels; branch/publish, editing context and some metadata effects still
+need migration. Per-project operations serialize; stale opens cannot reclaim the
+active screen and a close waits for startup before stopping its resources.
+
+Native UI preferences now use a versioned profile file with legacy per-key import,
+deletion tombstones and trusted-view bootstrap. Shared model-preference and
+workspace types are independent of the renderer. Electron retains browser storage.
+
+Validation: workspace lifecycle/race tests, preference restore/import tests,
+preferred-model and rail-order tests, all typechecks, and native background
+integration passed. Native-only work; no Electron tests or live provider calls.
+The next integration run also disables renderer delivery during New Chat.
+
+## 2026-09-24 — Plan remaining native migration
+
+Audited current host/build, workspace actions, chat context adapter, DOM geometry
+and remaining web panels. Added NATIVE-MIGRATION.md with seven ordered stages and
+exit checks: Bun workspace ownership, AppKit layout, main-WebView removal, native
+sheets, editing tools, source/chat parity, and build cleanup. Preserve Electron
+and Bun services; retain WebKit for project content and inspection. This entry
+records planning only; no runtime migration or benchmark was performed.
+
+## 2026-09-24 — Native welcome, animated cat and reliable chat resizing
+
+Moved startup/loading and empty workspace presentation into SwiftUI, with native
+Open/New/recent-project controls. Bundled the original pixel artwork and animation
+timings as rectangles for native drawing. The cat returns to the conversation
+footer with running, waiting, idle and completion poses; hidden views pause timers
+and Reduce Motion disables animation.
+
+The black toolbar crescent was a clipped “C” from the empty Chat title. The chat
+toolbar item now exists only with a visible chat, and narrow titles hide rather
+than showing a sliver. AppKit owns divider input above the native chat/preview
+surfaces, so resizing cannot cover the next drag target. Manual resize updates
+disable the expand/collapse CSS transition. Workspace geometry, navigation and
+remaining panels still depend on the web shell; this is not yet React-free.
+
+Validation: TypeScript checks, pure cat artwork/controller tests, native build and
+background integration passed. Added three consecutive divider drags and native
+hit-target checks, empty-toolbar/welcome checks, and running/waiting cat checks.
+Inspected welcome and Swift chat captures. Background mode skips actual preview
+mouse input and preview-animation sampling; no Electron or live provider tests ran.
+
+## 2026-09-24 — Move native chat behavior into Bun
+
+Native no longer mounts React ChatPanel. A Bun controller owns per-chat drafts,
+attachments, skill completion, streamed messages, queues, model changes and native
+card actions. Swift talks directly to it. Pure provider/settings/setup mappings
+are shared with Electron; workspace context, layout and other panels remain web
+based, so the application is not yet fully React-free. Conversation mirrors are
+sent to the shell only when changed and replayed on renderer reattach.
+
+Stop, permission and conflict operations now accept an explicit session target;
+existing active-chat callers retain their behavior, and browser RPC validates the
+new targets against its repository scope. Closing a chat cancels queued/preparing
+submissions. Fixed AppKit draft revisions when returning to a previously edited chat.
+
+Validation: controller and relevant pure-unit tests, all TypeScript checks, native
+build and background integration. Integration disables renderer event delivery
+while exercising Swift Send, queues, streaming and permission/question replies.
+Inspected the native conversation capture. Background mode explicitly skips real
+preview mouse input and animation sampling. No Electron or live provider tests ran.
+
+## 2026-09-24 — Render native chat in Swift
+
+Added SwiftUI conversation rendering with selectable inline Markdown, fenced code,
+headings, tool disclosures, sent attachments, copy/revert actions and native
+permission/question/setup/conflict/queue cards. AppKit composer controls now use
+typed state/actions instead of a hidden web form; deleted the DOM composer adapter.
+NativeChatSurface reserves geometry only. Drafts, models, permissions, skills,
+queues and provider submission reuse the shared controller. That controller and
+other application panels still use React; removing its runtime is not completed.
+
+Native build and all typechecks passed. Explicit background integration passed
+composer/history drafts, attachments, skills, typed Send/queue removal with a stubbed
+provider, streamed text/tool activity, permission/question responses and absence
+of React chat DOM. Inspected the Swift conversation capture. Normal-mode checks
+could not verify preview mouse input/animation with WebKit reporting the test
+window hidden; background mode explicitly skips these checks. No live provider
+calls or Electron tests ran. Native table layout, code highlighting and animated
+cat/sticky user-bubble parity remain follow-up work.
+
+## 2026-09-24 — Preserve native sidebar projects across launches
+
+Native now saves workspace JSON atomically in its own profile, independent of
+WebKit localhost storage. Restore retains every saved project, including those
+without a live process, and reopens the last selected project through the existing
+suspended-project path. Explicit closes remain persisted. Existing localStorage
+is the migration fallback; Electron's restore policy remains unchanged.
+
+Native workspace tests cover disk reopen, empty-list persistence, invalid writes,
+and cold-launch retention/selection. Both tests, all TypeScript checks and the
+full native integration suite passed. No Electron tests ran.
+
+## 2026-09-24 — Isolate selection input from the native preview app
+
+Selection now stops page keyboard, pointer and editing event handlers at window
+capture. Inline text editing retains WebKit's caret, typing and clipboard defaults;
+Praxis handles Enter/Escape before suppressing propagation. Inspection scrolling
+and overlay controls remain available. Native preload installation now runs at
+document start so project capture listeners cannot run first.
+
+Added native regression coverage with parser-registered page capture listeners,
+real mouse/keyboard input, caret movement, typing, cancel/commit and restored
+interaction after leaving selection mode. Native integration and all TypeScript
+checks passed; inspected the native shell capture. No Electron tests ran.
+
+## 2026-09-24 — Reduce native idle work and unused WebKit memory
+
+Created the property-panel view on demand, preserving retained state on first
+open and reusing the view on reopen. Replaced the composer's 150 ms DOM polling
+with React commit, input, mutation and resize notifications. Unchanged native
+sidebar rows retain decoded favicons; toolbar symbols reuse rendered artwork.
+
+Three paired runs against f4e3ed1 reduced median summed RSS from 976 to 898 MiB
+and processes from eight to seven before the panel is opened. Idle CPU medians
+were 2.16% and 1.82% of one core, with overlapping short samples. Startup and
+preview timing stayed approximately 0.86 s and 1.03 s; no speedup is claimed.
+The earlier 2.54 s native startup result did not reproduce in this controlled
+rerun. Restricted blank-page launches were excluded, not called fixed.
+
+Full native integration passed, including new first-use panel/reopen coverage,
+composer skills/drafts/permissions, source editing and Web Inspector. Typechecks
+passed. No Electron tests or live provider prompts ran. Kept Electron pending
+remaining platform and functionality validation; documented measurement limits.
+
+## 2026-09-24 — Clear native toolbar button highlights
+
+Replaced automatically generated toolbar group controls with explicit momentary
+NSSegmentedControls. Setting selectionMode on manually assembled subitems had
+not configured the rendered control, so its last-clicked segment stayed selected.
+Actions now clear transient selection immediately and refresh enabled states,
+images and tooltips from their existing toolbar items. Native automation invokes
+the group callback and checks the actual segmented cell's tracking/selection.
+
+Build and TypeScript checks passed. Native integration passed selection, device,
+code and expand/restore toolbar checks, including the residual-selection assertion;
+inspected the shell capture. The full run later timed out initializing the property
+panel with concurrent lazy-panel changes present. No Electron tests ran.
+
+## 2026-09-24 — Animate native preview expansion
+
+Native chat width now transitions over 240ms, with matching sidebar easing and
+toolbar alignment following the measured width. The conversation retains its
+layout width while clipped, avoiding temporary text reflow and scrollbar overflow.
+Divider dragging remains immediate; Reduce Motion disables the transition.
+
+All TypeScript checks and native build passed. Native integration verified
+intermediate expansion widths, stable conversation width, sidebar restoration,
+toolbar alignment and composer typing/drafts. Inspected the shell capture. The
+full run subsequently failed waiting for the composer slash-command skill list
+with concurrent composer transport edits present. No Electron tests ran.
+
+## 2026-09-23 — Native preview Web Inspector
+
+Added a Develop menu with preview Web Inspector (Option-Command-I) and JavaScript
+Console (Option-Command-C). Preview-only developer extras enable WebKit's native
+Inspect Element context-menu action. Guarded private inspector selectors stay
+in Inspector.swift, with a Safari Develop-menu explanation if unavailable; the
+preview's application IPC permissions are unchanged.
+
+Native integration opened the real preview inspector, invoked its console, and
+closed it successfully. Full native integration, build and type checks passed.
+No Electron tests ran.
+
+## 2026-09-23 — Momentary toolbar actions and native app icon
+
+Native toolbar groups now use momentary selection and clear residual selection
+when applying state, preventing Expand from staying highlighted after use.
+The native bundle includes the existing build/icon.icns as Resources/Praxis.icns,
+references it through CFBundleIconFile, and sets the application Dock icon on
+launch. Toolbar glyphs retain aspect ratios; the current fitting normalizes their
+maximum dimension rather than applying one identical scale to every SF Symbol.
+
+Native integration (including unselected groups after expand/restore), native
+build and all TypeScript checks passed. Verified the bundled icon matches the
+source resource and its plist entry. No Electron tests ran.
+
+## 2026-09-23 — Native/Electron runtime comparison
+
+Measured current builds on the local M4 Pro with isolated profiles and the same
+200-card static preview. Native runtime/application files (excluding external
+packages) measured 63.7 MiB vs Electron 309.0 MiB. Successful-run median summed
+RSS was 732 vs 1,022 MiB including the automatically started Claude helper;
+launch-to-ready was 2.54 vs 0.66 seconds. Two of four native attempts failed
+readiness; all three Electron attempts completed. See RUNTIME_BENCHMARK.md for
+methodology, ranges and limitations. Local raw data lives in
+`test/artifacts/runtime-benchmark/`. All recorded benchmark processes exited.
+No product code changes; no broad Electron test suite was run.
+
+## 2026-09-23 — Moderate toolbar icon reduction
+
+Increased fixed toolbar glyph bounds from 28 to 36 pixels within the same 40px
+2x template. This targets roughly 20% smaller than the original icons instead
+of the previous ~38% reduction, preserving button sizes and toolbar layout.
+Native build passed.
+
+## 2026-09-23 — Enforce rendered toolbar icon size
+
+The earlier SF Symbol configuration did not reduce the displayed toolbar glyphs:
+AppKit applied its own symbol sizing. Toolbar symbols are now rasterized into
+2x template artwork with explicit glyph bounds, preserving native tint and
+controls without symbol reconfiguration. Inspected actual before/after shell
+captures and measured dark glyph pixels: Layers height fell from 39px to 24px;
+device from 37px to 23px. All native integration checks and type checks passed.
+No Electron tests ran.
+
+## 2026-09-23 — Compact toolbar with visible preview actions
+
+Preview action groups now have high visibility priority. Chat/header widths
+adapt to the available window width, reserving room for all preview actions;
+the title/address truncate before actions overflow. Toolbar symbols use a 14pt
+configuration in a 16pt image. A native sidebar observer removes Projects from
+the toolbar when collapsed and restores it when reopened, so it cannot remain
+in the overflow menu.
+
+Native integration passed, including action visibility at 850, 1100 and 1320pt,
+Projects absent while collapsed, expand/restore and existing application flows.
+An independent AppKit harness confirmed both groups and Publish visible at all
+three widths. Type checks passed; inspected the native shell capture. No Electron
+tests ran.
+
+## 2026-09-23 — Preview header contrast and duplicate divider
+
+The domain/branch inherited the app's light appearance even when the preview
+painted a dark toolbar. The page-color observer now selects light/dark header
+appearance and explicit contrasting text, including the address editor and
+branch menu title. Native integration checks cover dark-to-light page changes.
+White-on-#111 and black-on-#fafafa domain text pass APCA at 13px bold.
+
+Pixel inspection found a two-pixel web resize handle beside the one-pixel native
+divider below the toolbar. Native CSS now clears its paint while preserving the
+drag target. The native divider has its own layer, pixel-aligned preview edge,
+and lighter opacity. Native integration and type checks passed; no Electron
+suite was run.
+
+## 2026-09-23 — Full-height native preview surface
+
+Removed native preview card fills/outlines and extended the detail behind the
+transparent titlebar. A hit-test-transparent AppKit surface observes WebKit's
+page-derived underPageBackgroundColor (html/body blend), paints the desktop
+preview's toolbar backing, and draws one lighter full-height left divider.
+The web view still begins below the toolbar safe area; mobile keeps its surround.
+Removed the separate chat-header separator.
+
+Expand/restore previously combined an immediate web layout with a 50ms-delayed
+native sidebar collapse. Workspace snapshots now sync immediately, other layout
+snapshots coalesce without that delay, and desktop WebKit follows canvas resizing.
+Geometry effect cleanup also sent zero-sized frames when insets/viewport changed;
+only unmount now clears the native view. Empty views do not autoresize back open.
+
+Native build, all TypeScript checks, and full native integration passed, including
+live html/body background changes, safe-area/divider geometry, expand/restore,
+editing, undo/redo and bridge isolation. Inspected shell capture: flush preview,
+continuous divider, content below toolbar. Offscreen glass capture limitations
+remain; animation smoothness was not measured. No Electron tests ran.
+
+## 2026-09-23 — Sidebar row fit and project favicons
+
+The source-list document could remain wider than its scroll viewport, clipping
+selection highlights and the trailing More control. A native scroll-view subclass
+now fits document/column width when the viewport changes. Project text can
+compress instead of displacing its controls. Native rows receive project icons
+from the same cached resolver as the React rail, decode data-URI images including
+SVG, and retain a folder fallback for absent/unreadable icons.
+
+Added native integration checks for an SVG fixture and row/action bounds at
+sidebar divider widths 180, 300 and 230. Full-app attempts failed before UI load
+with the existing WebKit startup unsupported-result error. Independently compiled
+and ran the actual AppKit shell: SVG decoding succeeded; document widths matched
+viewports (180, 292, 222), and More ended 20 points inside each viewport. Inspected
+a capture, with the existing offscreen compositing limits. Native build, all four
+typechecks, project-icon unit tests, docs-links and whitespace checks passed.
+No Electron tests ran.
+
+## 2026-09-23 — Select Object beside device switching
+
+Moved Select Object from the composer attachment menu into a native toolbar
+group with the phone/desktop toggle. The action routes through the existing
+shared toggleSelect handler, and its tooltip/icon reflect selection mode while
+remaining in the group. Code/Layers/Expand retain their separate group.
+
+Native integration passed group membership and selection on/off checks plus
+existing flows. Final native build, all four typechecks, docs-links and whitespace
+checks passed. No Electron tests ran.
+
+## 2026-09-23 — Plain compact composer controls
+
+Made attachment/tools a borderless plus (the image belongs to the popup’s first
+menu item, avoiding its previous chevron-only appearance). A flexible gap keeps
+it on the left and the provider/model/permission menus on the right. Those menus
+are borderless without native arrow chrome, sized from full selected labels up
+to 60 points, with truncation only when constrained. Full names stay in menus
+and tooltips. The empty, context-free form minimum is reduced from 146 to 120
+points including controls; populated forms retain the previous space.
+
+Native build/integration passed, including plain-picker/width/plus assertions and
+existing geometry, drafts, attachment, permission and slash flows. All four
+typechecks, docs-links and whitespace checks passed. Inspected the capture with
+the documented glass compositing limitation. No Electron tests ran.
+
+## 2026-09-23 — Selectors below the native composer
+
+Moved the attachment/tools menu and provider/model/permission selectors to a row
+below the Liquid Glass form, directly on the window surface. The form keeps its
+112-point minimum; the shared hidden layout reserves another 34 points for the
+row and gap. Send/Stop remains inside the lower-right corner as a 30-point native
+button, with a 13-point medium-weight symbol and no image upscaling.
+
+Native integration passed geometry assertions that selectors are below the form
+and Send remains inside at its standard size, plus drafts, permissions, slash
+completion, attachment and editing flows. Native build, all four typechecks,
+docs-links and whitespace checks passed. Inspected the composer capture with the
+existing glass compositing limitation. No Electron tests ran.
+
+## 2026-09-23 — Domain and branch header
+
+Replaced the separate branch pill and address field with a plain two-line native
+header: bold preview host/port above a smaller muted branch menu. Removed Home.
+The address reveals the full URL on editing, preserves existing origin-scoped
+navigation, and returns to its compact domain display afterward. The branch menu
+retains branch switching, Git Updates and New Branch. Entering `/` returns to the
+preview origin root.
+
+Native build/integration passed twice, including domain display, toolbar order,
+query/hash and root navigation plus existing native flows. All four typechecks,
+docs-links and whitespace checks passed. Inspected the toolbar capture with the
+existing offscreen compositing limits. No Electron tests ran.
+
+## 2026-09-23 — Terminal cleanup and transparent native chat
+
+Identified and stopped the orphaned lkmv.ch dev-server process group listening on
+7784. Native cleanup handled SIGINT/SIGTERM but omitted terminal hangup (SIGHUP).
+The launcher now forwards SIGHUP and the backend’s shared shutdown hook invokes
+existing server/agent cleanup for all three signals and normal exit. Added a
+pure-Bun regression test against the actual shared dev-server service: each
+signal terminates a spawned detached server. Both regression runs passed.
+
+The black chat remained because transparent pane CSS still exposed the opaque
+page body and WKWebView backing. Cleared the main webview’s background drawing
+and under-page color, plus page/root/chat/status-fade fills, to expose the actual
+AppKit window surface. Preview and component card backgrounds remain scoped.
+
+Native build/integration passed, including explicit transparent body/chat checks
+on the final run; one intermediate retry hit the existing WebKit startup error.
+Inspected the shell capture: chat matches the titlebar surface (other glass
+capture limitations remain). All four typechecks, docs-links and whitespace
+checks passed. No Electron tests ran.
+
+## 2026-09-23 — Separate native preview toolbar groups
+
+Separated the desktop/mobile toggle from a native NSToolbarItemGroup containing
+Code, Layers and Expand, with fixed toolbar spaces between groups. Layers uses
+the shared panel store. Replaced the custom accent-colored Publish stack with a
+standard NSMenuToolbarItem, retaining its action and PR/merge menu as a separate
+trailing control.
+
+Native integration passed group membership, Layers open/close, navigation,
+code/expand, publish mode and existing composer/editing flows. Native build and
+all four typechecks passed, as did docs-links and whitespace checks. The first
+build collided with another build updating generated Swift input; the retry
+passed. Inspected the toolbar capture with its existing offscreen compositing
+limitations. No Electron tests ran.
+
+## 2026-09-23 — Inline native skill list
+
+Replaced the Skills/commands popup chip with an automatically shown, scrollable
+native list above the composer. Rows display command names and descriptions,
+highlight the active keyboard choice, and are clickable without leaving focus
+away from the editor. The list follows composer geometry, caps at 240 points,
+and hides with the composer or when matches close. Existing React filtering,
+Arrow/Enter/Tab handling and completion remain authoritative.
+
+Native build/integration passed, including visible-list and slash-completion
+checks plus existing draft, modal, editing and isolation checks. All four
+typechecks, docs-links and whitespace checks passed; no Electron tests ran.
+
+## 2026-09-23 — Native composer spacing and compact controls
+
+Removed the chat pane’s separate background/token override so it shares the shell
+surface. The composer’s excessive top space came from an always-reserved 22-point
+chip row plus a forced 152-point form minimum. Empty chips now collapse and the
+form minimum is 112 points; populated context/attachment/suggestion rows remain.
+Send/Stop is 36 points with a larger symbol and a flexible spacer keeping it at
+the right. Pickers measure selected labels rather than their longest menu option,
+using Electron ComposerSelect’s ten-character compact rule; full labels remain
+in menus/tooltips and controls can shrink on narrow layouts.
+
+Native integration passed twice, including final geometry assertions for the
+empty input’s top inset and Send’s size/right inset, plus drafts, history,
+attachments, permissions and editing flows. Build, all four typechecks, docs-links
+and whitespace checks passed. Inspected the composer content capture; offscreen
+glass compositing still has the documented limits. No Electron tests ran.
+
+## 2026-09-23 — Circular glass Settings button
+
+Replaced the sidebar’s labeled Settings control with an icon-only 36-point circle.
+On macOS 26 it uses NSGlassEffectView with an 18-point radius around the native
+gear button; older macOS uses a circular system bezel. The Settings tooltip,
+accessibility label and existing action remain available.
+
+Native compilation/build and all four typechecks passed, as did docs-links and
+whitespace checks. Native integration again failed before UI initialization with
+the existing WebKit unsupported-result startup error, so the final appearance and
+click interaction were not verified in the running UI. No Electron tests ran.
+
+## 2026-09-23 — Project sidebar and chat history toolbar
+
+The native sidebar now lists projects only, selecting the active project rather
+than its chat. Each row has a hover More menu with Project Memory and Close
+Project; it also stays visible on the selected row, and right-click offers the
+same actions. The outline uses standard column autosizing with no tree indentation. Chat rows remain in the transport snapshot for history and routing.
+
+The chat header has a plain, non-actionable title on the left and History then
+New Chat on the right. History lists the current project’s open and saved chats,
+marks the active chat, and reuses the existing switch/review handlers. Removed
+the old header options menu. Native integration verifies project-only row counts,
+header configuration, and history-based chat switching with draft restoration,
+plus existing native flows on the first run. The final build, all four typechecks,
+docs-links and whitespace checks passed. Follow-up integration runs after row
+sizing/selected-row visibility adjustments failed before UI initialization with
+the known WebKit unsupported-result startup error; those final adjustments were
+not verified end to end. No Electron tests ran. Offscreen captures retain the
+existing glass/WebKit compositing limitations.
+
+## 2026-09-23 — Projects button opens from its icon
+
+Removed the generic toolbar action from the Projects NSMenuToolbarItem. AppKit
+was treating it as a split button, sending an unhandled action from the icon and
+opening the menu only from the chevron. It is now menu-only, like the Branch
+control, so the entire button opens New Project/Open Project. Native integration
+asserts the menu-only configuration and still exercises Open Project through its
+menu entry. Native build/integration and all four typechecks passed; no Electron
+tests ran.
+
+## 2026-09-23 — Sidebar includes the traffic lights
+
+Enabled full-size native window content and full-height sidebar layout so the
+open sidebar surface extends behind the system window controls. The project list
+uses the sidebar safe area; a detail wrapper keeps the WebKit canvas below the
+toolbar, preserving preview/composer coordinates. Split resize notifications keep
+the chat toolbar aligned when the full-height sidebar collapses or reopens.
+
+Native build/integration passed, including sidebar/window-control containment,
+content safe-area geometry, toolbar alignment, collapse/restore and existing
+composer/editing flows. All four typechecks, docs-links and whitespace checks
+passed. No Electron tests ran. Inspected the sidebar capture; full-window glass
+and WebKit capture limitations still apply.
+
+## 2026-09-23 — Column-aligned native toolbar
+
+Grouped the AppKit toolbar by its content columns, following the Notes reference.
+The Projects menu and sidebar toggle sit before the sidebar tracking separator;
+the chat title, New Chat and options (Project Memory/Close Chat) occupy the chat
+section; branch, navigation, device, code, expand and trailing primary Publish
+remain in the preview section. Removed duplicate project/chat buttons above the
+sidebar outline; Settings stays below it. Hiding chat compacts its toolbar group.
+
+A renderer ResizeObserver mirrors the actual chat pane width; AppKit measures in
+window coordinates to align the header’s separator with the web divider. Native
+integration verifies alignment at 360, 480 and 440 points and after sidebar
+collapse, plus existing navigation, draft, editing and isolation flows. Native
+build/integration and all four typechecks passed; docs-links and whitespace checks
+passed. No Electron tests ran. Inspected the native capture, whose offscreen
+WebKit/glass compositing still limits visual verification.
+
+## 2026-09-23 — Remove native chat's gray fill
+
+Scoped the native chat pane to the existing theme content-background token,
+replacing the inherited Electron shell gray. Rebound its local `--bg` token so
+the status fade and scrollbar edges match the new surface in light and dark mode.
+The Liquid Glass composer and Electron appearance retain their existing styling.
+Native integration/build and all four typechecks passed. Updated AGENTS and TESTING
+per the user's preference: native work uses native checks and relevant unit tests,
+without running Electron suites, including when native changes touch shared UI.
+No Electron tests ran for this change.
+
+## 2026-09-23 — Native navigation and automatic scrollbars
+
+Moved Home, the editable preview address and desktop/mobile switching into the
+AppKit toolbar. The address mirrors actual navigation, preserves edits while
+focused, submits on Enter and reverts on Escape. Navigation stays within the
+project origin; Home uses the project's base URL. Simulator device switching is
+disabled. The running web preview header is removed only in native mode; loading
+and error status remains visible. Publish is the trailing accent-colored native
+button, retaining its separate PR/merge menu without taking the Return shortcut.
+
+The sidebar and composer previously enabled scrollers without auto-hide. Both now
+use auto-hiding overlay scrollers, and the empty text document no longer retains
+an initial height larger than its viewport. Native-mode chat also drops its fixed
+scrollbar gutter and uses a thinner thumb. The project page's scrollbars are not
+modified.
+
+Validation: native integration passed address/query/hash navigation, Home, device
+switching, toolbar order/primary styling configuration, hidden duplicate header,
+automatic scrollers and existing editing/composer/isolation checks. All four
+typechecks passed. Inspected the native toolbar capture; inactive/offscreen glass
+compositing retains the documented visual limitations. The final native run passed
+in isolation after an intermittent WebKit startup evaluation failure during the
+concurrent run. Deterministic regressions: 146 PASS, with native checks separate
+and external agent-send tests excluded. Report:
+`test/artifacts/runs/run-bbHdPw/summary.json`. Docs-links and whitespace checks pass.
+
+## 2026-09-23 — Preview-focused native toolbar
+
+Moved New Project, Open Project and New Chat into the top of the native sidebar,
+with Settings at the bottom. The toolbar now has a leading sidebar toggle/tracking
+separator, current branch menu, Publish/Create PR (or Connect to GitHub), code and
+expand/restore controls. Removed their duplicate web preview-header controls only
+in the native build. URL and device controls remain local to the preview.
+
+Extended the typed shell bridge to call existing App handlers for branch changes,
+Git Updates, publishing and code editing. Native branch creation uses a sheet;
+publish mode is a native dropdown. Disabled/busy labels mirror the shared state.
+Expand hides both chat and native sidebar, then restores the sidebar's previous
+collapse state. Replaced the old persisted toolbar configuration so existing native
+profiles receive the new arrangement.
+
+Validation: native build and integration passed sidebar project opening, toolbar
+order, code toggling, expand/restore, publish-mode selection and existing composer,
+editing and preview-isolation checks. Inspected sidebar and toolbar captures;
+offscreen WebKit/vibrancy compositing still has the previously documented limits.
+All four typechecks, docs-links and whitespace checks passed. No publish operation
+was performed. Deterministic regressions: 145 PASS, one startup crossfade failure,
+which passed on isolated rerun. Native tests ran separately; external agent sends
+were excluded. Reports: `test/artifacts/runs/run-W73Vyn/summary.json` and
+`test/artifacts/runs/run-k7do9M/summary.json`.
+
+## 2026-09-23 — Native Liquid Glass composer
+
+Added an AppKit multiline chat composer using Apple's `NSGlassEffectView` on
+macOS 26+, with a visual-effect fallback on older systems. Standard native
+controls handle attachments, provider/model/permission choices, context clearing,
+slash-command choices and send/stop. PNG/TIFF clipboard images and local file
+paths pass through the existing attachment handlers. Build now needs the macOS
+26 SDK while retaining the macOS 13.3 deployment target.
+
+The native-only DOM adapter mirrors geometry/state and dispatches into the shared
+React composer, keeping its draft, queue, model confirmation and agent semantics.
+Electron keeps its original composer. Native input revisions prevent delayed
+snapshots from overwriting typing, and background synchronization uses timers
+because animation frames can stop in occluded WebKit windows. Undo is enabled in
+the native text field and cleared between chats.
+
+Validation: native build and all four typecheck projects passed. Native typing,
+per-chat draft restoration, file/image attachment add/remove, permission changes,
+slash completion, modal visibility and host geometry checks passed. WebKit
+reported unsupported evaluation result types during later startup checks; explicit
+JSON result conversion in the private evaluation helper resolved that run, and
+the full native integration check passed again. The authorized live Codex test submitted through the native send button,
+streamed a response, edited the fixture and verified the result in WebKit.
+Offscreen Liquid Glass/content captures are blank despite valid control geometry;
+visual appearance, pointer interaction and IME still need an unlocked-desktop
+check. Image thumbnails, richer slash suggestions and attachment error feedback
+remain follow-up work.
+
+Deterministic regressions: 145 PASS, one startup-intro animation timeout; that
+test passed on an isolated rerun. Native checks ran separately and ten external
+agent-send tests were excluded. Reports: `test/artifacts/runs/run-tnkZlZ/summary.json`
+and `test/artifacts/runs/run-THWLnA/summary.json`. Docs-links and whitespace checks
+passed.
+
+## 2026-09-23 — System macOS sidebar and toolbar
+
+Added an AppKit source-list outline for projects/live and previous chats, a system
+split-view divider/sidebar toggle, and standard toolbar items for opening/creating
+projects, new chats, reload, selection, chat visibility and settings. Context menus
+reuse the existing project-memory and close actions. Chat, inspectors, settings,
+code editing and detailed preview controls remain in WebKit. Electron retains its
+React rail and window controls.
+
+The native-only renderer hook subscribes to workspace state, sends changed compact
+snapshots and routes native actions through the current App closures. Sidebar
+collapse preserves detail-local preview coordinates. Added shared bridge types
+and preserved undefined optional IPC arguments across JSON serialization; the new
+multi-chat check exposed null defeating shared-handler default options.
+
+Validation: all four typecheck projects and native build passed. Native checks
+passed toolbar project opening, selection/chat toggles, sidebar collapse, real
+chat-session switching, source editing/live reload, undo/redo, image delivery,
+pop-out editors and preview isolation. Authorized Codex fixture editing also
+passed through the new shell. Inspected native sidebar/toolbar and separate web
+captures; offscreen vibrancy/WebKit compositing is limited, documented in NATIVE.
+Pointer interaction and missing sidebar parity (rename/order/background agents)
+remain manual/future work.
+
+Deterministic regression run: 144 PASS, two animation failures (startup-intro
+timing and rail-collapse icon morph), with native checks run separately and ten
+agent-send tests excluded. Both failures passed on an isolated serial rerun.
+Reports: `test/artifacts/runs/run-xsVFmE/summary.json` and
+`test/artifacts/runs/run-Lo2sAf/summary.json`. Docs-links and whitespace checks pass.
+
+## 2026-09-23 — Native Codex live edit verified
+
+Added `PRAXIS_NATIVE_TEST_PROVIDER=codex` to the native live test. Corrected the
+test setup to restart the actual backend session with the requested provider and
+options; changing renderer store state alone leaves the opened session unchanged.
+
+The user-authorized Codex run passed: actual composer submission, streamed tool
+and reply events, fixture heading edited on disk to `NATIVE_AGENT_VERIFIED`, and
+the same heading observed after WebKit preview reload. All deterministic native
+checks also passed. Inspected the captured Codex chat and provider events in
+`test/artifacts/native/`. Native typecheck, docs-links and whitespace checks passed.
+Claude remains unverified because its SDK returned the missing-login response.
+
+## 2026-09-23 — Authorized native live test: Claude login required
+
+With explicit user approval, ran `bun run test:native-live`. The deterministic
+native checks passed, and the actual composer submitted the fixture prompt through
+the shared provider SDK. Claude returned “Not logged in · Please run /login” as
+a text delta followed by done; no source edit occurred. Captured provider events
+and inspected the chat screenshot under `test/artifacts/native/`.
+
+Updated the test to recognize that exact login response as an authentication skip,
+capture events/screenshots before assertions, and set live model/permission options
+after project opening (which restores session settings). No successful native
+model edit is claimed. Claude sign-in is required before rerunning this test.
+Validation: rerun passed the deterministic checks and reported live authentication
+SKIP correctly; native typecheck, docs-links and whitespace checks passed.
+
+## 2026-09-23 — Shared Praxis app on Bun and system WebKit
+
+`bun run dev:native` now builds and launches the real Praxis UI and shared
+application services on Bun, with a Swift/AppKit/WKWebView host. The native build
+aliases the Electron primitives used by those services to a private adapter;
+the existing Electron entrypoint, renderer and business logic remain shared and
+unchanged. Added `build:native`, `typecheck:native`, native desktop tests and
+`docs/NATIVE.md`. Native state has a separate profile and process lock.
+
+The host supplies windows, menus, folder dialogs, screenshots, media delivery,
+pop-out code editors and Keychain-backed encryption. Preview instrumentation runs
+in an isolated content world with an event allowlist; privileged IPC is denied.
+The app asset server is loopback-only and exposes no backend command API.
+Linux, distribution, profile migration, app-shell HMR and updater parity remain
+future work. Keychain credential round trips and manual pointer interaction have
+not been verified.
+
+Validation: native build and all four typecheck projects passed. Real WKWebView
+integration passed project opening, managed static server startup, selection,
+computed styles, source edits/live reload, undo/redo, image delivery, pop-out
+editor loading, agent workspace access and preview isolation. Inspected both
+main and preview captures under `test/artifacts/native/`. A transient startup
+timeout occurred on one run; subsequent runs reached the checks. The media test
+now uses an image element like the product instead of fetching the custom scheme.
+Regression run: 146 PASS, 1 existing startup-intro crossfade assertion FAIL;
+report `test/artifacts/runs/run-xeTG1A/summary.json`. Ten tests containing agent
+send/spawn paths were excluded, and the live tier was not run. Docs-links and
+diff whitespace checks passed.
+
+The native live-composer fixture test is implemented but not executed: automatic
+approval review rejected sending fixture data to an authenticated external model
+with automatic tool permissions. A real native provider edit remains unverified
+pending explicit approval; no alternate path was used to make that call.
+
+## 2026-09-23 — Native prototype development command
+
+Added `bun run dev:native` and included the standalone Bun/AppKit/WebKit prototype
+under `experimental/native-runtime/`, so the command does not depend on a sibling
+checkout. The launcher forwards arguments, rejects unsupported platforms, and
+identifies itself as a prototype. `bun run dev` remains the complete Electron app;
+the shared Praxis UI/backend integration is still pending.
+
+Validation: all three typecheck projects passed. `bun run dev:native --test`
+passed real WebKit load, isolated source selection, reload reinjection and PNG
+capture; inspected the captured preview. Full regression suite: 154 PASS,
+1 existing startup-intro crossfade assertion FAIL, 1 spawn-comment live SKIP.
+Report: `test/artifacts/runs/run-E55Dkh/summary.json`.
+
+## 2026-09-22 — Dedicated models for preview comments
+
+Preview comment agents now use the latest Sonnet alias on Claude subscriptions
+and gpt-5.6-sol on Codex subscriptions. Gateway/custom connections retain their
+exact selected model and connection, regardless of harness. A shared pure policy
+is applied in main before queueing and in renderer dispatch/child model metadata.
+The parent chat settings, draft and transcript remain unchanged. Visual-edit
+agents continue to inherit the parent model. Updated docs/PROVIDERS.md.
+
+Confirmed Sol against the bundled Codex runtime's model catalog, and Sonnet's
+rolling alias against https://code.claude.com/docs/en/model-config.
+Validation: typecheck/build passed; unit policy cases cover default/explicit
+providers, connection precedence, visual edits and non-mutation. Electron tests
+exercise actual comment events through renderer dispatch, captured IPC options,
+queued model labels and preserved parent state; inspected the UI capture. A real
+Sonnet comment spawn edited and auto-landed successfully. Full verify: 167 PASS,
+1 known agent-multi already-running failure, 3 SKIP (Gateway test credential,
+external Next fixture, Xcode). All executed live-tier checks passed.
+
+## 2026-09-22 — Remove annotations from the selection toolbar
+
+Removed the pin-note action from the preview's selection toolbar. The remaining
+order is Comment, Edit text, Props, 3D, Code and Delete. Existing saved notes and
+the annotation shortcut remain available; this change removes the toolbar entry.
+Updated the selection test's expected buttons and nearby documentation comments.
+
+Validation: typecheck and build passed. Selection and comment-mode Electron tests
+passed; inspected the native preview capture to confirm the shorter toolbar.
+Full suite: 152 PASS / 2 FAIL (known agent-multi already-running failure and a
+spawn-comment branch-cleanup assertion). The isolated spawn-comment rerun passed.
+
+## 2026-09-22 — Restore each chat's composer model
+
+Existing chat settings no longer merge with the last-used/fixed model preference.
+That merge supplied a different chat's optional modelId and connectionId when a
+restored main snapshot or persisted chat omitted them, making the composer show
+Gateway while the existing session still ran its original model. Existing chats
+now use their saved settings over neutral defaults; missing chats still inherit
+the preferred model.
+
+Validation: new unit coverage fails against the original implementation and passes
+for Codex, Claude and default-model snapshots with the fix. Extended the Electron
+chat-render test with last-used Gateway preferences and sidebar round trips;
+inspected its screenshot showing the older chat's Claude/Sonnet composer.
+Typecheck/build passed. Full suite: 153 PASS / 1 existing agent-multi failure
+(“This chat is already running”). The initial sandboxed run could not launch
+Electron or bind local ports; these results are from the permitted rerun.
+
+## 2026-09-21 — Compact preview address input
+
+Capped the editable preview path at 200px with a Tailwind max-width utility,
+retaining flex shrinking in narrow toolbars. The focused field no longer spans
+the available toolbar space in wide windows.
+
+Validation: typecheck and build passed. An isolated Electron probe measured a
+200px focused input in an 1800px window; inspected its screenshot. Full suite:
+152 PASS / 2 known failures (startup-intro native crossfade and agent-multi
+already-running). The initial sandboxed run could not bind ports or launch
+Electron; the reported full result is the rerun with those permissions enabled.
+
+## 2026-09-21 — Surface-controls skill and no-key fallback
+
+Bundled surface-controls routes natural requests for content, component, style and
+animation controls through native Praxis tools. Operating rules v19 require this
+workflow, and portable skill menus expose /surface-controls. It distinguishes app
+end-user UI requests, JSON content editors, existing inspectors and persistent
+animation controls, with source wiring, landing and verification instructions.
+
+Control registration accepts engine:auto to prefer Jev. Both auto and explicit
+jev fall back to the chat model's prepared candidates only when the Gateway key
+is absent. Registration still validates recipes, content and source anchors;
+tool results report engine:agent plus the missing-key reason. Ambiguous/decryption
+errors, failed requests, cancellation and invalid decisions remain errors. Explicit
+agent and the legacy omitted-engine path skip Jev. Project-UI composition keeps
+its separate explicit-engine behavior.
+
+Validation: skill validator, typecheck, build, focused fallback/discovery/rules tests
+passed. Full suite: 153 PASS / 1 existing agent-multi failure. Live no-key test:
+PASS with a plain “Surface controls for the homepage headline” request, no saved
+connection and both Gateway env keys removed. The agent invoked surface-controls,
+reported the fallback, registered the editor, and the harness confirmed source Save
+updates the real preview. Inspected the resulting editor screenshot. The provider
+turn could not use its preview-state observer under its existing approval policy;
+the independent Electron harness completed that verification after landing.
+
+## 2026-09-21 — Saved Gateway credentials and missing content recovery
+
+Content/animation control selection and project-component composition now reuse
+Settings' encrypted Gateway key in main. The selected Gateway connection wins;
+otherwise the sole saved Gateway is used. Multiple connections require selection,
+custom endpoint keys are excluded, and explicit JEV_AI_GATEWAY_API_KEY overrides
+remain supported. Both Claude and Codex tool paths pass their connection identity.
+
+The supplied log repeatedly read writing-order.json while it was absent from the
+live checkout. Missing bound files now return null from content-controls:get; editors
+retry for a bounded interval and retry again on this project's landing events.
+Parked/abandoned bindings show reload/removal guidance, without endless rejected
+IPC. Loaded drafts are retained. Saves still require valid, current source.
+Text editing now falls back to chat for unsupported formats and Babel SyntaxError,
+matching the earlier inspection fix without rewriting malformed source.
+
+Validation: typecheck and build passed. Full suite: 153 PASS / 1 FAIL, the existing
+agent-multi “This chat is already running” failure. Focused Electron checks cover
+missing-file timeout, landing recovery, source saves, browser commands and safe
+MDX/malformed JSX text fallback. Unit checks cover Gateway connection selection,
+origin confinement, unavailable keys, and worktree-to-live content availability.
+Inspected the editor and separate native-preview captures. Targeted live verify:
+3 PASS (content controls, animation controls, project UI composition), using an
+OS-encrypted fixture connection with both Gateway env fallbacks removed from
+Electron. Real Jev requests succeeded; the content test creates its JSON in a Git
+worktree, lands it, surfaces the editor and saves to source.
+
+## 2026-09-21 — Property inspection console errors
+
+The supplied console log repeatedly rejected props:inspect with Babel syntax
+errors. Inspection now skips non-JavaScript/TypeScript sources (such as stamped
+MDX/HTML) and returns unavailable inspection for unrecoverable syntax errors in
+JSX/TSX, including incomplete edits. Other unexpected errors still propagate.
+The log did not identify the source filenames, so the exact offending files
+remain unknown. Source viewing and Svelte dispatch retain their existing paths.
+
+Validation: typecheck and build passed. Real Electron IPC regression covers
+MDX, HTML, malformed JSX/TSX, and successful inspection after repairing the same
+file; existing prop editing and style editing passed. Full suite: 153 PASS /
+1 FAIL, the previously recorded agent-multi “This chat is already running” error.
+Inspected the test's main-window screenshot; the separate inspector panel is
+verified by its existing DOM assertions rather than that capture.
+
+## 2026-09-21 — Content editors and Jev control decisions
+
+Vendored the local content-controls 0.1 build and exposed its catalog/recipe flow
+to Claude and Codex/custom endpoints. Chat binds page content to JSON; persistent
+preview-area editors provide text/textarea, number, toggle/select and collection
+controls with drafts, Undo/Reset and Save to source. Editors share the native
+preview inset with animation panels, lazy-load their runtime, follow both themes,
+and work through root-scoped browser commands. No target editor dependency is
+needed. Registration reads the worktree and persists in the live sidecar.
+
+Saves use the repository writer queue and edit history, preserve unknown document
+and existing collection-item fields, validate recipes/values and real paths, and
+reject stale content or recipe revisions without losing drafts. Corrupt stores
+are not overwritten. JSON bindings and current limits are in CONTENT_CONTROLS.md.
+
+Optional Jev chooses membership/order from prepared content sections or validated
+animation/component parameters. It uses the existing main-process Gateway setup,
+with two evaluations, a 25-second deadline and cancellation; failures register no
+fallback. Verified the reference's catalog/decision approach in the browser.
+
+Validation: typecheck, build, scoped MCP transport, unit checks and targeted lint
+passed. Real Codex content registration made one successful Jev evaluation, then
+saved through the editor. A separate real Jev animation turn passed parameter
+editing, Replay, selection independence, collapse/reopen and source Undo. Browser
+RPC tests cover root isolation, saves, preserved fields and stale revisions.
+Light/dark content UI and native preview/animation screenshots were inspected;
+16px regular editor text passes APCA in both themes (Lc 106 / 96).
+
+Full regression initially finished 150 PASS / 4 FAIL. Fixed this change's MCP
+entry-point startup issue; its real transport passed. Chat-hide launch timeout and
+chat-render slash-selection assertions passed isolated retries. The pre-existing
+agent-multi already-running failure remains. Final content UI passed after adding
+a bounded retry for a transient native capture UnknownVizError (editing assertions
+had already passed). Focused verify finished 12 PASS / 1 capture failure; that
+content UI retry passed. All five live checks passed: content-controls with Jev,
+animation controls with Jev, Claude controls, Codex controls and tool invocation.
+Final typecheck and docs-link checks passed.
+
+## 2026-09-21 — History as a chat-list row
+
+Pulled origin/candidate and preserved both task-log entries when resolving the
+merge conflict. History now lives inside the same list as the live chats and
+uses their shared typography, padding and status-icon slot, with the normal 1px
+row gap instead of a separate heading's top padding. Kept the muted gray for
+both label and count and removed the obsolete section-heading CSS.
+
+Validation: typecheck passed. Full suite initially finished 149 pass / 3 fail;
+the two sidebar failures were outdated selectors after nesting History in the
+chat list. Scoped live-row and Show-more selectors; overflow and reorder passed
+on rerun. The remaining failure is the previously recorded agent-multi
+already-running error. The status/geometry probe passed: matching 12px/400 fonts,
+18px line height, 28px rows and a 1px gap in the same list. Inspected the final
+light screenshot (native vibrancy disabled in the probe for readable capture).
+Retained muted colors
+measure APCA Lc 50 (light) / 41 (dark), below guidance for 12px regular text;
+kept the requested lighter gray rather than changing the existing palette.
+
+## 2026-09-21 — Subagent cat entrance
+
+Subagent cats now play the existing six-frame appear sequence once on mount
+before running or idling. The first render uses the empty entrance frame, and
+status changes do not restart the sequence. Reduced motion skips the entrance;
+unmounting cancels its timer. Quoted SVG data URLs in the CSS mask also fix the
+solid-square rendering exposed by inspecting the entrance screenshot.
+
+Validation: typecheck and targeted animation tests passed, including all six
+entrance frames before the first run frame, valid SVG masks and reduced motion.
+Entrance/run screenshots were inspected. Full regression: 150 pass / 2 fail;
+project-ui-settings passed on isolated retry, leaving the previously documented
+agent-multi already-running error. The final animation test passed again after
+the mask fix. Targeted lint passed for CatLoader, animation assets and the test;
+SubagentCats retains its pre-existing formatting/ARIA lint findings.
+
+## 2026-09-21 — Actual Next portfolio source access
+
+Diagnosed the running sibling `lkmv.ch` checkout without replacing its existing
+work. Praxis was running this repository's development app; the portfolio used
+Next 16.3.5 Turbopack through `bun run content:generate && next dev`, owned by
+Praxis. Its migrated Next config had no wrapper and its sidecar had only old
+React/Svelte helpers. The live portfolio contained zero source stamps, so the
+preview correctly hid Code before any source-read IPC occurred.
+
+Used the running app's scaffold API, wrapped the final MDX config with the existing
+Next adapter, enabled the MDX remark helper only in the development phase, and
+made Babel 7 a direct development dependency in the portfolio. Restarted through
+Praxis's setup flow. All four installed helpers matched current source exactly.
+No Praxis implementation change was needed. Production build output has no stamps.
+
+Actual-app checks use trusted preview input and the real Code toolbar relay:
+home/portfolio Server Component headings, nested IntentLink and ThemeSwitcher
+Client Components, navigation and refresh all open the matching on-disk file and
+highlight its authored line. Native preview and drawer screenshots were inspected.
+Evidence and the repeatable probe are in ignored `test/artifacts/portfolio-debug/`.
+Portfolio check, lint, 52 tests and production build passed. Restored missing
+Praxis dependencies with the frozen lockfile; typecheck then passed. Full suite:
+150 PASS / 1 FAIL / 1 SKIP. The existing test-runner test fails under this
+machine's Bun 1.2.2 on missing-command spawn semantics, and passes under Node.
+The live portion of spawn-comment skipped after no provider edit landed.
+Selection, 3D, Code peek/drawer and setup checks passed. Also verified the actual
+portfolio's 3D Code action and an MDX heading at its authored line. MDX selection
+exposes a separate existing props-inspection parser error; Code still works.
+
+## 2026-09-18 — Actual Jev UI composition
+
+Added a persisted composition-engine selector under the existing opt-in toggle.
+Each submitted/queued message captures the engine. Claude/Codex prepares concrete
+project-component candidates; Jev selects membership and layout through the pinned
+json-render 0.21.0 experimental composer. Finished trees pass the existing strict
+TSX exporter and ordinary editing/landing flow. Jev failures do not silently fall
+back. Requests are bounded to two evaluations, 24 candidates and 25 seconds;
+interrupt and session teardown cancel composition and close the tool gate.
+
+The Gateway credential stays in the main-process environment; the testing key is
+stored only in an ignored owner-only local file. Setup and explicit Bun environment
+forwarding are documented in PROJECT_UI.md. No key is embedded in code or renderer
+state. The default remains current-chat-model generation, with the whole feature off.
+
+Live evidence: direct Card/Text composition finished in one evaluation (641 ms,
+615 input tokens). A second test correctly omitted irrelevant content and reordered
+candidates in two evaluations (624 ms, 1,502 tokens). A real Codex/Electron turn
+made a successful Jev network call, integrated returned TSX and rendered the native
+preview; its screenshot was inspected. Offline tests exercise the actual composer,
+validation, two-step ordering, unavailable results, cancellation and preferences.
+Settings persistence and light/dark screenshots passed inspection; typecheck and
+targeted lint passed. Full verification finished 161 PASS / 2 FAIL / 3 SKIP:
+startup-intro failed its preview assertion (isolated retry timed out on the startup
+screen), and agent-multi hit its recorded already-running error. The optional Next
+fixture and Xcode simulator skipped; the suite's Jev test skipped without inherited
+credentials, while its separate explicitly credential-enabled run passed as above.
+All other live tests passed, including ordinary composition and tool-invocation.
+The final build and post-change cancellation/ordering tests passed.
+
+## 2026-09-18 — Opt-in project component composition
+
+Added Settings → Use project components, off by default and persisted on the
+current device. Each submitted message captures the setting, including queued
+messages; turning it off keeps generated files and returns later messages to
+ordinary editing. Desktop and browser sends carry the same typed turn option.
+
+Claude and Codex now expose chat-gated, read-only catalog/export tools. Bounded
+static React discovery extracts exports, literal prop schemas, children support,
+and stylesheet tokens without executing project source or Babel configuration.
+json-render validates the catalog/spec; a strict exporter rejects broken trees,
+unknown props/variants and unsafe output paths, and returns ordinary TSX importing
+real project components. The agent applies it through existing edits/landing; no
+json-render package is installed in the target repo. Imported/conditional types,
+custom adapters and other frameworks remain follow-up work. See PROJECT_UI.md.
+
+Validation: typecheck and targeted lint passed. Unit checks render exported TSX
+with the real fixture components and cover invalid specs, session isolation and
+opt-out. Real stdio/socket transport, Settings restart persistence, and live Codex
+catalog → export → source → preview checks passed. Settings light/dark and native
+preview screenshots were inspected; explanatory text was sized for readability.
+Full verification: 159 passed, three failed, two skipped. The transport assertion
+was corrected and passed on rerun; remaining failures are the previously recorded
+agent-multi running-chat error and tool-invocation failing to call design tools
+(the latter also failed its targeted rerun). Next's optional fixture and the iOS
+simulator were skipped. The feature's own live generation checks passed.
+
+## 2026-09-18 — Advisory Jev pilot harness
+
+Added an opt-in, dependency-free TypeSafe HTTP pilot, pinned to jev-1.13.0, with
+10 development and 20 holdout cases across five failure categories. Labels are
+agent-authored: 28 cases are synthetic and two are sanitized observed errors.
+The held-out set contains only one observed error, so it is a feasibility check,
+not a production accuracy estimate. Requests exclude labels, rationales, ids,
+and provenance; predictions cannot change test outcomes.
+
+Reports retain dataset/rubric hashes, a fixed keyword baseline, per-class
+confusion, accuracy/Brier/calibration metrics, probability-threshold coverage,
+latency, token usage, and dated price estimates. Calls are sequential, bounded,
+redirect-rejecting, and stop on the first error without automatic retries.
+Keys are loaded from the environment or ignored, owner-only .env.local; headers,
+raw provider responses/errors, and known credential values are excluded from
+reports. No real credential is present in the implementation or committed files.
+
+Validation: offline protocol/redaction/metrics checks and both split dry runs
+passed. The live command correctly reported a missing credential; no Jev call
+or measured accuracy is claimed. A 0600 ignored local credential slot is ready.
+Typecheck passed; full regression finished 148/149 in 240.5s. The sole failure
+is the already recorded agent-multi running-chat error. The UI status screenshot
+was inspected. See docs/JEV_PILOT.md for execution and the limits of the dataset
+and cost estimates.
+
+## 2026-09-18 — Reconcile candidate before pushing
+
+Merged origin/candidate without rewriting either history. Kept both task-log
+sections, the remote native composer pickers, and local queue/preview fixes.
+Adapted the two newer animation/code-reveal tests to native provider selects after
+the remote removed the custom-menu helper.
+
+Validation: typecheck passed. Full suite initially passed 146/148, exposing the
+removed test-helper import and the known agent-multi running-chat failure.
+Animation/composer UI checks passed after correcting the imports. The skills-menu
+check passed in the full run, failed once on insertion timing, then passed on retry.
+
+## 2026-09-18 — Preview address alignment
+
+Centered the Home control and URL vertically instead of baseline-aligning the
+button with text. Added an 8px gap after Home while keeping origin/path adjacent,
+and prevented the Home button from shrinking. Moved the touched layout rule to
+Tailwind utilities. Typecheck, preview navigation, and screenshot verification
+passed. Full suite: 146 passed; agent-multi retained its known running-chat failure,
+and the live spawn-comment check failed to observe comment-branch cleanup.
+
+## 2026-09-18 — Queued messages above the composer
+
+Queued follow-ups now sit in an inset, rounded card tucked behind the composer,
+with a leading queue icon, single-line label, and accessible trash action. Removed
+the visible count heading for the ordinary running state; paused queues retain
+Resume and multiple rows remain scrollable. The composer is opaque in both themes
+so the overlap does not leak the card border through dark mode.
+
+Validation: typecheck, message-queue logic, and Electron chat-render passed;
+light/dark screenshots inspected. Full suite: 147 passed; only the previously
+recorded agent-multi “This chat is already running” failure remains.
+
+## 2026-09-18 — Concurrent test execution and trustworthy reports
+
+Replaced the synchronous test loop with bounded subprocess workers: up to four
+unit tests and two explicitly audited store-only UI tests. Unreviewed UI tests
+are exclusive barriers; live tests stay serial. Builds run once, including for
+live-only invocations, and a failed build blocks dependent tests. Added exact
+filters, serial mode, per-test timeouts, process-group cleanup, a checkout lock,
+individual logs, and JSON reports with wall time. Legacy skip markers now report
+SKIP separately; partially skipped files never count as fully passing coverage.
+
+Focused checks cover concurrency limits, barriers, stable ordering, skip/failure
+precedence, spawn errors, timeout escalation, stubborn descendant cleanup,
+cancellation, profile cleanup, and checkout locking. Clean unit benchmarks passed
+77/77 in both modes: 35.7s serial versus 11.5s with four workers (about 3.1x).
+Typecheck and full unit/Electron regression ran in a disposable checkout to avoid
+other tasks' shared fixtures/build output: 147/148 passed in 266.8s. The sole
+failure is the previously recorded agent-multi “This chat is already running”
+error. Concurrent remote-indicator/smoke checks passed; screenshots inspected.
+Additional CLI checks passed for build-once behavior, live-only builds, dependent
+blocking after build failure, argument validation, report counts, and lock release.
+
+Documented the runner contract and an optional labeled-log Jev evaluation pilot
+in docs/TESTING.md. No model calls or probabilistic CI gates are introduced.
+
+## 2026-09-18 — Code access inside exploded view
+
+The 3D workspace hides the normal selection toolbar, which also hid its Code
+action. Added a Code button to the workspace header for source-backed layers.
+It resolves the current live selection and uses the existing source drawer relay,
+keeping exploded view open alongside the editor. Missing/stale selections cannot
+open code. Documented the action and covered a real child-layer click through IPC.
+
+Validation: typecheck and targeted 3D/code-drawer Electron checks passed; native
+toolbar and renderer drawer screenshots inspected. Full regression: 147 passed;
+only the previously recorded agent-multi failure remains ("This chat is already
+running").
+
+## 2026-09-18 — One composer action while queueing
+
+A running chat now swaps its spinner/Stop button for Queue when the composer
+contains text or attachments. Submitting or clearing the draft restores Stop in
+the same position, keeping one primary action visible. The Electron chat-render
+check covers replacement and restoration; both screenshots were inspected.
+
+Validation: typecheck, build, and targeted chat-render passed (also within the
+full suite). Full regression was stopped after stalling in prop-edit-svelte;
+native-animation-controls also failed accessing the native preview.
+
+## 2026-09-18 — Automatic text conflict reconciliation
+
+Successful interactive turns now three-way merge drift in existing regular text
+files inside their private worktree. Independent edits land quietly. Actual text
+overlaps trigger one reconciliation continuation in the originating provider/chat,
+preserving both intents and keeping markers out of the live checkout. Further
+conflicts, failed/stopped turns, binary/add/delete/symlink batches, and existing
+parks retain the manual recovery path. Detached agents are unchanged.
+
+The chat stays busy through landing so queued messages cannot race it. Provider
+responses finish streaming before landing, preserving the correct Revert target.
+Automatic reconciliation has a short progress status; Stop, closed/replaced
+sessions, and failed sends suppress or end the continuation without retry loops.
+The same resolution prompt supports the explicit retry action.
+
+Validation: typecheck/build, real-Git reconciliation and coordinator tests, message
+queue/Revert tests, and Electron isolation/UI checks passed; screenshot inspected.
+A real Codex turn with a competing live edit automatically reconciled both labels,
+committed the result, and never showed the Resolve card. Full verify: 157/158
+passed (including the normal fixture/simulator skips); only the previously recorded
+agent-multi “This chat is already running” failure remains. The new live conflict
+test passed separately. Final typecheck/build and targeted UI/queue tests also
+passed after preserving Revert while the landing gate is held. Existing App.tsx
+edits are unrelated and left out of this commit.
+
+## 2026-09-17 — Open project pages from chat
+
+Added `open_preview` to Claude's in-process tools and the Codex/custom-endpoint
+MCP bridge, with shared provider instructions to open requested project pages.
+The tool accepts a root-relative path, including query/hash, and reports a
+navigation request rather than claiming the page has loaded. Detached agents
+cannot navigate; external origins, parser escapes, and simulator routes are
+excluded.
+
+Desktop and browser transports route requests through the existing preview load
+API. The renderer scopes requests to the active project/chat, waits for isolated
+turns to land and the web preview to run, and drops requests after chat/project
+switches, failed or parked turns, or a newer turn. This avoids opening a newly
+authored route before its source reaches the served checkout.
+
+Validation: typecheck, route-boundary tests, actual stdio MCP registration/calls,
+and Electron navigation tests passed. The UI test checks path/query/hash,
+landing waits, wrong-project/chat guards, and stale request cancellation; native
+preview screenshot inspected. Real Claude and Codex turns both opened
+`/article.html` on request, with the rendered article heading verified.
+Full `verify`: 153/157 passed. The existing `agent-multi` failure reports
+"This chat is already running"; `controls-agent` and `controls-codex` report
+the provider session limit; `tool-invocation` made no tool calls. Next's opt-in
+matrix and the simulator self-skipped without their fixture/Xcode configuration.
+A final build/typecheck and targeted Electron rerun passed after adding the
+new-turn cancellation guard. Unrelated setup hunks in App.tsx remain unstaged.
+
+## 2026-09-17 — Dedicated Next setup and verifiable worktree helpers
+
+Setup now detects Next separately from generic React, including installed version,
+App/Pages/mixed routing, and the bundler selected by the dev script. A local
+source loader and final-config wrapper support Turbopack and webpack without a
+project Babel config or use-client changes. Existing wrappers/functions/async
+exports are retained; overlapping Turbopack rules fail explicitly for composition.
+A development-only remark helper maps MDX to authored Markdown positions. The
+loader preserves directives/maps and carries instance stamps through ordinary
+function components that destructure props without forwarding arbitrary attributes.
+Production config bypasses the adapter and the transforms independently dev-gate.
+Also fixed Next port forwarding: Bun/pnpm must not receive npm's extra `--`.
+
+Traced the missing helper to worktree snapshots deliberately excluding `.praxis/`.
+Setup's allowlisted helpers are now copied and SHA-256-verified before new sessions
+and each existing chat turn, with a checkout-local manifest. No other sidecar data
+is shared. Next worktrees install local dependencies using their package manager;
+manifests/lockfile fingerprints trigger refreshes without broadening Turbopack's
+root. Failed initial provisioning reclaims the new checkout. No-op setup turns
+acknowledge landing so restoring a helper can proceed to verification.
+
+Removed bulk component-typing instructions. Unresolved react-docgen inspection now
+uses the TypeScript JSX signature, covering inline/named/inherited/imported types
+and ComponentProps without editing source. Setup records phases and ignores
+readiness from documents predating its verification window. Workspace tools expose
+live revision/dirty state, checkout/base, URL, and stamp observations separately.
+Exact served-commit attribution remains explicitly unknown, not inferred from HEAD.
+
+Validation: typecheck/build, helper/detection/loader/production/map tests, real
+worktree synchronization and no-op acknowledgement, TypeScript schema tests, and
+worktree/live-commit regressions passed. Real Next 15.5.12 and 16.1.6 fixtures passed
+both bundlers, Server/Client Components, distinct non-forwarding instances, a
+workspace package, authored MDX stamps, inspector edit → HMR → refresh/navigation,
+hydration-error checks, and production stamp absence. Native screenshots inspected.
+Use PRAXIS_NEXT_FIXTURE with a disposable installed copy of test/fixtures/next-app;
+the optional live-tier fixture test otherwise reports SKIP. Canonical paths and
+waiting for HMR before testing persistence avoid alias/navigation races.
+
+The full verify run reported 149/157. Isolated final-build reruns passed setup,
+restart, project setup, chat isolation, history, simulator frame/control, sidebar,
+custom controls, and startup. A temporary preview.load waiting change caused the
+history/control failures and was reverted; navigation remains nonblocking.
+All eight failed checks were rerun in isolation. Seven passed, including live
+Claude/Codex code reveal; agent-multi still failed with “This chat is already
+running,” also recorded before this change. The full run is not reported as green.
+
+## 2026-09-17 — Native animation controls independent of selection
+
+Replaced the bundled animation skill's DialKit integration at the user's request.
+The skill now registers `presentation: "animation"` manifests through
+`define_controls`, using Praxis's existing sliders, toggles, colors, selects, and
+easing editor in a persistent dock beside the preview. No tuning dependency or
+panel UI is installed in the target project. Panels survive selection changes,
+can collapse/reopen, and reserve their own native-preview inset.
+
+Animation parameters must use literal source anchors: selection-dependent prop
+and style strategies are rejected. Changes use the existing source-write, HMR,
+and Undo flow. Optional Replay sends a component-scoped window event through the
+desktop preload or browser bridge; the skill wires the existing animation to it
+with cleanup and reduced-motion behavior intact. Codex explicitly allows the
+validated registration tool, matching Claude's existing allowlist. Gemini's
+tool limitation remains documented rather than falling back to a dependency.
+
+Added deterministic Electron coverage and replaced the DialKit live-agent test
+with native registration, Replay, selection independence, source edits,
+collapse/reopen, Undo, and dependency checks. The real Codex request passed all
+checks, including Replay using the changed duration, with no package dependency
+added. Inspected both deterministic and live-agent panel screenshots. Typecheck,
+build, skill validation, and targeted logic/UI tests passed. Full `verify`:
+153/155 passed; `agent-multi` failed with “This chat is already running” and
+`code-reveal-agent` passed Claude but could not find the Codex provider-menu option.
+Other live controls tests and tool invocation passed. Concurrent setup edits were
+present near the end of the run and are excluded from this change.
+
+## 2026-09-17 — Git updates dialog above the native preview
+
+Transfer the branch menu's existing preview freeze directly to Git updates.
+Preventing Radix's automatic selection close avoids releasing the shared freeze
+after the dialog has opened, which let the native WebContentsView cover it.
+Closing the dialog still restores the live preview.
+
+The Git updates UI regression now waits for a live native preview and checks
+actual main-process visibility while the dialog is open, after viewport changes
+and a pull/restart, and after closing. It failed on the original code and passes
+with the handoff fix. Typecheck/build passed; inspected desktop and narrow-window
+screenshots. Full unit/UI suite: 140/144 passed; startup-intro, agent-multi,
+spawn-comment, and prop-edit-svelte failed outside the Git updates test. The suite
+ran while concurrent animation-controls edits were present in the shared workspace.
+## 2026-09-17 — Merge and reconcile candidate updates
+
+Integrated remote candidate features while retaining native composer pickers,
+provider-switch synchronization, and the local cat-timer regression fix. Preserved
+both task-log histories, ordered recent progress entries newest-first, and kept
+chat-render's page-error handler failing the test. Updated the remote desktop
+surface regression to exercise the project action menu because composer pickers
+remain native selects.
+
+Type checks and all 144 unit/Electron tests pass; inspected the light-theme menu
+screenshot. The optional spawn-comment live portion self-skipped after no edit
+landed. No provider or simulator implementation was changed during resolution.
+
+## 2026-09-17 — Show exact code from chat
+
+Added `open_code` to Claude's in-process tools and the Codex/custom-endpoint MCP
+bridge. Shared rules route requests to see code into the existing mini editor:
+read the source, specify the repo-relative file and inclusive line range, open it,
+and highlight only those lines. Preview selection is not required or changed.
+
+Main captures the exact source text from the agent checkout and validates file,
+range, size, and symlink boundaries. The renderer scopes requests to the active
+project/chat, verifies the captured text against the live checkout, relocates a
+unique match when lines shift, and retries after landing. Unsaved drafts defer
+navigation until saved/discarded. Detached agents cannot navigate the editor.
+The same event contract is exposed in browser mode.
+
+A real Codex probe also found that its MCP entrypoint was resolved against
+Electron's `app.getAppPath()` (`out/main` in source launches), producing a missing
+`out/main/bin` path. It now resolves the bundled bridge from the compiled main
+module, as the existing plugin/skills paths do. Its headless SDK session explicitly
+allows only the validated `open_code` navigation tool through the documented
+per-tool approval setting; unrelated tool policies are unchanged.
+
+Validation: typecheck/build, exact-range/path unit tests, actual stdio MCP tool
+registration/invocation, and editor UI tests passed. The UI test verifies precise
+highlighting without selection, ignores another chat's request, and preserves an
+unsaved draft before revealing queued code after Undo. A simulated landing also
+verified deferred reveal and relocation. A real Codex turn opened `invoice.js`
+and highlighted exactly the requested function; screenshot inspected. Claude's
+live probe was skipped because its account had reached the session usage limit.
+Full `verify`: 148/154 passed, including all 144 unit/UI checks and the new live
+Codex reveal test. Six other live-provider probes failed during the exhausted
+Claude session; simulator skipped without Xcode. These are recorded as failures,
+not a green full verification run.
+
+## 2026-09-17 — Animation controls independent of selection
+
+Added the bundled `/animation-controls` skill and natural-language routing for
+“surface animation controls.” It builds a development-only DialKit panel inside
+the target project, wired to the existing animation and stable across selection
+changes, clearing selection, and Replay. Existing tuning UI is reused; unsupported
+frameworks can use a small native equivalent. Live values remain distinct from
+saved source defaults. The animation action and spring skill use this workflow;
+explicit selection-inspector requests retain `define_controls`/`open_controls`.
+
+Claude exposes a short portable skill alias; Codex/Gemini discover the same bundled
+skill as a fallback behind project/user skills. DialKit roots and custom panels
+marked `data-praxis-controls` remain interactive while Select mode is armed in
+both native and browser previews.
+
+Validation: typecheck/build, skill validation, provider discovery/precedence,
+rules, docs links, skill-menu UI, and trusted preview selection/control clicks
+passed. Inspected native-preview and skill-menu screenshots. Three real Codex turns
+surfaced the panel with no selection; the stronger test verified changed duration,
+repeatable Replay, retained values after selection changes/clear, and a production
+build with working motion and no tuning panel. Full unit/UI suite: 142/143 passed;
+startup-intro failed its unrelated startup timing check and the focused rerun
+failed the crossfade/native-preview assertion. Browser-mode integration passed.
+The live tier passed the new skill, model switching, both providers’ file edits
+and existing inspector controls, and CSS provenance; simulator skipped without
+Xcode. The tool-invocation probe missed its `line_height` call; the focused
+rerun missed both `check_contrast` and `line_height`. These broader failures
+remain unresolved; no animation/control-specific regression failed.
+
+## 2026-09-17 — Group selection, queued messages, and preview recovery
+
+Shift-click adds/removes explicitly selected DOM objects in desktop and browser
+previews, retaining their outlines and a selection count. Prompts and Delete
+carry every selected object; individual inspector controls retain the most recent
+object as their target. Plain clicks replace the group; clearing drops all picks.
+
+The composer now queues follow-ups per chat, capturing attachments and selection
+context when submitted. FIFO dispatch continues in background chats, preserves
+session identity across attachment saves/project switches, and waits for prior
+landing. Stop/errors pause pending messages, conflict states block dispatch, and
+users can remove items or resume. Cancellation also prevents late sends during
+attachment saving or turn preparation. Queues are in memory and clear on close.
+
+Routine merge notes are removed; Revert attaches to the completed response even
+when a queued turn starts before its merge notification. Chat links open separately,
+desktop renderer navigation cannot replace Praxis, and Back to project restores
+the project's entry URL. Existing preview origin guards remain in force.
+
+Validation: typecheck, build, focused lint, queue/context/cancellation unit tests,
+and docs links pass. The full desktop suite passed 141/143: startup-intro retains
+its documented timeout; agent-multi exposed an interrupt-completion timing assumption.
+That test now awaits the terminal state and passes. All six final-build targeted
+checks pass (chat-render, select-element, preview-iframe-navigation, chat-isolation,
+agent-multi, browser-mode). Inspected composer, grouped selection outlines, and
+preview home-button screenshots. The live tier completed 8/8 with no failures:
+real Claude/Codex edits, model handoff, controls, tools, and style provenance pass;
+the simulator check skipped because Xcode is unavailable. Tool-only completed
+responses also retain Revert without needing a merge note.
+
+## 2026-09-17 — Consistent sidebar hover surfaces
+
+Project headers and the Open/New project actions now share the chat row's
+translucent hover fill. Project headers use the matching 6px radius token, and
+one shared rail-hover stylesheet keeps the three selectors in sync. Existing
+chat selection styling and project action icon behavior remain intact.
+
+Validation: typecheck and sidebar/chat checks pass; inspected project/action/chat
+hover captures in light and dark themes. The full suite passed 140/142; the
+folder-icon animation and comment branch cleanup checks both pass on isolated
+reruns. The inherited 12px regular rail text remains below the
+APCA lookup's size recommendation (approximate opaque hover surfaces: Lc 72 light,
+58 dark); this change preserves the requested chat palette and typography.
+
+## 2026-09-17 — Compact chat composer spacing
+
+The composer now uses 8px content and toolbar insets, with matching space above,
+left of, and below attached files. Send and Stop use the shared 28px size token.
+The draft scrollbar is hidden while long drafts retain wheel/keyboard scrolling
+and the existing six-line height cap. Padding and button dimensions use Tailwind
+utilities rather than the legacy CSS rules.
+
+Validation: typecheck passes; inspected attached-file and narrow-composer captures
+from the passing chat-render check. The full suite passed 140/142: startup-intro
+timed out waiting for its fade phase, and spawn-comment failed a branch-cleanup
+assertion. The isolated spawn-comment rerun passes. The first sandboxed suite could not
+launch Electron; the reported full run used the required desktop access.
+
+## 2026-09-17 — Refresh previews after ordinary local branch switches
+
+The local branch dropdown and named work-branch switch now request an environment
+refresh after successful checkout. Previously these paths only updated the branch
+label, leaving the old server and preview running. Each switch restarts the managed
+preview with fresh framework detection; branch-tip manifest/lockfile differences
+request dependency installation, including files removed by the destination branch.
+An unavailable comparison conservatively requests installation. Failed switches
+leave the preview alone. Attached external servers get a page reload and an explicit
+manual-server-restart message. Custom launch commands remain preserved.
+
+Regression coverage switches back through the ordinary branch menu and verifies
+that the restarted server serves the destination branch. Git unit checks cover
+manifest differences in both directions and failed checkout. Typecheck and focused
+Git logic/UI checks pass. The full suite passed 138/142 initially: the expanded
+Git test needed to wait for the busy remote dialog before closing it, and startup,
+rail-animation, and layers-panel checks failed. After correcting that test wait,
+the final build passes the Git test (including native preview content), rail, and
+layers isolated reruns. The previously recorded startup-intro failure remains
+open. Docs links and diff whitespace checks pass.
+
+## 2026-09-16 — Harden reduced-motion cat regression
+
+The prior Electron window closure did not reproduce in the original focused
+run. Replaced its final 31-second sleep with observation of real idle timers:
+normal rest schedules one, reduced-motion completion schedules none, and enabling
+reduced motion during rest cancels the pending timer. Frame timings and the real
+idle-animation check remain unchanged; application code is untouched.
+
+Type checks, focused cat test, and the full unit/Electron suite pass (133/133).
+Inspected the idle screenshot. The optional spawn-comment live portion self-skipped
+after no edit landed. The cause of the earlier window closure remains unconfirmed;
+the revised test removes the long wait where it occurred and strengthens timer
+cleanup coverage.
+
+## 2026-09-16 — Pull latest candidate updates
+
+Merged origin/candidate's sentence-case sidebar headings while preserving local
+main integration and regression fixes. Restored newest-first progress-log order.
+Type checks pass; full unit/Electron suite: 132/133 passed. Cat-animations lost
+its Electron window during a wait; the optional spawn-comment live portion
+self-skipped after no edit landed. Rail/history checks pass; inspected the rail
+screenshot. No merge conflicts.
+
+## 2026-09-16 — Sentence-case rail headings
+
+Dropped the all-caps treatment (and its caps-only letter-spacing) from the
+sidebar's "Projects" heading and the per-project "History" toggle. The history
+label's 9px size only worked in caps — lowercase at that size loses too much
+x-height — so it moves to 10px, an existing value in the de facto type scale.
+`bun run typecheck` passes; rail and history-ui Electron screenshots inspected.
+
+## 2026-09-16 — Fetch, pull, and switch remote project branches
+
+The current-branch menu now opens Git updates in desktop and browser mode.
+Fetch discovers/prunes remote branches without changing project files. Pull
+fetches the selected remote and merges its branch into the current branch,
+preserving local commits. Switch creates a tracking branch or opens an existing
+local branch without resetting it. Successful file changes refresh the preview;
+manifest and lockfile changes also request dependency installation.
+
+Repository writes use the existing queue. Updates reject active project agents,
+stale branch selections, dirty project files, and unfinished Git operations.
+Conflicting pulls abort their merge back to the clean starting checkout. Browser
+commands remain scoped to the opened repository. Runtime sidecars do not block
+updates; Git still protects untracked file collisions.
+
+Validation: typecheck/build and real bare-remote unit regressions pass, including
+divergent commits, conflict recovery, dirty/busy guards, remote pruning, existing
+local branch preservation, and an unavailable unrelated remote. The full suite
+passed 141/142 checks; startup-intro failed its existing localhost-only native
+view lookup. A diagnostic rerun accepting all loopback hosts also exposed a
+preview-width failure during the intro fade; this unrelated issue remains open.
+Final targeted Git UI and browser-mode checks cover fetch-only behavior, pull,
+tracking checkout, automatic preview refresh, and repository scope. Inspected
+Git dialog captures at narrow/tablet/desktop widths and the native preview.
+
+## 2026-09-16 — Choose project setup before scaffolding; recover environment previews
+
+New Project now asks how to start before writing application files: use the
+React/TypeScript/Vite defaults, plan Next.js or Svelte, or discuss a custom
+setup. Discussion paths create only an empty Git repository with ignores and
+open the selected provider's chat with the user's preferences. Shared provider
+rules ask about unresolved choices before scaffolding; empty projects avoid
+premature launch errors and token-scaffold offers. Preview startup failures keep
+chat available for repair, and retry preserves the conversation.
+
+Managed web previews now respond to authoritative landed environment changes,
+not the earlier provider terminal event. Manifest/lockfile changes install in
+the live checkout through its repository write queue; config changes restart
+with fresh framework/package-manager detection. Explicit packageManager fields
+win over stale migration lockfiles. Custom launch commands stay intact,
+background projects defer refresh until activated, and cancelled starts cannot
+launch after a dependency install finishes. The first landed HTML app can start
+a previously empty preview too. Instrumentation setup waits for landing before
+verification; failed/parked turns do not restart the preview.
+
+Validation: typecheck/build, new-file lint, scaffold/environment unit checks,
+and all 140 unit/Electron tests pass. Expanded final project-setup regression
+also covers custom-command retries, background deferral, initially broken
+projects, and static recovery. Inspected setup screenshots at 390/768/1440px,
+empty-chat UI, and the native preview capture. The framework-switch regression
+uses local package fixtures to test detection/install/relaunch without network
+framework downloads. Seven live checks pass (real Claude/Codex turns, controls,
+model switching, tool invocation, and style provenance); simulator e2e skips
+because Xcode is unavailable. Existing large-file lint findings match HEAD
+(40 errors in the inspected baseline and working files); new modules lint clean.
+
+## 2026-09-16 — Keep subagent tooltips clear of the preview
+
+Cat tooltips now align to the trigger's right edge and use the chat pane as
+their collision boundary. Their maximum width also respects the available
+space, keeping long operation labels from extending beneath the native preview.
+Extended the rail status regression with long labels and chat-bound checks for
+hover and keyboard focus; visually inspected the captures. Typecheck and the
+full unit/Electron suite pass (138/138). Targeted lint reports the pre-existing
+generic div's aria-label warning in SubagentCats.
+
+## 2026-09-15 — Fix chat-render and provider-skills-menu regressions
+
+The chat-render timeout hid a renderer exception: its synthetic per-chat settings
+omitted required permissionMode, passing undefined into the native composer's
+label formatter. Completed all three fixture tuples and report page errors as
+explicit test failures. Application settings already supply this required field.
+The skills-menu test now waits for the provider restart to commit Codex before
+asserting skill discovery, instead of reading the old provider immediately.
+
+Both focused regressions pass; inspected the skills-menu screenshot. Type checks
+pass. Full unit/Electron suite: 132/133 passed, including both repaired tests.
+The unrelated spawn-comment live check raced branch cleanup; its isolated rerun
+passed the real agent edit and branch-deletion assertions. No application code
+changed.
+
 ## 2026-09-15 — Reconcile latest remote main
 
 Merged remote focus-ring, cursor, and cat-animation updates with the local
@@ -12,6 +7023,181 @@ Type checks pass. Full unit/Electron suite: 131/133 passed; remaining failures
 are the previously documented chat-render timeout and provider-skills-menu
 provider assertion. Startup and cat-animation tests pass; inspected the thinking
 cat screenshot. Remote candidate is an ancestor of the combined main history.
+
+## 2026-09-15 — Settings chevron spacing
+
+The default-model field now uses an inset decorative chevron instead of the
+browser-drawn arrow hugging its right edge. The native select retains its
+keyboard and popup behavior; extra right padding keeps long labels clear of the
+icon. Extended desktop-surface captures to show project actions in both themes,
+and wait for Radix's post-animation focus restoration before asserting it.
+Typecheck, build, focused lint/UI checks, and the full suite pass (138/138).
+
+## 2026-09-15 — Desktop dialogs, menus, and settings
+
+Shared Radix dialogs and dropdowns now use quiet opaque surfaces with a fine
+rim, broad shadow, and quick fades (reduced-motion aware). Dialogs use a lighter
+scrim, compact titles and controls, a circular close affordance, and bounded
+scrolling. Dropdowns and submenus share rounded selection rows, inset separators,
+checkmarks, and the same light/dark surface treatment. Surface tokens live in
+`src/renderer/src/components/ui/desktop-surfaces.css` and remain scoped to floating
+UI, preserving the app shell and native preview freeze contract.
+
+Settings is a compact preferences window with a persistent header, grouped
+model/connection controls, and a scrollable form body. Removed the single-tab
+strip and lengthy introductory paragraph. History review now uses the shared
+Radix dialog, gaining focus containment and consistent dismissal while keeping
+its native-preview freeze and session actions.
+
+Added `desktop-surfaces` to the Electron tier: light/dark screenshots, menu
+keyboard focus and Escape restoration, short-window form scrolling, and
+unsaved-key disposal when leaving a connection form. Checked surface-description
+contrast at 15px/500 in both themes (APCA Lc 96.6 and 95.1). Typecheck,
+build, targeted lint, and the full unit/Electron suite pass (138/138).
+
+## 2026-09-15 — Fix chat-render regression fixture
+
+The per-chat model-switch fixtures omitted the required `permissionMode` from
+both stored chats and the active session. Restoring those synthetic settings
+set the permission picker label to undefined, crashing `ComposerSelect` and
+leaving a blank renderer; the visible failure was a timeout waiting for sidebar
+chat rows. Supply `auto` for all three settings objects and report renderer
+`pageerror` stacks in the test log so future crashes expose their cause.
+
+The focused `chat-render` test, `bun run typecheck`, and the complete
+`bun run test` suite pass (137/137). Visually checked the model-switch approval
+screenshot with both peer chats and the Auto picker.
+
+## 2026-09-15 — Persistent sidebar ordering
+
+Project names now drag entire sidebar groups; live chats and History rows reorder
+within their own project/list. Native lifted drag images and before/after lines
+show the destination, edge hovering scrolls long lists, and Escape/outside drops
+cancel without writing an order. Alt+Up/Down reorders focused names, retains
+focus, and announces moves/cancellation. Rename and close remain separate buttons.
+Mounted chat-list unfold animations are settled before dragging so Chromium
+cannot replay them while a project group moves under the pointer.
+
+Manual order lives in a dedicated versioned localStorage store, independently of
+workspace project arrays, sessionKeys, active-session selection, and LRU stamps.
+New chats appear first without disturbing the established order; missing entries
+are filtered. Renderer reloads rehydrate the display order without changing
+provider session ownership or the running preview. History and live sessions
+remain separate groups and cross-project drops are rejected.
+
+Validation: type checks, build, targeted Biome checks, docs links, pure ordering
+cases, and the new Electron regression pass. The native regression covers project,
+chat, and History drops; keyboard focus; cancellation; lifecycle invariants;
+rename; reload persistence; new entries; and edge scrolling. Native drag tests
+keep the window inside the display and sustain the edge hover for macOS input
+delivery. Inspected reordered/drag screenshots and used agent-browser to verify
+keyboard moves and sidebar layouts at 390/768/1440px in light/dark themes. Ghost
+text passes APCA at 15px/600. Full unit/Electron suite: 136/137 passed; the only
+failure is the previously documented chat-render timeout.
+
+## 2026-09-15 — Desktop 3D component inspector
+
+On `candidate`, updated by fast-forward from `main`, the selection toolbar now
+opens an isolated 3D workspace. Paint-only copies of the selected DOM subtree
+separate by nesting depth, with orbit/pan/zoom, separation, front/reset, and a
+keyboard-accessible layer selector. Clicking a surface opens the existing
+inspector against its original live element. Style previews, source commits,
+and undo reuse the established editing path; returning to the page does not
+navigate or remount it.
+
+The workspace stays in the sandboxed preview preload, using a modal shadow root
+and CSS perspective without a new rendering dependency or IPC contract. Text is
+captured once per owning element; SVGs render in inert image context and canvas
+snapshots are bounded. Observers refresh changed surfaces. HMR recovery requires
+an unambiguous ID/source identity; removed or repeated instances cannot redirect
+style edits to a sibling. Capture limits and simplified effects are disclosed.
+`docs/THREE_D.md` documents controls, architecture, and the first-version limits;
+pseudo-elements, clipping/transforms, portals, and browser parity remain follow-ups.
+
+Validation: type checks, build, new-file Biome checks, and documentation links
+pass. Full unit/Electron suite: 134/135 passed; the only failure is the previously
+documented chat-render timeout. The new native regression covers trusted camera
+input, child selection, live style preview/clear, source edit/undo, simulated HMR
+subtree replacement, preserved route/scroll/application state, Escape, capture
+limits, and ambiguous identity protection. Inspected native screenshots and used
+agent-browser at 390/768/1440px, including keyboard separation adjustment. New
+control text passes APCA at its authored 15px/600 sizing.
+
+## 2026-09-14 — Agent-opened controls and authored inspector fields
+
+Claude, Codex, and custom-endpoint agents can now request selection and open the
+Props, Styles, or Custom inspector with `open_controls`. `define_controls` shares
+one validated registration path across harnesses, checks anchors in the private
+worktree, persists to the live root, and requests the Custom tab. The renderer
+uses the real Layers selection path, retries missing targets after landing, avoids
+ambiguous file matches, and cancels pending requests when the project changes.
+Existing selections can be reopened directly. Experimental Gemini retains its
+prop-based fallback; this feature targets the desktop inspector.
+
+Props default to present values and component defaults (including zero, false,
+empty strings, and expressions). Optional absent fields remain under Show all.
+Numeric props use the existing keyboard/pointer scrub control with exact-value
+entry. Styles default to matched stylesheet/inline declarations, with computed
+browser defaults under Show all. Authored field presence is separate from the
+transient value readout so committing an edit cannot hide its row. No new
+animation dependency was added; custom controls expose parameters using the
+project's existing animation implementation.
+
+Validation: type checks and build pass. Full unit/Electron run: 131/134 passed;
+two older inspector assertions assumed always-visible groups/number inputs and
+were updated, with affected tests passing on rerun. The remaining failure is the
+known chat-render timeout. All seven existing live checks passed (simulator
+self-skipped without Xcode), plus a new real Codex control-registration/landing
+regression passed. Inspected native panel screenshots, verified a Scale keyboard
+nudge through agent-browser, and checked panel layouts at 390/768/1440px.
+
+## 2026-09-14 — Required agent-browser workflow
+
+Operating rules v13 require agent-browser for web UI/browser verification when
+available across all providers. Agents check their execution PATH and CLI help,
+use an isolated named session, and test layout changes at phone/tablet/desktop
+sizes with screenshot inspection and interaction checks. Missing CLI/browser
+support requires an honest blocker report and permission before installation.
+Explicit user tool choices still win. A stale preview cannot verify unlanded
+worktree edits; agents must report pending verification and preserve the landing
+lifecycle. README and provider docs describe this prompt-level requirement and
+the need to recreate existing sessions for updated rules.
+
+Type checks and the expanded rule tests pass across provider capability variants.
+Full verification: 139/140 runner passes, with only the previously documented
+chat-render timeout. Real model-switch, Claude/Codex edit, controls, and tool
+invocation checks passed. Simulator e2e self-skipped because Xcode is unavailable.
+
+## 2026-09-14 — Optional agent-browser installation
+
+The installer recommends agent-browser for browser and responsive-layout checks
+and offers an explicit default-No global CLI plus browser install. It reads from
+the controlling terminal so the curl-pipe flow works, skips when the CLI is
+already on PATH or no terminal exists, and prints manual installation commands
+when declined. Optional failures leave Praxis installed. Bun global binaries
+outside PATH can still finish browser setup, with a PATH reminder. README now
+documents the offer.
+
+Shell syntax and type checks pass. Nine mocked full-installer cases pass,
+including piped input with a real pseudo-terminal: accept, decline, empty default,
+unattended, existing CLI, CLI failure, browser failure, npm fallback, and Bun's
+global bin outside PATH. No external packages were installed during these checks.
+Full unit/Electron suite: 130/133 passed; startup-intro, chat-render, and
+layers-panel failed. The first sandboxed run could not bind test servers or
+launch Electron; the reported result is from the rerun with the required access.
+
+## 2026-09-14 — Simultaneous startup cat reveal
+
+Removed contour-order timing and blur variation from the startup cat. All 21
+shapes now share one opacity/blur progression, so the artwork emerges together.
+Preserved the four-second reveal, final sharpening, and 500ms app crossfade.
+
+Type checks and build pass. Verified identical computed opacity and blur on all
+21 contours midway through the reveal and inspected the screenshot. Startup-intro
+passes, including reload preview suppression and reduced motion. Full suite:
+131/133 passed; chat-render hit its known timeout and layers-panel failed its
+focused-text-field undo assertion. The initial sandbox run could not launch
+Electron; the full result above is from the run with the required access.
 
 ## 2026-09-14 — System-accent focus rings
 
@@ -119,7 +7305,6 @@ those menus only.
 Type checks pass. Visually verified native composer selects alongside the existing
 project action menu. Full suite: 129/132 passed; code-drawer passes on a separate
 rerun, leaving the documented chat-render and provider-skills-menu failures.
-
 ## 2026-09-11 — Quiet project action icons
 
 Changed the sidebar project menu and new-chat icons to neutral gray at rest and
@@ -3449,7 +10634,7 @@ Swept the pre-rename `dsgn` name out of the code (~900 occurrences, 111 files):
 `data-praxis-source` / `data-praxis-component-source` stamps (RN testID prefix
 `praxis:`), `.praxis/` sidecar, `PraxisApi`, `praxis/*` work branches,
 `<userData>/praxis` data dir, `PRAXIS_DEBUG_PORT`, `__praxis*` test hooks,
-`mcp__praxis__*` tools. Entries in THIS file keep their historical wording.
+`mcp__trezi__*` tools. Entries in THIS file keep their historical wording.
 
 **Clean break for stamped target repos** (per user call): the old
 `data-dsgn-source` attribute is NOT read anymore — old instrumented repos get
@@ -3826,10 +11011,10 @@ GONE (ChatPanel no longer prepends it; `describePreviewLocationForPrompt`
 removed; `usePreviewLocation` stays for UI). Instead the Claude backend now
 registers Praxis's first in-process SDK tools via `createSdkMcpServer`:
 
-- `mcp__praxis__preview_location` — the agent asks where the user is when the
+- `mcp__trezi__preview_location` — the agent asks where the user is when the
   page actually matters (live SPA URL from the preview webContents; "No project
   preview is open." on the placeholder).
-- `mcp__praxis__preview_screenshot` — exactly what the user sees (their route,
+- `mcp__trezi__preview_screenshot` — exactly what the user sees (their route,
   viewport, simulator): `capturePage()` downscaled to ≤1200px JPEG, returned as
   an MCP image block.
 

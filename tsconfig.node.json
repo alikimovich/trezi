@@ -1,21 +1,9 @@
 {
   "compilerOptions": {
-    "composite": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "target": "ES2022",
-    "lib": ["ES2022"],
-    "types": ["node", "electron-vite/node"],
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "module": "ESNext", "moduleResolution": "Bundler", "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["node"],
+    "strict": true, "skipLibCheck": true, "noEmit": true,
+    "esModuleInterop": true, "forceConsistentCasingInFileNames": true
   },
-  "include": [
-    "electron.vite.config.ts",
-    "src/main/**/*",
-    "src/preload/**/*",
-    "src/shared/**/*"
-  ]
+  "include": ["src/native/**/*.ts", "src/main/**/*", "src/shared/**/*", "test/types/**/*.ts"]
 }

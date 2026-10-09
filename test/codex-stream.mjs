@@ -3,7 +3,7 @@
  * replies arrived with their opening cut off mid-word ("ve reliable visibility…",
  * "ing else?").
  *
- * Cause: Codex streams whole items and praxis emits the not-yet-sent SUFFIX, but
+ * Cause: Codex streams whole items and trezi emits the not-yet-sent SUFFIX, but
  * the CLI numbers items PER TURN (`item_0`, `item_1`, … restarting each turn)
  * while the tracker was kept for the whole SESSION. Turn 2's `item_0` therefore
  * inherited turn 1's length and had exactly that many characters sliced off the
@@ -12,7 +12,7 @@
  *
  * Run with: bun run test:codex-stream
  */
-import { createItemTracker } from '../src/main/backends/codex-stream.ts'
+import { codexItemWarning, createItemTracker } from '../src/main/backends/codex-stream.ts'
 
 let failed = 0
 const ok = (cond, msg) => {
@@ -23,6 +23,24 @@ const ok = (cond, msg) => {
 }
 
 try {
+  const advisory =
+    'Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter.'
+  ok(codexItemWarning(advisory) === null, 'routine skill budget advisory stays out of chat')
+  ok(
+    codexItemWarning('  ' + advisory + '\n') === null,
+    'advisory matching tolerates surrounding whitespace'
+  )
+  const warning = 'Could not load a skill: ' + 'details '.repeat(40) + '\nCheck its SKILL.md.'
+  ok(
+    codexItemWarning(warning) === `⚠ ${warning}`,
+    'other warnings preserve their complete multiline detail'
+  )
+  ok(
+    codexItemWarning('Skills failed to load.') === '⚠ Skills failed to load.',
+    'real skill failures remain visible'
+  )
+  ok(codexItemWarning('') === null, 'empty warnings do not create activity rows')
+
   // --- within one turn: readings stream as suffixes -----------------------
   const t = createItemTracker()
   ok(t.delta('item_0', 'Hey') === 'Hey', 'first reading is emitted whole')
@@ -34,7 +52,7 @@ try {
 
   // --- across turns: THE BUG ----------------------------------------------
   // Turn 1's reply is 82 chars and its item is `item_0`. Turn 2 reuses `item_0`.
-  const first = "Hey! I'm ready to help with your Praxis project. What would you like to work on?"
+  const first = "Hey! I'm ready to help with your Trezi project. What would you like to work on?"
   const turn1 = createItemTracker()
   turn1.delta('item_0', first)
 

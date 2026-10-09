@@ -1,11 +1,12 @@
 import { extname } from 'path'
 
 /**
- * The pure half of the editor's media support (media.ts owns the Electron
- * protocol + the token registry): which files are previewable media, how to
- * spot a binary that isn't, and HTTP range parsing for the media stream.
+ * The pure half of the editor's media support: which files are previewable media
+ * and how to spot a binary that isn't (the Swift platform owner keeps the same
+ * table in `src/service/PlatformMedia.swift`). `parseRange` is the HTTP range
+ * parser of the retired `trezi-media` stream, kept with its unit test.
  *
- * Kept dependency-free so it unit-tests without Electron.
+ * Kept dependency-free so it unit-tests on its own.
  */
 
 export type MediaKind = 'image' | 'video' | 'audio'

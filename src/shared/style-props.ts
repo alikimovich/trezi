@@ -36,6 +36,7 @@ export const STYLE_PROPS = [
   'color',
   'background-color',
   'border-radius',
+  'box-shadow',
   'opacity',
   // typography
   'font-size',

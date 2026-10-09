@@ -1,10 +1,13 @@
 /**
- * Types shared across the main / preload / renderer boundary. This module is
- * neutral (no electron or node imports) so every tsconfig can include it
+ * Types shared by backend services, native controllers and preview instrumentation.
+ * This module is neutral (no runtime or node imports) so every tsconfig can include it
  * without dragging in process-specific code.
  */
-import type { GithubConnectOptions, GithubConnectResult, GithubStatus } from './github'
 
+import type { ChatUiRecord } from './chat-ui'
+import type { DependencyIssue } from './dependency-issue'
+
+export type { DependencyIssue } from './dependency-issue'
 export type { GithubConnectOptions, GithubConnectResult, GithubStatus } from './github'
 
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm'
@@ -16,7 +19,7 @@ export type Framework =
   | 'expo'
   | 'react-native'
   // A plain static site (vanilla HTML/CSS/JS, no package.json or build step) —
-  // served by praxis's own built-in static file server, not a spawned dev command.
+  // served by trezi's own built-in static file server, not a spawned dev command.
   | 'static'
   | 'unknown'
 
@@ -30,7 +33,7 @@ export type Framework =
 export type PreviewKind = 'web' | 'simulator'
 
 /**
- * AI-assisted diagnosis of an open/launch failure. praxis *proposes* a fix (never
+ * AI-assisted diagnosis of an open/launch failure. trezi *proposes* a fix (never
  * auto-runs): repo-scoped steps it can apply, host-scoped steps (sudo / global /
  * downloads) the user runs. Cached per-machine by `signature` so a repeat error
  * recalls the plan instead of re-diagnosing.
@@ -39,7 +42,7 @@ export interface DiagStep {
   text: string
   /** Optional exact shell command (shown with a copy button). */
   command?: string
-  /** 'repo' = praxis can apply it; 'host' = machine-level, the user must run it. */
+  /** 'repo' = trezi can apply it; 'host' = machine-level, the user must run it. */
   scope: 'repo' | 'host'
 }
 export interface Diagnosis {
@@ -54,8 +57,10 @@ export interface Diagnosis {
   status?: 'proposed' | 'applied' | 'dismissed'
 }
 
-/** Result of ensuring/switching the opened project's `praxis/*` working branch. */
+/** Result of ensuring/switching the opened project's `trezi/*` working branch. */
 export interface BranchResult {
+  /** Files changed between branch tips; omitted when the comparison is unavailable. */
+  files?: string[]
   isRepo: boolean
   /** The branch now checked out (null if not a git repo or the switch failed). */
   branch: string | null
@@ -65,7 +70,29 @@ export interface BranchResult {
   error?: string
 }
 
+export interface GitRemoteStatus {
+  localBranches: string[]
+  current: string | null
+  remotes: string[]
+  upstream: string | null
+  branches: { ref: string; remote: string; branch: string; label: string }[]
+}
+export interface GitRemoteAction {
+  action: 'pull' | 'checkout'
+  ref: string
+  expectedBranch: string
+}
+export interface GitRemoteResult {
+  ok: boolean
+  branch: string | null
+  files: string[]
+  changed: boolean
+  message: string
+}
+
 export interface DetectedProject {
+  /** Empty project: open chat without attempting to launch a server. */
+  setupRequired?: boolean
   root: string
   name: string
   framework: Framework
@@ -90,7 +117,11 @@ export interface ProjectIcon {
   dataUrl: string
 }
 
-/** Result of `project:create` (scaffold a minimal Vite+React app, git init,
+export interface ProjectCreateOptions {
+  template: 'react' | 'empty'
+}
+
+/** Result of `project:create` (create the chosen starter, git init,
  *  install deps). `warning` = created, but a non-fatal step failed and the
  *  user must be told now (today: `git init` / the first commit — see
  *  scaffold.ts); it can be set alongside `ok: true`. */
@@ -164,13 +195,13 @@ export interface SimPreflight {
 
 /**
  * The agent's permission posture, mirroring the SDK's `PermissionMode`:
- * - `auto` — **praxis's default**: a model classifier approves/denies each tool
- *   call; only the ones it flags as risky fall through to praxis's canUseTool
+ * - `auto` — **trezi's default**: a model classifier approves/denies each tool
+ *   call; only the ones it flags as risky fall through to trezi's canUseTool
  *   (approve/deny card). No prompts for routine work, but genuinely dangerous
  *   ops still surface.
  * - `default` — ask (cards) for every tool the SDK gates.
  * - `acceptEdits` — auto-accept file edits, still ask for the rest (e.g. Bash).
- * - `bypassPermissions` — skip all checks (and praxis's canUseTool guards); unused.
+ * - `bypassPermissions` — skip all checks (and trezi's canUseTool guards); unused.
  */
 export type PermissionMode = 'auto' | 'default' | 'acceptEdits' | 'bypassPermissions'
 
@@ -247,10 +278,52 @@ export interface SlashCommandItem {
  * shared, but the renderer uses the origin to choose the right completion UX. */
 export type BackgroundSpawnOrigin = 'comment' | 'text-edit'
 
+/** Why a turn failed, when the chat shows a card for it (LKM-119). */
+export type ProviderErrorCode = 'auth' | 'no-response'
+
+/**
+ * "Check provider login" (LKM-119): the provider's auth status as its helper sees it
+ * (same environment allowlist, PATH and cwd as a chat). Names only, never a secret.
+ */
+export interface ProviderLoginReport {
+  provider: string
+  loggedIn: boolean | null
+  /** The CLI the chats use: `bundled` (the SDK's) or `installed` (e.g. ~/.local/bin/claude). */
+  source?: 'bundled' | 'installed'
+  executable?: string
+  authMethod?: string
+  /** A subscription token from Settings is in the helper's environment. */
+  token?: boolean
+  /** Exit codes of `security list-keychains` / `security default-keychain` run in the
+   *  helper (null: could not run). Non-zero: the helper has no user keychain (LKM-125). */
+  keychain?: { listKeychains: number | null; defaultKeychain: number | null }
+  /** Claude, from inside the helper (LKM-124): `security find-generic-password -s "Claude Code-credentials"` (no `-w`, output discarded) found the item; null: `security` did not run. */
+  keychainItem?: boolean | null
+  keychainItemExit?: number | null
+  /** `security list-keychains -d user` and `security default-keychain`, on one line each. */
+  keychainList?: string
+  keychainDefault?: string
+  /** `<config dir>/.credentials.json` through the helper's HOME: absolute path and metadata, never content. */
+  credentialsPath?: string
+  credentialsExists?: boolean
+  credentialsReadable?: boolean
+  credentialsSize?: number | null
+  /** The provider's variables in Trezi's environment, by name (never values): passed to the helper, or dropped as a parent session's (LKM-124). */
+  inherited?: string[]
+  dropped?: string[]
+  /** CLAUDE_CODE_SIMPLE (bare mode, which never reads the login) was set and dropped. */
+  bare?: boolean
+  /** One line per probe, human-readable. */
+  detail: string
+}
+
 export type AgentEvent = (
   | { type: 'delta'; text: string }
   | { type: 'status'; text: string }
   | { type: 'commands'; commands: SlashCommandItem[] }
+  /** The model the session resolved its choice to, from the SDK's init message
+   *  (`claude-opus-5-5` for the `opus` alias, LKM-164). Not turn output. */
+  | { type: 'model'; model: string }
   | { type: 'permission-request'; request: PermissionRequest }
   /** A pending request was resolved without the user (abort/session change) — dismiss its card. */
   | { type: 'permission-resolved'; id: string }
@@ -258,13 +331,24 @@ export type AgentEvent = (
   | { type: 'question-request'; request: QuestionRequest }
   /** A pending question was resolved (answered elsewhere / abort / session change) — dismiss its card. */
   | { type: 'question-resolved'; id: string }
+  /** LKM-208: an answer component shown or updated in the streaming message (`chat_ui`). */
+  | { type: 'chat-ui'; ui: ChatUiRecord }
   /** Tokens the backend just reported, as a DELTA to add to the chat's running
    *  totals (main dedupes the providers' repeated cumulative readings — see
    *  `shared/run-stats.ts`). Drives the status line's ↑/↓ counters. `cached` is
    *  the share of `input` served from the prompt cache, not an extra amount. */
   | { type: 'usage'; input: number; output: number; cached: number }
-  | { type: 'done' }
-  | { type: 'error'; message: string }
+  /** The turn is alive (LKM-147): the provider helper's heartbeat about every 5 s
+   *  while a turn is open, or the owner's "Still thinking…" (`step`). It names the
+   *  current step at most; it never enters the transcript and never counts as the
+   *  turn's first output. */
+  | { type: 'progress'; step?: string }
+  | { type: 'done'; landingPending?: boolean }
+  /** `code` (LKM-119): `auth` — the provider is not signed in (a login card, not
+   *  assistant text); `no-response` — the turn produced nothing within the owner's
+   *  first-event deadline and was ended; since LKM-135 its message names the
+   *  cold-start phase it stopped in (CLI start, session init, first model reply). */
+  | { type: 'error'; message: string; code?: ProviderErrorCode }
   /** An auto-generated name for this chat, summarising what the conversation is
    *  about (not its opening words). Emitted once per chat after the first turn
    *  completes; the renderer stores it on the chat slice and the rail shows it. */
@@ -275,7 +359,8 @@ export type AgentEvent = (
   /** A detached background spawn finished — drop its working rail row. `branch`
    *  is null when it auto-applied onto the working tree, else the durable review
    *  branch. Comments can use `summary` + `files` for a parent-chat notification;
-   *  automatic edit origins deliberately remain out of the transcript. */
+   *  automatic edit origins deliberately remain out of the transcript. `label` is
+   *  the comment's own text, one line (LKM-178): the collapsed result row names it. */
   | {
       type: 'spawn-finished'
       outcome?: 'applied' | 'review' | 'failed' | 'cancelled' | 'no-change'
@@ -283,7 +368,15 @@ export type AgentEvent = (
       origin?: BackgroundSpawnOrigin
       summary?: string
       files?: string[]
+      label?: string
     }
+  /** Main starts one bounded reconciliation turn in the originating chat. */
+  | { type: 'reconciliation-started' }
+  | { type: 'landing-finished' }
+  /** LKM-194: at turn start, why the chat's dependencies are not installed (conflict
+   *  markers, a failed install), or null once nothing stands in the way. The turn
+   *  starts either way; the chat shows a card. */
+  | { type: 'dependencies'; issue: DependencyIssue | null }
   /** Per-chat worktree isolation status (v9). A chat's turn merged back onto the live
    *  checkout ('merged'), a private worktree was forked for the chat ('isolated'), or a
    *  turn parked on its branch after mid-turn drift ('parked'). Routed by `projectKey` =
@@ -300,6 +393,12 @@ export type AgentEvent = (
       /** On 'merged': whether this turn is safely revertable (false once the chat's
        *  work has been pushed & merged via a PR) — the renderer hides Revert if false. */
       revertable?: boolean
+      /** LKM-151: 'interrupted' on a park held from a stopped/failed turn (live never
+       *  had it); 'reverted' on the 'isolated' that follows the user reverting it.
+       *  LKM-165: 'failed' on a park held because landing itself failed (`error`). */
+      reason?: 'interrupted' | 'reverted' | 'failed'
+      /** On a 'failed' park: why the landing failed, for the chat's Retry card. */
+      error?: string
     }
 ) & {
   /** Which project's session emitted this — set by main so the renderer routes it
@@ -308,6 +407,11 @@ export type AgentEvent = (
   /** Set for a detached background spawn's events — the renderer keeps these
    *  out of the main chat stream and routes them to the spawn's own rail row. */
   sessionId?: string
+  /** The user turn an interactive chat's event belongs to (S11). A terminal event
+   *  for another turn than the one a chat is running is late and must be ignored. */
+  turn?: string
+  /** A `done` no unfinished send accounts for (a late event): it completes nothing. */
+  stale?: boolean
 }
 
 /** Per-session options the user can set from the chat toolbar. */
@@ -319,6 +423,12 @@ export type AgentEvent = (
 export interface ImageAttachment {
   mediaType: string
   data: string
+}
+
+export interface AgentTurnOptions {
+  /** Opt-in static React composition; captured when the message is submitted. */
+  projectUi?: boolean
+  projectUiEngine?: 'agent' | 'jev'
 }
 
 export interface AgentOptions {
@@ -343,19 +453,32 @@ export interface AgentOptions {
    * key and model. Undefined ⇒ the harness's own subscription, exactly as pre-v10.
    */
   connectionId?: string
+  /**
+   * Claude only (LKM-138): load the user's own Claude Code plugins and MCP servers.
+   * Set by main from Settings when a helper session opens; absent ⇒ isolated.
+   */
+  claudeUserPlugins?: boolean
+  /**
+   * Settings → "Agent file access" (LKM-163): 'full' lets the agent read and write
+   * anywhere the user can (Codex `danger-full-access`); 'project' keeps Codex to the
+   * chat worktree. Set by main when a helper session opens; absent ⇒ 'full'.
+   */
+  agentFileAccess?: 'full' | 'project'
+  /** Settings → Agent Git access; absent is Managed. */
+  agentGitAccess?: 'managed' | 'full'
 }
 
-/** Praxis-managed durable context for one project, stored outside the repo. */
+/** Trezi-managed durable context for one project, stored outside the repo. */
 export interface ProjectMemory {
   content: string
   updatedAt: number
 }
 
 /**
- * A user-added model endpoint (v10). Praxis's two built-in seats — Claude (Agent
+ * A user-added model endpoint (v10). Trezi's two built-in seats — Claude (Agent
  * SDK) and Codex (`@openai/codex-sdk`) — log in with the user's own subscription and
  * need no configuration. A *connection* is the third path: an OpenAI-compatible
- * endpoint the user points Praxis at (Vercel AI Gateway, Groq, or any custom host)
+ * endpoint the user points Trezi at (Vercel AI Gateway, Groq, or any custom host)
  * so open models like Kimi or DeepSeek can drive a chat.
  *
  * Harness and endpoint are ORTHOGONAL. The Codex harness runs the loop; the
@@ -378,7 +501,7 @@ export interface ProviderConnection {
   /** Endpoint root, e.g. `https://ai-gateway.vercel.sh/v1`. */
   baseUrl: string
   /**
-   * Which OpenAI wire format Praxis speaks to this host. Only `'responses'` (the
+   * Which OpenAI wire format Trezi speaks to this host. Only `'responses'` (the
    * newer `/responses` endpoint) is possible: the `codex` CLI bundled with
    * `@openai/codex-sdk` REJECTS `wire_api = "chat"` at config load ("no longer
    * supported"), so a host that offers only the older `/chat/completions` route
@@ -431,7 +554,7 @@ export interface ModelCatalogResult {
 
 /**
  * One selectable entry in the chat's model picker (v10). The picker is MODEL-first:
- * the user picks a model and Praxis derives which harness runs it and which endpoint
+ * the user picks a model and Trezi derives which harness runs it and which endpoint
  * it points at, because people think in models rather than harnesses. Built in main
  * so the renderer never hardcodes a model list again.
  */
@@ -452,9 +575,13 @@ export interface ModelChoice {
 
 /** One line of a recorded agent session's transcript (v5-D history). */
 export interface SessionTranscriptEntry {
+  /** Turn completion, including landing; stored on the initiating user entry. */
+  completedAt?: number
   role: 'user' | 'assistant' | 'status'
   text: string
   at: number
+  /** LKM-208: a status entry's answer component (`chat_ui`), with the user's answer. */
+  ui?: ChatUiRecord
 }
 
 /**
@@ -470,7 +597,7 @@ export interface SessionRecord {
   projectName: string
   startedAt: number
   endedAt: number | null
-  /** The praxis/* branch it worked on, if the renderer tagged it. */
+  /** The trezi/* branch it worked on, if the renderer tagged it. */
   branch?: string
   /** The PR it produced, if published. */
   prUrl?: string
@@ -499,6 +626,8 @@ export interface SessionRecord {
    * affordance gates on, since it doubles as a Claude-backend marker.
    */
   sdkSessionId?: string
+  /** The resolved directory `sdkSessionId` was started in; a resume uses it (LKM-165). */
+  sdkCwd?: string
 }
 
 /** What `agent:open-project` hands back so the renderer can paint the current chat. */
@@ -520,9 +649,17 @@ export interface LiveChatSnapshot {
   /** A turn is currently in flight for this session (best-effort — see
    *  `agent:workspace-snapshot`'s implementation for how it's derived). */
   isRunning: boolean
+  /** The turn in flight (S11: from the conversation owner), so a reattached chat
+   *  accepts that turn's terminal events and no other. */
+  turn?: string | null
   /** Per-chat worktree isolation status (v9), for the renderer to rehydrate the chat's
    *  isolation chip after a reload. Absent for a non-isolated chat (treated as 'live'). */
-  isolation?: { state: 'live' | 'isolated' | 'parked'; branch?: string }
+  isolation?: {
+    state: 'live' | 'isolated' | 'parked'
+    branch?: string
+    reason?: 'interrupted' | 'failed'
+    error?: string
+  }
   /** The options this session is ACTUALLY running with (main's live copy — the
    *  authority). The renderer reconciles its per-chat pickers against these on
    *  reattach so a reload can't leave the toolbar showing a posture the session
@@ -560,10 +697,12 @@ export interface Bounds {
 
 /**
  * An element the user picked in the live preview (v2 select mode). `source` is
- * the repo's opt-in `data-praxis-source` stamp ("path/File.tsx:line") when present
+ * the repo's opt-in `data-trezi-source` stamp ("path/File.tsx:line") when present
  * — that's what lets the agent edit the exact component (see DESIGN.md).
  */
 export interface SelectedElement {
+  /** Explicit Shift-click group; the outer element remains the inspector target. */
+  selectionGroup?: SelectedElement[]
   tag: string
   id: string | null
   /** Authored display classes only; compiler-generated style-scope markers are
@@ -572,7 +711,7 @@ export interface SelectedElement {
   selector: string
   source: string | null
   /**
-   * The nearest COMPONENT-instance call site (v8 F3a) — `data-praxis-component-source`,
+   * The nearest COMPONENT-instance call site (v8 F3a) — `data-trezi-component-source`,
    * which the stamp plugin forwards so the authored `<Component …/>` (not the
    * innermost host) wins. Lets the inspector edit per-instance props. Null when the
    * element isn't inside a stamped component instance (or on a non-React backend).
@@ -581,12 +720,15 @@ export interface SelectedElement {
   text: string | null
   rect: Bounds
   styles: Record<string, string>
+  /** The element's `LayerNode.path` when it was picked, so Layers can select its row
+   *  (LKM-179). Absent on picks that don't come from the page's DOM. */
+  layerPath?: number[] | null
 }
 
 /**
  * One row in the Layers panel's DOM tree. `path` is a child-index path from
  * `document.body` (`[0,2,1]`) — recomputed fresh on every read, never a
- * durable id: `data-praxis-source` stamps aren't unique (a `.map()` puts the
+ * durable id: `data-trezi-source` stamps aren't unique (a `.map()` puts the
  * same stamp on every rendered item) and a CSS selector is too lossy, so this
  * is the only workable handle. Every action that resolves a path back to a
  * live element re-validates the `{tag, source}` fingerprint first.
@@ -624,7 +766,7 @@ export interface LayerFingerprint {
 
 /**
  * A Layers-panel or native-preview drag-to-reorder request. Both sides are
- * identified by their `data-praxis-source` stamp — main never needs the DOM path, only the
+ * identified by their `data-trezi-source` stamp — main never needs the DOM path, only the
  * renderer does (to resolve rows back to elements). `sessionId` is a UUID
  * minted client-side once per drag gesture: it becomes the `commitEdit`
  * coalesce key, and deliberately never coalesces with anything else — a move
@@ -662,11 +804,23 @@ export interface SourceMedia {
   /** MIME type, derived from the extension. */
   mediaType: string
   /**
-   * `praxis-media://` URL the renderer can point an <img>/<video>/<audio> at.
+   * `trezi-media://` URL the renderer can point an <img>/<video>/<audio> at.
    * Opaque and per-file: main streams it from disk (range requests included), so
    * a big video never has to cross IPC as base64.
    */
   url: string
+}
+
+/** Request to reveal exact source in the active chat’s mini editor. */
+export interface CodeRevealRequest {
+  root: string
+  key: string
+  source: string
+  startLine: number
+  endLine: number
+  /** Exact source lines, so landing or intervening edits cannot highlight unrelated code. */
+  code: string
+  requestId: string
 }
 
 /**
@@ -694,6 +848,8 @@ export interface SourceView {
   binary?: boolean
   /** Size on disk, for the preview's footer. Present with `media` / `binary`. */
   bytes?: number
+  /** SHA-256 of the text as read: the baseline a save (or a restored draft) must still match. */
+  hash?: string
 }
 
 /** Result of a whole-file save from the v9 code drawer. */
@@ -703,6 +859,8 @@ export interface SourceWriteResult {
   conflict?: boolean
   /** Human-readable failure (unresolved path, write error). */
   error?: string
+  /** On success: the SHA-256 of the saved text (the drawer's next baseline). */
+  hash?: string
 }
 
 /**
@@ -745,7 +903,7 @@ export interface PropField {
 /** Result of inspecting a selected element's editable props. */
 export interface PropInspection {
   component: string
-  /** The `path:line` we edit at (from the element's data-praxis-source). */
+  /** The `path:line` we edit at (from the element's data-trezi-source). */
   source: string
   fields: PropField[]
   /**
@@ -757,8 +915,19 @@ export interface PropInspection {
   note?: string
 }
 
+/** Agent request to select an object and open its desktop inspector. */
+export interface ControlsOpenRequest {
+  presentation?: 'animation'
+  root: string
+  source?: string
+  file?: string
+  tab: 'props' | 'styles' | 'custom'
+  requestId: string
+}
+
 /** What the floating prop-panel island renders from (main renderer → island). */
 export interface PanelState {
+  openRequest?: ControlsOpenRequest
   root: string
   element: SelectedElement
   inspection: PropInspection | null
@@ -773,7 +942,7 @@ export interface PanelState {
    *  fetched by the main renderer via `controls:get`; null while unfetched. */
   controls: ResolvedControlPanel[] | null
   /**
-   * Can praxis instrument this project for visual editing (a supported UI
+   * Can trezi instrument this project for visual editing (a supported UI
    * framework was detected)? Tailors the Styles tab's read-only guidance when
    * the picked element has no source stamp. Null while unprobed.
    */
@@ -826,7 +995,7 @@ export interface PropEditResult {
  * one matches, else splice an inline style, else route to the agent).
  */
 export interface StyleEdit {
-  /** The element's `data-praxis-source` stamp ("path/File.tsx:line"). */
+  /** The element's `data-trezi-source` stamp ("path/File.tsx:line"). */
   source: string
   /** The css property (longhand) being edited. */
   prop: string
@@ -890,7 +1059,7 @@ export interface StyleReadResult {
 export interface StyleEditResult {
   applied: boolean
   /** How the edit landed: a Tailwind class rewrite or an inline-style splice. */
-  strategy?: 'tailwind' | 'inline'
+  strategy?: 'tailwind' | 'inline' | 'class-rule'
   /** True when a token REFERENCE was written (rather than the resolved value). */
   wroteToken?: boolean
   /** When not applied directly: the change needs the agent (dynamic class / expression style). */
@@ -945,10 +1114,14 @@ export interface ControlParam {
 /**
  * An AI-surfaced control panel for one component (Custom Controls, v10) —
  * generated by the agent's `define_controls` tool, validated by main, and
- * persisted in the repo's `.praxis/control-panels.json` sidecar. Upserted by
+ * persisted in the repo's `.trezi/control-panels.json` sidecar. Upserted by
  * `file` + `component` (regenerating replaces, never duplicates).
  */
 export interface ControlPanelManifest {
+  /** Animation panels are owned by the project, not the current selection. */
+  presentation?: 'animation'
+  /** Project listens for trezi:animation-replay with its component name as detail. */
+  replay?: boolean
   id: string
   /** Repo-relative source file the panel's params live in. */
   file: string
@@ -981,7 +1154,7 @@ export interface ResolvedControlPanel {
   params: ResolvedControlParam[]
 }
 
-/** Result of an undo/redo over the praxis source-edit history (v8 F3b). */
+/** Result of an undo/redo over the trezi source-edit history (v8 F3b). */
 export interface UndoResult {
   ok: boolean
   /** The file reverted/re-applied. */
@@ -992,28 +1165,10 @@ export interface UndoResult {
   conflict?: boolean
 }
 
-/**
- * Apply a design token to the selected element directly (agent-free) when it maps
- * to an existing literal — a schema enum/string prop, or a single inline-style
- * property of the same family. Ambiguous cases (add-new, no stamp, className
- * expression, multiple candidates) fall back to the agent (`needsAgent`).
- */
-export interface TokenEdit {
-  /** The element's `data-praxis-source` stamp (null → agent). */
-  source: string | null
-  token: Token
-  /** The token's group name (e.g. 'colors' | 'spacing' | 'radius' | 'fontSize'). */
-  group: string
-  /** How the token source renders a reference (css → var(--name); else the value). */
-  tokenSource: TokenSource
-  /** The element's current class list (for the future Tailwind-class-swap path). */
-  classes: string[]
-}
-
-/** A reviewer note pinned to an element, stored in the repo's .praxis sidecar. */
+/** A reviewer note pinned to an element, stored in the repo's .trezi sidecar. */
 export interface Annotation {
   id: string
-  /** The element's data-praxis-source, if any. */
+  /** The element's data-trezi-source, if any. */
   source: string | null
   selector: string
   tag: string
@@ -1034,17 +1189,25 @@ export interface PublishResult {
   ok: boolean
   /** The created PR URL on success. */
   url?: string
-  /** The fresh praxis/* branch created to continue on (publish.ship). */
+  /** The work branch publish kept the live checkout on (publish.ship). */
   branch?: string
   error?: string
+  /** Published, but the work branch could not take in the merged base (LKM-185). */
+  notice?: string
   /** Per-file merge conflicts left for explicit resolution; never auto-resolved. */
   conflictFiles?: string[]
   /** Local refs preserving the pre-reconciliation tips. */
   recoveryRefs?: string[]
+  /** LKM-194: both tips bumped package.json `version` differently. */
+  versionConflict?: { local: string; remote: string }
+  /** The publish step that failed (`publish-progress.ts`), when one had started (LKM-187). */
+  step?: string
+  /** The user cancelled the run before the pull request was created. */
+  cancelled?: boolean
 }
 
 /**
- * In-app feedback (LKM-27) posted as a GitHub issue on Praxis's OWN repo (the
+ * In-app feedback (LKM-27) posted as a GitHub issue on Trezi's OWN repo (the
  * app's git checkout, `app.getAppPath()`), not the opened target project. The
  * screenshot + conversation are opt-in attachments — the renderer only sends
  * them when the corresponding toggle is on, so a bare report carries neither.
@@ -1056,6 +1219,10 @@ export interface FeedbackInput {
   screenshot?: string | null
   /** The rendered chat transcript, present only when opted in. */
   conversation?: string | null
+  /** Attach redacted logs, landing state and git status (LKM-165), only when opted in. */
+  diagnostics?: boolean
+  /** The chat the sheet was opened over, for its landing state and worktree status. */
+  chat?: { key: string; root?: string } | null
 }
 
 export interface FeedbackResult {
@@ -1066,9 +1233,11 @@ export interface FeedbackResult {
 }
 
 /** Result of scaffolding source-stamping into an unprepared project. */
-export type Frontend = 'react' | 'react-native' | 'svelte' | 'vue' | 'solid' | 'unknown'
-/** How praxis instruments source mapping for the detected framework. */
+export type Frontend = 'next' | 'react' | 'react-native' | 'svelte' | 'vue' | 'solid' | 'unknown'
+/** How trezi instruments source mapping for the detected framework. */
 export type SetupStrategy =
+  | 'next-loader'
+  | 'vite-plugin'
   | 'babel-plugin'
   | 'babel-plugin-rn'
   | 'svelte-preprocess'
@@ -1076,7 +1245,7 @@ export type SetupStrategy =
   | 'none'
 
 /**
- * Read-only setup probe — can praxis instrument this project for visual editing?
+ * Read-only setup probe — can trezi instrument this project for visual editing?
  * Runs the deps-based framework detection WITHOUT writing anything, so the
  * renderer can decide up front whether to even offer setup (never dead-end a
  * static/vanilla project on "Set it up") and how to word the Styles tab's
@@ -1085,11 +1254,45 @@ export type SetupStrategy =
 export interface SetupProbe {
   /** The detected UI framework (deps-based), or 'unknown' when unrecognized. */
   framework: Frontend
-  /** True when praxis can add source-mapping for this framework (i.e. framework !== 'unknown'). */
+  /** True when trezi can add source-mapping for this framework (i.e. framework !== 'unknown'). */
   canInstrument: boolean
 }
 
+export interface NextSetupInfo {
+  version?: string
+  declaredVersion?: string
+  command: string
+  bundler: 'turbopack' | 'webpack' | 'unknown'
+  router: 'app' | 'pages' | 'mixed' | 'unknown'
+}
+
+/** A React project built by Vite (LKM-153): Vite 8 transforms with Oxc and
+ *  `@vitejs/plugin-react` 6 has no Babel option, so stamping uses Trezi's own plugin. */
+export interface ViteSetupInfo {
+  version?: string
+  declaredVersion?: string
+  major?: number
+  /** The React plugin the project uses, with its installed (else declared) version. */
+  reactPlugin?: string
+  reactPluginVersion?: string
+}
+
+/** What the project remembers about Connect to Trezi (LKM-153), kept in its workspace entry. */
+export interface SourceSetupState {
+  /** `unstamped` (LKM-157): was `done`, but a restarted preview stayed without stamps. */
+  state: 'done' | 'declined' | 'failed' | 'unstamped'
+  /** The exact failure, shown with a retry. */
+  reason?: string
+  at: number
+}
+
 export interface SetupResult {
+  next?: NextSetupInfo
+  vite?: ViteSetupInfo
+  helpers?: Array<{ path: string; sha256: string }>
+  /** The chat worktree Trezi copied the helpers into before the setup turn. */
+  checkout?: string
+
   ok: boolean
   /** The detected UI framework (NOT the build tool) — drives everything. */
   framework?: Frontend
@@ -1097,7 +1300,7 @@ export interface SetupResult {
   strategy?: SetupStrategy
   /** Svelte major version (4 or 5), so the prop-typing idiom is right. */
   svelteMajor?: number
-  /** Repo-relative files praxis wrote (under `.praxis/`). */
+  /** Repo-relative files trezi wrote (under `.trezi/`). */
   files?: string[]
   /** False if the helper already existed (idempotent). */
   written?: boolean
@@ -1119,12 +1322,12 @@ export interface TokenGroup {
 /** Design tokens detected in the opened repo (one source wins per project). */
 export interface TokenSet {
   source: TokenSource
-  /** Human label for where they came from, e.g. ".praxis/tokens.json". */
+  /** Human label for where they came from, e.g. ".trezi/tokens.json". */
   origin?: string
   groups: TokenGroup[]
 }
 
-/** Result of scaffolding a starter `.praxis/tokens.json` manifest. */
+/** Result of scaffolding a starter `.trezi/tokens.json` manifest. */
 export interface TokenScaffoldResult {
   ok: boolean
   /** False if a manifest already existed (idempotent — nothing written). */
@@ -1141,7 +1344,7 @@ export interface RecentMenuEntry {
 }
 
 /**
- * Self-update status pushed from main (`update:status`). Praxis is distributed
+ * Self-update status pushed from main (`update:status`). Trezi is distributed
  * as a git checkout; the updater compares HEAD to the tracked remote.
  * - `idle`      — up to date, or not a git checkout / offline / no upstream.
  * - `available` — `behind` commits behind the remote; `subject` is the newest.
@@ -1155,525 +1358,4 @@ export interface UpdateStatus {
   subject?: string
   progress?: string
   error?: string
-}
-
-/** The surface exposed on `window.api` by the preload bridge. */
-export interface PraxisApi {
-  /** Subscribe to native-menu commands: 'reload' | 'stop' | 'select' |
-   *  'open-project' | 'new-project' | 'clear-recents' | 'viewport:desktop' |
-   *  'viewport:mobile' | 'undo' | 'redo' | 'settings' | 'logs' | 'toggle-chat' |
-   *  'publish'. Returns an unsubscribe. (Undo/Redo only reach here when a focused
-   *  text field ISN'T claiming the accelerator — see `buildAppMenu`'s
-   *  `editCommand` in main/index.ts.) */
-  onMenuAction: (cb: (action: string) => void) => () => void
-  /** Recover a dropped/selected file's absolute on-disk path (Electron's
-   *  `webUtils.getPathForFile`, run in the preload). Returns '' for a file with
-   *  no on-disk path (e.g. an in-memory clipboard blob). Synchronous. */
-  pathForFile: (file: File) => string
-  /** Native window-chrome state. Drives layout that depends on whether the macOS
-   *  traffic lights are present (they vanish in fullscreen). */
-  window: {
-    /** Current native-fullscreen state (traffic lights hidden when true). */
-    isFullscreen: () => Promise<boolean>
-    /** Fires on enter/leave native fullscreen with the new state. */
-    onFullscreenChange: (cb: (fullscreen: boolean) => void) => () => void
-  }
-  /** File menu ↔ renderer recents bridge. The renderer owns the recents list
-   *  (localStorage); it pushes the current set so main can build the native
-   *  File → Open Recent submenu, and is called back when one is chosen. */
-  menu: {
-    /** Push the current recents (most-recent-first) so main rebuilds Open Recent. */
-    setRecents: (recents: RecentMenuEntry[]) => void
-    /** Fires when a project is chosen from File → Open Recent. */
-    onOpenRecent: (cb: (root: string) => void) => () => void
-    /** Run the NATIVE text-editing undo/redo in this window — used when the
-     *  Edit-menu accelerator arrived while a text field was focused (the
-     *  custom menu item swallowed the keystroke the field would have gotten). */
-    nativeEdit: (cmd: 'undo' | 'redo') => void
-  }
-  preview: {
-    setBounds: (bounds: Bounds) => void
-    load: (url: string) => Promise<void>
-    reset: () => Promise<void>
-    /** Hide the native view under renderer overlays that use a frozen snapshot. */
-    setDragging: (active: boolean) => void
-    /** Toggle click-to-select mode in the previewed app (v2). */
-    setSelectMode: (active: boolean) => Promise<void>
-    /** Fires when the user clicks an element in select mode. */
-    onElementPicked: (cb: (el: SelectedElement) => void) => () => void
-    /** Fires when select mode is cancelled from inside the preview (Escape). */
-    onSelectCancelled: (cb: () => void) => () => void
-    /** Render annotation pins in the preview, located by CSS selector. */
-    setAnnotations: (pins: { id: string; selector: string }[]) => void
-    /** Toggle the in-page iPhone bezel overlay (mobile viewport); passes clicks through. */
-    setFrame: (active: boolean) => void
-    /** Drop the in-preview selection toolbar (pill removed / message sent). */
-    clearSelected: () => void
-    /** Launch progress shown inside the preview (bottom pill); null clears. */
-    setStatus: (text: string | null) => void
-    /** Fires when S is pressed inside the focused preview (toggle select). */
-    onToggleSelect: (cb: () => void) => () => void
-    /** Fires when the preview navigates (link clicks, SPA routes) — full URL. */
-    onUrlChanged: (cb: (url: string) => void) => () => void
-    /** Selection-toolbar actions that resolve in the renderer (code / delete). */
-    onToolbarAction: (cb: (kind: 'code' | 'delete' | 'props') => void) => () => void
-    /** Snapshot the live preview as a data URL (freeze-frame under overlay UI). */
-    capture: () => Promise<string | null>
-    /** Fires after the previewed app loads, reporting source-stamp coverage. */
-    onReadiness: (cb: (info: { stamps: number }) => void) => () => void
-    /** Fires when the user commits an inline text edit in the preview. */
-    onTextEdit: (cb: (edit: { source: string; text: string }) => void) => () => void
-    /** Arm/disarm the inline comment (C) or annotation (Y) overlay mode. */
-    setCommentMode: (mode: CommentMode) => Promise<void>
-    /** Fires when the preview's mode changes from a keyboard shortcut (C/Y/Esc). */
-    onCommentMode: (cb: (mode: CommentMode) => void) => () => void
-    /** Fires when the user submits an inline comment/annotation in the preview. */
-    onComment: (cb: (c: PreviewComment) => void) => () => void
-  }
-  /**
-   * Floating prop-panel plumbing. The floating island is a separate
-   * WebContentsView stacked above the preview (DOM can't paint over a native
-   * view); the main renderer drives its bounds/state, the panel instance
-   * renders and reports actions/height back.
-   */
-  panel: {
-    /** Main renderer → position + show the island (window coordinates). */
-    show: (bounds: { x: number; y: number; width: number; height: number }) => void
-    hide: () => void
-    /** Main renderer → push the state the island renders from. */
-    setState: (state: PanelState) => void
-    /** Island → receive state pushes. */
-    onState: (cb: (state: PanelState) => void) => () => void
-    /** Island → ask main to (re)send the latest state on `onState`. The island
-     *  view is created by the first `show`, which the main renderer sends AFTER
-     *  its first `setState`, so that push has nowhere to land — and a re-push on
-     *  the view's load event races the island's own listener registration. The
-     *  island pulling once it is listening is the only order that can't lose. */
-    requestState: () => void
-    /** Island → relay a user action to the main renderer. */
-    action: (action: PanelAction) => void
-    /** Main renderer → handle island actions. */
-    onAction: (cb: (action: PanelAction) => void) => () => void
-    /** Island → report its rendered size (px). */
-    reportSize: (size: { width: number; height: number }) => void
-    /** Main renderer → resize the island view to the reported size. */
-    onSize: (cb: (size: { width: number; height: number }) => void) => () => void
-  }
-  project: {
-    pick: () => Promise<string | null>
-    detect: (root: string) => Promise<DetectedProject>
-    /** The project's own favicon, read from its source tree, so the rail can
-     *  lead the project with its real icon instead of a folder glyph. Null when
-     *  the project ships none. */
-    icon: (root: string) => Promise<ProjectIcon | null>
-    /** Save-dialog for a folder to create (New Project…). Null when cancelled. */
-    pickNew: () => Promise<string | null>
-    /** Scaffold a minimal Vite+React app there, git init, install deps. */
-    create: (root: string) => Promise<ProjectCreateResult>
-  }
-  devServer: {
-    start: (opts: {
-      root: string
-      command: string
-      framework?: Framework
-    }) => Promise<RunningDevServer>
-    /** Stop the dev server for one project (others keep running). */
-    stop: (root: string) => Promise<void>
-    /** Is this project's dev server still running? (warm servers can die) */
-    isRunning: (root: string) => Promise<boolean>
-    /** Like `isRunning`, but also returns the running server's URL/pid — lets a
-     *  reattaching renderer (e.g. after a reload) recover the live preview URL
-     *  instead of respawning on a fresh port. */
-    info: (root: string) => Promise<DevServerInfo>
-    onLog: (cb: (line: string) => void) => () => void
-  }
-  git: {
-    /** Ensure work happens on a `praxis/*` branch (creates one off HEAD if needed). */
-    ensure: (root: string) => Promise<BranchResult>
-    /** Switch to / create a specific branch (name is coerced to `praxis/<…>`). */
-    set: (root: string, name: string) => Promise<BranchResult>
-    /** List local branches (current first) so the titlebar pill can switch. */
-    list: (root: string) => Promise<{ branches: string[]; current: string | null }>
-    /** Check out an existing branch by exact name (no praxis/ coercion). */
-    checkout: (root: string, branch: string) => Promise<BranchResult>
-  }
-  diagnose: {
-    /** Recall a cached fix for this error, else ask the AI; caches the result. Null without auth. */
-    run: (root: string, error: string, context?: string) => Promise<Diagnosis | null>
-    /** Record the user's decision for a signature (per-machine memory). */
-    record: (root: string, signature: string, status: 'applied' | 'dismissed') => Promise<void>
-  }
-  simulator: {
-    /** Probe the host for macOS + Xcode + a bootable simulator (read-only, never throws). */
-    preflight: () => Promise<SimPreflight>
-    /** Boot a sim, start Metro/Expo, launch the app, stand up the frame bridge. */
-    start: (opts: { root: string; command?: string; udid?: string }) => Promise<RunningSimulator>
-    stop: () => Promise<void>
-    /** Phase 3: arm/disarm element-select (a tap becomes a source pick). */
-    setSelectMode: (active: boolean) => Promise<void>
-    onLog: (cb: (line: string) => void) => () => void
-    onElementPicked: (cb: (pick: SimElementPick) => void) => () => void
-  }
-  props: {
-    /**
-     * Inspect the editable props of the element at `source` ("path:line").
-     * `text` is the clicked element's rendered text — for Svelte it lets praxis
-     * content-match the click to the concrete component INSTANCE (v8 F3a-svelte)
-     * instead of falling back to a definition-default edit.
-     */
-    inspect: (root: string, source: string, text?: string | null) => Promise<PropInspection | null>
-    /** Apply a prop edit; may report it needs the agent for a complex change. */
-    apply: (root: string, edit: PropEdit) => Promise<PropEditResult>
-    /** Apply a design token directly when it maps to a literal; agent-fallback otherwise. */
-    applyToken: (root: string, edit: TokenEdit) => Promise<PropEditResult>
-    /** Remove a prop attribute from the element's source (reset-to-default). Reversible
-     *  via the F3b edit history. A no-op (already absent) reports applied. (v8 F2) */
-    remove: (root: string, source: string, name: string) => Promise<PropEditResult>
-  }
-  text: {
-    /** Rewrite the element's text content in source; agent-fallback for complex content. */
-    apply: (root: string, edit: { source: string; text: string }) => Promise<PropEditResult>
-  }
-  /** The island's Styles tab (v10): live scrub injection into the previewed app
-   *  plus the Tailwind-first commit engine (`main/styles.ts`). */
-  styles: {
-    /** Commit a style edit to source: Tailwind class rewrite → inline-style
-     *  splice → agent fallback (`needsAgent`, like prop editing). */
-    apply: (root: string, edit: StyleEdit) => Promise<StyleEditResult>
-    /** Live scrub override — inject `prop: value` inline on the selected element
-     *  (the preload stashes the original for exact revert). Fire-and-forget. */
-    preview: (prop: string, value: string) => void
-    /** Revert live override(s) exactly — one prop, or all when omitted. */
-    clearPreview: (prop?: string) => void
-    /** Fresh computed values for `props` from the current selection (pick-time
-     *  snapshots go stale), PLUS proof of design-token usage. Null when the
-     *  selection is gone (navigation / element removed), there's no preview,
-     *  or the read timed out. */
-    read: (props: string[]) => Promise<StyleReadResult | null>
-    /** Replay a transition on the selected element: jump to `from` with
-     *  transitions disabled, force reflow, then set `to` so it animates. */
-    replay: (prop: string, from: string, to: string) => void
-  }
-  /** The Layers panel: a tree of the previewed page's DOM, panel-driven
-   *  select/hover, and drag-to-reorder that writes back into source. */
-  layers: {
-    /** A full snapshot of the previewed page's DOM tree. Null on timeout / no
-     *  preview (mirrors `styles.read`'s contract). */
-    read: () => Promise<LayersSnapshot | null>
-    /** A trusted native-preview modifier drag, ready for the source move engine. */
-    onMoveRequest: (cb: (request: MoveNodeRequest) => void) => () => void
-    /** Fires on a debounced structural DOM change while the watch is armed —
-     *  the renderer decides whether/when to re-`read()`. */
-    onChanged: (cb: () => void) => () => void
-    /** Select the element at `path` — routes through the preview's normal
-     *  click-pick path (`describe`/`showToolbar`/outline), independent of
-     *  Select-mode. */
-    select: (path: number[], fingerprint: LayerFingerprint) => void
-    /** Hover-highlight the element at `path` (the transient box); null clears it. */
-    hover: (path: number[] | null, fingerprint: LayerFingerprint | null) => void
-    /** Arm/disarm the preload's structural MutationObserver — only while the
-     *  panel is open, so an idle panel costs nothing. */
-    setWatch: (on: boolean) => void
-    /** Drag-to-reorder: writes a real source edit for a same-parent sibling
-     *  move; anything ambiguous (list items, reparenting, cross-file) reports
-     *  `needsAgent` with a ready-made prompt instead. */
-    move: (root: string, req: MoveNodeRequest) => Promise<MoveNodeResult>
-  }
-  /** AI-surfaced custom-control panels (v10) — manifests persisted by main in
-   *  the repo's `.praxis/control-panels.json`, values resolved fresh per read. */
-  controls: {
-    /** Panels matching the selection's candidate files (two-stamp match), with
-     *  every param's value freshly resolved against the live tree. */
-    get: (
-      root: string,
-      q: { files: string[]; component?: string }
-    ) => Promise<ResolvedControlPanel[]>
-    /** Every stored panel for the repo (unresolved manifests). */
-    list: (root: string) => Promise<ControlPanelManifest[]>
-    /** Delete a panel by id ("Remove panel"). */
-    remove: (root: string, id: string) => Promise<void>
-    /** Apply a value to a literal-strategy param — main re-anchors, lexes and
-     *  renders the replacement itself (never splices a supplied string raw). */
-    applyLiteral: (
-      root: string,
-      panelId: string,
-      paramId: string,
-      value: string | number | boolean
-    ) => Promise<StyleEditResult>
-    /** Fires when the agent's `define_controls` tool saved a manifest — App
-     *  re-fetches and re-pushes panel state for that root. */
-    onUpdated: (cb: (root: string) => void) => () => void
-  }
-  source: {
-    /** Resolve a component tag name to its defining file via imports (Cmd+click). */
-    resolveComponent: (root: string, fromFile: string, name: string) => Promise<string | null>
-    /** Read the stamped element's source file for the inspector's code peek. */
-    read: (root: string, source: string) => Promise<SourceView | null>
-    /** Jump to the stamp in the user's editor (code/cursor/zed/subl CLI → OS default app). */
-    openInEditor: (root: string, source: string) => Promise<{ ok: boolean; error?: string }>
-    /** Save the whole file from the v9 code drawer. Refuses if disk drifted from
-     *  `baseline` (the content the drawer loaded); routes through commitEdit so
-     *  undo/redo + HMR just work. */
-    write: (
-      root: string,
-      source: string,
-      baseline: string,
-      content: string
-    ) => Promise<SourceWriteResult>
-    /** Pop the code drawer out into its own resizable window showing `source`.
-     *  Focuses the existing window if one is already open for this root. */
-    popout: (root: string, source: string) => Promise<void>
-    /** Close the standalone editor window (called from inside a popped-out editor). */
-    closeWindow: () => Promise<void>
-    /** Repo-relative file paths for the pop-out editor's file-tree sidebar. */
-    tree: (root: string) => Promise<string[]>
-    /** File-tree sidebar: create an empty file (parent dirs created as needed). */
-    createFile: (root: string, path: string) => Promise<FileOpResult>
-    /** File-tree sidebar: rename/move a file. Never overwrites an existing path. */
-    renameFile: (root: string, from: string, to: string) => Promise<FileOpResult>
-    /** File-tree sidebar: delete a file (to the OS trash where that's available). */
-    deleteFile: (root: string, path: string) => Promise<FileOpResult>
-    /** Standalone editor window: retarget event when a second pop-out reuses it. */
-    onNavigate: (cb: (source: string) => void) => () => void
-  }
-  /** Undo/redo over ALL direct praxis source edits — props, text, token swaps (v8 F3b).
-   *  Scoped per project root: the rail keeps several projects open at once. */
-  edits: {
-    undo: (root: string) => Promise<UndoResult>
-    redo: (root: string) => Promise<UndoResult>
-    can: (root: string) => Promise<{ undo: boolean; redo: boolean }>
-    /** Per-turn chat revert: restore the pre-turn files of the recorded group
-     *  `chat:<wtId>:<turnNo>` (addressable, not stack-order). `conflict` when a file
-     *  drifted since (a later turn or hand edit touched it). */
-    revert: (root: string, group: string) => Promise<UndoResult>
-    /** Is that group still safely revertable right now (on the stack, no file drifted)?
-     *  A cheap pre-check for greying out the Revert button. */
-    canRevert: (root: string, group: string) => Promise<boolean>
-  }
-  tokens: {
-    /** Detect design tokens in the repo (manifest → tailwind → CSS vars). */
-    detect: (root: string) => Promise<TokenSet>
-    /** Write a starter `.praxis/tokens.json` (idempotent — skips if one exists). */
-    scaffold: (root: string) => Promise<TokenScaffoldResult>
-  }
-  annotations: {
-    list: (root: string) => Promise<Annotation[]>
-    add: (root: string, input: AnnotationInput) => Promise<Annotation[]>
-    remove: (root: string, id: string) => Promise<Annotation[]>
-    /** Fires when the user clicks an annotation pin in the preview. */
-    onPinClick: (cb: (id: string) => void) => () => void
-  }
-  publish: {
-    /** Create a branch + GitHub PR with the annotations; returns the PR URL. */
-    toPr: (root: string, opts: { title: string }) => Promise<PublishResult>
-    /** Full ship: commit all → push → PR → squash-merge to the default branch →
-     *  pull it → delete the merged branch → start a fresh praxis/* branch. */
-    /** The legacy summary argument is ignored; PR copy is derived from git changes. */
-    ship: (root: string, legacySummary?: string[], mode?: 'merge' | 'pr') => Promise<PublishResult>
-  }
-  github: {
-    /** GitHub link + gh readiness for the header + connect sheet. */
-    status: (root: string) => Promise<GithubStatus>
-    /** First-publish bridge: create the repo, wire origin, push the built work. */
-    connect: (root: string, opts: GithubConnectOptions) => Promise<GithubConnectResult>
-  }
-  setup: {
-    /** Read-only: detect the UI framework + whether praxis can instrument it (no writes). */
-    detect: (root: string) => Promise<SetupProbe>
-    /** Write the dev-only source-stamping plugin into the repo (deterministic). */
-    scaffold: (root: string) => Promise<SetupResult>
-    /** Remove praxis's scaffold files from the repo (the .praxis helpers + legacy root plugin). */
-    uninstall: (root: string) => Promise<SetupResult>
-  }
-  agent: {
-    openProject: (root: string, options?: AgentOptions) => Promise<OpenProjectResult>
-    /** Close a project's agent session (single-active teardown / rail close). */
-    closeProject: (root: string) => Promise<void>
-    /**
-     * Make an already-open project's session the active one (rail switch). Without
-     * `sessionKey`, restores whichever of the project's own sessions (default, or
-     * an additional/resumed chat) was last active. Pass `sessionKey` to select a
-     * SPECIFIC one of that project's already-live sessions directly (v9 multi-chat
-     * switcher) — it's a no-op unless that session is already live.
-     */
-    setActive: (root: string, sessionKey?: string) => Promise<void>
-    /** Does this project still have a live session? (LRU may have suspended it) */
-    isOpen: (root: string) => Promise<boolean>
-    /**
-     * Start an ADDITIONAL fresh session for a project that already has one open
-     * (v9 resume/multi-chat) — unlike `openProject`, the existing session is left
-     * running. Returns the new session's key (`${projectKey}#…`) and makes it the
-     * project's active session.
-     */
-    newChat: (
-      root: string,
-      options?: AgentOptions
-    ) => Promise<{ ok: boolean; sessionKey?: string; error?: string }>
-    /**
-     * Rename one LIVE chat (rail inline rename). Replaces the record's name — the
-     * one main auto-generates — so the chosen name survives into the chat's
-     * persisted history record and blocks any later auto-naming. `ok:false` when
-     * that sessionKey has no live session or the name is empty.
-     */
-    renameChat: (
-      sessionKey: string,
-      title: string
-    ) => Promise<{ ok: boolean; title?: string; error?: string }>
-    /** Restart one live chat with startup-only options (such as a Codex model)
-     * without touching any of its sibling chats. */
-    restartChat: (
-      root: string,
-      sessionKey: string,
-      options?: AgentOptions
-    ) => Promise<{ ok: boolean; error?: string }>
-    /**
-     * Resume a past ("previous agent") session by its history record id — requires
-     * the record to carry a Claude `sdkSessionId` (else `ok:false`). Starts a live
-     * session with the SDK's `resume` option, registers it under a new sessionKey,
-     * and makes it the project's active session. `options` is the posture the
-     * resumed chat should run with (model/effort/permission mode) — omit it and the
-     * session falls back to main's defaults, which is how a resumed chat used to
-     * end up asking for every edit while the toolbar still read "Auto". The backend
-     * is always Claude here, whatever `options.provider` says.
-     */
-    resumeSession: (
-      root: string,
-      recordId: string,
-      options?: AgentOptions
-    ) => Promise<{ ok: boolean; sessionKey?: string; error?: string }>
-    /**
-     * Close ONE of a project's live chats (v9 multi-chat) — tears down just that
-     * `sessionKey`'s session (persisting it to history like any teardown), leaving
-     * the project and its other chats untouched. Returns the project's remaining
-     * live sessionKeys and whichever one is now active (`null` if none remain, so
-     * the caller closes the project). A no-op-safe call if the key isn't live.
-     */
-    closeChat: (
-      root: string,
-      sessionKey: string
-    ) => Promise<{ ok: boolean; remaining: string[]; activeSessionKey: string | null }>
-    send: (text: string, images?: ImageAttachment[]) => Promise<void>
-    /** Write a pasted image (clipboard bytes, no on-disk origin) into the app's
-     *  attachments dir and return its absolute path — so the turn can tell the
-     *  agent WHERE the image it can see actually lives. '' if it couldn't be
-     *  written; a dropped image needs no call (it already has a path). */
-    saveAttachment: (image: ImageAttachment, name?: string) => Promise<string>
-    setModel: (model: string) => Promise<void>
-    /** Change the permission posture live (drives the SDK's setPermissionMode). */
-    setPermissionMode: (mode: PermissionMode) => Promise<void>
-    /** Answer a pending approve/deny card. */
-    respondPermission: (id: string, behavior: 'allow' | 'deny') => Promise<void>
-    /** Answer a pending agent question (AskUserQuestion). `answers` maps each
-     *  question's text to the chosen option label(s); `null` dismisses it. */
-    respondQuestion: (id: string, answers: QuestionAnswers | null) => Promise<void>
-    interrupt: () => Promise<void>
-    /** Tag the live session with branch / PR metadata for its history record. */
-    tagSession: (root: string, tag: { branch?: string; prUrl?: string }) => Promise<void>
-    /** Spawn a detached agent in its own git worktree — runs in the background
-     *  without touching the active chat. `origin` chooses completion UX. Returns
-     *  `ok:false` when the repo/backend cannot support isolation, so the caller can
-     *  preserve the instruction in its foreground fallback. */
-    spawnComment: (
-      root: string,
-      text: string,
-      parentSessionKey: string,
-      options?: AgentOptions,
-      origin?: BackgroundSpawnOrigin
-    ) => Promise<{
-      ok: boolean
-      spawnId?: string
-      branch?: string
-      queued?: boolean
-      reason?: string
-    }>
-    /** Cancel a running or queued background spawn (the rail row's ×). */
-    spawnInterrupt: (spawnId: string) => Promise<void>
-    /** F1 Phase 2 — apply a finished spawn's branch diff onto the live working tree
-     *  (the dev server HMRs it). `conflict` when the patch overlapped local edits. */
-    spawnApply: (
-      root: string,
-      branch: string
-    ) => Promise<{ ok: boolean; conflict?: boolean; error?: string }>
-    /** F1 Phase 2 — delete a finished spawn's branch (Discard). */
-    spawnDiscard: (root: string, branch: string) => Promise<{ ok: boolean }>
-    /** F1 Phase 2 — push a finished spawn's branch + open a PR from it. */
-    spawnPr: (
-      root: string,
-      branch: string,
-      title: string,
-      recordId: string
-    ) => Promise<{ ok: boolean; prUrl?: string; error?: string }>
-    /** v9 conflict card — "Resolve it" on the ACTIVE parked chat. Stages the worktree
-     *  with both sides 3-way merged; `conflicted` lists the files with real overlap and
-     *  `prompt` is the resolution turn the renderer should `send`. An empty `conflicted`
-     *  means the sides merged cleanly and were already applied (no turn to run). */
-    resolveConflict: () => Promise<{
-      ok: boolean
-      conflicted: string[]
-      prompt?: string
-      error?: string
-    }>
-    /** v9 conflict card — "Discard changes" on the ACTIVE parked chat (drop its work). */
-    discardConflict: () => Promise<{ ok: boolean }>
-    onEvent: (cb: (event: AgentEvent) => void) => () => void
-    /** Everything still live in main (open projects, their live chats + in-progress
-     *  transcripts) — used to reattach the renderer after a reload without tearing
-     *  down any session. Read-only: never suspends/starts/closes anything. */
-    workspaceSnapshot: () => Promise<WorkspaceSnapshot>
-  }
-  projectMemory: {
-    get: (root: string) => Promise<ProjectMemory>
-    set: (root: string, content: string) => Promise<ProjectMemory>
-  }
-  /**
-   * User-added model endpoints (v10) — see `ProviderConnection`. Global, not
-   * per-project. Every call here is key-safe: keys go IN via `save`/`catalog` and
-   * never come back out, so the renderer can only ever observe `hasKey`.
-   */
-  providers: {
-    /** Every saved connection, keys excluded. */
-    list: () => Promise<ProviderConnection[]>
-    /**
-     * Create (no `id`) or update (with `id`) a connection. `apiKey` set ⇒ replace the
-     * stored key; omitted ⇒ leave it untouched, so editing a label can't wipe a key.
-     */
-    save: (
-      input: ProviderConnectionInput
-    ) => Promise<{ ok: boolean; connection?: ProviderConnection; error?: string }>
-    /** Delete a connection and its stored key. */
-    remove: (id: string) => Promise<void>
-    /** Probe `{baseUrl}/models` — validates the key AND returns the catalog (the
-     *  dialog's "Connect"). Accepts an unsaved draft so users can test before saving. */
-    catalog: (input: ModelCatalogInput) => Promise<ModelCatalogResult>
-    /** Every model the chat picker should offer, grouped: built-in seats first, then
-     *  one group per connection. Recomputed on demand, so it always reflects the store. */
-    choices: () => Promise<ModelChoice[]>
-  }
-  /** Persisted agent-session history ("previous agents") — v5-D. */
-  sessions: {
-    /** Past sessions for a project, newest first. Excludes the live session and
-     *  the current-chat slot (that's restored in place, not listed as History). */
-    list: (root: string) => Promise<SessionRecord[]>
-    get: (id: string) => Promise<SessionRecord | null>
-    /** Rename a past session (rail inline rename). `ok:false` for an unknown
-     *  record or an empty name. */
-    rename: (id: string, title: string) => Promise<{ ok: boolean; title?: string; error?: string }>
-    remove: (id: string) => Promise<void>
-  }
-  /** In-app feedback → a GitHub issue on Praxis's own repo (LKM-27). */
-  feedback: {
-    /** Snapshot the app window as a downscaled data URL, for the opt-in screenshot. */
-    capture: () => Promise<string | null>
-    /** Post the feedback (with any opted-in attachments) as a GitHub issue. */
-    submit: (input: FeedbackInput) => Promise<FeedbackResult>
-  }
-  /** Praxis self-update: check the git remote and apply an update in place. */
-  update: {
-    /** Subscribe to update-status pushes (startup check, periodic, and apply progress). */
-    onStatus: (cb: (status: UpdateStatus) => void) => () => void
-    /** Force an immediate check against the remote. */
-    check: () => Promise<UpdateStatus>
-    /** Run `praxis --update` (pull + install + build) and relaunch on success. */
-    apply: () => Promise<void>
-  }
 }

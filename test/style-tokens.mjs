@@ -16,11 +16,12 @@
  *
  * Run with: bun run test:style-tokens
  */
-import { resolveTokenRef, tokenClassRewrite } from '../src/main/style-tokens.ts'
-import { rewriteClassList, rewriteClassListToken } from '../src/main/tw-styles.ts'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolveTokenRef, tokenClassRewrite } from '../src/main/style-tokens.ts'
+import { rewriteClassList, rewriteClassListToken } from '../src/main/tw-styles.ts'
 
 let failed = 0
 const ok = (cond, msg) => {
@@ -35,13 +36,13 @@ const eq = (actual, expected, msg) =>
     `${msg} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
   )
 
-const base = mkdtempSync(join(tmpdir(), 'praxis-style-tokens-'))
+const base = mkdtempSync(join(tmpdir(), 'trezi-style-tokens-'))
 
-// --- fixture A: manifest source (.praxis/tokens.json) ----------------------
+// --- fixture A: manifest source (.trezi/tokens.json) ----------------------
 const manifestRoot = join(base, 'manifest-project')
-mkdirSync(join(manifestRoot, '.praxis'), { recursive: true })
+mkdirSync(join(manifestRoot, '.trezi'), { recursive: true })
 writeFileSync(
-  join(manifestRoot, '.praxis', 'tokens.json'),
+  join(manifestRoot, '.trezi', 'tokens.json'),
   JSON.stringify({
     colors: { text: '#111111', brand: '#2563eb' },
     spacing: { sm: '4px' },
@@ -157,9 +158,16 @@ try {
   // Malformed / absent pick — no token, or a non-string name/group (what a
   // renderer bug or a hostile island message might send).
   {
-    eq(await resolveTokenRef(manifestRoot, edit({ prop: 'color' })), null, 'no token on the edit → null')
     eq(
-      await resolveTokenRef(manifestRoot, edit({ prop: 'color', token: { name: 1, group: 'colors' } })),
+      await resolveTokenRef(manifestRoot, edit({ prop: 'color' })),
+      null,
+      'no token on the edit → null'
+    )
+    eq(
+      await resolveTokenRef(
+        manifestRoot,
+        edit({ prop: 'color', token: { name: 1, group: 'colors' } })
+      ),
       null,
       'non-string token.name → null'
     )
@@ -232,7 +240,10 @@ try {
       rewriteClassListToken(classList, e.prop, tok.name),
       'tailwind-sourced token delegates to rewriteClassListToken'
     )
-    ok(tokenClassRewrite(classList, e, tok) === 'flex text-brand-500', 'tailwind rewrite lands the token class')
+    ok(
+      tokenClassRewrite(classList, e, tok) === 'flex text-brand-500',
+      'tailwind rewrite lands the token class'
+    )
   }
 
   // A `css`-sourced token has NO class form — must drop to S2 (splice the
@@ -242,7 +253,11 @@ try {
     const classList = 'flex text-gray-500'
     const e = edit({ prop: 'color' })
     const tok = { ref: 'var(--color-text)', name: '--color-text', source: 'css', value: '#1a1a1a' }
-    eq(tokenClassRewrite(classList, e, tok), null, 'css-sourced token has no class form — drops to S2')
+    eq(
+      tokenClassRewrite(classList, e, tok),
+      null,
+      'css-sourced token has no class form — drops to S2'
+    )
   }
 
   // Same for `manifest` — no scale-key class form either.
@@ -250,7 +265,11 @@ try {
     const classList = 'flex text-gray-500'
     const e = edit({ prop: 'color' })
     const tok = { ref: '#111111', name: 'text', source: 'manifest', value: '#111111' }
-    eq(tokenClassRewrite(classList, e, tok), null, 'manifest-sourced token has no class form — drops to S2')
+    eq(
+      tokenClassRewrite(classList, e, tok),
+      null,
+      'manifest-sourced token has no class form — drops to S2'
+    )
   }
 
   if (failed === 0) {

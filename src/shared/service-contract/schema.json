@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:trezi:service-contract:1.0",
+  "title": "Trezi service contract 1.0",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "counter": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$" },
+    "version": {
+      "type": "object",
+      "properties": { "major": { "const": 1 }, "minor": { "const": 0 } },
+      "required": ["major", "minor"],
+      "additionalProperties": false
+    },
+    "revision": {
+      "type": "object",
+      "properties": {
+        "epoch": { "$ref": "#/$defs/uuid" },
+        "counter": { "$ref": "#/$defs/counter" }
+      },
+      "required": ["epoch", "counter"],
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "project": { "$ref": "#/$defs/uuid" },
+        "chat": { "$ref": "#/$defs/uuid" },
+        "turn": { "$ref": "#/$defs/uuid" },
+        "checkout": { "$ref": "#/$defs/uuid" },
+        "document": { "$ref": "#/$defs/uuid" }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "capability": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9.-]{0,79}$" },
+        "version": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "required": ["name", "version"],
+      "additionalProperties": false
+    },
+    "cursor": {
+      "type": "object",
+      "properties": {
+        "serviceEpoch": { "$ref": "#/$defs/uuid" },
+        "sequence": { "$ref": "#/$defs/counter" }
+      },
+      "required": ["serviceEpoch", "sequence"],
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "invalidRequest",
+            "unsupportedVersion",
+            "unsupportedCapability",
+            "unauthorized",
+            "notFound",
+            "conflict",
+            "busy",
+            "cancelled",
+            "deadlineExceeded",
+            "unavailable",
+            "ioFailure",
+            "providerFailure",
+            "recoveryRequired",
+            "idempotencyMismatch"
+          ]
+        },
+        "message": { "type": "string", "maxLength": 1024 },
+        "retryable": { "type": "boolean" },
+        "operationID": { "$ref": "#/$defs/uuid" },
+        "currentRevision": { "$ref": "#/$defs/revision" },
+        "recoveryID": { "$ref": "#/$defs/uuid" }
+      },
+      "required": ["code", "message", "retryable"],
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "connection": { "$ref": "#/$defs/uuid" },
+        "requestID": { "$ref": "#/$defs/uuid" },
+        "operationID": { "$ref": "#/$defs/uuid" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "mode": { "enum": ["read", "mutation"] },
+        "expectedRevision": { "$ref": "#/$defs/revision" },
+        "timeoutMilliseconds": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "service": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9.-]{0,79}$" },
+        "method": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9.-]{0,79}$" },
+        "body": { "type": "object" }
+      },
+      "required": [
+        "connection",
+        "requestID",
+        "operationID",
+        "scope",
+        "mode",
+        "service",
+        "method",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "connection": { "$ref": "#/$defs/uuid" },
+        "requestID": { "$ref": "#/$defs/uuid" },
+        "operationID": { "$ref": "#/$defs/uuid" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": { "kind": { "const": "succeeded" }, "payload": {} },
+              "required": ["kind", "payload"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "failed" },
+                "payload": { "$ref": "#/$defs/failure" }
+              },
+              "required": ["kind", "payload"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["connection", "requestID", "operationID", "scope", "result"],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "serviceEpoch": { "$ref": "#/$defs/uuid" },
+        "sequence": { "$ref": "#/$defs/counter" },
+        "operationID": { "$ref": "#/$defs/uuid" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "name": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9.-]{0,79}$" },
+        "value": { "type": "object" }
+      },
+      "required": ["serviceEpoch", "sequence", "scope", "name", "value"],
+      "additionalProperties": false
+    },
+    "hello": {
+      "type": "object",
+      "properties": {
+        "connection": { "$ref": "#/$defs/uuid" },
+        "role": { "enum": ["ui", "legacy", "provider", "parser"] },
+        "versions": { "type": "array", "items": { "$ref": "#/$defs/version" }, "minItems": 1 },
+        "schemaHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability" } }
+      },
+      "required": ["connection", "role", "versions", "schemaHash", "capabilities"],
+      "additionalProperties": false
+    },
+    "helloAck": {
+      "type": "object",
+      "properties": {
+        "connection": { "$ref": "#/$defs/uuid" },
+        "version": { "$ref": "#/$defs/version" },
+        "serviceEpoch": { "$ref": "#/$defs/uuid" },
+        "capabilities": { "type": "array", "items": { "$ref": "#/$defs/capability" } },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "maxBytes": { "type": "integer", "minimum": 1, "maximum": 65536 },
+            "maxDepth": { "type": "integer", "minimum": 1, "maximum": 24 },
+            "maxCollection": { "type": "integer", "minimum": 1, "maximum": 256 }
+          },
+          "required": ["maxBytes", "maxDepth", "maxCollection"],
+          "additionalProperties": false
+        },
+        "cursor": { "$ref": "#/$defs/cursor" }
+      },
+      "required": ["connection", "version", "serviceEpoch", "capabilities", "limits", "cursor"],
+      "additionalProperties": false
+    },
+    "cancel": {
+      "type": "object",
+      "properties": {
+        "connection": { "$ref": "#/$defs/uuid" },
+        "requestID": { "$ref": "#/$defs/uuid" },
+        "operationID": { "$ref": "#/$defs/uuid" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "target": { "$ref": "#/$defs/uuid" }
+      },
+      "required": ["connection", "requestID", "operationID", "scope", "target"],
+      "additionalProperties": false
+    },
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "scope": { "$ref": "#/$defs/scope" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "cursor": { "$ref": "#/$defs/cursor" },
+        "value": { "type": "object" }
+      },
+      "required": ["scope", "revision", "cursor", "value"],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "request" },
+        "payload": { "$ref": "#/$defs/request" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "reply" },
+        "payload": { "$ref": "#/$defs/reply" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "event" },
+        "payload": { "$ref": "#/$defs/event" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "hello" },
+        "payload": { "$ref": "#/$defs/hello" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "helloAck" },
+        "payload": { "$ref": "#/$defs/helloAck" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "cancel" },
+        "payload": { "$ref": "#/$defs/cancel" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": { "const": "snapshot" },
+        "payload": { "$ref": "#/$defs/snapshot" }
+      },
+      "required": ["version", "kind", "payload"],
+      "additionalProperties": false
+    }
+  ]
+}

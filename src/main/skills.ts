@@ -19,7 +19,10 @@ import type { SlashCommandItem } from '../shared/api'
 /** Strip matching single/double quotes around a YAML scalar. */
 const unquote = (v: string): string => {
   const t = v.trim()
-  if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
+  if (
+    t.length >= 2 &&
+    ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))
+  ) {
     return t.slice(1, -1)
   }
   return t

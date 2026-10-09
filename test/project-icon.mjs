@@ -130,7 +130,7 @@ ok(
 
 const roots = []
 const makeRoot = () => {
-  const dir = mkdtempSync(join(tmpdir(), 'praxis-icon-'))
+  const dir = mkdtempSync(join(tmpdir(), 'trezi-icon-'))
   roots.push(dir)
   return dir
 }

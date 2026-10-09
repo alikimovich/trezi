@@ -7,10 +7,12 @@
  *
  * Run with: bun test/css-values.mjs
  */
+
+// Cross-module regression (finding: options were Tailwind family names, not
+// CSS): the select options must be committable through the S1 class path.
+import { tailwindClassFor } from '../src/main/tw-styles.ts'
 import {
   BEZIER_PRESETS,
-  STYLE_GROUPS,
-  STYLE_PROP_META,
   clamp,
   clampBezier,
   clampBezierX,
@@ -22,12 +24,11 @@ import {
   normalizeMs,
   parseBezier,
   parseCssNumber,
+  STYLE_GROUPS,
+  STYLE_PROP_META,
   snapBezierPreset,
   stylePropMeta
-} from '../src/renderer/src/lib/css-values.ts'
-// Cross-module regression (finding: options were Tailwind family names, not
-// CSS): the select options must be committable through the S1 class path.
-import { tailwindClassFor } from '../src/main/tw-styles.ts'
+} from '../src/shared/css-values.ts'
 
 let failed = 0
 let count = 0
@@ -72,7 +73,7 @@ const V1 = {
     'margin-left',
     'gap'
   ],
-  appearance: ['color', 'background-color', 'border-radius', 'opacity'],
+  appearance: ['color', 'background-color', 'box-shadow', 'border-radius', 'opacity'],
   typography: [
     'font-size',
     'font-weight',
@@ -154,7 +155,7 @@ assert(m('background-color')?.control === 'color', 'background-color uses ColorC
 assert(m('font-family')?.control === 'readonly', 'font-family read-only chip')
 assert(m('display')?.control === 'readonly', 'display read-only chip')
 assert(stylePropMeta('width') === null, 'width out of scope v1')
-assert(stylePropMeta('box-shadow') === null, 'box-shadow out of scope v1')
+assert(stylePropMeta('box-shadow')?.control === 'text', 'box-shadow uses a CSS text control')
 
 // --- s/ms normalization ---
 assert(normalizeMs('0.3s') === 300, '0.3s -> 300')
@@ -231,8 +232,7 @@ assert(
 )
 // every coord must be within tolerance, not just the total
 assert(
-  snapBezierPreset({ x1: easeIn.x1, y1: easeIn.y1 + 0.05, x2: easeIn.x2, y2: easeIn.y2 }) ===
-    null,
+  snapBezierPreset({ x1: easeIn.x1, y1: easeIn.y1 + 0.05, x2: easeIn.x2, y2: easeIn.y2 }) === null,
   'one coord 0.05 off -> no snap even if others exact'
 )
 // nearest preset wins when two are in range (ease-in vs ease-in-out differ in x2)

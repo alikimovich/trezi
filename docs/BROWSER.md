@@ -1,4 +1,7 @@
-# Browser and hosted Praxis
+> **Retired:** Browser and Tailscale modes were removed with Electron. This document
+> records the previous architecture; these commands are no longer available.
+
+# Browser and hosted Trezi
 
 Status: mode 1 local-browser foundation implemented, 2026-09-03. A secure,
 single-client mode 2 slice shipped 2026-09-04; multi-client controls and a user
@@ -13,10 +16,10 @@ during the local-browser work.
 ## Running mode 1 today
 
 ```text
-praxis serve /absolute/path/to/repo
+trezi serve /absolute/path/to/repo
 ```
 
-Praxis builds when needed, starts its workspace engine without a desktop window,
+Trezi builds when needed, starts its workspace engine without a desktop window,
 opens the default browser, and keeps running until the terminal process is stopped.
 Use `--port=4173` to choose the control port or `--no-open` to print the URL without
 opening it. Omitting the repository uses the current directory.
@@ -42,24 +45,24 @@ Install Tailscale on both machines, sign them into the same tailnet, then run th
 on the workstation that owns the repository:
 
 ```text
-praxis serve /absolute/path/to/repo --remote
+trezi serve /absolute/path/to/repo --remote
 ```
 
-Praxis checks that Tailscale is connected and that Serve is enabled. The first run
+Trezi checks that Tailscale is connected and that Serve is enabled. The first run
 may print a Tailscale activation link; open it once, enable Serve for the workstation,
 and rerun the command. Copy the printed `Open once:` URL to the other machine. Remote
 mode deliberately does not open that URL on the workstation, because doing so would
 consume the single-use pairing secret before the other browser receives it.
 
 The control UI and untrusted project preview remain on separate origins. By default,
-Praxis listens only on local ports 4173 and 4174 and asks Tailscale Serve to publish
+Trezi listens only on local ports 4173 and 4174 and asks Tailscale Serve to publish
 them as tailnet-only HTTPS ports 8443 and 8444. Use `--port`, `--preview-port`, or
 `--remote-port` to resolve a conflict; the preview's remote port is always one above
 `--remote-port`. The session cookie is `Secure`, and HTTP RPC plus WebSocket upgrades
 still require the exact public origin. A reconnect cursor replays events missed while
 the remote browser sleeps or changes network.
 
-Stopping Praxis normally removes both Tailscale Serve routes and revokes the browser
+Stopping Trezi normally removes both Tailscale Serve routes and revokes the browser
 session. If the process is force-killed, clean up its two default routes without
 resetting unrelated Serve configuration:
 
@@ -68,20 +71,20 @@ tailscale serve --yes --https=8443 off
 tailscale serve --yes --https=8444 off
 ```
 
-This first mode 2 slice pairs one browser profile for one Praxis process. A connected-
+This first mode 2 slice pairs one browser profile for one Trezi process. A connected-
 client list, selective revocation, multi-client writer arbitration, and launchd/systemd
 packaging are intentionally still pending.
 
-Praxis should be able to present the same browser UI while running its workspace
+Trezi should be able to present the same browser UI while running its workspace
 engine in three places:
 
 1. **Local browser:** the browser and workspace engine run on the same machine.
-2. **Remote browser, local workspace:** Praxis and the repository run on one
+2. **Remote browser, local workspace:** Trezi and the repository run on one
    workstation; an authorized browser on another machine controls them.
 3. **Hosted workspace:** the UI and workspace engine run on remote infrastructure
    such as Railway; the repository is cloned into an isolated server workspace.
 
-The first two modes preserve Praxis's current local-repo and subscription-login
+The first two modes preserve Trezi's current local-repo and subscription-login
 model. The third is a cloud IDE and has a materially different trust, persistence,
 and credential model.
 
@@ -89,7 +92,7 @@ and credential model.
 
 ```text
                           HTTPS + WebSocket
- Browser renderer  <------------------------------>  Praxis control API
+ Browser renderer  <------------------------------>  Trezi control API
       |                                                        |
       | postMessage                                            | typed commands/events
       v                                                        v
@@ -101,11 +104,11 @@ deployment choice, not a separate UI implementation.
 
 ### Keep the current contract
 
-`src/shared/api.ts#PraxisApi` remains the source-level client contract. Add a
+`src/shared/api.ts#TreziApi` remains the source-level client contract. Add a
 serializable, schema-validated command/event protocol underneath it:
 
-- Electron adapter: `PraxisApi` -> the existing `ipcRenderer` transport.
-- Browser adapter: `PraxisApi` -> HTTP for commands/uploads and WebSocket for
+- Electron adapter: `TreziApi` -> the existing `ipcRenderer` transport.
+- Browser adapter: `TreziApi` -> HTTP for commands/uploads and WebSocket for
   agent/dev-server/preview events.
 - A browser bootstrap installs the selected adapter as `window.api`, allowing the
   renderer to migrate without rewriting every call site at once.
@@ -146,8 +149,8 @@ Electron-only edge without duplicating the DOM behavior:
    when injection is impossible.
 5. Validate both `event.origin` and an unguessable per-preview channel token.
 
-Serve preview content from an origin separate from the Praxis control UI. Project
-code is untrusted: it must not inherit Praxis cookies, read the control page, or call
+Serve preview content from an origin separate from the Trezi control UI. Project
+code is untrusted: it must not inherit Trezi cookies, read the control page, or call
 workspace APIs directly. The preview gateway must proxy HTTP and WebSocket traffic
 to the project's private dev-server port, including HMR upgrades and redirects.
 
@@ -156,7 +159,7 @@ to the project's private dev-server port, including HMR upgrades and redirects.
 The shipped command is:
 
 ```text
-praxis serve /absolute/path/to/repo
+trezi serve /absolute/path/to/repo
 ```
 
 It starts the control API, browser assets, workspace engine, and project dev server,
@@ -178,23 +181,23 @@ platform capabilities with browser fallbacks.
 ## Mode 2: remote browser controlling a local workstation
 
 This is the recommended remote mode when the repository should remain on the machine
-running Praxis. The server still binds to loopback; an authenticated private tunnel
-publishes only the Praxis HTTPS endpoint.
+running Trezi. The server still binds to loopback; an authenticated private tunnel
+publishes only the Trezi HTTPS endpoint.
 
 The first integration is **Tailscale Serve**, limited to devices/users in the same
 tailnet. It reverse-proxies two local HTTP services and provisions HTTPS, while
-tailnet policy controls which devices can reach them. Praxis also requires a
+tailnet policy controls which devices can reach them. Trezi also requires a
 single-use, per-process browser pairing as defense in depth.
 
 ```text
 Workstation                       Other computer/tablet
-repo + Praxis :4173               browser
+repo + Trezi :4173               browser
        ^                             |
        +------ private HTTPS --------+
               Tailscale Serve
 ```
 
-Avoid binding an unauthenticated Praxis server to `0.0.0.0` or exposing it by raw
+Avoid binding an unauthenticated Trezi server to `0.0.0.0` or exposing it by raw
 router port-forwarding. Possession of this UI can lead to source changes and agent
 tool execution. Tailscale Funnel is public-internet exposure and is not the default;
 if public sharing is ever supported, place a strong identity-aware access proxy in
@@ -203,7 +206,7 @@ front and issue short-lived, revocable sessions.
 Current remote-mode guarantees:
 
 - explicit opt-in (`--remote`), never automatic exposure;
-- Tailscale device authorization plus single-use Praxis pairing and exact-origin
+- Tailscale device authorization plus single-use Trezi pairing and exact-origin
   CSRF protection;
 - WebSocket reconnect and replay from a monotonic event cursor;
 - loopback-only control/preview services with separate tailnet HTTPS origins;
@@ -221,13 +224,13 @@ Official operational references:
 - [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
 - [Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel)
 
-## Mode 3: fully hosted Praxis on Railway
+## Mode 3: fully hosted Trezi on Railway
 
 ### Personal/single-user deployment
 
 A useful first hosted release can run as one authenticated Railway service:
 
-- build a Linux Docker image containing Node 22, Bun, Git, `gh`, Praxis's browser
+- build a Linux Docker image containing Node 22, Bun, Git, `gh`, Trezi's browser
   bundle, control API, and workspace supervisor;
 - listen on `0.0.0.0:$PORT` and provide `/health`;
 - attach one volume at `/data` for cloned repositories, `.git` worktrees, sessions,
@@ -330,7 +333,7 @@ the control application. The gateway must:
 
 ### Phase 0 — contract and threat model
 
-- [ ] Inventory all `PraxisApi` calls/events and classify them as core, native-only,
+- [ ] Inventory all `TreziApi` calls/events and classify them as core, native-only,
       preview-only, or hosted-disabled.
 - [ ] Define versioned command/event schemas and an authenticated workspace context.
 - [ ] Write the threat model: malicious website, malicious repository/dependency,
@@ -357,7 +360,7 @@ the control application. The gateway must:
 
 - [x] Add single-use pairing, process-lifetime revocation, and reconnect/replay.
 - [ ] Add multi-client presence, selective revocation, and single-writer coordination.
-- [x] Document/test Tailscale Serve with a loopback-bound Praxis process.
+- [x] Document/test Tailscale Serve with a loopback-bound Trezi process.
 - [ ] Package the daemon as a launchd/systemd user service.
 
 ### Phase 4 — Railway personal alpha

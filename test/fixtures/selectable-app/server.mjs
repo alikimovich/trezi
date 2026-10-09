@@ -1,6 +1,6 @@
 // Serves the selectable fixture fresh each request and prints a localhost URL
 // the way a real dev server does — so the runner's detect/launch/parse path
-// works without auth or a real framework. The page carries `data-praxis-source`
+// works without auth or a real framework. The page carries `data-trezi-source`
 // stamps so the v2 select-element flow can resolve a source location.
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'

@@ -1,42 +1,38 @@
-import { join } from 'node:path'
-import { app, ipcMain as electronIpcMain, safeStorage } from 'electron'
+import { tmpdir } from 'node:os'
+import { ipcMain as nativeIpcMain } from '../native/platform'
 import type {
   ModelCatalogInput,
   ModelCatalogResult,
   ModelChoice,
   ProviderConnection,
-  ProviderConnectionInput
+  ProviderConnectionInput,
+  ProviderLoginReport
 } from '../shared/api'
-import { discoverCodexModels } from './codex-models'
+import { withoutRejected } from './codex-seat'
+import { checkedJevKey, jevConnection } from './jev-credentials'
+import { type CatalogBackend, type CatalogModel, setModelCatalog } from './model-catalog'
 import {
-  type CatalogBackend,
-  type CatalogModel,
-  createModelCatalog,
-  type ModelCatalog,
-  setModelCatalog
-} from './model-catalog'
-import {
-  createProviderStore,
-  modelsUrl,
-  type ProviderStore,
-  parseModelCatalog,
-  type SecretCipher,
-  sameOrigin,
-  scrubSecret
-} from './providers-store'
+  codexModels,
+  modelCatalog,
+  seatLogin,
+  setProviderDataDir,
+  connectionStore as store
+} from './provider-data'
+import { modelsUrl, parseModelCatalog, sameOrigin, scrubSecret } from './providers-store'
 import type { RpcHandlerRegistry } from './rpc-router'
 
-let ipcMain: RpcHandlerRegistry = electronIpcMain
+let ipcMain: RpcHandlerRegistry = nativeIpcMain
 
 /**
  * Main-owned wiring for user-added model endpoints (v10) — the Electron half of
  * the pure `providers-store.ts` engine, mirroring the control-manifest.ts /
- * control-panels.ts split. Everything here needs `electron` (safeStorage, app
- * paths, ipcMain) or the network; everything testable without them lives next door.
+ * control-panels.ts split. Everything here needs the native platform (app paths,
+ * ipcMain) or the network; everything testable without them lives next door.
  *
  * Three jobs:
- *  1. Own the store singleton + the `safeStorage` cipher, so a key is encrypted at
- *     rest and only ever decrypted inside main.
+ *  1. Serve the connections store (`provider-data.ts`: the Swift provider owner
+ *     writes it and holds the keys), so a key is
+ *     encrypted at rest and only ever decrypted inside main.
  *  2. Probe an endpoint's `/models` (the settings dialog's "Connect" button) —
  *     one call that both validates the credential and returns the catalog.
  *  3. Build the chat picker's `ModelChoice[]`: main is now the single source of
@@ -44,57 +40,8 @@ let ipcMain: RpcHandlerRegistry = electronIpcMain
  *
  * KEY DISCIPLINE (see providers-store.ts): plaintext keys never cross IPC and
  * never enter a log line or an error string — the one door to a key is
- * `secretFor()`, used here by `catalog()` and `resolveConnection()` only.
+ * `secretFor()`, used only by main-process catalog, chat and Jev requests.
  */
-
-/**
- * `safeStorage` gives us Buffers; the store keeps plain JSON, so blobs ride as
- * base64. `available` is a GETTER on purpose: `isEncryptionAvailable()` throws
- * before the app is ready and can flip on Linux depending on the session's
- * keyring, so it has to be asked at save time rather than captured at import.
- */
-const cipher: SecretCipher = {
-  get available(): boolean {
-    try {
-      if (!safeStorage.isEncryptionAvailable()) return false
-      // On Linux `isEncryptionAvailable()` is also satisfied by the `basic_text`
-      // backend, which "encrypts" with a hardcoded, non-secret key — anything able
-      // to read providers.json could reverse it. That is not what the UI promises
-      // ("encrypted with the system keychain"), so treat it as unavailable and make
-      // the user install/unlock a real keyring rather than store a key we can only
-      // pretend is protected. The API is Linux-only, hence the optional call.
-      const backend = safeStorage.getSelectedStorageBackend?.()
-      return backend !== 'basic_text'
-    } catch {
-      return false
-    }
-  },
-  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-  decrypt: (blob: string): string | null => {
-    try {
-      return safeStorage.decryptString(Buffer.from(blob, 'base64'))
-    } catch {
-      return null
-    }
-  }
-}
-
-/**
- * The data dir is INJECTED by `registerProviderIpc` (agent.ts hands over its own
- * `dataDir()`) rather than recomputed here. Same directory either way — but
- * agent.ts's version also performs the one-time `<userData>/dsgn` → `praxis`
- * migration, gated on the praxis dir not existing yet. If this module created
- * that dir first, the migration would be skipped forever and a pre-rename user's
- * session history and worktrees would be stranded.
- */
-let getDataDir: () => string = () => join(app.getPath('userData'), 'praxis')
-let _store: ProviderStore | null = null
-const store = (): ProviderStore => (_store ??= createProviderStore(getDataDir(), cipher))
-// Same lazy shape, same reason: `getDataDir` isn't final (and `app.getPath`
-// throws) until `registerProviderIpc` has run.
-let _modelCatalog: ModelCatalog | null = null
-const modelCatalog = (): ModelCatalog =>
-  (_modelCatalog ??= createModelCatalog({ baseDir: getDataDir() }))
 
 // ---------------------------------------------------------------------------
 // Catalog probe
@@ -133,8 +80,8 @@ function statusMessage(status: number, statusText: string): string {
  */
 export async function catalog(input: ModelCatalogInput): Promise<ModelCatalogResult> {
   const draftKey = input.apiKey?.trim()
-  const stored = !draftKey && input.id ? store().get(input.id) : null
-  const key = draftKey || (input.id ? store().secretFor(input.id) : null)
+  const stored = !draftKey && input.id ? store.get(input.id) : null
+  const key = draftKey || (input.id ? await store.secretFor(input.id) : null)
   if (!key) return { ok: false, models: [], error: 'No API key — enter one to connect.' }
 
   // A stored key may only ever be sent to its own stored endpoint (see above).
@@ -213,8 +160,8 @@ export async function catalog(input: ModelCatalogInput): Promise<ModelCatalogRes
 // Built-in seats: live model discovery
 //
 // The halves this orchestrates live elsewhere: `model-catalog.ts` (pure — the
-// parsers and the TTL/disk cache) and `codex-models.ts` (finding and running the
-// CLI). What's here is WHEN to ask: one probe in flight, a floor between
+// parsers and the TTL/disk cache) and the provider owner (running the CLI probe,
+// `ProviderData.swift`). What's here is WHEN to ask: one probe in flight, a floor between
 // attempts, never on the render path. The Claude half needs no scheduler —
 // `backends/claude.ts` volunteers its answer whenever a session exists.
 // ---------------------------------------------------------------------------
@@ -226,6 +173,10 @@ const CODEX_RETRY_MS = 5 * 60_000
 /** How long a COLD `providers:choices` may wait on the first probe (see the IPC
  *  handler). Only ever paid once, before any list has been cached to disk. */
 const COLD_START_WAIT_MS = 2_500
+/** How often a running app checks whether the daily refresh is due (LKM-164): an app
+ *  left open for days still notices a new model. The probe itself runs only once the
+ *  cached list is a day old (`CATALOG_TTL_MS`). */
+const REFRESH_CHECK_MS = 60 * 60_000
 
 let codexProbe: Promise<void> | null = null
 let codexProbedAt = 0
@@ -245,12 +196,13 @@ function refreshCodexModels(): Promise<void> {
   }
   if (codexProbedAt && Date.now() - codexProbedAt < CODEX_RETRY_MS) return Promise.resolve()
   codexProbedAt = Date.now()
-  codexProbe = discoverCodexModels()
+  codexProbe = codexModels()
     .then((models) => {
-      modelCatalog().set('codex', models) // a no-op for the empty (failed) list
+      // A no-op for the empty (failed) list. Models this login rejected stay out.
+      modelCatalog().set('codex', withoutRejected(models))
     })
     .catch(() => {
-      /* discoverCodexModels already swallows; belt-and-braces */
+      /* codexModels already swallows; belt-and-braces */
     })
     .finally(() => {
       codexProbe = null
@@ -282,26 +234,24 @@ const DEFAULT_MODEL = 'default'
  * models` and the Agent SDK's `Query.supportedModels()` — and the answer is
  * cached to disk, so these arrays should be reached ~once per install at most.
  *
- * They are a snapshot of what discovery returned on 2026-08-07 and WILL rot.
+ * They are a snapshot of the current families (LKM-164, 2026-10-05) and WILL rot.
  * When they're wrong the seat is almost certainly unusable anyway (no working
  * CLI / never-authenticated account), so they exist to keep the picker from
  * rendering empty, not to be right.
  */
 const CLAUDE_FALLBACK: Array<[modelId: string, label: string]> = [
-  // Left exactly as the curated array had them (minus the sentinel, which
-  // `builtinChoices` now prepends): these short aliases are what shipped, and a
-  // fallback that quietly drops a model the user could pick before would be its
-  // own regression. Discovery returns the fuller ids (`claude-fable-5[1m]`, …).
+  // Aliases, not ids: the bundled CLI resolves each to its family's current model,
+  // so they stay current as long as the SDK does (docs/PROVIDERS.md, "Bumping the
+  // SDKs"). The chat shows what one resolved to (LKM-164).
   ['fable', 'Fable'],
   ['opus', 'Opus'],
   ['sonnet', 'Sonnet'],
   ['haiku', 'Haiku']
 ]
 const CODEX_FALLBACK: Array<[modelId: string, label: string]> = [
-  ['gpt-5.6-sol', 'GPT-5.6-Sol'],
-  ['gpt-5.6-terra', 'GPT-5.6-Terra'],
-  ['gpt-5.6-luna', 'GPT-5.6-Luna'],
-  ['gpt-5.5', 'GPT-5.5']
+  // What a ChatGPT login offers today.
+  ['gpt-6-sol', 'GPT-6-Sol'],
+  ['gpt-6-astra', 'GPT-6-Astra']
 ]
 
 /**
@@ -343,7 +293,7 @@ function prettyModelLabel(id: string, siblings: string[]): string {
  * leads with `{value: 'default', displayName: 'Default (recommended)'}`, whose
  * value collides exactly with ours. Two choices sharing a `value` would be a
  * duplicate React key and an ambiguous `resolveChoice` match, so a discovered
- * `default` is dropped in favour of praxis's own entry — which the renderer and
+ * `default` is dropped in favour of trezi's own entry — which the renderer and
  * `agentModelId` ("modelId === 'default' ⇒ send no model") depend on being first.
  */
 function builtinChoices(
@@ -359,9 +309,10 @@ function builtinChoices(
   } catch {
     /* data dir not resolvable yet — use the fallback */
   }
-  const models = discovered?.length
+  const listed = discovered?.length
     ? discovered
     : fallback.map(([id, label]) => ({ id, label }) as CatalogModel)
+  const models = provider === 'codex' ? withoutRejected(listed) : listed
   return [
     { id: DEFAULT_MODEL, label: 'Default' },
     ...models.filter((m) => m.id !== DEFAULT_MODEL)
@@ -378,7 +329,7 @@ function builtinChoices(
  *  totality rule as `builtinChoices`: `choices()` must never throw. */
 function connections(): ProviderConnection[] {
   try {
-    return store().list()
+    return store.list()
   } catch {
     return []
   }
@@ -419,6 +370,11 @@ export function choices(): ModelChoice[] {
   return out
 }
 
+export async function resolveSavedJevKey(connectionId?: string): Promise<string | undefined> {
+  const connection = jevConnection(store.list(), connectionId)
+  return connection && checkedJevKey(await store.secretFor(connection.id))
+}
+
 /**
  * Where a connection points and what it authenticates with — the seam
  * `backends/codex.ts` imports to aim the Codex SDK at a user endpoint. Null when
@@ -427,26 +383,26 @@ export function choices(): ModelChoice[] {
  * the harness's own subscription, which would silently bill the wrong account and
  * answer with a different model than the picker shows.
  */
-export function resolveConnection(
+export async function resolveConnection(
   id: string
-): { baseUrl: string; apiKey: string; wireApi: 'responses' } | null {
-  const conn = store().get(id)
+): Promise<{ baseUrl: string; apiKey: string; wireApi: 'responses' } | null> {
+  const conn = store.get(id)
   if (!conn) return null
-  const apiKey = store().secretFor(id)
+  const apiKey = await store.secretFor(id)
   if (!apiKey) return null
   return { baseUrl: conn.baseUrl, apiKey, wireApi: conn.wireApi }
 }
 
 /**
  * `providers:*` IPC. `dataDirFn` is agent.ts's `dataDir` — see the note on
- * `getDataDir` for why it's injected instead of recomputed.
+ * `getDataDir` in provider-data.ts for why it's injected instead of recomputed.
  */
 export function registerProviderIpc(
   dataDirFn: () => string,
-  router: RpcHandlerRegistry = electronIpcMain
+  router: RpcHandlerRegistry = nativeIpcMain
 ): void {
   ipcMain = router
-  getDataDir = dataDirFn
+  setProviderDataDir(dataDirFn)
   // From here on `getDataDir` is final, so the catalog can be built and shared.
   // `backends/claude.ts` feeds the Claude half through it (`recordClaudeModels`)
   // — the SDK will only name its models from inside a live query.
@@ -455,27 +411,63 @@ export function registerProviderIpc(
   // picker render: the probe is a ~1s subprocess, and this runs long before a
   // window exists, so by the time the renderer asks the answer is already there.
   void refreshCodexModels()
+  setInterval(() => void refreshCodexModels(), REFRESH_CHECK_MS).unref?.()
 
-  ipcMain.handle('providers:list', (): ProviderConnection[] => store().list())
+  ipcMain.handle('providers:list', (): ProviderConnection[] => store.list())
 
   // save() throws a user-readable message for a bad draft or an un-storable key
   // (no OS keyring) — turn it into the contract's { ok, error } instead of an IPC
   // rejection, so the dialog can render it inline.
   ipcMain.handle(
     'providers:save',
-    (
+    async (
       _e,
       input: ProviderConnectionInput
-    ): { ok: boolean; connection?: ProviderConnection; error?: string } => {
+    ): Promise<{ ok: boolean; connection?: ProviderConnection; error?: string }> => {
       try {
-        return { ok: true, connection: store().save(input) }
+        return { ok: true, connection: await store.save(input) }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }
     }
   )
 
-  ipcMain.handle('providers:remove', (_e, id: string): void => store().remove(id))
+  ipcMain.handle('providers:remove', (_e, id: string): Promise<void> => store.remove(id))
+
+  // The Claude subscription token (LKM-119): saved by the service, never read back.
+  ipcMain.handle(
+    'providers:seat-token-status',
+    async (): Promise<{ hasToken: boolean }> => ({ hasToken: await seatLogin.hasToken() })
+  )
+  ipcMain.handle(
+    'providers:seat-token-save',
+    async (_e, token: string): Promise<{ ok: boolean; hasToken?: boolean; error?: string }> => {
+      try {
+        return { ok: true, hasToken: await seatLogin.save(typeof token === 'string' ? token : '') }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+  // "Check provider login": run in a helper launched like a chat's, in `root` (a chat's
+  // project) or, from Settings, a temporary folder. Never the home folder: the CLI looks
+  // through its cwd, and from `$HOME` that made macOS ask for Photos access (LKM-137; the
+  // service also refuses a home cwd, `ProviderHelperProcess.workingDirectory`).
+  ipcMain.handle(
+    'providers:check-login',
+    async (_e, provider: string, root?: string): Promise<ProviderLoginReport> => {
+      const id = typeof provider === 'string' ? provider : 'claude'
+      try {
+        return await seatLogin.check(id, typeof root === 'string' && root ? root : tmpdir())
+      } catch (err) {
+        return {
+          provider: id,
+          loggedIn: null,
+          detail: err instanceof Error ? err.message : String(err)
+        }
+      }
+    }
+  )
 
   ipcMain.handle(
     'providers:catalog',

@@ -1,0 +1,175 @@
+import assert from 'node:assert/strict'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { NativeSheetAction } from '../shared/native-sheet'
+import type { NativeBridge } from './bridge'
+import { nativeChat } from './chat-runtime'
+import { showProjectMemoryNote } from './memory-note'
+import { NativeSheetController } from './sheets-runtime'
+import { waitFor } from './smoke-wait'
+import { NativeSupportSheets } from './support-sheets'
+import { nativeWorkspace } from './workspace-runtime'
+
+/** LKM-170: app alerts are NSAlert-style sheets attached to the main window, and sent
+ *  feedback is a self-dismissing toast, never a titled window. The feedback path runs on
+ *  its own controller with GitHub and the browser stubbed, so no issue is filed. */
+export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
+  const until = async (method: string, check: (state: any) => boolean, label: string) => {
+    let state: any
+    for (let i = 0; i < 100; i++) {
+      state = await host.request(method)
+      if (check(state)) return state
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    throw new Error(`${label}: ${JSON.stringify(state)}`)
+  }
+  const capture = async (method: string, name: string) => {
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    writeFileSync(join(artifacts, name), Buffer.from(await host.request(method), 'base64'))
+  }
+  // Sized to content: the sheet's content is the alert's height, give or take a point.
+  const fitted = (s: any) => s.height > 0 && Math.abs(s.height - s.contentHeight) <= 2
+  const standard = async (label: string) => {
+    const state = await until('sheetInspect', fitted, `${label} is not sized to content`)
+    assert.ok(state.alert && state.attached, `${label} is a sheet on the main window`)
+    assert.ok(!state.titled && !state.closable && !state.resizable, `${label} has no window chrome`)
+    assert.ok(state.height < 320, `${label} has no spare space: ${JSON.stringify(state)}`)
+    return state
+  }
+
+  // A production alert: Trezi → Check for updates (nothing runs until its button).
+  host.emit('menu', { action: 'updates' })
+  await until(
+    'sheetInspect',
+    (s) => s.visible && s.title === 'Trezi updates',
+    'Updates alert did not open'
+  )
+  const updates = await standard('Updates alert')
+  assert.equal(updates.defaultAction, 'check', 'Return checks for updates')
+  assert.equal(updates.cancelAction, 'cancel', 'Esc closes the alert')
+  assert.deepEqual(updates.actions, ['cancel', 'check'], 'An alert keeps its visible Close')
+  await capture('captureSheet', 'alert-updates.png')
+  await host.request('sheetPerform', { action: 'cancel' })
+  await until('sheetInspect', (s) => !s.visible, 'Updates alert did not close')
+
+  // Feedback: a failed post shows the standard error sheet, Retry posts it and shows the toast.
+  const posted: unknown[] = [],
+    opened: string[] = []
+  let fail = true
+  const sheets = new NativeSheetController(
+    host,
+    nativeWorkspace,
+    nativeChat,
+    async (channel, input) => {
+      assert.equal(channel, 'feedback:submit')
+      posted.push(input)
+      return fail
+        ? { ok: false, error: 'gh: To get started with GitHub CLI, please run: gh auth login' }
+        : { ok: true, url: 'https://github.com/alikimovich/trezi/issues/170' }
+    }
+  )
+  const support = new NativeSupportSheets(
+    sheets,
+    async () => null,
+    async (url) => opened.push(url)
+  )
+  const onSheet = (action: NativeSheetAction) => void sheets.action(action)
+  const onToast = (action: { id: string; index?: number }) => void sheets.toastAction(action)
+  host.on('sheet-action', onSheet)
+  host.on('toast-action', onToast)
+  try {
+    await support.feedback()
+    await until('sheetInspect', (s) => s.visible && s.title === 'Send feedback', 'Feedback form')
+    await host.request('sheetPerform', { action: 'send', values: { body: 'Smoke feedback' } })
+    await until(
+      'sheetInspect',
+      (s) => s.visible && s.title === 'Couldn’t send feedback' && !s.busy,
+      'Feedback error sheet did not open'
+    )
+    const failed = await standard('Feedback error sheet')
+    assert.deepEqual(failed.actions, ['copy', 'cancel', 'retry'])
+    assert.equal(failed.defaultAction, 'retry', 'Return retries')
+    assert.equal(failed.cancelAction, 'cancel', 'Esc cancels')
+    assert.match(failed.detail, /gh auth login/)
+    await capture('captureSheet', 'alert-feedback-error.png')
+    fail = false
+    await host.request('sheetPerform', { action: 'retry' })
+    await until('sheetInspect', (s) => !s.visible, 'Retry did not close the error sheet')
+    assert.equal(posted.length, 2, 'Retry posts the same feedback once more')
+    assert.deepEqual(posted[1], posted[0])
+    const toast = await until('toastInspect', (s) => s.visible, 'Feedback toast did not show')
+    assert.equal(toast.message, 'Feedback sent')
+    assert.equal(toast.action, 'View on GitHub')
+    assert.ok(
+      toast.inWindow && toast.pending,
+      'The toast is in the main window and dismisses itself'
+    )
+    assert.ok(toast.hitToast, 'The native toast takes clicks across its frame')
+    assert.equal(toast.cover.length, 1, 'The visible toast covers one preview rect')
+    assert.deepEqual(toast.sentCover, toast.cover, 'The host sent the laid-out toast rect')
+    const pageCover = async () =>
+      host.request('evaluate', {
+        view: 'preview',
+        isolated: true,
+        code: `([...document.querySelector('[data-trezi-cover]')?.shadowRoot?.children ?? []].map(e => { const r = e.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }))`
+      })
+    const shields = await waitFor(async () => {
+      const value = await pageCover()
+      return Array.isArray(value) && value.length === 1 && value
+    }, 'toast shield in the preview')
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      assert.ok(
+        Math.abs(shields[0][key] - toast.cover[0][key]) <= 1,
+        `toast shield ${key} matches its native frame`
+      )
+    await capture('captureToast', 'feedback-toast.png')
+    await host.request('toastPerform')
+    await until('toastInspect', (s) => !s.visible, 'The toast action did not dismiss it')
+    await waitFor(
+      async () => (await pageCover()).length === 0,
+      'toast shield cleared after dismissal'
+    )
+    await until('sheetInspect', () => opened.length === 1, 'View on GitHub did not open')
+    assert.deepEqual(opened, ['https://github.com/alikimovich/trezi/issues/170'])
+
+    // LKM-177: the memory note after an automatic update offers View and Undo; Undo is
+    // stubbed, so the profile's memory is untouched.
+    const undone: string[] = []
+    const memory = (content: string, digest: string) => ({ content, digest, updatedAt: 0 })
+    showProjectMemoryNote(
+      sheets,
+      {
+        root: '/smoke/project',
+        before: memory('- Answer briefly.', 'a'),
+        after: memory('- Answer briefly.\n- Check the mobile width after UI changes.', 'b')
+      },
+      {
+        view: () => {},
+        undo: async (update) => {
+          undone.push(update.before.content)
+          return memory(update.before.content, 'c')
+        }
+      }
+    )
+    const note = await until(
+      'toastInspect',
+      (s) => s.visible && s.message === 'Project memory updated: +1 rule',
+      'Memory note did not show'
+    )
+    assert.deepEqual(note.actions, ['View', 'Undo'], 'The memory note offers View and Undo')
+    assert.ok(note.hitToast && note.pending, 'The memory note takes clicks and dismisses itself')
+    await capture('captureToast', 'memory-note-toast.png')
+    await host.request('toastPerform', { index: 1 })
+    await until('toastInspect', () => undone.length === 1, 'Undo did not run')
+    assert.deepEqual(undone, ['- Answer briefly.'], 'Undo restores the memory before the update')
+    await until(
+      'toastInspect',
+      (s) => s.visible && s.message === 'Project memory change undone',
+      'Undo did not confirm itself'
+    )
+  } finally {
+    host.off('sheet-action', onSheet)
+    host.off('toast-action', onToast)
+    sheets.close()
+  }
+}

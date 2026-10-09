@@ -37,7 +37,7 @@ export interface GithubConnectResult {
   error?: string
 }
 
-const PRAXIS_PREFIX = 'praxis/'
+const TREZI_PREFIX = 'trezi/'
 
 /**
  * Coerce a folder name into a valid GitHub repo name: lowercase, only
@@ -68,7 +68,7 @@ export interface ConnectPlan {
 }
 
 /**
- * Decide the push plan for Connect. A praxis work branch (`praxis/main`) maps to
+ * Decide the push plan for Connect. A trezi work branch (`trezi/main`) maps to
  * its clean base (`main`): when the base is an ancestor of the work branch (the
  * scaffold case), fast-forward the base up to the work and push both, so the
  * repo's default branch already shows what the user built. If the base has
@@ -77,12 +77,24 @@ export interface ConnectPlan {
  * itself.
  */
 export function resolveConnectPlan(current: string, baseIsAncestor: boolean): ConnectPlan {
-  if (!current.startsWith(PRAXIS_PREFIX)) {
+  if (!current.startsWith(TREZI_PREFIX) && !current.startsWith('praxis/')) {
     return { defaultBranch: current, fastForwardBase: false, pushBranches: [current] }
   }
-  const base = current.slice(PRAXIS_PREFIX.length) || 'main'
+  const base = current.replace(/^(trezi|praxis)\//, '') || 'main'
   if (baseIsAncestor) {
     return { defaultBranch: base, fastForwardBase: true, pushBranches: [base, current] }
   }
   return { defaultBranch: current, fastForwardBase: false, pushBranches: [current] }
+}
+
+/** Resolve the same legacy/current base before performing the ancestry probe. */
+export async function planGitHubConnection(
+  current: string,
+  isAncestor: (base: string, branch: string) => Promise<boolean>
+): Promise<ConnectPlan> {
+  const base = /^(trezi|praxis)\//.test(current)
+    ? current.replace(/^(trezi|praxis)\//, '') || 'main'
+    : current
+  const ancestor = base !== current && (await isAncestor(base, current))
+  return resolveConnectPlan(current, ancestor)
 }

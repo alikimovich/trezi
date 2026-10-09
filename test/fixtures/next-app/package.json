@@ -1,0 +1,27 @@
+{
+  "name": "trezi-next-integration",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "@next/mdx": "16.1.6",
+    "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "trezi-fixture-ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}

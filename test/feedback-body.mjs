@@ -17,7 +17,7 @@ assert.ok(title.endsWith('…'), 'truncation ellipsis')
 // --- Body: bare feedback + footer, no optional sections. ---
 let body = buildFeedbackBody({ body: 'please fix' })
 assert.ok(body.includes('please fix'), 'feedback text kept')
-assert.ok(body.includes('Sent from Praxis'), 'footer present')
+assert.ok(body.includes('Sent from Trezi'), 'footer present')
 assert.ok(!body.includes('<details>'), 'no details when nothing attached')
 
 // Empty feedback still yields a placeholder, never an empty body.
@@ -27,7 +27,7 @@ assert.ok(body.includes('no description provided'), 'empty-body placeholder')
 // --- Conversation + screenshot render as collapsed details. ---
 body = buildFeedbackBody({
   body: 'hi',
-  conversation: 'You: hello\n\nPraxis: hi',
+  conversation: 'You: hello\n\nTrezi: hi',
   screenshot: 'data:image/jpeg;base64,QUJD'
 })
 assert.ok(body.includes('Conversation transcript'), 'conversation summary')

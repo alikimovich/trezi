@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -11,18 +11,20 @@ import { join } from 'node:path'
  * The two harnesses can both be ASKED — `codex debug models` prints its whole
  * model table as JSON, and the Claude Agent SDK's `Query.supportedModels()`
  * returns the same list the `/model` menu shows — so this module holds the pure
- * half of doing that: the parsers, plus a TTL cache that persists to disk.
+ * half of doing that: the parsers, plus a TTL cache over the file the service's
+ * provider owner persists.
  *
  * Pure on purpose (the `codex-retry.ts` / `providers-store.ts` pattern): NO
  * electron import, an injected `baseDir` and an injected clock, so the whole
  * thing unit-tests in the bun tier (test/model-catalog.mjs). The impure parts sit
- * around it — `codex-models.ts` finds and runs the CLI, `providers.ts` resolves
+ * around it — the provider owner runs the CLI probe (`ProviderData.swift`) and writes
+ * the cache, `providers.ts` resolves
  * the data dir, schedules the refresh and assembles `ModelChoice[]`, and
  * `backends/claude.ts` feeds the Claude side through `recordClaudeModels` once a
  * live query exists.
  *
- * NOTHING here throws. A model list is a nicety; a parse failure, an unwritable
- * cache dir or a hand-mangled cache file must degrade to "we don't know yet"
+ * NOTHING here throws. A model list is a nicety; a parse failure, a refused
+ * write or a hand-mangled cache file must degrade to "we don't know yet"
  * (→ the caller's last-resort curated list), never break the picker or a turn.
  */
 
@@ -39,13 +41,13 @@ export type CatalogBackend = 'claude' | 'codex'
 /**
  * How long a discovered list is trusted before a background refresh is due.
  *
- * Six hours is the balance between "the day OpenAI ships gpt-5.7 the picker
- * notices without a reinstall" and "we don't spawn a CLI on every app launch".
+ * One day (LKM-164): a new model shows up the day after it ships, without a
+ * reinstall, and no CLI is spawned or list rewritten more than once a day.
  * Staleness never HIDES the cached list (see `ModelCatalog.get`) — it only asks
  * the caller to refresh behind it, so the TTL costs the user nothing when it
- * expires at an awkward moment.
+ * expires at an awkward moment. A bundled SDK/CLI bump does hide it: see `harness`.
  */
-export const CATALOG_TTL_MS = 6 * 60 * 60 * 1000
+export const CATALOG_TTL_MS = 24 * 60 * 60 * 1000
 
 /** Well past anything this writes (two lists of ~10 short strings). A bigger
  *  file isn't a big cache, it's a corrupt one. */
@@ -115,7 +117,7 @@ export function parseCodexModels(json: unknown): CatalogModel[] {
  * menu shows them, and there's no priority field to re-derive that from.
  *
  * Note the SDK's list LEADS with its own `{value: 'default'}` sentinel — the
- * exact string praxis uses for "omit the model, use the account default". It is
+ * exact string trezi uses for "omit the model, use the account default". It is
  * kept here (this module reports what the harness said) and dropped by the
  * caller, which prepends its own sentinel; see `providers.ts#builtinChoices`.
  */
@@ -163,6 +165,8 @@ export interface ModelCatalog {
 interface CacheEntry {
   at: number
   models: CatalogModel[]
+  /** The bundled harness that produced the list (`harnessStamp`); absent before LKM-164. */
+  harness?: string
 }
 
 interface CacheFile {
@@ -171,6 +175,40 @@ interface CacheFile {
 }
 
 const BACKENDS: CatalogBackend[] = ['claude', 'codex']
+
+/** The bundled packages that decide what a seat's model ids mean: the SDK and the CLI
+ *  it runs (the Claude CLI ships inside its SDK at the same version). */
+export const HARNESS_PACKAGES: Record<CatalogBackend, string[]> = {
+  claude: ['@anthropic-ai/claude-agent-sdk'],
+  codex: ['@openai/codex-sdk', '@openai/codex']
+}
+
+/** `pkg@version` for each of a seat's harness packages that `version` knows; '' when none. */
+export function harnessStamp(
+  backend: CatalogBackend,
+  version: (pkg: string) => string | null | undefined
+): string {
+  return HARNESS_PACKAGES[backend]
+    .map((pkg) => {
+      const v = version(pkg)
+      return v ? `${pkg}@${v}` : ''
+    })
+    .filter(Boolean)
+    .join(' ')
+}
+
+/** A package's version from `<root>/node_modules`, read directly: both SDKs' `exports`
+ *  hide `package.json` from `require.resolve`. Null when it is missing or unreadable. */
+export function installedVersion(root: string, pkg: string): string | null {
+  try {
+    const { version } = JSON.parse(
+      readFileSync(join(root, 'node_modules', pkg, 'package.json'), 'utf8')
+    ) as { version?: unknown }
+    return typeof version === 'string' && version ? version : null
+  } catch {
+    return null
+  }
+}
 
 /**
  * A TTL cache over `<baseDir>/model-catalog.json`.
@@ -188,12 +226,34 @@ export function createModelCatalog(opts: {
   baseDir: string
   now?: () => number
   ttlMs?: number
+  /**
+   * The bundled SDK/CLI versions per backend (`harnessStamp`). A cached list from a
+   * different harness is no list at all (LKM-164): the old CLI resolved aliases like
+   * `opus` to older models, and its list can name models the new one dropped. '' (or
+   * no option) means unknown, and then any entry is accepted.
+   */
+  harness?: (backend: CatalogBackend) => string
+  /** The file's writer: the Swift provider owner (the only one since LKM-111). False
+   *  when it could not take the write; the list then lives in memory for this run. */
+  persist: (backend: CatalogBackend, models: CatalogModel[], harness?: string) => boolean
 }): ModelCatalog {
   const file = join(opts.baseDir, 'model-catalog.json')
   const now = opts.now ?? Date.now
   const ttlMs = opts.ttlMs ?? CATALOG_TTL_MS
+  const harness = (backend: CatalogBackend): string => {
+    try {
+      return opts.harness?.(backend) ?? ''
+    } catch {
+      return ''
+    }
+  }
+  const current = (backend: CatalogBackend, entry: CacheEntry | undefined) => {
+    const stamp = harness(backend)
+    return entry && (!stamp || entry.harness === stamp) ? entry : undefined
+  }
 
-  // Read-through, once. Nothing else writes this file, so re-reading it on every
+  // Read-through, once. Only this app run writes this file (itself, or through
+  // `persist` the Swift owner it hands each list to), so re-reading it on every
   // `choices()` call would be pure syscall tax on the picker's hot path.
   let entries: Partial<Record<CatalogBackend, CacheEntry>> | null = null
 
@@ -203,6 +263,7 @@ export function createModelCatalog(opts: {
       !!e &&
       typeof e.at === 'number' &&
       Number.isFinite(e.at) &&
+      (e.harness === undefined || typeof e.harness === 'string') &&
       Array.isArray(e.models) &&
       e.models.every(
         (m) =>
@@ -212,9 +273,9 @@ export function createModelCatalog(opts: {
   }
 
   /** Any unreadable/unparseable/mis-shaped file reads as "no cache". Unlike
-   *  providers-store there is nothing to preserve here — every value is
-   *  re-derivable from the harness, so the corrupt file is simply overwritten
-   *  on the next successful discovery. */
+   *  providers.json there is nothing to preserve here — every value is
+   *  re-derivable from the harness, so the owner simply overwrites the corrupt
+   *  file on the next successful discovery. */
   const load = (): Partial<Record<CatalogBackend, CacheEntry>> => {
     if (entries) return entries
     entries = {}
@@ -235,10 +296,11 @@ export function createModelCatalog(opts: {
     return entries
   }
 
-  const get = (backend: CatalogBackend): CatalogModel[] | null => load()[backend]?.models ?? null
+  const get = (backend: CatalogBackend): CatalogModel[] | null =>
+    current(backend, load()[backend])?.models ?? null
 
   const isStale = (backend: CatalogBackend): boolean => {
-    const entry = load()[backend]
+    const entry = current(backend, load()[backend])
     if (!entry) return true
     const age = now() - entry.at
     // A negative age means the clock moved backwards (a DST/NTP correction, or a
@@ -249,20 +311,11 @@ export function createModelCatalog(opts: {
 
   const set = (backend: CatalogBackend, models: CatalogModel[]): void => {
     if (!models.length) return
-    const current = load()
-    current[backend] = { at: now(), models }
-    try {
-      mkdirSync(opts.baseDir, { recursive: true })
-      const body: CacheFile = { version: 1, entries: current }
-      // tmp+rename so a crash mid-write can't leave a half-file that then reads
-      // as corrupt on the next launch. Cheap — the file is well under a KB.
-      const tmp = `${file}.tmp`
-      writeFileSync(tmp, JSON.stringify(body), 'utf8')
-      renameSync(tmp, file)
-    } catch {
-      // A read-only or full disk costs us persistence, not correctness: the
-      // in-memory entry above still serves this whole app run.
-    }
+    const stamp = harness(backend)
+    load()[backend] = { at: now(), models, ...(stamp ? { harness: stamp } : {}) }
+    // A refused write costs persistence, not correctness: the in-memory entry above
+    // still serves this whole app run.
+    opts.persist(backend, models, stamp || undefined)
   }
 
   return { get, isStale, set }
@@ -294,12 +347,15 @@ export function setModelCatalog(catalog: ModelCatalog): void {
  * `Query.supportedModels()`. Never throws and never blocks: a session must not
  * fail, stall, or log because a dropdown wanted fresher labels. A no-op before
  * `useModelCatalog` has run (a session that somehow starts before the IPC is
- * registered) and for an empty/unparseable payload.
+ * registered), for an empty/unparseable payload, and while the cached list is
+ * fresh: every session answers, but the list is rewritten at most once a day, or
+ * at once after an SDK bump (LKM-164).
  */
 export function recordClaudeModels(raw: unknown): void {
   try {
+    if (!shared?.isStale('claude')) return
     const models = parseClaudeModels(raw)
-    if (models.length) shared?.set('claude', models)
+    if (models.length) shared.set('claude', models)
   } catch {
     /* see above — a catalog is never worth disturbing a session for */
   }

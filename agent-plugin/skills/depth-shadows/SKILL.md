@@ -3,7 +3,7 @@ name: depth-shadows
 description: Generate realistic, layered CSS box-shadows and elevation scales. Use whenever you add a shadow, elevation, or depth to a card, popover, dropdown, modal, button, or any raised surface, or the user asks for a nicer/softer/more realistic shadow or a shadow/elevation token system. Avoids the flat single-layer shadow that reads as AI-generated.
 ---
 
-# Depth & shadows in Praxis
+# Depth & shadows in Trezi
 
 A realistic cast shadow is never one `box-shadow` — it's several stacked layers
 whose offset and blur grow while opacity fades, all sharing one light-source angle.

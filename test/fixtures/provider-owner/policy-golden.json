@@ -1,0 +1,728 @@
+[
+ [
+  "open fg",
+  {
+   "ok": {
+    "tools": [
+     "project_ui_catalog",
+     "compose_project_ui",
+     "preview_location",
+     "preview_screenshot",
+     "preview_inspect",
+     "preview_evaluate",
+     "preview_console",
+     "preview_viewport",
+     "preview_speed",
+     "open_preview",
+     "reload_preview",
+     "restart_dev_server",
+     "open_code",
+     "chat_island",
+     "spring_to_css",
+     "check_contrast",
+     "fluid_clamp",
+     "color_scale",
+     "layered_shadow",
+     "line_height",
+     "list_recommended_skills",
+     "install_skills",
+     "workspace_state",
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update",
+     "publish_merge",
+     "land_now",
+     "ask_user",
+     "chat_ui"
+    ]
+   }
+  }
+ ],
+ [
+ "open bg",
+  {
+   "ok": {
+    "tools": [
+     "project_ui_catalog",
+     "compose_project_ui",
+     "preview_location",
+     "preview_screenshot",
+     "preview_inspect",
+     "preview_evaluate",
+     "preview_console",
+     "preview_viewport",
+     "preview_speed",
+     "open_preview",
+     "reload_preview",
+     "spring_to_css",
+     "check_contrast",
+     "fluid_clamp",
+     "color_scale",
+     "layered_shadow",
+     "line_height",
+     "list_recommended_skills",
+     "install_skills",
+     "workspace_state",
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update",
+     "publish_merge",
+     "land_now"
+    ]
+   }
+  }
+ ],
+ [
+  "open again",
+  {
+   "error": "conflict"
+  }
+ ],
+ [
+  "open bad id",
+  {
+   "error": "invalidRequest"
+  }
+ ],
+ [
+  "open bad provider",
+  {
+   "error": "invalidRequest"
+  }
+ ],
+ [
+  "open relative root",
+  {
+   "error": "invalidRequest"
+  }
+ ],
+ [
+  "fg AskUserQuestion {}",
+  {
+   "ok": {
+    "decision": "question"
+   }
+  }
+ ],
+ [
+  "bg AskUserQuestion {}",
+  {
+   "ok": {
+    "decision": "question"
+   }
+  }
+ ],
+ [
+  "fg mcp__trezi__preview_screenshot {}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "bg mcp__trezi__preview_screenshot {}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "fg mcp__trezi__open_code {}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "bg mcp__trezi__open_code {}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Background edits cannot navigate the user editor."
+   }
+  }
+ ],
+ [
+  "fg mcp__trezi__install_skills {}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg mcp__trezi__install_skills {}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg mcp__trezi__workspace_state {}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg mcp__trezi__workspace_state {}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg mcp__other__tool {}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg mcp__other__tool {}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg Edit {\"file_path\":\"<scratch>/wt-1/src/a.ts\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg Edit {\"file_path\":\"<scratch>/wt-1/src/a.ts\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg Edit {\"file_path\":\".trezi/notes.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The .trezi/ sidecar is managed by trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "bg Edit {\"file_path\":\".trezi/notes.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The .trezi/ sidecar is managed by trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "fg Write {\"path\":\"x/.praxis/y\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The .trezi/ sidecar is managed by trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "bg Write {\"path\":\"x/.praxis/y\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The .trezi/ sidecar is managed by trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "fg Bash {\"command\":\"cat .trezi/control-panels.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The .trezi/ sidecar is managed by trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "bg Bash {\"command\":\"cat .trezi/control-panels.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The .trezi/ sidecar is managed by trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "fg Bash {\"command\":\"ls\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg Bash {\"command\":\"ls\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg MultiEdit {\"file_path\":\"<home>/sessions/x.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Trezi's own data is managed by Trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "bg MultiEdit {\"file_path\":\"<home>/sessions/x.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Trezi's own data is managed by Trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "fg Write {\"file_path\":\"<home>/trezi/worktrees/other/a.ts\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Trezi's own data is managed by Trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "bg Write {\"file_path\":\"<home>/trezi/worktrees/other/a.ts\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Trezi's own data is managed by Trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "fg Write {\"file_path\":\"<home>/../elsewhere/a.ts\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg Write {\"file_path\":\"<home>/../elsewhere/a.ts\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg Write {\"file_path\":\"../../escape.ts\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg Write {\"file_path\":\"../../escape.ts\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg Edit {\"file_path\":5}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg Edit {\"file_path\":5}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "fg Edit {\"file_path\":null,\"path\":\"<home>/preferences.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Trezi's own data is managed by Trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "bg Edit {\"file_path\":null,\"path\":\"<home>/preferences.json\"}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Trezi's own data is managed by Trezi, not the agent."
+   }
+  }
+ ],
+ [
+  "fg Read {\"file_path\":\"<home>/sessions/x.json\"}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "bg Read {\"file_path\":\"<home>/sessions/x.json\"}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "fg Glob {\"pattern\":\"**\"}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "bg Glob {\"pattern\":\"**\"}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "fg WebFetch {\"url\":\"https://example.com\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "bg WebFetch {\"url\":\"https://example.com\"}",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "huge content",
+  {
+   "ok": {
+    "decision": "ask"
+   }
+  }
+ ],
+ [
+  "huge target",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "The request is too large for Trezi to check."
+   }
+  }
+ ],
+ [
+  "authorize fg open_code",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "authorize bg open_code",
+  {
+   "error": "unauthorized"
+  }
+ ],
+ [
+  "authorize fg chat_island",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "authorize bg chat_island",
+  {
+   "error": "unauthorized"
+  }
+ ],
+ [
+  "authorize fg preview_screenshot",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "authorize bg preview_screenshot",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "authorize fg rm_rf",
+  {
+   "error": "unauthorized"
+  }
+ ],
+ [
+  "authorize bg rm_rf",
+  {
+   "error": "unauthorized"
+  }
+ ],
+ [
+  "authorize fg compose_project_ui",
+  {
+   "error": "invalidRequest"
+  }
+ ],
+ [
+  "authorize bg compose_project_ui",
+  {
+   "error": "invalidRequest"
+  }
+ ],
+ [
+  "turn",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "settled",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "cancel answered",
+  {
+   "ok": {
+    "escalate": false
+   }
+  }
+ ],
+ [
+  "cancel again",
+  {
+   "ok": {
+    "escalate": true
+   }
+  }
+ ],
+ [
+  "late settled",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "terminal",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "resume",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "recover",
+  {
+   "ok": {
+    "provider": "claude",
+    "resume": "thread-1"
+   }
+  }
+ ],
+ [
+  "recover unknown",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "send to in-process",
+  {
+   "error": "notFound"
+  }
+ ],
+ [
+  "answer in-process",
+  {
+   "error": "notFound"
+  }
+ ],
+ [
+  "configure in-process",
+  {
+   "error": "notFound"
+  }
+ ],
+ [
+  "cancel unknown",
+  {
+   "ok": {
+    "escalate": false
+   }
+  }
+ ],
+ [
+  "snapshot",
+  [
+   {
+    "chat": "chat-1",
+    "provider": "codex",
+    "host": "bun",
+    "phase": "idle",
+    "background": true,
+    "tools": [
+     "project_ui_catalog",
+     "compose_project_ui",
+     "preview_location",
+     "preview_screenshot",
+     "preview_inspect",
+     "preview_evaluate",
+     "preview_console",
+     "preview_viewport",
+     "preview_speed",
+     "open_preview",
+     "reload_preview",
+     "spring_to_css",
+     "check_contrast",
+     "fluid_clamp",
+     "color_scale",
+     "layered_shadow",
+     "line_height",
+     "list_recommended_skills",
+     "install_skills",
+     "workspace_state",
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update",
+     "publish_merge",
+     "land_now"
+    ],
+    "resume": null,
+    "session": "bg-N"
+   },
+   {
+    "chat": "chat-1",
+    "provider": "claude",
+    "host": "bun",
+    "phase": "idle",
+    "background": false,
+    "tools": [
+     "project_ui_catalog",
+     "compose_project_ui",
+     "preview_location",
+     "preview_screenshot",
+     "preview_inspect",
+     "preview_evaluate",
+     "preview_console",
+     "preview_viewport",
+     "preview_speed",
+     "open_preview",
+     "reload_preview",
+     "restart_dev_server",
+     "open_code",
+     "chat_island",
+     "spring_to_css",
+     "check_contrast",
+     "fluid_clamp",
+     "color_scale",
+     "layered_shadow",
+     "line_height",
+     "list_recommended_skills",
+     "install_skills",
+     "workspace_state",
+     "prepare_conflict_resolution",
+     "git_sync_base",
+     "git_merge_continue",
+     "git_merge_abort",
+     "pr_status",
+     "publish_update",
+     "publish_merge",
+     "land_now",
+     "ask_user",
+     "chat_ui"
+    ],
+    "resume": "thread-1",
+    "session": "fg-N"
+   }
+  ]
+ ],
+ [
+  "close",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "permission after close",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Session no longer active."
+   }
+  }
+ ],
+ [
+  "question after close",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Session no longer active."
+   }
+  }
+ ],
+ [
+  "read after close",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "authorize after close",
+  {
+   "error": "unauthorized"
+  }
+ ]
+]

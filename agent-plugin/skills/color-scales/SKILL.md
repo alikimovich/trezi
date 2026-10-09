@@ -3,7 +3,7 @@ name: color-scales
 description: Generate perceptually-even color ramps (tints/shades) and token palettes from a seed color using OKLCH. Use whenever you build a color system, need the shades of a brand color (50–950 / 1–12 steps), create design tokens for color, or the user asks for a palette, color scale, or lighter/darker variants of a color. Pairs with contrast checking to pick accessible pairs.
 ---
 
-# Color scales in Praxis
+# Color scales in Trezi
 
 When you need shades and tints of a color — a brand ramp, a gray scale, a token
 palette — use the `color_scale` tool instead of hand-picking hex values. Eyeballed

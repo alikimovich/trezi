@@ -1,7 +1,7 @@
 // Serves the propedit fixture's index.html fresh each request and prints a
 // localhost URL the way a real dev server does — so style-edit.mjs can open
 // this fixture as a real project (select clicks + live style injection need a
-// preview). The page carries `data-praxis-source` stamps matching src/Styled.tsx.
+// preview). The page carries `data-trezi-source` stamps matching src/Styled.tsx.
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'

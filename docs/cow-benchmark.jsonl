@@ -1,18 +1,18 @@
 {"revision":"c202fcb0dce137fdef69c11530b5c3780aa8b861","rounds":5,"os":"26.4.1","arch":"arm64","bun":"1.3.13","node":"v26.7.0","filesystemType":26}
-{"scenario":"praxis","files":414,"logicalMiB":5.92}
-{"scenario":"praxis","checks":"content, untracked WIP, private writes, sync, staged state: pass"}
+{"scenario":"trezi","files":414,"logicalMiB":5.92}
+{"scenario":"trezi","checks":"content, untracked WIP, private writes, sync, staged state: pass"}
 {"scenario":"many-files","files":5414,"logicalMiB":10.58}
 {"scenario":"many-files","checks":"content, untracked WIP, private writes, sync, staged state: pass"}
 {"scenario":"large-assets","files":422,"logicalMiB":69.92}
 {"scenario":"large-assets","checks":"content, untracked WIP, private writes, sync, staged state: pass"}
-{"name":"praxis:current-create","medianMs":213.5,"minMs":196.3,"maxMs":235.5,"samplesMs":[213.5,212.3,196.3,235.5,230.4]}
-{"name":"praxis:current-unchanged-sync","medianMs":151.4,"minMs":147.9,"maxMs":233.9,"samplesMs":[233.9,151.4,148.1,147.9,166.6]}
-{"name":"praxis:current-changed-sync","medianMs":166.9,"minMs":139.7,"maxMs":206.4,"samplesMs":[206.4,139.7,166.9,150.7,168.6]}
-{"name":"praxis:cow-hybrid-create","medianMs":196,"minMs":167.5,"maxMs":418.9,"samplesMs":[418.9,254.7,167.5,196,173.6]}
-{"name":"praxis:cow-unchanged-sync","medianMs":148.2,"minMs":135.2,"maxMs":165.1,"samplesMs":[150.9,148.2,135.2,145.9,165.1]}
-{"name":"praxis:cow-changed-sync","medianMs":151.2,"minMs":135.4,"maxMs":161.5,"samplesMs":[151.8,151.2,135.4,150.7,161.5]}
-{"name":"praxis:raw-cow-source-only","medianMs":49.3,"minMs":45.8,"maxMs":95,"samplesMs":[52.8,45.8,46.9,95,49.3]}
-{"name":"praxis:capture-base","medianMs":118.4,"minMs":98.6,"maxMs":127.1,"samplesMs":[122.8,98.6,127.1,111.1,118.4]}
+{"name":"trezi:current-create","medianMs":213.5,"minMs":196.3,"maxMs":235.5,"samplesMs":[213.5,212.3,196.3,235.5,230.4]}
+{"name":"trezi:current-unchanged-sync","medianMs":151.4,"minMs":147.9,"maxMs":233.9,"samplesMs":[233.9,151.4,148.1,147.9,166.6]}
+{"name":"trezi:current-changed-sync","medianMs":166.9,"minMs":139.7,"maxMs":206.4,"samplesMs":[206.4,139.7,166.9,150.7,168.6]}
+{"name":"trezi:cow-hybrid-create","medianMs":196,"minMs":167.5,"maxMs":418.9,"samplesMs":[418.9,254.7,167.5,196,173.6]}
+{"name":"trezi:cow-unchanged-sync","medianMs":148.2,"minMs":135.2,"maxMs":165.1,"samplesMs":[150.9,148.2,135.2,145.9,165.1]}
+{"name":"trezi:cow-changed-sync","medianMs":151.2,"minMs":135.4,"maxMs":161.5,"samplesMs":[151.8,151.2,135.4,150.7,161.5]}
+{"name":"trezi:raw-cow-source-only","medianMs":49.3,"minMs":45.8,"maxMs":95,"samplesMs":[52.8,45.8,46.9,95,49.3]}
+{"name":"trezi:capture-base","medianMs":118.4,"minMs":98.6,"maxMs":127.1,"samplesMs":[122.8,98.6,127.1,111.1,118.4]}
 {"name":"many-files:current-create","medianMs":1193.1,"minMs":981.1,"maxMs":1379.4,"samplesMs":[1207.6,1054.7,1193.1,1379.4,981.1]}
 {"name":"many-files:current-unchanged-sync","medianMs":607.8,"minMs":440.7,"maxMs":763.4,"samplesMs":[638,763.4,546.8,607.8,440.7]}
 {"name":"many-files:current-changed-sync","medianMs":468.2,"minMs":408.9,"maxMs":608.6,"samplesMs":[465.8,481,408.9,468.2,608.6]}

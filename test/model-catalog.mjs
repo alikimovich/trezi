@@ -10,30 +10,54 @@
  * fields the parser reads, since each real entry also carries a multi-KB
  * `base_instructions` blob (the full payload is ~300KB). The Claude fixture is
  * the real `Query.supportedModels()` answer from the same day, including the
- * SDK's own `default` sentinel, which collides with praxis's.
+ * SDK's own `default` sentinel, which collides with trezi's.
  *
- * The clock and baseDir are injected, so TTL expiry is tested without sleeping
- * and persistence without touching userData — the whole reason this module is
- * split out of providers.ts.
+ * The clock, baseDir and persist callback are injected, so TTL expiry is tested
+ * without sleeping and persistence without touching userData or the service: the
+ * Swift provider owner writes the file (LKM-111), `ownerPersist` stands in for it.
  *
  * Run with: bun run test:model-catalog
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   CATALOG_TTL_MS,
   createModelCatalog,
+  harnessStamp,
+  installedVersion,
   parseClaudeModels,
-  parseCodexModels
+  parseCodexModels,
+  recordClaudeModels,
+  setModelCatalog
 } from '../src/main/model-catalog.ts'
 
-const base = mkdtempSync(join(tmpdir(), 'praxis-model-catalog-'))
+const base = mkdtempSync(join(tmpdir(), 'trezi-model-catalog-'))
 let failed = 0
 const ok = (cond, msg) => {
   if (!cond) {
     console.error(`FAIL: ${msg}`)
     failed++
+  }
+}
+
+// Stands in for the Swift provider owner, the only writer since LKM-111: it merges one
+// backend's entry into the versioned file the Bun reader parses on the next launch.
+const ownerPersist = (dir, now) => (backend, models) => {
+  const file = join(dir, 'model-catalog.json')
+  let doc
+  try {
+    doc = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {}
+  if (!doc || typeof doc.entries !== 'object' || Array.isArray(doc.entries))
+    doc = { version: 1, entries: {} }
+  doc.entries[backend] = { at: now(), models }
+  try {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(file, JSON.stringify(doc))
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -172,7 +196,11 @@ try {
   // --- cache: hit, expiry, persistence ---------------------------------------
   let clock = 1_000_000
   const cacheDir = join(base, 'cache')
-  const cache = createModelCatalog({ baseDir: cacheDir, now: () => clock })
+  const cache = createModelCatalog({
+    baseDir: cacheDir,
+    now: () => clock,
+    persist: ownerPersist(cacheDir, () => clock)
+  })
 
   ok(cache.get('codex') === null, 'a never-populated backend reads as null (not [])')
   ok(cache.isStale('codex') === true, 'a never-populated backend is stale — go discover')
@@ -204,7 +232,11 @@ try {
 
   // Persistence: a second catalog over the same dir sees the first one's writes,
   // which is what makes a fresh launch show real models before any session exists.
-  const reopened = createModelCatalog({ baseDir: cacheDir, now: () => clock })
+  const reopened = createModelCatalog({
+    baseDir: cacheDir,
+    now: () => clock,
+    persist: ownerPersist(cacheDir, () => clock)
+  })
   ok(
     reopened
       .get('codex')
@@ -239,7 +271,11 @@ try {
   for (const [what, body] of corruptCases) {
     const dir = mkdtempSync(join(base, 'corrupt-'))
     writeFileSync(join(dir, 'model-catalog.json'), body, 'utf8')
-    const c = createModelCatalog({ baseDir: dir, now: () => clock })
+    const c = createModelCatalog({
+      baseDir: dir,
+      now: () => clock,
+      persist: ownerPersist(dir, () => clock)
+    })
     ok(c.get('codex') === null, `${what}: degrades to empty`)
     ok(c.isStale('codex') === true, `${what}: reads as stale, so discovery reruns`)
     // …and it is recoverable: the next successful probe simply overwrites it.
@@ -260,12 +296,188 @@ try {
     }),
     'utf8'
   )
-  const half = createModelCatalog({ baseDir: halfDir, now: () => clock })
+  const half = createModelCatalog({
+    baseDir: halfDir,
+    now: () => clock,
+    persist: ownerPersist(halfDir, () => clock)
+  })
   ok(half.get('codex') === null, 'the mangled backend reads as absent')
   ok(half.get('claude')?.[0]?.id === 'sonnet', 'the intact backend is unaffected')
 
+  // --- LKM-164: one day, and only for the harness that wrote it -----------------
+  ok(CATALOG_TTL_MS === 24 * 60 * 60 * 1000, 'the background refresh is due once a day')
+
+  ok(
+    harnessStamp(
+      'codex',
+      (pkg) => ({ '@openai/codex-sdk': '0.160.1', '@openai/codex': '0.160.1' })[pkg]
+    ) === '@openai/codex-sdk@0.160.1 @openai/codex@0.160.1',
+    'the Codex stamp names the SDK and the CLI it runs'
+  )
+  ok(
+    harnessStamp('claude', (pkg) =>
+      pkg === '@anthropic-ai/claude-agent-sdk' ? '0.3.289' : null
+    ) === '@anthropic-ai/claude-agent-sdk@0.3.289',
+    'the Claude stamp names the SDK (its CLI ships inside it)'
+  )
+  ok(harnessStamp('codex', () => null) === '', 'no installed version is an unknown stamp')
+  const fakeRoot = join(base, 'checkout')
+  mkdirSync(join(fakeRoot, 'node_modules/@openai/codex'), { recursive: true })
+  writeFileSync(
+    join(fakeRoot, 'node_modules/@openai/codex/package.json'),
+    JSON.stringify({ name: '@openai/codex', version: '0.160.1' })
+  )
+  ok(installedVersion(fakeRoot, '@openai/codex') === '0.160.1', 'reads node_modules directly')
+  ok(installedVersion(fakeRoot, '@openai/codex-sdk') === null, 'a missing package is null')
+
+  // The bump this ticket ships: the checkout's SDKs are past the ones whose CLI mapped
+  // 'opus'/'sonnet' to old models, so lists cached under those are dropped on update.
+  const repo = new URL('..', import.meta.url).pathname
+  const atLeast = (version, min) => {
+    const [a, b] = [version, min].map((v) => (v ?? '0').split('.').map(Number))
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]
+    return true
+  }
+  for (const [pkg, min] of [
+    ['@anthropic-ai/claude-agent-sdk', '0.3.289'],
+    ['@openai/codex-sdk', '0.160.1'],
+    ['@openai/codex', '0.160.1']
+  ])
+    ok(atLeast(installedVersion(repo, pkg), min), `${pkg} is at least ${min}`)
+  const oldSdks = {
+    '@anthropic-ai/claude-agent-sdk': '0.3.186',
+    '@openai/codex-sdk': '0.154.0',
+    '@openai/codex': '0.154.0'
+  }
+  const upgradeDir = join(base, 'upgrade')
+  mkdirSync(upgradeDir, { recursive: true })
+  const oldEntry = (backend, models) => ({
+    at: clock,
+    models,
+    harness: harnessStamp(backend, (pkg) => oldSdks[pkg])
+  })
+  writeFileSync(
+    join(upgradeDir, 'model-catalog.json'),
+    JSON.stringify({
+      version: 1,
+      entries: { claude: oldEntry('claude', claude), codex: oldEntry('codex', codex) }
+    })
+  )
+  const upgraded = createModelCatalog({
+    baseDir: upgradeDir,
+    now: () => clock,
+    harness: (backend) => harnessStamp(backend, (pkg) => installedVersion(repo, pkg)),
+    persist: () => true
+  })
+  for (const backend of ['claude', 'codex']) {
+    ok(upgraded.get(backend) === null, `${backend}: a list cached by the old SDK is dropped`)
+    ok(upgraded.isStale(backend) === true, `${backend}: and rediscovered at once`)
+  }
+
+  let installed = { claude: 'sdk@1', codex: 'codex@1' }
+  const persisted = []
+  const stampedDir = join(base, 'stamped')
+  const stampedPersist = (backend, models, harness) => {
+    persisted.push([backend, harness])
+    const file = join(stampedDir, 'model-catalog.json')
+    let doc = { version: 1, entries: {} }
+    try {
+      doc = JSON.parse(readFileSync(file, 'utf8'))
+    } catch {}
+    doc.entries[backend] = { at: clock, models, ...(harness ? { harness } : {}) }
+    mkdirSync(stampedDir, { recursive: true })
+    writeFileSync(file, JSON.stringify(doc))
+    return true
+  }
+  const stamped = () =>
+    createModelCatalog({
+      baseDir: stampedDir,
+      now: () => clock,
+      harness: (backend) => installed[backend],
+      persist: stampedPersist
+    })
+  const first = stamped()
+  first.set('codex', codex)
+  first.set('claude', claude)
+  ok(
+    persisted.map((p) => p.join('=')).join(',') === 'codex=codex@1,claude=sdk@1',
+    'each list is persisted with the harness that produced it'
+  )
+  ok(stamped().get('codex')?.length === 6, 'the same harness reads its list back')
+  ok(stamped().isStale('codex') === false, 'and it is fresh')
+  installed = { claude: 'sdk@1', codex: 'codex@2' }
+  const bumped = stamped()
+  ok(
+    bumped.get('codex') === null,
+    'a Codex SDK/CLI bump drops the Codex list (fallback, not stale models)'
+  )
+  ok(bumped.isStale('codex') === true, 'and makes it due for discovery at once')
+  ok(bumped.get('claude')?.length === 6, 'the Claude list is unaffected by a Codex bump')
+  installed = { claude: 'sdk@2', codex: 'codex@2' }
+  ok(stamped().get('claude') === null, 'a Claude SDK bump drops the Claude list')
+  bumped.set('codex', [{ id: 'gpt-6-sol', label: 'GPT-6-Sol' }])
+  ok(stamped().get('codex')?.[0]?.id === 'gpt-6-sol', 'the new harness’s list replaces it')
+  installed = { claude: '', codex: '' }
+  ok(stamped().get('codex')?.length === 1, 'an unknown stamp accepts any entry')
+  // A pre-LKM-164 file has no stamp: it was written by an unknown (older) harness.
+  const legacyDir = mkdtempSync(join(base, 'legacy-'))
+  writeFileSync(
+    join(legacyDir, 'model-catalog.json'),
+    JSON.stringify({ version: 1, entries: { codex: { at: clock, models: codex } } })
+  )
+  const legacy = createModelCatalog({
+    baseDir: legacyDir,
+    now: () => clock,
+    harness: () => 'codex@2',
+    persist: () => true
+  })
+  ok(legacy.get('codex') === null && legacy.isStale('codex'), 'an unstamped entry is refreshed')
+  const badStamp = mkdtempSync(join(base, 'bad-stamp-'))
+  writeFileSync(
+    join(badStamp, 'model-catalog.json'),
+    JSON.stringify({ version: 1, entries: { codex: { at: clock, models: codex, harness: 7 } } })
+  )
+  ok(
+    createModelCatalog({ baseDir: badStamp, now: () => clock, persist: () => true }).get(
+      'codex'
+    ) === null,
+    'a non-string stamp is a corrupt entry'
+  )
+
+  // The daily refresh: fresh for a day, due after it.
+  installed = { claude: 'sdk@3', codex: 'codex@3' }
+  const daily = stamped()
+  daily.set('codex', codex)
+  clock += 23 * 60 * 60 * 1000
+  ok(daily.isStale('codex') === false, 'not refreshed again within the day')
+  clock += 2 * 60 * 60 * 1000
+  ok(daily.isStale('codex') === true, 'due once the day has passed')
+  ok(daily.get('codex')?.length === 6, 'the day-old list is still shown while it refreshes')
+
+  // Claude: every session answers `supportedModels()`, the list is written once a day.
+  setModelCatalog(daily)
+  persisted.length = 0
+  recordClaudeModels(CLAUDE_PAYLOAD)
+  ok(
+    persisted.length === 1 && persisted[0][1] === 'sdk@3',
+    'the first answer on a new SDK is saved'
+  )
+  recordClaudeModels([{ value: 'opus', displayName: 'Opus' }])
+  ok(persisted.length === 1, 'a second session the same day does not rewrite it')
+  ok(daily.get('claude').length === 6, 'and the list is the first answer')
+  clock += CATALOG_TTL_MS + 1
+  recordClaudeModels([{ value: 'opus', displayName: 'Opus' }])
+  ok(
+    persisted.length === 2 && daily.get('claude').length === 1,
+    'the next day’s answer replaces it'
+  )
+
   // An unwritable baseDir costs persistence, never correctness.
-  const blocked = createModelCatalog({ baseDir: join(base, 'file-not-a-dir'), now: () => clock })
+  const blocked = createModelCatalog({
+    baseDir: join(base, 'file-not-a-dir'),
+    now: () => clock,
+    persist: ownerPersist(join(base, 'file-not-a-dir'), () => clock)
+  })
   writeFileSync(join(base, 'file-not-a-dir'), 'x', 'utf8')
   blocked.set('codex', codex)
   ok(blocked.get('codex').length === 6, 'a failed write still serves the in-memory list')
@@ -274,7 +486,8 @@ try {
     console.log(
       'MODEL-CATALOG OK — real codex payload parsed (hide/list filtered, priority-ordered), ' +
         'malformed entries skipped, ModelInfo parsed, TTL hit/expiry on an injected clock, ' +
-        'persistence across processes, corrupt/hostile cache files degrade to empty and self-heal'
+        'persistence across processes, corrupt/hostile cache files degrade to empty and self-heal, ' +
+        'an SDK/CLI bump drops that seat’s list, daily refresh, Claude written once a day'
     )
   } else {
     process.exitCode = 1

@@ -3,7 +3,7 @@ name: fluid-typography
 description: Build responsive (fluid) font-size and spacing that scales smoothly with the viewport using CSS clamp(). Use whenever you set a font-size, spacing, or gap that should grow between small and large screens, or the user asks for responsive/fluid type, a type scale, or spacing that adapts to screen size. Also use to generate a whole fluid type or spacing scale.
 ---
 
-# Fluid typography & spacing in Praxis
+# Fluid typography & spacing in Trezi
 
 When a size should scale smoothly with the viewport (instead of jumping at
 breakpoints), use the `fluid_clamp` tool rather than hand-writing the `clamp()`.

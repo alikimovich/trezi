@@ -1,3 +1,7 @@
-# Append-style logs: every agent/task prepends an entry, so parallel branches
+# Append-style logs: every agent/task adds entries, so parallel branches
 # always "conflict" here. union merge keeps both sides instead of conflicting.
+# (Union can keep both versions of a line both sides edited, e.g. a TASKS
+# checkbox ticked differently — review those after a merge.)
+docs/TASKS.md merge=union
 docs/PROGRESS.md merge=union
+CHANGELOG.md merge=union

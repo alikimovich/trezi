@@ -1,8 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import type { BrowserWindow } from 'electron'
+import type { NativeView } from '../../native/platform'
 import type { AgentEvent, AgentOptions } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
-import { praxisRules } from '../rules'
+import { treziRules } from '../rules'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
 import type { ModelProvider, PendingPrompt, ProviderSession, SpawnContext } from './types'
@@ -13,12 +13,12 @@ import type { ModelProvider, PendingPrompt, ProviderSession, SpawnContext } from
  * dependency in package.json — it shells out to an external `gemini` binary that
  * most installs won't have. Because a selectable-but-missing backend is a runtime
  * trap, `pickProvider` (see ./index.ts) does NOT route to it by default: it is
- * gated behind the PRAXIS_EXPERIMENTAL_GEMINI=1 opt-in env flag. Do not add a Gemini
+ * gated behind the TREZI_EXPERIMENTAL_GEMINI=1 opt-in env flag. Do not add a Gemini
  * SDK / wire this into the default provider list without revisiting that gate.
  *
  * Auth is the user's **Google account** ("Login with Google": run `gemini` once and
  * sign in) — NO API key. Gemini edits the repo with its own tools; we just map its
- * headless JSONL event stream to praxis's `AgentEvent` stream.
+ * headless JSONL event stream to trezi's `AgentEvent` stream.
  *
  * Each turn spawns `gemini -p <prompt> --output-format stream-json` in the repo and
  * streams its JSONL events (`init`/`message`/`tool_use`/`tool_result`/`error`/
@@ -32,9 +32,9 @@ import type { ModelProvider, PendingPrompt, ProviderSession, SpawnContext } from
 
 // Overridable so tests can force the CLI-absent path even on machines where a
 // real `gemini` is installed (provider-seam asserts the fail-soft behavior).
-const GEMINI_BIN = process.env.PRAXIS_GEMINI_BIN || 'gemini'
+const GEMINI_BIN = process.env.TREZI_GEMINI_BIN || 'gemini'
 
-/** Map one parsed Gemini JSONL event to a praxis AgentEvent (or null to ignore). */
+/** Map one parsed Gemini JSONL event to a trezi AgentEvent (or null to ignore). */
 function mapEvent(ev: unknown): AgentEvent | null {
   const e = ev as Record<string, unknown>
   const type = e?.type as string | undefined
@@ -67,7 +67,7 @@ function mapEvent(ev: unknown): AgentEvent | null {
 async function startSession(
   root: string,
   options: AgentOptions,
-  getWindow: () => BrowserWindow | null,
+  getWindow: () => NativeView | null,
   // v9 resume/multi-chat: Gemini has no resume primitive here (headless `-p` runs
   // don't carry a session id at all yet) — accept the context and no-op the resume;
   // `emitKey` is still honored so an additional live chat routes to its own slice.
@@ -85,7 +85,7 @@ async function startSession(
   let disposed = false
   let aborted = false
   let child: ChildProcessWithoutNullStreams | null = null
-  // praxis rules (v8 R): no system-prompt arg here, so prepend them to the first turn.
+  // trezi rules (v8 R): no system-prompt arg here, so prepend them to the first turn.
   let firstTurn = true
 
   const emit = (event: AgentEvent): void => {
@@ -139,8 +139,7 @@ async function startSession(
       }
       proc.stdout.on('data', (d: Buffer) => {
         buf += d.toString()
-        let nl: number
-        while ((nl = buf.indexOf('\n')) >= 0) {
+        for (let nl = buf.indexOf('\n'); nl >= 0; nl = buf.indexOf('\n')) {
           onLine(buf.slice(0, nl))
           buf = buf.slice(nl + 1)
         }
@@ -177,7 +176,7 @@ async function startSession(
     // Gemini CLI is text-only here; images (paste/drop) are ignored for now.
     send: (text, _images) => {
       const prompt = firstTurn
-        ? `${praxisRules({ projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
+        ? `${treziRules({ projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
         : text
       firstTurn = false
       chain = chain.then(() => runTurn(prompt))

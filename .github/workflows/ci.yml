@@ -1,13 +1,19 @@
 name: CI
 
+# Only the shared branches and pull requests; throwaway and worker branches never run.
 on:
   push:
+    branches: [main, candidate]
   pull_request:
 
 jobs:
   test:
     name: typecheck + unit tests
-    runs-on: ubuntu-latest
+    # The Swift service owners compile against the macOS 26 SDK (scripts/requirements.mjs
+    # MIN_SDK). The macos-26 image's default Xcode 26 provides it; the toolchain step
+    # fails the job if it does not. See docs/TESTING.md "GitHub CI".
+    runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,18 +23,47 @@ jobs:
         with:
           bun-version: 1.3.x
 
+      # package.json version is SemVer and CHANGELOG.md has an Unreleased section (LKM-143).
+      - name: Version and changelog
+        run: bun scripts/check-version.mjs
+
+      - name: Toolchain
+        run: |
+          xcode-select -p
+          xcrun swiftc --version
+          git --version
+          bun scripts/requirements.mjs --build
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run typecheck
+      # Compiled Swift test fixtures, the shared Clang module cache and the last test
+      # times (test/helpers/swift-build.mjs, LKM-167). Binaries are keyed by toolchain,
+      # flags and source contents, so a stale cache only costs a rebuild.
+      - name: Swift test cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .local/test-cache
+            .local/test-times.json
+          key: unit-swift-${{ runner.os }}-${{ github.sha }}
+          restore-keys: unit-swift-${{ runner.os }}-
 
-      - name: Unit tests
-        run: node test/run.mjs unit
+      # Both typechecks run next to the unit tier (--typecheck), and --report prints the
+      # 20 slowest. --log-tail prints the last 150 lines of every failing test's log into
+      # the job output; the full logs are in the artifact below.
+      - name: Typecheck + unit tests
+        run: node test/run.mjs unit --typecheck --report --timeout-ms=120000 --log-tail=150
 
-  # NOTE: The `electron` (Playwright/Electron UI) and `live`
-  # (agent-e2e / codex-e2e / sim-e2e) tiers are intentionally NOT run here.
-  # They require a display server and/or provider credentials. A self-hosted
-  # macOS runner can add them later, e.g.:
-  #   - node test/run.mjs electron
-  #   - node test/run.mjs live
+      # always(): upload after a green, red or cancelled run alike, so the logs of a
+      # failing (or flaky) test can be downloaded for 7 days.
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-logs
+          path: test/artifacts/runs/
+          retention-days: 7
+
+  # No native GUI or live provider tier here: the runner has no desktop session to
+  # drive and no provider credentials. Run them on a Mac: node test/run.mjs native|live.

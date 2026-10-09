@@ -1,16 +1,17 @@
-import type { BrowserWindow } from 'electron'
+import type { NativeView } from '../../native/platform'
 import type {
   AgentEvent,
   AgentOptions,
   ImageAttachment,
   PermissionMode,
+  ProviderLoginReport,
   QuestionAnswers,
   SessionRecord,
   SessionTranscriptEntry
 } from '../../shared/api'
 
 /**
- * The model-provider seam (v7). praxis's chat is backend-agnostic: `agent.ts` owns
+ * The model-provider seam (v7). trezi's chat is backend-agnostic: `agent.ts` owns
  * the per-project `sessions` map, `activeKey`, teardown, the permission-card
  * settle loop, and every `agent:*` IPC handler — all in terms of `ProviderSession`
  * + `AgentEvent`. A `ModelProvider` plugs a specific backend (Claude Agent SDK,
@@ -70,15 +71,60 @@ export interface SpawnContext {
   /** Resume a past SDK session instead of starting fresh (v9 resume). Claude-only —
    *  other backends accept and ignore this. */
   resumeSessionId?: string
+  /** A compact summary of the chat being resumed (LKM-165): if the resume fails, the new
+   *  session starts from it instead of the lost one. */
+  resumeSummary?: string
+  /** The cwd stored with `resumeSessionId` (LKM-165); used while it is still the chat's directory. */
+  resumeCwd?: string
   /** The REAL project root when the session's cwd is a per-chat worktree
    *  (`isolatedCwd`). Tool callbacks that persist app state (e.g.
-   *  `define_controls` writing `.praxis/control-panels.json`) must write under
+   *  chat-island persistence) must write under
    *  this root, not the worktree — a worktree write would be stranded when the
    *  worktree is merged/dropped. Absent ⇒ cwd IS the live root. */
   liveRoot?: string
-  /** Durable Praxis-managed project decisions captured when this provider
+  /** Durable Trezi-managed project decisions captured when this provider
    * session starts. Backends inject them into their initial instructions. */
   projectMemory?: string
+  /** The provider owner's session id (S10, set by `provider-sessions.ts`): the adapter
+   *  asks the owner with it before answering a permission request or running one of
+   *  Trezi's tools. Absent only when an adapter is started outside that wiring. */
+  grant?: string
+  /** Inside a provider helper: Trezi's tools, run by Bun after the Swift owner
+   *  authorized the call against the helper's grant. */
+  tools?: SessionToolHost
+  /** Inside a provider helper (LKM-135): cold-start progress the Swift owner bases its
+   *  liveness deadlines and debug timings on. */
+  onPhase?: (phase: ProviderPhase, detail?: ProviderPhaseDetail) => void
+  /** Inside a Claude helper (LKM-135): the CLI an earlier helper of this app session
+   *  chose, from the owner's cache. Present: no login probe runs. */
+  claudeCli?: ClaudeCliChoice
+}
+
+/**
+ * A helper's cold-start phases (LKM-135): `auth` the login probe finished (or the cached
+ * choice was used), `cli` the provider CLI answered its initialize request, `init` the
+ * CLI began the turn's session, `progress` the CLI reports work before any output.
+ */
+export type ProviderPhase = 'auth' | 'cli' | 'init' | 'progress'
+
+export interface ClaudeCliChoice {
+  source: 'bundled' | 'installed'
+  executable?: string
+}
+
+export interface ProviderPhaseDetail {
+  /** How long the phase took, in milliseconds. */
+  ms?: number
+  /** `auth`: the owner's cached choice was used. */
+  cached?: boolean
+  /** `auth` after a probe: the chosen CLI and whether it is logged in. */
+  cli?: ClaudeCliChoice
+  loggedIn?: boolean
+}
+
+/** Trezi tools as seen from a provider helper (see `backends/helper-host.ts`). */
+export interface SessionToolHost {
+  invoke(tool: string, args?: unknown): Promise<unknown>
 }
 
 /**
@@ -129,6 +175,13 @@ export interface ProviderSession {
    * needs it: resolving undefined reads as a clean stop.
    */
   interrupt?: () => Promise<{ hardStopped: boolean } | undefined>
+  /**
+   * The kill switch Stop escalates to when the provider owner's deadline passes
+   * before `interrupt` answered (S10: the owner holds the deadline, see
+   * `provider-sessions.ts`). It must end the turn: finalize, then emit an `error`
+   * and one `done`. A backend without one is shut down instead.
+   */
+  forceStop?: () => void
 }
 
 export interface ModelProvider {
@@ -139,10 +192,13 @@ export interface ModelProvider {
    *  terminal `done`/`error`). Claude and Codex do today; others would silently
    *  leak a worktree + rail row, so agent.ts refuses to spawn on them. */
   supportsSpawn?: boolean
+  /** `helper`: sessions run in a provider helper the Swift owner supervises, which
+   *  already holds their grant and lifecycle (`backends/helper-session.ts`). */
+  host?: 'helper'
   startSession: (
     root: string,
     options: AgentOptions,
-    getWindow: () => BrowserWindow | null,
+    getWindow: () => NativeView | null,
     /** Present for a detached comment spawn (v8 F1) OR an additional/resumed
      *  interactive chat (v9 resume/multi-chat); absent for the plain default
      *  single-session-per-project case. A provider that doesn't support these can
@@ -162,6 +218,12 @@ export interface ModelProvider {
     options: AgentOptions
   ) => Promise<string | null>
   /**
+   * One-shot, tool-less completion of a self-contained prompt (LKM-189: a landing
+   * commit message from the turn's diff). Ends when `signal` aborts; `null` on any
+   * failure, so the caller falls back. Optional.
+   */
+  complete?: (prompt: string, options: AgentOptions, signal: AbortSignal) => Promise<string | null>
+  /**
    * Evaluate a completed chat against the project's current shared memory and
    * return the complete revised memory. Tool-less and best-effort: `null` means
    * no durable change or an evaluation failure. agent.ts serializes persistence.
@@ -171,4 +233,9 @@ export interface ModelProvider {
     transcript: SessionTranscriptEntry[],
     options: AgentOptions
   ) => Promise<string | null>
+  /**
+   * "Check provider login" (LKM-119): the provider CLI's auth status, run inside a
+   * provider helper (its environment and cwd are a chat's). Optional.
+   */
+  checkLogin?: () => Promise<Omit<ProviderLoginReport, 'provider'>>
 }

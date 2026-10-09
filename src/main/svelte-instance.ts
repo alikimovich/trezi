@@ -1,7 +1,7 @@
 /**
  * Resolve a clicked Svelte element to the component *instance* that rendered it —
  * the Svelte counterpart of v8 F3a (which the React stamp solves with
- * `data-praxis-component-source`). A Svelte component renders no wrapper DOM node,
+ * `data-trezi-component-source`). A Svelte component renders no wrapper DOM node,
  * so a click inside `EmptyState.svelte`'s markup resolves to the **definition**,
  * not the `<EmptyState …/>` call site the user authored. Editing the definition
  * changes the prop's *default* (option D), which is rarely what's wanted.

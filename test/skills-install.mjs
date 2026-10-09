@@ -5,9 +5,8 @@
  *   bun test/skills-install.mjs
  *
  * SCOPE: this tier exercises only the pure data + `buildInstallArgs` argv + the
- * allowlist gate. It deliberately does NOT spawn `npx skills add` — the
- * side-effecting spawn path in skills-install.ts (network + filesystem) is
- * untested here and is covered manually / by a follow-up live test.
+ * allowlist gate. It deliberately does NOT spawn `npx skills add` — the service's
+ * workflow owner does (test/workflow-owner.mjs runs it against a scripted npx).
  */
 import assert from 'node:assert'
 import { buildInstallArgs, findPack, SKILL_PACKS } from '../src/main/skill-packs.ts'

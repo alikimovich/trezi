@@ -2,22 +2,28 @@ import { execFile } from 'child_process'
 import { realpath } from 'fs/promises'
 import { promisify } from 'util'
 import type { BranchResult } from '../shared/api'
+import { enqueueRepoWrite } from './repo-write-queue'
+import { repositoryOwner } from './repository-owner'
 
 /**
- * Branch management for the opened project: praxis does its work on a `praxis/<…>`
- * branch so the user's main branch stays clean. Pure (child_process + git only,
- * no electron) so it's unit-testable against a temp repo.
+ * Branch management for the opened project: trezi does its work on a `trezi/<…>`
+ * branch so the user's main branch stays clean. Reads run Git here; every switch goes
+ * through the service's repository owner (S07).
  */
 
 const execFileP = promisify(execFile)
-const PRAXIS_PREFIX = 'praxis/'
-// Work branches created before the dsgn→praxis rename (2026-07). Recognized as
+const TREZI_PREFIX = 'trezi/'
+// Work branches created before the dsgn→trezi rename (2026-07). Recognized as
 // ours (keep working on them, allow publish) but never created anymore.
 const LEGACY_PREFIX = 'dsgn/'
 
-/** Is this branch a Praxis work branch (current or legacy prefix)? */
+/** Is this branch a Trezi work branch (current or legacy prefix)? */
 export function isWorkBranch(branch: string): boolean {
-  return branch.startsWith(PRAXIS_PREFIX) || branch.startsWith(LEGACY_PREFIX)
+  return (
+    branch.startsWith('praxis/') ||
+    branch.startsWith(TREZI_PREFIX) ||
+    branch.startsWith(LEGACY_PREFIX)
+  )
 }
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -66,25 +72,16 @@ export async function enclosingRepoRoot(root: string): Promise<string | null> {
   }
 }
 
-/** Check out an EXISTING branch by its exact name (no praxis/ coercion) — for the
+/** Check out an EXISTING branch by its exact name (no trezi/ coercion) — for the
  *  titlebar branch switcher. Carries uncommitted changes across like git does. */
 export async function checkoutBranch(root: string, branch: string): Promise<BranchResult> {
-  try {
-    // `--` end-of-options so a branch name that happens to start with `-` can't
-    // be parsed as a git flag (defense-in-depth; the value comes from the IPC).
-    await git(root, ['checkout', '--end-of-options', branch])
-    return { isRepo: true, branch, created: false }
-  } catch (e) {
-    return {
-      isRepo: true,
-      branch: (await getCurrentBranch(root)) ?? branch,
-      created: false,
-      error: msg(e)
-    }
-  }
+  // Only an existing local branch; the service refuses anything Git could read as a path.
+  return repositoryOwner()
+    .checkout(root, branch)
+    .catch((e) => ({ isRepo: true, branch, created: false, error: msg(e) }))
 }
 
-/** Local branches (current first, then praxis/* newest-active, then the rest). */
+/** Local branches (current first, then trezi/* newest-active, then the rest). */
 export async function listBranches(
   root: string
 ): Promise<{ branches: string[]; current: string | null }> {
@@ -100,7 +97,7 @@ export async function listBranches(
       .map((s) => s.trim())
       .filter(Boolean)
     const current = await getCurrentBranch(root)
-    // Current first, then praxis/* (recent), then everything else.
+    // Current first, then trezi/* (recent), then everything else.
     const rank = (b: string): number => (b === current ? 0 : isWorkBranch(b) ? 1 : 2)
     const branches = [...all].sort((a, b) => rank(a) - rank(b))
     return { branches, current }
@@ -119,52 +116,42 @@ export async function getCurrentBranch(root: string): Promise<string | null> {
   }
 }
 
-/** Make a git-ref-safe `praxis/<…>` branch name from a requested name or bare suffix. */
+/** Make a git-ref-safe `trezi/<…>` branch name from a requested name or bare suffix. */
 export function normalizeBranchName(requested: string): string {
   const raw = requested.trim()
-  const withPrefix = raw.startsWith(PRAXIS_PREFIX) ? raw : PRAXIS_PREFIX + raw
+  const withPrefix = raw.startsWith(TREZI_PREFIX) ? raw : TREZI_PREFIX + raw
   const suffix = withPrefix
-    .slice(PRAXIS_PREFIX.length)
+    .slice(TREZI_PREFIX.length)
     .replace(/[\s~^:?*[\]\\@{}]+/g, '-') // git-forbidden chars + whitespace → -
     .replace(/\.{2,}/g, '-') // no ".."
     .replace(/\/{2,}/g, '/') // collapse //
     .replace(/^[/.-]+|[/.-]+$/g, '') // trim leading/trailing / . -
-  return PRAXIS_PREFIX + (suffix || 'work')
+  return TREZI_PREFIX + (suffix || 'work')
 }
 
-async function branchExists(root: string, name: string): Promise<boolean> {
-  try {
-    await git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`])
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** Switch to (creating if needed) a specific praxis/* branch. */
+/** Switch to (creating if needed) a specific trezi/* branch. */
 export async function switchBranch(root: string, requested: string): Promise<BranchResult> {
-  if (!(await isRepoRoot(root))) return { isRepo: false, branch: null, created: false }
   const name = normalizeBranchName(requested)
-  const cur = await getCurrentBranch(root)
-  if (cur === name) return { isRepo: true, branch: name, created: false }
-  const existed = await branchExists(root, name)
-  try {
-    // checkout -b carries uncommitted changes onto the new branch (nothing lost);
-    // checking out an existing branch can fail if changes conflict — report that.
-    await git(root, existed ? ['checkout', name] : ['checkout', '-b', name])
-    return { isRepo: true, branch: name, created: !existed }
-  } catch (e) {
-    return { isRepo: true, branch: cur, created: false, error: msg(e) }
-  }
+  return repositoryOwner()
+    .switchBranch(root, name)
+    .catch(async (e) => ({
+      isRepo: true,
+      branch: await getCurrentBranch(root),
+      created: false,
+      error: msg(e)
+    }))
 }
 
 /**
- * Ensure work happens on a `praxis/*` branch. If already on one, keep it; else
- * create `praxis/<current-branch>` (or `praxis/work` when detached) off HEAD.
+ * Ensure work happens on a `trezi/*` branch. If already on one, keep it; else
+ * create `trezi/<current-branch>` (or `trezi/work` when detached) off HEAD.
  */
 export async function ensureBranch(root: string): Promise<BranchResult> {
-  if (!(await isRepoRoot(root))) return { isRepo: false, branch: null, created: false }
-  const cur = await getCurrentBranch(root)
-  if (cur && isWorkBranch(cur)) return { isRepo: true, branch: cur, created: false }
-  return switchBranch(root, PRAXIS_PREFIX + (cur ?? 'work'))
+  // The read and the switch share one lease on the repository's lane.
+  return enqueueRepoWrite(root, async () => {
+    if (!(await isRepoRoot(root))) return { isRepo: false, branch: null, created: false }
+    const cur = await getCurrentBranch(root)
+    if (cur && isWorkBranch(cur)) return { isRepo: true, branch: cur, created: false }
+    return switchBranch(root, TREZI_PREFIX + (cur ?? 'work'))
+  })
 }

@@ -24,14 +24,14 @@ const cleanSummary = (raw: string): string => {
 const isNoise = (summary: string): boolean =>
   !summary ||
   summary.startsWith('/') ||
-  /^(?:do it(?: for me)?|tell me what|sounds like you|you are praxis|pull latest from main)$/i.test(
+  /^(?:do it(?: for me)?|tell me what|sounds like you|you are trezi|pull latest from main)$/i.test(
     summary
   ) ||
   /\[vite\]|Publishing —|Creating PR —/i.test(summary)
 
 /**
  * Parse `%s%x1f%b%x1e` git-log output. The legacy publisher made a final commit
- * whose body began with "Changes requested in Praxis:" and contained the pasted
+ * whose body began with "Changes requested in Trezi:" and contained the pasted
  * chat; exclude it when an existing PR is updated so that mistake cannot persist.
  */
 export function publishCommitSummaries(log: string): string[] {
@@ -39,8 +39,8 @@ export function publishCommitSummaries(log: string): string[] {
   const summaries: string[] = []
   for (const record of log.split('\x1e')) {
     const [subject = '', body = ''] = record.split('\x1f')
-    if (body.includes('Changes requested in Praxis:')) continue
-    if (/^Reconcile local and remote Praxis publish histories$/i.test(subject.trim())) continue
+    if (body.includes('Changes requested in Trezi:')) continue
+    if (/^Reconcile local and remote Trezi publish histories$/i.test(subject.trim())) continue
     const summary = cleanSummary(subject)
     if (isNoise(summary)) continue
     const key = summary.toLocaleLowerCase()
@@ -100,7 +100,7 @@ export function buildPublishMessage(
         ? `Update ${scopeText}`
         : summaries.length > 1
           ? `Implement ${summaries.length} project changes`
-          : `Praxis: publish ${branch}`,
+          : `Trezi: publish ${branch}`,
     72
   )
 
@@ -113,7 +113,7 @@ export function buildPublishMessage(
       `- Update ${changedFiles.length} ${scopeText || 'project'} ${changedFiles.length === 1 ? 'file' : 'files'}.`
     )
   } else {
-    lines.push('- Publish the current Praxis work branch.')
+    lines.push('- Publish the current Trezi work branch.')
   }
 
   if (changedFiles.length) {
@@ -136,6 +136,6 @@ export function buildPublishMessage(
     )
   }
 
-  lines.push('', '_Prepared in Praxis._')
+  lines.push('', '_Prepared in Trezi._')
   return { title, body: lines.join('\n') }
 }

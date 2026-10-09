@@ -29,6 +29,7 @@ const STYLE_PROPS = new Set([
   'color',
   'background-color',
   'border-radius',
+  'box-shadow',
   'opacity',
   'font-size',
   'font-weight',
@@ -157,11 +158,17 @@ export function validateManifest(input: unknown): ControlPanelManifest | { error
   if (!isStr(m.createdAt) || !m.createdAt.trim()) return { error: 'missing createdAt' }
   if (!Array.isArray(m.params) || m.params.length === 0 || m.params.length > MAX_PARAMS)
     return { error: `params must have 1-${MAX_PARAMS} entries` }
+  if (m.presentation !== undefined && m.presentation !== 'animation')
+    return { error: 'unknown presentation' }
+  if (m.replay !== undefined && (typeof m.replay !== 'boolean' || m.presentation !== 'animation'))
+    return { error: 'replay is only supported for animation panels' }
   const seen = new Set<string>()
   const params: ControlParam[] = []
   for (const raw of m.params) {
     const r = validateParam(raw, seen)
     if ('error' in r) return r
+    if (m.presentation === 'animation' && r.param.apply.strategy !== 'literal')
+      return { error: 'animation panels require literal controls independent of selection' }
     params.push(r.param)
   }
   return {
@@ -170,7 +177,10 @@ export function validateManifest(input: unknown): ControlPanelManifest | { error
     component: m.component,
     title: m.title,
     params,
-    createdAt: m.createdAt
+    createdAt: m.createdAt,
+    ...(m.presentation === 'animation'
+      ? { presentation: 'animation' as const, replay: m.replay === true }
+      : {})
   }
 }
 

@@ -3,7 +3,7 @@ name: spring-animations
 description: Build spring / bouncy / physics-based UI animations that run on the compositor. Use whenever the user asks for a spring, bouncy, springy, elastic, or physics-based motion, gives spring parameters (stiffness/damping/mass, damping-ratio + frequency, or Framer-style bounce + duration), or wants a natural-feeling open/close, slide, pop, or bottom-sheet animation in CSS.
 ---
 
-# Spring animations in Praxis
+# Spring animations in Trezi
 
 When the user wants a spring, bouncy, or physics-based motion, do **not** hand-write
 `linear()` control points or guess a `cubic-bezier` — you can't integrate a spring
@@ -53,7 +53,8 @@ transition:
 
 ## Making it tweakable
 
-If the user wants to fiddle with the spring live (sliders for stiffness/damping, or a
-bounce knob), extract the params to named constants and pair this with `define_controls`
-so they can scrub the values from the selection island, then re-run `spring_to_css` with
-their chosen numbers.
+For interactive animation controls, follow the sibling
+[surface-controls skill](../surface-controls/SKILL.md) and use `chat_island`.
+Sliders, inputs and easing editors belong inside the conversation. Bind them to
+parameters that update the actual spring, including regenerating any derived
+curve. Keep an existing runtime spring engine when the app already has one.

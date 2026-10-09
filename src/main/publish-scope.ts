@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
  * Split out of `annotations.ts` purely so it's unit-testable: that module imports
  * `electron`, which a bun test can't load. Pure (child_process + git only).
  *
- * The answers stopped being "diff vs HEAD" when Praxis started committing every turn
+ * The answers stopped being "diff vs HEAD" when Trezi started committing every turn
  * on the live checkout (`live-commit.ts`): a session whose turns all landed has a
  * SPOTLESS working tree and all its work in commits, so a HEAD-relative diff reports
  * nothing changed and publish would refuse. Scope is measured against the default

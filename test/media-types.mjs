@@ -2,7 +2,7 @@
  * media-types.ts unit test (pure — no Electron). This is the half of the
  * editor's media support that decides whether a file is a picture, a video, or
  * bytes we shouldn't pour into CodeMirror, plus the Range parsing the
- * praxis-media protocol needs for <video> seeking.
+ * trezi-media protocol needs for <video> seeking.
  *
  * Asserts: media detection is case-insensitive (`arkady.PNG` is the reported
  * bug), .svg stays TEXT on purpose, source files are never mistaken for media;
@@ -16,7 +16,7 @@ import { looksBinary, mediaTypeFor, parseRange } from '../src/main/media-types.t
 
 let failed = 0
 const ok = (cond, msg) => {
-  if (!cond) (failed++, console.error('  ✗', msg))
+  if (!cond) failed++, console.error('  ✗', msg)
 }
 const eq = (a, b, msg) =>
   ok(JSON.stringify(a) === JSON.stringify(b), `${msg} — got ${JSON.stringify(a)}`)
@@ -44,7 +44,10 @@ ok(!looksBinary('// caffè — naïve 🎉\r\nconst x = 1\r\n'), 'accents/emoji/
 ok(looksBinary(`PNG${String.fromCharCode(0)}IHDR`), 'NUL byte means binary')
 ok(looksBinary(`${String.fromCharCode(0xfffd).repeat(50)}abc`), 'utf8 garbage means binary')
 // One stray replacement char in a big file is not enough to hide it.
-ok(!looksBinary(`${'x'.repeat(500)}${String.fromCharCode(0xfffd)}`), 'a single U+FFFD is not binary')
+ok(
+  !looksBinary(`${'x'.repeat(500)}${String.fromCharCode(0xfffd)}`),
+  'a single U+FFFD is not binary'
+)
 
 // --- Range parsing -----------------------------------------------------------
 ok(parseRange(null, 1000) === null, 'no header → whole file')

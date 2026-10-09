@@ -1,9 +1,7 @@
-import { ipcMain, shell } from 'electron'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { readFile, stat, writeFile } from 'fs/promises'
 import { existsSync, readFileSync, statSync } from 'fs'
+import { readFile, stat } from 'fs/promises'
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from 'path'
+import { ipcMain } from '../native/platform'
 import type {
   PropEdit,
   PropEditResult,
@@ -11,40 +9,33 @@ import type {
   PropInspection,
   PropKind,
   SourceView,
-  SourceWriteResult,
-  TokenEdit
+  SourceWriteResult
 } from '../shared/api'
+import { projectRelative } from '../shared/project-path'
+import { canRevertGroup, editAvailability, redo, revertGroup, undo } from './edit-history'
+import { spliceHtmlText } from './html-source'
+import { looksBinary, mediaTypeFor } from './media-types'
+import { platformOwner } from './platform-owner'
 import {
   applySvelteEdit,
   applySvelteTextEdit,
-  applySvelteTokenEdit,
   inspectSvelteProps,
   removeSvelteProp
 } from './props-svelte'
-import { looksBinary, mediaTypeFor } from './media-types'
-import { mediaUrl } from './media'
-import { tokenReference } from '../shared/token-match'
-import { swapTailwindClass } from './tw-classes'
-import { spliceHtmlText } from './html-source'
-import {
-  recordEdit,
-  undo,
-  redo,
-  canUndo,
-  canRedo,
-  revertGroup,
-  canRevertGroup
-} from './edit-history'
+import { typescriptProps } from './props-typescript'
+import { proposeEdit } from './source-commit'
+import { contentHash, sourceOwner } from './source-owner'
 
 /**
- * Write a source edit and record it for undo/redo (v8 F3b). A no-op (after ===
- * before) reports success without writing. `key` coalesces rapid edits of the same
- * target (e.g. retyping a prop) into one undo step; `group` batches distinct-key
- * edits of one gesture (e.g. the four sides of a linked padding scrub) into one
- * atomic undo. Shared by the React + Svelte adapters so EVERY praxis source edit
- * is reversible.
+ * Hand a source-edit engine's result to the source owner (v8 F3b Undo included).
+ * The engines only compute: `before` is the exact text they parsed and `after` their
+ * proposal; `proposeEdit` is the one committing call (hash-bound, see
+ * source-commit.ts). `key` coalesces rapid edits of one target into one
+ * Undo step; `group` batches the distinct-key edits of one gesture (the four sides of
+ * a linked padding scrub) into one atomic Undo. Shared by the React + Svelte + HTML
+ * adapters so EVERY trezi source edit is reversible.
  */
-export async function commitEdit(
+export function commitEdit(
   root: string,
   file: string,
   before: string,
@@ -52,26 +43,20 @@ export async function commitEdit(
   key: string,
   group?: string
 ): Promise<PropEditResult> {
-  if (after === before) return { applied: true }
-  try {
-    await writeFile(file, after, 'utf8')
-  } catch {
-    return { applied: false, error: 'Could not write the source file.' }
-  }
-  recordEdit(root, file, before, after, key, group)
-  return { applied: true }
+  return proposeEdit(root, file, before, after, key, group)
 }
 
 /**
  * Prop editing is framework-agnostic by dispatch: the source file's extension
- * picks an adapter. `.svelte` → props-svelte.ts; everything else (.tsx/.jsx/.ts/
- * .js) → the React/JSX engine below. Both speak the same `data-praxis-source`
+ * picks an adapter. `.svelte` → props-svelte.ts; JavaScript/TypeScript sources
+ * → the React/JSX engine below. Inspection skips other source formats.
+ * Both speak the same `data-trezi-source`
  * stamp, the same shared helpers (resolveSource, mergeFields, …), and return the
  * same PropInspection / PropEditResult shapes.
  */
 
 /**
- * Prop/token editing for the v2 inspector. Given an element's `data-praxis-source`
+ * Prop/token editing for the v2 inspector. Given an element's `data-trezi-source`
  * stamp ("relpath:line"), we parse the source file, find the JSX element on that
  * line, and read its current literal attributes — enriched, when we can resolve
  * a schema, by react-docgen. Edits are applied the "hybrid" way: simple literal
@@ -161,7 +146,7 @@ export function collectNodes(node: unknown, type: string, out: BabelNode[]): voi
   for (const key of Object.keys(n)) {
     if (key === 'loc' || key === 'leadingComments' || key === 'trailingComments') continue
     const v = (n as Record<string, unknown>)[key]
-    if (Array.isArray(v)) v.forEach((c) => collectNodes(c, type, out))
+    if (Array.isArray(v)) for (const c of v) collectNodes(c, type, out)
     else if (v && typeof v === 'object') collectNodes(v, type, out)
   }
 }
@@ -605,13 +590,24 @@ async function inspectProps(
   const loc = resolveSource(root, source)
   if (!loc) return null
   if (loc.file.endsWith('.svelte')) return inspectSvelteProps(root, source, loc, text)
+  // Stamps also come from MDX/HTML. Those authored files are not JavaScript;
+  // selection and source viewing still work without a React prop inspection.
+  if (!/\.(?:[cm]?[jt]sx?)$/i.test(loc.file)) return null
   let code: string
   try {
     code = await readFile(loc.file, 'utf8')
   } catch {
     return null
   }
-  const found = await findElementAtLine(code, loc.line, loc.column)
+  let found: FoundElement | null
+  try {
+    found = await findElementAtLine(code, loc.line, loc.column)
+  } catch (error) {
+    // Babel's errorRecovery cannot recover every syntax error (including an
+    // incomplete edit). Treat this as unavailable inspection, not failed IPC.
+    if (error instanceof SyntaxError) return null
+    throw error
+  }
   if (!found) return null
 
   const current = readAttributes(found.opening)
@@ -632,6 +628,9 @@ async function inspectProps(
       }
     }
   }
+
+  if (isComponent && schema.length === 0)
+    schema = typescriptProps(root, loc.file, loc.line, loc.column ?? 0)
 
   const fields = mergeFields(schema, current)
 
@@ -656,7 +655,7 @@ function renderAttr(name: string, kind: PropKind, value: string | number | boole
   return /^[^"\\\n<>{}]*$/.test(s) ? `${name}="${s}"` : `${name}={${JSON.stringify(s)}}`
 }
 
-async function applyPropEdit(root: string, edit: PropEdit): Promise<PropEditResult> {
+export async function applyPropEdit(root: string, edit: PropEdit): Promise<PropEditResult> {
   // Never splice an unvalidated name into source — don't trust the renderer
   // payload (defense in depth; inspection already drops non-identifier keys).
   if (!isValidAttrName(edit.name)) {
@@ -664,7 +663,7 @@ async function applyPropEdit(root: string, edit: PropEdit): Promise<PropEditResu
   }
   // 'other' values can't be expressed as a literal here — that's the agent's job.
   if (edit.kind === 'other') {
-    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   }
   const loc = resolveSource(root, edit.source)
   if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
@@ -677,7 +676,7 @@ async function applyPropEdit(root: string, edit: PropEdit): Promise<PropEditResu
   }
   const found = await findElementAtLine(code, loc.line, loc.column)
   if (!found) {
-    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit) }
+    return { applied: false, needsAgent: true, agentPrompt: agentPromptFor(edit, root) }
   }
   const attrText = renderAttr(edit.name, edit.kind, edit.value)
   const existing = readAttributes(found.opening).find((a) => a.name === edit.name)
@@ -700,7 +699,11 @@ async function applyPropEdit(root: string, edit: PropEdit): Promise<PropEditResu
  * attribute, including expression-valued ones. Reversible via the F3b edit history;
  * an already-absent prop is a successful no-op. (v8 F2)
  */
-async function removeProp(root: string, source: string, name: string): Promise<PropEditResult> {
+export async function removeProp(
+  root: string,
+  source: string,
+  name: string
+): Promise<PropEditResult> {
   if (!isValidAttrName(name)) return { applied: false, error: 'Invalid prop name.' }
   const loc = resolveSource(root, source)
   if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
@@ -723,13 +726,15 @@ async function removeProp(root: string, source: string, name: string): Promise<P
   return commitEdit(root, loc.file, code, next, `${source}:${name}`)
 }
 
-export function agentPromptFor(edit: PropEdit): string {
+// Agent prompts name the source relative to `root`, so a worktree chat edits its own
+// checkout rather than the live tree (LKM-155).
+export function agentPromptFor(edit: PropEdit, root: string): string {
   const val = typeof edit.value === 'string' ? `"${edit.value}"` : String(edit.value)
-  return `In ${edit.source}, set the \`${edit.name}\` prop of the selected element to ${val}.`
+  return `In ${projectRelative(edit.source, root)}, set the \`${edit.name}\` prop of the selected element to ${val}.`
 }
 
-export function textAgentPrompt(source: string, text: string): string {
-  return `In ${source}, change only the selected element's rendered text to “${text.slice(0, 200)}”. Make the smallest source edit needed. Do not update matching copy elsewhere unless this exact element is driven by a shared value that must change.`
+export function textAgentPrompt(source: string, text: string, root: string): string {
+  return `In ${projectRelative(source, root)}, change only the selected element's rendered text to “${text.slice(0, 200)}”. Make the smallest source edit needed. Do not update matching copy elsewhere unless this exact element is driven by a shared value that must change.`
 }
 
 /**
@@ -738,7 +743,7 @@ export function textAgentPrompt(source: string, text: string): string {
  * new text is splice-safe are applied directly — mixed/expression content,
  * self-closing elements, or `<{}>`-bearing text fall back to the agent.
  */
-async function applyTextEdit(
+export async function applyTextEdit(
   root: string,
   edit: { source: string; text: string }
 ): Promise<PropEditResult> {
@@ -765,7 +770,7 @@ async function applyTextEdit(
       return {
         applied: false,
         needsAgent: true,
-        agentPrompt: textAgentPrompt(edit.source, newText)
+        agentPrompt: textAgentPrompt(edit.source, newText, root)
       }
     }
     return commitEdit(root, loc.file, html, next, `${edit.source}:text`)
@@ -776,12 +781,19 @@ async function applyTextEdit(
   } catch {
     return { applied: false, error: 'Could not read the source file.' }
   }
-  const found = await findElementAtLine(code, loc.line, loc.column)
   const agentFallback = (): PropEditResult => ({
     applied: false,
     needsAgent: true,
-    agentPrompt: textAgentPrompt(edit.source, newText)
+    agentPrompt: textAgentPrompt(edit.source, newText, root)
   })
+  if (!/\.[cm]?[jt]sx?$/i.test(loc.file)) return agentFallback()
+  let found: Awaited<ReturnType<typeof findElementAtLine>>
+  try {
+    found = await findElementAtLine(code, loc.line, loc.column)
+  } catch (error) {
+    if (error instanceof SyntaxError) return agentFallback()
+    throw error
+  }
   if (!found) return agentFallback()
 
   const elements: BabelNode[] = []
@@ -817,99 +829,6 @@ async function applyTextEdit(
   return commitEdit(root, loc.file, code, next, `${edit.source}:text`)
 }
 
-// --- v6: direct (agent-free) token application -----------------------------
-
-// Main runs in Node (no CSS.supports), so family checks are regex-based.
-const NAMED_COLORS = new Set([
-  'red',
-  'blue',
-  'green',
-  'black',
-  'white',
-  'gray',
-  'grey',
-  'orange',
-  'purple',
-  'pink',
-  'yellow',
-  'teal',
-  'cyan',
-  'magenta',
-  'transparent',
-  'currentcolor',
-  'inherit'
-])
-function isColorValue(v: string): boolean {
-  const s = v.trim().toLowerCase()
-  if (/gradient\(/.test(s)) return true
-  if (/^(#|rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color\(|var\()/.test(s)) return true
-  return NAMED_COLORS.has(s)
-}
-function isLengthValue(v: string): boolean {
-  const s = v.trim()
-  // Require a unit/% (a bare number is fontWeight/lineHeight/opacity/zIndex, not a
-  // length). var(...) is allowed but T3 also gates on the property name.
-  return /^-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch|ex)$/.test(s) || /^var\(/.test(s)
-}
-
-// T3 only swaps a style property when BOTH the property NAME and the VALUE belong
-// to the token's family — otherwise a color token could land in fontSize, etc.
-const COLOR_STYLE_PROPS = new Set([
-  'color',
-  'background',
-  'backgroundColor',
-  'borderColor',
-  'borderTopColor',
-  'borderRightColor',
-  'borderBottomColor',
-  'borderLeftColor',
-  'outlineColor',
-  'fill',
-  'stroke',
-  'caretColor',
-  'textDecorationColor',
-  'columnRuleColor'
-])
-const LENGTH_STYLE_PROPS = new Set([
-  'width',
-  'height',
-  'minWidth',
-  'maxWidth',
-  'minHeight',
-  'maxHeight',
-  'padding',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'margin',
-  'marginTop',
-  'marginRight',
-  'marginBottom',
-  'marginLeft',
-  'gap',
-  'rowGap',
-  'columnGap',
-  'fontSize',
-  'lineHeight',
-  'borderRadius',
-  'top',
-  'right',
-  'bottom',
-  'left',
-  'letterSpacing',
-  'borderWidth'
-])
-
-/** The static key name of a style ObjectProperty (null for computed/spread). */
-function stylePropKey(p: BabelNode): string | null {
-  if (p.type !== 'ObjectProperty' || (p as { computed?: boolean }).computed) return null
-  const k = p.key as BabelNode | undefined
-  if (k?.type === 'Identifier') return (k as { name?: string }).name ?? null
-  if (k?.type === 'StringLiteral') return (k as unknown as { value?: string }).value ?? null
-  return null
-}
-
 /** The literal-string AST node behind a className attr value (`"…"` or `{'…'}`),
  * or null for an expression/dynamic className we must not rewrite. */
 export function classNameStringNode(v: BabelNode | null | undefined): BabelNode | null {
@@ -922,140 +841,6 @@ export function classNameStringNode(v: BabelNode | null | undefined): BabelNode 
   return null
 }
 
-/** How to write a token reference into source: css vars stay var(--name); other
- * sources splice the resolved value (a manifest hex, a Tailwind scale value, …). */
-function tokenRef(edit: TokenEdit): string {
-  return tokenReference(edit.tokenSource, edit.token)
-}
-
-function tokenAgentPrompt(edit: TokenEdit): string {
-  return `Apply the ${edit.group} token "${edit.token.name}" (${edit.token.value}) to the selected element${edit.source ? ` in ${edit.source}` : ''}.`
-}
-
-/** Resolve a component's prop schema (same-file → cross-file import), for T1. */
-async function resolveSchema(
-  root: string,
-  file: string,
-  code: string,
-  found: FoundElement
-): Promise<PropField[]> {
-  if (!/^[A-Z]/.test(found.name)) return []
-  let schema = await schemaFor(code, found.name)
-  if (schema.length === 0) {
-    const def = await resolveComponentFile(root, file, found.ast, found.name)
-    if (def) {
-      try {
-        schema = await schemaFor(await readFile(def.file, 'utf8'), def.exportName)
-      } catch {
-        /* unreadable — no schema */
-      }
-    }
-  }
-  return schema
-}
-
-/**
- * Apply a design token directly when it maps to an *existing literal*, else hand
- * to the agent. Two unambiguous direct paths (first match wins):
- *  - T1 schema-enum swap: the component has an enum prop whose options include the
- *    token name → set that prop to the token name.
- *  - T3 inline-style swap: the element has a literal `style={{…}}` with exactly one
- *    property whose value is a string literal in the token's family → replace it.
- * Anything ambiguous (no stamp, add-new, multiple candidates) → needsAgent.
- */
-async function applyTokenEdit(root: string, edit: TokenEdit): Promise<PropEditResult> {
-  const toAgent = (): PropEditResult => ({
-    applied: false,
-    needsAgent: true,
-    agentPrompt: tokenAgentPrompt(edit)
-  })
-  if (!edit.source) return toAgent()
-  const loc = resolveSource(root, edit.source)
-  if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
-  // `.svelte` → the Svelte adapter (Tailwind class swap; other cases → agent).
-  if (loc.file.endsWith('.svelte')) return applySvelteTokenEdit(root, edit, loc)
-  let code: string
-  try {
-    code = await readFile(loc.file, 'utf8')
-  } catch {
-    return { applied: false, error: 'Could not read the source file.' }
-  }
-  const found = await findElementAtLine(code, loc.line, loc.column)
-  if (!found) return toAgent()
-
-  // T1 — schema enum swap (the token name IS a valid enum option). If more than
-  // one enum prop lists it, it's ambiguous → let the agent decide.
-  const schema = await resolveSchema(root, loc.file, code, found)
-  const enumFields = schema.filter((f) => f.kind === 'enum' && f.options?.includes(edit.token.name))
-  if (enumFields.length === 1) {
-    return applyPropEdit(root, {
-      source: edit.source,
-      name: enumFields[0].name,
-      kind: 'enum',
-      value: edit.token.name
-    })
-  }
-
-  const isColorGroup = /colou?r/i.test(edit.group)
-
-  // T2 — Tailwind utility class swap: for a tailwind token on an element with a
-  // literal className that has EXACTLY ONE utility of the token's family (color /
-  // radius / spacing), swap that utility's scale to the token (e.g. `text-gray-500`
-  // + 'primary' → `text-primary`). Zero/multiple matches, or a dynamic className →
-  // fall through.
-  if (edit.tokenSource === 'tailwind') {
-    const classAttr = (found.opening.attributes ?? []).find(
-      (a) => a.type === 'JSXAttribute' && (a.name as { name?: string })?.name === 'className'
-    )
-    const strNode = classNameStringNode(classAttr?.value as BabelNode | null | undefined)
-    if (strNode) {
-      const swapped = swapTailwindClass(
-        String((strNode as unknown as { value: string }).value),
-        edit.group,
-        edit.token.name
-      )
-      if (swapped != null) {
-        const next =
-          code.slice(0, strNode.start) + JSON.stringify(swapped) + code.slice(strNode.end)
-        return commitEdit(root, loc.file, code, next, `${edit.source}:token`)
-      }
-    }
-  }
-
-  // T3 — inline-style single-property swap, gated on BOTH the property name and
-  // the value family (so a color token can't land in fontSize, etc.).
-  const propSet = isColorGroup ? COLOR_STYLE_PROPS : LENGTH_STYLE_PROPS
-  const valueInFamily = (v: string): boolean => (isColorGroup ? isColorValue(v) : isLengthValue(v))
-  const styleAttr = (found.opening.attributes ?? []).find(
-    (a) => a.type === 'JSXAttribute' && (a.name as { name?: string })?.name === 'style'
-  )
-  const styleExpr = unwrapExpr(
-    (styleAttr?.value as BabelNode | undefined)?.expression as BabelNode | undefined
-  )
-  if (styleExpr?.type === 'ObjectExpression') {
-    const matches = ((styleExpr as { properties?: BabelNode[] }).properties ?? []).filter((p) => {
-      const key = stylePropKey(p)
-      const val = p.value as BabelNode | undefined
-      return (
-        key != null &&
-        propSet.has(key) &&
-        val?.type === 'StringLiteral' &&
-        valueInFamily(String((val as unknown as { value: string }).value))
-      )
-    })
-    if (matches.length === 1) {
-      const valNode = matches[0].value as BabelNode
-      const next =
-        code.slice(0, valNode.start) + JSON.stringify(tokenRef(edit)) + code.slice(valNode.end)
-      return commitEdit(root, loc.file, code, next, `${edit.source}:token`)
-    }
-  }
-
-  // Ambiguous (add-new property/class, className expression, multiple candidates,
-  // host element with no schema + no inline style) → the agent decides.
-  return toAgent()
-}
-
 // --- code peek: read the stamped file / jump to it in the user's editor ------
 
 /**
@@ -1064,12 +849,12 @@ async function applyTokenEdit(root: string, edit: TokenEdit): Promise<PropEditRe
  * span so the renderer can highlight it. Svelte / unparsable files fall back to
  * the stamp line alone — the peek still works, just without the span.
  *
- * Images/video/audio come back as `media` (registered with the praxis-media
- * protocol so the renderer can show them) and other non-text files as `binary`;
+ * Images/video/audio come back as `media` (an opaque `trezi-media://` grant the
+ * native editor turns into a path) and other non-text files as `binary`;
  * both carry an empty `code`. Before that, a `.png` opened here was decoded as
  * utf8 and rendered as thousands of lines of mojibake.
  */
-async function readSourceView(root: string, source: string): Promise<SourceView | null> {
+export async function readSourceView(root: string, source: string): Promise<SourceView | null> {
   const loc = resolveSource(root, source)
   if (!loc) return null
   const rel = relative(root, loc.file)
@@ -1082,18 +867,32 @@ async function readSourceView(root: string, source: string): Promise<SourceView 
     } catch {
       return null
     }
+    // A grant bound to the source editor, the file's size and hash, with an expiry. A
+    // file the platform owner refuses (too large, changed while read) shows as binary.
+    let url: string
+    try {
+      url = (await platformOwner().grantMedia(root, loc.file)).url
+    } catch {
+      return { file: rel, code: '', line: loc.line, binary: true, bytes }
+    }
     return {
       file: rel,
       code: '',
       line: loc.line,
-      media: { ...media, url: mediaUrl(loc.file) },
+      media: { ...media, url },
       bytes
     }
   }
 
   let code: string
+  let hash: string | undefined
   try {
-    code = await readFile(loc.file, 'utf8')
+    // The owner authorizes the path (symlinks included) and issues the baseline hash.
+    const read = await sourceOwner().read(root, loc.file)
+    if (read.binary || read.content === undefined)
+      return { file: rel, code: '', line: loc.line, binary: true, bytes: read.size }
+    code = read.content
+    hash = read.hash
   } catch {
     return null
   }
@@ -1106,7 +905,7 @@ async function readSourceView(root: string, source: string): Promise<SourceView 
     }
     return { file: rel, code: '', line: loc.line, binary: true, bytes }
   }
-  const view: SourceView = { file: rel, code, line: loc.line }
+  const view: SourceView = { file: rel, code, line: loc.line, hash }
   if (!loc.file.endsWith('.svelte')) {
     try {
       const found = await findElementAtLine(code, loc.line, loc.column)
@@ -1129,47 +928,51 @@ async function readSourceView(root: string, source: string): Promise<SourceView 
 }
 
 /**
- * Save the whole file from the v9 code drawer. The drawer loaded `baseline`; if
- * the on-disk content has drifted since (the user edited it in their own editor,
- * or the agent wrote it), refuse rather than clobber — same contract as undo/redo.
- * Otherwise route through `commitEdit` so the write lands in the undo/redo history
- * and the dev server's HMR refreshes the preview, exactly like a prop/text edit.
+ * Save the whole file from the v9 code drawer. The drawer loaded `baseline` (and,
+ * since S08, the hash the owner issued for it: `baseHash`, which wins — a draft
+ * restored after a restart only knows the hash it was typed against). If the file on
+ * disk no longer matches (the user edited it in their own editor, or the agent wrote
+ * it), refuse rather than clobber — same contract as undo/redo; the draft stays in
+ * the editor. Otherwise the save is a proposal like any other edit, so it lands in
+ * the Undo history and the dev server's HMR refreshes the preview.
  */
 async function writeSourceFile(
   root: string,
   source: string,
   baseline: string,
-  content: string
+  content: string,
+  baseHash?: string
 ): Promise<SourceWriteResult> {
   const loc = resolveSource(root, source)
   if (!loc) return { ok: false, error: 'Could not resolve the source location.' }
   // The drawer shows these as a preview/placeholder rather than text, so a save
   // could only ever be a utf8 round-trip that corrupts them.
   if (mediaTypeFor(loc.file)) return { ok: false, error: 'This file is not editable as text.' }
-  let current: string
+  const expected =
+    typeof baseHash === 'string' && /^[0-9a-f]{64}$/.test(baseHash)
+      ? baseHash
+      : contentHash(baseline)
   try {
-    current = await readFile(loc.file, 'utf8')
-  } catch {
-    return { ok: false, error: 'Could not read the source file.' }
+    const owner = sourceOwner()
+    const current = await owner.read(root, loc.file)
+    if (current.binary || current.content === undefined || looksBinary(current.content)) {
+      return { ok: false, error: 'This file is not editable as text.' }
+    }
+    if (current.hash !== expected) return { ok: false, conflict: true }
+    if (current.content === content) return { ok: true, hash: expected }
+    const result = await owner.commit(root, [{ path: loc.file, expectedHash: expected, content }], {
+      key: `${source}:drawer`
+    })
+    return result.ok ? { ok: true, hash: result.hashes[0] } : { ok: false, conflict: true }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not write the source file.'
+    }
   }
-  if (looksBinary(current)) return { ok: false, error: 'This file is not editable as text.' }
-  if (current !== baseline) return { ok: false, conflict: true }
-  const res = await commitEdit(root, loc.file, current, content, `${source}:drawer`)
-  return res.applied ? { ok: true } : { ok: false, error: res.error }
 }
 
-const execFileP = promisify(execFile)
-
-// Editor CLIs tried in order for "Open in editor" — each accepts a
-// file:line[:col] jump target. A missing CLI fails fast (ENOENT) and the next
-// is tried; when none exist the file opens with the OS default app (no jump).
-const EDITOR_CLIS: Array<{ cmd: string; args: (target: string) => string[] }> = [
-  { cmd: 'code', args: (t) => ['-g', t] },
-  { cmd: 'cursor', args: (t) => ['-g', t] },
-  { cmd: 'zed', args: (t) => [t] },
-  { cmd: 'subl', args: (t) => [t] }
-]
-
+// "Open in editor": the platform owner runs the editor CLIs (`PlatformOpen.swift`).
 async function openInEditor(
   root: string,
   source: string
@@ -1181,17 +984,11 @@ async function openInEditor(
   } catch {
     return { ok: false, error: 'The source file does not exist.' }
   }
-  const target = `${loc.file}:${loc.line}${loc.column != null ? `:${loc.column}` : ''}`
-  for (const editor of EDITOR_CLIS) {
-    try {
-      await execFileP(editor.cmd, editor.args(target), { timeout: 5000 })
-      return { ok: true }
-    } catch {
-      /* not installed / failed — try the next */
-    }
+  try {
+    return await platformOwner().openInEditor(root, loc.file, loc.line, loc.column)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
-  const err = await shell.openPath(loc.file) // '' on success
-  return err ? { ok: false, error: err } : { ok: true }
 }
 
 /**
@@ -1291,9 +1088,6 @@ export function registerPropsIpc(): void {
     inspectProps(root, source, text)
   )
   ipcMain.handle('props:apply', (_e, root: string, edit: PropEdit) => applyPropEdit(root, edit))
-  ipcMain.handle('props:applyToken', (_e, root: string, edit: TokenEdit) =>
-    applyTokenEdit(root, edit)
-  )
   ipcMain.handle('props:remove', (_e, root: string, source: string, name: string) =>
     removeProp(root, source, name)
   )
@@ -1313,14 +1107,24 @@ export function registerPropsIpc(): void {
   // v9 phase 2: save the whole file from the editable code drawer.
   ipcMain.handle(
     'source:write',
-    (_e, root: string, source: string, baseline: string, content: string) =>
-      writeSourceFile(root, source, baseline, content)
+    (_e, root: string, source: string, baseline: string, content: string, baseHash?: string) =>
+      writeSourceFile(root, source, baseline, content, baseHash)
   )
-  // v8 F3b: undo/redo over ALL praxis source edits (props, text, token swaps),
+  // S08: unsaved editor drafts survive a restart in the source owner.
+  ipcMain.handle('source:drafts', (_e, root: string) => sourceOwner().drafts(root))
+  ipcMain.handle(
+    'source:save-draft',
+    (_e, root: string, file: string, base: string, text: string) =>
+      sourceOwner().saveDraft(root, file, base, text)
+  )
+  ipcMain.handle('source:clear-draft', (_e, root: string, file: string) =>
+    sourceOwner().clearDraft(root, file)
+  )
+  // v8 F3b: undo/redo over ALL trezi source edits (props, text, token swaps),
   // scoped to the active project root (the rail keeps several projects open).
   ipcMain.handle('edit:undo', (_e, root: string) => undo(root))
   ipcMain.handle('edit:redo', (_e, root: string) => redo(root))
-  ipcMain.handle('edit:can', (_e, root: string) => ({ undo: canUndo(root), redo: canRedo(root) }))
+  ipcMain.handle('edit:can', (_e, root: string) => editAvailability(root))
   // Per-turn "Revert changes" (chat): addressable revert of one recorded turn group
   // (chat:<wtId>:<turnNo>) — restores its pre-turn files unless any drifted since.
   ipcMain.handle('edit:revert', (_e, root: string, group: string) => revertGroup(root, group))

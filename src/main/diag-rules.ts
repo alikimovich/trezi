@@ -36,7 +36,8 @@ const RULES: Rule[] = [
       const nodePath = t.match(/Node found at:\s*(\S+)/i)?.[1]
       const lib = t.match(/Library not loaded:\s*(\S+)/i)?.[1]
       return {
-        summary: 'The Node binary the iOS build uses is broken — a shared library it links is missing.',
+        summary:
+          'The Node binary the iOS build uses is broken — a shared library it links is missing.',
         detail:
           `The Xcode script phase ran ${nodePath ?? 'a node binary'} which failed to load ` +
           `${lib ?? 'a shared library'} and aborted. This is almost always a stale Homebrew node keg ` +
@@ -44,7 +45,8 @@ const RULES: Rule[] = [
         steps: [
           {
             text: 'Repoint the iOS build at your current working node (overrides the stale pinned path).',
-            command: "printf 'export NODE_BINARY=%s\\n' \"$(command -v node)\" > ios/.xcode.env.local",
+            command:
+              'printf \'export NODE_BINARY=%s\\n\' "$(command -v node)" > ios/.xcode.env.local',
             scope: 'repo'
           },
           {

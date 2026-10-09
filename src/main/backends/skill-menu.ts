@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { discoverSkillsInDirectory, type DiscoveredSkill } from '../skills'
+import { discoverPortableSkills } from '../bundled-skills'
+import { type DiscoveredSkill, discoverSkillsInDirectory } from '../skills'
 import type { ModelProvider } from './types'
 
 /** Project skills shadow user skills; native locations shadow compatible ones. */
@@ -19,10 +20,11 @@ export async function discoverProviderSkills(
     [join(provider === 'gemini' ? join(home, native) : codexHome, 'skills'), 'other'],
     [join(home, '.claude', 'skills'), 'other']
   ] as const
-  const groups = await Promise.all(locations.map(([dir, source]) =>
-    discoverSkillsInDirectory(dir, source, true)))
+  const groups = await Promise.all(
+    locations.map(([dir, source]) => discoverSkillsInDirectory(dir, source, true))
+  )
   const seen = new Set<string>()
-  return groups.flat().filter((skill) => {
+  return [...groups.flat(), ...(await discoverPortableSkills())].filter((skill) => {
     if (seen.has(skill.name)) return false
     seen.add(skill.name)
     return true

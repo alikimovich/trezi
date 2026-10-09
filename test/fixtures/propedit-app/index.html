@@ -33,27 +33,27 @@
   }
 </style>
 <body>
-  <main data-praxis-source="src/Badge.tsx:17">
-    <h1 data-praxis-source="src/Badge.tsx:25">Propedit fixture</h1>
+  <main data-trezi-source="src/Badge.tsx:17">
+    <h1 data-trezi-source="src/Badge.tsx:25">Propedit fixture</h1>
     <!-- v10 Styles tab: a Tailwind-utility element (S1 class rewrite) … -->
-    <div id="tw-box" class="p-4 rounded-md" data-praxis-source="src/Styled.tsx:5">
+    <div id="tw-box" class="p-4 rounded-md" data-trezi-source="src/Styled.tsx:5">
       Padded box
     </div>
     <!-- … and an inline-styled element (S2 style-object merge). -->
-    <div id="inline-box" style="padding: 8px" data-praxis-source="src/Styled.tsx:9">
+    <div id="inline-box" style="padding: 8px" data-trezi-source="src/Styled.tsx:9">
       Inline padded
     </div>
     <!-- … one whose color happens to BE a design token's value, but does NOT
          reference it — the panel must show the raw hex, not name the token. -->
-    <div id="token-box" style="color: #6c6c6c" data-praxis-source="src/Styled.tsx:21">
+    <div id="token-box" style="color: #6c6c6c" data-trezi-source="src/Styled.tsx:21">
       Token colored
     </div>
     <!-- … and a BARE one: no class, no style, so S2 has nothing to extend and
          the edit must fall through to the agent instead of inventing a prop. -->
-    <div id="bare-box" data-praxis-source="src/Styled.tsx:46">Bare box</div>
+    <div id="bare-box" data-trezi-source="src/Styled.tsx:46">Bare box</div>
     <!-- … and one that DOES reference the token — `style=` preserves var()
          unresolved (unlike getComputedStyle), so this is the proven case. -->
-    <div id="proven-token-box" style="color: var(--color-text)" data-praxis-source="src/Styled.tsx:54">
+    <div id="proven-token-box" style="color: var(--color-text)" data-trezi-source="src/Styled.tsx:54">
       Proven token colored
     </div>
   </main>

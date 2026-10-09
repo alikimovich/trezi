@@ -1,6 +1,6 @@
 // v10 Styles-tab fixtures: a Tailwind-utility-classed element (the S1
 // class-rewrite target) and an inline-styled element (the S2 style-object
-// merge target). index.html mirrors both with matching data-praxis-source stamps.
+// merge target). index.html mirrors both with matching data-trezi-source stamps.
 export function TwCard(): JSX.Element {
   return <div className="p-4 rounded-md">Padded box</div>
 }
@@ -22,7 +22,7 @@ export function TokenCard(): JSX.Element {
 }
 
 // v10 Custom Controls fixture (custom-controls.mjs): module constants a canned
-// .praxis/control-panels.json anchors on with the 'literal' strategy. CustomCard
+// .trezi/control-panels.json anchors on with the 'literal' strategy. CustomCard
 // USES them, so each write-through commit would repaint under a real dev
 // server's HMR — the literal tier's whole preview story.
 const DEMO_SCALE = 1.5

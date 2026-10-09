@@ -20,7 +20,7 @@ export interface RecordCapture {
   finalize: () => void
   /** Stamp the SDK's own resumable session id (v9 resume) onto the record, once
    *  it's known (off the `system`/init message). Claude-only today. */
-  setSdkSessionId: (id: string) => void
+  setSdkSessionId: (id: string, cwd?: string) => void
 }
 
 export function createRecordCapture(root: string, projectKey: string): RecordCapture {
@@ -36,16 +36,19 @@ export function createRecordCapture(root: string, projectKey: string): RecordCap
   }
   const touched = new Set<string>()
   let assistantBuf = ''
+  let assistantAt: number | undefined
 
   const flushAssistant = (): void => {
     const text = assistantBuf.trim()
-    if (text) record.transcript.push({ role: 'assistant', text, at: Date.now() })
+    if (text) record.transcript.push({ role: 'assistant', text, at: assistantAt ?? Date.now() })
     assistantBuf = ''
+    assistantAt = undefined
   }
 
   return {
     record,
     appendAssistant: (text) => {
+      if (!assistantBuf) assistantAt = Date.now()
       assistantBuf += text
     },
     noteTool: (name, input) => {
@@ -62,8 +65,10 @@ export function createRecordCapture(root: string, projectKey: string): RecordCap
       flushAssistant()
       record.filesTouched = [...touched]
     },
-    setSdkSessionId: (id) => {
+    setSdkSessionId: (id, cwd) => {
       record.sdkSessionId = id
+      // The directory the session was started in, kept with its id (LKM-165).
+      if (cwd) record.sdkCwd = cwd
     }
   }
 }
@@ -89,6 +94,9 @@ export function seedFromRecord(
   }
   if (from.branch && !live.branch) live.branch = from.branch
   if (from.prUrl && !live.prUrl) live.prUrl = from.prUrl
-  if (from.sdkSessionId && !live.sdkSessionId) live.sdkSessionId = from.sdkSessionId
+  if (from.sdkSessionId && !live.sdkSessionId) {
+    live.sdkSessionId = from.sdkSessionId
+    if (from.sdkCwd) live.sdkCwd = from.sdkCwd
+  }
   if (opts.reuseId) live.id = from.id
 }

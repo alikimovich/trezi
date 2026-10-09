@@ -1,0 +1,96 @@
+#!/bin/sh
+# The trezi command: a thin front for `open -a Trezi`, Trezi's one start path.
+# install.sh links it as ~/.local/bin/trezi. The app
+# finds its own bundled Bun, backend and profile (src/native/HostLaunch.swift); this
+# script only builds a missing app, opens it (with a folder as the project), and hands
+# --update and logs to bin/trezi.mjs.
+set -eu
+
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case $link in /*) self=$link ;; *) self=$(dirname "$self")/$link ;; esac
+done
+root=$(cd "$(dirname "$self")/.." && pwd -P)
+app="$root/out/native/Trezi.app"
+
+usage() {
+  cat <<'EOF'
+Usage: trezi [folder | option]
+
+  trezi               Open Trezi (builds it first if needed)
+  trezi .             Open the current folder as a project
+  trezi <folder>      Open that folder as a project
+  trezi --update      Pull the latest Trezi, reinstall and rebuild
+  trezi logs [--since 30m] [--follow]
+                      Print Trezi's logs (~/Library/Logs/Trezi), newest last
+  trezi --help        Show this help
+  trezi --version     Print the installed version
+EOF
+}
+
+# The Bun on PATH, else the one bundled into a built Trezi.app.
+bun_path() {
+  if command -v bun >/dev/null 2>&1; then command -v bun
+  elif [ -x "$app/Contents/Helpers/bun" ]; then printf '%s\n' "$app/Contents/Helpers/bun"
+  else echo "Bun is required to build Trezi. Install it from https://bun.sh." >&2; exit 1
+  fi
+}
+
+open_trezi() {
+  if [ ! -f "$app/Contents/MacOS/TreziHost" ] || [ ! -f "$app/Contents/Helpers/bun" ] || [ ! -f "$app/Contents/Resources/backend/index.cjs" ]; then
+    echo "Building Trezi…"
+    bun=$(bun_path)
+    (cd "$root" && "$bun" run build) || { echo "Trezi build failed — see output above." >&2; exit 1; }
+  fi
+  exec open -a "$app" "$@"
+}
+
+# "Trezi X.Y.Z (build N, <short sha>)", as Settings shows it (scripts/version.mjs). The
+# built app's Info.plist when it carries the stamp, else the checkout itself.
+print_version() {
+  plist="$app/Contents/Info.plist"
+  if [ -f "$plist" ] && commit=$(plutil -extract TreziCommit raw -o - "$plist" 2>/dev/null); then
+    version=$(plutil -extract CFBundleShortVersionString raw -o - "$plist")
+    build=$(plutil -extract CFBundleVersion raw -o - "$plist")
+  else
+    version=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$root/package.json")
+    build=$(git -C "$root" rev-list --count HEAD 2>/dev/null || echo 0)
+    commit=$(git -C "$root" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
+  fi
+  printf 'Trezi %s (build %s, %s)\n' "$version" "$build" "$commit"
+}
+
+open_folder() {
+  folder=$(cd "$1" 2>/dev/null && pwd -P) || { echo "Not a folder: $1" >&2; exit 1; }
+  open_trezi "$folder"
+}
+
+case "${1-}" in
+  "")
+    [ $# -eq 0 ] || { usage >&2; exit 1; }
+    open_trezi ;;
+  --update|update)
+    shift
+    bun=$(bun_path)
+    exec "$bun" "$root/bin/trezi.mjs" --update "$@" ;;
+  logs)
+    shift
+    bun=$(bun_path)
+    exec "$bun" "$root/bin/trezi.mjs" logs "$@" ;;
+  --help|-h) usage ;;
+  --version|-v) print_version ;;
+  --project)
+    [ $# -eq 2 ] || { echo "Usage: trezi <folder>" >&2; exit 1; }
+    open_folder "$2" ;;
+  serve)
+    echo "Browser and Tailscale modes were retired with Electron. Use trezi <folder> for the native app." >&2
+    exit 1 ;;
+  -*)
+    echo "Unknown option: $1" >&2
+    usage >&2
+    exit 1 ;;
+  *)
+    [ $# -eq 1 ] || { usage >&2; exit 1; }
+    open_folder "$1" ;;
+esac

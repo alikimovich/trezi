@@ -5,7 +5,7 @@
  * Run with: bun test/preferred-model.mjs
  */
 
-import { DEFAULT_PROVIDER, defaultChatAgentSettings } from '../src/renderer/src/chat-settings.ts'
+import { DEFAULT_PROVIDER, defaultChatAgentSettings } from '../src/shared/chat-settings.ts'
 import {
   defaultPreferredModelState,
   LAST_USED_VALUE,
@@ -16,7 +16,7 @@ import {
   setFixedPreference,
   setLastUsedMode,
   settingsFromChoice
-} from '../src/renderer/src/preferred-model.ts'
+} from '../src/shared/preferred-model.ts'
 
 let failed = 0
 const ok = (cond, msg) => {

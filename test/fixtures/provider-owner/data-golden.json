@@ -1,0 +1,258 @@
+{
+ "connections": [
+  {
+   "label": "create",
+   "answer": {
+    "ok": {
+     "id": "gw",
+     "label": "AI Gateway",
+     "preset": "gateway",
+     "baseUrl": "https://ai-gateway.vercel.sh/v1",
+     "wireApi": "responses",
+     "models": [
+      "kimi",
+      "deepseek"
+     ],
+     "hasKey": true
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"AI Gateway\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [\n        \"kimi\",\n        \"deepseek\"\n      ],\n      \"secret\": \"ZW5jOnNrLW9uZQ==\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "keyless",
+   "answer": {
+    "ok": {
+     "id": "groq",
+     "label": "Groq",
+     "preset": "custom",
+     "baseUrl": "https://api.groq.com/openai/v1",
+     "wireApi": "responses",
+     "models": [],
+     "hasKey": false
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"AI Gateway\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [\n        \"kimi\",\n        \"deepseek\"\n      ],\n      \"secret\": \"ZW5jOnNrLW9uZQ==\"\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://api.groq.com/openai/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    }\n  ]\n}"
+  },
+  {
+   "label": "path edit keeps the key",
+   "answer": {
+    "ok": {
+     "id": "gw",
+     "label": "Gateway (work)",
+     "preset": "gateway",
+     "baseUrl": "https://ai-gateway.vercel.sh/v1beta",
+     "wireApi": "responses",
+     "models": [
+      "a"
+     ],
+     "hasKey": true
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh/v1beta\",\n      \"wireApi\": \"responses\",\n      \"models\": [\n        \"a\"\n      ],\n      \"secret\": \"ZW5jOnNrLW9uZQ==\"\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://api.groq.com/openai/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    }\n  ]\n}"
+  },
+  {
+   "label": "blank key keeps the key",
+   "answer": {
+    "ok": {
+     "id": "gw",
+     "label": "Gateway (work)",
+     "preset": "gateway",
+     "baseUrl": "https://ai-gateway.vercel.sh/v1beta",
+     "wireApi": "responses",
+     "models": [
+      "a"
+     ],
+     "hasKey": true
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh/v1beta\",\n      \"wireApi\": \"responses\",\n      \"models\": [\n        \"a\"\n      ],\n      \"secret\": \"ZW5jOnNrLW9uZQ==\"\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://api.groq.com/openai/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    }\n  ]\n}"
+  },
+  {
+   "label": "a key for a keyless one",
+   "answer": {
+    "ok": {
+     "id": "groq",
+     "label": "Groq",
+     "preset": "custom",
+     "baseUrl": "https://api.groq.com/openai/v1",
+     "wireApi": "responses",
+     "models": [],
+     "hasKey": true
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh/v1beta\",\n      \"wireApi\": \"responses\",\n      \"models\": [\n        \"a\"\n      ],\n      \"secret\": \"ZW5jOnNrLW9uZQ==\"\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://api.groq.com/openai/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmdzay10d28=\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "origin change drops the key",
+   "answer": {
+    "ok": {
+     "id": "groq",
+     "label": "Groq",
+     "preset": "custom",
+     "baseUrl": "https://attacker.example/v1",
+     "wireApi": "responses",
+     "models": [],
+     "hasKey": false
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh/v1beta\",\n      \"wireApi\": \"responses\",\n      \"models\": [\n        \"a\"\n      ],\n      \"secret\": \"ZW5jOnNrLW9uZQ==\"\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    }\n  ]\n}"
+  },
+  {
+   "label": "port change drops the key",
+   "answer": {
+    "ok": {
+     "id": "gw",
+     "label": "Gateway (work)",
+     "preset": "gateway",
+     "baseUrl": "https://ai-gateway.vercel.sh:444/v1",
+     "wireApi": "responses",
+     "models": [],
+     "hasKey": false
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    }\n  ]\n}"
+  },
+  {
+   "label": "unicode label",
+   "answer": {
+    "ok": {
+     "id": "local",
+     "label": "Local ✨",
+     "preset": "custom",
+     "baseUrl": "http://127.0.0.1:1234/v1",
+     "wireApi": "responses",
+     "models": [],
+     "hasKey": true
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "no label",
+   "answer": {
+    "error": "Give this connection a name."
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "no url",
+   "answer": {
+    "error": "Enter the endpoint URL."
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "unsafe id",
+   "answer": {
+    "error": "unsafe connection id: ../etc"
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "locked keychain",
+   "answer": {
+    "error": "macOS Keychain encryption unavailable; unlock the keychain and retry."
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "remove unknown",
+   "answer": {
+    "ok": null
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"groq\",\n      \"label\": \"Groq\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"https://attacker.example/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "remove",
+   "answer": {
+    "ok": null
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"gw\",\n      \"label\": \"Gateway (work)\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://ai-gateway.vercel.sh:444/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    },\n    {\n      \"id\": \"local\",\n      \"label\": \"Local ✨\",\n      \"preset\": \"custom\",\n      \"baseUrl\": \"http://127.0.0.1:1234/v1\",\n      \"wireApi\": \"responses\",\n      \"models\": [],\n      \"secret\": \"ZW5jOmxr\"\n    }\n  ]\n}"
+  },
+  {
+   "label": "corrupt",
+   "answer": {
+    "ok": {
+     "id": "n",
+     "label": "N",
+     "preset": "gateway",
+     "baseUrl": "https://n.example",
+     "wireApi": "responses",
+     "models": [],
+     "hasKey": false
+    }
+   },
+   "file": "{\n  \"version\": 1,\n  \"connections\": [\n    {\n      \"id\": \"n\",\n      \"label\": \"N\",\n      \"preset\": \"gateway\",\n      \"baseUrl\": \"https://n.example\",\n      \"wireApi\": \"responses\",\n      \"models\": []\n    }\n  ]\n}"
+  }
+ ],
+ "secrets": {
+  "gw": null,
+  "groq": null,
+  "local": "lk",
+  "missing": null,
+  "../x": null
+ },
+ "list": [
+  {
+   "id": "gw",
+   "label": "Gateway (work)",
+   "preset": "gateway",
+   "baseUrl": "https://ai-gateway.vercel.sh:444/v1",
+   "wireApi": "responses",
+   "models": [],
+   "hasKey": false
+  },
+  {
+   "id": "local",
+   "label": "Local ✨",
+   "preset": "custom",
+   "baseUrl": "http://127.0.0.1:1234/v1",
+   "wireApi": "responses",
+   "models": [],
+   "hasKey": true
+  }
+ ],
+ "noStore": "No OS credential store is available, so Trezi cannot store this API key (it will never write a key to disk in plain text). On Linux, install/unlock a keyring (gnome-keyring, kwallet) and try again.",
+ "catalogSeed": "{\"version\":1,\"entries\":{\"claude\":{\"at\":5,\"models\":[{\"id\":\"x\"}]},\"codex\":{\"at\":7,\"models\":[{\"id\":\"old\",\"label\":\"Old\"}]},\"other\":{}}}",
+ "catalog": [
+  {
+   "backend": "claude",
+   "models": [
+    {
+     "id": "default",
+     "label": "Default (recommended)"
+    },
+    {
+     "id": "claude-fable-5",
+     "label": "Fable 5 \"quoted\" ✨"
+    }
+   ],
+   "file": "{\"version\":1,\"entries\":{\"codex\":{\"at\":7,\"models\":[{\"id\":\"old\",\"label\":\"Old\"}]},\"claude\":{\"at\":1234,\"models\":[{\"id\":\"default\",\"label\":\"Default (recommended)\"},{\"id\":\"claude-fable-5\",\"label\":\"Fable 5 \\\"quoted\\\" ✨\"}]}}}"
+  },
+  {
+   "backend": "codex",
+   "models": [
+    {
+     "id": "gpt-5.6-sol",
+     "label": "GPT-5.6-Sol"
+    }
+   ],
+   "file": "{\"version\":1,\"entries\":{\"codex\":{\"at\":1234,\"models\":[{\"id\":\"gpt-5.6-sol\",\"label\":\"GPT-5.6-Sol\"}]},\"claude\":{\"at\":1234,\"models\":[{\"id\":\"default\",\"label\":\"Default (recommended)\"},{\"id\":\"claude-fable-5\",\"label\":\"Fable 5 \\\"quoted\\\" ✨\"}]}}}"
+  },
+  {
+   "backend": "codex",
+   "models": [],
+   "file": "{\"version\":1,\"entries\":{\"codex\":{\"at\":1234,\"models\":[{\"id\":\"gpt-5.6-sol\",\"label\":\"GPT-5.6-Sol\"}]},\"claude\":{\"at\":1234,\"models\":[{\"id\":\"default\",\"label\":\"Default (recommended)\"},{\"id\":\"claude-fable-5\",\"label\":\"Fable 5 \\\"quoted\\\" ✨\"}]}}}"
+  },
+  {
+   "backend": "claude",
+   "models": [
+    {
+     "id": "opus",
+     "label": "Opus"
+    }
+   ],
+   "file": "{\"version\":1,\"entries\":{\"codex\":{\"at\":1234,\"models\":[{\"id\":\"gpt-5.6-sol\",\"label\":\"GPT-5.6-Sol\"}]},\"claude\":{\"at\":1234,\"models\":[{\"id\":\"opus\",\"label\":\"Opus\"}]}}}"
+  }
+ ]
+}

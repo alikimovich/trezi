@@ -7,3 +7,8 @@ test/artifacts/
 .DS_Store
 .env
 .env.local
+.local/
+
+# Local output from the retired standalone prototype.
+experimental/native-runtime/build/
+experimental/native-runtime/artifacts/

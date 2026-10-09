@@ -1,0 +1,544 @@
+{
+ "current": {
+  "read": {
+   "view": {
+    "projects": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "key": "<scratch>/projects/alpha",
+      "name": "alpha",
+      "url": "http://127.0.0.1:5173",
+      "previewKind": "web",
+      "branch": "trezi/x",
+      "launchSpec": {
+       "root": "<scratch>/projects/alpha",
+       "command": "bun run dev",
+       "framework": "vite",
+       "previewKind": "web"
+      },
+      "touchedAt": 1789999999999,
+      "sessionKeys": [
+       "<scratch>/projects/alpha",
+       "<scratch>/projects/alpha#2"
+      ],
+      "activeSessionKey": "<scratch>/projects/alpha#2",
+      "chatSettings": {
+       "<scratch>/projects/alpha": {
+        "provider": "claude",
+        "model": "default"
+       }
+      },
+      "viewport": "mobile"
+     },
+     {
+      "root": "<scratch>/projects/beta/",
+      "key": "<scratch>/projects/beta",
+      "name": "beta",
+      "url": null,
+      "previewKind": "simulator",
+      "branch": null,
+      "launchSpec": null,
+      "touchedAt": 1,
+      "sessionKeys": [
+       "<scratch>/projects/beta"
+      ],
+      "activeSessionKey": "<scratch>/projects/beta"
+     }
+    ],
+    "activeKey": "<scratch>/projects/beta",
+    "recents": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "name": "alpha",
+      "at": 5
+     }
+    ]
+   },
+   "encoded": "{\"projects\":[{\"root\":\"<scratch>/projects/alpha\",\"key\":\"<scratch>/projects/alpha\",\"name\":\"alpha\",\"url\":\"http://127.0.0.1:5173\",\"previewKind\":\"web\",\"branch\":\"trezi/x\",\"launchSpec\":{\"root\":\"<scratch>/projects/alpha\",\"command\":\"bun run dev\",\"framework\":\"vite\",\"previewKind\":\"web\"},\"touchedAt\":1789999999999,\"sessionKeys\":[\"<scratch>/projects/alpha\",\"<scratch>/projects/alpha#2\"],\"activeSessionKey\":\"<scratch>/projects/alpha#2\",\"chatSettings\":{\"<scratch>/projects/alpha\":{\"provider\":\"claude\",\"model\":\"default\"}},\"viewport\":\"mobile\"},{\"root\":\"<scratch>/projects/beta/\",\"key\":\"<scratch>/projects/beta\",\"name\":\"beta\",\"url\":null,\"previewKind\":\"simulator\",\"branch\":null,\"launchSpec\":null,\"touchedAt\":1,\"sessionKeys\":[\"<scratch>/projects/beta\"],\"activeSessionKey\":\"<scratch>/projects/beta\"}],\"activeKey\":\"<scratch>/projects/beta\",\"recents\":[{\"root\":\"<scratch>/projects/alpha\",\"name\":\"alpha\",\"at\":5}]}"
+  },
+  "applied": {
+   "results": [
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": false,
+     "key": "<scratch>/projects/beta",
+     "created": false
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/missing-folder",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    }
+   ],
+   "encoded": "{\"projects\":[{\"root\":\"<scratch>/missing-folder\",\"key\":\"<scratch>/missing-folder\",\"name\":\"missing-folder\",\"url\":null,\"previewKind\":\"web\",\"branch\":null,\"launchSpec\":null,\"touchedAt\":1790000000000,\"sessionKeys\":[\"<scratch>/missing-folder\"],\"activeSessionKey\":\"<scratch>/missing-folder\"}],\"activeKey\":null,\"recents\":[{\"root\":\"<scratch>/projects/alpha\",\"name\":\"again\",\"at\":1790000000000},{\"root\":\"<scratch>/projects/beta\",\"name\":\"beta\",\"at\":1790000000000}]}",
+   "view": {
+    "projects": [
+     {
+      "root": "<scratch>/missing-folder",
+      "key": "<scratch>/missing-folder",
+      "name": "missing-folder",
+      "url": null,
+      "previewKind": "web",
+      "branch": null,
+      "launchSpec": null,
+      "touchedAt": 1790000000000,
+      "sessionKeys": [
+       "<scratch>/missing-folder"
+      ],
+      "activeSessionKey": "<scratch>/missing-folder"
+     }
+    ],
+    "activeKey": null,
+    "recents": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "name": "again",
+      "at": 1790000000000
+     },
+     {
+      "root": "<scratch>/projects/beta",
+      "name": "beta",
+      "at": 1790000000000
+     }
+    ]
+   }
+  }
+ },
+ "old": {
+  "read": {
+   "view": {
+    "projects": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "key": "<scratch>/projects/alpha",
+      "name": "Alpha",
+      "touchedAt": 3
+     }
+    ],
+    "activeKey": null,
+    "recents": []
+   },
+   "encoded": "{\"projects\":[{\"root\":\"<scratch>/projects/alpha\",\"key\":\"<scratch>/projects/alpha\",\"name\":\"Alpha\",\"touchedAt\":3}]}"
+  },
+  "applied": {
+   "results": [
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/missing-folder",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    }
+   ],
+   "encoded": "{\"projects\":[{\"root\":\"<scratch>/missing-folder\",\"key\":\"<scratch>/missing-folder\",\"name\":\"missing-folder\",\"url\":null,\"previewKind\":\"web\",\"branch\":null,\"launchSpec\":null,\"touchedAt\":1790000000000,\"sessionKeys\":[\"<scratch>/missing-folder\"],\"activeSessionKey\":\"<scratch>/missing-folder\"}],\"activeKey\":null,\"recents\":[{\"root\":\"<scratch>/projects/alpha\",\"name\":\"again\",\"at\":1790000000000},{\"root\":\"<scratch>/projects/beta\",\"name\":\"beta\",\"at\":1790000000000}]}",
+   "view": {
+    "projects": [
+     {
+      "root": "<scratch>/missing-folder",
+      "key": "<scratch>/missing-folder",
+      "name": "missing-folder",
+      "url": null,
+      "previewKind": "web",
+      "branch": null,
+      "launchSpec": null,
+      "touchedAt": 1790000000000,
+      "sessionKeys": [
+       "<scratch>/missing-folder"
+      ],
+      "activeSessionKey": "<scratch>/missing-folder"
+     }
+    ],
+    "activeKey": null,
+    "recents": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "name": "again",
+      "at": 1790000000000
+     },
+     {
+      "root": "<scratch>/projects/beta",
+      "name": "beta",
+      "at": 1790000000000
+     }
+    ]
+   }
+  }
+ },
+ "odd": {
+  "read": {
+   "view": {
+    "projects": [
+     {
+      "1": "a",
+      "2": "b",
+      "root": "/x\\y/",
+      "key": "/x/y",
+      "z": 1e-7,
+      "n": 1.5,
+      "big": 1e+21,
+      "neg": 0,
+      "f": 123456789.123,
+      "e": "😀\ud800"
+     },
+     {
+      "root": "<scratch>/projects/gamma　",
+      "key": "<scratch>/projects/gamma",
+      "__proto__": {
+       "x": 1
+      }
+     },
+     {
+      "root": "<scratch>/projects/alpha",
+      "key": "<scratch>/projects/alpha",
+      "name": "first-wins"
+     }
+    ],
+    "activeKey": null,
+    "recents": [
+     {
+      "root": "/r2",
+      "name": "R2",
+      "at": 0.5
+     }
+    ]
+   },
+   "encoded": "{\"0\":\"zero\",\"10\":1,\"projects\":[{\"1\":\"a\",\"2\":\"b\",\"root\":\"/x\\\\y/\",\"key\":\"/x/y\",\"z\":1e-7,\"n\":1.5,\"big\":1e+21,\"neg\":0,\"f\":123456789.123,\"e\":\"😀\\ud800\"},{\"root\":\"<scratch>/projects/gamma　\",\"key\":\"<scratch>/projects/gamma\",\"__proto__\":{\"x\":1}},{\"root\":\"relative\",\"key\":\"relative\"},{\"root\":\"/mismatch\",\"key\":\"/other\"},null,[1],7,{\"root\":\"<scratch>/projects/alpha\",\"key\":\"<scratch>/projects/alpha\",\"name\":\"first-wins\"},{\"root\":\"<scratch>/projects/alpha\",\"key\":\"<scratch>/projects/alpha\",\"name\":\"duplicate\"}],\"activeKey\":7,\"recents\":[null,{\"root\":\"/r\"},{\"root\":\"/r2\",\"name\":\"R2\",\"at\":0.5}],\"__proto__\":1}"
+  },
+  "applied": {
+   "results": [
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/missing-folder",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    }
+   ],
+   "encoded": "{\"0\":\"zero\",\"10\":1,\"projects\":[{\"1\":\"a\",\"2\":\"b\",\"root\":\"/x\\\\y/\",\"key\":\"/x/y\",\"z\":1e-7,\"n\":1.5,\"big\":1e+21,\"neg\":0,\"f\":123456789.123,\"e\":\"😀\\ud800\"},{\"root\":\"<scratch>/projects/gamma　\",\"key\":\"<scratch>/projects/gamma\",\"__proto__\":{\"x\":1}},{\"root\":\"relative\",\"key\":\"relative\"},{\"root\":\"/mismatch\",\"key\":\"/other\"},null,[1],7,{\"root\":\"<scratch>/missing-folder\",\"key\":\"<scratch>/missing-folder\",\"name\":\"missing-folder\",\"url\":null,\"previewKind\":\"web\",\"branch\":null,\"launchSpec\":null,\"touchedAt\":1790000000000,\"sessionKeys\":[\"<scratch>/missing-folder\"],\"activeSessionKey\":\"<scratch>/missing-folder\"}],\"activeKey\":null,\"recents\":[{\"root\":\"<scratch>/projects/alpha\",\"name\":\"again\",\"at\":1790000000000},{\"root\":\"<scratch>/projects/beta\",\"name\":\"beta\",\"at\":1790000000000},null,{\"root\":\"/r\"},{\"root\":\"/r2\",\"name\":\"R2\",\"at\":0.5}],\"__proto__\":1}",
+   "view": {
+    "projects": [
+     {
+      "1": "a",
+      "2": "b",
+      "root": "/x\\y/",
+      "key": "/x/y",
+      "z": 1e-7,
+      "n": 1.5,
+      "big": 1e+21,
+      "neg": 0,
+      "f": 123456789.123,
+      "e": "😀\ud800"
+     },
+     {
+      "root": "<scratch>/projects/gamma　",
+      "key": "<scratch>/projects/gamma",
+      "__proto__": {
+       "x": 1
+      }
+     },
+     {
+      "root": "<scratch>/missing-folder",
+      "key": "<scratch>/missing-folder",
+      "name": "missing-folder",
+      "url": null,
+      "previewKind": "web",
+      "branch": null,
+      "launchSpec": null,
+      "touchedAt": 1790000000000,
+      "sessionKeys": [
+       "<scratch>/missing-folder"
+      ],
+      "activeSessionKey": "<scratch>/missing-folder"
+     }
+    ],
+    "activeKey": null,
+    "recents": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "name": "again",
+      "at": 1790000000000
+     },
+     {
+      "root": "<scratch>/projects/beta",
+      "name": "beta",
+      "at": 1790000000000
+     },
+     {
+      "root": "/r2",
+      "name": "R2",
+      "at": 0.5
+     }
+    ]
+   }
+  }
+ },
+ "empty": {
+  "read": {
+   "view": {
+    "projects": [],
+    "activeKey": null,
+    "recents": []
+   },
+   "encoded": "{\"projects\":[]}"
+  },
+  "applied": {
+   "results": [
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha",
+     "created": true
+    },
+    {
+     "changed": false,
+     "key": "<scratch>/projects/alpha",
+     "created": false
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/missing-folder",
+     "created": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": false
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/beta"
+    },
+    "notFound",
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    },
+    {
+     "changed": true,
+     "key": "<scratch>/projects/alpha"
+    }
+   ],
+   "encoded": "{\"projects\":[{\"root\":\"<scratch>/missing-folder\",\"key\":\"<scratch>/missing-folder\",\"name\":\"missing-folder\",\"url\":null,\"previewKind\":\"web\",\"branch\":null,\"launchSpec\":null,\"touchedAt\":1790000000000,\"sessionKeys\":[\"<scratch>/missing-folder\"],\"activeSessionKey\":\"<scratch>/missing-folder\"}],\"activeKey\":null,\"recents\":[{\"root\":\"<scratch>/projects/alpha\",\"name\":\"again\",\"at\":1790000000000},{\"root\":\"<scratch>/projects/beta\",\"name\":\"beta\",\"at\":1790000000000}]}",
+   "view": {
+    "projects": [
+     {
+      "root": "<scratch>/missing-folder",
+      "key": "<scratch>/missing-folder",
+      "name": "missing-folder",
+      "url": null,
+      "previewKind": "web",
+      "branch": null,
+      "launchSpec": null,
+      "touchedAt": 1790000000000,
+      "sessionKeys": [
+       "<scratch>/missing-folder"
+      ],
+      "activeSessionKey": "<scratch>/missing-folder"
+     }
+    ],
+    "activeKey": null,
+    "recents": [
+     {
+      "root": "<scratch>/projects/alpha",
+      "name": "again",
+      "at": 1790000000000
+     },
+     {
+      "root": "<scratch>/projects/beta",
+      "name": "beta",
+      "at": 1790000000000
+     }
+    ]
+   }
+  }
+ }
+}

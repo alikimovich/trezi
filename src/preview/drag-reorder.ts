@@ -1,5 +1,6 @@
 import type { MoveNodeRequest } from '../shared/api'
 import { type SiblingSlot, siblingSlot } from './sibling-drop'
+import { sourceSelector, sourceStamp } from './source-stamp'
 
 /** Native-preview input only. No DOM reparenting: source edits own persistence. */
 export function installDragReorder(options: {
@@ -52,7 +53,7 @@ export function installDragReorder(options: {
         !el.contains(e.target)
       )
         return
-      const source = el.getAttribute('data-praxis-source')
+      const source = sourceStamp(el)
       const parent = el.parentElement
       if (!source || !parent || el === document.body) return
       swallow(e)
@@ -119,14 +120,14 @@ export function installDragReorder(options: {
       d.slot = inside
         ? siblingSlot(boxes, d.children.indexOf(d.el), e.clientX, e.clientY, row, reverse, d.slot)
         : null
-      if (d.slot && !d.children[d.slot.index].getAttribute('data-praxis-source')) d.slot = null
+      if (d.slot && !sourceStamp(d.children[d.slot.index])) d.slot = null
       if (!d.slot) {
         line?.remove()
         line = null
         return
       }
       line ??= document.createElement('div')
-      line.setAttribute('data-praxis-drop-line', '')
+      line.setAttribute('data-trezi-drop-line', '')
       const s = d.slot
       line.style.cssText =
         `position:fixed;pointer-events:none;background:#2563eb;outline:1px solid white;` +
@@ -159,9 +160,9 @@ export function installDragReorder(options: {
         target.parentElement === d.parent &&
         d.children.length === d.parent.children.length &&
         d.children.every((el, i) => d.parent.children[i] === el) &&
-        d.el.getAttribute('data-praxis-source') === d.source
+        sourceStamp(d.el) === d.source
       ) {
-        const source = target.getAttribute('data-praxis-source')
+        const source = sourceStamp(target)
         if (source)
           options.move({
             dragged: { source: d.source },
