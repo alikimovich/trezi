@@ -199,6 +199,19 @@ export async function checkThreeD(host: NativeBridge, artifacts: string) {
   await waitFor(async () => !(await inspect()).active, 'Back closes native chrome')
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 0)
 
+  const samePage = await open()
+  assert.notEqual(samePage.session, second.session, 'reopening creates a new session')
+  await page(`(() => { history.pushState({}, '', '#x'); return true })()`)
+  await waitFor(
+    async () => !(await inspect()).active,
+    'same-document URL change clears native chrome'
+  )
+  await waitFor(
+    async () =>
+      (await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true)) === 0,
+    'same-document URL change closes the modal scene'
+  )
+
   const third = await open()
   await page(`(() => {
     const original = document.querySelector('#native-title');

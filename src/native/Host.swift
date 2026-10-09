@@ -333,7 +333,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
         case "previewSpeed": setPreviewSpeed(c)
         case "statesState": statesSwitcher.update(c["state"] as? [String: Any]); nativeLayout.layout()
-        case "threeDClear": threeD.clear(); nativeLayout.layout()
+        case "threeDClear":
+            // A same-document URL change (pushState, hash) fires no navigation, so the
+            // modal scene would stay open without controls: close it before clearing.
+            threeD.dismiss(); threeD.clear(); nativeLayout.layout()
         case "workbenches": shell.updateWorkbenches(c["items"] as? [[String: Any]] ?? [])
         case "previewViewport":
             if name.hasPrefix("agent:"), let view {

@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-214 review repair: same-document URL change closes the exploded scene
+
+- The host's `url` handler clears the native 3D bars on every preview URL change, including `history.pushState`/hash changes that fire no navigation. That left the modal scene open with no controls. `threeDClear` now sends the session's `close` action (`ThreeDChrome.dismiss()`) before clearing, so the scene and the bars always leave together; real navigations still clear as before.
+- Native `three-d` smoke reopens the scene, runs `history.pushState({}, '', '#x')` and asserts the chrome is inactive and no `[data-trezi-three-d]` remains.
+
 ## 2026-10-08 — LKM-214 review repair: compact chrome, panel clearance and focus
 
 - Compact exploded-view bars now keep Back, Code, Front, Reset, separation and the layer picker visible without hidden scrolling. The inspector and Layers islands fit between the bars when there is camera room; the scene receives matching side insets. A scene that cannot show its bars closes.
