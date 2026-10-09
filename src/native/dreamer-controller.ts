@@ -67,6 +67,10 @@ export class NativeDreamerController {
     readonly preferences: NativePreferences,
     readonly host: DreamerHost
   ) {}
+  /** A run is reading chats or waiting for its model (the quit check names it, LKM-221). */
+  get isRunning() {
+    return this.running
+  }
 
   /** The last result: this session's, else the one saved by an earlier launch. */
   last(): DreamerResult | null {

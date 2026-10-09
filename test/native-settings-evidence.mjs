@@ -148,7 +148,8 @@ for (const width of [680, 780]) {
       control('agentGitAccess', 'Managed'),
       control('agentMerge', 'On'),
       control('workspaceIdle', '7 days'),
-      control('activityAutoOpen', 'For problems that need me')
+      control('activityAutoOpen', 'For problems that need me'),
+      control('quitDontAsk', 'Ask first')
     ],
     text: [
       'General',
@@ -263,6 +264,44 @@ const outOfOrder = {
   ]
 }
 assertSettingsEvidence(outOfOrder, 960, true, 'agent')
+// Verbatim OCR from the manager's 680-point On/Chat capture (LKM-221): the pixels show
+// "UI layout method"; Vision returned "Ullayout method". Must pass; other words still count.
+const joined = {
+  ...structuredClone(outOfOrder),
+  width: 680,
+  height: 760,
+  text: [
+    'General',
+    'Al Providers',
+    'Experimental',
+    'Dreamer',
+    'Experimental',
+    'Experimental',
+    'Changes save automatically. Ul generation options apply to your',
+    'next message.',
+    'Gen Ul',
+    "Generate Ul using your project's existing components and",
+    'styles. Experimental; supports React and Svelte.',
+    'Ullayout method',
+    'Chat model uses your selected chat model to',
+    'arrange components. Jev uses a separate',
+    'layout model and requires an Al Gateway API',
+    'key.',
+    'Chat model',
+    'Saved automatically.',
+    'On'
+  ]
+}
+assertSettingsEvidence(joined, 680, true, 'agent')
+for (const line of ['Ullayout', 'Ullayout methods', 'Ul method'])
+  assert.throws(() =>
+    assertSettingsEvidence(
+      { ...joined, text: joined.text.map((t) => (t === 'Ullayout method' ? line : t)) },
+      680,
+      true,
+      'agent'
+    )
+  )
 const rejectWrapped = (mutate, enabled = true) => {
   const bad = structuredClone(outOfOrder)
   bad.values.projectUi = String(enabled)
