@@ -9,6 +9,7 @@ import type {
 import { type ChatAgentSettings, defaultChatAgentSettings } from '../shared/chat-settings'
 import { migrateChatTitle } from '../shared/chat-title'
 import type { ChatUiRecord } from '../shared/chat-ui'
+import type { NativeLiveChange } from '../shared/native-chat'
 import type { NativeChatContext, NativeChatMirror } from '../shared/native-chat-controller'
 import { emptyUsage, type TokenUsage } from '../shared/run-stats'
 import type { ChatLogin } from './chat-login'
@@ -92,6 +93,10 @@ export interface Chat extends NativeChatMirror {
   /** LKM-165: what runs while the phase is 'applying', named in the activity row.
    *  'waiting' is a turn the backend still holds that this chat did not start. */
   operation?: 'landing' | 'parking' | 'resolving' | 'waiting'
+  /** LKM-215: a turn's outside-change row, held until the turn (and its landing) ends. */
+  pendingLiveChange?: NativeLiveChange
+  /** Spawned comment agents' reports that arrived while the turn ran; each is a row. */
+  pendingSpawnLiveChanges?: NativeLiveChange[]
 }
 /** The hover Revert of a stopped turn's message: routes to the held-work revert. */
 export const STOPPED_GROUP = 'stopped:'
@@ -230,6 +235,27 @@ export function finish(chat: Chat, landing = false) {
     }
     chat.turnStartedAt = null
     chat.streamingId = null
+    placeLiveChange(chat)
+  }
+}
+/** LKM-215: the outside-change row goes under the finished turn's reply, after its
+ *  landing tagged that reply (Revert), never inside a running turn. */
+function placeLiveChange(chat: Chat) {
+  const changes = [chat.pendingLiveChange, ...(chat.pendingSpawnLiveChanges ?? [])]
+  chat.pendingLiveChange = undefined
+  chat.pendingSpawnLiveChanges = undefined
+  for (const change of changes) {
+    if (!change) continue
+    const text = `${change.line}\n\n${change.detail}`
+    chat.messages.push({
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      at: Date.now(),
+      text,
+      statuses: [],
+      segments: [{ kind: 'text', text }],
+      liveChange: change
+    })
   }
 }
 /** A terminal event that cannot belong to the turn this chat is running (S11). */
@@ -312,6 +338,19 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       break
     case 'dependencies':
       chat.dependencies = event.issue ?? undefined
+      break
+    case 'live-change':
+      // One per turn: a later report for the same turn replaces a held one. Bun makes it
+      // cumulative (a continuation run's report includes the earlier runs'), so nothing is lost.
+      // A spawned comment agent's report is its own row, never the turn's: it would
+      // replace the turn's held report, or the turn's later one replace it.
+      if (event.spawn)
+        chat.pendingSpawnLiveChanges = [
+          ...(chat.pendingSpawnLiveChanges ?? []),
+          { line: event.line, detail: event.detail, agent: event.agent }
+        ]
+      else chat.pendingLiveChange = { line: event.line, detail: event.detail, agent: event.agent }
+      if (!chat.isRunning) placeLiveChange(chat)
       break
     case 'reconciliation-started':
       chat.isolation = 'isolated'

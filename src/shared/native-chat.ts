@@ -28,6 +28,9 @@ export interface NativeChatMessage {
   /** A problem Trezi's own check of the preview found after a turn landed (LKM-195,
    *  LKM-210: a passing check adds no row), one compact warning row. */
   landingCheck?: NativeLandingCheck
+  /** LKM-215: the live checkout changed outside this chat during the turn, one compact
+   *  warning row with Details. */
+  liveChange?: NativeLiveChange
   /** Tokens this assistant turn's model calls reported (cached is part of input). */
   usage?: { input: number; output: number; cached: number }
 }
@@ -42,6 +45,16 @@ export interface NativeLandingCheck {
   line: string
   /** The first console errors or the dev server's message (page text, untrusted). */
   errors: string[]
+}
+
+/** What changed in the live checkout during a turn that Trezi did not do (LKM-215). */
+export interface NativeLiveChange {
+  /** One line: what changed, with repo-relative paths. */
+  line: string
+  /** Markdown shown under Details: the files, the commits and what they mean. */
+  detail: string
+  /** The agent's own commands named the live checkout; otherwise the user or a tool. */
+  agent: boolean
 }
 
 export interface NativeChatCard {

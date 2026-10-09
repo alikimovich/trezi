@@ -18,7 +18,7 @@ import {
   type TokenUsage,
   usageDelta
 } from '../../shared/run-stats'
-import { agentFileAccess, realPath } from '../agent-file-access'
+import { agentFileAccess } from '../agent-file-access'
 import { type RolloutUsageWatch, watchRolloutUsage } from '../codex-usage'
 import { parseCodexModels } from '../model-catalog'
 import { resolveConnection } from '../providers'
@@ -39,7 +39,6 @@ import {
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
 import { codexItemWarning, createItemTracker } from './codex-stream'
-import { liveTreeReport, liveTreeSnapshot, liveWriteNote } from './live-tree-watch'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
@@ -233,10 +232,10 @@ async function startSession(
   const emitKey = ctx?.emitKey ?? key
   const cap = createRecordCapture(root, key)
   const access = agentFileAccess(options.agentFileAccess)
-  // Full access has no sandbox to keep a worktree chat off the live checkout, so each
-  // turn compares the live tree before and after (`live-tree-watch.ts`).
+  // Full access has no sandbox to keep a worktree chat off the live checkout, so Bun
+  // compares the live tree around each turn, minus Trezi's own effects
+  // (`main/live-change-watch.ts`, LKM-215).
   const liveRoot = ctx?.liveRoot ?? root
-  const watchLive = access === 'full' && realPath(root) !== realPath(liveRoot)
   const pending = new Map<string, PendingPrompt>()
   let disposed = false
   let aborted = false // session teardown (permanent)
@@ -471,7 +470,6 @@ async function startSession(
     // On turn 2+ the thread id is already known, so the tail starts with the turn;
     // on turn 1 it starts at `thread.started`, a moment later.
     if (thread.id) startUsageWatch(thread.id)
-    const liveBefore = watchLive ? await liveTreeSnapshot(liveRoot) : null
     // A model this ChatGPT login cannot use fails the turn before any output. Try the
     // next listed model on a fresh copy of the thread, say so, and keep it for later
     // turns; main reads the notice (`provider-sessions.ts`). Connections never do this.
@@ -498,14 +496,6 @@ async function startSession(
     // `turn.completed`, so the rollout is the only record of what it spent.
     await usageWatch?.poll().catch(() => {})
     stopUsageWatch()
-    const liveAfter = liveBefore ? await liveTreeSnapshot(liveRoot) : null
-    const liveChanged =
-      liveBefore && liveAfter ? await liveTreeReport(liveRoot, liveBefore, liveAfter) : null
-    if (liveChanged && (liveChanged.files.length || liveChanged.committed) && !disposed) {
-      const note = liveWriteNote(liveChanged.files, root, liveChanged.committed)
-      cap.appendAssistant(note)
-      emit({ type: 'delta', text: note })
-    }
     cap.finalize()
     emit({ type: 'done' })
   }
