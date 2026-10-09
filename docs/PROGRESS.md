@@ -2,7 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
-## 2026-10-08 — LKM-218 repair: element toolbar capture shows the toolbar
+## 2026-10-09 — LKM-218 repair: editor-freshness flake, changelog placement
+
+- The manager's `editor-freshness` failure (`#fresh-card` never selected) did not reproduce as a product fault: nothing in this change touches selection, and in three further native `core` runs under a load average of 17–23 it failed once on the initial page load, then passed (3.5 s) while only the typing-latency check `source-syntax` failed. No check was relaxed.
+- After the v0.1.0 release merged in, the LKM-218 line had landed inside the dated 0.1.0 section; it is back under `## [Unreleased]` → Changed. `test/versioning.mjs` asserted that the `trezi --version` entry is in Unreleased, which the release itself made false (it failed on main too); it now looks for the entry anywhere in the changelog.
 
 - Review found `element-toolbar.png` without the toolbar: `captureShell` is an offscreen `cacheDisplay` and does not reliably paint the preview's WebKit overlay. The capture now uses `captureVisibleWindow` after `preparePreviewInput` (retried up to 3 times when focus moves), and `element-toolbar.json` records the toolbar's bounding rect and the viewport, failing the check if the toolbar has no size.
 
