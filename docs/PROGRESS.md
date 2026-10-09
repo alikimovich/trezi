@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-08 — LKM-213: Publish is the rightmost toolbar group
+
+- **Why.** LKM-206 (slow motion) and LKM-197 ("…") were added after Publish, so Publish and its chevron were no longer at the trailing edge.
+- **Order.** `interaction [select | device | ruler | slow motion]` · space · `tools [code | layers | expand]` · space · `…` · `Publish`. Slow motion is an `NSMenuToolbarItem` subitem of the `MomentaryToolbarGroup`; a click on a menu-only subitem pops its menu under the segment. A subitem's `.prominent` style does not draw, so a slowed preview shows an accent-coloured `tortoise.fill` (`toolbarAccentSymbol`); `speedProminent` reports that glyph. `clickSegment` refuses menu segments (the menu would block the pipe); checks keep using `preview-speed`.
+- **Narrow windows.** As before, "…" and slow motion leave windows under 1000 pt; Publish (high priority) never overflows. A first try kept the segment at every width: at 850 pt with the sidebar open its 32 pt pushed the address block to its 80 pt floor, under the LKM-148 lower bound (100 pt). `MomentaryToolbarGroup.setSegment` now drops or restores a subitem's segment (`shown`) and returns the control's width change. The reserved inset moves by that plus the "…" shift, measured from AppKit's item views (`toolbarItemFrames`: Publish's leading edge minus "…"'s) when they can be read, else the `moreShift` estimate.
+- **Check.** `publishTrailingInspect` (in `toolbarInspect`) reports the laid-out item order, Publish's frame and the trailing inset. Native `toolbar-address` adds a 950 pt width and asserts at every width: Publish visible and last, every other item ends before it, "…" just before it when shown, the same trailing inset (±1, ≤ 24 pt) as at the first width, and the interaction segments (slow motion only from 1000 pt).
+
 ## 2026-10-08 — LKM-211: chat-new-instant timing flake
 
 - **Cause.** `chat-new-instant` asserted one sample per scenario against 100 ms. On the shared CI runner one PR run measured 103 ms, while the push run of the same commit passed. Locally the composer is ready in 1–2 ms.

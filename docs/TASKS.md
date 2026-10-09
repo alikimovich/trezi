@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Toolbar: Publish is the rightmost group (LKM-213)
+
+- [x] Slow motion is the last segment of the interaction group (select | device | ruler | slow motion); its click opens the speed menu, and the accent glyph marks a slowed preview.
+- [x] "…" sits just before Publish; it and the slow-motion segment still leave windows under 1000 pt; Publish (high priority) never overflows. The address-block shift is measured (segment width, laid-out "…").
+- [x] Native `toolbar-address` (group `core`): at 850, 950, 1800 and the default width Publish is the last item, every other item ends before it, and its trailing inset is the same at every width; `shell-layout` and `preview-speed` updated.
+
 ## Post-landing check: silent on success, warning on problems (LKM-210)
 
 - [x] A passing check adds no chat row; a problem (not loaded, dev-server error, stale revision, blank page, new console errors) is one warning row with Ask agent to fix / Show preview (`src/native/landing-check.ts`, `ChatLandingCheck.swift`).

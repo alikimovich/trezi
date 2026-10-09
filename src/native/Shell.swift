@@ -38,7 +38,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var toolbarLayout: ToolbarLayout!
     weak var window: NSWindow?
     private(set) var toolbarItems: [String: NSToolbarItem] = [:]
-    private let items = [ "chat", "address", "interaction", "select-object", "device", "overlay", "tools", "code", "layers", "expand", "publish", "speed", "more"]
+    private let items = [ "chat", "address", "interaction", "select-object", "device", "overlay", "speed", "tools", "code", "layers", "expand", "more", "publish"]
     private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "more":"More Preview Actions"]
     private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
     /// The rulers-and-grids button opens its native popover (LKM-205) instead of asking main.
@@ -52,8 +52,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     // The address block and its layout (`ToolbarAddress.swift`).
     var addressWidth: NSLayoutConstraint?
     var addressLayout = ToolbarAddressLayout()
-    /// How far the right groups move when the slow-motion and "…" items leave or join the toolbar (`ToolbarMore.swift`; measured 82–84 between runs on macOS 26, the layout check allows ±1).
-    var moreShift: CGFloat = 83
+    /// How far the groups before "…" move when it leaves or joins the toolbar (`ToolbarMore.swift`):
+    /// measured from the laid-out items when AppKit's item views can be read, else this estimate
+    /// (macOS 26; the layout check allows ±1).
+    var moreShift: CGFloat = 46
     let addressHeader = ToolbarAddressView()
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor
@@ -161,7 +163,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// The chat header follows the chat column; the address block fills the rest (`ToolbarAddressLayout`).
     func alignChatHeader() {
         let windowWidth = window?.frame.width ?? 1320
-        fitMore(["speed", "more"].compactMap { toolbarItems[$0] }, windowWidth: windowWidth)
+        fitMore(windowWidth: windowWidth)
         var chatTrailing: CGFloat?
         if chatHeader.window != nil, chatHeaderWidth != nil {
             let detail = split.splitViewItems[1].viewController.view
@@ -182,15 +184,16 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .space] + items.map { NSToolbarItem.Identifier($0) }
     }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        // LKM-213: Publish is always the last item, at the trailing edge; "…" goes before it.
         [.toggleSidebar, .sidebarTrackingSeparator, NSToolbarItem.Identifier("address"), .flexibleSpace,
-         NSToolbarItem.Identifier("interaction"), .space, NSToolbarItem.Identifier("tools"), .space, NSToolbarItem.Identifier("publish"), NSToolbarItem.Identifier("speed"), NSToolbarItem.Identifier("more")]
+         NSToolbarItem.Identifier("interaction"), .space, NSToolbarItem.Identifier("tools"), .space, NSToolbarItem.Identifier("more"), NSToolbarItem.Identifier("publish")]
     }
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
         let key = identifier.rawValue
         guard items.contains(key) else { return nil }
         if key == "chat" || key == "address", let existing = toolbarItems[key] { return existing }
         if key == "tools" || key == "interaction" {
-            let actions = key == "tools" ? ["code", "layers", "expand"] : ["select-object", "device", "overlay"]
+            let actions = key == "tools" ? ["code", "layers", "expand"] : ["select-object", "device", "overlay", "speed"]
             let children = actions.compactMap {
                 self.toolbar(toolbar, itemForItemIdentifier: NSToolbarItem.Identifier($0), willBeInsertedIntoToolbar: willBeInsertedIntoToolbar)
             }

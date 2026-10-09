@@ -91,6 +91,20 @@ extension NativeShell {
         previewMenuAction(entry); return true
     }
 
+    /// LKM-213: Publish against the other laid-out toolbar items (window x): it must be the last
+    /// one, its trailing edge on the toolbar's trailing inset.
+    func publishTrailingInspect() -> [String: Any] {
+        let frames = toolbarItemFrames(window)
+        let order = frames.sorted { $0.value.minX < $1.value.minX }.map(\.key)
+        var state: [String: Any] = ["publishMeasured":frames["publish"] != nil, "toolbarItemOrder":order,
+            "publishVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "publish" } ?? false]
+        guard let publish = frames["publish"] else { return state }
+        state["publishLeading"] = publish.minX; state["publishTrailing"] = publish.maxX
+        state["publishTrailingInset"] = (window?.frame.width ?? 0) - publish.maxX
+        state["beforePublishTrailing"] = frames.filter { $0.key != "publish" }.map(\.value.maxX).max() ?? 0
+        return state
+    }
+
     func publishInspect(_ item: NSMenuToolbarItem?, state: [String: Any]) -> [String: Any] {
         ["publishing":state["publishing"] as? Bool ?? false, "publishEnabled":item?.isEnabled ?? false, "publishSpinning":publishSpinner.spinning && item?.image != nil,
          "publishClickable":item?.action != nil, "publishMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? []]
