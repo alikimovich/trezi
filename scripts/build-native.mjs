@@ -26,11 +26,12 @@ const contents = join(out, 'Trezi.app/Contents')
 // out/native, where these bundles were built before.
 const backendDir = join(contents, 'Resources/backend')
 // LKM-143: package version, commit count and short sha, stamped into both Info.plists
-// and both JS bundles (the backend shows it in Settings; `TREZI_VERSION`).
+// and both JS bundles (the backend shows it in Settings; `TREZI_VERSION`). LKM-226: the
+// whole stamp (branch, dirty, tag, full sha) as `TREZI_BUILD` for the build badge.
 const info = buildInfo(root)
 const label = versionLabel(info)
 const outDirname = {
-  define: { __dirname: '__treziOutDir', TREZI_VERSION: JSON.stringify(label) },
+  define: { __dirname: '__treziOutDir', TREZI_VERSION: JSON.stringify(label), TREZI_BUILD: JSON.stringify(JSON.stringify(info)) },
   banner: { js: `// ${label}\nvar __treziOutDir = require("node:path").resolve(__dirname, "../../../..");` }
 }
 // LKM-183: Shiki is the one package the backend does not resolve from the checkout; it
@@ -195,6 +196,7 @@ const host = compile(
     join(root, 'src/native/Toast.swift'),
     join(root, 'src/native/Activity.swift'),
     join(root, 'src/native/ActivityIndicator.swift'),
+    join(root, 'src/native/BuildBadge.swift'),
     join(root, 'src/native/SourceEditor.swift'),
     join(root, 'src/native/SourceSyntax.swift'),
     join(root, 'src/native/SourceSyntaxVerification.swift'),

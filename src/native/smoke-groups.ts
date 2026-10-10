@@ -80,6 +80,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'island-new-chat': ['islands'],
   'project-switching': ['sidebar'],
   'chat-gate': ['sidebar'],
+  'build-badge': ['sidebar'],
   sheets: ['settings'],
   dreamer: ['settings'],
   'security-session': ['settings'],
