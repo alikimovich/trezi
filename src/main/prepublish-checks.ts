@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
+const CHECK_TIMEOUT_MS = 10_000
 const SAFE = new Set(['lint', 'typecheck', 'typecheck:native', 'test:unit', 'check'])
 
 /** Commands explicitly named by CI or a dated project rule; no shell interpolation. */
@@ -42,6 +43,14 @@ export function prepublishCommands(
   }
 }
 
+/** A failed local run: a timeout means it was too slow to be cheap, not that it failed. */
+export function prepublishRunWarning(script: string, error: unknown): string {
+  const { killed, signal } = (error ?? {}) as { killed?: boolean; signal?: string }
+  if (killed || signal === 'SIGTERM')
+    return `Pre-publish check bun run ${script} did not finish locally within ${CHECK_TIMEOUT_MS / 1000} s; CI will run it`
+  return `Pre-publish check bun run ${script} failed: ${String(error).slice(0, 300)}`
+}
+
 export async function prepublishChecks(
   root: string,
   memory: string
@@ -62,9 +71,13 @@ export async function prepublishChecks(
   const warnings = [...warn]
   for (const script of run) {
     try {
-      await exec('bun', ['run', script], { cwd: root, timeout: 10_000, maxBuffer: 64 * 1024 })
+      await exec('bun', ['run', script], {
+        cwd: root,
+        timeout: CHECK_TIMEOUT_MS,
+        maxBuffer: 64 * 1024
+      })
     } catch (error) {
-      warnings.push(`Pre-publish check bun run ${script} failed: ${String(error).slice(0, 300)}`)
+      warnings.push(prepublishRunWarning(script, error))
     }
   }
   return { warnings }

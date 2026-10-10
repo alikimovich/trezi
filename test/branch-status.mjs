@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { cachedGithubApi, deriveChecks, deriveSync } from '../src/main/branch-status.ts'
-import { prepublishCommands } from '../src/main/prepublish-checks.ts'
+import { prepublishCommands, prepublishRunWarning } from '../src/main/prepublish-checks.ts'
 
 assert.deepEqual(deriveSync('0\t0', 'main'), { ahead: 0, behind: 0, sync: 'up to date' })
 assert.deepEqual(deriveSync('2\t3', 'main'), {
@@ -60,3 +60,22 @@ assert.deepEqual(
     ]
   }
 )
+
+// A run killed by the 10 s timeout is "did not finish", never a false "failed"; a real
+// non-zero exit still reports "failed".
+const timedOut = prepublishRunWarning(
+  'typecheck',
+  Object.assign(new Error('Command failed'), { killed: true, signal: 'SIGTERM' })
+)
+assert.match(timedOut, /did not finish locally within 10 s; CI will run it/)
+assert.doesNotMatch(timedOut, /failed/)
+const exited = prepublishRunWarning(
+  'check',
+  Object.assign(new Error('Command failed: bun run check'), {
+    code: 1,
+    killed: false,
+    signal: null
+  })
+)
+assert.match(exited, /^Pre-publish check bun run check failed: /)
+assert.doesNotMatch(exited, /did not finish/)
