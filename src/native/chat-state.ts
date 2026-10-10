@@ -80,6 +80,8 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
+  /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
+  autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
   /** LKM-151: the files and undo group of the last turn that landed on the live tree. */

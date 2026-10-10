@@ -36,7 +36,7 @@ export interface SourceListEvidence {
   [key: string]: unknown
 }
 /** The Settings window's content size when it opens (`SectionedSheetContent.defaultSize`). */
-export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 760 }
+export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 830 }
 export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
@@ -126,10 +126,11 @@ export function assertSectionEvidence(
         'buildCheck',
         'claudePlugins',
         'default',
+        'providerFallback',
         'quitDontAsk',
         'workspaceIdle'
       ],
-      'General shows the default model, Claude plugins, agent file and Git access, PR merging, workspace cleanup, Activity, quit and build check pickers'
+      'General shows the default model, provider fallback, Claude plugins, agent file and Git access, PR merging, workspace cleanup, Activity, quit and build check pickers'
     )
   else
     assert.ok(

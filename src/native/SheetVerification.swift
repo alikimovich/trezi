@@ -31,7 +31,7 @@ extension NativeSheets {
             if let width = command["width"] as? Double {
                 let height = command["height"] as? Double ?? 600
                 guard width >= panel.contentMinSize.width, width <= 1000,
-                      height >= panel.contentMinSize.height, height <= 800 else { throw failure("Invalid Settings test size") }
+                      height >= panel.contentMinSize.height, height <= 900 else { throw failure("Invalid Settings test size") }
                 panel.setContentSize(NSSize(width: width, height: height))
                 panel.center()
             }

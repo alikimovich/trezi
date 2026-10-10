@@ -19,6 +19,7 @@ import { defaultChoiceFor, providerOptions, resolveSelection } from '../shared/p
 import { statesContext } from '../shared/states-workbench'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
+import { autoResolve } from './chat-auto-resolve'
 import { menuQuery, withReferences } from './chat-island-refs'
 import { sendBlock } from './chat-queue'
 import { matches, permissionModes, snapshot } from './chat-snapshot'
@@ -45,6 +46,8 @@ export interface ChatServices {
   effect: (effect: NativeChatEffect) => void
   /** A one-line status shown when a turn starts, e.g. the one-time network-volume note. */
   notice?: (settings: ChatAgentSettings) => string | undefined
+  /** LKM-225: a drift park is resolved once automatically (off where tests need the card). */
+  autoResolve?: boolean
 }
 /** Owns native conversation behavior. No browser, React, DOM or renderer stores. */
 export class NativeChatController {
@@ -292,6 +295,13 @@ export class NativeChatController {
       (event.type === 'isolation' && event.state !== 'parked')
     )
       queueMicrotask(() => void this.drain(chat))
+    if (
+      this.services.autoResolve &&
+      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
+    )
+      queueMicrotask(() =>
+        autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
+      )
   }
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return

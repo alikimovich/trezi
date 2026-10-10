@@ -21,12 +21,12 @@ import {
 import { agentFileAccess } from '../agent-file-access'
 import { type RolloutUsageWatch, watchRolloutUsage } from '../codex-usage'
 import { parseCodexModels } from '../model-catalog'
-import { productLog } from '../product-log'
 import { resolveConnection } from '../providers'
 import { scrubSecret } from '../providers-store'
 import { treziRules } from '../rules'
 import { classifyError } from '../self-heal/catalog'
 import { providerReachable, recoveryDelay } from '../self-heal/network'
+import { RECOVERED_STATUS, reconnectingStatus } from '../self-heal/status'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
 import { gitAccessHook, isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
@@ -489,7 +489,7 @@ async function startSession(
       tries++
     ) {
       networkRetries++
-      if (tries === 0) emit({ type: 'status', text: 'Reconnecting to Codex…' })
+      if (tries === 0) emit({ type: 'status', text: reconnectingStatus('codex') })
       // This uses the helper's proxy and certificate environment, exactly as the CLI does.
       await providerReachable(networkHost)
       await new Promise<void>((resolve) => setTimeout(resolve, recoveryDelay(tries)))
@@ -498,22 +498,11 @@ async function startSession(
       thread = openThread(resumeId)
       result = await attempt(thread, text)
     }
-    if (networkRetries && !result.network && !result.rejected && !turnAbort.signal.aborted) {
-      emit({ type: 'status', text: 'Recovered' })
-      productLog.info('self-heal', 'Incident recovery', {
-        code: 'provider-network',
-        outcome: 'recovered',
-        provider: 'codex'
-      })
-    }
-    if (result.network && !disposed && !aborted && !turnAbort.signal.aborted) {
-      productLog.warn('self-heal', 'Incident recovery', {
-        code: 'provider-network',
-        outcome: 'failed',
-        provider: 'codex'
-      })
+    // Main's incident tracker logs the outcome from these two lines (self-heal/status.ts).
+    if (networkRetries && !result.network && !result.rejected && !turnAbort.signal.aborted)
+      emit({ type: 'status', text: RECOVERED_STATUS })
+    if (result.network && !disposed && !aborted && !turnAbort.signal.aborted)
       emitError(result.network)
-    }
     let rejected = result.rejected
     for (let tries = 0; rejected && openThread && tries < 3; tries++) {
       const fallback = nextCodexModel(

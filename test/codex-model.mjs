@@ -7,6 +7,10 @@
 // - where it is said (LKM-128): the real CLI's stream `error` events, `turn.failed`
 //   only, the exec error only, after a warning item, with and without a model asked for;
 // - clear message: with every listed model rejected, the turn ends in a visible error;
+// - network (LKM-225): "workspace routing discovery failed" re-runs the turn at most three
+//   times (same thread and prompt, backoff, probe stubbed), one "Reconnecting to Codex…",
+//   "Recovered" on success, one error when all fail; inside the helper session the turn then
+//   runs on Claude with one note, unless the fallback setting is off or Claude is signed out;
 // - MCP: every CLI run gets a config under which the real Codex CLI loads none of the
 //   fixture user's `~/.codex` MCP servers (declared or plugin-provided), only Trezi's.
 import assert from 'node:assert/strict'
@@ -44,7 +48,10 @@ const HOME = join(scratch, 'codex-home'),
   WT = join(scratch, 'wt')
 for (const dir of [HOME, DATA, WT]) mkdirSync(dir)
 const LOG = join(scratch, 'exec.log'),
-  REJECT = join(scratch, 'reject.json')
+  REJECT = join(scratch, 'reject.json'),
+  NETFAIL = join(scratch, 'netfail')
+/** The next `n` runs of the stand-in end like the operator's "workspace routing discovery failed". */
+const netfail = (n) => writeFileSync(NETFAIL, String(n))
 const MODELS = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-astra']
 /**
  * Which models the stand-in rejects, and where it says so (LKM-128): `stream` is the
@@ -144,7 +151,7 @@ writeFileSync(
   CLI,
   `#!${process.execPath}
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 const out = (event) => process.stdout.write(JSON.stringify(event) + '\\n')
 if (args[0] === '--version') { console.log('codex-cli 0.0.0-test'); process.exit(0) }
@@ -154,15 +161,24 @@ if (args[0] === 'debug' && args[1] === 'models') {
   process.exit(0)
 }
 if (args[0] !== 'exec') process.exit(2)
-readFileSync(0)
+const prompt = readFileSync(0, 'utf8')
 const configs = args.flatMap((arg, i) => (arg === '--config' ? ['--config', args[i + 1]] : []))
 const listed = JSON.parse(execFileSync(${JSON.stringify(REAL)}, [...configs, 'mcp', 'list', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }))
 const at = args.indexOf('--model'), resumed = args.indexOf('resume')
 const model = at < 0 ? null : args[at + 1], resume = resumed < 0 ? null : args[resumed + 1]
-appendFileSync(${JSON.stringify(LOG)}, JSON.stringify({ model, resume, mcp: Object.fromEntries(listed.map((s) => [s.name, s.enabled])) }) + '\\n')
+appendFileSync(${JSON.stringify(LOG)}, JSON.stringify({ model, resume, prompt, at: Date.now(), mcp: Object.fromEntries(listed.map((s) => [s.name, s.enabled])) }) + '\\n')
 const effective = model ?? models[0]
 out({ type: 'thread.started', thread_id: resume ?? 'thread-' + process.pid })
 out({ type: 'turn.started' })
+let netLeft = 0
+try { netLeft = Number(readFileSync(${JSON.stringify(NETFAIL)}, 'utf8')) } catch {}
+if (netLeft > 0) {
+  writeFileSync(${JSON.stringify(NETFAIL)}, String(netLeft - 1))
+  const message = 'workspace routing discovery failed: error sending request for url (https://chatgpt.com/backend-api)'
+  out({ type: 'turn.failed', error: { message } })
+  process.stderr.write('Reading prompt from stdin...\\n' + message + '\\n')
+  process.exit(1)
+}
 const { models: rejected, via, warn } = JSON.parse(readFileSync(${JSON.stringify(REJECT)}, 'utf8'))
 if (rejected.includes(effective)) {
   if (warn) out({ type: 'item.completed', item: { id: 'item_0', type: 'error', message: 'Skill descriptions were shortened to fit the skills context budget.' } })
@@ -199,6 +215,13 @@ const { choices } = await import('../src/main/providers.ts')
 const { startProviderSession } = await import('../src/main/provider-sessions.ts')
 const { shutdownTreziAgentTools } = await import('../src/main/trezi-agent-tools.ts')
 const { newChat, reduce } = await import('../src/native/chat-state.ts')
+const { setProviderProbe } = await import('../src/main/self-heal/network.ts')
+const { setFallbackLoginProbe, setProviderFallbackSource } = await import(
+  '../src/main/self-heal/fallback.ts'
+)
+const { fallbackNote, reconnectingStatus, RECOVERED_STATUS } = await import(
+  '../src/main/self-heal/status.ts'
+)
 
 // The picker's catalog, as the service's `codex debug models` probe persisted it with
 // the installed Codex SDK/CLI (an entry from another version is ignored, LKM-164).
@@ -324,11 +347,167 @@ async function fallbackChat(provider, where, warn = false) {
   )
 }
 
+/**
+ * LKM-225, the operator's "workspace routing discovery failed": the adapter re-runs the turn
+ * (same thread, same prompt, with backoff) and shows one "Reconnecting to Codex…", then
+ * "Recovered"; when all three re-runs fail the one error stays, and with the fallback setting
+ * on the turn runs on Claude with one note. The reachability probe is stubbed: no network.
+ */
+async function networkRecovery(stub) {
+  resetCodexModelMemory()
+  reject([])
+  const probes = []
+  setProviderProbe(async (host) => {
+    probes.push(host)
+    return true
+  })
+  try {
+    netfail(0)
+    const c = await chat(codexProvider)
+    assert.equal(said((await c.turn('first')).events), 'PONG from gpt-6.1-sol')
+
+    // (a)-(c) two failed runs, then the third works.
+    netfail(2)
+    const recovered = await c.turn('second')
+    assert.equal(recovered.runs.length, 3, 'the failed run and two re-runs')
+    assert.ok(recovered.runs[0].resume, 'a later turn resumes its thread')
+    assert.deepEqual(
+      [...new Set(recovered.runs.map((r) => r.resume))],
+      [recovered.runs[0].resume],
+      'every re-run keeps the thread id'
+    )
+    assert.equal(new Set(recovered.runs.map((r) => r.prompt)).size, 1, 'and the same prompt')
+    const gaps = recovered.runs.slice(1).map((r, i) => r.at - recovered.runs[i].at)
+    assert.ok(gaps[0] >= 200 && gaps[1] >= 450, `backoff grows: ${gaps}`)
+    assert.deepEqual(
+      statuses(recovered.events),
+      [reconnectingStatus('codex'), RECOVERED_STATUS],
+      'one reconnecting row, then Recovered'
+    )
+    assert.equal(said(recovered.events), 'PONG from gpt-6.1-sol')
+    assert.equal(of(recovered.events, 'error').length, 0)
+    assert.equal(of(recovered.events, 'done').length, 1)
+    assert.deepEqual(probes, ['https://chatgpt.com', 'https://chatgpt.com'], 'one probe per re-run')
+
+    // (d) every attempt fails: three re-runs at most, one error, no Recovered.
+    netfail(99)
+    const failed = await c.turn('third')
+    assert.equal(failed.runs.length, 4, 'the failed run and three re-runs, no more')
+    assert.deepEqual(statuses(failed.events), [reconnectingStatus('codex')])
+    const errors = of(failed.events, 'error')
+    assert.equal(errors.length, 1, 'exactly one provider-network error')
+    assert.match(errors[0].message, /workspace routing discovery failed/)
+    assert.equal(of(failed.events, 'done').length, 1)
+
+    // (e) the same failure inside the helper session: the turn moves to Claude, with one note.
+    const ok = async () => {}
+    const claudeRuns = []
+    const live = new Map()
+    setProviderOwner({
+      ...stub,
+      async openHelper(grant, start, handlers) {
+        live.set(grant.session, {
+          handlers,
+          s:
+            grant.provider === 'claude'
+              ? null
+              : await codexProvider.startSession(WT, start.options, () => null, {
+                  emitKey: grant.chat,
+                  liveRoot: WT,
+                  onEvent: (e) => handlers.event(e)
+                })
+        })
+        return { tools: [] }
+      },
+      async send(session, text) {
+        const h = live.get(session)
+        if (h.s) return h.s.send(text)
+        claudeRuns.push(text)
+        h.handlers.event({ type: 'delta', text: 'Claude answered' })
+        h.handlers.event({ type: 'done' })
+      },
+      async close(session) {
+        live.get(session)?.s?.shutdown()
+        live.delete(session)
+      },
+      answer: ok,
+      configure: ok
+    })
+    setFallbackLoginProbe(async (provider) => provider === 'claude')
+    const helperChat = async (key) => {
+      const events = []
+      const s = await helperProvider('codex').startSession(WT, { provider: 'codex' }, () => null, {
+        emitKey: key,
+        liveRoot: WT,
+        onEvent: (e) => events.push(e)
+      })
+      sessions.push(s)
+      const turn = async (text) => {
+        const start = events.length,
+          ran = runs().length
+        s.send(text)
+        await until(() => events.slice(start).some((e) => e.type === 'done'), `turn ${text}`)
+        await sleep(100)
+        return { events: events.slice(start), runs: runs().slice(ran) }
+      }
+      return { s, turn }
+    }
+    const moved = await helperChat('chat-moved')
+    netfail(99)
+    const onClaude = await moved.turn('move me')
+    assert.equal(onClaude.runs.length, 4, 'Codex ran its own retries first')
+    assert.deepEqual(statuses(onClaude.events), [
+      reconnectingStatus('codex'),
+      fallbackNote('codex', 'claude')
+    ])
+    assert.equal(
+      statuses(onClaude.events).filter((t) => t === fallbackNote('codex', 'claude')).length,
+      1,
+      'the note is shown once'
+    )
+    assert.equal(said(onClaude.events), 'Claude answered')
+    assert.equal(of(onClaude.events, 'error').length, 0, 'the failed attempt shows no error')
+    assert.equal(of(onClaude.events, 'done').length, 1)
+    assert.equal(claudeRuns.length, 1)
+    assert.ok(claudeRuns[0].includes('move me'))
+    // The next message goes back to the chat's own provider.
+    netfail(0)
+    const back = await moved.turn('and again')
+    assert.equal(back.runs.length, 1)
+    assert.equal(said(back.events), 'PONG from gpt-6.1-sol')
+    assert.equal(claudeRuns.length, 1)
+
+    // With the setting off, or Claude not signed in, the one error stays.
+    for (const [why, setting, signedIn] of [
+      ['the setting is off', 'false', true],
+      ['Claude is not signed in', null, false]
+    ]) {
+      setProviderFallbackSource(() => setting)
+      setFallbackLoginProbe(async (provider) => provider === 'claude' && signedIn)
+      netfail(99)
+      const stays = await (await helperChat(`chat-${why}`)).turn('stay')
+      assert.equal(of(stays.events, 'error').length, 1, `${why}: one error`)
+      assert.ok(
+        !statuses(stays.events).some((t) => t.includes('could not connect')),
+        `${why}: no fallback note`
+      )
+      assert.equal(claudeRuns.length, 1, `${why}: Claude did not run`)
+      netfail(0)
+    }
+  } finally {
+    netfail(0)
+    setProviderOwner(stub)
+    setProviderProbe(null)
+    setFallbackLoginProbe(null)
+    setProviderFallbackSource(() => null)
+  }
+}
+
 let fixture
 try {
   // --- in-process, under a stand-in owner ---------------------------------------------
   const ok = async () => {}
-  setProviderOwner({
+  const stub = {
     kind: 'swift',
     open: async () => ({ tools: ['workspace_state'] }),
     authorize: ok, // the bridge's startup `workspace_state` check
@@ -338,7 +517,8 @@ try {
     close: ok,
     settled: ok,
     cancel: async () => ({ escalate: false })
-  })
+  }
+  setProviderOwner(stub)
   await fallbackChat(codexProvider, 'in-process')
 
   // Every listed model rejected: a clear error, not an empty turn.
@@ -387,6 +567,8 @@ try {
     assert.equal(of(run.events, 'error').length, 0, `${where}: no error`)
     assert.equal(of(run.events, 'done').length, 1, where)
   }
+
+  await networkRecovery(stub)
 
   // --- in the real helper host, under the real Swift owner ------------------------------
   resetCodexModelMemory()

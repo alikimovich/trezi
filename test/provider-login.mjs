@@ -217,16 +217,18 @@ try {
     }
     assert.equal(c.delta(await c.turn('auth Hello from the model')), 'Hello from the model')
     const crash = await c.turn('crash')
+    // LKM-225: the crashed helper is restarted twice before the error shows (it crashes every time).
     assert.deepEqual(
       crash.map((e) => e.type),
-      ['error', 'done']
+      ['status', 'commands', 'model', 'status', 'commands', 'model', 'error', 'done']
     )
+    const crashError = crash.find((e) => e.type === 'error')
     assert.match(
-      crash[0].message,
+      crashError.message,
       /stopped unexpectedly \(status 7\)\. Send your message again to continue\./
     )
     // It died before any output: the message names that phase (LKM-135).
-    assert.match(crash[0].message, /It exited while starting the Claude CLI\.$/)
+    assert.match(crashError.message, /It exited while starting the Claude CLI\.$/)
     await sleep(200)
     assert.equal(
       c.delta(await c.turn('say after the crash')),
@@ -829,7 +831,8 @@ esac
     // Other errors become one compact incident; raw output stays in Details.
     c.isRunning = true
     reduce(c, { type: 'error', message: 'boom' })
-    assert.equal(c.messages.at(-1).incident.line, 'Something went wrong')
+    // LKM-225: an unclassified error keeps its short redacted first line visible.
+    assert.equal(c.messages.at(-1).incident.line, 'boom')
     assert.equal(c.messages.at(-1).incident.detail, 'boom')
 
     assert.ok(

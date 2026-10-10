@@ -143,6 +143,7 @@ for (const width of [680, 780]) {
     ...sidebar('general'),
     controls: [
       control('default', 'Use last selected model'),
+      control('providerFallback', 'On'),
       control('claudePlugins', 'Don’t allow'),
       control('agentFileAccess', 'Full access'),
       control('agentGitAccess', 'Managed'),
@@ -270,7 +271,7 @@ assertSettingsEvidence(outOfOrder, 960, true, 'agent')
 const joined = {
   ...structuredClone(outOfOrder),
   width: 680,
-  height: 760,
+  height: 830,
   text: [
     'General',
     'Al Providers',

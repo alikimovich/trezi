@@ -52,6 +52,7 @@ final class RepositoryOwner: @unchecked Sendable {
         "pruneOrphans": (["root", "worktreesDir", "skip", "parked", "intent"], ["leases"], ["recover"]),
         "pruneBranches": (["root", "protected", "intent"], ["leases"], ["integrated"]),
         "removeLegacyFolder": (["root", "intent"], ["leases"], ["legacy"]),
+        "clearStaleLock": (["root", "minAge", "intent"], ["leases"], ["unlock"]),
         "deleteRecoveryRefs": (["root", "refs", "shas", "intent"], ["leases"], ["discard"]),
         "commitLive": (["root", "files", "title"], ["body", "mergeParent", "leases"], nil),
         "checkout": (["root", "branch"], ["leases"], nil),
@@ -333,6 +334,9 @@ final class RepositoryOwner: @unchecked Sendable {
             return .array(reclaimed.map { item in Self.object([("id", .string(JSText(item.id))), ("dirty", .bool(item.dirty)),
                 ("branch", item.branch.map { .string(JSText($0)) } ?? .null), ("repoRoot", item.repoRoot.map { .string(JSText($0)) } ?? .null)]) })
         case "removeLegacyFolder": return Self.object([("removed", .bool(try e.removeLegacyFolder(c.root)))])
+        case "clearStaleLock":
+            let (removed, reason, age) = try e.clearStaleIndexLock(c, minAge: try body.seconds("minAge"))
+            return Self.object([("removed", .bool(removed)), ("reason", .string(JSText(reason))), ("age", age.map { .number(Double($0)) } ?? .null)])
         case "pruneBranches":
             let (deleted, preserved) = e.pruneBranches(c, protected: Set(try body.strings("protected")))
             return Self.object([("deleted", Self.strings(deleted)), ("preserved", Self.strings(preserved))])
@@ -474,6 +478,12 @@ struct Body: Sendable {
 
     func bool(_ key: String) throws -> Bool {
         guard case .bool(let value)? = fields[key] else { throw ServiceContractFailure.invalidRequest }
+        return value
+    }
+
+    /// A duration in seconds, at most a day.
+    func seconds(_ key: String) throws -> TimeInterval {
+        guard case .number(let value)? = fields[key], value.isFinite, value >= 0, value <= 86_400 else { throw ServiceContractFailure.invalidRequest }
         return value
     }
 

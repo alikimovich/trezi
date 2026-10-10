@@ -92,6 +92,9 @@ export interface RepositoryOwner {
   ): Promise<{ deleted: string[]; preserved: string[] }>
   /** An emptied old-name worktree folder (and its empty old-name parent); false when anything is left. */
   removeLegacyFolder(directory: string): Promise<boolean>
+  /** LKM-225: removes `<git dir>/index.lock` only when it is a plain file at least `minAge`
+   *  seconds old and no Git process works in the checkout. `reason` says why it stayed. */
+  clearStaleLock(root: string, minAge: number): Promise<StaleLockResult>
   commitLive(
     root: string,
     files: string[],
@@ -138,6 +141,13 @@ export interface RepositoryStatus {
   /** Open entries of an older journal, closed without a new report (they were reported at every earlier launch). */
   closedEarlier: number
   journal?: string
+}
+
+export interface StaleLockResult {
+  removed: boolean
+  reason: 'removed' | 'none' | 'fresh' | 'git-running' | 'unsafe'
+  /** Whole seconds since the lock was written, when there is one. */
+  age: number | null
 }
 
 export interface StrandedLandings {

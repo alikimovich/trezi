@@ -1,4 +1,5 @@
 import { repositoryOwner } from './repository-owner'
+import { withGitLockRecovery } from './self-heal/git-lock'
 import { excludedWorktreePath } from './worktrees'
 
 /**
@@ -73,7 +74,16 @@ export async function commitLiveTurn(
   const paths = committableFiles(files)
   if (!paths.length && !mergeParent) return { committed: false, files: [] }
   // A pathspec commit in the repository's lane; the service re-checks the paths.
-  return repositoryOwner()
-    .commitLive(root, paths, commitTitle(message.title), message.body, mergeParent)
-    .catch(() => ({ committed: false, files: [] }))
+  return withGitLockRecovery(
+    [root],
+    () =>
+      repositoryOwner().commitLive(
+        root,
+        paths,
+        commitTitle(message.title),
+        message.body,
+        mergeParent
+      ),
+    (result) => !result.committed
+  ).catch(() => ({ committed: false, files: [] }))
 }

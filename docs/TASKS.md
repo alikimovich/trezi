@@ -8,8 +8,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Classify known failures and collapse duplicate provider errors into a compact native row with copyable Details.
 - [x] Retry Codex routing/network failures inside the helper with bounded backoff; preserve proxy and certificate passthrough.
 - [x] Bundle doctor guidance, document safe recovery actions, and log incident class and outcome for Dreamer.
-- [ ] Automatic cross-provider fallback, reset-time queueing, and helper restart within the same failed turn.
-- [ ] Automatic owner-mediated Git lock cleanup, Resolve and dev-server recovery, and a tool-limited doctor subagent.
+- [x] Automatic cross-provider fallback (setting "Automatic provider fallback", default on) and helper restart within the same failed turn.
+- [ ] Reset-time queueing for a provider limit: not implemented (descoped from LKM-225; a limit still offers wait or another provider).
+- [x] Automatic owner-mediated Git lock cleanup (`clearStaleLock`, stale only) and automatic Resolve of a drift park; dev-server recovery is the existing preview supervisor (LKM-146).
+- [x] Doctor: a deterministic diagnosis module plus the bundled `trezi-doctor` skill. A tool-limited LLM doctor subagent was descoped.
+- [x] Tests for the Codex retry loop, helper restart, fallback, Git lock, telemetry and auto Resolve (`test/codex-model.mjs`, `test/self-heal-recovery.mjs`, `test/chat-auto-resolve.mjs`).
+- [ ] Simulate a helper network failure end to end against a real provider (needs authorization for live calls; the stand-in CLI covers it offline).
 - [x] Native foreground capture and JSON geometry for the compact row and expanded Details (`chat` group).
 - [ ] Simulate a helper network failure end to end; verify retries and fallback without a live provider call.
 ## Build badge: on main, behind or not (LKM-226)

@@ -106,7 +106,24 @@ export function classifyError(raw: string): Incident {
     entries.find((item) => item.pattern.test(raw))
   return entry
     ? { class: entry.class, line: entry.line, action: entry.action }
-    : { class: 'unknown', line: 'Something went wrong', action: 'doctor' }
+    : { class: 'unknown', line: summarizeError(raw), action: 'doctor' }
+}
+
+/** One short, redacted line of an unclassified message: it often names the action the user
+ *  needs ("re-add it in Settings", "codex login"), so the compact row keeps it visible. */
+export function summarizeError(raw: string, max = 140): string {
+  const first =
+    incidentDetail(raw)
+      .split('\n')
+      .map((line) =>
+        line
+          .replace(/^(?:\s|⚠️?)+/u, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      )
+      .find(Boolean) ?? ''
+  if (!first) return 'Something went wrong'
+  return first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first
 }
 
 /** Details stay useful for support, but never expose credential-looking values. */

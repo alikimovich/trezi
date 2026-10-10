@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-225 review repair: fallback, restart, Git lock, auto Resolve, telemetry
+
+- **Provider fallback and helper restart live in the helper session** (`helper-session.ts` + `turn-recovery.ts`), not in the Codex adapter: the Swift event protocol is an allowlist, so recovery progress is plain `status` text (`self-heal/status.ts`) that main's incident tracker parses. A failed turn's `error`/`done` are held until the outcome is known. Fallback closes the helper, opens one on the other provider without resume, posts "Codex could not connect; this turn used Claude" and sends the recorded conversation (`handoffPrompt`); the next message returns to the chat's provider the same way. Setting "Automatic provider fallback" (default on). Restarts: at most two, resume id kept, original or "continue" prompt; never after Stop, a grant violation, in background runs or on a fallback turn.
+- **Git lock cleanup is owner-mediated:** new `clearStaleLock` in `RepositoryOwner.swift`/`RepositoryLock.swift` (stale > 30 s and no Git process), wrapped around `completeTurn` and `commitLiveTurn` by `withGitLockRecovery`. Swift's `commitLive` reports a Git failure as `committed:false`, so the wrapper takes a `declined` predicate.
+- **Telemetry:** one `Incident` line per class per turn with the final outcome (recovered / fell-back / failed); the per-attempt `Incident recovery` log lines were removed. Unknown errors keep a redacted one-line summary as the row line.
+- **Automatic Resolve** (`chat-auto-resolve.ts`): one try per park through the Resolve path, production only (`installNativeChat`'s `checkLandings`), so the smoke suite keeps the parked card. **Dev-server recovery** is the existing preview supervisor (LKM-146); nothing new was added. **Doctor** is a deterministic module (`self-heal/doctor.ts`), not an LLM subagent; reset-time queueing was not implemented.
+- **Settings height.** The new General row (Automatic provider fallback) clipped the last picker (`quitDontAsk`) at the 760-point minimum in the native settings smoke, so the Settings default and minimum height are now 830 (`SectionedSheetContent`, `SETTINGS_DEFAULT_SIZE`); the test-size cap in `SheetVerification.swift` rose from 800 to 900.
+- Tests: `test/codex-model.mjs` (retry loop: one "Reconnecting" status, ≤3 re-runs with the same thread and prompt, "Recovered", one error, reachability probe stubbed), `test/self-heal-recovery.mjs`, `test/chat-auto-resolve.mjs`, `test/repository-owner.mjs` (real Swift fixture). `test/codex-model.mjs` needs a unix socket, so it does not run inside the worker sandbox.
+
 ## 2026-10-10 — LKM-225 review repair: Layers drop survives a stale tree
 
 - The manager's full native run timed out waiting for a Layers paragraph reorder after the native outline accepted the drop. The isolated `core` group passed, so the failure is intermittent. A move whose row or target is absent from the Bun controller's current tree now refreshes that tree once before handling the action, rather than silently dropping the request. A unit case covers the stale-tree path.
