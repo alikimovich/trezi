@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Build badge: on main, behind or not (LKM-226)
+
+- [x] The build stamps the branch, a dirty flag and the exact `v*` release tag (bundles' `TREZI_BUILD`, Info.plist `TreziBranch`/`TreziDirty`/`TreziTag`).
+- [x] Background check at launch (after 3 s) and every 30 min against origin main (`git ls-remote`, local ancestry, else the unauthenticated GitHub compare API); local states and offline make no network call; Settings → General switch turns it off.
+- [x] One state: On main / Behind main by N / Not on main / Local changes / Unknown; sidebar footer badge beside Activity with tooltip, click details (update steps, Update…), Copy Commit; About Trezi credits.
+- [x] Copy Logs for Support and feedback diagnostics carry the build line.
+- [x] Unit `build-status` (derivation, disposable repos, stamp, controller, setting); native `build-badge` (group `sidebar`) captures each state.
+- [ ] Operator: a real launch against GitHub (online, then offline) on a clean main build.
+
 ## Trezi-owned component states canvas (LKM-224)
 
 - [x] Register bounded recipes through provider tools and persist them with the Swift preference owner outside the project; keep legacy generated workbenches separate.

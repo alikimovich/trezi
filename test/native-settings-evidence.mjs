@@ -149,7 +149,8 @@ for (const width of [680, 780]) {
       control('agentMerge', 'On'),
       control('workspaceIdle', '7 days'),
       control('activityAutoOpen', 'For problems that need me'),
-      control('quitDontAsk', 'Ask first')
+      control('quitDontAsk', 'Ask first'),
+      control('buildCheck', 'On')
     ],
     text: [
       'General',
