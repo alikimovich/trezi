@@ -102,11 +102,13 @@ assert.deepEqual(
     ['version', 'general'],
     ['projectUi', 'experimental'],
     ['engine', 'experimental'],
+    ['autoFixCI', 'experimental'],
     ['connections', 'providers']
   ]
 )
 // LKM-152: Show Activity automatically, default "For problems that need me", persists.
 assert.equal(field('agentMerge').value, 'true', 'Agent PR merge is on by default')
+assert.equal(field('autoFixCI').value, 'ask', 'CI repair asks by default')
 await action('change', {
   default: 'last-used',
   projectUi: 'false',
