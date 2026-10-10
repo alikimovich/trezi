@@ -73,11 +73,15 @@ export const TREZI_TOOLS = [
   'publish_merge',
   'land_now',
   'ask_user',
-  'chat_ui'
+  'chat_ui',
+  'register_states_canvas',
+  'open_states_canvas',
+  'inspect_states_canvas'
 ] as const
 
 /** Tools a background (comment) session is not granted, and what it is told instead. */
 export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
+  open_states_canvas: 'Background agents cannot open the user canvas.',
   open_code: 'Background edits cannot navigate the user editor.',
   chat_island: 'Background edits cannot create chat islands.',
   restart_dev_server: 'Background edits cannot restart the dev server.',

@@ -85,6 +85,8 @@ export const PREVIEW_STATES = 'trezi:preview:states'
 export const PREVIEW_STATES_SWITCH = 'trezi:preview:states-switch'
 /** → main ('hide'): H pressed on a workbench page. */
 export const PREVIEW_STATES_KEY = 'trezi:preview:states-key'
+export const PREVIEW_CANVAS = 'trezi:preview:states-canvas' // → isolated preload (bounded recipe/action)
+export const PREVIEW_CANVAS_RESULT = 'trezi:preview:states-canvas-result' // → main (status only)
 export interface PreviewStates {
   ids: string[]
 }

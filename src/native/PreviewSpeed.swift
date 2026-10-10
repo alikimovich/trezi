@@ -16,6 +16,8 @@ extension Host {
         controller.addUserScript(WKUserScript(source: preview, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world))
         let slow = (try? String(contentsOfFile: directory + "/slow-motion.js", encoding: .utf8)) ?? ""
         controller.addUserScript(WKUserScript(source: "{const __treziSpeed = \(speed);\n\(slow)\n}", injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+        let canvas = (try? String(contentsOfFile: directory + "/states-canvas.js", encoding: .utf8)) ?? ""
+        controller.addUserScript(WKUserScript(source: canvas, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
     }
     func setPreviewSpeed(_ c: [String: Any]) {
         let speed = c["speed"] as? Double ?? 1

@@ -36,7 +36,10 @@
      "publish_merge",
      "land_now",
      "ask_user",
-     "chat_ui"
+     "chat_ui",
+     "register_states_canvas",
+     "open_states_canvas",
+     "inspect_states_canvas"
     ]
    }
   }
@@ -73,7 +76,9 @@
      "pr_status",
      "publish_update",
      "publish_merge",
-     "land_now"
+     "land_now",
+     "register_states_canvas",
+     "inspect_states_canvas"
     ]
    }
   }
@@ -636,7 +641,9 @@
      "pr_status",
      "publish_update",
      "publish_merge",
-     "land_now"
+     "land_now",
+     "register_states_canvas",
+     "inspect_states_canvas"
     ],
     "resume": null,
     "session": "bg-N"
@@ -680,7 +687,10 @@
      "publish_merge",
      "land_now",
      "ask_user",
-     "chat_ui"
+     "chat_ui",
+     "register_states_canvas",
+     "open_states_canvas",
+     "inspect_states_canvas"
     ],
     "resume": "thread-1",
     "session": "fg-N"
