@@ -81,6 +81,7 @@ export type WorkflowKind =
   | 'update'
   | 'feedback'
   | 'skills'
+  | 'ciRerun'
 
 export class WorkflowError extends Error {
   constructor(
@@ -118,6 +119,7 @@ export interface WorkflowOwner {
   update(root: string, progress?: (text: string) => void): Promise<{ ok: boolean; error?: string }>
   /** Files the in-app feedback issue on Trezi's own repository (`root` is its checkout). */
   feedback(root: string, title: string, body: string): Promise<FeedbackResult>
+  ciRerun(root: string, commit: string): Promise<{ ok: boolean; rerun?: boolean; error?: string }>
   /** Installs a curated skill pack (`npx skills add`); never throws for an install failure. */
   installSkills(input: InstallInput): Promise<InstallResult>
   recallDiagnosis(root: string, signature: string): Promise<Diagnosis | null>

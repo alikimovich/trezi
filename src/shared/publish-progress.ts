@@ -8,6 +8,7 @@ import type { PublishResult } from './api'
  */
 
 export const PUBLISH_STEPS: Record<string, string> = {
+  checks: 'Checking project',
   commit: 'Committing',
   sync: 'Syncing with GitHub',
   push: 'Pushing',
@@ -18,7 +19,7 @@ export const PUBLISH_STEPS: Record<string, string> = {
 }
 
 /** Steps before the pull request exists: the owner stops before its next effect. */
-const CANCELLABLE = new Set(['commit', 'sync', 'push', 'describe'])
+const CANCELLABLE = new Set(['checks', 'commit', 'sync', 'push', 'describe'])
 
 /** A step's elapsed time shows once it has taken longer than this. */
 export const PUBLISH_ELAPSED_AFTER_MS = 3000

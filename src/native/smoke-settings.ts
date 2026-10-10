@@ -136,6 +136,7 @@ export async function checkVisibleSettings(
   )
   assert.equal(initial.values.agentGitAccess, 'managed', 'Agent Git access defaults to Managed')
   assert.equal(initial.values.agentMerge, 'true', 'Agent PR merging defaults to on')
+  assert.equal(initial.values.autoFixCI, 'ask', 'CI repair defaults to Ask')
   // LKM-143: General shows the version stamped into this build, as `trezi --version` prints it.
   assert.match(
     initial.values.version ?? '',
