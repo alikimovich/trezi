@@ -33,14 +33,26 @@ const git = (root, args) => {
   return result.status === 0 ? result.stdout.trim() : null
 }
 
-/** `{ version, build, commit }` of a checkout. Outside Git the build is 0 and the commit "unknown". */
+/**
+ * `{ version, build, commit, sha, branch, dirty, tag }` of a checkout. Outside Git the
+ * build is 0 and the commit "unknown". LKM-226: `sha` is the full commit, `branch` the
+ * checked-out branch ('' when detached), `dirty` whether the tree had uncommitted
+ * changes, `tag` the release tag (v…) HEAD is exactly on, else ''. The build badge
+ * compares them with GitHub main (`src/shared/build-status.ts`).
+ */
 export function buildInfo(root) {
   const version = packageVersion(root)
   if (!isSemver(version)) throw new Error(`package.json version is not SemVer: ${version}`)
+  const branch = git(root, ['rev-parse', '--abbrev-ref', 'HEAD']) ?? ''
+  const status = git(root, ['status', '--porcelain'])
   return {
     version,
     build: git(root, ['rev-list', '--count', 'HEAD']) ?? '0',
-    commit: git(root, ['rev-parse', '--short=7', 'HEAD']) ?? 'unknown'
+    commit: git(root, ['rev-parse', '--short=7', 'HEAD']) ?? 'unknown',
+    sha: git(root, ['rev-parse', 'HEAD']) ?? '',
+    branch: branch === 'HEAD' ? '' : branch,
+    dirty: status === null ? false : status !== '',
+    tag: (git(root, ['tag', '--points-at', 'HEAD', '--sort=-v:refname', '--list', 'v*']) ?? '').split('\n')[0] ?? ''
   }
 }
 

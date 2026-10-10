@@ -36,6 +36,7 @@
     "test:prbody": "bun test/pr-body.mjs",
     "test:feedback-body": "bun test/feedback-body.mjs",
     "test:feedback-diagnostics": "bun test/feedback-diagnostics.mjs",
+    "test:build-status": "bun test/build-status.mjs",
     "test:product-log": "bun test/product-log.mjs",
     "test:dreamer-digest": "bun test/dreamer-digest.mjs",
     "test:dreamer-export": "bun test/dreamer-export.mjs",
