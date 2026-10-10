@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Toolbar popover anchoring in full screen (LKM-229)
+
+- [x] Rulers and Grids popover anchored to the button's own control (not main-window coordinates); follows toolbar relayout, closes on full-screen transitions.
+- [x] Layers island anchor and slow-motion menu go through the same anchor; branch, "…", Publish and history menus are AppKit-anchored to their controls.
+- [x] Native `preview-overlay` (group `core`): popover and slow-motion menu open under their buttons in a normal and a full-screen window.
+- [ ] Operator: every toolbar popover and menu in Split View (a test cannot enter Split View).
+
 ## Build badge: on main, behind or not (LKM-226)
 
 - [x] The build stamps the branch, a dirty flag and the exact `v*` release tag (bundles' `TREZI_BUILD`, Info.plist `TreziBranch`/`TreziDirty`/`TreziTag`).
