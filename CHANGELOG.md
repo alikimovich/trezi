@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+- A build badge in the sidebar footer shows whether this Trezi is on main ("0.1.0 · main ✓"), behind it ("0.1.0 · 3 behind", click for the update steps), not on main or built with local changes; hover or About Trezi shows version, build, commit, branch, release tag and the last check. The check runs in the background at launch and every 30 minutes, makes no network call offline, can be turned off in Settings → General, and Copy Logs for Support and feedback diagnostics include it (LKM-226).
 ### Changed
 - Show states now registers an app-owned component canvas with real React renders and native state controls for supported Vite components, keeping the project page and files intact; the canvas follows light/dark, redraws when the page reloads or its styles change, the States bar falls back to a compact row at narrow widths, and Remove asks first; generated route workbenches remain available as legacy entries (LKM-224).
 - The selected element's toolbar shows a cube for Inspect in 3D and a stack of variants for Show states, and the States switcher's All button uses a matching stack, so neither looks like Layers or the layout grid (LKM-218).

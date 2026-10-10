@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { release, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { currentBuildLine } from '../main/build-status'
 import { type CatalogBackend, harnessStamp, installedVersion } from '../main/model-catalog'
 import { productLog, productLogDirectory, readLogs, redact } from '../main/product-log'
 import { detectProject } from '../main/project-detect'
@@ -63,6 +64,7 @@ export async function systemSummary(root: string | null, appRoot = app.getAppPat
   return redact(
     [
       `App: ${appVersion()}`,
+      currentBuildLine(),
       `macOS: ${await macOS()} (${process.arch})`,
       `Bun: ${process.versions.bun ?? 'unknown'}`,
       `Claude: ${provider('claude')}`,
@@ -142,7 +144,7 @@ export function installLogSupport(
   }
   const copy = async () => {
     const lines = readLogs(productLogDirectory(), SUPPORT_WINDOW)
-    const header = `Trezi log, last 30 minutes. ${appVersion()}, Darwin ${release()}`
+    const header = `Trezi log, last 30 minutes. ${appVersion()}, Darwin ${release()}\n${currentBuildLine()}`
     await host.request('copyText', { text: supportText(lines, header) })
     productLog.info('support', 'Logs copied for support', { lines: lines.length })
     notify(`Copied ${lines.length} log lines from the last 30 minutes.`, 'info')

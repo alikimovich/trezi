@@ -101,6 +101,12 @@ const text = await gatherDiagnostics(slow.value)
 for (const secret of SECRETS) assert.ok(!text.includes(secret), `bundle has no ${secret}`)
 assert.ok(!text.includes(HOME), 'bundle paths are shortened')
 assert.match(text, /## App main thread\nreplied in \d+ ms \(busy\)/)
+// LKM-226: the build badge's state leads the bundle.
+assert.match(text, /^## Build\nBuild: not checked yet\n/)
+assert.match(
+  await gatherDiagnostics({ ...slow.value, build: 'Build: On main: this is the published code' }),
+  /^## Build\nBuild: On main: this is the published code\n/
+)
 assert.match(text, /## Main thread sample \(3 s\)\nSampling process 4242/)
 assert.deepEqual(
   slow.calls.find(([c]) => c === '/usr/bin/sample'),

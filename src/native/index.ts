@@ -70,6 +70,7 @@ import {
 } from './activity-startup'
 import { appVersion } from './app-version'
 import { NativeBridge, setBridge } from './bridge'
+import { NativeBuildStatusController, nativeBuildStatus } from './build-status-controller'
 import { agentAttention } from './chat-agent-card'
 import { installNativeChat } from './chat-runtime'
 import { NativeContextController } from './context-controller'
@@ -102,6 +103,7 @@ import { NativeRecoveryRefs } from './repository-recovery'
 import { serviceRepository } from './repository-service'
 import { NativeReviewController } from './review-controller'
 import { type ProjectRuntime, serviceRuntime } from './runtime-service'
+import { withBuildCheckSetting } from './settings-build-check'
 import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
 import { withDreamerPane } from './settings-dreamer'
@@ -879,6 +881,20 @@ async function main() {
     if (action === 'updates')
       void updates.open().catch((error) => activityController.append(String(error), 'error'))
   })
+  // LKM-226: the sidebar build badge. Tests never read GitHub; the smoke shows each state.
+  const buildStatus = new NativeBuildStatusController(
+    host,
+    preferences,
+    sheetController,
+    root,
+    () => void updates.open().catch((error) => activityController.append(String(error), 'error')),
+    testing ? { compare: async () => null } : {}
+  )
+  nativeBuildStatus.current = buildStatus
+  host.once('ready', () => buildStatus.start())
+  host.on('menu', ({ action }) => {
+    if (action === 'build-status' && !sheetController.current?.state.busy) buildStatus.open()
+  })
   host.on('download-error', ({ message }) =>
     activityController.append(`Download failed: ${message}`, 'error')
   )
@@ -900,9 +916,15 @@ async function main() {
   const reviewController = new NativeReviewController(sheetController, (url) =>
     shell.openExternal(url)
   )
-  const settingsController = withDreamerPane(
-    withClaudePane(new NativeSettingsController(sheetController, preferences, refreshPreferences)),
-    preferences
+  const settingsController = withBuildCheckSetting(
+    withDreamerPane(
+      withClaudePane(
+        new NativeSettingsController(sheetController, preferences, refreshPreferences)
+      ),
+      preferences
+    ),
+    preferences,
+    () => void buildStatus.check()
   )
   const dreamerController = new NativeDreamerController(sheetController, preferences, {
     pickExport: async (name) => {

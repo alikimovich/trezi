@@ -10,18 +10,16 @@ final class ActivityIndicator: NSObject {
     private(set) var count = 0
     private(set) var level = "info"
 
-    func install(in container: NSView) {
+    /// LKM-226: it sits in the sidebar footer right of the build badge (`BuildBadge.swift`),
+    /// which truncates first; hidden, the footer row drops it.
+    func install(in footer: NSStackView) {
         button.target = self; button.action = #selector(open)
         button.isBordered = false; button.setButtonType(.momentaryChange)
         button.imagePosition = .imageLeading; button.imageHugsTitle = true
         button.identifier = NSUserInterfaceItemIdentifier("activity-indicator")
         button.isHidden = true
-        button.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(button)
-        NSLayoutConstraint.activate([
-            button.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            button.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10)
-        ])
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        footer.addArrangedSubview(button)
     }
 
     func update(count: Int, level: String) {

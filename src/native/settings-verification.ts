@@ -123,12 +123,13 @@ export function assertSectionEvidence(
         'agentFileAccess',
         'agentGitAccess',
         'agentMerge',
+        'buildCheck',
         'claudePlugins',
         'default',
         'quitDontAsk',
         'workspaceIdle'
       ],
-      'General shows the default model, Claude plugins, agent file and Git access, PR merging, workspace cleanup, Activity and quit pickers'
+      'General shows the default model, Claude plugins, agent file and Git access, PR merging, workspace cleanup, Activity, quit and build check pickers'
     )
   else
     assert.ok(

@@ -9,6 +9,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Offer CI repair in a background agent and save a dated project-memory rule after a landed repair; run bounded local checks before Publish.
 - [ ] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
 - [ ] Verify native captures and the end-to-end failed CI repair flow.
+## Build badge: on main, behind or not (LKM-226)
+
+- [x] The build stamps the branch, a dirty flag and the exact `v*` release tag (bundles' `TREZI_BUILD`, Info.plist `TreziBranch`/`TreziDirty`/`TreziTag`).
+- [x] Background check at launch (after 3 s) and every 30 min against origin main (`git ls-remote`, local ancestry, else the unauthenticated GitHub compare API); local states and offline make no network call; Settings → General switch turns it off.
+- [x] One state: On main / Behind main by N / Not on main / Local changes / Unknown; sidebar footer badge beside Activity with tooltip, click details (update steps, Update…), Copy Commit; About Trezi credits.
+- [x] Copy Logs for Support and feedback diagnostics carry the build line.
+- [x] Unit `build-status` (derivation, disposable repos, stamp, controller, setting); native `build-badge` (group `sidebar`) captures each state.
+- [ ] Operator: a real launch against GitHub (online, then offline) on a clean main build.
 
 ## Onboarding research and design (LKM-223)
 
