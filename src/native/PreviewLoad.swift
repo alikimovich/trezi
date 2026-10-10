@@ -7,7 +7,13 @@ import WebKit
 /// state: a pill over the page while it loads, and when the server answered an error.
 extension Host {
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        guard webView === views["preview"] else { return }
+        guard webView === views["preview"] else {
+            // LKM-230: preview_interact waits for a navigation its action started.
+            if let name = views.first(where: { $0.value === webView })?.key, name.hasPrefix("agent:") {
+                emit(["event":"agent-navigation", "view":name, "phase":"start", "url":String((webView.url?.absoluteString ?? "").prefix(500))])
+            }
+            return
+        }
         threeD.clear(); nativeLayout.layout()
         emit(["event":"navigation-start", "view":"preview", "url":webView.url?.absoluteString ?? ""])
     }
@@ -23,6 +29,7 @@ extension Host {
         // An agent browser is private: its failed load answers the agent's call and never reaches the user's UI.
         if name.hasPrefix("agent:") {
             if let pending = agentBrowserLoads.removeValue(forKey: name) { reply(pending, error: error.localizedDescription) }
+            emit(["event":"agent-navigation", "view":name, "phase":"failed", "url":String(url.prefix(500)), "message":cancelled ? "cancelled" : error.localizedDescription])
             return
         }
         if cancelled { emit(["event":"navigation-cancelled", "view":name, "url":url]); return }

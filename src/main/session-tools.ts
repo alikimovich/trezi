@@ -1,8 +1,14 @@
 import { bridge } from '../native/bridge'
 import { canvasController } from '../native/states-canvas-registry'
 import { previewPath } from '../shared/preview-navigation'
-import { projectKey } from '../shared/projectKey'
 import { agentBrowser } from './agent-browser'
+import {
+  ensureAgentPage,
+  INTERACT_USER_REFUSAL,
+  type InteractArgs,
+  parseInteraction,
+  runAgentInteraction
+} from './agent-interact'
 import type { SessionToolHost } from './backends/types'
 import { agentGitTool } from './chat-agent-git'
 import { runChatIslandTool } from './chat-islands'
@@ -18,12 +24,10 @@ import { openAgentCode } from './code-tools'
 import { noteServedRevision } from './landing-context'
 import { treziLiveEffect } from './live-change-watch'
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
-import { previewServers } from './preview-evidence'
 import { identityText, isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { agentPreviewOverlay } from './preview-overlay'
 import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-tools'
 import { parseSpeed } from './preview-speed'
-import { getPreviewUrl } from './preview-state'
 import { openAgentPreview } from './preview-tools'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
@@ -75,6 +79,7 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'preview_console',
   'preview_viewport',
   'preview_speed',
+  'preview_interact',
   'project_ui_catalog',
   'compose_project_ui',
   'ask_user',
@@ -159,7 +164,10 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   const target = (args as { target?: unknown } | null)?.target
   const engine = (args as { engine?: unknown } | null)?.engine
   const browserTool =
-    isPreviewObserver(action) || action === 'open_preview' || action === 'reload_preview'
+    isPreviewObserver(action) ||
+    action === 'open_preview' ||
+    action === 'reload_preview' ||
+    action === 'preview_interact'
   if (browserTool && target !== undefined && target !== 'user' && target !== 'agent')
     return { error: 'target must be "agent" or "user".' }
   if (browserTool && engine !== undefined && engine !== 'webkit' && engine !== 'chromium')
@@ -183,32 +191,23 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   const saw = (revision: string | null | undefined) => {
     if (!s.background) noteServedRevision(s.emitKey, revision)
   }
-  if (isPreviewObserver(action)) {
+  if (isPreviewObserver(action) || action === 'preview_interact') {
     if (target === 'user')
-      return observeAgentPreview(action, args, s.liveRoot, (identity) =>
-        saw(identity.servedRevision)
-      )
+      return action === 'preview_interact'
+        ? { content: [{ type: 'text', text: INTERACT_USER_REFUSAL }], isError: true }
+        : observeAgentPreview(action, args, s.liveRoot, (identity) => saw(identity.servedRevision))
+    const request = action === 'preview_interact' ? parseInteraction(args) : null
+    if (request && 'error' in request)
+      return { content: [{ type: 'text', text: request.error }], isError: true }
     try {
       const browser = await agentBrowser(s.emitKey, s.liveRoot, browserEngine)
-      if (!browser.url) {
-        const server = previewServers.get(projectKey(s.liveRoot))
-        if (!server)
-          return {
-            content: [
-              { type: 'text', text: 'The project dev server is stopped. Call restart_dev_server.' }
-            ],
-            isError: true
-          }
-        const shown = getPreviewUrl()
-        const route =
-          shown && new URL(shown).origin === new URL(server.url).origin
-            ? new URL(shown).pathname + new URL(shown).search + new URL(shown).hash
-            : '/'
-        await browser.open(route)
-      }
+      const stopped = await ensureAgentPage(browser, s.liveRoot)
+      if (stopped) return { content: [{ type: 'text', text: stopped }], isError: true }
       const identity = await browser.identity()
       let result: PreviewToolResult
-      if (action === 'preview_location') {
+      if (action === 'preview_interact') {
+        result = await runAgentInteraction(browser, request as InteractArgs)
+      } else if (action === 'preview_location') {
         result = { content: [{ type: 'text' as const, text: `Agent browser: ${browser.url}` }] }
       } else if (action === 'preview_speed') {
         const speedArgs = (args ?? {}) as { speed?: unknown; step?: unknown }
@@ -270,10 +269,11 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       } else {
         result = await runPreviewAgentTool(action, args, browser.host)
       }
-      if (!result.isError) {
-        saw(identity.servedRevision)
-        result.content.push({ type: 'text', text: identityText(identity) })
-      }
+      // An interaction can navigate, so its identity is read after it.
+      const seen = request ? await browser.identity() : identity
+      if (!result.isError) saw(seen.servedRevision)
+      if (!result.isError || request)
+        result.content.push({ type: 'text', text: identityText(seen) })
       return result
     } catch (error) {
       return {

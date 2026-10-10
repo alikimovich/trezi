@@ -29,6 +29,11 @@ call them, and every result is bounded. Prefer them to any external browser.
 - `preview_speed` — slow the preview's animations, timers and media (`speed` 0.5,
   0.25 or 0.1; 0 pauses) or `step` frames while paused, to screenshot motion mid-way.
   The user sees the same speed: set `speed: 1` before you finish.
+- `preview_interact` — use the page in your private agent browser: `click`, `type`,
+  `press` a key, `hover`, `scroll`, `select` an option, or `wait` for a selector, text
+  or network idle. Target a `selector`, a `source` stamp or `x`/`y`. Each call returns
+  the URL, console errors and a small screenshot. It never drives the user's preview;
+  uploads, downloads, leaving the dev server and external form posts are refused.
 
 ## The loop
 
@@ -37,6 +42,8 @@ call them, and every result is bounded. Prefer them to any external browser.
 3. Edit the source; it hot-reloads into their preview.
 4. `preview_screenshot` (cropped when it helps) to verify the change landed. For
    layout changes, check phone/tablet/desktop with `preview_viewport`, then restore.
+   For interactive changes (filters, tabs, menus, forms), use them with
+   `preview_interact` and check the result it returns.
 
 ## Scripted interactions only: agent-browser
 

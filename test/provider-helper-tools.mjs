@@ -75,6 +75,8 @@ const CALLS = {
   preview_console: { target: 'user' },
   preview_viewport: { preset: 'mobile', target: 'user' },
   preview_speed: { speed: 1, target: 'user' },
+  // LKM-230: main refuses to drive the user's preview.
+  preview_interact: { action: 'click', selector: 'h1', target: 'user' },
   open_preview: { path: '/helper-route', target: 'user' },
   reload_preview: { hard: true, target: 'user' },
   restart_dev_server: { cleanCache: true },

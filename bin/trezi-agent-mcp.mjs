@@ -251,7 +251,8 @@ for (const name of [
   'preview_evaluate',
   'preview_console',
   'preview_viewport',
-  'preview_speed'
+  'preview_speed',
+  'preview_interact'
 ]) {
   server.registerTool(
     name,
@@ -259,7 +260,7 @@ for (const name of [
       description: previewToolText[name],
       inputSchema: previewToolShapes[name],
       annotations: {
-        readOnlyHint: name !== 'preview_viewport' && name !== 'preview_speed',
+        readOnlyHint: !['preview_viewport', 'preview_speed', 'preview_interact'].includes(name),
         destructiveHint: false,
         openWorldHint: false
       }
