@@ -21,6 +21,8 @@ final class StatesSwitcherModel: ObservableObject {
     @Published var current = ""
     @Published var status = ""
     @Published var reason = ""
+    /// The full row does not fit the page: the compact row and its pop-up menu take over.
+    @Published var compact = false
     /// "Back to <page>", empty when the page it came from is not known.
     @Published var back = ""
     func action(_ name: String, _ id: String = "") { emit(["event":"states-action", "action":name, "id":id]) }
@@ -28,10 +30,11 @@ final class StatesSwitcherModel: ObservableObject {
 
 struct StatesSwitcherContent: View {
     @ObservedObject var model: StatesSwitcherModel
+    /// Measures the full row's natural width whatever layout is showing.
+    var forceFull = false
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            fullRow
-            compactRow
+        Group {
+            if model.compact && !forceFull { compactRow } else { fullRow }
         }
         .padding(.horizontal, 10).padding(.vertical, 5)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -60,7 +63,7 @@ struct StatesSwitcherContent: View {
             Text(model.component).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                 .lineLimit(1).frame(maxWidth: 110)
             if model.status == "loading" { ProgressView().controlSize(.small).help("Loading component") }
-            if model.status == "error" {
+            if model.status == "error" || model.status == "stale" {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                     .help(model.reason).accessibilityLabel("Canvas error: \(model.reason)")
             }
@@ -85,6 +88,10 @@ struct StatesSwitcherContent: View {
                     .buttonStyle(.bordered).help(model.back).accessibilityLabel(model.back)
             }
             statePicker
+            if model.status == "error" || model.status == "stale" {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    .help(model.reason).accessibilityLabel("Canvas error: \(model.reason)")
+            }
             Menu {
                 Button { model.action("continue") } label: { Label("Continue in Chat", systemImage: "bubble.left") }
                 Button { model.action("hide") } label: { Label("Hide", systemImage: "eye.slash") }
@@ -129,10 +136,20 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
     private lazy var measure: NSHostingController<StatesSwitcherContent> = {
         let controller = NSHostingController(rootView: StatesSwitcherContent(model: model)); controller.sizingOptions = []; return controller
     }()
+    private lazy var measureFull: NSHostingController<StatesSwitcherContent> = {
+        let controller = NSHostingController(rootView: StatesSwitcherContent(model: model, forceFull: true)); controller.sizingOptions = []; return controller
+    }()
+    private var page = NSRect.zero
     /// Bottom center of the page, clear of the loading pill at the top.
     func place(in page: NSRect, visible: Bool) {
         isHidden = !wanted || !visible || page.width < 200
         guard !isHidden else { return }
+        self.page = page
+        // The full row is used only when it fits whole; its menus and pickers have fixed widths, so
+        // a long state label or component name never widens it.
+        let natural = measureFull.sizeThatFits(in: NSSize(width: 4000, height: 200))
+        let compact = ceil(natural.width) > page.width - 24
+        if model.compact != compact { model.compact = compact }
         let fits = measure.sizeThatFits(in: NSSize(width: max(180, page.width - 24), height: 200))
         let size = NSSize(width: ceil(fits.width), height: ceil(fits.height))
         let width = min(size.width, page.width - 24)
@@ -148,6 +165,7 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
     }
     func inspect() -> [String: Any] {
         ["visible":!isHidden, "active":active, "hidden":active && !wanted, "component":model.component, "states":model.states.map(\.id),
-         "labels":model.states.map(\.label), "missing":model.missing.map(\.id), "current":model.current, "back":model.back, "frame":NSStringFromRect(frame)]
+         "labels":model.states.map(\.label), "missing":model.missing.map(\.id), "current":model.current, "back":model.back, "frame":NSStringFromRect(frame),
+         "compact":model.compact, "status":model.status, "reason":model.reason, "page":NSStringFromRect(page)]
     }
 }

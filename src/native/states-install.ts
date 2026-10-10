@@ -50,9 +50,11 @@ export function installStatesWorkbench(options: {
   const canvas = new StatesCanvasController({
     preferences,
     active: () => workspace.active ?? null,
+    pageUrl: () => options.preview.webContents.getURL(),
     preview: (channel, payload) => options.preview.webContents.send(channel, payload),
     send: (command, payload) => host.send(command, payload as Record<string, unknown>),
     legacyItems: () => legacyItems,
+    sheets: options.sheets,
     chatTitle: (chat) => nativeChat.chats.get(chat)?.title || undefined,
     submit: async (root, text, chat) => {
       const entry = project(root)
@@ -140,9 +142,11 @@ export function installStatesWorkbench(options: {
   options.git.beforePublish = (root) => states.beforePublish(root)
   serviceEvents.on('event', (channel: string, value: unknown) => {
     if (channel === 'preview:url-changed') {
-      if (canvas.view) canvas.close()
+      // A reload of the same document redraws the canvas; any other URL disposes it.
+      canvas.pageLoaded(typeof value === 'string' ? value : '')
       states.url(typeof value === 'string' ? value : null)
-    } else if (channel === 'preview:states-canvas-result') canvas.result(value)
+    } else if (channel === 'preview:styles-updated') canvas.stylesUpdated()
+    else if (channel === 'preview:states-canvas-result') canvas.result(value)
     else if (channel === 'preview:states-key') {
       if (canvas.view) {
         const id = typeof value === 'string' ? value : ''

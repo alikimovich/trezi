@@ -11,7 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Changed
-- Show states now registers an app-owned component canvas with real React renders and native state controls for supported Vite components, keeping the project page and files intact; generated route workbenches remain available as legacy entries (LKM-224).
+- Show states now registers an app-owned component canvas with real React renders and native state controls for supported Vite components, keeping the project page and files intact; the canvas follows light/dark, redraws when the page reloads or its styles change, the States bar falls back to a compact row at narrow widths, and Remove asks first; generated route workbenches remain available as legacy entries (LKM-224).
 - The selected element's toolbar shows a cube for Inspect in 3D and a stack of variants for Show states, and the States switcher's All button uses a matching stack, so neither looks like Layers or the layout grid (LKM-218).
 - States workbenches can be left and found again: the States switcher has "← Back to <page>" (same page and scroll, the component selected again, ⌘[ / ⌘] move between them) and Continue in Chat; a "States N" menu under the address lists each workbench with where it came from and its last state, with Open, Open All States, Continue in Chat, Rebuild States and Remove (replacing the … menu's Workbenches); Show states on a component that already has a workbench opens it; the list survives restarts; and the Publish warning adds Open Workbench (LKM-220).
 ### Fixed

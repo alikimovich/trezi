@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { type FSWatcher, realpathSync, statSync, watch } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import type { SelectedElement } from '../shared/api'
+import type { NativeSheetAction, NativeSheetState } from '../shared/native-sheet'
 import { PREVIEW_CANVAS } from '../shared/preview-channels'
 import {
   CANVAS_ALL,
+  CANVAS_PREFIX,
   type CanvasRecipe,
   parseCanvasRecipe,
   readCanvasRecipes,
@@ -20,7 +22,12 @@ type View = {
   state: string
   status: string
   reason: string
+  /** The document the canvas sits on: another URL, or a reload of it, ends or re-renders it. */
+  url: string
 }
+
+/** Actions whose id is a state of the open canvas; every other id names a recipe. */
+const STATE_ACTIONS = new Set(['select', 'all', 'next', 'prev'])
 
 /** App-managed recipes are separate from route-based legacy workbenches. */
 export class StatesCanvasController {
@@ -28,18 +35,25 @@ export class StatesCanvasController {
   hidden = false
   private readonly pending = new Map<string, SelectedElement>()
   private readonly last = new Map<string, string>()
-  private watchers: FSWatcher[] = []
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null
+  private drawn = 0
   constructor(
     readonly services: {
       preferences: NativePreferences
       active: () => { root: string; url?: string | null } | null
+      pageUrl: () => string
       preview: (channel: string, payload: unknown) => void
       send: (command: 'statesState' | 'workbenches', payload: unknown) => void
       legacyItems: (root: string) => unknown[]
       chatTitle: (chat: string) => string | undefined
       submit: (root: string, text: string, chat: string) => Promise<void>
       focusChat: (root: string, chat: string) => Promise<boolean>
+      sheets: {
+        present(
+          state: Omit<NativeSheetState, 'id' | 'busy'>,
+          handle: (action: NativeSheetAction) => Promise<void>
+        ): void
+        close(): void
+      }
       report: (error: unknown) => void
     }
   ) {}
@@ -71,6 +85,14 @@ export class StatesCanvasController {
     } catch {
       return false
     }
+  }
+  /** Why a recipe can no longer be trusted: its component or provider file is gone. */
+  stale(root: string, recipe: CanvasRecipe): string {
+    if (!this.sourceExists(root, recipe.source))
+      return `${recipe.source} no longer exists. Rebuild this canvas.`
+    if (recipe.provider && !this.sourceExists(root, recipe.provider.source))
+      return `${recipe.provider.source} no longer exists. Rebuild this canvas.`
+    return ''
   }
   async register(
     root: string,
@@ -124,7 +146,7 @@ export class StatesCanvasController {
       folder: recipe.id,
       component: recipe.component,
       route: '',
-      from: 'Canvas',
+      from: this.stale(root, recipe) ? 'Canvas — source missing' : 'Canvas',
       chat: this.services.chatTitle(recipe.chat) ?? null,
       last:
         recipe.states.find((state) => state.id === (this.last.get(recipe.id) ?? recipe.last))
@@ -144,55 +166,65 @@ export class StatesCanvasController {
       return { error: 'State is missing or unsupported.' }
     this.close()
     this.hidden = false
+    const reason = this.stale(root, recipe)
     this.view = {
       root,
       recipe,
       session: randomUUID(),
       state: selected,
-      status: 'loading',
-      reason: ''
+      status: reason ? 'stale' : 'loading',
+      reason,
+      url: this.services.pageUrl()
     }
     this.publishView()
-    for (const source of [recipe.source, recipe.provider?.source].filter(
-      (item): item is string => !!item
-    )) {
-      try {
-        this.watchers.push(
-          watch(resolve(root, source), () => {
-            if (this.refreshTimer) clearTimeout(this.refreshTimer)
-            this.refreshTimer = setTimeout(() => {
-              const view = this.view
-              if (!view || view.recipe.id !== recipe.id || view.root !== root) return
-              view.status = 'loading'
-              this.publishView()
-              this.services.preview(PREVIEW_CANVAS, {
-                command: 'select',
-                session: view.session,
-                recipe: view.recipe,
-                state: view.state,
-                refresh: true
-              })
-            }, 100)
-          })
-        )
-      } catch (error) {
-        this.services.report(error)
-      }
-    }
     this.services.preview(PREVIEW_CANVAS, {
       command: 'open',
       session: this.view.session,
       recipe,
-      state: selected
+      state: selected,
+      ...(reason ? { unavailable: reason } : {})
     })
     return { id }
   }
+  /** Draws the open canvas again from the current sources, after a reload or a style update. */
+  refresh() {
+    const view = this.view
+    if (!view || view.status === 'stale') return
+    const recipe = this.recipes(view.root).find((item) => item.id === view.recipe.id)
+    if (!recipe) {
+      this.close()
+      return
+    }
+    const reason = this.stale(view.root, recipe)
+    view.recipe = recipe
+    view.status = reason ? 'stale' : 'loading'
+    view.reason = reason
+    this.publishView()
+    // `open`, not `select`: after a reload the page has no session to select within.
+    this.services.preview(PREVIEW_CANVAS, {
+      command: 'open',
+      session: view.session,
+      recipe,
+      state: view.state,
+      refresh: true,
+      ...(reason ? { unavailable: reason } : {})
+    })
+  }
+  /** The preview's existing "stylesheets changed in place" signal (an HMR update applied).
+   * Drawing may itself inject styles (CSS-in-JS), so signals right after a draw are ours. */
+  stylesUpdated(now = Date.now()) {
+    if (!this.view || now - this.drawn < 1500) return
+    this.refresh()
+  }
+  /** The preview reported a load: the same URL is a reload (HMR full reload, dev restart) and
+   * keeps the canvas; any other URL is a navigation and disposes it. */
+  pageLoaded(url: string) {
+    if (!this.view) return
+    if (url.split('#')[0] === this.view.url.split('#')[0]) this.refresh()
+    else this.close()
+  }
   close() {
     if (!this.view) return
-    if (this.refreshTimer) clearTimeout(this.refreshTimer)
-    this.refreshTimer = null
-    for (const watcher of this.watchers) watcher.close()
-    this.watchers = []
     this.services.preview(PREVIEW_CANVAS, { command: 'close', session: this.view.session })
     this.view = null
     this.hidden = false
@@ -201,6 +233,7 @@ export class StatesCanvasController {
   private publishView() {
     const view = this.view
     if (!view) return
+    this.drawn = Date.now()
     this.services.send('statesState', {
       state: {
         folder: view.recipe.id,
@@ -220,6 +253,7 @@ export class StatesCanvasController {
     if (
       !this.view ||
       raw?.session !== this.view.session ||
+      this.view.status === 'stale' ||
       !['loading', 'ready', 'error'].includes(String(raw.status))
     )
       return
@@ -230,10 +264,6 @@ export class StatesCanvasController {
   async action(action: string, id?: string): Promise<boolean> {
     const root = this.services.active()?.root
     if (!root) return false
-    const recipe = this.recipes(root).find(
-      (item) => item.id === id || item.id === this.view?.recipe.id
-    )
-    if (!recipe && action !== 'back') return false
     if (action === 'back' && this.view) {
       this.close()
       return true
@@ -243,6 +273,12 @@ export class StatesCanvasController {
       this.publishView()
       return true
     }
+    // State actions carry a state id and act on the open canvas. Any other id names a
+    // recipe, and an id that is not a canvas id is a legacy workbench folder: it is not ours.
+    const named = STATE_ACTIONS.has(action) ? '' : (id ?? '')
+    if (named && !named.startsWith(CANVAS_PREFIX)) return false
+    const target = named || this.view?.recipe.id
+    const recipe = target ? this.recipes(root).find((item) => item.id === target) : undefined
     if (!recipe) return false
     if (action === 'open' || action === 'grid') {
       this.open(root, recipe.id, action === 'grid' ? CANVAS_ALL : undefined)
@@ -275,13 +311,16 @@ export class StatesCanvasController {
           ]
         ])
       }
-      this.view.status = 'loading'
+      const reason = this.stale(root, recipe)
+      this.view.status = reason ? 'stale' : 'loading'
+      this.view.reason = reason
       this.publishView()
       this.services.preview(PREVIEW_CANVAS, {
         command: 'select',
         session: this.view.session,
         recipe,
-        state
+        state,
+        ...(reason ? { unavailable: reason } : {})
       })
       return true
     }
@@ -298,22 +337,43 @@ export class StatesCanvasController {
       return true
     }
     if (action === 'remove') {
-      if (this.view?.recipe.id === recipe.id) this.close()
-      await this.services.preferences.apply((values) => [
-        [
-          STATES_CANVAS_PREFERENCE,
-          writeCanvasRecipes(
-            values[STATES_CANVAS_PREFERENCE],
-            root,
-            readCanvasRecipes(values[STATES_CANVAS_PREFERENCE], root).filter(
-              (item) => item.id !== recipe.id
-            )
-          )
-        ]
-      ])
-      this.publishMenu(root)
+      this.confirmRemove(root, recipe)
       return true
     }
     return false
+  }
+  /** The menu item ends in an ellipsis: a sheet names what goes, and only Remove deletes. The
+   * recipe is app data; nothing in the project is touched. */
+  confirmRemove(root: string, recipe: CanvasRecipe) {
+    this.services.sheets.present(
+      {
+        title: `Remove the ${recipe.component} states canvas?`,
+        detail: `Trezi forgets this canvas recipe and its ${recipe.states.length} states. No file in the project changes.`,
+        fields: [],
+        actions: [
+          { id: 'keep', label: 'Cancel', cancel: true },
+          { id: 'remove', label: 'Remove Canvas', primary: true, destructive: true }
+        ]
+      },
+      async ({ action }) => {
+        this.services.sheets.close()
+        if (action === 'remove') await this.remove(root, recipe.id)
+      }
+    )
+  }
+  async remove(root: string, id: string) {
+    if (this.view?.recipe.id === id) this.close()
+    this.last.delete(id)
+    await this.services.preferences.apply((values) => [
+      [
+        STATES_CANVAS_PREFERENCE,
+        writeCanvasRecipes(
+          values[STATES_CANVAS_PREFERENCE],
+          root,
+          readCanvasRecipes(values[STATES_CANVAS_PREFERENCE], root).filter((item) => item.id !== id)
+        )
+      ]
+    ])
+    this.publishMenu(root)
   }
 }

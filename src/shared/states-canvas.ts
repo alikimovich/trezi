@@ -37,13 +37,21 @@ const source = (value: unknown): value is string =>
   !value.startsWith('/') &&
   !value.includes('\\') &&
   value.split('/').every((part) => part !== '.' && part !== '..' && part !== '')
-const modulePath = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  value.startsWith('/') &&
-  value.length <= 400 &&
-  !value.startsWith('//') &&
-  !/[?#\\]/.test(value) &&
-  value.split('/').every((part) => part !== '..' && part !== '.')
+/** A same-origin module path, optionally with the dev server's `?v=<hash>` cache key so the
+ * recipe can name the exact URL the component itself imports (one React instance). */
+const modulePath = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false
+  const [path, query, ...rest] = value.split('?')
+  return (
+    !rest.length &&
+    (query === undefined || /^v=[A-Za-z0-9]{1,32}$/.test(query)) &&
+    path.startsWith('/') &&
+    value.length <= 400 &&
+    !path.startsWith('//') &&
+    !/[#\\]/.test(value) &&
+    path.split('/').every((part) => part !== '..' && part !== '.')
+  )
+}
 const jsonData = (value: unknown): value is Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   try {

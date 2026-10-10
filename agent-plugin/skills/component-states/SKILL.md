@@ -20,7 +20,8 @@ Existing generated workbenches are legacy user files: leave them alone.
 2. Use a supported Vite React module. `source` is the project-relative file
    exporting the real component; `exportName` is its named export or `default`.
    Use the project's Vite-served React and `react-dom/client` module URLs, both
-   same-origin root paths. If the component needs a provider, name an **existing**
+   same-origin root paths; copy the exact URL (including a `?v=<hash>` key) from
+   the component module's own React import so hooks and context share one React. If the component needs a provider, name an **existing**
    module/export in `provider`. That wrapper must be safe to mount independently
    for each state. Do not claim support for a loader, server-only component,
    global store mutation, network data, or a provider that cannot be isolated.

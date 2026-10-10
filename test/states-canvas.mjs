@@ -34,6 +34,21 @@ const raw = {
 assert.equal(parseCanvasRecipe({ ...raw, source: '../outside.ts' }, 'chat', 1), null)
 assert.equal(parseCanvasRecipe({ ...raw, states: [raw.states[0], raw.states[0]] }, 'chat', 1), null)
 assert.equal(parseCanvasRecipe({ ...raw, react: '//other-host/react.js' }, 'chat', 1), null)
+// Vite's cache key is allowed on a runtime URL so the recipe names the component's own React.
+assert.equal(
+  parseCanvasRecipe({ ...raw, react: '/node_modules/.vite/deps/react.js?v=1a2b3c4d' }, 'chat', 1)
+    ?.react,
+  '/node_modules/.vite/deps/react.js?v=1a2b3c4d'
+)
+for (const react of [
+  '/react.js?x=1',
+  '/react.js?v=1&x=2',
+  '/react.js?v=a?b',
+  '/react.js#frag',
+  '/react.js?v=',
+  '/../react.js?v=1'
+])
+  assert.equal(parseCanvasRecipe({ ...raw, react }, 'chat', 1), null, react)
 assert.equal(
   parseCanvasRecipe(
     { ...raw, states: [{ id: 'x', label: 'X', props: { huge: 'x'.repeat(20000) } }] },
@@ -53,9 +68,21 @@ const preferences = {
     stored = entries[0][1]
   }
 }
+let page = 'http://localhost:5173/orders'
+const sheets = {
+  shown: null,
+  present(state, handle) {
+    this.shown = { state, handle }
+  },
+  close() {
+    this.shown = null
+  }
+}
 const services = {
   preferences,
-  active: () => ({ root, url: 'http://localhost:5173/orders' }),
+  active: () => ({ root, url: page }),
+  pageUrl: () => page,
+  sheets,
   preview: (channel, payload) => commands.push([channel, payload]),
   send: (command, payload) => sent.push([command, payload]),
   legacyItems: () => [],
@@ -85,8 +112,52 @@ assert.equal(controller.view, null)
 const reopened = new StatesCanvasController(services)
 assert.equal(reopened.open(root, registered.id).id, registered.id)
 assert.equal(reopened.view.state, 'populated')
+
+// A legacy workbench folder id is never the open canvas: the menu's legacy entries reach their own owner.
+for (const action of ['open', 'grid', 'rebuild', 'remove', 'continue'])
+  assert.equal(await reopened.action(action, 'OrderList'), false, action)
+assert.equal(readCanvasRecipes(stored, root).length, 1)
+assert.equal(reopened.view.recipe.id, registered.id)
+assert.equal(sheets.shown, null)
+
+// A page reload of the same URL redraws; another URL disposes. Style updates redraw, but not
+// the ones our own draw causes.
+commands.length = 0
+reopened.pageLoaded(page)
+assert.equal(commands.at(-1)[1].command, 'open')
+assert.equal(commands.at(-1)[1].refresh, true)
+assert.equal(reopened.view.status, 'loading')
+commands.length = 0
+reopened.stylesUpdated(Date.now())
+assert.equal(commands.length, 0, 'a style update right after a draw is ignored')
+reopened.stylesUpdated(Date.now() + 5000)
+assert.equal(commands.at(-1)[1].refresh, true)
+
+// Remove asks first; Cancel keeps the recipe, Remove forgets it and closes the canvas.
+assert.equal(await reopened.action('remove', registered.id), true)
+assert.equal(readCanvasRecipes(stored, root).length, 1)
+assert.match(sheets.shown.state.title, /Remove the Orders states canvas/)
+await sheets.shown.handle({ id: 's', action: 'keep', values: {} })
+assert.equal(readCanvasRecipes(stored, root).length, 1)
 await reopened.action('remove', registered.id)
+await sheets.shown.handle({ id: 's', action: 'remove', values: {} })
 assert.equal(readCanvasRecipes(stored, root).length, 0)
 assert.equal(reopened.view, null)
+
+// A recipe whose source is gone is stale and says so instead of importing it.
+controller.expect(root, { tag: 'div', componentSource: 'src/Orders.tsx:12', layerPath: [0, 2] })
+const again = await controller.register(root, 'chat', raw)
+rmSync(join(root, 'src/Orders.tsx'))
+commands.length = 0
+assert.equal(controller.open(root, again.id).id, again.id)
+assert.equal(controller.view.status, 'stale')
+assert.match(controller.view.reason, /no longer exists/)
+assert.match(commands.at(-1)[1].unavailable, /no longer exists/)
+controller.result({ session: controller.view.session, status: 'ready' })
+assert.equal(controller.view.status, 'stale', 'the page cannot overrule a stale source')
+assert.equal(sent.at(-1)[1].state.status, 'stale')
+controller.pageLoaded('http://localhost:5173/other')
+assert.equal(controller.view, null, 'navigation disposes the canvas')
+assert.equal(commands.at(-1)[1].command, 'close')
 rmSync(root, { recursive: true, force: true })
 console.log('states-canvas: OK')

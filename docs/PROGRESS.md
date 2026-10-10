@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-224 review repair 2: menu routing, Vite runtime shape, reload/stale, appearance and narrow coverage
+
+- Canvas `action()` only resolves a recipe from a `canvas:` id, or from the open canvas for state actions (select/all/next/prev); a legacy folder id returns false so the legacy owner handles it. Canvas Remove now asks first (sheet with Cancel/Remove).
+- Page adapter reads `createElement`/`Component`/`createRoot` from named exports or `default` (Vite's optimized CommonJS deps), and recipe module paths accept a bounded `?v=<hash>`.
+- Replaced the per-file watchers: a same-URL reload (`preview:url-changed`) or the existing `preview:styles-updated` signal redraws the canvas; another URL disposes it. A recipe whose source is missing is `stale` (menu "source missing", explicit message on the canvas, nothing imported).
+- The states bar chooses compact vs full row from the measured full-row width (no ViewThatFits), and reports `compact`, status, reason and page in its inspect JSON.
+- Smoke: CommonJS-shaped runtime + hooks/context under a provider via a `?v=` URL, light/dark captures and live switching through the window appearance override, 24 long-labelled states at a narrow window, source edit re-render, throwing/unsupported/stale canvases, legacy-id routing and the Remove confirmation. Unit test extended likewise.
+
 ## 2026-10-09 — LKM-224 review repair: canvas ready status reaches native
 
 - The page-world renderer reached `ready`, but the isolated preview's result was rejected at the native IPC boundary: `PREVIEW_CANVAS_RESULT` was missing from `previewSendChannels`. Added that status-only channel to the allowlist; `preview-ipc.ts` still validates its session, status and bounded reason before relaying it. The canvas unit test checks that status is allowed while page-originated canvas commands remain blocked.

@@ -7,7 +7,7 @@ export const statesCanvasShape = {
   source: z.string().describe('Project-relative source module with the real component export.'),
   exportName: z.string().describe('Named export or default.'),
   provider: z.object({ source: z.string(), exportName: z.string() }).optional().describe('Optional existing provider component export.'),
-  react: z.string().describe('Same-origin Vite URL for the project React module, such as /node_modules/.vite/deps/react.js.'),
+  react: z.string().describe('Same-origin Vite URL for the project React module, such as /node_modules/.vite/deps/react.js?v=<hash>. Use the exact URL (with its ?v= key) that the component module itself imports so there is one React instance.'),
   reactDom: z.string().describe('Same-origin Vite URL for react-dom/client.'),
   width: z.number().int(),
   states: z.array(z.object({ id: z.string(), label: z.string(), props: z.record(z.string(), z.unknown()) })),

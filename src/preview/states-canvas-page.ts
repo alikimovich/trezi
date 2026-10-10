@@ -8,6 +8,8 @@ type Request = {
   recipe?: CanvasRecipe
   state?: string
   refresh?: boolean
+  /** The recipe cannot be drawn (its source is gone): say why instead of importing it. */
+  unavailable?: string
   command: 'open' | 'select' | 'close'
 }
 let session = ''
@@ -15,6 +17,16 @@ let dialog: HTMLDialogElement | null = null
 let roots: { unmount(): void }[] = []
 let generation = 0
 let savedScroll: { x: number; y: number } | null = null
+
+type Runtime = Record<string, unknown>
+/** Vite serves optimized CommonJS deps (react, react-dom/client) as a module whose only export
+ * is `default`; an ESM build exports the names. Either shape is the one runtime instance. */
+function pick<T extends (...args: any[]) => unknown>(mod: Runtime | null, name: string) {
+  const direct = mod?.[name]
+  if (typeof direct === 'function') return direct as T
+  const wrapped = (mod?.default as Runtime | undefined)?.[name]
+  return typeof wrapped === 'function' ? (wrapped as T) : undefined
+}
 
 function close() {
   generation++
@@ -77,6 +89,12 @@ async function open(request: Request) {
   dialog.showModal()
   window.scrollTo(savedScroll.x, savedScroll.y)
   report('loading')
+  if (request.unavailable) {
+    contents.textContent = request.unavailable
+    dialog.setAttribute('data-trezi-state', 'unavailable')
+    report('error', request.unavailable)
+    return
+  }
   const url = (path: string) => new URL(path, location.origin).href
   try {
     const modules = await Promise.race([
@@ -104,21 +122,28 @@ async function open(request: Request) {
     const [source, react, reactDom, providerModule] = modules
     const component = source[recipe.exportName]
     const provider = recipe.provider && providerModule?.[recipe.provider.exportName]
-    if (
-      typeof component !== 'function' ||
-      typeof react.createElement !== 'function' ||
-      typeof react.Component !== 'function' ||
-      typeof reactDom.createRoot !== 'function' ||
-      (recipe.provider && typeof provider !== 'function')
+    const createElement = pick<(...args: any[]) => unknown>(react, 'createElement')
+    const Base = pick<any>(react, 'Component')
+    const createRoot = pick<(node: Element) => { render(tree: unknown): void; unmount(): void }>(
+      reactDom,
+      'createRoot'
     )
-      throw new Error('Component, provider, or React runtime export is unavailable')
+    if (typeof component !== 'function' || (recipe.provider && typeof provider !== 'function'))
+      throw new Error(`${recipe.exportName} is not exported by ${recipe.source}`)
+    if (!createElement || !Base || !createRoot)
+      throw new Error(
+        'Unsupported: the React runtime modules do not export createElement, Component and createRoot'
+      )
+    const h: (...args: any[]) => unknown = createElement
+    const mountRoot = createRoot
     const shown =
       request.state === 'all'
         ? recipe.states
         : recipe.states.filter((state) => state.id === request.state)
     if (!shown.length) throw new Error('State is missing or unsupported')
-    class StateBoundary extends react.Component {
+    class StateBoundary extends Base {
       declare state: { error: string | null }
+      declare props: { children?: unknown }
       constructor(props: unknown) {
         super(props)
         this.state = { error: null }
@@ -131,7 +156,7 @@ async function open(request: Request) {
       }
       render() {
         return this.state.error
-          ? react.createElement('pre', { 'data-trezi-canvas-error': '' }, this.state.error)
+          ? h('pre', { 'data-trezi-canvas-error': '' }, this.state.error)
           : this.props.children
       }
     }
@@ -139,13 +164,14 @@ async function open(request: Request) {
     for (const state of shown) {
       const { box, mount } = frame(state.id, state.label, recipe.width)
       contents.append(box)
-      const child = react.createElement(component, state.props)
-      const tree = provider ? react.createElement(provider, null, child) : child
-      const root = reactDom.createRoot(mount)
+      const child = h(component, state.props)
+      const tree = provider ? h(provider, null, child) : child
+      const root = mountRoot(mount)
       roots.push(root)
-      root.render(react.createElement(StateBoundary, null, tree))
+      root.render(h(StateBoundary, null, tree))
     }
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    // React commits on its own scheduler: let a boundary report a thrown render first.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 40)))
     if (ticket !== generation || !dialog) return
     dialog.setAttribute('data-trezi-state', request.state ?? '')
     if (!dialog.querySelector('[data-trezi-canvas-error]')) report('ready')

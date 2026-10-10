@@ -13,6 +13,7 @@ export type CanvasCommand = {
   recipe?: CanvasRecipe
   state?: string
   refresh?: boolean
+  unavailable?: string
 }
 
 /** Only the isolated preview can address native IPC. The page-world renderer receives
