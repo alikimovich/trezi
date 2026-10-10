@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-225 partial: classified incidents and Codex reconnect recovery
+
+- Native `chat` group passes 13/13 including `incident-row`: duplicate routing errors yield one row (collapsed 39 pt), with readable expanded Details and Copy details; foreground PNGs reviewed. Agent OS quick passes 212 unit checks, typechecks and lint.
+- Added a catalog for provider, workspace and Git failures. Provider errors now render as one compact native incident row with collapsed, copyable Details; repeated errors of the same class in a turn update that row. The real Codex routing-discovery strings are unit fixtures.
+- Codex retries a pre-output network failure up to three times from its supervised helper, checking provider reachability and backing off between attempts. A recovered turn gets a short status; classified incidents and outcomes are logged for Dreamer. Bundled doctor guidance and `docs/SELF-HEAL.md` describe safe diagnosis and the existing recovery paths.
+- Remaining work is tracked in `docs/TASKS.md`: automatic provider fallback and reset-time queueing, same-turn helper restart, owner-mediated Git lock cleanup, automatic Resolve/dev-server actions, and a tool-limited doctor agent.
+
 ## 2026-10-09 — LKM-224 review repair 3: states bar compact decision and default recipe ids
 
 - `NativeStatesSwitcher` re-measures on the next run-loop turn after every `update(...)` (SwiftUI applies the model after the turn, so the first pass saw stale content and could pick the compact row at the usual width), on an effective-appearance change, and after a compact flip. The smoke now asserts `compact === false` with the component name and Missing at the usual width, in the plain capture and after the light and dark captures; the narrow case still asserts `compact === true`.

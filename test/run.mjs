@@ -54,6 +54,7 @@ const UNIT = [
   'claude-resume',
   'claude-cwd',
   'codex-model',
+  'self-heal',
   'native-bridge-close',
   'native-service-launch',
   'native-supervised-bridge',

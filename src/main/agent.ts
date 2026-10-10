@@ -101,6 +101,7 @@ import { generatePublishDescription } from './publish-description'
 import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { RpcHandlerRegistry } from './rpc-router'
+import { classifyError } from './self-heal/catalog'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
@@ -414,6 +415,15 @@ function evaluateProjectMemory(sessionKey: string): void {
 const interactiveEvents =
   (sessionKey: string, tracker: TurnTracker) =>
   (e: AgentEvent): void => {
+    if (e.type === 'error') {
+      const incident = classifyError(e.message)
+      productLog.warn('chat', 'Self-heal incident', {
+        chat: sessionKey,
+        code: incident.class,
+        recovery: incident.action,
+        outcome: 'unresolved'
+      })
+    }
     watchdog.touch(sessionKey)
     if (e.type === 'permission-request')
       void conversation()

@@ -358,10 +358,8 @@ try {
   assert.equal(of(none.events, 'done').length, 1)
   const view = newChat('chat-none')
   for (const event of none.events) reduce(view, event)
-  assert.ok(
-    view.messages[0].text.includes(codexModelUnavailable('gpt-6-astra')),
-    'the chat shows the message'
-  )
+  assert.equal(view.messages.at(-1).incident.line, 'Model unavailable')
+  assert.ok(view.messages.at(-1).incident.detail.includes(codexModelUnavailable('gpt-6-astra')))
 
   // The rejection in `turn.failed` only, in the exec error only, and after a warning
   // item; and a turn that asked for the model by name. Each falls back the same way.

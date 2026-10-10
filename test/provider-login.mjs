@@ -826,10 +826,11 @@ esac
       snapshot(c, []).cards.some((x) => x.id === 'login'),
       false
     )
-    // Other errors keep the warning text.
+    // Other errors become one compact incident; raw output stays in Details.
     c.isRunning = true
     reduce(c, { type: 'error', message: 'boom' })
-    assert.match(c.messages.at(-1).text, /⚠️ boom/)
+    assert.equal(c.messages.at(-1).incident.line, 'Something went wrong')
+    assert.equal(c.messages.at(-1).incident.detail, 'boom')
 
     assert.ok(
       isLoginCommand('/login') &&

@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Self-healing incidents (LKM-225)
+
+- [x] Classify known failures and collapse duplicate provider errors into a compact native row with copyable Details.
+- [x] Retry Codex routing/network failures inside the helper with bounded backoff; preserve proxy and certificate passthrough.
+- [x] Bundle doctor guidance, document safe recovery actions, and log incident class and outcome for Dreamer.
+- [ ] Automatic cross-provider fallback, reset-time queueing, and helper restart within the same failed turn.
+- [ ] Automatic owner-mediated Git lock cleanup, Resolve and dev-server recovery, and a tool-limited doctor subagent.
+- [x] Native foreground capture and JSON geometry for the compact row and expanded Details (`chat` group).
+- [ ] Simulate a helper network failure end to end; verify retries and fallback without a live provider call.
+
 ## Trezi-owned component states canvas (LKM-224)
 
 - [x] Register bounded recipes through provider tools and persist them with the Swift preference owner outside the project; keep legacy generated workbenches separate.

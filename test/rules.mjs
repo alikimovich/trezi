@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 39, 'version bumped to 39')
+assert(TREZI_RULES_VERSION === 40, 'version bumped to 40')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
 assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
 assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')
