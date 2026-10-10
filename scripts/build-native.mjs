@@ -132,6 +132,7 @@ const host = compile(
     join(root, 'src/native/HostLaunch.swift'),
     join(root, 'src/native/HostMenus.swift'),
     join(root, 'src/native/HostLogs.swift'),
+    join(root, 'src/native/HostNotify.swift'),
     join(root, 'src/native/HostInspect.swift'),
     join(root, 'src/native/SecuritySession.swift'),
     join(root, 'src/native/Shell.swift'),
