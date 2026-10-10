@@ -11,6 +11,7 @@ let progress = null
 const a = { key: 'a', root: '/a', branch: 'main', activeSessionKey: 'chat-a' },
   b = { key: 'b', root: '/b', branch: 'main', activeSessionKey: 'chat-b' }
 let branch = 'main',
+  ciStatus = null,
   connected = true,
   conflict = false,
   prConflict = false,
@@ -39,6 +40,9 @@ const invoke = async (channel, ...args) => {
   if (channel === 'git:list') return { current: branch, branches: ['main', 'feature'] }
   if (channel === 'github:status')
     return { connected, gh: 'ok', login: 'user', suggestedName: 'project' }
+  if (channel === 'github:branch-status') return ciStatus
+  if (channel === 'github:failure-context') return { log: 'build failed', diff: '+ fix' }
+  if (channel === 'agent:spawn-comment') return { ok: true, spawnId: 'ci-fix-1' }
   if (channel === 'git:checkout') {
     branch = args[1]
     return { branch, files: ['app.ts'] }
@@ -257,6 +261,44 @@ assert.deepEqual(calls.find((c) => c[0] === 'github:connect')[2], {
 await git.updates('a')
 await sheets.action({ id: sheets.current.state.id, action: 'pull', values: { ref: 'origin/main' } })
 assert.ok(calls.some((c) => c[0] === 'git:remote-update' && c[2].expectedBranch === 'feature'))
+// A new failed published commit offers the background repair, then a landed repair
+// records the dated rule through the memory owner. A settled old failure is silent.
+git.statuses.set('/a', {
+  base: 'main',
+  ahead: 0,
+  behind: 0,
+  sync: 'up to date',
+  ci: 'passed',
+  failing: [],
+  commit: '1'.repeat(40)
+})
+ciStatus = {
+  base: 'main',
+  ahead: 0,
+  behind: 0,
+  sync: 'up to date',
+  ci: 'failed',
+  failing: ['build', 'lint'],
+  commit: '2'.repeat(40),
+  checksUrl: 'https://github.com/o/r/commit/2/checks',
+  pr: { number: 8, state: 'merged', url: 'https://github.com/o/r/pull/8' }
+}
+await git.pollStatus('/a')
+assert.equal(lastToast().actions[0], 'Fix with agent')
+assert.equal(lastToast().actions[1], 'View checks')
+await sheets.toastAction({ id: lastToast().id, index: 0 })
+assert.ok(
+  calls.some(
+    (c) => c[0] === 'agent:spawn-comment' && c[1] === '/a' && String(c[2]).includes('build failed')
+  )
+)
+await git.agentEvent({
+  type: 'spawn-finished',
+  sessionId: 'ci-fix-1',
+  outcome: 'applied',
+  summary: 'Fixed build'
+})
+assert.ok(calls.some((c) => c[0] === 'project-memory:ci-rule' && c[1] === '/a' && c[2] === 'build'))
 console.log(
   'Native Git: branch scope, publish mode/concurrency, conflicts, connection and remote update passed'
 )

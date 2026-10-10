@@ -61,6 +61,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var previewTextColor = NSColor.labelColor
     let address = NSTextField()
     let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
+    private var branchAnimation: Timer?
+    private var branchAnimationPhase = 0
+    private var branchAnimationTitle = ""
     let statesMenu = NSPopUpButton(frame: .zero, pullsDown: true)
     var statesMenuConstraints: [NSLayoutConstraint] = []
     var publishTitle = "Publish"
@@ -158,7 +161,32 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     private func branchTitle(_ title: String) -> NSAttributedString {
         let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
-        return NSAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle:style])
+        let result = NSMutableAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle:style])
+        let ci = (previewState["branchStatus"] as? [String: Any])?["ci"] as? String ?? ""
+        let color: NSColor = ci == "failed" ? .systemRed : ci == "passed" ? .systemGreen : .systemOrange
+        for dot in ["●", "◌"] {
+            let range = (title as NSString).range(of: dot)
+            if range.location != NSNotFound { result.addAttribute(.foregroundColor, value: color, range: range) }
+        }
+        return result
+    }
+    private func animateBranch(_ title: String, active: Bool) {
+        branchAnimationTitle = title
+        if !active || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            branchAnimation?.invalidate(); branchAnimation = nil
+            return
+        }
+        guard branchAnimation == nil else { return }
+        let timer = Timer(timeInterval: 0.55, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.branchAnimationPhase = (self.branchAnimationPhase + 1) % 3
+            let arrow = ["↗", "→", "↑"][self.branchAnimationPhase]
+            let dot = self.branchAnimationPhase == 1 ? "◌" : "●"
+            let title = self.branchAnimationTitle.replacingOccurrences(of: "↗", with: arrow).replacingOccurrences(of: "●", with: dot)
+            self.branchMenu.menu?.items.first?.attributedTitle = self.branchTitle(title)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        branchAnimation = timer
     }
     func setChatGeometry(_ width: CGFloat) { previewState["chatWidth"] = Double(width); alignChatHeader() }
     var previewLeading: CGFloat { CGFloat(previewState["chatWidth"] as? Double ?? 440) }
@@ -351,7 +379,15 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         toolbarItems["device"]?.image = toolbarSymbol(mobile ? "desktopcomputer" : "iphone", toolbarItems["device"]?.label)
         do {
             let title = previewState["branch"] as? String ?? "Branch"
-            branchMenu.toolTip = title; branchMenu.isEnabled = previewState["branch"] is String
+            let status = previewState["branchStatus"] as? [String: Any] ?? [:]
+            let sync = status["sync"] as? String ?? ""
+            let ci = status["ci"] as? String ?? "unknown"
+            let failing = status["failing"] as? [String] ?? []
+            let step = previewState["publishStep"] as? String
+            let detail = step.map { "↗ \($0)" } ?? (ci == "unknown" ? sync : "\(sync) · ● \(ci)\(failing.isEmpty ? "" : " \(failing.count)")")
+            let display = detail.isEmpty ? title : "\(title) · \(detail)"
+            branchMenu.toolTip = [title, sync, status["pr"] is [String: Any] ? "Pull request" : "", ci == "unknown" ? "CI unknown" : "CI \(ci): \(failing.joined(separator: ", "))"].filter { !$0.isEmpty }.joined(separator: "\n")
+            branchMenu.isEnabled = previewState["branch"] is String
             let menu = NSMenu(); menu.autoenablesItems = false
             func add(_ title: String, _ action: String, _ value: String = "") {
                 let entry = NSMenuItem(title: title, action: #selector(previewMenuAction(_:)), keyEquivalent: ""); entry.target = self
@@ -359,12 +395,18 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                 if action == "branch" { entry.state = value == previewState["branch"] as? String ? .on : .off }
                 menu.addItem(entry)
             }
+            if !sync.isEmpty { let row = NSMenuItem(title: sync, action: nil, keyEquivalent: ""); row.isEnabled = false; menu.addItem(row) }
+            if let pr = status["pr"] as? [String: Any], let number = pr["number"] as? Int {
+                add("PR #\(number) \(pr["state"] as? String ?? "open") · View on GitHub", "branch-open-url", pr["url"] as? String ?? "")
+            }
+            if ci != "unknown" { add("CI \(ci)\(failing.isEmpty ? "" : ": " + failing.joined(separator: ", ")) · View checks", "branch-open-url", status["checksUrl"] as? String ?? "") }
             add("Git Updates…", "git-updates"); menu.addItem(.separator())
             for branch in previewState["branches"] as? [String] ?? [] { add(branch, "branch", branch) }
             menu.addItem(.separator()); add("New Branch…", "new-branch")
-            menu.insertItem(withTitle: title, action: nil, keyEquivalent: "", at: 0)
-            menu.items.first?.attributedTitle = branchTitle(title)
+            menu.insertItem(withTitle: display, action: nil, keyEquivalent: "", at: 0)
+            menu.items.first?.attributedTitle = branchTitle(display)
             branchMenu.menu = menu
+            animateBranch(display, active: step != nil || ci == "running")
         }
         if let item = toolbarItems["publish"] as? NSMenuToolbarItem { updatePublish(item, state: previewState, ready: ready) }
         toolbarItems["code"]?.toolTip = previewState["codeOpen"] as? Bool == true ? "Hide Code" : "Show Code"
@@ -477,6 +519,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let sidebarFrame = sidebar.view.convert(sidebar.view.bounds, to: nil)
         let trafficLight = window?.standardWindowButton(.closeButton)
         let trafficFrame = trafficLight.map { $0.convert($0.bounds, to: nil) } ?? .zero
+        let branchInspect: [String: Any] = ["branchDisplay":branchMenu.menu?.items.first?.title ?? "",
+                                            "branchStatus":previewState["branchStatus"] ?? [:],
+                                            "publishStep":previewState["publishStep"] ?? ""]
         return ["sidebarContainsTrafficLights":sidebarFrame.contains(trafficFrame),
          "interactionGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "interaction" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "selectMode":selecting, "projectsMenuOnly":toolbarItems["projects"]?.action == nil,
          "sidebarTop":sidebarFrame.maxY, "contentTop":window?.contentLayoutRect.maxY ?? 0,
@@ -491,6 +536,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
          }, "projectIconCount":rows.filter { $0.icon != nil }.count, "outlineClipWidth":outline.enclosingScrollView?.contentSize.width ?? 0, "outlineRows":outline.numberOfRows, "outlineWidth":outline.bounds.width,
          "toolbar":toolbar.items.map { $0.itemIdentifier.rawValue }, "branch":previewState["branch"] ?? "", "publishLabel":previewState["publishLabel"] ?? "", "codeOpen":previewState["codeOpen"] ?? false,
          "toolbarGroupsMomentary":toolbar.items.compactMap { $0 as? NSToolbarItemGroup }.allSatisfy { ($0 as? MomentaryToolbarGroup)?.hasMomentaryControl == true }, "visibleToolbar":toolbar.visibleItems?.map { $0.itemIdentifier.rawValue } ?? [], "previewHeaderLightText":previewTextColor == .white, "address":previewAddress, "domain":address.stringValue, "viewport":previewState["viewport"] ?? "", "publishStandard":toolbarItems["publish"]?.view == nil, "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "sidebarAutohidesScrollers":(outline.enclosingScrollView?.autohidesScrollers ?? false), "sidebarActions":sidebarButtons.keys.sorted(), "chatActions":["history", "new-chat"], "historyIDs":chatActions.historyMenu?.items.compactMap { ($0.representedObject as? [String:String])?["id"] } ?? [], "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil, "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x, "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x, "chatWidth":previewState["chatWidth"] ?? 0, "enabled":toolbarItems.mapValues { $0.isEnabled }]
+            .merging(branchInspect) { _, new in new }
             .merging(toolbarInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
             .merging(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
             .merging(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }

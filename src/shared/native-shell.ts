@@ -10,6 +10,17 @@ export interface NativeShellRow {
   running?: boolean
   children?: NativeShellRow[]
 }
+export interface BranchStatus {
+  base: string
+  ahead: number
+  behind: number
+  sync: string
+  pr?: { number: number; state: 'open' | 'merged'; url: string }
+  ci: 'running' | 'passed' | 'failed' | 'none' | 'unknown'
+  failing: string[]
+  checksUrl?: string
+  commit?: string
+}
 export interface NativeShellState {
   previewStatus?: import('./native-workspace').NativeProjectStatus
   /** The pill over the running preview: loading, or the page answered an HTTP error (LKM-196). */
@@ -38,6 +49,8 @@ export interface NativeShellState {
   chatHidden: boolean
   branch: string | null
   branches: string[]
+  branchStatus?: BranchStatus
+  publishStep?: string
   publishLabel: string
   publishing: boolean
   /** The publish's current step can still be cancelled (LKM-187). */
@@ -61,6 +74,7 @@ export interface NativeShellAction {
     | 'branch'
     | 'new-branch'
     | 'git-updates'
+    | 'branch-open-url'
     | 'publish'
     | 'publish-cancel'
     | 'publish-mode'

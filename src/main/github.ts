@@ -13,6 +13,8 @@ import { promisify } from 'util'
 import { ipcMain } from '../native/platform'
 import type { GithubConnectOptions, GithubStatus } from '../shared/api'
 import { sanitizeRepoName } from '../shared/github'
+import { branchStatus, failureContext } from './branch-status'
+import { prepublishChecks } from './prepublish-checks'
 import { workflowOwner } from './workflow-owner'
 
 const execFileP = promisify(execFile)
@@ -75,6 +77,13 @@ export async function githubStatus(root: string): Promise<GithubStatus> {
 
 export function registerGithubIpc(): void {
   ipcMain.handle('github:status', (_e, root: string) => githubStatus(root))
+  ipcMain.handle('github:branch-status', (_e, root: string) => branchStatus(root))
+  ipcMain.handle('github:failure-context', (_e, root: string, commit: string, prNumber?: number) =>
+    failureContext(root, commit, prNumber)
+  )
+  ipcMain.handle('github:prepublish', (_e, root: string, memory: string) =>
+    prepublishChecks(root, memory)
+  )
   // Creating the repository is a remote effect: the workflow owner journals it (S13).
   ipcMain.handle('github:connect', (_e, root: string, opts: GithubConnectOptions) =>
     workflowOwner().connect(root, { ...opts, name: sanitizeRepoName(opts.name) })

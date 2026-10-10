@@ -1,7 +1,7 @@
 import type { GithubStatus, GitRemoteStatus, PublishResult } from '../shared/api'
 import { versionConflict } from '../shared/dependency-issue'
 import { sanitizeRepoName } from '../shared/github'
-import type { NativeShellState } from '../shared/native-shell'
+import type { BranchStatus, NativeShellState } from '../shared/native-shell'
 import {
   type PublishProgress,
   publishCancellable,
@@ -12,6 +12,7 @@ import {
 import type { NativeActivityController } from './activity-controller'
 import type { NativeChatController } from './chat-controller'
 import type { NativePreferences } from './preferences'
+import { AUTO_FIX_CI_KEY } from './settings-controller'
 import type { NativeSheetController } from './sheets-runtime'
 
 /** A publish the toolbar shows for one project (LKM-187), kept per root across switches. */
@@ -33,6 +34,10 @@ const OPEN = new Set(['running', 'describe'])
 export class NativeGitController {
   readonly branches = new Map<string, string[]>()
   readonly connections = new Map<string, GithubStatus | null>()
+  readonly statuses = new Map<string, BranchStatus>()
+  private readonly statusTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly ciFixes = new Map<string, { root: string; check: string }>()
+  private readonly recentPublishes = new Set<string>()
   private readonly revisions = new Map<string, number>()
   /** Publishes under way, by root: the toolbar follows the active project's. */
   readonly runs = new Map<string, PublishRun>()
@@ -76,6 +81,8 @@ export class NativeGitController {
       ...state,
       branch: entry?.branch ?? null,
       branches: this.branches.get(root) ?? [],
+      branchStatus: this.statuses.get(root),
+      publishStep: run?.step,
       publishing: !!run,
       publishCancellable: !!run && !run.cancelling && publishCancellable(run.step),
       publishMode: this.mode,
@@ -106,6 +113,105 @@ export class NativeGitController {
     this.connections.set(root, status)
     this.render()
     if (!this.runs.has(root)) await this.adopt(root)
+    void this.pollStatus(root)
+  }
+  /** Running checks are refreshed within a minute; settled checks every ten minutes. */
+  async pollStatus(root: string) {
+    clearTimeout(this.statusTimers.get(root))
+    try {
+      const status: BranchStatus = await this.invoke('github:branch-status', root)
+      const previous = this.statuses.get(root)
+      this.statuses.set(root, status)
+      this.render()
+      if (
+        status.ci === 'failed' &&
+        (this.recentPublishes.has(root) || (!!previous && previous.commit !== status.commit))
+      ) {
+        this.recentPublishes.delete(root)
+        this.ciFailed(root, status)
+      }
+    } catch {
+      this.statuses.delete(root)
+      this.render()
+    }
+    if (!this.workspace.state.projects.some((project) => project.root === root)) return
+    const current = this.statuses.get(root)
+    const timer = setTimeout(
+      () => void this.pollStatus(root),
+      current?.ci === 'running' || this.runs.has(root) ? 45_000 : 600_000
+    )
+    timer.unref?.()
+    this.statusTimers.set(root, timer)
+  }
+  private ciFailed(root: string, status: BranchStatus) {
+    const message = `CI failed on ${status.pr?.state === 'merged' ? status.base : 'branch'} after publish: ${status.failing.length} checks`
+    this.log.append(message, 'needs-action')
+    const view = {
+      label: 'View checks',
+      run: async () => {
+        if (status.checksUrl) this.openExternal(status.checksUrl)
+      }
+    }
+    const mode = this.preferences.get(AUTO_FIX_CI_KEY) ?? 'ask'
+    const fix = { label: 'Fix with agent', run: async () => this.fixCI(root, status) }
+    this.sheets.toast(message, mode === 'off' ? [view] : [fix, view], 15)
+    if (mode === 'auto') void this.fixCI(root, status)
+  }
+  private async fixCI(root: string, status: BranchStatus) {
+    const entry = this.workspace.state.projects.find((project) => project.root === root)
+    if (!entry?.activeSessionKey || !status.commit) return
+    const context = await this.invoke(
+      'github:failure-context',
+      root,
+      status.commit,
+      status.pr?.number
+    ).catch(() => ({
+      log: '',
+      diff: ''
+    }))
+    const prompt = [
+      `Fix CI failure on ${status.pr?.state === 'merged' ? status.base : entry.branch}.`,
+      `Failing checks: ${status.failing.join(', ')}. Commit: ${status.commit}.`,
+      'Reproduce locally where possible. Make the smallest fix in your private worktree, verify it, call land_now, and publish through the normal publish_update or publish_merge tool. Watch CI after publishing; make at most two repair attempts. Report one concise result. Preserve unrelated user changes.',
+      `Failed job log (bounded):\n${context.log || '(unavailable)'}`,
+      `Commit diff (bounded):\n${context.diff || '(unavailable)'}`
+    ].join('\n\n')
+    const result = await this.invoke(
+      'agent:spawn-comment',
+      root,
+      prompt,
+      entry.activeSessionKey,
+      {},
+      'comment',
+      'Fix CI checks'
+    ).catch(() => null)
+    if (!result?.ok) {
+      this.log.append('Could not start the CI repair agent.', 'warning')
+      return
+    }
+    this.ciFixes.set(result.spawnId, { root, check: status.failing[0] ?? 'CI' })
+    this.log.append('Fixing CI in the background', 'success')
+  }
+  /** A finished background repair writes a dated rule only after its work landed. */
+  async agentEvent(event: {
+    type?: string
+    sessionId?: string
+    outcome?: string
+    summary?: string
+  }) {
+    if (event.type !== 'spawn-finished' || !event.sessionId) return
+    const fix = this.ciFixes.get(event.sessionId)
+    if (!fix) return
+    this.ciFixes.delete(event.sessionId)
+    if (event.outcome === 'applied') {
+      await this.invoke('project-memory:ci-rule', fix.root, fix.check).catch(() => {})
+      this.log.append(`CI repair landed: ${event.summary ?? fix.check}`, 'success')
+      void this.pollStatus(fix.root)
+    } else
+      this.log.append(
+        `CI repair ${event.outcome ?? 'ended'}: ${event.summary ?? fix.check}`,
+        'warning'
+      )
   }
   async branch(key: string, name: string, create = false) {
     if (!name.trim()) return
@@ -154,6 +260,15 @@ export class NativeGitController {
         result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
         return
       }
+      const memory = await this.invoke('project-memory:get', root).catch(() => null)
+      const checklist = await this.invoke('github:prepublish', root, memory?.content ?? '').catch(
+        () => ({ warnings: ['Could not run local pre-publish checks.'] })
+      )
+      for (const warning of checklist.warnings ?? []) this.log.append(warning, 'warning')
+      if (run.cancelling) {
+        result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
+        return
+      }
       await this.workspace.transact(key, async () => {
         // transact queues behind other work on the project: a Cancel that arrived while
         // waiting must still stop the publish before anything changes.
@@ -167,6 +282,7 @@ export class NativeGitController {
         run.shipping = true
         this.follow(root, run)
         result = await this.invoke('publish:ship', root, undefined, mode)
+        if (result?.ok) this.recentPublishes.add(root)
         run.shipping = false
         if (!result?.ok) return
         // Tagging the chat is bookkeeping: its failure doesn't fail the publish.

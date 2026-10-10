@@ -113,6 +113,7 @@ const UNIT = [
   'sidebar-focus',
   'native-git',
   'publish-progress',
+  'branch-status',
   'dependency-issue',
   'native-support-sheets',
   'native-cat-assets',

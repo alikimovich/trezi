@@ -44,6 +44,7 @@ const origin = (url: string) => {
 }
 /** Remembers the last selected Settings section. The settings keys themselves are unchanged. */
 export const SETTINGS_SECTION_KEY = 'trezi:settings-section:v1'
+export const AUTO_FIX_CI_KEY = 'trezi:auto-fix-ci:v1'
 const PROVIDERS =
   'Claude and Codex use your existing sign-ins. Add another provider to use its models in chats.'
 const sections = (): NativeSheetSection[] => [
@@ -251,6 +252,21 @@ export class NativeSettingsController {
               { value: 'jev', label: 'Jev layout engine' }
             ]
           },
+          {
+            id: 'autoFixCI',
+            section: 'experimental',
+            label: 'Auto-fix CI failures',
+            help: 'Ask offers a background agent when published checks fail. Auto starts one.',
+            kind: 'choice',
+            value: ['off', 'ask', 'auto'].includes(this.preferences.get(AUTO_FIX_CI_KEY) ?? '')
+              ? this.preferences.get(AUTO_FIX_CI_KEY)!
+              : 'ask',
+            choices: [
+              { value: 'off', label: 'Off' },
+              { value: 'ask', label: 'Ask' },
+              { value: 'auto', label: 'Auto' }
+            ]
+          },
           ...providers.fields.map((field) => ({ ...field, section: 'providers', draft: true }))
         ],
         autosave: true,
@@ -344,6 +360,9 @@ export class NativeSettingsController {
     const agentMerge = action.values.agentMerge
     if (agentMerge !== undefined && !['true', 'false'].includes(agentMerge))
       throw new Error('Invalid setting.')
+    const autoFixCI = action.values.autoFixCI
+    if (autoFixCI !== undefined && !['off', 'ask', 'auto'].includes(autoFixCI))
+      throw new Error('Invalid setting.')
     // One atomic batch, built from the committed state when it is sent (a chat may
     // have recorded a newer last-used model since the sheet opened). Autosave
     // keeps the draft and closing waits for this to settle.
@@ -370,7 +389,8 @@ export class NativeSettingsController {
           : [[QUIT_DONT_ASK_KEY, quitDontAsk] as [string, string]]),
         ...(access === undefined ? [] : [[AGENT_FILE_ACCESS_KEY, access] as [string, string]]),
         ...(gitAccess === undefined ? [] : [[AGENT_GIT_ACCESS_KEY, gitAccess] as [string, string]]),
-        ...(agentMerge === undefined ? [] : [[AGENT_MERGE_KEY, agentMerge] as [string, string]])
+        ...(agentMerge === undefined ? [] : [[AGENT_MERGE_KEY, agentMerge] as [string, string]]),
+        ...(autoFixCI === undefined ? [] : [[AUTO_FIX_CI_KEY, autoFixCI] as [string, string]])
       ]
     })
     this.notify()

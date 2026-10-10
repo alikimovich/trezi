@@ -487,6 +487,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         alert.beginSheetModal(for: window) { response in decisionHandler(response == .alertFirstButtonReturn ? .grant : .deny) }
     }
     func windowDidEnterFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":true]) }
+    func windowDidBecomeKey(_ notification: Notification) { emit(["event":"window-focus"]) }
     func windowDidExitFullScreen(_ notification: Notification) { emit(["event":"fullscreen", "value":false]) }
     func windowWillClose(_ notification: Notification) {
         // The window is gone, so nothing can ask any more (`windowShouldClose` already did).

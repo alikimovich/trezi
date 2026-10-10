@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Branch and CI status (LKM-228)
+
+- [x] Show ahead/behind, publish step, PR and CI state in the native branch control; poll GitHub with ETags and refresh on focus.
+- [x] Offer CI repair in a background agent and save a dated project-memory rule after a landed repair; run bounded local checks before Publish.
+- [ ] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
+- [ ] Verify native captures and the end-to-end failed CI repair flow.
+
 ## Onboarding research and design (LKM-223)
 
 - [x] Phase 0: sourced Zed, Claude and Codex authentication research with a supported-path recommendation (`docs/research/onboarding-auth.md`).

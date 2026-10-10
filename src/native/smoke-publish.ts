@@ -103,6 +103,38 @@ export async function checkPublishProgress(
     remoteUrl: 'https://github.com/example/folder-alpha.git'
   })
   try {
+    const priorStatus = git.statuses.get(root)
+    const sample = {
+      base: 'main',
+      ahead: 2,
+      behind: 0,
+      sync: '2 ahead · 0 behind main',
+      ci: 'running' as const,
+      failing: [] as string[]
+    }
+    git.statuses.set(root, sample)
+    git.render()
+    const branchStatus = await until(
+      (s) =>
+        String(s.branchDisplay).includes('2 ahead') && String(s.branchDisplay).includes('running'),
+      'Branch sync and running CI'
+    )
+    assert.ok(
+      branchStatus.addressVisible && branchStatus.addressTrailing < branchStatus.rightGroupLeading,
+      'Branch status stays inside the toolbar'
+    )
+    await capture(host, artifacts, 'branch-status-running')
+    git.statuses.set(root, { ...sample, ci: 'passed' })
+    git.render()
+    await until((s) => String(s.branchDisplay).includes('passed'), 'Passed CI')
+    await capture(host, artifacts, 'branch-status-passed')
+    git.statuses.set(root, { ...sample, ci: 'failed', failing: ['build', 'lint'] })
+    git.render()
+    await until((s) => String(s.branchDisplay).includes('failed 2'), 'Failed CI')
+    await capture(host, artifacts, 'branch-status-failed')
+    if (priorStatus) git.statuses.set(root, priorStatus)
+    else git.statuses.delete(root)
+    git.render()
     await until(label('Publish'), 'Publish is idle')
     // Immediate feedback: the label and spinner before the owner reports anything.
     const clicked = Date.now()
@@ -130,6 +162,7 @@ export async function checkPublishProgress(
     await until(label('Syncing with GitHub…'), 'Syncing step')
     step('push')
     const pushing = await until(label('Pushing…'), 'Pushing step')
+    await until((s) => /[↗→↑] push/.test(String(s.branchDisplay)), 'Branch publish animation')
     assert.ok(pushing.publishEnabled, 'The menu opens while the step can be cancelled')
     assert.deepEqual(pushing.publishMenu, ['Pushing…', 'Cancel Publish'])
     evidence.pushing = await capture(host, artifacts, 'publish-progress')

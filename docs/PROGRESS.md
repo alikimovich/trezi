@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-228: branch and CI status
+
+- The branch pull-down now shows local and GitHub sync counts, PR state, and the latest branch or merged-base check result. GitHub REST reads cache ETags; running checks refresh in 45 seconds, settled checks in ten minutes, and window focus refreshes immediately. Offline reads leave CI unknown.
+- Publish steps appear beside the branch with a subtle arrow animation that stops under Reduce Motion. A newly failing published commit shows a toast with View checks and, by default, Fix with agent. Settings offers Off, Ask, and Auto.
+- The repair action gives the existing private-worktree background agent bounded failed logs and commit diff, with instructions to land and publish. A landed repair writes a dated Pitfalls rule through the memory owner. Publish checks safe local commands named in CI workflow files or memory and reports commands it cannot run.
+- Quick verification passed; the native run reached the status captures, then the Settings evidence expected the old Experimental picker count. That assertion now recognizes the new CI setting; the worker's native verification call limit prevented a confirming run. The one-time rerun and bounded post-fix watcher still need the Swift workflow owner path.
+
 ## 2026-10-09 — LKM-223 Phase 0 research and Phase 1 onboarding prototype
 
 - Zed's ACP agents own their auth separately from Zed's built-in agent; Codex also has a separate direct ChatGPT path in Zed. Anthropic's 2026-10-07 help update permits third-party Agent SDK subscription usage under current limits, but the Agent SDK guide still requires prior approval to offer claude.ai login in a third-party product. The researched recommendation therefore uses Codex-managed app-server login and Claude Console API access, with no CLI token-file reading or subscription-token proxying (`docs/research/onboarding-auth.md`).
