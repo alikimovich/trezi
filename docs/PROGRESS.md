@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-223 Phase 0 research and Phase 1 onboarding prototype
+
+- Zed's ACP agents own their auth separately from Zed's built-in agent; Codex also has a separate direct ChatGPT path in Zed. Anthropic's 2026-10-07 help update permits third-party Agent SDK subscription usage under current limits, but the Agent SDK guide still requires prior approval to offer claude.ai login in a third-party product. The researched recommendation therefore uses Codex-managed app-server login and Claude Console API access, with no CLI token-file reading or subscription-token proxying (`docs/research/onboarding-auth.md`).
+- Added an isolated HTML prototype and flow notes for the two provider connection cards and a question-by-question New Project setup, including failure, cancellation, edit and review states (`docs/prototypes/onboarding/`). It makes no provider request or filesystem change. Phase 2 remains gated on product review.
 ## 2026-10-09 — LKM-224 review repair 3: states bar compact decision and default recipe ids
 
 - `NativeStatesSwitcher` re-measures on the next run-loop turn after every `update(...)` (SwiftUI applies the model after the turn, so the first pass saw stale content and could pick the compact row at the usual width), on an effective-appearance change, and after a compact flip. The smoke now asserts `compact === false` with the component name and Missing at the usual width, in the plain capture and after the light and dark captures; the narrow case still asserts `compact === true`.
