@@ -1,5 +1,5 @@
 import type { ThreeDAction, ThreeDState } from '../shared/api'
-import { threeDActionAllowed } from '../shared/three-d-contract'
+import { packAtlas, THREE_D_LIMITS, threeDActionAllowed } from '../shared/three-d-contract'
 import { sourceSelector, sourceStamp } from './source-stamp'
 import { captureSurfaces, type Surface } from './three-d-paint'
 import { THREE_D_CSS } from './three-d-styles'
@@ -22,6 +22,9 @@ function identity(el: Element, scope: ParentNode): () => Element | null {
   }
 }
 
+/** Owns capture, identity and selection of the exploded view. The host renders the
+ * scene natively (`src/native/ThreeDScene.swift`) from snapshots of an atlas of inert
+ * surfaces that this module paints in a modal dialog on request (LKM-227). */
 export function createThreeDInspector(options: {
   select: (element: Element, open: boolean) => void
   hasSource: (element: Element) => boolean
@@ -34,31 +37,14 @@ export function createThreeDInspector(options: {
   open: (element: Element) => void
   close: () => void
   selected: () => Element | null
-  action: (action: ThreeDAction) => void
+  action: (action: ThreeDAction) => boolean
   key: (event: KeyboardEvent) => void
-  appearance: (
-    palette: Record<string, string>,
-    top: number,
-    bottom: number,
-    left: number,
-    right: number
-  ) => void
 } {
   let host: HTMLDivElement | null = null
   let cleanup: (() => void) | null = null
   let resolveSelected: (() => Element | null) | null = null
-  let current: ThreeDState | null = null
-  let runAction: ((action: ThreeDAction) => void) | null = null
+  let runAction: ((action: ThreeDAction) => boolean) | null = null
   let handleKey: ((event: KeyboardEvent) => void) | null = null
-  let setAppearance:
-    | ((
-        palette: Record<string, string>,
-        top: number,
-        bottom: number,
-        left: number,
-        right: number
-      ) => void)
-    | null = null
   const close = (): void => {
     if (!host) return
     cleanup?.()
@@ -66,10 +52,8 @@ export function createThreeDInspector(options: {
     host.remove()
     host = null
     resolveSelected = null
-    current = null
     runAction = null
     handleKey = null
-    setAppearance = null
     options.publish(null)
     options.close()
   }
@@ -85,77 +69,64 @@ export function createThreeDInspector(options: {
     const shadow = host.attachShadow({ mode: 'open' })
     const style = document.createElement('style')
     style.textContent = THREE_D_CSS
+    // Modal so the live page takes no input; it paints only while the host snapshots.
     const dialog = document.createElement('dialog')
     dialog.setAttribute('aria-label', '3D component inspector')
+    dialog.tabIndex = -1
     dialog.style.cssText =
-      'position:fixed;inset:0;margin:0;padding:0;border:0;max-width:none;max-height:none;width:100vw;height:100vh;background:transparent;color:inherit;'
-    const workspace = document.createElement('div')
-    workspace.className = 'workspace'
-    const stage = document.createElement('div')
-    stage.className = 'stage'
-    stage.tabIndex = 0
-    stage.setAttribute(
-      'aria-label',
-      '3D canvas. Arrow keys rotate; plus and minus zoom; Shift and drag pans.'
-    )
-    const scene = document.createElement('div')
-    scene.className = 'scene'
-    stage.append(scene)
+      'position:fixed;inset:0;margin:0;padding:0;border:0;max-width:none;max-height:none;width:100vw;height:100vh;background:transparent;color:inherit;overflow:hidden;outline:none;'
     const session = `${Date.now()}-${Math.random()}`
     let revision = 0
+    let ready = false
     let limited = false,
       simplified = false,
       invalid = false
     let surfaces: Surface[] = []
-    let pitch = 48,
-      yaw = -28,
-      zoom = 1,
-      separation = 36,
-      panX = 0,
-      panY = 0
-    let frame = 0,
-      timer = 0,
+    let slots: { page: number; x: number; y: number }[] = []
+    let pages: HTMLDivElement[] = []
+    let scale = 1
+    let timer = 0,
       disposed = false
-    let width = 1,
-      height = 1,
-      maxDepth = 0,
+    let width = 0,
+      height = 0,
       originX = 0,
       originY = 0
     const publish = (): void => {
+      if (!ready) return
       const selectedIndex = surfaces.findIndex((s) => s.element === selected)
-      current = {
+      options.publish({
         session,
         revision,
-        title: `3D · ${surfaces[0]?.label ?? root.localName}`,
-        layers: surfaces.map((s, id) => ({ id, label: s.label.slice(0, 120), depth: s.depth })),
+        title: `3D · ${surfaces[0]?.label ?? root.localName}`.slice(0, THREE_D_LIMITS.title),
+        layers: surfaces.map((s, id) => ({
+          id,
+          label: s.label.slice(0, THREE_D_LIMITS.label),
+          depth: s.depth,
+          x: s.rect.left - originX,
+          y: s.rect.top - originY,
+          width: s.rect.width,
+          height: s.rect.height,
+          page: slots[id].page,
+          ax: slots[id].x,
+          ay: slots[id].y
+        })),
+        width,
+        height,
+        scale,
+        pages: pages.length,
         selected: selectedIndex < 0 ? null : selectedIndex,
         hasSource: !!selected && options.hasSource(selected),
-        separation,
         limited,
         simplified,
         invalid
-      }
-      options.publish(current)
-    }
-    const updateCamera = (): void => {
-      const fit = Math.min(
-        (stage.clientWidth - 70) / width,
-        (stage.clientHeight - 70) / (height + maxDepth * separation),
-        1.5
-      )
-      scene.style.transform = `translate(${panX}px,${panY}px) scale(${Math.max(0.04, fit) * zoom}) rotateX(${pitch}deg) rotateY(${yaw}deg)`
-      Array.from(scene.children).forEach((node, i) => {
-        const s = surfaces[i]
-        ;(node as HTMLElement).style.transform =
-          `translate3d(${s.rect.left - originX - width / 2}px,${s.rect.top - originY - height / 2}px,${(s.depth - maxDepth / 2) * separation}px)`
       })
     }
-    const scheduleCamera = (): void => {
-      if (!frame)
-        frame = requestAnimationFrame(() => {
-          frame = 0
-          updateCamera()
-        })
+    const paint = (value: number): void => {
+      if (value < 0) dialog.removeAttribute('data-tone')
+      else dialog.dataset.tone = String(value % 2)
+      pages.forEach((page, i) => {
+        page.toggleAttribute('data-shown', value >= 0 && i === Math.floor(value / 2))
+      })
     }
     const choose = (i: number): void => {
       const s = surfaces[i]
@@ -169,9 +140,6 @@ export function createThreeDInspector(options: {
         const el = resolve()
         return el && root.contains(el) ? el : null
       }
-      Array.from(scene.children).forEach((node, n) => {
-        node.toggleAttribute('data-selected', i === n)
-      })
       options.select(selected, true)
       publish()
     }
@@ -179,9 +147,12 @@ export function createThreeDInspector(options: {
       if (disposed) return
       const nextRoot = resolveRoot()
       if (!nextRoot) {
-        scene.replaceChildren()
+        dialog.replaceChildren()
         surfaces = []
+        slots = []
+        pages = []
         invalid = true
+        ready = true
         revision++
         if (selected) {
           selected = null
@@ -199,8 +170,15 @@ export function createThreeDInspector(options: {
         else options.lost()
       }
       const captured = captureSurfaces(root)
-      surfaces = captured.surfaces
-      limited = captured.truncated
+      const atlas = packAtlas(
+        captured.surfaces.map((s) => ({ width: s.rect.width, height: s.rect.height })),
+        { width: window.innerWidth, height: window.innerHeight }
+      )
+      // Surfaces beyond the page budget are dropped; their DOM order is kept.
+      surfaces = captured.surfaces.filter((_, i) => atlas.slots[i])
+      slots = atlas.slots.filter(Boolean)
+      scale = atlas.scale
+      limited = captured.truncated || atlas.fitted < captured.surfaces.length
       simplified = captured.approximate
       invalid = false
       revision++
@@ -213,22 +191,36 @@ export function createThreeDInspector(options: {
         rootRect.bottom - originY,
         ...surfaces.map((s) => s.rect.bottom - originY)
       )
-      maxDepth = Math.max(0, ...surfaces.map((s) => s.depth))
-      const planes = document.createDocumentFragment()
+      pages = Array.from({ length: atlas.pages }, () => {
+        const page = document.createElement('div')
+        page.className = 'page'
+        return page
+      })
       for (const [i, s] of surfaces.entries()) {
-        const plane = document.createElement('div')
-        plane.className = 'surface'
-        plane.dataset.layer = String(i)
-        plane.title = s.label
-        plane.toggleAttribute('data-selected', selected === s.element)
-        plane.style.width = `${s.rect.width}px`
-        plane.style.height = `${s.rect.height}px`
-        plane.append(s.paint)
-        planes.append(plane)
+        const slot = document.createElement('div')
+        slot.className = 'slot'
+        slot.style.left = `${slots[i].x}px`
+        slot.style.top = `${slots[i].y}px`
+        slot.style.width = `${s.rect.width}px`
+        slot.style.height = `${s.rect.height}px`
+        slot.style.transform = `scale(${scale})`
+        slot.append(s.paint)
+        pages[slots[i].page].append(slot)
       }
-      scene.replaceChildren(planes)
-      updateCamera()
-      publish()
+      dialog.removeAttribute('data-tone')
+      dialog.replaceChildren(...pages)
+      // Publish once images have decoded so the host's snapshots include them.
+      ready = false
+      const current = revision
+      const images = Array.from(dialog.querySelectorAll('img'))
+      void Promise.race([
+        Promise.allSettled(images.map((img) => img.decode())),
+        new Promise((resolve) => setTimeout(resolve, 1500))
+      ]).then(() => {
+        if (disposed || current !== revision) return
+        ready = true
+        publish()
+      })
     }
     const scheduleRefresh = (): void => {
       // Throttle, rather than debounce: continuously changing pages still update.
@@ -236,77 +228,36 @@ export function createThreeDInspector(options: {
         timer = window.setTimeout(() => {
           timer = 0
           refresh()
-        }, 180)
-    }
-    const reset = (): void => {
-      pitch = 48
-      yaw = -28
-      zoom = 1
-      panX = 0
-      panY = 0
-      separation = 36
-      scheduleCamera()
-      publish()
+        }, 300)
     }
     runAction = (message) => {
-      if (disposed) return
-      if (!threeDActionAllowed(message, session, revision, surfaces.length)) {
+      if (disposed) return false
+      if (!threeDActionAllowed(message, session, revision, surfaces.length, pages.length)) {
         // A rejected action for the live session (a stale revision after a refresh) re-publishes
         // the scene so the native controls show what the scene actually has.
         if ((message as { session?: unknown } | null)?.session === session) publish()
-        return
+        return false
       }
       switch (message.action) {
         case 'close':
           close()
-          return
+          break
         case 'code': {
           const element = resolveSelected?.()
           if (element && options.hasSource(element)) options.code(element)
-          return
+          break
         }
-        case 'front':
-          pitch = 0
-          yaw = 0
-          separation = 0
-          scheduleCamera()
-          publish()
-          return
-        case 'reset':
-          reset()
-          return
-        case 'separation':
-          if (!Number.isInteger(message.value) || message.value < 0 || message.value > 100) return
-          separation = message.value
-          scheduleCamera()
-          publish()
-          return
         case 'layer':
           choose(message.value)
-          return
+          break
+        case 'paint':
+          // The host snapshots only after this returns true for a published revision.
+          if (!ready) return false
+          paint(message.value)
+          break
       }
+      return true
     }
-    setAppearance = (palette, top, bottom, left, right) => {
-      const firstAppearance = workspace.style.visibility === 'hidden'
-      for (const key of ['background', 'grid', 'outline', 'accent', 'focus']) {
-        if (/^#[0-9a-fA-F]{6}$/.test(palette[key] ?? ''))
-          workspace.style.setProperty(`--three-d-${key}`, palette[key])
-      }
-      if (Number.isFinite(top) && top >= 0 && top <= 300)
-        workspace.style.setProperty('--three-d-top', `${top}px`)
-      if (Number.isFinite(bottom) && bottom >= 0 && bottom <= 300)
-        workspace.style.setProperty('--three-d-bottom', `${bottom}px`)
-      if (Number.isFinite(left) && left >= 0 && left <= 2000)
-        workspace.style.setProperty('--three-d-left', `${left}px`)
-      if (Number.isFinite(right) && right >= 0 && right <= 2000)
-        workspace.style.setProperty('--three-d-right', `${right}px`)
-      workspace.style.visibility = 'visible'
-      scheduleCamera()
-      if (firstAppearance) stage.focus({ preventScroll: true })
-    }
-    workspace.style.visibility = 'hidden'
-    workspace.append(stage)
-    dialog.append(workspace)
     shadow.append(style, dialog)
     document.documentElement.append(host)
     dialog.showModal()
@@ -314,81 +265,15 @@ export function createThreeDInspector(options: {
       e.preventDefault()
       close()
     })
-    const onKey = (e: KeyboardEvent): void => {
+    handleKey = (e) => {
       if (!e.isTrusted) return
-      // Keep shortcuts from reaching the running app while this modal owns focus.
+      // Keep shortcuts from reaching the running app while the scene is open.
       e.stopImmediatePropagation()
       if (e.key === 'Escape') {
         e.preventDefault()
         close()
-        return
       }
-      if (e.target !== host) return
-      const target = e.composedPath()[0]
-      if (target !== stage) return
-      if (e.key === 'ArrowLeft') yaw -= 5
-      else if (e.key === 'ArrowRight') yaw += 5
-      else if (e.key === 'ArrowUp') pitch -= 5
-      else if (e.key === 'ArrowDown') pitch += 5
-      else if (e.key === '+' || e.key === '=') zoom = Math.min(4, zoom * 1.1)
-      else if (e.key === '-') zoom = Math.max(0.2, zoom / 1.1)
-      else return
-      pitch = Math.max(-80, Math.min(80, pitch))
-      e.preventDefault()
-      scheduleCamera()
     }
-    handleKey = onKey
-    let drag: { id: number; x: number; y: number; moved: boolean; layer: number | null } | null =
-      null
-    stage.addEventListener('pointerdown', (e) => {
-      if (!e.isTrusted || e.button !== 0) return
-      const target = (e.target as Element).closest<HTMLElement>('[data-layer]')
-      drag = {
-        id: e.pointerId,
-        x: e.clientX,
-        y: e.clientY,
-        moved: false,
-        layer: target ? Number(target.dataset.layer) : null
-      }
-      stage.setPointerCapture(e.pointerId)
-      stage.focus({ preventScroll: true })
-    })
-    stage.addEventListener('pointermove', (e) => {
-      if (!drag || e.pointerId !== drag.id) return
-      const dx = e.clientX - drag.x,
-        dy = e.clientY - drag.y
-      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return
-      drag.moved = true
-      drag.x = e.clientX
-      drag.y = e.clientY
-      if (e.shiftKey) {
-        panX += dx
-        panY += dy
-      } else {
-        yaw += dx * 0.4
-        pitch = Math.max(-80, Math.min(80, pitch - dy * 0.4))
-      }
-      scheduleCamera()
-    })
-    stage.addEventListener('pointerup', (e) => {
-      if (!drag || drag.id !== e.pointerId) return
-      if (!drag.moved && drag.layer !== null) choose(drag.layer)
-      drag = null
-      stage.releasePointerCapture(e.pointerId)
-    })
-    stage.addEventListener('lostpointercapture', () => {
-      drag = null
-    })
-    stage.addEventListener(
-      'wheel',
-      (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        zoom = Math.max(0.2, Math.min(4, zoom * Math.exp(-e.deltaY * 0.001)))
-        scheduleCamera()
-      },
-      { passive: false }
-    )
     const observer = new MutationObserver(scheduleRefresh)
     observer.observe(document.body, {
       subtree: true,
@@ -403,8 +288,6 @@ export function createThreeDInspector(options: {
         characterData: true,
         attributes: true
       })
-    const resize = new ResizeObserver(scheduleRefresh)
-    resize.observe(stage)
     window.addEventListener('resize', scheduleRefresh)
     document.addEventListener('load', scheduleRefresh, true)
     document.addEventListener('transitionend', scheduleRefresh, true)
@@ -415,9 +298,7 @@ export function createThreeDInspector(options: {
     cleanup = () => {
       disposed = true
       observer.disconnect()
-      resize.disconnect()
       clearTimeout(timer)
-      cancelAnimationFrame(frame)
       window.removeEventListener('resize', scheduleRefresh)
       window.removeEventListener('pagehide', onPageHide)
       document.removeEventListener('load', scheduleRefresh, true)
@@ -435,9 +316,7 @@ export function createThreeDInspector(options: {
     open,
     close,
     selected: () => resolveSelected?.() ?? null,
-    action: (message) => runAction?.(message),
-    key: (event) => handleKey?.(event),
-    appearance: (palette, top, bottom, left, right) =>
-      setAppearance?.(palette, top, bottom, left, right)
+    action: (message) => runAction?.(message) ?? false,
+    key: (event) => handleKey?.(event)
   }
 }

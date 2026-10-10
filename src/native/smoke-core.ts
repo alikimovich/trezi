@@ -63,7 +63,7 @@ import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
-import { checkThreeD } from './smoke-three-d'
+import { checkThreeD, removeThreeDCard } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { checkToolbarMore } from './smoke-toolbar-more'
 import { inspectUntil, waitFor } from './smoke-wait'
@@ -1036,6 +1036,7 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         if ((await host.request('threeDInspect')).active)
           await host.request('threeDPerform', { action: 'close' })
+        await page(removeThreeDCard)
         if ((await host.request('sourceInspect')).popped)
           await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
         if ((await host.request('sourceInspect')).visible)

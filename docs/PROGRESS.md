@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-227: exploded view rendered natively
+
+- The in-page CSS perspective scene, camera and pointer handling are gone. The preview keeps `three-d-paint.ts` capture and layer identity, packs surfaces into at most six viewport-sized atlas pages (`packAtlas`) and sends only bounded geometry; `threeDStateAllowed` mirrors the Swift checks.
+- Why an atlas plus host snapshots: sending per-layer PNGs over the message bridge would be large and slow, and WebKit has no per-element snapshot API. The host (`ThreeDCapture.swift`) shows each page on black and on white via a revision-checked `paint` action, snapshots at backing scale and recovers alpha from the pair, so transparent layers stay transparent and a stale atlas is never cropped.
+- `ThreeDScene.swift` renders Core Animation planes in a `CATransformLayer`. Core Animation does not hit-test 3D transform layers, so hover/click project each plane's corners and pick the front-most by facing side. Re-adding the scene subview drops first responder, so layout only reorders it when needed.
+- Front/Reset/separation are native-only now (rejected by the page contract); capture failure or timeout shows a native message rather than an empty stage. The picker says "1 layer" / "N layers".
+- The `three-d` core smoke uses a nested fixture card and checks rendered planes, backing-scale images, spacing, Front/Reset, hover, click selection, the fallback message and recovery, and light/dark scene backgrounds. It clears ruler guides first: `previewInput` clicks are hit-tested natively and a leftover guide took the toolbar click. A `ThreeDBackdrop` covers the whole preview area under the translucent bars, so the page no longer peeks through under the header.
+- Verification: quick passes (211 unit). Native `core` passed `three-d` (27/29; `preview-overlay` lost window focus and `inspector` failed after it). The backdrop was added after that native run and is unverified natively.
+
 ## 2026-10-09 — LKM-223 Phase 0 research and Phase 1 onboarding prototype
 
 - Zed's ACP agents own their auth separately from Zed's built-in agent; Codex also has a separate direct ChatGPT path in Zed. Anthropic's 2026-10-07 help update permits third-party Agent SDK subscription usage under current limits, but the Agent SDK guide still requires prior approval to offer claude.ai login in a third-party product. The researched recommendation therefore uses Codex-managed app-server login and Claude Console API access, with no CLI token-file reading or subscription-token proxying (`docs/research/onboarding-auth.md`).

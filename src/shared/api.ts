@@ -1347,23 +1347,43 @@ export interface RecentMenuEntry {
   name: string
 }
 
-/** Visible preview's exploded scene. The document and session are opaque identities. */
+/** One captured surface of the exploded scene. `x`/`y`/`width`/`height` are CSS px
+ * relative to the subtree's origin; `ax`/`ay` place it on atlas `page` (viewport CSS px,
+ * drawn at the state's `scale`). The array index is the DOM z-order. */
+export interface ThreeDLayer {
+  id: number
+  label: string
+  depth: number
+  x: number
+  y: number
+  width: number
+  height: number
+  page: number
+  ax: number
+  ay: number
+}
+
+/** Visible preview's exploded scene. The document and session are opaque identities.
+ * The host snapshots the atlas pages and renders the layers natively (LKM-227). */
 export interface ThreeDState {
   session: string
   revision: number
   title: string
-  layers: { id: number; label: string; depth: number }[]
+  layers: ThreeDLayer[]
+  width: number
+  height: number
+  scale: number
+  pages: number
   selected: number | null
   hasSource: boolean
-  separation: number
   limited: boolean
   simplified: boolean
   invalid: boolean
 }
 
 export type ThreeDAction =
-  | { session: string; revision: number; action: 'close' | 'code' | 'front' | 'reset' }
-  | { session: string; revision: number; action: 'separation' | 'layer'; value: number }
+  | { session: string; revision: number; action: 'close' | 'code' }
+  | { session: string; revision: number; action: 'layer' | 'paint'; value: number }
 
 /**
  * Self-update status pushed from main (`update:status`). Trezi is distributed
