@@ -86,7 +86,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         config.websiteDataStore = .nonPersistent()
         let contentWorld = world
         config.userContentController.add(self, contentWorld: contentWorld, name: "trezi")
-        installPreviewScripts(config.userContentController, speed: id == "preview" ? speedBadge.speed : 1)
+        installPreviewScripts(config.userContentController, speed: id == "preview" ? speedBadge.speed : 1, agent: id != "preview")
         // WebKit keeps its own tracking areas; the page shields what native views cover (LKM-173).
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self; view.uiDelegate = self; view.isInspectable = true
@@ -227,7 +227,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
             let step = c["step"] as? Int
             if let step, !(1...600).contains(step) { reply(id, error: "Invalid frame step"); return }
-            installPreviewScripts(view.configuration.userContentController, speed: speed)
+            installPreviewScripts(view.configuration.userContentController, speed: speed, agent: true)
             let detail = step.map { "step:\($0)" } ?? "rate:\(speed)"
             view.evaluateJavaScript("document.dispatchEvent(new CustomEvent('trezi:speed', {detail:'\(detail)'}))", in: nil, in: world) { _ in }
             reply(id, ["speed": speed, "stepped": step as Any? ?? NSNull()])
@@ -459,12 +459,13 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let name = views.first(where: { $0.value === webView })?.key, let target = targets[name], let url = action.request.url else { decisionHandler(.cancel); return }
+        let sameOrigin = url.scheme == target.scheme && url.host == target.host && url.port == target.port
+        if name.hasPrefix("agent:") { decisionHandler(agentPolicy(name, action, url: url, sameOrigin: sameOrigin)); return }
         // The app shell stays on its own URL. The preview's main frame stays on
         // its exact assigned origin; subframes never receive a privileged bridge.
         if action.targetFrame?.isMainFrame == false { decisionHandler(.allow); return }
         if name == "preview" && previewHistory.redirect(action) { decisionHandler(.cancel); return }
-        let sameOrigin = url.scheme == target.scheme && url.host == target.host && url.port == target.port
-        let allowed = name == "preview" || name.hasPrefix("agent:") ? (sameOrigin || url.absoluteString == "about:blank") : (sameOrigin && url.path == target.path)
+        let allowed = name == "preview" ? (sameOrigin || url.absoluteString == "about:blank") : (sameOrigin && url.path == target.path)
         if allowed && action.shouldPerformDownload { decisionHandler(.download) }
         else if allowed && action.targetFrame != nil { decisionHandler(.allow) }
         else {

@@ -140,6 +140,7 @@ try {
     'preview_console',
     'preview_evaluate',
     'preview_inspect',
+    'preview_interact',
     'preview_location',
     'preview_screenshot',
     'preview_speed',

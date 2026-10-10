@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- Agents can click, type, press keys, hover, scroll, select options and wait in their private agent browser with `preview_interact`, each call returning the resulting URL, console errors and a small screenshot; uploads, downloads, leaving the dev server and posting forms to other hosts are refused, and the user's preview is never driven (LKM-230).
 - A build badge in the sidebar footer shows whether this Trezi is on main ("0.1.0 · main ✓"), behind it ("0.1.0 · 3 behind", click for the update steps), not on main or built with local changes; hover or About Trezi shows version, build, commit, branch, release tag and the last check. The check runs in the background at launch and every 30 minutes, makes no network call offline, can be turned off in Settings → General, and Copy Logs for Support and feedback diagnostics include it (LKM-226).
 ### Changed
 - Inspect in 3D now renders natively with Core Animation instead of inside the page: crisp Retina layers, smooth orbit, two-finger pan and pinch zoom, live separation, animated Front and Reset, hover labels, light/dark colours with a subtle grid, "1 layer" / "N layers" in the picker, and a clear message instead of a blank scene when layers can't be captured (LKM-227).
