@@ -29,6 +29,7 @@ import {
   LAYERS_SELECT,
   LAYERS_SET_WATCH,
   PREVIEW_CANCELLED,
+  PREVIEW_CANVAS_RESULT,
   PREVIEW_CLEAR_SELECTED,
   PREVIEW_COMMENT,
   PREVIEW_COMMENT_MODE,
@@ -288,8 +289,26 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   })
   // LKM-207: H on a states workbench hides the native switcher (for screenshots).
   ipcMain.on(PREVIEW_STATES_KEY, (e, key: unknown) => {
-    if (!fromPreview(e) || key !== 'hide') return
+    if (
+      !fromPreview(e) ||
+      typeof key !== 'string' ||
+      !/^(hide|close|[a-z0-9][a-z0-9-]{0,39})$/.test(key)
+    )
+      return
     sendToMain('preview:states-key', key)
+  })
+  ipcMain.on(PREVIEW_CANVAS_RESULT, (e, value: unknown) => {
+    if (!fromPreview(e) || !value || typeof value !== 'object') return
+    const result = value as { session?: unknown; status?: unknown; reason?: unknown }
+    if (
+      typeof result.session !== 'string' ||
+      result.session.length > 64 ||
+      !['loading', 'ready', 'error'].includes(String(result.status)) ||
+      (result.reason !== undefined &&
+        (typeof result.reason !== 'string' || result.reason.length > 240))
+    )
+      return
+    sendToMain('preview:states-canvas-result', result)
   })
   // Renderer dropped the selection (pill ×, message sent) → hide the toolbar.
   ipcMain.on('preview:clear-selected', () => {

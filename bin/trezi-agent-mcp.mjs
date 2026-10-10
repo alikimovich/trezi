@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from './chat-island-schema.mjs'
 import { chatUiDescription, chatUiShape } from './chat-ui-schema.mjs'
 import { previewToolShapes, previewToolText } from './preview-tool-schema.mjs'
+import { statesCanvasDescription, statesCanvasShape } from './states-canvas-schema.mjs'
 
 const socketPath = process.env.TREZI_AGENT_TOOL_SOCKET
 const token = process.env.TREZI_AGENT_TOOL_TOKEN
@@ -164,6 +165,15 @@ server.registerTool(
   { description: chatUiDescription, inputSchema: chatUiShape },
   async (args) => result(await invoke('chat_ui', args))
 )
+server.registerTool('register_states_canvas',
+  { description: statesCanvasDescription, inputSchema: statesCanvasShape },
+  async (args) => result(await invoke('register_states_canvas', args)))
+server.registerTool('open_states_canvas',
+  { description: 'Open a registered component canvas in the visible preview without changing its URL or page.', inputSchema: { id: z.string(), state: z.string().optional() } },
+  async (args) => result(await invoke('open_states_canvas', args)))
+server.registerTool('inspect_states_canvas',
+  { description: 'Read registered canvas recipes and the visible canvas render status.', inputSchema: {}, annotations: { readOnlyHint: true } },
+  async () => result(await invoke('inspect_states_canvas', {})))
 
 server.registerTool(
   'open_code',

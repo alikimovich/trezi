@@ -29,7 +29,10 @@ export const TREZI_AGENT_ACTIONS = [
   'project_ui_catalog',
   'compose_project_ui',
   'ask_user',
-  'chat_ui'
+  'chat_ui',
+  'register_states_canvas',
+  'open_states_canvas',
+  'inspect_states_canvas'
 ] as const
 export type TreziAgentToolAction = (typeof TREZI_AGENT_ACTIONS)[number]
 

@@ -2,6 +2,30 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-224 review repair 3: states bar compact decision and default recipe ids
+
+- `NativeStatesSwitcher` re-measures on the next run-loop turn after every `update(...)` (SwiftUI applies the model after the turn, so the first pass saw stale content and could pick the compact row at the usual width), on an effective-appearance change, and after a compact flip. The smoke now asserts `compact === false` with the component name and Missing at the usual width, in the plain capture and after the light and dark captures; the narrow case still asserts `compact === true`.
+- A recipe registered without an `id` now gets `canvasIdFor(source, exportName)` (slug tail plus a short hash), so two exports of one file are two canvases. `register` resolves the existing recipe by that derived id too, so the same export again is an explicit update that keeps revision/last (revision +1) and never touches another recipe. Stored ids are unchanged. Unit cases cover distinct exports, the update, and long paths with one tail.
+
+## 2026-10-09 — LKM-224 review repair 2: menu routing, Vite runtime shape, reload/stale, appearance and narrow coverage
+
+- Canvas `action()` only resolves a recipe from a `canvas:` id, or from the open canvas for state actions (select/all/next/prev); a legacy folder id returns false so the legacy owner handles it. Canvas Remove now asks first (sheet with Cancel/Remove).
+- Page adapter reads `createElement`/`Component`/`createRoot` from named exports or `default` (Vite's optimized CommonJS deps), and recipe module paths accept a bounded `?v=<hash>`.
+- Replaced the per-file watchers: a same-URL reload (`preview:url-changed`) or the existing `preview:styles-updated` signal redraws the canvas; another URL disposes it. A recipe whose source is missing is `stale` (menu "source missing", explicit message on the canvas, nothing imported).
+- The states bar chooses compact vs full row from the measured full-row width (no ViewThatFits), and reports `compact`, status, reason and page in its inspect JSON.
+- Smoke: CommonJS-shaped runtime + hooks/context under a provider via a `?v=` URL, light/dark captures and live switching through the window appearance override, 24 long-labelled states at a narrow window, source edit re-render, throwing/unsupported/stale canvases, legacy-id routing and the Remove confirmation. Unit test extended likewise.
+
+## 2026-10-09 — LKM-224 review repair: canvas ready status reaches native
+
+- The page-world renderer reached `ready`, but the isolated preview's result was rejected at the native IPC boundary: `PREVIEW_CANVAS_RESULT` was missing from `previewSendChannels`. Added that status-only channel to the allowlist; `preview-ipc.ts` still validates its session, status and bounded reason before relaying it. The canvas unit test checks that status is allowed while page-originated canvas commands remain blocked.
+- Agent OS quick verification passes (211 unit checks and typechecks). Native `core` passes 29/29, including `states-canvas` and the legacy workbench smoke. The earlier ready timeout no longer occurs.
+
+## 2026-10-09 — LKM-224: app-owned component states canvas
+
+- Added a bounded states recipe tool and Swift-owned preference record, scoped to the selected component and project. A Vite React adapter imports the real source module into disposable React roots on a flat page-world canvas; the isolated preview passes commands and observes status without exposing native IPC to project code. Registration, state changes, reopen and removal write no project files. Existing generated workbenches remain separate legacy entries.
+- Replaced the fixed native state row with system selection controls and a compact fallback. The new native smoke fixture exercises loading, empty, populated and All with a real module and provider export, checks native actions and unchanged project inventory/page state. The component-states skill and states documentation now describe the canvas workflow and its Vite React boundary.
+- Typechecks, lint and focused canvas unit tests pass. Native verification rendered the fixture states, then timed out waiting for the native ready status. A DOM-attribute observer now relays page-world status to the isolated preview; this last repair needs manager native verification because this worker reached the session's native call limit.
+
 ## 2026-10-09 — LKM-220 review repair: stored origin ports are stale
 
 - A record keeps the origin as an absolute URL, but preview ports are allocated per run (`RuntimeNet.freePort`), so after a restart or with several projects open Back could load a dead port or another project's dev server. `NativeStatesController.origin()` now rebases the stored path, query and hash onto the preview's current origin (`rebaseUrl`, `src/shared/states-records.ts`); Back, the history check, the restore comparison and the Remove reload all go through it. The stored record is unchanged. `test/states-return.mjs` restarts onto another port and asserts Back and the restore use it. Removed the unused `WorkbenchMemory.reload()`.
