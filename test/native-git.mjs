@@ -293,6 +293,16 @@ ciStatus = { ...ciStatus, ci: 'failed', failing: ['build', 'lint'] }
 await git.pollStatus('/a')
 assert.equal(lastToast().actions[0], 'Fix with agent')
 assert.equal(lastToast().actions[1], 'View checks')
+// The optional macOS notification is requested once, titled like the toast, and its
+// actions route to the toast's handlers.
+const notifications = () => sent.filter(([type]) => type === 'notify').map(([, payload]) => payload)
+assert.equal(notifications().length, 1)
+assert.deepEqual((({ root, title }) => ({ root, title }))(notifications()[0]), {
+  root: '/a',
+  title: 'CI failed on main after publish: 2 checks'
+})
+await git.notificationAction({ action: 'view', root: '/a' })
+assert.equal(opened.at(-1), 'https://github.com/o/r/commit/2/checks')
 await sheets.toastAction({ id: lastToast().id, index: 0 })
 assert.ok(
   calls.some(
@@ -324,6 +334,18 @@ assert.deepEqual(
   [['/a', 'build']]
 )
 assert.equal(logs.filter((line) => String(line[0]).startsWith('CI green after')).length, 1)
+// Auto-fix CI failures Off keeps the failure in the toast but sends no notification.
+values.set('trezi:auto-fix-ci:v1', 'off')
+const notified = notifications().length
+ciStatus = { ...ciStatus, commit: '5'.repeat(40), ci: 'failed', failing: ['lint'] }
+await git.pollStatus('/a')
+ciStatus = { ...ciStatus, ci: 'running', failing: [] }
+await git.pollStatus('/a')
+ciStatus = { ...ciStatus, ci: 'failed', failing: ['lint'] }
+await git.pollStatus('/a')
+assert.equal(lastToast().action, 'View checks')
+assert.equal(lastToast().actions, undefined)
+assert.equal(notifications().length, notified, 'Off sends no macOS notification')
 console.log(
   'Native Git: branch scope, publish mode/concurrency, conflicts, connection and remote update passed'
 )

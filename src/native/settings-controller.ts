@@ -256,7 +256,7 @@ export class NativeSettingsController {
             id: 'autoFixCI',
             section: 'experimental',
             label: 'Auto-fix CI failures',
-            help: 'Ask offers a background agent when published checks fail. Auto starts one.',
+            help: 'Ask offers a background agent when published checks fail. Auto starts one. Off also silences the macOS notification.',
             kind: 'choice',
             value: ['off', 'ask', 'auto'].includes(this.preferences.get(AUTO_FIX_CI_KEY) ?? '')
               ? this.preferences.get(AUTO_FIX_CI_KEY)!

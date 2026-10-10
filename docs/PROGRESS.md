@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-228 macOS notification and rule date
+
+- A CI failure after Publish now also posts an optional macOS notification (`src/native/HostNotify.swift`, host command `notify`) titled like the toast, with Fix with agent and View checks actions that return as `ci-notification` events to the same handlers (`NativeGitController.notificationAction`). It is gated by Settings → Auto-fix CI failures: Off sends none. The host posts only while Trezi is in the background, asks for notification authorization lazily on the first one, and never in a test run (`TREZI_NATIVE_TEST_DIR`), so no permission prompt appears in automation. `test/native-git.mjs` asserts the request is sent on a failure and not when Off.
+- The `project-memory:ci-rule` stamp uses `memoryDate()` (local date) like every other LKM-177 rule, not the UTC date.
+
 ## 2026-10-10 — LKM-228 review repairs
 
 - The Swift workflow owner now records a failed GitHub Actions rerun before the repair action appears. The controller watches the rerun, caps follow-up repair attempts, requires a successful subsequent Publish and green checks before writing one dated project-memory rule, and reports one result row.

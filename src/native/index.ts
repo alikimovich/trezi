@@ -970,6 +970,9 @@ async function main() {
   host.on('toast-action', (action) => {
     void sheetController.toastAction(action).catch(console.error)
   })
+  host.on('ci-notification', (action) => {
+    void gitController.notificationAction(action).catch(console.error)
+  })
   const openSheet = (kind: string, key?: string) => {
     if (sheetController.current?.state.busy) return
     if (kind === 'settings')

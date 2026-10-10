@@ -51,6 +51,11 @@ export class NativeGitController {
   >()
   private readonly ciFixes = new Map<string, string>()
   private readonly repairs = new Map<string, CIRepair>()
+  /** The last CI failure offered per project, for the notification's actions. */
+  private readonly failures = new Map<
+    string,
+    { status: BranchStatus; fix: () => Promise<void>; view: () => Promise<void> }
+  >()
   private readonly recentPublishes = new Set<string>()
   private readonly revisions = new Map<string, number>()
   /** Publishes under way, by root: the toolbar follows the active project's. */
@@ -245,16 +250,33 @@ export class NativeGitController {
   private ciFailed(root: string, status: BranchStatus) {
     const message = `CI failed on ${status.pr?.state === 'merged' ? status.base : 'branch'} after publish: ${status.failing.length} checks`
     this.log.append(message, 'needs-action')
-    const view = {
-      label: 'View checks',
-      run: async () => {
-        if (status.checksUrl) this.openExternal(status.checksUrl)
-      }
-    }
     const mode = this.preferences.get(AUTO_FIX_CI_KEY) ?? 'ask'
     const fix = { label: 'Fix with agent', run: async () => this.fixCI(root, status) }
+    const view = { label: 'View checks', run: async () => this.viewChecks(status) }
+    this.failures.set(root, { status, fix: fix.run, view: view.run })
     this.sheets.toast(message, mode === 'off' ? [view] : [fix, view], 15)
+    // The optional macOS notification follows the same setting: Off keeps CI quiet
+    // outside the app; the host only posts it while Trezi is in the background.
+    if (mode !== 'off')
+      this.sheets.host.send('notify', {
+        root,
+        title: message,
+        body:
+          mode === 'auto'
+            ? 'A background agent is fixing it.'
+            : 'Fix with agent or view the checks.'
+      })
     if (mode === 'auto') void this.fixCI(root, status)
+  }
+  private viewChecks(status: BranchStatus) {
+    if (status.checksUrl) this.openExternal(status.checksUrl)
+  }
+  /** A macOS notification action routes to the toast's handlers for the same failure. */
+  async notificationAction(action: { action?: string; root?: string }) {
+    const failure = action.root ? this.failures.get(action.root) : undefined
+    if (!failure) return
+    if (action.action === 'fix') await failure.fix()
+    else await failure.view()
   }
   private async fixCI(root: string, status: BranchStatus) {
     if (!status.commit || this.repairs.has(root)) return

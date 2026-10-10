@@ -93,6 +93,7 @@ import {
   type ProjectMemoryUpdateQueue
 } from './project-memory'
 import { refineProjectMemory } from './project-memory-evaluation'
+import { memoryDate } from './project-memory-format'
 import { cancelProjectUi, projectUiInstructions, setProjectUiEnabled } from './project-ui'
 import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
@@ -2053,7 +2054,7 @@ export function registerAgentIpc(
       .trim()
       .slice(0, 120)
     if (!name) return
-    const date = new Date().toISOString().slice(0, 10)
+    const date = memoryDate()
     await memoryUpdateQueue().enqueue(root, async (current) => {
       const rule = `- Before publishing, reproduce and fix failures from CI check "${name}" using the project's CI workflow. <!-- added ${date} -->`
       if (current.includes(`CI check "${name}"`)) return null

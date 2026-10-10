@@ -398,7 +398,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "quit":
             if let status = c["status"] as? Int, status != 0 { exitStatus = 1 }
             terminateHost()
-        default: if !logCommand(c, id: id) && !testBroker(c, id: id) && !quitCommand(c, id: id) { reply(id, error: "Unsupported native host command") }
+        default: if !logCommand(c, id: id) && !notifyCommand(c) && !testBroker(c, id: id) && !quitCommand(c, id: id) { reply(id, error: "Unsupported native host command") }
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
