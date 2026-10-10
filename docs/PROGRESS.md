@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-225 review repair: rules version, cat completion, doctor skill catalog
+
+- **Rules v41** (`src/main/rules.ts`): the doctor-skill rule changed the text, so the version is bumped; `test/rules.mjs` pins 41 and asserts the rules name the `trezi-doctor` skill path (`DOCTOR_SKILL`).
+- **Pet-cat completion** (`Chat.swift`): a failed turn ends in an incident row whose text is the clean class line, not "⚠️ …", so it counted as completed. A last message that carries an incident no longer counts as completed; the ⚠️ check stays for remaining warning text.
+- **Doctor skill** (`agent-plugin/skills/trezi-doctor/SKILL.md`): it pointed at `docs/SELF-HEAL.md`, which does not exist in a user's project. The class → recovery table is now in the skill itself.
+
 ## 2026-10-10 — LKM-225 review repair: fallback, restart, Git lock, auto Resolve, telemetry
 
 - **Provider fallback and helper restart live in the helper session** (`helper-session.ts` + `turn-recovery.ts`), not in the Codex adapter: the Swift event protocol is an allowlist, so recovery progress is plain `status` text (`self-heal/status.ts`) that main's incident tracker parses. A failed turn's `error`/`done` are held until the outcome is known. Fallback closes the helper, opens one on the other provider without resume, posts "Codex could not connect; this turn used Claude" and sends the recorded conversation (`handoffPrompt`); the next message returns to the chat's provider the same way. Setting "Automatic provider fallback" (default on). Restarts: at most two, resume id kept, original or "continue" prompt; never after Stop, a grant violation, in background runs or on a fallback turn.

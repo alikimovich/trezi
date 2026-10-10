@@ -5,7 +5,25 @@ description: Diagnose and recover from provider, workspace, Git and preview erro
 
 # Trezi doctor
 
-Read `docs/SELF-HEAL.md` for the incident catalog. Keep one short user-facing status and the exact next step when recovery fails. Do not paste raw logs into the chat.
+Keep one short user-facing status and the exact next step when recovery fails. Do not paste raw logs into the chat.
+
+Incident classes and their recovery (Trezi applies most of these itself; you handle what is left):
+
+| Class | Recovery |
+| --- | --- |
+| provider-network | retry with backoff, then the turn runs on the other signed-in provider |
+| provider-auth | show the sign-in card once |
+| provider-limit | wait for the reset or offer the other provider |
+| model-unavailable | switch to an available model |
+| helper-crash | restart the provider helper and resume the turn (at most twice) |
+| dev-server | restart the dev server |
+| dependency-install | diagnose the install failure, then reinstall through Trezi |
+| conflict | start Resolve with agent |
+| landing | reconcile the parked change |
+| git-lock | repository owner removes a stale `index.lock` |
+| disk-full | report it and name what to free |
+| stale-preview | reload the preview |
+| unknown | gather the diagnostics below, then one cause and one next step |
 
 Use read-only diagnostics first: Trezi's redacted product logs, `git status`, process status, available disk space and the relevant provider's connectivity from its helper. Do not print credentials or full environment values; report variable names only. Never run a target dev server yourself.
 

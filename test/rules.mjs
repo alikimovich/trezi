@@ -5,6 +5,7 @@
  * Run with: bun test/rules.mjs
  */
 
+import { DOCTOR_SKILL } from '../src/main/bundled-skills.ts'
 import { TREZI_RULES_VERSION, treziRules } from '../src/main/rules.ts'
 import { chatIslandGuidance } from '../src/shared/chat-island-guidance.ts'
 
@@ -19,7 +20,9 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 40, 'version bumped to 40')
+assert(TREZI_RULES_VERSION === 41, 'version bumped to 41')
+// LKM-225: agents are pointed at the bundled doctor skill instead of telling the user to debug.
+assert(r.includes(JSON.stringify(DOCTOR_SKILL)), 'rules mention the trezi-doctor skill path')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
 assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
 assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')

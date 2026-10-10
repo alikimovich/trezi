@@ -166,7 +166,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
             lastConversation = conversation
             let messages = frame.messages ?? (kept ? previous?.messages : nil) ?? []
             let snapshot = ChatSnapshot(activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
-            let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false)
+            let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false) && snapshot.messages.last?.incident == nil
             model.cat.update(running: snapshot.running, questioning: !snapshot.questions.isEmpty || snapshot.cards.contains { $0.agent?.question != nil || $0.actions.contains { $0.action == "permission" } }, completed: completed)
             model.revealAgentQuestions(snapshot.cards)
             let follow = kept ? previous?.followHead != snapshot.followHead : previous?.followContent != snapshot.followContent
