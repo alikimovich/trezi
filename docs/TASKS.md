@@ -12,6 +12,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `build-status` (derivation, disposable repos, stamp, controller, setting); native `build-badge` (group `sidebar`) captures each state.
 - [ ] Operator: a real launch against GitHub (online, then offline) on a clean main build.
 
+## Onboarding research and design (LKM-223)
+
+- [x] Phase 0: sourced Zed, Claude and Codex authentication research with a supported-path recommendation (`docs/research/onboarding-auth.md`).
+- [x] Phase 1: low-fi auth and New Project flows plus a standalone clickable prototype covering status, recovery, validation, review, edit and cancel (`docs/prototypes/onboarding/`).
+- [ ] Product review/approval of Phase 1 design before Phase 2 implementation.
+- [ ] Phase 2, separately authorized: split auth and New Project implementation, including security, accessibility, UI and service verification.
 ## Trezi-owned component states canvas (LKM-224)
 
 - [x] Register bounded recipes through provider tools and persist them with the Swift preference owner outside the project; keep legacy generated workbenches separate.
