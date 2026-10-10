@@ -10,12 +10,24 @@ import type { AgentCapture, PreviewAgentHost } from './preview-state'
 export const AGENT_BROWSER_LIMIT = 3
 export const AGENT_BROWSER_IDLE_MS = 120_000
 
+/** A navigation the host refused or that failed (LKM-230), newest last. */
+export interface AgentNotice {
+  phase: 'blocked' | 'failed'
+  reason?: string
+  url: string
+  message?: string
+  at: number
+}
+
 export interface AgentBrowser {
   readonly id: string
   readonly root: string
   readonly host: PreviewAgentHost
   url: string | null
   navigation: number
+  /** LKM-230: a main-frame load is in flight; engines that cannot tell leave both unset. */
+  loading?: boolean
+  notices?: AgentNotice[]
   servedRevision: string | null
   speed: number
   setSpeed(speed: number): Promise<void>
@@ -56,13 +68,37 @@ async function webkitBrowser(key: string, root: string): Promise<AgentBrowser> {
     if (event.view === viewName && typeof event.url === 'string') browser.url = event.url
   }
   const onLoaded = (event: { view?: string }) => {
-    if (event.view === viewName) browser.navigation++
+    if (event.view !== viewName) return
+    browser.navigation++
+    browser.loading = false
+  }
+  const onNavigation = (
+    event: Omit<Partial<AgentNotice>, 'phase'> & { view?: string; phase?: string }
+  ) => {
+    if (event.view !== viewName) return
+    if (event.phase === 'start') {
+      browser.loading = true
+      return
+    }
+    if (event.phase !== 'blocked' && event.phase !== 'failed') return
+    if (event.phase === 'failed') browser.loading = false
+    const notices = browser.notices ?? []
+    notices.push({
+      phase: event.phase,
+      reason: typeof event.reason === 'string' ? event.reason : undefined,
+      url: typeof event.url === 'string' ? event.url : '',
+      message: typeof event.message === 'string' ? event.message : undefined,
+      at: Date.now()
+    })
+    browser.notices = notices.slice(-20)
   }
   const browser: AgentBrowser = {
     id,
     root,
     url: null,
     navigation: 0,
+    loading: false,
+    notices: [],
     servedRevision: null,
     speed: 1,
     host: {
@@ -124,6 +160,7 @@ async function webkitBrowser(key: string, root: string): Promise<AgentBrowser> {
     async close() {
       bridge().off('url', onUrl)
       bridge().off('loaded', onLoaded)
+      bridge().off('agent-navigation', onNavigation)
       await bridge()
         .request('agentBrowserClose', { session: id })
         .catch(() => {})
@@ -134,6 +171,7 @@ async function webkitBrowser(key: string, root: string): Promise<AgentBrowser> {
   }
   bridge().on('url', onUrl)
   bridge().on('loaded', onLoaded)
+  bridge().on('agent-navigation', onNavigation)
   return browser
 }
 

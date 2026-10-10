@@ -92,12 +92,13 @@ const PREVIEW_TOOL_NAMES = new Set([
   'mcp__trezi__preview_screenshot',
   // LKM-138: isolated-world inspection; evaluate is read-only and bounded, and a
   // viewport change is temporary and restores itself; a speed change (LKM-206) lasts
-  // only for the preview session.
+  // only for the preview session. Interaction (LKM-230) drives only the private agent browser.
   'mcp__trezi__preview_inspect',
   'mcp__trezi__preview_evaluate',
   'mcp__trezi__preview_console',
   'mcp__trezi__preview_viewport',
-  'mcp__trezi__preview_speed'
+  'mcp__trezi__preview_speed',
+  'mcp__trezi__preview_interact'
 ])
 // Validated in-process tools are auto-allowed by both allowedTools and
 // canUseTool. Chat islands persist through the island service; main remains
@@ -576,7 +577,7 @@ async function startSession(
     }
   }
   // The preview observers already answer as MCP content (text or a JPEG); a failure is text.
-  const observed = async (action: PreviewObserver, args: unknown = {}) => {
+  const observed = async (action: PreviewObserver | 'preview_interact', args: unknown = {}) => {
     const result = (await treziTool(action, args)) as { content?: unknown } | null
     return Array.isArray(result?.content)
       ? (result as { content: never[] })
@@ -711,6 +712,12 @@ async function startSession(
         PREVIEW_TOOL_TEXT.preview_speed,
         previewShapes.preview_speed,
         async (args) => observed('preview_speed', args)
+      ),
+      tool(
+        'preview_interact',
+        PREVIEW_TOOL_TEXT.preview_interact,
+        previewShapes.preview_interact,
+        async (args) => observed('preview_interact', args)
       ),
       tool(
         'open_preview',

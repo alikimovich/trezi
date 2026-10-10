@@ -125,6 +125,11 @@ sees the same speed. Like `preview_viewport` it is foreground only and not read-
 and while the preview is slowed every other observation says so before its identity
 block. The store is `src/main/preview-speed.ts`; the page-world clock is
 `src/preview/slow-motion.ts`.
+`preview_interact` (LKM-230) clicks, types, presses keys, hovers, scrolls, selects an
+option or waits, only in the session's private agent browser; `target: "user"` is
+refused. It is not read-only, and is auto-allowed for Claude like the other preview
+tools. Each answer is a JSON report (URL, navigation, host refusals, console errors)
+plus a 480 px JPEG. Details: `docs/agent-guide/agent-browser.md`.
 
 Preview observation is on demand and shows the current user view, not necessarily
 the calling chat’s private worktree. Codex screenshot tool output is separate from
@@ -961,6 +966,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `preview_location`, `preview_screenshot` | routed | routed | the preview registry (URL, capture) |
 | `preview_inspect`, `preview_evaluate`, `preview_console`, `preview_viewport` | routed | routed | the preview's isolated agent world and page zoom |
 | `preview_speed` | routed | routed | the preview session's slow-motion speed (`src/main/preview-speed.ts`) |
+| `preview_interact` | routed | routed | the session's private agent browser (`src/main/agent-interact.ts`) |
 | `open_preview`, `open_code` | routed | routed | the window that navigates the preview or reveals code |
 | `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |

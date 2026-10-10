@@ -8,6 +8,14 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - `src/shared/provider-readiness.ts` exports independent `ready` / `checking` / `signed_out` / `failed` states for Claude and Codex. Chat checks both seats on startup and refreshes the signed-in seat. A disconnected seat does not block the other. Sign-in never auto-sends a failed turn: the last submission (including attachments) stays in memory and Retry is explicit; a zero-state draft stays in the composer.
 - Deterministic tests cover app-server success, cancel, expiry, missing process, URL restriction, readiness, and prompt preservation. Live consent and real account identity were not exercised by the worker. An app restart rechecks credentials; the existing conversation transcript does not persist unsent attachment bytes or an interrupted login operation.
 
+## 2026-10-10 — LKM-230: agents click, type and scroll in their own browser
+
+- **Tool.** `preview_interact` is one tool with an `action` (click, type, press, hover, scroll, select, wait) rather than seven, so the provider lists, policy goldens and rules grow by one name. It runs only against the agent browser (LKM-212); `target: "user"` is refused because driving the visible preview would move the user's page, focus and scroll under them.
+- **Events.** `src/preview/agent-interact.ts` synthesizes DOM events in the isolated world instead of posting CGEvents, so the offscreen page needs no key window and the user's focus is never touched. The cost: CSS `:hover` does not apply to a synthetic hover; handlers do run.
+- **Two layers of limits.** The page refuses file inputs, `download` links and off-origin links/forms before acting, with a clear `refused` kind. Script navigations (`location.href`, `form.submit()`) bypass that, so `agentPolicy` (`src/native/PreviewPlatform.swift`) blocks them for `agent:` views and emits `agent-navigation` notices; responses WebKit cannot show are cancelled as downloads. The preview/app policy is unchanged.
+- **Report.** `src/main/agent-interact.ts` waits for a navigation the action started (load, block or failure, ≤10 s), then reads URL, title and console errors since the action (from 0 on a new document) and attaches a 480 px JPEG. Blocked notices make the call an error.
+- **Network idle** uses a `fetch`/XHR counter installed in agent pages only.
+- **Not done:** a user allowance for leaving the origin, and blocking `fetch` to other hosts. Tests: unit `agent-interact`; native `agent-interact` on the fixture's `filter.html` (filter click shows the design card, every refusal and host block, user preview unchanged).
 ## 2026-10-10 — LKM-229: toolbar popover anchoring in full screen
 
 - **Cause.** In full screen AppKit moves the toolbar into its own window. The Rulers and Grids popover took the button's frame in that window's coordinates and showed it relative to the main window's theme frame, so it hung from the bottom of the screen.

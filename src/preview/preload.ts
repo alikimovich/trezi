@@ -7,6 +7,7 @@ import { islandOverride } from './island-override'
 import { sourceSelector, sourceStamp } from './source-stamp'
 import './agent-console'
 import './agent-inspect'
+import './agent-interact'
 /**
  * Preview preload — injected into the previewed app's native WebContentsView.
  *

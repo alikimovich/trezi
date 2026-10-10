@@ -253,6 +253,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/worktrees.ts` | helper | RepositoryOwner | Git reads (a branch's diff, chat refs) |
 | `src/native/log-support.ts` | helper | PlatformOwner | Export Logs… zip (`ditto`) of a temporary folder and a `sw_vers` read (LKM-168) |
 | `src/native/dreamer-export.ts` | helper | PlatformOwner | Export Dreamer Report… zip (`ditto`) of a temporary folder (LKM-202) |
+| `src/native/smoke-agent-interact.ts` | test | — | smoke fixture |
 | `src/native/smoke-agent-preview.ts` | test | — | smoke fixture |
 | `src/native/smoke-alerts.ts` | test | — | smoke fixture |
 | `src/native/smoke-build-badge.ts` | test | — | smoke fixture |

@@ -143,6 +143,7 @@
     "test:quick": "node test/run.mjs unit --typecheck --report",
     "test:trezi-agent-tools": "bun test/trezi-agent-tools.mjs",
     "test:preview-agent-tools": "bun test/preview-agent-tools.mjs",
+    "test:agent-interact": "bun test/agent-interact.mjs",
     "test:preview-slow-motion": "bun test/preview-slow-motion.mjs"
   },
   "dependencies": {
