@@ -58,6 +58,8 @@ export interface StatesServices {
   /** Sends `text` in `chat` (focused first) or the project's active chat. */
   submit?: (root: string, text: string, chat?: string) => Promise<void>
   chatTitle?: (chat: string) => string | undefined
+  canvasSelection?: (root: string, element: SelectedElement) => void
+  openCanvasForSelection?: (root: string, element: SelectedElement) => boolean
 }
 
 /** Minimum gap between same-path rescans triggered by preview loads. */
@@ -293,6 +295,8 @@ export class NativeStatesController {
    * otherwise the page is remembered for the workbench the agent is about to build.
    */
   async show(root: string, element: SelectedElement, chat?: string): Promise<boolean> {
+    this.services.canvasSelection?.(root, element)
+    if (this.services.openCanvasForSelection?.(root, element)) return true
     const cached = this.lists.has(root)
     const picked = selectionOf(element)
     const origin = await this.here(picked)

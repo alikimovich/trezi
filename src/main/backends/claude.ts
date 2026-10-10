@@ -8,6 +8,7 @@ import {
   previewToolText as PREVIEW_TOOL_TEXT,
   previewToolShapes as previewShapes
 } from '../../../bin/preview-tool-schema.mjs'
+import { statesCanvasDescription, statesCanvasShape } from '../../../bin/states-canvas-schema.mjs'
 import type { NativeView } from '../../native/platform'
 import type {
   AgentEvent,
@@ -111,6 +112,9 @@ const TREZI_TOOL_NAMES = new Set([
   'mcp__trezi__restart_dev_server',
   'mcp__trezi__project_ui_catalog',
   'mcp__trezi__compose_project_ui',
+  'mcp__trezi__register_states_canvas',
+  'mcp__trezi__open_states_canvas',
+  'mcp__trezi__inspect_states_canvas',
   // Pure, deterministic spring→CSS calculator. No state, no side effects, so
   // it's auto-allowed like the observers — it never touches disk or the repo.
   'mcp__trezi__spring_to_css',
@@ -750,6 +754,21 @@ async function startSession(
       // LKM-208: native answer components (options, form) in this message.
       tool('chat_ui', chatUiDescription, chatUiShape, async (args) =>
         asText(treziTool('chat_ui', args))
+      ),
+      tool('register_states_canvas', statesCanvasDescription, statesCanvasShape, async (args) =>
+        asText(treziTool('register_states_canvas', args))
+      ),
+      tool(
+        'open_states_canvas',
+        'Open a registered canvas in the visible preview without navigating the page.',
+        { id: z.string(), state: z.string().optional() },
+        async (args) => asText(treziTool('open_states_canvas', args))
+      ),
+      tool(
+        'inspect_states_canvas',
+        'Read registered recipes and visible canvas status.',
+        {},
+        async () => asText(treziTool('inspect_states_canvas', {}))
       ),
       // Pure spring→CSS calculator. LLMs can't reliably integrate a spring in
       // their head, so this computes the EXACT `linear()` easing + duration the

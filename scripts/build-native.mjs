@@ -74,7 +74,7 @@ const bundles = (async () => {
       sourcemap: true,
       ...outDirname
     }),
-    ...[['src/preview/preload.ts', 'preview.js'], ['src/preview/slow-motion-page.ts', 'slow-motion.js']].map(([input, output]) =>
+    ...[['src/preview/preload.ts', 'preview.js'], ['src/preview/slow-motion-page.ts', 'slow-motion.js'], ['src/preview/states-canvas-page.ts', 'states-canvas.js']].map(([input, output]) =>
       bundle({
         entryPoints: [join(root, input)],
         outfile: join(out, output),

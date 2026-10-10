@@ -83,6 +83,7 @@ import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from
 import { createNativeCover } from './native-cover'
 import { createOverlayGuides } from './overlay-guides'
 import { sendPageSpeed } from './speed-control'
+import { installStatesCanvas } from './states-canvas'
 import { installStatesSwitch } from './states-switch'
 import { specifiedValues, varRefName } from './style-provenance'
 import { watchStyles } from './style-watch'
@@ -1954,6 +1955,7 @@ if (!IS_SIM_BRIDGE) {
   window.addEventListener('keydown', onKey, true)
   window.addEventListener('keyup', onKeyUp, true)
   installStatesSwitch(busy)
+  installStatesCanvas(busy)
   if (location.protocol.startsWith('http')) watchStyles(() => ipcRenderer.send(STYLES_UPDATED))
   for (const type of [
     'keypress',
