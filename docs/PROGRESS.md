@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-223 Phase 0 research and Phase 1 onboarding prototype
+
+- Zed's ACP agents own their auth separately from Zed's built-in agent; Codex also has a separate direct ChatGPT path in Zed. Anthropic's 2026-10-07 help update permits third-party Agent SDK subscription usage under current limits, but the Agent SDK guide still requires prior approval to offer claude.ai login in a third-party product. The researched recommendation therefore uses Codex-managed app-server login and Claude Console API access, with no CLI token-file reading or subscription-token proxying (`docs/research/onboarding-auth.md`).
+- Added an isolated HTML prototype and flow notes for the two provider connection cards and a question-by-question New Project setup, including failure, cancellation, edit and review states (`docs/prototypes/onboarding/`). It makes no provider request or filesystem change. Phase 2 remains gated on product review.
+
 ## 2026-10-09 — LKM-220 review repair: stored origin ports are stale
 
 - A record keeps the origin as an absolute URL, but preview ports are allocated per run (`RuntimeNet.freePort`), so after a restart or with several projects open Back could load a dead port or another project's dev server. `NativeStatesController.origin()` now rebases the stored path, query and hash onto the preview's current origin (`rebaseUrl`, `src/shared/states-records.ts`); Back, the history check, the restore comparison and the Remove reload all go through it. The stored record is unchanged. `test/states-return.mjs` restarts onto another port and asserts Back and the restore use it. Removed the unused `WorkbenchMemory.reload()`.

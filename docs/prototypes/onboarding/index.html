@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trezi onboarding — LKM-223 design prototype</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --ink:#17212b; --muted:#303e4c; --paper:#f7f7f4; --surface:#fff; --line:#bac5cd; --blue:#234768; --soft:#e9f1f5; --error:#8f1d23; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); }
+    button, input, select { font:inherit; }
+    button { cursor:pointer; min-height:40px; border:1px solid #8da0af; border-radius:10px; background:#fff; color:var(--ink); padding:8px 14px; }
+    button:hover { background:var(--soft); }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid #075c9a; outline-offset:2px; }
+    button:disabled { cursor:not-allowed; opacity:.6; }
+    .primary { background:var(--blue); border-color:var(--blue); color:#fff; font-weight:600; }
+    .primary:hover { background:#173b5a; }
+    .quiet { border:0; background:transparent; text-decoration:underline; }
+    .shell { max-width:1120px; margin:auto; padding:32px 24px 70px; }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding-bottom:26px; border-bottom:1px solid var(--line); }
+    .mark { display:inline-flex; align-items:center; gap:9px; font-size:13px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+    .mark span { width:24px; height:24px; border-radius:7px; background:var(--blue); display:inline-block; }
+    h1 { font-size:30px; line-height:1.15; margin:13px 0 7px; letter-spacing:-.035em; }
+    h2 { font-size:22px; line-height:1.2; margin:0 0 10px; }
+    h3 { font-size:17px; margin:0 0 5px; }
+    p { margin:0 0 14px; }
+    .muted { color:var(--muted); }
+    .tag { font-size:13px; border:1px solid var(--line); border-radius:99px; padding:5px 10px; white-space:nowrap; }
+    .tabs { display:flex; gap:8px; margin:24px 0; }
+    .tabs button[aria-selected="true"] { background:var(--blue); border-color:var(--blue); color:#fff; }
+    .layout { display:grid; grid-template-columns:minmax(0,1fr) 230px; gap:22px; align-items:start; }
+    .panel { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:26px; box-shadow:0 6px 24px #1222320b; }
+    .rail { background:#eaf0f2; border:1px solid var(--line); border-radius:14px; padding:16px; }
+    .rail h2 { font-size:15px; margin-bottom:8px; }
+    .rail label, label.field { display:block; font-weight:600; margin:12px 0 6px; }
+    .rail select, input[type="text"], input[type="password"] { width:100%; min-height:43px; padding:9px 11px; border:1px solid #748797; border-radius:9px; background:white; color:var(--ink); }
+    .rail small { display:block; color:var(--muted); line-height:1.45; }
+    .provider-switch, .actions, .picks { display:flex; gap:9px; flex-wrap:wrap; }
+    .provider-switch { margin:18px 0 24px; }
+    .provider-switch button[aria-pressed="true"], .picks button[aria-pressed="true"] { border-color:var(--blue); background:var(--soft); box-shadow:inset 0 0 0 1px var(--blue); }
+    .status { border-left:4px solid #246380; background:#f0f6f8; border-radius:0 10px 10px 0; padding:12px 14px; margin:16px 0; }
+    .status.error { border-color:var(--error); background:#fff1f0; }
+    .status.success { border-color:#22644d; background:#e8f4ee; }
+    .status p:last-child { margin-bottom:0; }
+    .subtle { font-size:14px; color:var(--muted); }
+    .steps { display:flex; gap:6px; margin:2px 0 23px; }
+    .steps span { height:5px; flex:1; border-radius:5px; background:#d2dce1; }
+    .steps span.active { background:var(--blue); }
+    .thread { display:grid; gap:10px; margin:4px 0 23px; max-height:210px; overflow:auto; padding-right:6px; }
+    .bubble { max-width:84%; padding:9px 13px; border-radius:13px; background:#e9f1f5; }
+    .bubble.mine { justify-self:end; background:#234768; color:white; }
+    .bubble strong { display:block; font-size:13px; margin-bottom:2px; }
+    .question { font-size:22px; font-weight:650; line-height:1.3; margin-bottom:8px; }
+    .response { margin:19px 0 16px; }
+    .picks button { min-height:42px; }
+    .helper { font-size:14px; color:var(--muted); margin-top:8px; }
+    .error-text { color:var(--error); font-weight:600; margin-top:8px; }
+    .review { border-top:1px solid var(--line); margin-top:20px; }
+    .review-row { display:grid; grid-template-columns:125px minmax(0,1fr) auto; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); align-items:center; }
+    .review-row strong { overflow-wrap:anywhere; }
+    .review-row button { min-height:34px; }
+    .dialog { position:fixed; inset:0; background:#17212b99; display:grid; place-items:center; padding:18px; }
+    .dialog[hidden], [hidden] { display:none !important; }
+    .dialog section { max-width:440px; width:100%; background:#fff; border-radius:16px; padding:24px; box-shadow:0 18px 55px #15263555; }
+    footer { margin-top:30px; font-size:13px; color:var(--muted); }
+    @media (max-width:760px) { .shell { padding:20px 14px 50px; } .layout { grid-template-columns:1fr; } header { display:block; } .panel { padding:20px; } .review-row { grid-template-columns:1fr auto; } .review-row span { grid-column:1/-1; } }
+    @media (prefers-reduced-motion:no-preference) { button { transition:background-color .14s ease; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div><div class="mark"><span aria-hidden="true"></span> Trezi · Design proposal</div><h1>Make the first step feel clear.</h1><p class="muted">Two connected onboarding flows, ready for product review.</p></div>
+      <span class="tag">LKM-223 · Phase 1</span>
+    </header>
+    <div class="tabs" role="tablist" aria-label="Prototype flow">
+      <button id="authTab" role="tab" aria-selected="true" aria-controls="authPanel">Connect an agent</button>
+      <button id="projectTab" role="tab" aria-selected="false" aria-controls="projectPanel">New project</button>
+    </div>
+    <div class="layout">
+      <main>
+        <section id="authPanel" class="panel" role="tabpanel" aria-labelledby="authTab">
+          <h2>Connect an agent</h2><p class="muted">Choose the account you want to use with Trezi. Each provider manages its own billing.</p>
+          <div class="provider-switch" role="group" aria-label="Provider">
+            <button id="codexButton" aria-pressed="true">Codex</button><button id="claudeButton" aria-pressed="false">Claude Agent</button>
+          </div>
+          <div id="authContent" aria-live="polite"></div>
+        </section>
+        <section id="projectPanel" class="panel" role="tabpanel" aria-labelledby="projectTab" hidden>
+          <div id="projectContent" aria-live="polite"></div>
+        </section>
+      </main>
+      <aside class="rail" aria-label="Prototype controls">
+        <h2>Prototype controls</h2><small>These simulate results. No account or project is changed.</small>
+        <label for="simulate">Simulate state</label>
+        <select id="simulate"><option value="normal">Normal</option><option value="not-installed">CLI not installed</option><option value="offline">Offline</option><option value="expired">Expired / revoked</option><option value="error">Provider error</option></select>
+        <div class="actions" style="margin-top:14px"><button id="resetButton">Reset prototype</button></div>
+        <p class="subtle" style="margin-top:18px">Use the tabs and buttons to walk both flows. In Codex's waiting state, try Complete, Cancel, or Fail.</p>
+      </aside>
+    </div>
+    <footer>Design-only HTML · No network, credential storage, or filesystem writes. <a href="README.md">Read the flow notes</a>.</footer>
+  </div>
+  <div class="dialog" id="cancelDialog" hidden role="alertdialog" aria-modal="true" aria-labelledby="cancelTitle" aria-describedby="cancelText">
+    <section><h2 id="cancelTitle">Discard this setup?</h2><p id="cancelText">Your answers will be lost. No project has been created.</p><div class="actions"><button id="keepButton" class="primary">Keep editing</button><button id="discardButton">Discard setup</button></div></section>
+  </div>
+  <script>
+    const $ = id => document.getElementById(id);
+    const state = { flow:'auth', provider:'codex', codex:'signed-out', claude:'signed-out', simulated:'normal', step:0, editing:false, dirty:false, manualPreview:false, creation:'', answers:{name:'',location:'~/Projects',start:'React starter',preview:'Vite',agent:'Ask later'} };
+    const questions = [
+      {key:'name', title:'What should we call your project?', hint:'A short name also becomes the suggested folder name.', picks:['Portfolio', 'Dashboard', 'Studio']},
+      {key:'location', title:'Where should it live?', hint:'This folder is checked before Trezi creates anything.', picks:['~/Projects', '~/Desktop']},
+      {key:'start', title:'How would you like to start?', hint:'You can choose a starter or plan the stack with Trezi.', picks:['React starter', 'Plan with Next.js', 'Plan with Svelte', 'Help me choose']},
+      {key:'preview', title:'What should the preview open?', hint:'We inferred this from your starting point. Edit it if needed.', picks:['Vite', 'Next.js', 'SvelteKit', 'Decide later']},
+      {key:'agent', title:'Who should help you build it?', hint:'You can connect an agent later.', picks:['Codex', 'Claude Agent', 'Ask later']}
+    ];
+    function node(tag, text, className) { const el=document.createElement(tag); if(text!==undefined) el.textContent=text; if(className) el.className=className; return el; }
+    function button(text, fn, className) { const el=node('button',text,className); el.type='button'; el.addEventListener('click',fn); return el; }
+    function status(title, detail, kind) { const box=node('div',undefined,'status '+(kind||'')); box.append(node('h3',title),node('p',detail)); return box; }
+    function actions(...items) { const box=node('div',undefined,'actions'); items.forEach(x=>box.append(x)); return box; }
+    function render() {
+      $('authPanel').hidden=state.flow!=='auth'; $('projectPanel').hidden=state.flow!=='project';
+      $('authTab').setAttribute('aria-selected',String(state.flow==='auth')); $('projectTab').setAttribute('aria-selected',String(state.flow==='project'));
+      $('codexButton').setAttribute('aria-pressed',String(state.provider==='codex')); $('claudeButton').setAttribute('aria-pressed',String(state.provider==='claude'));
+      $('simulate').value=state.simulated; renderAuth(); renderProject();
+    }
+    function renderAuth() {
+      const host=$('authContent'); host.replaceChildren();
+      const codex=state.provider==='codex', current=codex?state.codex:state.claude;
+      host.append(node('h3',codex?'Codex with ChatGPT':'Claude Agent with a Console API key'));
+      host.append(node('p',codex?'Your Codex login stays with Codex. Trezi checks its connection status.':'Claude API usage is billed by Anthropic, separately from a Claude subscription. Trezi would store your key in its app-scoped Keychain.','muted'));
+      if(state.simulated==='not-installed') { host.append(status(codex?'Codex is not installed':'Claude Agent is unavailable',codex?'Install Codex, then check again.':'Trezi could not find its Claude Agent runtime. Check the installation, then retry.','error')); host.append(actions(button('Open install guide',()=>notice(host,'Install guide would open in your browser.')),button('Check again',()=>{state.simulated='normal';render();}))); return; }
+      if(state.simulated==='offline') { host.append(status('You appear to be offline','Reconnect to the internet, then retry. Your current setup stays here.','error')); host.append(actions(button('Retry connection',()=>{state.simulated='normal';render();}))); return; }
+      if(state.simulated==='error') { host.append(status('Could not check the connection','The provider did not return a usable status. Try again or open its help page.','error')); host.append(actions(button('Retry',()=>{state.simulated='normal';render();}),button('Open help',()=>notice(host,'Provider help would open in your browser.')))); return; }
+      if(state.simulated==='expired') { host.append(status('Connection expired','Reconnect to continue. Trezi has not changed your project.','error')); host.append(actions(button(codex?'Sign in again':'Replace key',()=>{state.simulated='normal';if(codex)state.codex='signed-out';else state.claude='signed-out';render();}),button('Open help',()=>notice(host,'Provider help would open in your browser.')))); return; }
+      if(codex) renderCodex(host,current); else renderClaude(host,current);
+    }
+    function notice(host,message) { const old=host.querySelector('.prototype-notice'); if(old) old.remove(); const el=status('Prototype action',message); el.classList.add('prototype-notice');host.append(el); }
+    function renderCodex(host,current) {
+      if(current==='signed-out') { host.append(status('Not connected','We’ll open your browser to sign in with ChatGPT. Trezi never sees your password.')); host.append(actions(button('Sign in with ChatGPT',()=>{state.codex='waiting';render();},'primary'),button('Use device code',()=>{state.codex='device';render();}))); }
+      if(current==='waiting'||current==='device') {
+        host.append(status('Waiting for '+(current==='device'?'device approval':'browser sign-in'),current==='device'?'Open the provider’s device page and enter the one-time code shown there. This prototype uses SAMPLE-1234.':'Finish signing in with ChatGPT in your browser, then return here. Closing the browser leaves you signed out.'));
+        host.append(actions(button('Simulate success',()=>{state.codex='connected';render();},'primary'),button('Cancel sign-in',()=>{state.codex='cancelled';render();}),button('Simulate failure',()=>{state.codex='failed';render();})));
+      }
+      if(current==='cancelled') { host.append(status('Sign-in cancelled','Nothing was saved. You can start again whenever you’re ready.')); host.append(actions(button('Try again',()=>{state.codex='signed-out';render();},'primary'))); }
+      if(current==='failed') { host.append(status('Sign-in could not finish','The browser approval may have expired. Try again or use the device-code route.','error')); host.append(actions(button('Try again',()=>{state.codex='signed-out';render();},'primary'))); }
+      if(current==='connected') { host.append(status('Connected to Codex','Codex is ready. This status would be checked again when Trezi opens.','success')); host.append(actions(button('Switch account',()=>{state.codex='signed-out';render();}),button('Sign out',()=>{state.codex='signed-out';render();}))); }
+    }
+    function renderClaude(host,current) {
+      if(current==='connected') { host.append(status('Claude API key connected','Trezi would show only that a key is available, never the key itself.','success')); host.append(actions(button('Replace key',()=>{state.claude='signed-out';render();}),button('Clear key',()=>{state.claude='signed-out';render();}))); return; }
+      host.append(status('Connect with a Claude Console API key','We’ll open your browser to create a key. Trezi never sees your Claude password; API usage is billed by Anthropic.'));
+      const label=node('label','Claude API key','field'); label.htmlFor='claudeKey'; const input=node('input'); input.id='claudeKey'; input.type='password'; input.autocomplete='off'; input.placeholder='Paste API key';
+      host.append(label,input,node('p','The key is only used for this simulated connection and is not saved by this page.','helper'));
+      if(current==='invalid') host.append(node('p','Enter a Claude Console API key to continue.','error-text'));
+      host.append(actions(button('Open Claude Console',()=>notice(host,'Claude Console would open in your browser.')),button('Connect key',()=>{state.claude=input.value.trim()?'connected':'invalid';input.value='';render();},'primary')));
+    }
+    function renderProject() {
+      const host=$('projectContent'); host.replaceChildren(); host.append(node('h2','New project'));
+      if(state.creation==='created') { host.append(status('Project ready','The confirmed project would now open in Trezi. This prototype created nothing.','success')); host.append(actions(button('Start another',resetProject,'primary'))); return; }
+      if(state.step<questions.length) renderQuestion(host); else renderReview(host);
+    }
+    function renderQuestion(host) {
+      const q=questions[state.step]; host.append(node('p',`Question ${state.step+1} of ${questions.length}`,'subtle'));
+      const progress=node('div',undefined,'steps'); progress.setAttribute('aria-label',`${state.step+1} of ${questions.length}`); for(let i=0;i<questions.length;i++)progress.append(node('span',undefined,i<=state.step?'active':'')); host.append(progress);
+      const thread=node('div',undefined,'thread'); thread.setAttribute('aria-label','Setup conversation');
+      const greeting=node('div',undefined,'bubble'); greeting.append(node('strong','Trezi'),node('span','Let’s set up a project together. I’ll suggest defaults as we go. Nothing is created until you confirm.')); thread.append(greeting);
+      for(let i=0;i<state.step;i++){const previous=questions[i];if(!state.answers[previous.key])continue;const reply=node('div',undefined,'bubble mine');reply.append(node('strong','You'),node('span',state.answers[previous.key]));thread.append(reply);}
+      host.append(thread);
+      host.append(node('div',q.title,'question'),node('p',q.hint,'muted'));
+      const picks=node('div',undefined,'picks'); const field=node('input'); field.type='text'; field.value=state.answers[q.key]; field.id='answer'; field.autocomplete='off'; field.setAttribute('aria-label',q.title);
+      q.picks.forEach(choice=>{const pick=button(choice,()=>{field.value=choice; field.focus();updatePicks();});picks.append(pick);});
+      function updatePicks(){[...picks.children].forEach(x=>x.setAttribute('aria-pressed',String(x.textContent===field.value)));}
+      field.addEventListener('input',updatePicks); field.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();advance();}});
+      host.append(picks,node('label','Or type your answer','field'),field); host.querySelector('label.field').htmlFor='answer'; updatePicks();
+      const error=node('p','', 'error-text'); error.hidden=true; host.append(error);
+      function advance(){const value=field.value.trim(); if(!value || (q.key==='name' && (!/^[\w][\w .-]{1,63}$/.test(value)||value==='.'||value==='..')) || (q.key==='location' && !/^(~\/|\/).+/.test(value))){error.textContent=q.key==='name'?'Enter 2–64 letters, numbers, spaces, dots, dashes or underscores.':q.key==='location'?'Enter an absolute folder path, such as ~/Projects.':'Add an answer or choose an option.';error.hidden=false;field.focus();return;}
+        const old=state.answers[q.key]; state.answers[q.key]=value; state.dirty=true; if(q.key==='start'&&old!==value&&!state.manualPreview)state.answers.preview=value.includes('Next.js')?'Next.js':value.includes('Svelte')?'SvelteKit':value==='React starter'?'Vite':'Decide later'; if(q.key==='preview')state.manualPreview=true; if(state.editing){state.step=questions.length;state.editing=false;}else state.step++; state.creation='';render(); }
+      const back=button('Back',()=>{state.step=Math.max(0,state.step-1);render();}); back.disabled=state.step===0&&!state.editing;
+      host.append(actions(back,button(state.editing?'Save answer':state.step===questions.length-1?'Review project':'Continue',advance,'primary'),button('Cancel',requestCancel)));
+    }
+    function renderReview(host) {
+      host.append(node('p','Review your project before anything is created.','muted')); const list=node('div',undefined,'review');
+      questions.forEach((q,i)=>{const row=node('div',undefined,'review-row');row.append(node('span',q.key==='start'?'Starting point':q.key==='agent'?'Agent':q.key[0].toUpperCase()+q.key.slice(1),'muted'),node('strong',state.answers[q.key]),button('Edit',()=>{state.step=i;state.editing=true;render();}));list.append(row);});host.append(list);
+      if(state.creation==='error')host.append(status('Could not create project','The selected folder could not be used. Edit the location or try again; your answers are still here.','error'));
+      host.append(actions(button('Back',()=>{state.step=questions.length-1;render();}),button('Create project',()=>{state.creation=state.simulated==='error'?'error':'created';render();},'primary'),button('Cancel',requestCancel)));
+    }
+    function requestCancel(){if(state.dirty){$('cancelDialog').hidden=false;$('keepButton').focus();}else resetProject();}
+    function resetProject(){state.step=0;state.editing=false;state.dirty=false;state.manualPreview=false;state.creation='';state.answers={name:'',location:'~/Projects',start:'React starter',preview:'Vite',agent:'Ask later'};$('cancelDialog').hidden=true;render();}
+    $('authTab').onclick=()=>{state.flow='auth';render();}; $('projectTab').onclick=()=>{state.flow='project';render();};
+    $('codexButton').onclick=()=>{state.provider='codex';render();}; $('claudeButton').onclick=()=>{state.provider='claude';render();};
+    $('simulate').onchange=e=>{state.simulated=e.target.value;render();}; $('resetButton').onclick=()=>{state.codex='signed-out';state.claude='signed-out';state.simulated='normal';resetProject();};
+    $('keepButton').onclick=()=>{$('cancelDialog').hidden=true;$('projectPanel').querySelector('button')?.focus();}; $('discardButton').onclick=resetProject;
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('cancelDialog').hidden){$('cancelDialog').hidden=true;return;}if(state.flow==='project'){requestCancel();}}});
+    render();
+  </script>
+</body>
+</html>
