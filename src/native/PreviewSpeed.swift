@@ -8,9 +8,9 @@ import WebKit
 /// speed; the open document follows a change through the isolated world (`speed-control.ts`),
 /// never through a host evaluation that could land mid-navigation.
 extension Host {
-    func installPreviewScripts(_ controller: WKUserContentController, speed: Double) {
+    func installPreviewScripts(_ controller: WKUserContentController, speed: Double, agent: Bool = false) {
         controller.removeAllUserScripts()
-        PreviewAgent.install(controller)
+        PreviewAgent.install(controller, agent: agent)
         let preview = (try? String(contentsOfFile: directory + "/preview.js", encoding: .utf8)) ?? ""
         // Selection must intercept input before the project's capture listeners.
         controller.addUserScript(WKUserScript(source: preview, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world))

@@ -8,6 +8,7 @@ import { nativeDreamer } from './dreamer-controller'
 import type { NativeGitController } from './git-controller'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
+import { checkAgentInteract } from './smoke-agent-interact'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkAgentQuestion } from './smoke-agent-question'
 import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
@@ -977,6 +978,13 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreAgentPreview(page)
+      }
+    },
+    {
+      name: 'agent-interact',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkAgentInteract(page, artifacts)
       }
     },
     {

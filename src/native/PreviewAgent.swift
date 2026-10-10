@@ -28,8 +28,28 @@ enum PreviewAgent {
     })();
     """#
 
-    static func install(_ controller: WKUserContentController) {
+    /// LKM-230, agent pages only: one `trezi:net` event (+1 / -1) per fetch or XHR, so
+    /// `preview_interact` can wait for network idle. It reports counts and exposes nothing.
+    static let networkCounter = #"""
+    (() => {
+      const d = document, E = CustomEvent;
+      const send = (step) => { try { d.dispatchEvent(new E('trezi:net', { detail: step })); } catch {} };
+      const original = globalThis.fetch;
+      if (typeof original === 'function') globalThis.fetch = function (...args) {
+        send(1);
+        let request;
+        try { request = original.apply(this, args); } catch (error) { send(-1); throw error; }
+        Promise.resolve(request).then(() => send(-1), () => send(-1));
+        return request;
+      };
+      const xhr = globalThis.XMLHttpRequest && XMLHttpRequest.prototype, send0 = xhr && xhr.send;
+      if (send0) xhr.send = function (...args) { send(1); this.addEventListener('loadend', () => send(-1), { once: true }); return send0.apply(this, args); };
+    })();
+    """#
+
+    static func install(_ controller: WKUserContentController, agent: Bool = false) {
         controller.addUserScript(WKUserScript(source: consoleForwarder, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+        if agent { controller.addUserScript(WKUserScript(source: networkCounter, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page)) }
     }
 
     /// The world an `evaluate` command runs in: the agent world, the isolated preview world, or the page.

@@ -9,6 +9,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Offer CI repair in a background agent and save a dated project-memory rule only after published CI passes; run bounded local checks before Publish.
 - [x] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
 - [ ] Verify native captures and the end-to-end failed CI repair flow.
+## Agent browser interactions (LKM-230)
+
+- [x] `preview_interact` (click by selector/source/point, type, press, hover, scroll, select, wait for selector/text/network idle) in the agent browser only; `target: "user"` is refused.
+- [x] Every call returns the URL, navigation, host blocks, console errors since the action and a 480 px screenshot.
+- [x] Limits: page refusals (file inputs, downloads, off-origin links/forms) plus the native `agentPolicy` backstop for agent views (off-origin navigation, external form posts, new windows, downloads).
+- [x] Rules v40: check interactive changes with `preview_interact`; skill, PROVIDERS and agent-browser docs.
+- [x] Unit `agent-interact`; native `agent-interact` (group `core`) on the fixture's `filter.html`, user preview unchanged.
+- [ ] Follow-up: a user-granted allowance for leaving the dev server origin, and blocking page fetches to other hosts.
 ## Toolbar popover anchoring in full screen (LKM-229)
 
 - [x] Rulers and Grids popover anchored to the button's own control (not main-window coordinates); follows toolbar relayout, closes on full-screen transitions.
