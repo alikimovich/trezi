@@ -12,6 +12,7 @@ const a = { key: 'a', root: '/a', branch: 'main', activeSessionKey: 'chat-a' },
   b = { key: 'b', root: '/b', branch: 'main', activeSessionKey: 'chat-b' }
 let branch = 'main',
   ciStatus = null,
+  spawned = 0,
   connected = true,
   conflict = false,
   prConflict = false,
@@ -42,7 +43,7 @@ const invoke = async (channel, ...args) => {
     return { connected, gh: 'ok', login: 'user', suggestedName: 'project' }
   if (channel === 'github:branch-status') return ciStatus
   if (channel === 'github:failure-context') return { log: 'build failed', diff: '+ fix' }
-  if (channel === 'agent:spawn-comment') return { ok: true, spawnId: 'ci-fix-1' }
+  if (channel === 'agent:spawn-comment') return { ok: true, spawnId: `ci-fix-${++spawned}` }
   if (channel === 'git:checkout') {
     branch = args[1]
     return { branch, files: ['app.ts'] }
@@ -284,6 +285,12 @@ ciStatus = {
   pr: { number: 8, state: 'merged', url: 'https://github.com/o/r/pull/8' }
 }
 await git.pollStatus('/a')
+assert.equal(calls.filter((c) => c[0] === 'github:ci-rerun').length, 1)
+assert.notEqual(lastToast()?.actions?.[0], 'Fix with agent', 'Rerun precedes repair offer')
+ciStatus = { ...ciStatus, ci: 'running', failing: [] }
+await git.pollStatus('/a')
+ciStatus = { ...ciStatus, ci: 'failed', failing: ['build', 'lint'] }
+await git.pollStatus('/a')
 assert.equal(lastToast().actions[0], 'Fix with agent')
 assert.equal(lastToast().actions[1], 'View checks')
 await sheets.toastAction({ id: lastToast().id, index: 0 })
@@ -298,7 +305,25 @@ await git.agentEvent({
   outcome: 'applied',
   summary: 'Fixed build'
 })
-assert.ok(calls.some((c) => c[0] === 'project-memory:ci-rule' && c[1] === '/a' && c[2] === 'build'))
+assert.equal(calls.filter((c) => c[0] === 'project-memory:ci-rule').length, 0)
+progress = { id: 'repair-publish-1', state: 'done', result: { ok: true } }
+ciStatus = { ...ciStatus, commit: '3'.repeat(40), ci: 'failed', failing: ['build'] }
+await git.pollStatus('/a')
+assert.equal(calls.filter((c) => c[0] === 'project-memory:ci-rule').length, 0)
+ciStatus = { ...ciStatus, ci: 'running', failing: [] }
+await git.pollStatus('/a')
+ciStatus = { ...ciStatus, ci: 'failed', failing: ['build'] }
+await git.pollStatus('/a')
+assert.equal(spawned, 2)
+await git.agentEvent({ type: 'spawn-finished', sessionId: 'ci-fix-2', outcome: 'applied' })
+progress = { id: 'repair-publish-2', state: 'done', result: { ok: true } }
+ciStatus = { ...ciStatus, commit: '4'.repeat(40), ci: 'passed', failing: [] }
+await git.pollStatus('/a')
+assert.deepEqual(
+  calls.filter((c) => c[0] === 'project-memory:ci-rule').map((c) => c.slice(1)),
+  [['/a', 'build']]
+)
+assert.equal(logs.filter((line) => String(line[0]).startsWith('CI green after')).length, 1)
 console.log(
   'Native Git: branch scope, publish mode/concurrency, conflicts, connection and remote update passed'
 )

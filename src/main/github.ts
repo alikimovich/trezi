@@ -84,6 +84,9 @@ export function registerGithubIpc(): void {
   ipcMain.handle('github:prepublish', (_e, root: string, memory: string) =>
     prepublishChecks(root, memory)
   )
+  ipcMain.handle('github:ci-rerun', (_e, root: string, commit: string) =>
+    workflowOwner().ciRerun(root, commit)
+  )
   // Creating the repository is a remote effect: the workflow owner journals it (S13).
   ipcMain.handle('github:connect', (_e, root: string, opts: GithubConnectOptions) =>
     workflowOwner().connect(root, { ...opts, name: sanitizeRepoName(opts.name) })

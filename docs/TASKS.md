@@ -6,8 +6,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## Branch and CI status (LKM-228)
 
 - [x] Show ahead/behind, publish step, PR and CI state in the native branch control; poll GitHub with ETags and refresh on focus.
-- [x] Offer CI repair in a background agent and save a dated project-memory rule after a landed repair; run bounded local checks before Publish.
-- [ ] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
+- [x] Offer CI repair in a background agent and save a dated project-memory rule only after published CI passes; run bounded local checks before Publish.
+- [x] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
 - [ ] Verify native captures and the end-to-end failed CI repair flow.
 ## Build badge: on main, behind or not (LKM-226)
 

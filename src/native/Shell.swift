@@ -182,7 +182,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             self.branchAnimationPhase = (self.branchAnimationPhase + 1) % 3
             let arrow = ["↗", "→", "↑"][self.branchAnimationPhase]
             let dot = self.branchAnimationPhase == 1 ? "◌" : "●"
-            let title = self.branchAnimationTitle.replacingOccurrences(of: "↗", with: arrow).replacingOccurrences(of: "●", with: dot)
+            let title = self.branchAnimationTitle.replacingOccurrences(of: "↗", with: arrow).replacingOccurrences(of: "◌", with: dot)
             self.branchMenu.menu?.items.first?.attributedTitle = self.branchTitle(title)
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -384,9 +384,16 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let ci = status["ci"] as? String ?? "unknown"
             let failing = status["failing"] as? [String] ?? []
             let step = previewState["publishStep"] as? String
-            let detail = step.map { "↗ \($0)" } ?? (ci == "unknown" ? sync : "\(sync) · ● \(ci)\(failing.isEmpty ? "" : " \(failing.count)")")
-            let display = detail.isEmpty ? title : "\(title) · \(detail)"
-            branchMenu.toolTip = [title, sync, status["pr"] is [String: Any] ? "Pull request" : "", ci == "unknown" ? "CI unknown" : "CI \(ci): \(failing.joined(separator: ", "))"].filter { !$0.isEmpty }.joined(separator: "\n")
+            let pr = status["pr"] as? [String: Any]
+            let prText = (pr?["number"] as? Int).map { "PR #\($0) \(pr?["state"] as? String ?? "open")" } ?? ""
+            let ciText = ci == "failed" ? "●\(failing.count)" : ci == "running" ? "◌" : ci == "passed" ? "●" : ci == "none" ? "○" : "?"
+            let ahead = status["ahead"] as? Int ?? 0, behind = status["behind"] as? Int ?? 0
+            let compactSync = ahead == 0 && behind == 0 ? "✓" : [ahead > 0 ? "\(ahead)↑" : "", behind > 0 ? "\(behind)↓" : ""].filter { !$0.isEmpty }.joined(separator: " ")
+            // The check state comes first so AppKit's tail truncation cannot hide it.
+            let compactPR = (pr?["number"] as? Int).map { "#\($0)" } ?? ""
+            let detail = step.map { "↗ \($0)" } ?? "\(ciText) · \(compactSync)\(compactPR.isEmpty ? "" : " · " + compactPR)"
+            let display = "\(title) · \(detail)"
+            branchMenu.toolTip = [title, sync, prText, ci == "unknown" ? "CI unknown" : "CI \(ci): \(failing.joined(separator: ", "))"].filter { !$0.isEmpty }.joined(separator: "\n")
             branchMenu.isEnabled = previewState["branch"] is String
             let menu = NSMenu(); menu.autoenablesItems = false
             func add(_ title: String, _ action: String, _ value: String = "") {

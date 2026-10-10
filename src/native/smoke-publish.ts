@@ -95,6 +95,12 @@ export async function checkPublishProgress(
     )
   const label = (text: string) => (s: State) => s.publishLabel === text
   const evidence: Record<string, unknown> = {}
+  const invoke = git.sheets.invoke
+  Object.defineProperty(git.sheets, 'invoke', {
+    configurable: true,
+    value: (channel: string, ...args: unknown[]) =>
+      channel === 'github:prepublish' ? Promise.resolve({ warnings: [] }) : invoke(channel, ...args)
+  })
   setWorkflowOwner(stub)
   git.githubStatus = async () => ({
     connected: true,
@@ -115,8 +121,7 @@ export async function checkPublishProgress(
     git.statuses.set(root, sample)
     git.render()
     const branchStatus = await until(
-      (s) =>
-        String(s.branchDisplay).includes('2 ahead') && String(s.branchDisplay).includes('running'),
+      (s) => String(s.branchDisplay).includes('2↑') && String(s.branchDisplay).includes('◌'),
       'Branch sync and running CI'
     )
     assert.ok(
@@ -126,11 +131,13 @@ export async function checkPublishProgress(
     await capture(host, artifacts, 'branch-status-running')
     git.statuses.set(root, { ...sample, ci: 'passed' })
     git.render()
-    await until((s) => String(s.branchDisplay).includes('passed'), 'Passed CI')
+    await until((s) => String(s.branchDisplay).includes('●'), 'Passed CI')
     await capture(host, artifacts, 'branch-status-passed')
     git.statuses.set(root, { ...sample, ci: 'failed', failing: ['build', 'lint'] })
     git.render()
-    await until((s) => String(s.branchDisplay).includes('failed 2'), 'Failed CI')
+    const failed = await until((s) => String(s.branchDisplay).includes('●2'), 'Failed CI')
+    assert.ok(!failed.branchTruncated, 'CI dot and failure count remain visible in toolbar')
+    assert.ok(failed.branchTitleWidth <= failed.branchTitleRoom + 0.5, 'Branch title fits control')
     await capture(host, artifacts, 'branch-status-failed')
     if (priorStatus) git.statuses.set(root, priorStatus)
     else git.statuses.delete(root)
@@ -141,7 +148,9 @@ export async function checkPublishProgress(
     assert.ok(await host.request('shellPerform', { action: 'publish' }), 'Publish clicks')
     const started = await until(
       (s) =>
-        s.publishing && s.publishSpinning && /^(Publishing…|Committing…)$/.test(s.publishLabel),
+        s.publishing &&
+        s.publishSpinning &&
+        /^(Publishing…|Checking project…|Committing…)$/.test(s.publishLabel),
       'The button shows progress at once'
     )
     evidence.feedbackMs = Date.now() - clicked
@@ -260,6 +269,7 @@ export async function checkPublishProgress(
     await waitFor(async () => !(await host.request('sheetInspect')).visible, 'Failure sheet closed')
     console.log('Native publish progress', JSON.stringify(evidence))
   } finally {
+    Object.defineProperty(git.sheets, 'invoke', { configurable: true, value: invoke })
     setWorkflowOwner(real)
     git.githubStatus = status
     // A failed assertion mid-run: end the stubbed publish so the button returns to normal.

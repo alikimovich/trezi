@@ -22,46 +22,82 @@ export function deriveSync(
 }
 
 export function deriveChecks(
-  checks: { name?: string; status?: string; conclusion?: string }[]
+  checks: {
+    name?: string
+    status?: string
+    conclusion?: string
+    id?: number
+    completed_at?: string
+  }[]
 ): Pick<BranchStatus, 'ci' | 'failing'> {
-  const failing = checks
-    .filter((check) => ['failure', 'timed_out', 'action_required'].includes(check.conclusion ?? ''))
+  const latest = new Map<string, (typeof checks)[number]>()
+  for (const check of checks) {
+    const name = check.name || 'Check'
+    const prior = latest.get(name)
+    if (!prior || (check.id ?? 0) > (prior.id ?? 0)) latest.set(name, check)
+  }
+  const current = [...latest.values()]
+  const failing = current
+    .filter((check) =>
+      ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(
+        check.conclusion ?? ''
+      )
+    )
     .map((check) => check.name || 'Check')
   return {
     ci: failing.length
       ? 'failed'
-      : checks.some((check) => check.status !== 'completed')
+      : current.some((check) => check.status !== 'completed')
         ? 'running'
-        : checks.length
+        : current.length &&
+            current.some(
+              (check) =>
+                check.conclusion === 'success' ||
+                check.conclusion === 'neutral' ||
+                check.conclusion === 'skipped'
+            )
           ? 'passed'
           : 'none',
     failing
   }
 }
 
-const etags = new Map<string, { tag: string; body: unknown }>()
-async function api(root: string, path: string): Promise<any> {
-  const key = `${root}:${path}`,
-    previous = etags.get(key)
-  const args = [
-    'api',
-    '-i',
-    path,
-    '-H',
-    'Accept: application/vnd.github+json',
-    ...(previous ? ['-H', `If-None-Match: ${previous.tag}`] : [])
-  ]
-  const output = await run('gh', args, root)
-  const split = output.indexOf('\r\n\r\n') >= 0 ? '\r\n\r\n' : '\n\n'
-  const boundary = output.indexOf(split)
-  if (boundary < 0) throw new Error('GitHub response has no headers')
-  const headers = output.slice(0, boundary)
-  if (/^HTTP\/\S+ 304/m.test(headers) && previous) return previous.body
-  const body = JSON.parse(output.slice(boundary + split.length))
-  const tag = /^etag:\s*(.+)$/im.exec(headers)?.[1]?.trim()
-  if (tag) etags.set(key, { tag, body })
-  return body
+export function cachedGithubApi(
+  request: (root: string, args: string[]) => Promise<string>,
+  etags = new Map<string, { tag: string; body: unknown }>()
+) {
+  return async (root: string, path: string): Promise<any> => {
+    const key = `${root}:${path}`,
+      previous = etags.get(key)
+    const args = [
+      'api',
+      '-i',
+      path,
+      '-H',
+      'Accept: application/vnd.github+json',
+      ...(previous ? ['-H', `If-None-Match: ${previous.tag}`] : [])
+    ]
+    let output: string
+    try {
+      output = await request(root, args)
+    } catch (error) {
+      // gh exits nonzero for HTTP 304, but preserves the response headers on stdout.
+      const response = (error as { stdout?: string }).stdout ?? ''
+      if (/^HTTP\/\S+ 304/m.test(response) && previous) return previous.body
+      throw error
+    }
+    const split = output.indexOf('\r\n\r\n') >= 0 ? '\r\n\r\n' : '\n\n'
+    const boundary = output.indexOf(split)
+    if (boundary < 0) throw new Error('GitHub response has no headers')
+    const headers = output.slice(0, boundary)
+    if (/^HTTP\/\S+ 304/m.test(headers) && previous) return previous.body
+    const body = JSON.parse(output.slice(boundary + split.length))
+    const tag = /^etag:\s*(.+)$/im.exec(headers)?.[1]?.trim()
+    if (tag) etags.set(key, { tag, body })
+    return body
+  }
 }
+const api = cachedGithubApi((root, args) => run('gh', args, root))
 
 /** Reads only local refs and GitHub REST. A disconnected/offline project becomes unknown. */
 export async function branchStatus(root: string): Promise<BranchStatus> {
@@ -87,7 +123,11 @@ export async function branchStatus(root: string): Promise<BranchStatus> {
     )
     const pr = Array.isArray(prs) ? prs[0] : undefined
     if (pr)
-      status.pr = { number: pr.number, state: pr.merged_at ? 'merged' : 'open', url: pr.html_url }
+      status.pr = {
+        number: pr.number,
+        state: pr.merged_at ? 'merged' : pr.state === 'closed' ? 'closed' : 'open',
+        url: pr.html_url
+      }
     try {
       const comparison = await api(
         root,

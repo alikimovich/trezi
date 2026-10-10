@@ -15,7 +15,7 @@ export interface BranchStatus {
   ahead: number
   behind: number
   sync: string
-  pr?: { number: number; state: 'open' | 'merged'; url: string }
+  pr?: { number: number; state: 'open' | 'closed' | 'merged'; url: string }
   ci: 'running' | 'passed' | 'failed' | 'none' | 'unknown'
   failing: string[]
   checksUrl?: string

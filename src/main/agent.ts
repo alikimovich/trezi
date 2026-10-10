@@ -2055,14 +2055,7 @@ export function registerAgentIpc(
     if (!name) return
     const date = new Date().toISOString().slice(0, 10)
     await memoryUpdateQueue().enqueue(root, async (current) => {
-      const command = /lint/i.test(name)
-        ? 'bun run lint'
-        : /type.?check/i.test(name)
-          ? 'bun run typecheck'
-          : /\btest\b/i.test(name)
-            ? 'bun run test:unit'
-            : null
-      const rule = `- Before publishing, ${command ? `run \`${command}\`` : 'reproduce'} and fix failures from CI check "${name}". <!-- added ${date} -->`
+      const rule = `- Before publishing, reproduce and fix failures from CI check "${name}" using the project's CI workflow. <!-- added ${date} -->`
       if (current.includes(`CI check "${name}"`)) return null
       const heading = /^## Pitfalls\s*$/m
       if (heading.test(current)) return current.replace(heading, `## Pitfalls\n${rule}`)

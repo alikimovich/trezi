@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-228 review repairs
+
+- The Swift workflow owner now records a failed GitHub Actions rerun before the repair action appears. The controller watches the rerun, caps follow-up repair attempts, requires a successful subsequent Publish and green checks before writing one dated project-memory rule, and reports one result row.
+- Branch polling handles `gh api` 304 responses even when gh exits nonzero, avoids concurrent poll chains, and distinguishes closed PRs, newer rerun checks, startup failures and cancelled runs. The toolbar puts a compact CI dot and count ahead of sync and PR details so they stay visible.
+- The pre-publish checklist reads workflow run steps and project rules, executes only defined cheap scripts with a short bound, and warns for unsupported or missing steps. Publish shows a Checking project progress step.
+
 ## 2026-10-10 — LKM-228: branch and CI status
 
 - The branch pull-down now shows local and GitHub sync counts, PR state, and the latest branch or merged-base check result. GitHub REST reads cache ETags; running checks refresh in 45 seconds, settled checks in ten minutes, and window focus refreshes immediately. Offline reads leave CI unknown.
