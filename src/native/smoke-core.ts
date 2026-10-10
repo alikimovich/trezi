@@ -57,7 +57,7 @@ import {
 } from './smoke-runner'
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
-import { checkNativeSheets } from './smoke-sheets'
+import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
@@ -500,6 +500,7 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         host.emit('activity-action', { action: 'hide' })
+        await restoreNativeSheets(host)
       }
     },
     {
