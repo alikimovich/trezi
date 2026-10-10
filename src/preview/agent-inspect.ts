@@ -60,7 +60,7 @@ const STYLE_KEYS = [
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
 const MAX_STYLE = 300
 
-const overlay = (el: Element) =>
+export const overlay = (el: Element) =>
   el.closest('[data-trezi-overlay]') !== null || el.closest(CONTROL_OVERLAY_SELECTOR) !== null
 const round = (n: number) => Math.round(n * 100) / 100
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text)
@@ -108,7 +108,9 @@ export interface InspectRequest {
   index?: number
 }
 
-function find(request: InspectRequest): { el: Element; matches: number } | { error: string } {
+export function find(
+  request: InspectRequest
+): { el: Element; matches: number } | { error: string } {
   if (typeof request.selector === 'string' && request.selector.trim()) {
     let all: Element[]
     try {

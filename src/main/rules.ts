@@ -19,7 +19,7 @@ import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 39
+export const TREZI_RULES_VERSION = 40
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -231,6 +231,11 @@ export function treziRules(opts?: {
       `  CSS width for responsive checks; call it with restore: true when done.`,
       `- \`preview_speed\` — slow, pause or step animations in your browser; set speed 1`,
       `  again when done.`,
+      `- \`preview_interact\` — use the page in your browser: click, type, press a key, hover,`,
+      `  scroll, select an option, or wait for a selector, text or network idle. Target a CSS`,
+      `  selector, a source stamp (file:line) or an x/y point. Each call returns the URL,`,
+      `  console errors and a small screenshot. It never drives the user's preview. Uploads,`,
+      `  downloads, leaving the dev server and posting forms to other hosts are refused.`,
       `Use target: "user" only when the user asks to see the visible rendering or route.`,
       `Trezi waits until their preview has been idle for five seconds before moving it.`,
       ``
@@ -366,9 +371,13 @@ const previewVerification = (background: boolean) => [
   `worktree/landing lifecycle to make it visible. ${landingOwner(background)}`,
   `Before finishing, report the route, sizes, and what you checked, and any blockers.`,
   ``,
-  `Use \`agent-browser\` only for scripted multi-step interactions the preview tools`,
-  `cannot do (clicking through a flow, filling forms, hover or keyboard sequences),`,
-  `never just to inspect, evaluate, or screenshot. When you do, first run`,
+  `You MUST check an interactive change (a filter, tab, menu, toggle, form or keyboard`,
+  `path) by using it in your agent browser with \`preview_interact\`: click or type as a`,
+  `person would, then confirm the result it returns (the screenshot, the URL, no console`,
+  `errors). Looking at the page before the interaction does not prove it works.`,
+  ``,
+  `Use \`agent-browser\` only for scripted multi-step interactions \`preview_interact\``,
+  `cannot do, never just to inspect, evaluate, or screenshot. When you do, first run`,
   `\`command -v agent-browser\` and \`agent-browser --help\`; if it is missing, say so`,
   `and offer setup. Do not install packages without the user's permission. Use a`,
   `unique \`--session trezi-<task-id>\`, open the Trezi-managed preview URL (do not`,

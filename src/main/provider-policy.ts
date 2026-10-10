@@ -50,6 +50,7 @@ export const TREZI_TOOLS = [
   'preview_console',
   'preview_viewport',
   'preview_speed',
+  'preview_interact',
   'open_preview',
   'reload_preview',
   'restart_dev_server',

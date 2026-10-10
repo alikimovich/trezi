@@ -72,6 +72,49 @@ export const previewToolShapes = {
       .max(600)
       .optional()
       .describe('Pause, then advance this many 1/60 s frames')
+  },
+  // LKM-230: src/main/agent-interact.ts validates the same limits.
+  preview_interact: {
+    action: z
+      .enum(['click', 'type', 'press', 'hover', 'scroll', 'select', 'wait'])
+      .describe('What to do in the agent browser'),
+    ...target,
+    source: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('Instead of a selector: an element source stamp, file:line[:col]'),
+    text: z
+      .string()
+      .max(1000)
+      .optional()
+      .describe('type: text for the target (or focused) field; wait: text to appear'),
+    clear: z.boolean().optional().describe('type: replace the field value (default true)'),
+    key: z
+      .string()
+      .max(60)
+      .optional()
+      .describe('press: a key with optional modifiers, e.g. Enter, Tab, Escape, Shift+Tab, Meta+a'),
+    option: z.string().max(500).optional().describe('select: the option value or label'),
+    deltaX: z.number().optional().describe('scroll: CSS px right'),
+    deltaY: z.number().optional().describe('scroll: CSS px down'),
+    to: z.enum(['top', 'bottom']).optional().describe('scroll: jump to the top or bottom'),
+    networkIdle: z
+      .boolean()
+      .optional()
+      .describe('wait: until no fetch/XHR has run for 500 ms'),
+    hidden: z.boolean().optional().describe('wait: until the selector or text is gone instead'),
+    timeoutMs: z.number().int().min(100).max(15000).optional().describe('wait: default 5000'),
+    force: z
+      .boolean()
+      .optional()
+      .describe('click/hover: act even when another element covers the target'),
+    screenshot: z.boolean().optional().describe('Attach a small screenshot (default true)'),
+    target: z
+      .enum(['agent', 'user'])
+      .optional()
+      .describe("agent (default); user is refused, the visible preview is never driven"),
+    engine: browser.engine
   }
 }
 
@@ -87,5 +130,7 @@ export const previewToolText = {
   preview_viewport:
     'Lay the private agent browser out at a CSS width for responsive checks. target: user changes the visible preview only when idle. Restore after checking.',
   preview_speed:
-    "Read or set the private agent browser's animation speed (1, 0.5, 0.25, 0.1 or 0), or step whole frames while paused. target: user changes the visible preview only when idle."
+    "Read or set the private agent browser's animation speed (1, 0.5, 0.25, 0.1 or 0), or step whole frames while paused. target: user changes the visible preview only when idle.",
+  preview_interact:
+    "Use the page in the private agent browser like a person: click, type, press a key, hover, scroll, select an option, or wait for a selector, text or network idle. Target by CSS selector, source stamp or viewport point. Returns the resulting URL, console errors and a small screenshot. Never touches the user's preview. Uploads, downloads, leaving the dev server and posting forms to other hosts are refused."
 }

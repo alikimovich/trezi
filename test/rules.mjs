@@ -19,7 +19,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 39, 'version bumped to 39')
+assert(TREZI_RULES_VERSION === 40, 'version bumped to 40')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
 assert(/"after Trezi lands"/.test(r), 'forbids deferred publish reply')
 assert(/"click Publish again"/.test(r), 'forbids repeat Publish reply')
@@ -227,7 +227,8 @@ for (const rules of [withTools, codexObservers]) {
     'preview_evaluate',
     'preview_console',
     'preview_viewport',
-    'preview_speed'
+    'preview_speed',
+    'preview_interact'
   ])
     assert(rules.includes(tool), `preview tools: teaches ${tool}`)
   assert(
@@ -242,6 +243,14 @@ for (const rules of [withTools, codexObservers]) {
     /never just to inspect, evaluate, or screenshot/.test(rules),
     'preview tools: no agent-browser screenshots'
   )
+  // LKM-230: interactive changes are checked by using them in the agent browser.
+  assert(
+    /MUST check an interactive change[\s\S]*by using it in your agent browser with\s+`preview_interact`/.test(
+      rules
+    ),
+    'preview tools: interactive changes are used, not just looked at'
+  )
+  assert(/never drives the user's preview/.test(rules), 'preview_interact: agent browser only')
   assert(!/MUST use `agent-browser`/.test(rules), 'preview tools: agent-browser is not mandatory')
   assert(/--session trezi-<task-id>/.test(rules), 'preview tools: isolated agent-browser sessions')
   assert(
