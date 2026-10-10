@@ -61,6 +61,7 @@ import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
+import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
 import { checkThreeD } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
@@ -1004,6 +1005,14 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkToolbarMore(host, page)
       }
+    },
+    {
+      name: 'states-canvas',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkStatesCanvas(host, page, fixture, root, artifacts)
+      },
+      cleanup: () => restoreStatesCanvas(fixture)
     },
     {
       name: 'states-workbench',

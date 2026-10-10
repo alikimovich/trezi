@@ -1,4 +1,5 @@
 import { bridge } from '../native/bridge'
+import { canvasController } from '../native/states-canvas-registry'
 import { previewPath } from '../shared/preview-navigation'
 import { projectKey } from '../shared/projectKey'
 import { agentBrowser } from './agent-browser'
@@ -78,6 +79,9 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'compose_project_ui',
   'ask_user',
   'chat_ui',
+  'register_states_canvas',
+  'open_states_canvas',
+  'inspect_states_canvas',
   'install_skills'
 ]
 
@@ -113,6 +117,45 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   // The owner grants more names than run here (the calculators run in the provider).
   if (!SESSION_TOOLS.includes(action))
     return { error: `${String(action)} is not one of Trezi's session tools.` }
+  if (action === 'register_states_canvas')
+    return (
+      canvasController()?.register(s.liveRoot, s.emitKey, args) ?? {
+        error: 'Canvas controller unavailable.'
+      }
+    )
+  if (action === 'open_states_canvas') {
+    if (s.background) return { error: 'Background agents cannot open the visible canvas.' }
+    if (!(await revealGate())) return { error: 'The user is interacting with the preview.' }
+    const id = (args as { id?: unknown } | null)?.id
+    const state = (args as { state?: unknown } | null)?.state
+    if (typeof id !== 'string' || (state !== undefined && typeof state !== 'string'))
+      return { error: 'A canvas id and optional state id are required.' }
+    return (
+      canvasController()?.open(s.liveRoot, id, state as string | undefined) ?? {
+        error: 'Canvas controller unavailable.'
+      }
+    )
+  }
+  if (action === 'inspect_states_canvas') {
+    const root = s.liveRoot
+    const view = canvasController()?.view
+    return {
+      recipes:
+        canvasController()
+          ?.recipes(root)
+          .map(({ id, component, states, missing, revision }) => ({
+            id,
+            component,
+            states: states.map(({ id, label }) => ({ id, label })),
+            missing,
+            revision
+          })) ?? [],
+      visible:
+        view?.root === root
+          ? { id: view.recipe.id, state: view.state, status: view.status, reason: view.reason }
+          : null
+    }
+  }
   const target = (args as { target?: unknown } | null)?.target
   const engine = (args as { engine?: unknown } | null)?.engine
   const browserTool =

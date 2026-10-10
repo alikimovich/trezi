@@ -19,6 +19,8 @@ final class StatesSwitcherModel: ObservableObject {
     @Published var states: [StatesItem] = []
     @Published var missing: [StatesItem] = []
     @Published var current = ""
+    @Published var status = ""
+    @Published var reason = ""
     /// "Back to <page>", empty when the page it came from is not known.
     @Published var back = ""
     func action(_ name: String, _ id: String = "") { emit(["event":"states-action", "action":name, "id":id]) }
@@ -27,54 +29,71 @@ final class StatesSwitcherModel: ObservableObject {
 struct StatesSwitcherContent: View {
     @ObservedObject var model: StatesSwitcherModel
     var body: some View {
-        HStack(spacing: 4) {
-            if !model.back.isEmpty {
-                Button { model.action("back") } label: {
-                    Label(model.back, systemImage: "chevron.left").font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.middle)
-                        .frame(maxWidth: 200).padding(.horizontal, 6).padding(.vertical, 3).contentShape(Capsule())
-                }
-                .buttonStyle(.plain).help(model.back).accessibilityLabel(model.back)
-                Divider().frame(height: 14).padding(.horizontal, 2)
-            }
-            Text(model.component).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary).lineLimit(1)
-                .padding(.trailing, 4)
-            ForEach(Array(model.states.enumerated()), id: \.element.id) { index, state in
-                segment(state.label, selected: model.current == state.id) { model.action("select", state.id) }
-                    .help(index < 9 ? "\(state.label) (\(index + 1))" : state.label)
-            }
-            ForEach(model.missing) { state in
-                Text(state.label).font(.system(size: 12)).strikethrough().foregroundStyle(.tertiary)
-                    .padding(.horizontal, 6).help("Missing in the code\(state.note.isEmpty ? "" : ": " + state.note)")
-            }
-            Divider().frame(height: 14).padding(.horizontal, 2)
-            segment(nil, symbol: "square.stack", selected: model.current == "all") { model.action("all") }
-                .help("All states side by side").accessibilityLabel("All states")
-            Button { model.action("continue") } label: { Image(systemName: "bubble.left").frame(width: 22, height: 20) }
-                .buttonStyle(.borderless).help("Continue in Chat").accessibilityLabel("Continue in Chat")
-            Button { model.action("hide") } label: { Image(systemName: "eye.slash").frame(width: 22, height: 20) }
-                .buttonStyle(.borderless).help("Hide for screenshots (H)").accessibilityLabel("Hide states switcher")
+        ViewThatFits(in: .horizontal) {
+            fullRow
+            compactRow
         }
         .padding(.horizontal, 10).padding(.vertical, 5)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Color(nsColor: .separatorColor).opacity(0.6)))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .separatorColor).opacity(0.6)))
         .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
-        .fixedSize()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("States")
     }
-    private func segment(_ label: String?, symbol: String? = nil, selected: Bool, _ run: @escaping () -> Void) -> some View {
-        Button(action: run) {
-            Group {
-                if let label { Text(label).font(.system(size: 12, weight: .medium)).lineLimit(1) }
-                if let symbol { Image(systemName: symbol) }
-            }
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .foregroundStyle(selected ? Color.white : Color.primary)
-            .background(selected ? Color.accentColor : Color.clear, in: Capsule())
-            .contentShape(Capsule())
+    private var statePicker: some View {
+        Picker("State", selection: Binding(get: { model.current }, set: { model.action($0 == "all" ? "all" : "select", $0) })) {
+            ForEach(model.states) { state in Text(state.label).tag(state.id) }
+            Divider()
+            Text("All states").tag("all")
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .pickerStyle(.menu).labelsHidden().frame(width: 130)
+        .accessibilityLabel("State")
+    }
+    private var fullRow: some View {
+        HStack(spacing: 6) {
+            if !model.back.isEmpty {
+                Button { model.action("back") } label: {
+                    Label(model.back, systemImage: "chevron.left").font(.system(size: 12)).lineLimit(1)
+                }
+                .buttonStyle(.bordered).help(model.back)
+            }
+            Text(model.component).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                .lineLimit(1).frame(maxWidth: 110)
+            if model.status == "loading" { ProgressView().controlSize(.small).help("Loading component") }
+            if model.status == "error" {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    .help(model.reason).accessibilityLabel("Canvas error: \(model.reason)")
+            }
+            statePicker
+            if !model.missing.isEmpty {
+                Menu("Missing \(model.missing.count)") {
+                    ForEach(model.missing) { state in
+                        Text("\(state.label) — \(state.note.isEmpty ? "Not implemented" : state.note)")
+                    }
+                }.menuStyle(.borderlessButton).frame(maxWidth: 110)
+            }
+            Button { model.action("continue") } label: { Image(systemName: "bubble.left") }
+                .buttonStyle(.bordered).help("Continue in Chat").accessibilityLabel("Continue in Chat")
+            Button { model.action("hide") } label: { Image(systemName: "eye.slash") }
+                .buttonStyle(.bordered).help("Hide for screenshots (H)").accessibilityLabel("Hide states switcher")
+        }
+    }
+    private var compactRow: some View {
+        HStack(spacing: 4) {
+            if !model.back.isEmpty {
+                Button { model.action("back") } label: { Image(systemName: "chevron.left") }
+                    .buttonStyle(.bordered).help(model.back).accessibilityLabel(model.back)
+            }
+            statePicker
+            Menu {
+                Button { model.action("continue") } label: { Label("Continue in Chat", systemImage: "bubble.left") }
+                Button { model.action("hide") } label: { Label("Hide", systemImage: "eye.slash") }
+                ForEach(model.missing) { state in
+                    Text("Missing: \(state.label) — \(state.note)")
+                }
+            } label: { Image(systemName: "ellipsis") }
+                .menuStyle(.borderlessButton).frame(width: 28).accessibilityLabel("More states actions")
+        }
     }
 }
 
@@ -98,6 +117,8 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
         if model.missing != missing { model.missing = missing }
         model.component = state?["component"] as? String ?? ""
         model.current = state?["current"] as? String ?? ""
+        model.status = state?["status"] as? String ?? ""
+        model.reason = state?["reason"] as? String ?? ""
         let back = state?["back"] as? String ?? ""
         if model.back != back { model.back = back }
         active = state != nil && !states.isEmpty
@@ -112,7 +133,7 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
     func place(in page: NSRect, visible: Bool) {
         isHidden = !wanted || !visible || page.width < 200
         guard !isHidden else { return }
-        let fits = measure.sizeThatFits(in: NSSize(width: 10_000, height: 200))
+        let fits = measure.sizeThatFits(in: NSSize(width: max(180, page.width - 24), height: 200))
         let size = NSSize(width: ceil(fits.width), height: ceil(fits.height))
         let width = min(size.width, page.width - 24)
         frame = NSRect(x: page.midX - width / 2, y: page.maxY - size.height - 12, width: width, height: size.height)

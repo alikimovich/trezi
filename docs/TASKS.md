@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Trezi-owned component states canvas (LKM-224)
+
+- [x] Register bounded recipes through provider tools and persist them with the Swift preference owner outside the project; keep legacy generated workbenches separate.
+- [x] Render real Vite React module exports with JSON props and optional existing provider on a flat canvas in the visible preview; keep the original page mounted.
+- [x] Native selection, All, close, hide, reopen, rebuild and chat actions; replace fixed-width capsule rows with system controls.
+- [x] Unit recipe and controller coverage, native core canvas fixture, component-states skill and architecture docs.
+- [ ] Verify native foreground rendering, light/dark appearance and narrow layouts through Agent OS.
+
 ## Preview Back/Forward and layout-independent shortcuts (LKM-219)
 
 - [x] View → Back (⌘[) / Forward (⌘]) enabled only when a step exists; ⌘← / ⌘→ outside text fields (host monitor, and the page script when the page left the key alone); two-finger swipe on the preview; no toolbar buttons.

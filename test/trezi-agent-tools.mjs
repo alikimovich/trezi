@@ -23,6 +23,9 @@ const registration = await registerTreziAgentTools(async (action, args) => {
     action === 'chat_island' ||
     action === 'project_ui_catalog' ||
     action === 'compose_project_ui' ||
+    action === 'register_states_canvas' ||
+    action === 'open_states_canvas' ||
+    action === 'inspect_states_canvas' ||
     action === 'open_preview' ||
     action === 'open_code'
   )
@@ -127,9 +130,11 @@ try {
     'git_merge_abort',
     'git_merge_continue',
     'git_sync_base',
+    'inspect_states_canvas',
     'land_now',
     'open_code',
     'open_preview',
+    'open_states_canvas',
     'pr_status',
     'prepare_conflict_resolution',
     'preview_console',
@@ -142,6 +147,7 @@ try {
     'project_ui_catalog',
     'publish_merge',
     'publish_update',
+    'register_states_canvas',
     'reload_preview',
     'restart_dev_server',
     'workspace_state'
@@ -262,6 +268,31 @@ try {
     composition,
     'composition survives the real MCP transport'
   )
+  const recipe = {
+    component: 'Card',
+    source: 'src/Card.tsx',
+    exportName: 'Card',
+    react: '/node_modules/.vite/deps/react.js',
+    reactDom: '/node_modules/.vite/deps/react-dom_client.js',
+    width: 420,
+    states: [{ id: 'default', label: 'Default', props: {} }],
+    missing: []
+  }
+  const canvasRegistered = await request('tools/call', {
+    name: 'register_states_canvas',
+    arguments: recipe
+  })
+  assert.deepEqual(canvasRegistered.result.structuredContent.received, recipe)
+  const canvasOpened = await request('tools/call', {
+    name: 'open_states_canvas',
+    arguments: { id: 'canvas:card' }
+  })
+  assert.deepEqual(canvasOpened.result.structuredContent.received, { id: 'canvas:card' })
+  const canvasInspected = await request('tools/call', {
+    name: 'inspect_states_canvas',
+    arguments: {}
+  })
+  assert.deepEqual(canvasInspected.result.structuredContent.received, {})
   const status = await request('tools/call', {
     name: 'workspace_state',
     arguments: {}

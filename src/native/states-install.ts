@@ -9,11 +9,14 @@ import type { NativeGitController } from './git-controller'
 import { dispatchIPC, type NativeView, serviceEvents } from './platform'
 import type { NativePreferences } from './preferences'
 import type { NativeSheetController } from './sheets-runtime'
+import { StatesCanvasController } from './states-canvas-controller'
+import { setCanvasController } from './states-canvas-registry'
 import { NativeStatesController, type StatesAction } from './states-controller'
 import type { NativeWorkspaceController } from './workspace-controller'
 
 /** The running app's states workbench controller (the native smoke drives it). */
 export let nativeStates: NativeStatesController | null = null
+export let nativeCanvas: StatesCanvasController | null = null
 
 const PAGE = '({ href: location.href, title: document.title, x: scrollX, y: scrollY })'
 
@@ -43,8 +46,32 @@ export function installStatesWorkbench(options: {
     workspace.services.focusComposer?.()
     return true
   }
-  const states = new NativeStatesController({
+  let legacyItems: unknown[] = []
+  const canvas = new StatesCanvasController({
+    preferences,
+    active: () => workspace.active ?? null,
+    preview: (channel, payload) => options.preview.webContents.send(channel, payload),
     send: (command, payload) => host.send(command, payload as Record<string, unknown>),
+    legacyItems: () => legacyItems,
+    chatTitle: (chat) => nativeChat.chats.get(chat)?.title || undefined,
+    submit: async (root, text, chat) => {
+      const entry = project(root)
+      if (!entry) return
+      const key = (await focus(root, chat)) ? chat : entry.activeSessionKey
+      await nativeChat.command({ type: 'submit', chat: key, text })
+    },
+    focusChat: focus,
+    report
+  })
+  nativeCanvas = canvas
+  setCanvasController(canvas)
+  const states = new NativeStatesController({
+    send: (command, payload) => {
+      if (command === 'workbenches') {
+        legacyItems = (payload as { items?: unknown[] })?.items ?? []
+        canvas.sync()
+      } else if (!canvas.view) host.send(command, payload as Record<string, unknown>)
+    },
     preview: (channel, payload) => options.preview.webContents.send(channel, payload),
     active: () => workspace.active ?? null,
     load: (url) => workspace.services.invoke('preview:load', url),
@@ -98,7 +125,9 @@ export function installStatesWorkbench(options: {
       const key = chat && (await focus(root, chat)) ? chat : entry.activeSessionKey
       await nativeChat.command({ type: 'submit', chat: key, text })
     },
-    chatTitle: (chat) => nativeChat.chats.get(chat)?.title || undefined
+    chatTitle: (chat) => nativeChat.chats.get(chat)?.title || undefined,
+    canvasSelection: (root, element) => canvas.expect(root, element),
+    openCanvasForSelection: (root, element) => canvas.openForSelection(root, element)
   })
   nativeStates = states
   // A workbench chip tells the agent where the workbench is when the message is sent.
@@ -110,8 +139,18 @@ export function installStatesWorkbench(options: {
   })
   options.git.beforePublish = (root) => states.beforePublish(root)
   serviceEvents.on('event', (channel: string, value: unknown) => {
-    if (channel === 'preview:url-changed') states.url(typeof value === 'string' ? value : null)
-    else if (channel === 'preview:states-key') void states.action({ action: 'hide' }).catch(report)
+    if (channel === 'preview:url-changed') {
+      if (canvas.view) canvas.close()
+      states.url(typeof value === 'string' ? value : null)
+    } else if (channel === 'preview:states-canvas-result') canvas.result(value)
+    else if (channel === 'preview:states-key') {
+      if (canvas.view) {
+        const id = typeof value === 'string' ? value : ''
+        void canvas
+          .action(id === 'close' ? 'back' : id === 'hide' ? 'hide' : 'select', id)
+          .catch(report)
+      } else void states.action({ action: 'hide' }).catch(report)
+    }
   })
   // A landed turn may have written a workbench into any project, open or not: rescan its
   // root so the island and the Publish guard see it without a path change. `key` is the
@@ -126,7 +165,13 @@ export function installStatesWorkbench(options: {
     if (root) states.landed(root)
   })
   host.on('states-action', (action: StatesAction) => {
-    if (action && typeof action.action === 'string') void states.action(action).catch(report)
+    if (action && typeof action.action === 'string')
+      void canvas
+        .action(action.action, action.id)
+        .then((handled) => {
+          if (!handled) return states.action(action)
+        })
+        .catch(report)
   })
   return states
 }

@@ -174,7 +174,7 @@ export const STATES_INVOCATION = /(?:^|\s)\/states(?=\s|$)/
 /** The turn text for Show states on a selected element (toolbar or … menu). */
 export function showStatesText(selection: string, componentSource?: string | null): string {
   const instance = componentSource ? `The component instance is at ${componentSource}. ` : ''
-  return `/states ${selection}${instance}Build a states workbench for this component.`
+  return `/states ${selection}${instance}Register a Trezi-owned states canvas for this component without changing project files.`
 }
 
 /** The turn text for Rebuild States (LKM-220): the same workbench, updated in place. */
@@ -201,7 +201,7 @@ export function workbenchReferenceText(bench: Workbench): string {
 /** Appended to a `/states` prompt so the manifest records the creating chat. */
 export function statesContext(text: string, chat: string): string {
   return STATES_INVOCATION.test(text)
-    ? `\n\nTrezi chat key for the workbench manifest "chat" field: ${JSON.stringify(chat)}.`
+    ? `\n\nTrezi chat key for this states canvas: ${JSON.stringify(chat)}. Register the recipe with Trezi; do not create a manifest or route.`
     : ''
 }
 
