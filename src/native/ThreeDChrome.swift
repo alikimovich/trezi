@@ -144,6 +144,8 @@ final class ThreeDChrome {
     var insets = ThreeDInsets()
     /// Smoke only: the next capture fails, to exercise the fallback message.
     var failNextCapture = false
+    /// Smoke only: keeps the next capture running this long, so a session can open meanwhile.
+    var holdNextCapture: TimeInterval = 0
     private(set) var captures = 0
     private var closedSession = ""
     private var closedDocument = ""
@@ -237,8 +239,12 @@ final class ThreeDChrome {
         let finish: ([CGImage?]?) -> Void = { [weak self] images in
             guard let self else { return }
             capturing = false
-            guard active, model.session == job.session else { return }
-            if model.revision != job.revision || recaptureQueued { recaptureQueued = false; capture(); return }
+            guard active else { return }
+            // A session opened while this job ran was refused by `capture()`: start it now,
+            // or a static page would never send another revision and stay on "Capturing layers…".
+            if model.session != job.session || model.revision != job.revision || recaptureQueued {
+                recaptureQueued = false; capture(); return
+            }
             capturedRevision = job.revision
             captures += 1
             if let images, images.contains(where: { $0 != nil }) {
@@ -252,17 +258,21 @@ final class ThreeDChrome {
         capturing = true
         if failNextCapture { failNextCapture = false; DispatchQueue.main.async { finish(nil) }; return }
         guard let preview, let world else { DispatchQueue.main.async { finish(nil) }; return }
-        ThreeDCapture.run(job, view: preview, world: world, done: finish)
+        let hold = holdNextCapture
+        holdNextCapture = 0
+        ThreeDCapture.run(job, view: preview, world: world, done: hold > 0
+            ? { images in DispatchQueue.main.asyncAfter(deadline: .now() + hold) { finish(images) } }
+            : finish)
     }
-    /// Smoke only: capture the current revision again (optionally failing it).
-    func recapture(fail: Bool) {
-        failNextCapture = fail; capturedRevision = -1; recaptureQueued = capturing; capture()
+    /// Smoke only: capture the current revision again (optionally failing or holding it).
+    func recapture(fail: Bool, hold: TimeInterval = 0) {
+        failNextCapture = fail; holdNextCapture = hold; capturedRevision = -1; recaptureQueued = capturing; capture()
     }
     func clear() {
         if active { closedSession = model.session; closedDocument = document }
         if let window = header.window, ownsFocus(window.firstResponder), let preview { window.makeFirstResponder(preview) }
         active = false; document = ""; model.session = ""; model.revision = 0
-        insets = ThreeDInsets(); invalid = false; capturedRevision = -1; recaptureQueued = false; failNextCapture = false
+        insets = ThreeDInsets(); invalid = false; capturedRevision = -1; recaptureQueued = false; failNextCapture = false; holdNextCapture = 0
         scene.clearPlanes(message: "")
         header.isHidden = true; footer.isHidden = true; scene.isHidden = true; backdrop.isHidden = true
     }

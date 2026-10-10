@@ -248,6 +248,19 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     const s = await inspect()
     return s.message === '' && s.rendered === s.layers.length
   }, 'a later capture replaces the fallback message')
+  // A capture still running when the view closes must not strand the next session on
+  // "Capturing layers…": hold one capture, close, reopen, and the new scene renders again.
+  await host.request('threeDPerform', { action: 'recapture', hold: 2500 })
+  await perform('close')
+  await waitFor(async () => !(await inspect()).active, 'Back closes while a capture is running')
+  const reopened = await open('#three-d-card')
+  assert.notEqual(
+    reopened.session,
+    opened.session,
+    'reopening during a capture starts a new session'
+  )
+  assert.equal(reopened.rendered, reopened.layers.length, 'the reopened scene renders its layers')
+  assert.equal(reopened.message, '', 'no stuck capturing message after a quick reopen')
   const original = (await host.request('inspectorIsland')).window
   try {
     await host.request('inspectorIsland', { windowWidth: 850, windowHeight: 650 })

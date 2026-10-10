@@ -179,6 +179,11 @@ export async function checkLayersIsland(host: NativeBridge, artifacts: string, s
     const h1 = page.find((n) => n.id === 'native-title')
     const p = page.find((n) => n.tag === 'p' && samePath(n.parentPath, body?.path))
     assert.ok(body && h1 && p, 'the fixture body, heading and paragraph are rows')
+    // A move across files goes to the agent and writes nothing: fail fast on a stale stamp.
+    assert.ok(
+      String(h1.source).startsWith('index.html:') && String(p.source).startsWith('index.html:'),
+      `the heading and paragraph are stamped from index.html (heading ${h1.source}, paragraph ${p.source})`
+    )
     assert.ok((await island({ action: 'collapse' })).ok)
     const sent = (await island()).selectionsSent
     await select(p)
@@ -209,10 +214,21 @@ export async function checkLayersIsland(host: NativeBridge, artifacts: string, s
     const at = siblings.findIndex((n) => samePath(n.path, h1.path))
     const drop = await island({ action: 'drop', path: p.path, parent: body.path, index: at })
     assert.ok(drop.ok, `the drop is accepted ${JSON.stringify(drop)}`)
-    await waitFor(() => {
-      const text = readFileSync(index, 'utf8')
-      return text.indexOf('Bun owns this server') < text.indexOf('id="native-title"')
-    }, 'the paragraph moved before the heading in index.html')
+    await waitFor(
+      () => {
+        const text = readFileSync(index, 'utf8')
+        return text.indexOf('Bun owns this server') < text.indexOf('id="native-title"')
+      },
+      'the paragraph moved before the heading in index.html',
+      10000,
+      // A refusal or an agent fallback shows only as a notice.
+      async () => ({
+        notice: (await island()).notice,
+        drop,
+        heading: h1.source,
+        paragraph: p.source
+      })
+    )
     // The paragraph now has the heading's old row.
     await waitFor(
       async () =>

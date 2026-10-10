@@ -759,6 +759,12 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: async () => {
         layersOriginal = readFileSync(join(fixture, 'index.html'), 'utf8')
+        // `inspector` re-stamps the heading as native-style.tsx and nothing reloads the page after
+        // it; a move across two files goes to the agent and writes nothing. Start from the
+        // fixture's own stamp.
+        await page(
+          `document.querySelector('#native-title').setAttribute('data-trezi-source','index.html:3:1')`
+        )
         layersWindow = (await host.request('inspectorIsland')).window
         await checkLayersIsland(host, artifacts, layersSmoke)
       },

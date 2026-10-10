@@ -188,7 +188,7 @@ extension Host {
             // Through the scene's own hit test, at the layer's projected centre.
             case "click": reply(id, value.flatMap(threeD.scene.screenPoint).flatMap { threeD.scene.click(at: $0) } ?? -1)
             case "hover": threeD.scene.hoverLayer(value); reply(id, threeD.scene.hoverText)
-            case "recapture": threeD.recapture(fail: c["fail"] as? Bool == true); reply(id, true)
+            case "recapture": threeD.recapture(fail: c["fail"] as? Bool == true, hold: (c["hold"] as? Double ?? 0) / 1000); reply(id, true)
             default: reply(id, false)
             }
         case "threeDFocus":
