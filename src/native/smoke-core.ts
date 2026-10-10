@@ -10,6 +10,7 @@ import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkAgentQuestion } from './smoke-agent-question'
+import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
 import { checkChatText } from './smoke-chat-text'
@@ -500,6 +501,14 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         host.emit('activity-action', { action: 'hide' })
       }
+    },
+    {
+      name: 'build-badge',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkBuildBadge(host, artifacts)
+      },
+      cleanup: restoreBuildBadge
     },
     {
       name: 'dreamer',

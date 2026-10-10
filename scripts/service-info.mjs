@@ -2,11 +2,16 @@ import { MIN_MACOS } from './requirements.mjs'
 
 /**
  * Version keys every bundle carries (LKM-143), from `buildInfo` (scripts/version.mjs):
- * the package version, the commit count as the build number, and the short sha.
+ * the package version, the commit count as the build number, and the short sha. LKM-226
+ * adds the source branch, whether the tree was dirty and the exact release tag.
  */
-const versionKeys = ({ version, build, commit }) => `<key>CFBundleShortVersionString</key><string>${version}</string>
+const xml = text => String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const versionKeys = ({ version, build, commit, branch = '', dirty = false, tag = '' }) => `<key>CFBundleShortVersionString</key><string>${version}</string>
 <key>CFBundleVersion</key><string>${build}</string>
-<key>TreziCommit</key><string>${commit}</string>`
+<key>TreziCommit</key><string>${commit}</string>
+<key>TreziBranch</key><string>${xml(branch)}</string>
+<key>TreziDirty</key>${dirty ? '<true/>' : '<false/>'}
+<key>TreziTag</key><string>${xml(tag)}</string>`
 
 /** Info.plist of `Trezi.app`. */
 export function appInfoPlist(info) {

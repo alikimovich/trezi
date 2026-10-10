@@ -226,6 +226,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/backends/codex.ts` | helper | ProviderOwner (provider helper) | Codex SDK process, inside the supervised helper |
 | `src/main/backends/gemini.ts` | helper | ProviderOwner (provider helper) | Gemini CLI process, inside the supervised helper |
 | `src/main/backends/live-tree-watch.ts` | helper | RepositoryOwner | `git status` and `git rev-parse` reads of the live checkout for a Full-access Codex turn's snapshots (LKM-163, LKM-215) |
+| `src/main/build-status.ts` | helper | PlatformOwner | read-only Git reads of Trezi's own checkout (`ls-remote`, `merge-base`, `rev-list`; never a fetch) for the build badge (LKM-226) |
 | `src/main/chat-park.ts` | helper | RepositoryOwner | Git reads (diff, show, status) |
 | `src/main/chat-agent-git.ts` | helper | RepositoryOwner / WorkflowOwner | `git rev-parse` read; mutations route through the owners (LKM-188) |
 | `src/main/chat-workspaces.ts` | helper | RepositoryOwner | `du` and `git rev-parse` reads (LKM-136 usage, old-name folders' repositories) |
@@ -253,6 +254,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/dreamer-export.ts` | helper | PlatformOwner | Export Dreamer Report… zip (`ditto`) of a temporary folder (LKM-202) |
 | `src/native/smoke-agent-preview.ts` | test | — | smoke fixture |
 | `src/native/smoke-alerts.ts` | test | — | smoke fixture |
+| `src/native/smoke-build-badge.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-gate.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-text.ts` | test | — | smoke fixture |

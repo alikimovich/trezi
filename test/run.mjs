@@ -137,6 +137,7 @@ const UNIT = [
   'pr-body',
   'feedback-body',
   'feedback-diagnostics',
+  'build-status',
   'product-log',
   'dreamer-digest',
   'dreamer-export',

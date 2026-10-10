@@ -62,6 +62,30 @@ extension Host {
             else if c["keys"] as? Bool == true { reply(id, editor.verifyWrapKeys(probe)) }
             else { reply(id, editor.inspectWrap(probe)) }
         case "activityInspect": reply(id, ["visible":activity.window?.isVisible ?? false, "key":activity.window?.isKeyWindow ?? false, "count":activity.count, "text":String(activity.text.string.suffix(20000))].merging(activityIndicator.inspect()) { _, new in new })
+        // LKM-226: the sidebar build badge; `perform` clicks it, `capture` shows the footer row.
+        case "buildBadgeInspect":
+            shell.sidebar.view.layoutSubtreeIfNeeded()
+            let activityFrame = activityIndicator.button.isHidden || activityIndicator.button.window == nil ? NSRect.zero : activityIndicator.button.convert(activityIndicator.button.bounds, to: nil)
+            if c["perform"] as? Bool == true { guard ephemeral else { reply(id, error: "Test profile required"); return true }; buildBadge.button.performClick(nil) }
+            if let capture = c["capture"] as? String {
+                guard ephemeral else { reply(id, error: "Test profile required"); return true }
+                let sidebar = shell.sidebar.view, prior = window.appearance
+                if capture == "dark" || capture == "light" { window.appearance = NSAppearance(named: capture == "dark" ? .darkAqua : .aqua) }
+                Task { @MainActor in
+                    defer { window.appearance = prior }
+                    sidebar.layoutSubtreeIfNeeded(); sidebar.displayIfNeeded()
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    let band = NSRect(x: 0, y: 0, width: sidebar.bounds.width, height: BuildBadge.footerHeight + 8)
+                    if let visible = try? await captureVisibleRegion(window: window, view: sidebar, region: band, recognize: false) { reply(id, visible.merging(["foreground":true]) { _, new in new }); return }
+                    // Background runs: the view's own drawing, without the sidebar material.
+                    guard let bitmap = sidebar.bitmapImageRepForCachingDisplay(in: band) else { reply(id, error: "No sidebar"); return }
+                    sidebar.cacheDisplay(in: band, to: bitmap)
+                    reply(id, ["png":bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "", "foreground":false])
+                }
+                return true
+            }
+            reply(id, buildBadge.inspect().merging(["activityFrame":NSStringFromRect(activityFrame), "sidebarWidth":shell.sidebar.view.bounds.width,
+                                                    "listBottom":shell.outline.enclosingScrollView.map { $0.convert($0.bounds, to: nil).minY } ?? 0]) { _, new in new })
         case "activityMenu":
             // Pipe test: Command-L through the main menu's key equivalents, as the keyboard sends it.
             guard ephemeral, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37) else { reply(id, error: "Test profile required"); return true }

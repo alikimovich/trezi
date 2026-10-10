@@ -33,6 +33,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let downloads = PreviewDownloads()
     let activity = NativeActivity()
     let activityIndicator = ActivityIndicator()
+    let buildBadge = BuildBadge()
     let toast = NativeToast()
     let previewLoad = NativePreviewLoad()
     let speedBadge = NativePreviewSpeed()
@@ -132,7 +133,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         chatDivider.changed = { [weak self] width in self?.nativeLayout.resized(width) }
         welcome = NativeWelcome(); welcome.frame = canvas.bounds; canvas.addSubview(welcome)
         sheets = NativeSheets(parent: window); activity.parent = window; downloads.parent = window
-        activityIndicator.install(in: shell.sidebar.view)
+        buildBadge.install(in: shell.sidebar.view, activity: activityIndicator)
         nativeLayout = WorkspaceLayout(host: self)
         previewOverlay = PreviewOverlay(host: self)
         toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
@@ -277,6 +278,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             nativeLayout.layout()
         case "activityState": activity.update(c)
         case "activityUnread": activityIndicator.update(count: c["count"] as? Int ?? 0, level: c["level"] as? String ?? "info")
+        case "buildStatus": buildBadge.update(c)
         case "sheetState": sheets.update(c["state"] as? [String: Any] ?? [:])
         case "sheetClose": sheets.close(c["id"] as? String ?? "")
         case "toastState": toast.show(c["state"] as? [String: Any] ?? [:], in: canvas)

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { currentBuildLine } from './build-status'
 import { states } from './chat-state'
 import { agentWorkspaceEvidence } from './chat-status'
 import { productLogDirectory, readLogs, redact } from './product-log'
@@ -79,6 +80,8 @@ export interface DiagnosticsSources {
   home?: string
   /** The product log folder (tests); the process's own otherwise. */
   logDir?: string
+  /** The build badge's line (tests); the current state otherwise. */
+  build?: string
 }
 
 const PRODUCT_LOG_CHARS = 9000
@@ -142,7 +145,8 @@ export function systemLogLines(out: string, max = SYSTEM_LOG_LINES) {
 export async function gatherDiagnostics(sources: DiagnosticsSources = {}) {
   const run = sources.run ?? execRun
   const now = sources.now ?? Date.now
-  const sections: string[] = []
+  // LKM-226: whether this build is the published code on main (the sidebar badge).
+  const sections: string[] = [`## Build\n${sources.build ?? currentBuildLine()}`]
 
   let busy = false
   if (sources.ping) {

@@ -100,7 +100,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             projectActions.topAnchor.constraint(equalTo: sidebarContainer.safeAreaLayoutGuide.topAnchor, constant: 8),
             projectActions.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor, constant: 10),
             projectActions.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor, constant: -10),
-            scroll.topAnchor.constraint(equalTo: projectActions.bottomAnchor, constant: 16), scroll.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor), scroll.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor)
+            scroll.topAnchor.constraint(equalTo: projectActions.bottomAnchor, constant: 16), scroll.leadingAnchor.constraint(equalTo: sidebarContainer.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: sidebarContainer.trailingAnchor), scroll.bottomAnchor.constraint(equalTo: sidebarContainer.bottomAnchor, constant: -BuildBadge.footerHeight)
         ])
         sidebar.view = sidebarContainer
         sidebarItem = SourceList.sidebarItem(sidebar, minimum: 180, maximum: 340)
