@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-225 review repair: Layers drop survives a stale tree
+
+- The manager's full native run timed out waiting for a Layers paragraph reorder after the native outline accepted the drop. The isolated `core` group passed, so the failure is intermittent. A move whose row or target is absent from the Bun controller's current tree now refreshes that tree once before handling the action, rather than silently dropping the request. A unit case covers the stale-tree path.
+- The Layers smoke keeps its source-order assertion and now reports the native notice, row counts, source offsets and whether the file changed if the reorder times out. That makes a repeated full-run failure distinguish an ignored event from a source-owner refusal. The previous full run also reached its 300-second launcher limit after the reorder failure; the manager will verify the full suite.
+- Quick verification exposed a separate simulator-fixture race: a reader could parse `bootstatus.json` mid-write and throw `Unexpected EOF`. The test now treats an incomplete or briefly absent status as pending, while still waiting for the same boot status. A standalone rerun in this worker sandbox reached `No free port found from 17800`; manager verification must confirm that socket-dependent case.
+- The first post-fix native `core` call passed all 29 smoke checks, including Layers, then the separate chat-scroll capture failed because its window had lost foreground. The shared test bridge now prepares the foreground before `captureShell` and retries once only for the two foreground capture errors; the real capture guard and pixel assertions remain intact.
+
 ## 2026-10-10 — LKM-225 partial: classified incidents and Codex reconnect recovery
 
 - Native `chat` group passes 13/13 including `incident-row`: duplicate routing errors yield one row (collapsed 39 pt), with readable expanded Details and Copy details; foreground PNGs reviewed. Agent OS quick passes 212 unit checks, typechecks and lint.

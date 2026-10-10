@@ -203,7 +203,7 @@ export class NativeLayersController {
     if (action.root !== this.root) return
     const find = (path?: number[]): LayerNode | undefined =>
       this.snapshot?.nodes.find((node) => samePath(node.path, path))
-    const node = find(action.path)
+    let node = find(action.path)
     if (action.action === 'close') {
       if (this.visible) await this.toggle()
       return
@@ -221,6 +221,13 @@ export class NativeLayersController {
         node ? { path: node.path, fingerprint: { tag: node.tag, source: node.source } } : null
       )
       return
+    }
+    // The native outline can still hold a row while a page-change read is in flight.
+    // Refresh once before discarding a drop whose paths are absent from our snapshot.
+    if (action.action === 'move' && (!node || !find(action.target))) {
+      await this.refresh()
+      if (action.root !== this.root) return
+      node = find(action.path)
     }
     const target = find(action.target)
     const position = action.position

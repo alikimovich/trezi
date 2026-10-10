@@ -151,6 +151,28 @@ assert.deepEqual(sent.at(-1), [
   { path: [0], fingerprint: { tag: 'p', source: 'i.html:3:1' } }
 ])
 assert.deepEqual(states.at(-1).selected, [0], 'the moved element stays selected')
+
+// An outline drop may arrive while the controller is one preview read behind.
+// A missing row gets one fresh read before the move is discarded.
+let reads = 0
+const recovered = []
+const staleDrop = new NativeLayersController(
+  async (channel, _root, request) => {
+    if (channel === 'layers:read') {
+      reads++
+      return reads === 1 ? { ...page, nodes: [page.nodes[0], page.nodes[1]] } : page
+    }
+    recovered.push(request)
+    return { applied: true }
+  },
+  async () => {},
+  () => {}
+)
+await staleDrop.activate('/i')
+await staleDrop.toggle()
+await staleDrop.action({ root: '/i', action: 'move', path: [0], target: [1], position: 'before' })
+assert.equal(reads, 3, 'a missing target gets one read before the move and one after it')
+assert.equal(recovered.length, 1, 'the recovered drop reaches the source owner')
 console.log(
   'Native layers: scoped selection/fingerprints, source moves, agent fallback, canceled reads, selection sync and moved-row follow passed'
 )

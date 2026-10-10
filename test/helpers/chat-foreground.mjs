@@ -1,5 +1,7 @@
 /** The host's answer (`ChatAcceptance.swift`) when the chat window is not key in the active app. */
 export const CHAT_NOT_FOREGROUND = 'Chat must be foreground'
+const CAPTURE_NOT_FOREGROUND = 'Chat window is not in the foreground'
+const CAPTURE_LOST_FOREGROUND = 'Chat lost foreground during capture'
 
 /**
  * Chat acceptance reads real window geometry, so the host refuses it unless the chat window is key
@@ -21,11 +23,30 @@ export function foregroundChatHost(host, warn = console.warn) {
       return host.request('chatAcceptance', { ...body, prepare: true })
     }
   }
+  const capture = async (body) => {
+    await acceptance()
+    try {
+      return await host.request('captureShell', body)
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        (error.message !== CAPTURE_NOT_FOREGROUND && error.message !== CAPTURE_LOST_FOREGROUND)
+      )
+        throw error
+      warn('Chat capture lost foreground; reactivating and retrying once')
+      await acceptance()
+      return host.request('captureShell', body)
+    }
+  }
   return new Proxy(host, {
     get(target, key) {
       if (key === 'request')
         return (method, body) =>
-          method === 'chatAcceptance' ? acceptance(body) : target.request(method, body)
+          method === 'chatAcceptance'
+            ? acceptance(body)
+            : method === 'captureShell'
+              ? capture(body)
+              : target.request(method, body)
       const value = Reflect.get(target, key)
       return typeof value === 'function' ? value.bind(target) : value
     }

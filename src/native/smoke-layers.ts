@@ -209,10 +209,26 @@ export async function checkLayersIsland(host: NativeBridge, artifacts: string, s
     const at = siblings.findIndex((n) => samePath(n.path, h1.path))
     const drop = await island({ action: 'drop', path: p.path, parent: body.path, index: at })
     assert.ok(drop.ok, `the drop is accepted ${JSON.stringify(drop)}`)
-    await waitFor(() => {
-      const text = readFileSync(index, 'utf8')
-      return text.indexOf('Bun owns this server') < text.indexOf('id="native-title"')
-    }, 'the paragraph moved before the heading in index.html')
+    await waitFor(
+      () => {
+        const text = readFileSync(index, 'utf8')
+        return text.indexOf('Bun owns this server') < text.indexOf('id="native-title"')
+      },
+      'the paragraph moved before the heading in index.html',
+      10000,
+      async () => {
+        const text = readFileSync(index, 'utf8')
+        const state = await island()
+        return {
+          notice: state.notice,
+          nativeRows: state.count,
+          sourceRows: (await nodes()).length,
+          headingOffset: text.indexOf('id="native-title"'),
+          paragraphOffset: text.indexOf('Bun owns this server'),
+          sourceChanged: text !== original
+        }
+      }
+    )
     // The paragraph now has the heading's old row.
     await waitFor(
       async () =>

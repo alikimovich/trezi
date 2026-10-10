@@ -436,6 +436,7 @@ assert.throws(
   const { foregroundChatHost } = await import('./helpers/chat-foreground.mjs')
   const sent = []
   let refusals = 0
+  let captureRefusals = 0
   const fake = {
     marker: 'bridge',
     send() {
@@ -448,6 +449,10 @@ assert.throws(
         throw new Error('Chat must be foreground')
       }
       if (method === 'chatAcceptance' && body?.fail) throw new Error('Unknown scroller override x')
+      if (method === 'captureShell' && captureRefusals > 0) {
+        captureRefusals--
+        throw new Error('Chat window is not in the foreground')
+      }
       return { method, body }
     }
   }
@@ -481,6 +486,19 @@ assert.throws(
 
   await assert.rejects(host.request('chatAcceptance', { fail: true }), /Unknown scroller override/)
   assert.equal(sent.length, 1, 'other errors are never retried')
+
+  sent.length = 0
+  captureRefusals = 1
+  await host.request('captureShell')
+  assert.deepEqual(
+    sent.map(([method]) => method),
+    ['chatAcceptance', 'captureShell', 'chatAcceptance', 'captureShell'],
+    'a capture that lost focus reactivates the window and retries once'
+  )
+  sent.length = 0
+  captureRefusals = 2
+  await assert.rejects(host.request('captureShell'), /Chat window is not in the foreground/)
+  assert.equal(sent.filter(([method]) => method === 'captureShell').length, 2)
 }
 
 console.log(

@@ -102,6 +102,15 @@ const calls = () =>
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : []
+const bootStatus = () => {
+  try {
+    return JSON.parse(readFileSync(join(sim, 'bootstatus.json'), 'utf8'))
+  } catch (error) {
+    // The simulator fixture writes this file while the parent polls it.
+    if (error instanceof SyntaxError || error.code === 'ENOENT') return null
+    throw error
+  }
+}
 const metros = () =>
   readdirSync(sim)
     .filter((name) => name.startsWith('metro-'))
@@ -532,12 +541,7 @@ try {
   rmSync(join(sim, 'booted.json'), { force: true })
   mode({ slowBoot: true })
   const booting = pending(owner.simulatorStart({ root: project, command: fakes.metro('ready') }))
-  const status = await until(
-    () =>
-      existsSync(join(sim, 'bootstatus.json')) &&
-      JSON.parse(readFileSync(join(sim, 'bootstatus.json'), 'utf8')),
-    'bootstatus'
-  )
+  const status = await until(bootStatus, 'bootstatus')
   await gone(secondMetro.pid, 'the running preview replaced by the new start')
   const stopAt = Date.now()
   await owner.simulatorStop()
@@ -550,12 +554,7 @@ try {
 
   log('a newer start supersedes one still booting')
   const older = pending(owner.simulatorStart({ root: project, command: fakes.metro('ready') }))
-  const waiting = await until(
-    () =>
-      existsSync(join(sim, 'bootstatus.json')) &&
-      JSON.parse(readFileSync(join(sim, 'bootstatus.json'), 'utf8')),
-    'bootstatus'
-  )
+  const waiting = await until(bootStatus, 'bootstatus')
   mode({})
   const newer = owner.simulatorStart({ root: project, command: fakes.metro('ready') })
   await rejects(older, 'cancelled')
