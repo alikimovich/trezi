@@ -16,6 +16,11 @@ import type {
 } from '../shared/native-chat-controller'
 import type { NativeComposerAction } from '../shared/native-composer'
 import { defaultChoiceFor, providerOptions, resolveSelection } from '../shared/provider-choices'
+import {
+  type BuiltinProvider,
+  initialProviderReadiness,
+  readinessFromLogin
+} from '../shared/provider-readiness'
 import { statesContext } from '../shared/states-workbench'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
@@ -51,6 +56,8 @@ export class NativeChatController {
   readonly chats = new Map<string, Chat>()
   active = ''
   choices: ModelChoice[] = []
+  readonly readiness = initialProviderReadiness()
+  private readinessStarted = false
   layout: NativeChatLayout = { visible: false, bounds: { x: 0, y: 0, width: 0, height: 0 } }
   private streamUpdates = new Map<string, ReturnType<typeof setTimeout>>()
   private mirrors = new Map<string, string>()
@@ -77,7 +84,7 @@ export class NativeChatController {
       this.services.effect({ type: 'mirror', state })
     }
     if (chat.chat === this.active)
-      this.services.render({ ...snapshot(chat, this.choices), ...this.layout })
+      this.services.render({ ...snapshot(chat, this.choices, this.readiness), ...this.layout })
   }
   async refreshChoices() {
     try {
@@ -86,6 +93,31 @@ export class NativeChatController {
     } catch (error) {
       this.fail(this.get(this.active), error)
     }
+  }
+  private startReadinessIfVisible() {
+    if (!this.layout.visible || !this.active || this.readinessStarted) return
+    this.readinessStarted = true
+    void this.refreshReadiness()
+  }
+  async refreshReadiness(provider?: BuiltinProvider) {
+    const providers: BuiltinProvider[] = provider ? [provider] : ['claude', 'codex']
+    await Promise.all(
+      providers.map(async (id) => {
+        this.readiness[id] = { status: 'checking' }
+        this.changed()
+        try {
+          const report = await this.services.invoke(
+            'providers:check-login',
+            id,
+            this.get(this.active).root
+          )
+          this.readiness[id] = readinessFromLogin(report.loggedIn)
+        } catch {
+          this.readiness[id] = readinessFromLogin(null)
+        }
+        this.changed()
+      })
+    )
   }
   private fail(chat: Chat, error: unknown) {
     chat.error = String(error)
@@ -144,6 +176,7 @@ export class NativeChatController {
     if (command.type === 'layout') {
       this.layout = command.layout
       this.changed()
+      this.startReadinessIfVisible()
       return
     }
     if (command.type === 'context') {
@@ -158,6 +191,7 @@ export class NativeChatController {
       if (switched) this.mirrors.delete(chat.chat)
       this.changed(chat)
       if (context.root) await this.initialize(chat)
+      this.startReadinessIfVisible()
       return
     }
     const chat = this.get(command.chat)

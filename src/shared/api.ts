@@ -291,6 +291,8 @@ export interface ProviderLoginReport {
   /** The CLI the chats use: `bundled` (the SDK's) or `installed` (e.g. ~/.local/bin/claude). */
   source?: 'bundled' | 'installed'
   executable?: string
+  /** The Claude CLI configuration directory selected in the chat helper. */
+  configDir?: string
   authMethod?: string
   /** A subscription token from Settings is in the helper's environment. */
   token?: boolean

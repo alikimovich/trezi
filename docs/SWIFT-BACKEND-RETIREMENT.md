@@ -214,8 +214,8 @@ commit nothing themselves:
 
 ## Census
 
-Classes: `helper` (retained JS whose effects are reads, a provider SDK's own process
-inside its supervised helper, or a scratch directory it removes); `test` (native smoke
+Classes: `helper` (retained JS whose effects are reads, a provider's own authentication
+or SDK process, or a scratch directory it removes); `test` (native smoke
 fixtures, never in the product path); `bun` (a Bun-owned effect, which blocks
 retirement). LKM-111 removed the `rollback` class with the writers it listed.
 
@@ -241,6 +241,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/park-reconcile.ts` | helper | RepositoryOwner | `git show` reads of a parked chat's held files; the clear/rebuild runs through the owner (LKM-196) |
 | `src/main/preview-identity.ts` | helper | RepositoryOwner | `git rev-parse HEAD` read of the live checkout: the revision a preview document serves (LKM-200) |
 | `src/main/preview-tools.ts` | helper | PlatformOwner | `open_preview` screenshot: one scratch JPEG per chat in the system temp folder, overwritten on each call (LKM-196) |
+| `src/main/provider-sign-in.ts` | helper | ProviderOwner | User-initiated Claude Code or Codex app-server login process; credentials stay in provider-managed storage (LKM-231) |
 | `src/main/product-log.ts` | helper | PlatformOwner | appends and prunes the product log day files in `~/Library/Logs/Trezi` (LKM-168) |
 | `src/main/pull-request-status.ts` | helper | WorkflowOwner | `gh pr view` and `git merge-tree` reads of PR mergeability (LKM-188) |
 | `src/main/project-memory-evaluation.ts` | helper | MemoryOwner | `git grep` reads of a chat's worktree and the live checkout: a new memory rule's design token must exist in code (LKM-177) |

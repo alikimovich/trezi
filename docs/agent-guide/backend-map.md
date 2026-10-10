@@ -24,6 +24,9 @@ src/main/
                   once, shared by styles:read and layers:read
   devserver.ts    registers the devserver:* routes, served by the runtime owner
                   through devserver-service.ts
+  provider-sign-in.ts  starts user-initiated Claude Code or Codex app-server browser
+                  login; provider CLIs own credential storage and the resulting
+                  readiness is refreshed through providers:check-login
   project-detect.ts detect framework/PM + launch commands (pure; Swift mirror
                   in service/RuntimeDetect.swift)
   file-tree.ts    list a project's files (git ls-files / fs-walk) for the

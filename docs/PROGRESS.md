@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-231: native Claude and Codex sign-in
+
+- Chat start and auth-recovery cards now launch the provider-owned browser flows. Claude uses the selected Claude Code CLI's `auth login`; Codex uses app-server `account/login/start` with managed ChatGPT auth, opens only an approved provider URL, listens for `account/login/completed`, and cancels with `account/login/cancel`. Both credential stores remain provider-owned; no OAuth URL, CLI output, or raw auth error is put in the transcript or product log.
+- `src/shared/provider-readiness.ts` exports independent `ready` / `checking` / `signed_out` / `failed` states for Claude and Codex. Chat checks both seats on startup and refreshes the signed-in seat. A disconnected seat does not block the other. Sign-in never auto-sends a failed turn: the last submission (including attachments) stays in memory and Retry is explicit; a zero-state draft stays in the composer.
+- Deterministic tests cover app-server success, cancel, expiry, missing process, URL restriction, readiness, and prompt preservation. Live consent and real account identity were not exercised by the worker. An app restart rechecks credentials; the existing conversation transcript does not persist unsent attachment bytes or an interrupted login operation.
+
 ## 2026-10-10 — LKM-229: toolbar popover anchoring in full screen
 
 - **Cause.** In full screen AppKit moves the toolbar into its own window. The Rulers and Grids popover took the button's frame in that window's coordinates and showed it relative to the main window's theme frame, so it hung from the bottom of the screen.

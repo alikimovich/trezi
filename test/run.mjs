@@ -29,6 +29,7 @@ const UNIT = [
   'provider-owner',
   'provider-data',
   'provider-login',
+  'provider-sign-in',
   'provider-cold-start',
   'turn-progress',
   'provider-helper-tools',
