@@ -8,6 +8,7 @@ import {
   CANVAS_ALL,
   CANVAS_PREFIX,
   type CanvasRecipe,
+  canvasIdFor,
   parseCanvasRecipe,
   readCanvasRecipes,
   STATES_CANVAS_PREFERENCE,
@@ -100,7 +101,16 @@ export class StatesCanvasController {
     raw: unknown
   ): Promise<{ id?: string; error?: string }> {
     const pending = this.pending.get(root)
-    const previous = (raw as { id?: unknown } | null)?.id
+    const given = (raw as { id?: unknown } | null)?.id
+    const named = typeof given === 'string' && given.startsWith(CANVAS_PREFIX) ? given : ''
+    const body = raw as { source?: unknown; exportName?: unknown } | null
+    // Without an id the canvas is the one for this source file and export: registering the same
+    // component again updates it (keeping revision and last state); another export is a new canvas.
+    const previous =
+      named ||
+      (typeof body?.source === 'string' && typeof body.exportName === 'string'
+        ? canvasIdFor(body.source, body.exportName)
+        : '')
     const current = this.recipes(root).find((item) => item.id === previous)
     if (!pending && !current)
       return { error: 'Select the component in the visible preview before registering states.' }

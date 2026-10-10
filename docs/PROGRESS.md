@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-09 — LKM-224 review repair 3: states bar compact decision and default recipe ids
+
+- `NativeStatesSwitcher` re-measures on the next run-loop turn after every `update(...)` (SwiftUI applies the model after the turn, so the first pass saw stale content and could pick the compact row at the usual width), on an effective-appearance change, and after a compact flip. The smoke now asserts `compact === false` with the component name and Missing at the usual width, in the plain capture and after the light and dark captures; the narrow case still asserts `compact === true`.
+- A recipe registered without an `id` now gets `canvasIdFor(source, exportName)` (slug tail plus a short hash), so two exports of one file are two canvases. `register` resolves the existing recipe by that derived id too, so the same export again is an explicit update that keeps revision/last (revision +1) and never touches another recipe. Stored ids are unchanged. Unit cases cover distinct exports, the update, and long paths with one tail.
+
 ## 2026-10-09 — LKM-224 review repair 2: menu routing, Vite runtime shape, reload/stale, appearance and narrow coverage
 
 - Canvas `action()` only resolves a recipe from a `canvas:` id, or from the open canvas for state actions (select/all/next/prev); a legacy folder id returns false so the legacy owner handles it. Canvas Remove now asks first (sheet with Cancel/Remove).

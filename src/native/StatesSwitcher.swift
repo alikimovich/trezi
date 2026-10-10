@@ -130,6 +130,17 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
         if model.back != back { model.back = back }
         active = state != nil && !states.isEmpty
         wanted = active && state?["hidden"] as? Bool != true
+        placeAgain()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); placeAgain() }
+    /// SwiftUI applies the model's new values after this turn, so a measurement taken right now can
+    /// still see the old content (loading, no component name, no missing states). Measure again once
+    /// the content has caught up; the compact decision never depends on the first, stale pass.
+    private func placeAgain() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.placed else { return }
+            self.place(in: self.page, visible: self.placedVisible)
+        }
     }
     /// With no sizing options the view has no intrinsic size (`fittingSize` is zero), so the
     /// same content is measured off-screen, as `SheetAlert.swift` does.
@@ -140,16 +151,20 @@ final class NativeStatesSwitcher: NSHostingView<StatesSwitcherContent> {
         let controller = NSHostingController(rootView: StatesSwitcherContent(model: model, forceFull: true)); controller.sizingOptions = []; return controller
     }()
     private var page = NSRect.zero
+    private var placed = false
+    private var placedVisible = false
     /// Bottom center of the page, clear of the loading pill at the top.
     func place(in page: NSRect, visible: Bool) {
+        placed = true; placedVisible = visible; self.page = page
         isHidden = !wanted || !visible || page.width < 200
         guard !isHidden else { return }
-        self.page = page
         // The full row is used only when it fits whole; its menus and pickers have fixed widths, so
         // a long state label or component name never widens it.
+        measureFull.view.layoutSubtreeIfNeeded()
         let natural = measureFull.sizeThatFits(in: NSSize(width: 4000, height: 200))
         let compact = ceil(natural.width) > page.width - 24
-        if model.compact != compact { model.compact = compact }
+        if model.compact != compact { model.compact = compact; placeAgain() }
+        measure.view.layoutSubtreeIfNeeded()
         let fits = measure.sizeThatFits(in: NSSize(width: max(180, page.width - 24), height: 200))
         let size = NSSize(width: ceil(fits.width), height: ceil(fits.height))
         let width = min(size.width, page.width - 24)

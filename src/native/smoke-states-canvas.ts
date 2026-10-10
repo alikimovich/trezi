@@ -193,6 +193,17 @@ export function Quiet() { return createElement('p',null,'quiet'); }`
     await page("document.querySelectorAll('[data-trezi-state-frame] .provider').length"),
     3
   )
+  const full = await waitFor(
+    async () => {
+      const value = await switcher()
+      return value.visible && value.compact === false && value
+    },
+    'the full row at the usual width',
+    5000,
+    switcher
+  )
+  assert.equal(full.component, 'Orders')
+  assert.equal(full.missing.length, 1)
   writeFileSync(
     join(artifacts, 'states-canvas.png'),
     Buffer.from(await host.request('captureShell'), 'base64')
@@ -226,6 +237,17 @@ export function Quiet() { return createElement('p',null,'quiet'); }`
         async () => ({ background: await background() })
       )
       await delay(350)
+      const row = await waitFor(
+        async () => {
+          const value = await switcher()
+          return value.visible && value.compact === false && value
+        },
+        `${appearance}: the full row at the usual width`,
+        5000,
+        switcher
+      )
+      assert.equal(row.component, 'Orders')
+      assert.equal(row.missing.length, 1)
       writeFileSync(
         join(artifacts, `states-canvas-${appearance}.png`),
         Buffer.from(await host.request('captureShell'), 'base64')

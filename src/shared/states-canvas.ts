@@ -61,6 +61,21 @@ const jsonData = (value: unknown): value is Record<string, unknown> => {
   }
 }
 
+/** The id a recipe gets when the tool call names none: the component's source file and export, so
+ * two exports of one file are two canvases. A short hash of the full pair keeps long paths apart. */
+export function canvasIdFor(sourcePath: string, exportName: string): string {
+  const key = `${sourcePath}#${exportName}`
+  let hash = 5381
+  for (let i = 0; i < key.length; i++) hash = (hash * 33 + key.charCodeAt(i)) >>> 0
+  const tail = key
+    .replace(/[^a-z0-9-]/gi, '-')
+    .toLowerCase()
+    .replace(/^-+/, '')
+    .slice(-30)
+    .replace(/^-+/, '')
+  return `${CANVAS_PREFIX}${tail || 'c'}-${hash.toString(36).slice(0, 5)}`
+}
+
 /** Validate an untrusted tool argument before it enters the preference or page world. */
 export function parseCanvasRecipe(
   raw: unknown,
@@ -138,10 +153,7 @@ export function parseCanvasRecipe(
     value.id.startsWith(CANVAS_PREFIX) &&
     slug.test(value.id.slice(CANVAS_PREFIX.length))
       ? value.id
-      : `${CANVAS_PREFIX}${value.source
-          .replace(/[^a-z0-9-]/gi, '-')
-          .toLowerCase()
-          .slice(-35)}`
+      : canvasIdFor(value.source, value.exportName)
   return {
     id,
     component: value.component.trim(),

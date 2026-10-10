@@ -144,6 +144,40 @@ await sheets.shown.handle({ id: 's', action: 'remove', values: {} })
 assert.equal(readCanvasRecipes(stored, root).length, 0)
 assert.equal(reopened.view, null)
 
+// Without an id, two exports of one source file are two canvases; the same export again updates
+// its canvas (revision 2) and never touches the other.
+const pick = () =>
+  controller.expect(root, { tag: 'div', componentSource: 'src/Orders.tsx:12', layerPath: [0, 2] })
+pick()
+const first = await controller.register(root, 'chat-a', raw)
+pick()
+const summary = await controller.register(root, 'chat-b', {
+  ...raw,
+  component: 'Orders summary',
+  exportName: 'OrdersSummary'
+})
+assert.ok(first.id && summary.id)
+assert.notEqual(first.id, summary.id)
+assert.match(first.id, /^canvas:[a-z0-9][a-z0-9-]{0,39}$/)
+assert.match(summary.id, /^canvas:[a-z0-9][a-z0-9-]{0,39}$/)
+let both = readCanvasRecipes(stored, root)
+assert.equal(both.length, 2)
+assert.equal(both.find((r) => r.id === first.id).chat, 'chat-a')
+assert.equal(both.find((r) => r.id === summary.id).exportName, 'OrdersSummary')
+const updated = await controller.register(root, 'chat-a', { ...raw, width: 500 })
+assert.equal(updated.id, first.id, 'the same export updates its own canvas')
+both = readCanvasRecipes(stored, root)
+assert.equal(both.length, 2)
+assert.equal(both.find((r) => r.id === first.id).revision, 2)
+assert.equal(both.find((r) => r.id === first.id).width, 500)
+assert.equal(both.find((r) => r.id === summary.id).revision, 1)
+assert.equal(both.find((r) => r.id === summary.id).chat, 'chat-b')
+assert.notEqual(
+  parseCanvasRecipe({ ...raw, source: 'a/'.repeat(40) + 'x.tsx' }, 'c', 1)?.id,
+  parseCanvasRecipe({ ...raw, source: 'b/'.repeat(40) + 'x.tsx' }, 'c', 1)?.id,
+  'long paths with one tail stay apart'
+)
+
 // A recipe whose source is gone is stale and says so instead of importing it.
 controller.expect(root, { tag: 'div', componentSource: 'src/Orders.tsx:12', layerPath: [0, 2] })
 const again = await controller.register(root, 'chat', raw)

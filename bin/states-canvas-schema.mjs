@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const statesCanvasDescription = 'Register or update a Trezi-owned component canvas recipe for the selected instance. Use existing Vite-served React modules and JSON props; this writes only Trezi app data, never project files. Components with loaders, live stores, or server-only context are unsupported.'
 export const statesCanvasShape = {
-  id: z.string().optional().describe('Existing canvas: id for a rebuild; omit to create.'),
+  id: z.string().optional().describe('Existing canvas: id for a rebuild. Omit to create: the id is derived from source and exportName, so another export of the same file is a new canvas and the same export updates its canvas.'),
   component: z.string(),
   source: z.string().describe('Project-relative source module with the real component export.'),
   exportName: z.string().describe('Named export or default.'),
