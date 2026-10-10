@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-229: toolbar popover anchoring in full screen
+
+- **Cause.** In full screen AppKit moves the toolbar into its own window. The Rulers and Grids popover took the button's frame in that window's coordinates and showed it relative to the main window's theme frame, so it hung from the bottom of the screen.
+- **Fix.** `MomentaryToolbarGroup.segmentAnchor` returns the segmented control and the segment's rect in it; `NativeShell.toolbarButtonAnchor` exposes it and the popover shows relative to that view (preferred edge: the button's bottom). `toolbarButtonFrame` (the Layers island's anchor) now converts through the screen when the toolbar is in another window. The open popover follows its button on every layout and closes when the button leaves its control or the window starts entering or leaving full screen. The slow-motion menu opens through the same anchor (`popUpMenu`).
+- **Other menus.** Branch (`NSPopUpButton`), "…" and Publish (`NSMenuToolbarItem`) and chat history open relative to their own controls through AppKit, so they never used main-window coordinates.
+- **Tests.** Native `preview-overlay` (group `core`) opens the popover and the slow-motion menu (cancelled by a timer during tracking) in a normal and a full-screen window and asserts in screen coordinates that each opens under its button and spans its centre (`ToolbarAnchorVerification.swift`). Skipped in background test mode. Split View cannot be entered by a test; it is an operator check.
+
 ## 2026-10-10 — LKM-226: build badge (on main, behind, not on main)
 
 - **Stamp.** `buildInfo` (`scripts/version.mjs`) adds the full sha, the branch (empty when detached), a dirty flag and the exact `v*` tag at HEAD. The bundles get it as `TREZI_BUILD` (`buildStamp()` in `src/native/app-version.ts`); the plists get `TreziBranch`, `TreziDirty` and `TreziTag`.

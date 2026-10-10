@@ -47,6 +47,9 @@ extension Host {
             return result
         case "drag": return try await overlayDrag(overlay, c)
         case "capture": return try await captureOverlay(dark: c["dark"] as? Bool == true)
+        case "anchors": return toolbarAnchorInspect()
+        case "fullscreen": return try await toolbarFullScreen(c["value"] as? Bool == true)
+        case "menu": return toolbarMenuProbe(c["key"] as? String ?? "speed")
         default: break
         }
         return previewOverlayInspect()

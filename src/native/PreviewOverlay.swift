@@ -38,6 +38,10 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
     let popover = NSPopover()
     /// What the last toolbar click did, so a popover that does not open says why.
     private(set) var panelNote = ""
+    /// The control the open popover hangs from; nil while it is closed.
+    private weak var panelAnchor: NSView?
+    /// Between the window's will- and did- full-screen notifications.
+    private(set) var fullScreenTransition = false
 
     init(host: Host) {
         self.host = host
@@ -52,6 +56,10 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
         host.canvas.addSubview(corner, positioned: .above, relativeTo: left)
         popover.behavior = .transient; popover.delegate = self
         host.shell.overlayAction = { [weak self] in self?.togglePanel() }
+        for (name, selector) in [(NSWindow.willEnterFullScreenNotification, #selector(fullScreenWillChange(_:))), (NSWindow.willExitFullScreenNotification, #selector(fullScreenWillChange(_:))),
+                                 (NSWindow.didEnterFullScreenNotification, #selector(fullScreenDidChange(_:))), (NSWindow.didExitFullScreenNotification, #selector(fullScreenDidChange(_:)))] {
+            NotificationCenter.default.addObserver(self, selector: selector, name: name, object: nil)
+        }
     }
 
     // MARK: State
@@ -111,20 +119,42 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
     }
     func togglePanel() {
         panelNote = "toggle"
-        guard let host, let window = host.window, let theme = window.contentView?.superview else { panelNote = "no window"; return }
+        guard let host, host.window != nil else { panelNote = "no window"; return }
         if popover.isShown { panelNote = "closed by toggle"; popover.close(); return }
         guard key != nil else { panelNote = "no project"; return }
-        guard let button = host.shell.toolbarButtonFrame("overlay") else { panelNote = "no toolbar button"; return }
+        guard let (button, rect) = host.shell.toolbarButtonAnchor("overlay") else { panelNote = "no toolbar button"; return }
         if popover.contentViewController == nil {
             let controller = NSHostingController(rootView: PreviewOverlayPanel(overlay: self))
             controller.sizingOptions = .preferredContentSize
             popover.contentViewController = controller
         }
-        popover.show(relativeTo: theme.convert(button, from: nil), of: theme, preferredEdge: theme.isFlipped ? .maxY : .minY)
+        // LKM-229: anchored to the button's own view. In full screen the toolbar is another
+        // window, so the main window's coordinates put the popover at the bottom of the screen.
+        popover.show(relativeTo: rect, of: button, preferredEdge: button.isFlipped ? .maxY : .minY)
+        panelAnchor = button
         panelNote = popover.isShown ? "shown" : "not shown after show"
     }
     func popoverDidClose(_ notification: Notification) {
+        panelAnchor = nil
         panelNote = "closed: " + String(describing: notification.userInfo?[NSPopover.closeReasonUserInfoKey] ?? "unknown")
+    }
+    /// Toolbar relayout (a resize, slow motion's segment leaving or joining the group) moves
+    /// the button: the open popover follows it, or closes when the button left its control.
+    private func reanchorPanel() {
+        guard popover.isShown, let panelAnchor else { return }
+        guard let (button, rect) = host?.shell.toolbarButtonAnchor("overlay"), button === panelAnchor else { panelNote = "closed for toolbar relayout"; popover.close(); return }
+        if popover.positioningRect != rect { popover.positioningRect = rect }
+    }
+    /// Entering or leaving full screen moves the toolbar to another window; the popover closes
+    /// instead of pointing at where the button was.
+    @objc private func fullScreenWillChange(_ notification: Notification) {
+        guard notification.object as? NSWindow === host?.window else { return }
+        fullScreenTransition = true
+        if popover.isShown { panelNote = "closed for full screen"; popover.close() }
+    }
+    @objc private func fullScreenDidChange(_ notification: Notification) {
+        guard notification.object as? NSWindow === host?.window else { return }
+        fullScreenTransition = false
     }
 
     // MARK: Geometry
@@ -145,7 +175,7 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
         for view in [top, left, corner] as [NSView] where view.isHidden == rulers { view.isHidden = !rulers }
         let hidden = !shown || (!state.rulers && state.shownGrids.isEmpty)
         if guides.isHidden != hidden { guides.isHidden = hidden; guides.window?.invalidateCursorRects(for: guides) }
-        redraw(); sendLines()
+        redraw(); sendLines(); reanchorPanel()
     }
     /// The room the rulers take from the page area: they sit beside the page, never over
     /// it, so a guide can go anywhere on the page and dropping on a ruler removes it.

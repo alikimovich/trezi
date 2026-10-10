@@ -42,6 +42,32 @@ export async function checkPreviewOverlay(
       label,
       timeout
     )
+  // Screen frames (y up): the opening's top edge sits at the button's bottom edge.
+  const under = (open: State, button: State, label: string, centred: boolean) => {
+    assert.ok(open && button, `${label}: frames ${JSON.stringify({ open, button })}`)
+    const gap = button.y - (open.y + open.height)
+    assert.ok(gap >= -12 && gap <= 24, `${label} opens under its button (gap ${gap})`)
+    const x = centred ? button.x + button.width / 2 : button.x
+    assert.ok(
+      x >= open.x - 16 && x <= open.x + open.width,
+      `${label} points into its button: ${JSON.stringify({ open, button })}`
+    )
+  }
+  const anchors = async (full: boolean) => {
+    const mode = await test({ action: 'fullscreen', value: full })
+    assert.equal(mode.fullScreen, full, `full screen ${full}`)
+    await test({ action: 'panel' })
+    const shown = await test({ action: 'anchors' })
+    assert.ok(shown.panelShown, `popover shown (full screen ${full})`)
+    under(shown.panel, shown.overlayButton, `Rulers and Grids (full screen ${full})`, true)
+    await test({ action: 'panel' })
+    await until((s) => !s.panelShown, 'overlay popover closed')
+    // A narrow window moves slow motion out of the group (LKM-213); full screen is wide.
+    const menu = await test({ action: 'menu', key: 'speed' })
+    if (!full && !menu.speedButton) return { shown, menu: 'slow motion not in the group' }
+    under(menu.menu, menu.speedButton, `Slow Motion menu (full screen ${full})`, false)
+    return { shown, menu: menu.menu }
+  }
   const first = nativeWorkspace.active!
   const key = (root: string, viewport: string) => JSON.stringify([root, viewport])
   const evidence: Record<string, unknown> = {}
@@ -215,10 +241,17 @@ export async function checkPreviewOverlay(
   })
   await host.request('shellPerform', { action: 'overlay' })
   await until((s) => !s.panelShown, 'overlay popover closed')
+  evidence.focusAfterPopover = (await test({ action: 'anchors' })).focus
 
   if (process.env.TREZI_NATIVE_BACKGROUND_TEST !== '1') {
     for (const dark of [false, true]) {
-      const image = await test({ action: 'capture', dark })
+      const image = await test({ action: 'capture', dark }).catch(async (error) => {
+        const { focus } = await test({ action: 'anchors' })
+        const after = JSON.stringify(evidence.focusAfterPopover)
+        throw new Error(
+          `${error.message} (focus after popover ${after}, now ${JSON.stringify(focus)})`
+        )
+      })
       assert.ok(image.width > 0 && image.dark === dark)
       writeFileSync(
         join(artifacts, `preview-overlay-${dark ? 'dark' : 'light'}.png`),
@@ -226,6 +259,16 @@ export async function checkPreviewOverlay(
       )
     }
   } else evidence.captures = 'skipped: background test'
+  // LKM-229: in a normal and a full-screen window the popover and the slow-motion menu open
+  // under their buttons. Full screen moves the toolbar into its own window.
+  if (process.env.TREZI_NATIVE_BACKGROUND_TEST !== '1') {
+    try {
+      for (const full of [false, true])
+        evidence[full ? 'fullScreen' : 'window'] = await anchors(full)
+    } finally {
+      await test({ action: 'fullscreen', value: false }).catch(() => {})
+    }
+  } else evidence.anchors = 'skipped: background test'
   evidence.final = await inspect()
   writeFileSync(join(artifacts, 'preview-overlay.json'), JSON.stringify(evidence, null, 2))
 }
