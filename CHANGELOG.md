@@ -27,6 +27,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 - Classified provider and workspace errors in compact chat rows with copyable Details, and retry Codex network failures automatically (LKM-225).
+- Branch sync, PR and CI state beside the branch name, with a publish progress indicator, failed-check repair action, an optional macOS notification and local pre-publish checks (LKM-228).
 - Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
 - Quitting while agents work (⌘Q, Quit, closing the window, logout or restart) now asks first: a sheet lists what is still running per project, with Cancel, Wait and Quit (quits when the work ends; cancelable) and Quit Anyway (stops the agents and keeps their work in each chat’s copy, as Stop does). A landing or publish in progress always finishes first, for up to 15 seconds. “Don’t ask again” is also in Settings → General (LKM-221).
 - Native controls and light/dark appearance for the exploded component view.

@@ -31,6 +31,23 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - Added a catalog for provider, workspace and Git failures. Provider errors now render as one compact native incident row with collapsed, copyable Details; repeated errors of the same class in a turn update that row. The real Codex routing-discovery strings are unit fixtures.
 - Codex retries a pre-output network failure up to three times from its supervised helper, checking provider reachability and backing off between attempts. A recovered turn gets a short status; classified incidents and outcomes are logged for Dreamer. Bundled doctor guidance and `docs/SELF-HEAL.md` describe safe diagnosis and the existing recovery paths.
 - Remaining work is tracked in `docs/TASKS.md`: automatic provider fallback and reset-time queueing, same-turn helper restart, owner-mediated Git lock cleanup, automatic Resolve/dev-server actions, and a tool-limited doctor agent.
+## 2026-10-10 — LKM-228 macOS notification and rule date
+
+- A CI failure after Publish now also posts an optional macOS notification (`src/native/HostNotify.swift`, host command `notify`) titled like the toast, with Fix with agent and View checks actions that return as `ci-notification` events to the same handlers (`NativeGitController.notificationAction`). It is gated by Settings → Auto-fix CI failures: Off sends none. The host posts only while Trezi is in the background, asks for notification authorization lazily on the first one, and never in a test run (`TREZI_NATIVE_TEST_DIR`), so no permission prompt appears in automation. `test/native-git.mjs` asserts the request is sent on a failure and not when Off.
+- The `project-memory:ci-rule` stamp uses `memoryDate()` (local date) like every other LKM-177 rule, not the UTC date.
+
+## 2026-10-10 — LKM-228 review repairs
+
+- The Swift workflow owner now records a failed GitHub Actions rerun before the repair action appears. The controller watches the rerun, caps follow-up repair attempts, requires a successful subsequent Publish and green checks before writing one dated project-memory rule, and reports one result row.
+- Branch polling handles `gh api` 304 responses even when gh exits nonzero, avoids concurrent poll chains, and distinguishes closed PRs, newer rerun checks, startup failures and cancelled runs. The toolbar puts a compact CI dot and count ahead of sync and PR details so they stay visible.
+- The pre-publish checklist reads workflow run steps and project rules, executes only defined cheap scripts with a short bound, and warns for unsupported or missing steps. Publish shows a Checking project progress step.
+
+## 2026-10-10 — LKM-228: branch and CI status
+
+- The branch pull-down now shows local and GitHub sync counts, PR state, and the latest branch or merged-base check result. GitHub REST reads cache ETags; running checks refresh in 45 seconds, settled checks in ten minutes, and window focus refreshes immediately. Offline reads leave CI unknown.
+- Publish steps appear beside the branch with a subtle arrow animation that stops under Reduce Motion. A newly failing published commit shows a toast with View checks and, by default, Fix with agent. Settings offers Off, Ask, and Auto.
+- The repair action gives the existing private-worktree background agent bounded failed logs and commit diff, with instructions to land and publish. A landed repair writes a dated Pitfalls rule through the memory owner. Publish checks safe local commands named in CI workflow files or memory and reports commands it cannot run.
+- Quick verification passed; the native run reached the status captures, then the Settings evidence expected the old Experimental picker count. That assertion now recognizes the new CI setting; the worker's native verification call limit prevented a confirming run. The one-time rerun and bounded post-fix watcher still need the Swift workflow owner path.
 ## 2026-10-10 — LKM-230: agents click, type and scroll in their own browser
 
 - **Tool.** `preview_interact` is one tool with an `action` (click, type, press, hover, scroll, select, wait) rather than seven, so the provider lists, policy goldens and rules grow by one name. It runs only against the agent browser (LKM-212); `target: "user"` is refused because driving the visible preview would move the user's page, focus and scroll under them.

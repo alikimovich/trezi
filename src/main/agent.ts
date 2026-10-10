@@ -93,6 +93,7 @@ import {
   type ProjectMemoryUpdateQueue
 } from './project-memory'
 import { refineProjectMemory } from './project-memory-evaluation'
+import { memoryDate } from './project-memory-format'
 import { cancelProjectUi, projectUiInstructions, setProjectUiEnabled } from './project-ui'
 import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
@@ -2049,6 +2050,21 @@ export function registerAgentIpc(
   ipcMain.handle('project-memory:set', (_e, root: string, content: string) =>
     memoryStore().save(root, typeof content === 'string' ? content : '')
   )
+  ipcMain.handle('project-memory:ci-rule', async (_e, root: string, check: string) => {
+    const name = String(check)
+      .replace(/[\r\n<>]/g, ' ')
+      .trim()
+      .slice(0, 120)
+    if (!name) return
+    const date = memoryDate()
+    await memoryUpdateQueue().enqueue(root, async (current) => {
+      const rule = `- Before publishing, reproduce and fix failures from CI check "${name}" using the project's CI workflow. <!-- added ${date} -->`
+      if (current.includes(`CI check "${name}"`)) return null
+      const heading = /^## Pitfalls\s*$/m
+      if (heading.test(current)) return current.replace(heading, `## Pitfalls\n${rule}`)
+      return `${current.trim()}\n\n## Pitfalls\n${rule}`.trim()
+    })
+  })
 
   // User-added model endpoints (v10, `providers:*`). Registered from here, next to
   // the other userData-backed stores, and handed THIS module's `dataDir` so both

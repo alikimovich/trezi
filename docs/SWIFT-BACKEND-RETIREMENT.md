@@ -237,6 +237,8 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/file-tree.ts` | helper | SourceOwner | `git ls-files` read |
 | `src/main/git.ts` | helper | RepositoryOwner | Git reads (work tree, top level, branches) |
 | `src/main/github.ts` | helper | WorkflowOwner | `git remote` and `gh` status reads |
+| `src/main/branch-status.ts` | helper | WorkflowOwner | local Git and GitHub status reads |
+| `src/main/prepublish-checks.ts` | helper | WorkflowOwner | bounded local CI command reads and runs |
 | `src/main/live-change-watch.ts` | helper | RepositoryOwner | `git rev-list` and `git log` reads of the live checkout: commits a Full-access Codex turn's outside changes made, minus Trezi's own (LKM-215) |
 | `src/main/park-reconcile.ts` | helper | RepositoryOwner | `git show` reads of a parked chat's held files; the clear/rebuild runs through the owner (LKM-196) |
 | `src/main/preview-identity.ts` | helper | RepositoryOwner | `git rev-parse HEAD` read of the live checkout: the revision a preview document serves (LKM-200) |

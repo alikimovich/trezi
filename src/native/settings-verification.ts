@@ -158,11 +158,19 @@ export function assertSettingsEvidence(
   assert.equal(evidence.values.projectUi, String(enabled))
   assert.equal(evidence.values.engine, engine, 'Preserve saved engine even while Off')
   const ids = evidence.controls.map((c) => c.id).sort()
+  const ci = evidence.values.autoFixCI
   assert.deepEqual(
     ids,
-    (enabled ? ['projectUi', 'engine'] : ['projectUi']).sort(),
+    (enabled ? ['projectUi', 'engine'] : ['projectUi'])
+      .concat(ci === undefined ? [] : ['autoFixCI'])
+      .sort(),
     'Rendered picker visibility'
   )
+  if (ci !== undefined)
+    assert.equal(
+      evidence.controls.find((c) => c.id === 'autoFixCI')?.selected,
+      ci === 'off' ? 'Off' : ci === 'auto' ? 'Auto' : 'Ask'
+    )
   assert.equal(
     evidence.controls.find((c) => c.id === 'projectUi')?.selected,
     enabled ? 'On' : 'Off'
@@ -177,6 +185,7 @@ export function assertSettingsEvidence(
     'Experimental',
     'Gen UI',
     'Generate UI using your project’s existing components and styles. Experimental; supports React and Svelte.',
+    ...(ci === undefined ? [] : ['Auto-fix CI failures']),
     ...(enabled
       ? [
           'UI layout method',

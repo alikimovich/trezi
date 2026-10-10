@@ -16,6 +16,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Simulate a helper network failure end to end against a real provider (needs authorization for live calls; the stand-in CLI covers it offline).
 - [x] Native foreground capture and JSON geometry for the compact row and expanded Details (`chat` group).
 - [ ] Simulate a helper network failure end to end; verify retries and fallback without a live provider call.
+## Branch and CI status (LKM-228)
+
+- [x] Show ahead/behind, publish step, PR and CI state in the native branch control; poll GitHub with ETags and refresh on focus.
+- [x] Offer CI repair in a background agent and save a dated project-memory rule only after published CI passes; run bounded local checks before Publish.
+- [x] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
+- [ ] Verify native captures and the end-to-end failed CI repair flow.
 ## Agent browser interactions (LKM-230)
 
 - [x] `preview_interact` (click by selector/source/point, type, press, hover, scroll, select, wait for selector/text/network idle) in the agent browser only; `target: "user"` is refused.

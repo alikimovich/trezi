@@ -40,6 +40,36 @@ struct WorkflowTools {
 
     // MARK: Feedback
 
+    /// One failed run is rerun in the repository lane before a repair is offered.
+    func ciRerun(_ record: WorkflowRecord, prior: WorkflowRecord?) throws -> WorkflowOutcome {
+        guard let commit = record.params["commit"]?.text?.string else { throw ServiceContractFailure.invalidRequest }
+        if context.owner.journal.all().contains(where: {
+            $0.id != record.id && $0.kind == "ciRerun" && $0.root == root &&
+            $0.params["commit"]?.text?.string == commit && $0.step("rerun")?.state == "done"
+        }) {
+            return .done(WorkflowOwner.object([("ok", .bool(true)), ("rerun", .bool(true))]))
+        }
+        if let prior, prior.params["commit"]?.text?.string == commit, let step = prior.step("rerun"), step.state == "done" {
+            try context.inherit(step)
+            return .done(WorkflowOwner.object([("ok", .bool(true)), ("rerun", .bool(true))]))
+        }
+        let raw = try context.gh.text(root, ["run", "list", "--commit", commit, "--json", "databaseId,conclusion", "--limit", "10"])
+        guard let data = raw.data(using: .utf8), let runs = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let run = runs.first(where: { $0["conclusion"] as? String == "failure" }),
+              let id = run["databaseId"] as? Int, id > 0 else {
+            return WorkflowContext.fail("No failed GitHub Actions run is available to rerun.")
+        }
+        try context.begin("rerun")
+        do {
+            try context.gh.text(root, ["run", "rerun", String(id), "--failed"], observer: context.observer(interruptible: false))
+            try context.done("rerun", [("runId", .number(Double(id)))])
+            return .done(WorkflowOwner.object([("ok", .bool(true)), ("rerun", .bool(true))]))
+        } catch {
+            context.failed("rerun", "\(error)")
+            return WorkflowContext.fail("GitHub could not rerun the failed jobs.")
+        }
+    }
+
     func feedback(_ record: WorkflowRecord, prior: WorkflowRecord?) throws -> WorkflowOutcome {
         guard let title = record.params["title"]?.text?.string, let body = record.params["body"]?.text?.string else { throw ServiceContractFailure.invalidRequest }
         // Preflight: fail before touching gh.

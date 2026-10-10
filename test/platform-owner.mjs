@@ -83,6 +83,14 @@ async function gone(pid, what, ms = 6000) {
     if (!alive(pid)) return
   assert.fail(`${what} (pid ${pid}) is still running`)
 }
+// A record another process may still be writing counts as absent until it parses.
+function readJsonIfComplete(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return false
+  }
+}
 async function until(test, what, ms = 8000) {
   for (const deadline = Date.now() + ms; Date.now() < deadline; await sleep(50)) {
     const value = await test()
@@ -102,15 +110,6 @@ const calls = () =>
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : []
-const bootStatus = () => {
-  try {
-    return JSON.parse(readFileSync(join(sim, 'bootstatus.json'), 'utf8'))
-  } catch (error) {
-    // The simulator fixture writes this file while the parent polls it.
-    if (error instanceof SyntaxError || error.code === 'ENOENT') return null
-    throw error
-  }
-}
 const metros = () =>
   readdirSync(sim)
     .filter((name) => name.startsWith('metro-'))
@@ -541,7 +540,7 @@ try {
   rmSync(join(sim, 'booted.json'), { force: true })
   mode({ slowBoot: true })
   const booting = pending(owner.simulatorStart({ root: project, command: fakes.metro('ready') }))
-  const status = await until(bootStatus, 'bootstatus')
+  const status = await until(() => readJsonIfComplete(join(sim, 'bootstatus.json')), 'bootstatus')
   await gone(secondMetro.pid, 'the running preview replaced by the new start')
   const stopAt = Date.now()
   await owner.simulatorStop()
@@ -554,7 +553,7 @@ try {
 
   log('a newer start supersedes one still booting')
   const older = pending(owner.simulatorStart({ root: project, command: fakes.metro('ready') }))
-  const waiting = await until(bootStatus, 'bootstatus')
+  const waiting = await until(() => readJsonIfComplete(join(sim, 'bootstatus.json')), 'bootstatus')
   mode({})
   const newer = owner.simulatorStart({ root: project, command: fakes.metro('ready') })
   await rejects(older, 'cancelled')

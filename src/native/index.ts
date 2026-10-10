@@ -642,6 +642,7 @@ async function main() {
     if (channel === 'preview:element-picked') contextController.selection(value)
     else if (channel === 'preview:readiness') contextController.readiness(value)
     else if (channel === 'agent:event') {
+      void gitController.agentEvent(value)
       // LKM-193: a background agent waiting for an answer is the attention-worthy event.
       const attention = agentAttention(value)
       if (attention)
@@ -689,6 +690,10 @@ async function main() {
     (url) => shell.openExternal(url),
     chatController
   )
+  host.on('window-focus', () => {
+    const root = workspaceController.active?.root
+    if (root) void gitController.pollStatus(root)
+  })
   const previewOverlay = installPreviewOverlay({
     host,
     preferences,
@@ -832,6 +837,10 @@ async function main() {
   }
   host.on('shell-action', (action) => {
     const key = action.project ?? workspaceController.state.activeKey
+    if (action.action === 'branch-open-url') {
+      if (action.value?.startsWith('https://github.com/')) void shell.openExternal(action.value)
+      return
+    }
     if (action.action === 'publish-mode') {
       void gitController.setMode(action.value).then(refreshPreferences, reportPreferences)
       return
@@ -966,6 +975,9 @@ async function main() {
   })
   host.on('toast-action', (action) => {
     void sheetController.toastAction(action).catch(console.error)
+  })
+  host.on('ci-notification', (action) => {
+    void gitController.notificationAction(action).catch(console.error)
   })
   const openSheet = (kind: string, key?: string) => {
     if (sheetController.current?.state.busy) return
