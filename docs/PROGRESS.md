@@ -2,6 +2,18 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-226: build badge (on main, behind, not on main)
+
+- **Stamp.** `buildInfo` (`scripts/version.mjs`) adds the full sha, the branch (empty when detached), a dirty flag and the exact `v*` tag at HEAD. The bundles get it as `TREZI_BUILD` (`buildStamp()` in `src/native/app-version.ts`); the plists get `TreziBranch`, `TreziDirty` and `TreziTag`.
+- **State.** `deriveBuildStatus` (`src/shared/build-status.ts`) picks exactly one state. Local facts come first: dirty means Local changes, and a non-main branch means Not on main. Neither needs the network. Then the Settings switch, then offline (no non-link-local interface means Unknown, with no call), then the comparison. Equal or contained with 0 behind is On main, contained is Behind by N, and not contained is Not on main.
+- **Comparison.** `compareWithMain` (`src/main/build-status.ts`) is read-only and never fetches into Trezi's checkout. It runs `git ls-remote origin refs/heads/main`. If that commit exists locally, ancestry and `rev-list --count` decide. Otherwise a GitHub origin is asked through the unauthenticated compare API, and the last fallback is the fetched `origin/main` ancestry (contained, count unknown). The existing Update… flow still does the fetch.
+- **Schedule and UI.** `NativeBuildStatusController` publishes the local state when the host is ready, checks after 3 s and then every 30 minutes (unref'd timers, shared in-flight run), and never blocks startup. Tests inject a null comparison, so the test profile never touches the network.
+  - The sidebar footer is now a stack: `BuildBadge.swift` (dot plus text, tooltip, a Copy Commit context menu), then Activity while it has unread lines. The outline scroll ends above the footer.
+  - A click opens the details sheet: Update… and the `git pull` / `bun run build` steps when behind, plus Copy Commit and Check Now. About Trezi's credits show the same lines.
+  - Settings → General → "Check whether this build is on main" (`settings-build-check.ts`, key `trezi:build-check:v1`).
+- **Support.** The Copy Logs header, the system summary and the feedback diagnostics' new `## Build` section carry `currentBuildLine()`.
+- **Tests.** Unit `build-status` covers derivation, disposable bare-origin repos (equal, not fetched, fetched behind 2, local commit not contained, no remote), the GitHub compare path, the stamp and plist keys, the controller's no-network rules, the details sheet and the setting. Native `build-badge` (group `sidebar`) publishes each state, asserts text, tone, tooltip and no truncation, captures `build-badge-<state>.png` (plus a dark behind capture), and opens the behind details.
+
 ## 2026-10-09 — LKM-223 Phase 0 research and Phase 1 onboarding prototype
 
 - Zed's ACP agents own their auth separately from Zed's built-in agent; Codex also has a separate direct ChatGPT path in Zed. Anthropic's 2026-10-07 help update permits third-party Agent SDK subscription usage under current limits, but the Agent SDK guide still requires prior approval to offer claude.ai login in a third-party product. The researched recommendation therefore uses Codex-managed app-server login and Claude Console API access, with no CLI token-file reading or subscription-token proxying (`docs/research/onboarding-auth.md`).

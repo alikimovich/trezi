@@ -68,10 +68,11 @@ extension Host {
         NSApp.mainMenu = menu
     }
     /// The standard panel reads "Version 0.1.0 (build N, <short sha>)" from the Info.plist the build stamps (LKM-143).
+    /// LKM-226: its credits are the build badge's details (on main or not, branch, tag, check time).
     @objc func showAbout(_ sender: Any?) {
         let info = Bundle.main.infoDictionary ?? [:]
         let build = info["CFBundleVersion"] as? String ?? "", commit = info["TreziCommit"] as? String ?? ""
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: commit.isEmpty ? build : "build \(build), \(commit)"])
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: commit.isEmpty ? build : "build \(build), \(commit)", .credits: buildBadge.aboutCredits])
     }
     @objc func menuAction(_ item: NSMenuItem) {
         let action = item.representedObject as? String ?? ""
