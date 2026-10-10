@@ -118,12 +118,22 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
         control.sendAction(control.action, to: control.target)
         return true
     }
-    /// A segment's frame in window coordinates; nil while the group is not in the window.
-    func segmentFrame(_ identifier: String) -> NSRect? {
+    /// A segment's control and its rect in the control's coordinates; nil while the group is
+    /// not in a window. LKM-229: in full screen the toolbar lives in its own window, so a
+    /// popover or menu anchors to this view, never to window coordinates of the main window.
+    func segmentAnchor(_ identifier: String) -> (view: NSView, rect: NSRect)? {
         let subitems = shown
         guard let index = subitems.firstIndex(where: { $0.itemIdentifier.rawValue == identifier }), control.window != nil, !subitems.isEmpty else { return nil }
         let width = control.bounds.width / CGFloat(subitems.count)
-        return control.convert(NSRect(x: control.bounds.minX + width * CGFloat(index), y: control.bounds.minY, width: width, height: control.bounds.height), to: nil)
+        return (control, NSRect(x: control.bounds.minX + width * CGFloat(index), y: control.bounds.minY, width: width, height: control.bounds.height))
+    }
+    /// A segment's frame in its control's window coordinates.
+    func segmentFrame(_ identifier: String) -> NSRect? { segmentAnchor(identifier).map { $0.view.convert($0.rect, to: nil) } }
+    /// A menu-only subitem's (slow motion) menu, opened under its segment.
+    func popUpMenu(_ identifier: String) {
+        guard let item = shown.first(where: { $0.itemIdentifier.rawValue == identifier }) as? NSMenuToolbarItem,
+              let (view, rect) = segmentAnchor(identifier) else { return }
+        item.menu.popUp(positioning: nil, at: NSPoint(x: rect.minX, y: view.isFlipped ? rect.maxY + 4 : rect.minY - 4), in: view)
     }
     @objc private func activate(_ sender: NSSegmentedControl) {
         let index = sender.selectedSegment, subitems = shown
@@ -133,10 +143,9 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
         defer { sender.setSelected(false, forSegment: index) }
         guard item.isEnabled else { return }
         // A menu-only subitem (slow motion) opens its menu under its segment.
-        if let menuItem = item as? NSMenuToolbarItem, item.action == nil {
+        if item is NSMenuToolbarItem, item.action == nil {
             sender.setSelected(false, forSegment: index)
-            let width = sender.bounds.width / CGFloat(subitems.count)
-            menuItem.menu.popUp(positioning: nil, at: NSPoint(x: sender.bounds.minX + width * CGFloat(index), y: sender.isFlipped ? sender.bounds.maxY + 4 : sender.bounds.minY - 4), in: sender)
+            popUpMenu(item.itemIdentifier.rawValue)
         } else if let action = item.action { NSApp.sendAction(action, to: item.target, from: item) }
     }
 }

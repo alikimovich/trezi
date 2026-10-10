@@ -11,6 +11,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Rules v40: check interactive changes with `preview_interact`; skill, PROVIDERS and agent-browser docs.
 - [x] Unit `agent-interact`; native `agent-interact` (group `core`) on the fixture's `filter.html`, user preview unchanged.
 - [ ] Follow-up: a user-granted allowance for leaving the dev server origin, and blocking page fetches to other hosts.
+## Toolbar popover anchoring in full screen (LKM-229)
+
+- [x] Rulers and Grids popover anchored to the button's own control (not main-window coordinates); follows toolbar relayout, closes on full-screen transitions.
+- [x] Layers island anchor and slow-motion menu go through the same anchor; branch, "…", Publish and history menus are AppKit-anchored to their controls.
+- [x] Native `preview-overlay` (group `core`): popover and slow-motion menu open under their buttons in a normal and a full-screen window.
+- [ ] Operator: every toolbar popover and menu in Split View (a test cannot enter Split View).
 
 ## Build badge: on main, behind or not (LKM-226)
 
