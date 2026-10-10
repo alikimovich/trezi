@@ -9,6 +9,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Offer CI repair in a background agent and save a dated project-memory rule only after published CI passes; run bounded local checks before Publish.
 - [x] Add an owner-managed one-time CI rerun for flaky failures and a bounded post-fix watch.
 - [ ] Verify native captures and the end-to-end failed CI repair flow.
+## Toolbar popover anchoring in full screen (LKM-229)
+
+- [x] Rulers and Grids popover anchored to the button's own control (not main-window coordinates); follows toolbar relayout, closes on full-screen transitions.
+- [x] Layers island anchor and slow-motion menu go through the same anchor; branch, "…", Publish and history menus are AppKit-anchored to their controls.
+- [x] Native `preview-overlay` (group `core`): popover and slow-motion menu open under their buttons in a normal and a full-screen window.
+- [ ] Operator: every toolbar popover and menu in Split View (a test cannot enter Split View).
+
 ## Build badge: on main, behind or not (LKM-226)
 
 - [x] The build stamps the branch, a dirty flag and the exact `v*` release tag (bundles' `TREZI_BUILD`, Info.plist `TreziBranch`/`TreziDirty`/`TreziTag`).

@@ -30,9 +30,17 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var chatReady = false
     /// What the chat gate shows in the header, merged into `shellInspect`.
     func gateInspect() -> [String: Any] { ["chatReady":chatReady, "chatHeaderContentVisible":!chatActions.isHidden || !chatTitle.isHidden] }
-    /// A toolbar button's frame in window coordinates, e.g. to hang the Layers island under it.
+    /// A toolbar button's control and its rect in it, to anchor a popover or menu (LKM-229).
+    func toolbarButtonAnchor(_ key: String) -> (view: NSView, rect: NSRect)? {
+        toolbar?.items.compactMap { $0 as? MomentaryToolbarGroup }.lazy.compactMap { $0.segmentAnchor(key) }.first
+    }
+    /// A toolbar button's frame in the main window's coordinates, e.g. to hang the Layers
+    /// island under it. In full screen the toolbar is another window: convert via the screen.
     func toolbarButtonFrame(_ key: String) -> NSRect? {
-        toolbar?.items.compactMap { $0 as? MomentaryToolbarGroup }.lazy.compactMap { $0.segmentFrame(key) }.first
+        guard let (view, rect) = toolbarButtonAnchor(key), let source = view.window else { return nil }
+        let frame = view.convert(rect, to: nil)
+        guard let window, source !== window else { return frame }
+        return window.convertFromScreen(source.convertToScreen(frame))
     }
     var toolbar: NSToolbar!
     private var toolbarLayout: ToolbarLayout!
