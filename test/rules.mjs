@@ -227,7 +227,8 @@ for (const rules of [withTools, codexObservers]) {
     'preview_evaluate',
     'preview_console',
     'preview_viewport',
-    'preview_speed'
+    'preview_speed',
+    'preview_interact'
   ])
     assert(rules.includes(tool), `preview tools: teaches ${tool}`)
   assert(
@@ -242,6 +243,14 @@ for (const rules of [withTools, codexObservers]) {
     /never just to inspect, evaluate, or screenshot/.test(rules),
     'preview tools: no agent-browser screenshots'
   )
+  // LKM-230: interactive changes are checked by using them in the agent browser.
+  assert(
+    /MUST check an interactive change[\s\S]*by using it in your agent browser with\s+`preview_interact`/.test(
+      rules
+    ),
+    'preview tools: interactive changes are used, not just looked at'
+  )
+  assert(/never drives the user's preview/.test(rules), 'preview_interact: agent browser only')
   assert(!/MUST use `agent-browser`/.test(rules), 'preview tools: agent-browser is not mandatory')
   assert(/--session trezi-<task-id>/.test(rules), 'preview tools: isolated agent-browser sessions')
   assert(
