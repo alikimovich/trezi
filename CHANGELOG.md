@@ -11,7 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
-- Self-healing turns (LKM-225): when Codex cannot connect after its retries the turn runs on Claude (and the other way round) with a note, unless you turn off Settings → General → Automatic provider fallback; a crashed provider helper restarts and resumes the same turn (up to twice); a stale Git `index.lock` is cleared by the repository owner and the Git step retried; a change held because the project moved is resolved once automatically.
+- Self-healing turns (LKM-225): when Codex cannot connect after its retries the turn runs on Claude (and the other way round) with a note, unless you turn off Settings → AI Providers → Automatic provider fallback; a crashed provider helper restarts and resumes the same turn (up to twice); a stale Git `index.lock` is cleared by the repository owner and the Git step retried; a change held because the project moved is resolved once automatically.
 - A build badge in the sidebar footer shows whether this Trezi is on main ("0.1.0 · main ✓"), behind it ("0.1.0 · 3 behind", click for the update steps), not on main or built with local changes; hover or About Trezi shows version, build, commit, branch, release tag and the last check. The check runs in the background at launch and every 30 minutes, makes no network call offline, can be turned off in Settings → General, and Copy Logs for Support and feedback diagnostics include it (LKM-226).
 ### Changed
 - An error Trezi does not recognize now keeps a short, redacted one-line summary on its chat row instead of a generic "Something went wrong".

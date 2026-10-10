@@ -8,7 +8,7 @@
 //   a violation or in a background run;
 // - fallback: a provider that could not connect hands the turn to the other one (with the
 //   conversation), the chat returns on the next message, and the setting gates it;
-// - setting: Settings → General "Automatic provider fallback";
+// - setting: Settings → AI Providers "Automatic provider fallback";
 // - doctor: the deterministic diagnosis (cause, fix applied, next step) for an unrecovered class.
 import assert from 'node:assert/strict'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
@@ -368,7 +368,7 @@ try {
   rmSync(ROOT, { recursive: true, force: true })
 }
 
-// --- Settings → General → Automatic provider fallback -------------------------------------
+// --- Settings → AI Providers → Automatic provider fallback -------------------------------------
 {
   const values = {}
   const handled = []
@@ -377,7 +377,14 @@ try {
     sheets,
     async open() {
       sheets.current = {
-        state: { title: 'Settings', fields: [{ id: 'default' }, { id: 'claudePlugins' }] },
+        state: {
+          title: 'Settings',
+          fields: [
+            { id: 'default', section: 'general' },
+            { id: 'connection', section: 'providers' },
+            { id: 'projectUi', section: 'experimental' }
+          ]
+        },
         handle: async (action) => handled.push(action.action)
       }
     }
@@ -393,10 +400,11 @@ try {
   await settings.open()
   assert.deepEqual(
     sheets.current.state.fields.map((f) => f.id),
-    ['default', 'providerFallback', 'claudePlugins'],
-    'one field, after the default model'
+    ['default', 'connection', 'providerFallback', 'projectUi'],
+    'one field, after the provider picker'
   )
-  assert.equal(sheets.current.state.fields[1].value, 'on', 'on by default')
+  assert.equal(sheets.current.state.fields[2].section, 'providers')
+  assert.equal(sheets.current.state.fields[2].value, 'on', 'on by default')
   await sheets.current.handle({ action: 'save', values: { providerFallback: 'off' } })
   assert.equal(values[PROVIDER_FALLBACK_KEY], 'false')
   await sheets.current.handle({ action: 'save', values: { providerFallback: 'on' } })

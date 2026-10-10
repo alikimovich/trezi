@@ -5,7 +5,7 @@ import type { NativeSettingsController } from './settings-controller'
 import type { NativeSheetController } from './sheets-runtime'
 
 /**
- * LKM-225: Settings → General → "Automatic provider fallback", after the default model.
+ * LKM-225: Settings → AI Providers → "Automatic provider fallback", after the provider list.
  * On (the default): a turn whose provider could not connect, after its own retries, runs on
  * the other signed-in provider once and says so. Off: the error stays. Stored as 'false'.
  */
@@ -21,7 +21,7 @@ export const providerFallbackField = (
   preferences: Pick<NativePreferences, 'get'>
 ): NativeSheetField => ({
   id: 'providerFallback',
-  section: 'general',
+  section: 'providers',
   label: 'Automatic provider fallback',
   help: 'If Codex or Claude cannot connect after a few retries, run that turn on the other one when it is signed in.',
   kind: 'choice',
@@ -40,7 +40,8 @@ export function withProviderFallbackSetting(
       sheet = sheets.current
     if (!sheet || decorated.has(sheet) || sheet.state.title !== 'Settings') return
     decorated.add(sheet)
-    const at = sheet.state.fields.findIndex((f) => f.id === 'default')
+    // After the provider list; the AI Providers pane has room, General is full.
+    const at = sheet.state.fields.map((f) => f.section).lastIndexOf('providers')
     sheet.state.fields.splice(
       at < 0 ? sheet.state.fields.length : at + 1,
       0,

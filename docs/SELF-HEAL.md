@@ -19,7 +19,7 @@ Trezi classifies errors in `src/main/self-heal/catalog.ts`. The native chat show
 
 When every Codex retry failed to connect and the turn produced no output, the turn runs on the other provider (Codex → Claude, Claude → Codex) if that provider is signed in. The helper session (`src/main/backends/helper-session.ts`, with `turn-recovery.ts`) holds the failed turn's `error` and `done`, closes the helper, opens one on the other provider without resuming, posts the status "Codex could not connect; this turn used Claude", and sends the prompt with the recorded conversation ahead of it (`handoffPrompt`). The chat keeps its own provider: its next message goes back to it, again with the recorded conversation, because it has not seen the fallback turn. A fallback turn never falls back again, and background spawns are never moved.
 
-**Settings → General → Automatic provider fallback** (default on) gates it (`src/main/self-heal/fallback.ts`, `src/native/settings-provider-fallback.ts`, preference `trezi:provider-fallback:v1`, stored only when off). If both providers fail the one provider-network error remains.
+**Settings → AI Providers → Automatic provider fallback** (default on) gates it (`src/main/self-heal/fallback.ts`, `src/native/settings-provider-fallback.ts`, preference `trezi:provider-fallback:v1`, stored only when off). If both providers fail the one provider-network error remains.
 
 ## Helper restart
 

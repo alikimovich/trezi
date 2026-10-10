@@ -1,7 +1,7 @@
 import type { AgentOptions } from '../../shared/api'
 import { seatLogin } from '../provider-data'
 
-/** Settings → General → "Automatic provider fallback". Absent means on. */
+/** Settings → AI Providers → "Automatic provider fallback". Absent means on. */
 export const PROVIDER_FALLBACK_KEY = 'trezi:provider-fallback:v1'
 
 let read: () => string | null | undefined = () => null

@@ -31,7 +31,7 @@ extension NativeSheets {
             if let width = command["width"] as? Double {
                 let height = command["height"] as? Double ?? 600
                 guard width >= panel.contentMinSize.width, width <= 1000,
-                      height >= panel.contentMinSize.height, height <= 900 else { throw failure("Invalid Settings test size") }
+                      height >= panel.contentMinSize.height, height <= 800 else { throw failure("Invalid Settings test size") }
                 panel.setContentSize(NSSize(width: width, height: height))
                 panel.center()
             }
@@ -49,7 +49,10 @@ extension NativeSheets {
         }
         content.layoutSubtreeIfNeeded()
         content.displayIfNeeded()
-        let fields = model.state!.fields.filter { $0.kind == "choice" }
+        // Only the selected pane renders; another pane's picker must not match this pane's popup
+        // when both offer the same choices (On/Off).
+        let shown = model.section ?? model.state!.sections?.first?.id
+        let fields = model.state!.fields.filter { $0.kind == "choice" && ($0.section == nil || $0.section == shown) }
         let popups = renderedPickers(in: content).filter { !$0.isHiddenOrHasHiddenAncestor }
         let sidebar = split?.outline
         let sidebarView = split?.sidebarItem.viewController.view
