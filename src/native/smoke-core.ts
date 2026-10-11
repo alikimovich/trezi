@@ -58,14 +58,14 @@ import {
 } from './smoke-runner'
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
-import { checkNativeSheets } from './smoke-sheets'
+import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
-import { checkThreeD } from './smoke-three-d'
+import { checkThreeD, removeThreeDCard } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { checkToolbarMore } from './smoke-toolbar-more'
 import { inspectUntil, waitFor } from './smoke-wait'
@@ -501,6 +501,7 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         host.emit('activity-action', { action: 'hide' })
+        await restoreNativeSheets(host)
       }
     },
     {
@@ -758,6 +759,12 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: async () => {
         layersOriginal = readFileSync(join(fixture, 'index.html'), 'utf8')
+        // `inspector` re-stamps the heading as native-style.tsx and nothing reloads the page after
+        // it; a move across two files goes to the agent and writes nothing. Start from the
+        // fixture's own stamp.
+        await page(
+          `document.querySelector('#native-title').setAttribute('data-trezi-source','index.html:3:1')`
+        )
         layersWindow = (await host.request('inspectorIsland')).window
         await checkLayersIsland(host, artifacts, layersSmoke)
       },
@@ -1053,6 +1060,7 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         if ((await host.request('threeDInspect')).active)
           await host.request('threeDPerform', { action: 'close' })
+        await page(removeThreeDCard)
         if ((await host.request('sourceInspect')).popped)
           await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
         if ((await host.request('sourceInspect')).visible)

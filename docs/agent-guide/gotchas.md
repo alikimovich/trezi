@@ -66,6 +66,12 @@ and provider-seat rules are here.
   invalidation rule in [CACHES.md](../CACHES.md). A new cache must be added there, and
   must listen to `onSourceChange` (`src/main/source-changes.ts`) or the freshness hub
   (`src/native/editor-freshness.ts`), not just to a TTL (LKM-216).
+- **Core Animation does not hit-test 3D transforms, and re-adding a view drops focus.**
+  The exploded view projects plane corners itself (`ThreeDSceneView.layerIndex`), and the
+  layout reorders the scene only when it is out of place (LKM-227).
+- **Smoke `previewInput` clicks go through native hit testing.** A ruler guide left by
+  another check takes clicks near it (`PreviewGuideView`); clear the overlay state first
+  when a check clicks at arbitrary page positions (LKM-227).
 
 ## Agent SDKs and providers
 

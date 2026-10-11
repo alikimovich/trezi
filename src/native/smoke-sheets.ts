@@ -5,6 +5,43 @@ import { dispatchIPC, serviceEvents } from './platform'
 import { checkNativeAlerts } from './smoke-alerts'
 import { preparePreviewInput } from './smoke-input'
 import { checkVisibleSettings } from './smoke-settings'
+/** Cleanup for an aborted run (a focus-loss retry starts over on the same profile): closes any
+ *  sheet and saves the new-profile Settings values the check changes, so the retry sees a new profile. */
+export async function restoreNativeSheets(host: NativeBridge) {
+  const settle = async (check: (state: any) => boolean) => {
+    for (const end = Date.now() + 4000; Date.now() < end; ) {
+      if (check(await host.request('sheetInspect'))) return
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    throw new Error('Native sheet did not settle during cleanup')
+  }
+  if ((await host.request('sheetInspect')).visible) {
+    await host.request('sheetPerform', { action: 'closeWindow' })
+    await settle((state) => !state.visible)
+  }
+  host.emit('menu', { action: 'settings' })
+  await settle((state) => state.visible && state.title === 'Settings')
+  await host.request('sheetPerform', {
+    action: 'change',
+    values: {
+      default: 'last-used',
+      projectUi: 'false',
+      engine: 'agent',
+      claudePlugins: 'false',
+      agentFileAccess: 'full',
+      agentGitAccess: 'managed',
+      agentMerge: 'true',
+      activityAutoOpen: 'problems',
+      quitDontAsk: 'false'
+    }
+  })
+  await settle((state) => !state.busy)
+  // Settings reopens on the last section; a new profile opens on General.
+  await host.request('settingsVerification', { section: 'general' })
+  await settle((state) => state.section === 'general')
+  await host.request('sheetPerform', { action: 'closeWindow' })
+  await settle((state) => !state.visible)
+}
 export async function checkNativeSheets(host: NativeBridge, key: string, artifacts: string) {
   // `timeoutMs` is 4 s unless a wait depends on a real process scan; a timeout names the
   // check that did not settle and the last sheet state instead of a bare message.

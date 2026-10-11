@@ -113,7 +113,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         window.title = "Trezi"; window.minSize = NSSize(width: 850, height: 550)
         window.contentView = canvas; window.delegate = self
         _ = makeView("preview")
-        threeD.preview = views["preview"]
+        threeD.preview = views["preview"]; threeD.world = world
         shell = NativeShell(window: window, canvas: canvas)
         previewSurface = PreviewSurface(preview: views["preview"]!, canvas: canvas, container: canvas.superview!)
         previewSurface.colorChanged = { [weak self] color in self?.shell.updatePreviewColor(color) }
@@ -121,9 +121,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
         canvas.addSubview(previewLoad); canvas.addSubview(speedBadge); canvas.addSubview(statesSwitcher)
+        canvas.addSubview(threeD.backdrop, positioned: .above, relativeTo: views["preview"])
+        canvas.addSubview(threeD.scene, positioned: .above, relativeTo: threeD.backdrop)
         canvas.addSubview(threeD.header); canvas.addSubview(threeD.footer)
-        threeD.header.appearanceChanged = { [weak self] in self?.sendThreeDAppearance() }
-        threeD.footer.appearanceChanged = { [weak self] in self?.sendThreeDAppearance() }
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
@@ -419,7 +419,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             guard !document.isEmpty, let args = body["args"] as? [Any], args.count == 1 else { return }
             if args[0] is NSNull { if threeD.document == document { threeD.clear(); nativeLayout.layout() } }
             else if let state = args[0] as? [String: Any] {
-                threeD.receive(state, document: document); nativeLayout.layout(); sendThreeDAppearance()
+                threeD.receive(state, document: document); nativeLayout.layout()
             }
             return
         }
@@ -444,17 +444,6 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
               window.firstResponder === views["preview"] || threeD.ownsFocus(window.firstResponder) else { return false }
         threeD.model.action("close")
         return true
-    }
-    func sendThreeDAppearance() {
-        guard threeD.active, let view = views["preview"] else { return }
-        let appearance = threeD.header.effectiveAppearance
-        let scale = max(Double(view.pageZoom * view.magnification), 0.01)
-        let insets = threeD.insets
-        let value: [String: Any] = ["type":"event", "channel":"trezi:preview:three-d-appearance",
-            "args":[["palette":threeD.palette(appearance), "top":insets.top / scale, "bottom":insets.bottom / scale,
-                     "left":insets.left / scale, "right":insets.right / scale]]]
-        guard let data = try? JSONSerialization.data(withJSONObject: value), let json = String(data: data, encoding: .utf8) else { return }
-        view.evaluateJavaScript("globalThis.__treziNativeDispatch?.(\(json))", in: nil, in: world) { _ in }
     }
     var recentCrashes: [TimeInterval] = []
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

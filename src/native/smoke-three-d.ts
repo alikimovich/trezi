@@ -11,12 +11,27 @@ const intersects = (a: Rect, b: Rect) =>
   Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x) &&
   Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y)
 
-/** The real isolated preview opens the scene; actions go through native Swift. */
+/** Nested fixture for the exploded view: section > div > h2, section > p > b (5 layers). */
+const CARD = `(() => {
+  document.querySelector('#three-d-card')?.remove();
+  const card = document.createElement('section');
+  card.id = 'three-d-card';
+  card.style.cssText = 'margin:12px;padding:16px;width:320px;background:#f4e3c1;border-radius:12px';
+  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
+  document.body.prepend(card);
+  card.scrollIntoView({ block: 'nearest' });
+  return true;
+})()`
+export const removeThreeDCard = `(() => { document.querySelector('#three-d-card')?.remove(); return true })()`
+
+/** The real isolated preview opens the scene; the host renders it natively (LKM-227). */
 export async function checkThreeD(host: NativeBridge, artifacts: string, fixture: string) {
   const page = (code: string, isolated = false) =>
     host.request('evaluate', { view: 'preview', code, isolated })
   const inspect = () => host.request('threeDInspect')
-  const open = async () => {
+  const perform = (action: string, value?: number) =>
+    host.request('threeDPerform', value === undefined ? { action } : { action, value })
+  const open = async (selector: string) => {
     await preparePreviewInput(host)
     if ((await page('document.documentElement.style.cursor')) !== 'crosshair')
       await host.request('shellPerform', { action: 'select-object' })
@@ -24,8 +39,9 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
       () => page(`document.documentElement.style.cursor === 'crosshair'`),
       '3D select mode'
     )
+    // Inside the element's own padding, so the element itself is picked.
     const point = await page(
-      `(() => { const r = document.querySelector('#native-title').getBoundingClientRect(); return {x:r.x+20,y:r.y+r.height/2} })()`
+      `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x+6,y:r.y+Math.min(6,r.height/2)} })()`
     )
     await host.request('previewInput', point)
     const button = await waitFor(
@@ -41,48 +57,77 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
       '3D toolbar button'
     )
     await host.request('previewInput', button)
+    await waitFor(async () => (await inspect()).active, 'exploded view opened from the toolbar')
     return waitFor(async () => {
       const state = await inspect()
-      return state.active && state.layers.length && state
-    }, 'native exploded chrome')
+      return (
+        state.active &&
+        state.layers.length &&
+        state.capturedRevision === state.revision &&
+        state.rendered === state.layers.length &&
+        state
+      )
+    }, 'native exploded scene rendered')
   }
+  // Clicks go through native hit testing: a guide left near the toolbar would take them.
+  await host.request('previewOverlayTest', { action: 'set', state: {} })
   const viewport = await page('({width:innerWidth,height:innerHeight})')
-  const opened = await open()
+  await page(CARD)
+  const opened = await open('#three-d-card')
   assert.match(opened.headerType, /ThreeDBar/)
   assert.match(opened.footerType, /ThreeDBar/)
+  assert.match(opened.sceneType, /ThreeDSceneView/)
   assert.deepEqual([opened.insets.top, opened.insets.bottom], [48, 76])
-  await waitFor(
-    () =>
-      page(
-        `!!document.querySelector('[data-trezi-three-d]')?.shadowRoot?.activeElement?.classList.contains('stage')`,
-        true
-      ),
-    '3D stage focused after the first appearance'
+  // N layers render natively, each a Core Animation plane holding its capture.
+  assert.deepEqual(opened.layers, [
+    'section#three-d-card',
+    'div#three-d-head',
+    'h2#three-d-heading',
+    'p#three-d-copy',
+    'b#three-d-bold'
+  ])
+  assert.equal(opened.planes, 5)
+  assert.equal(opened.rendered, 5, 'every layer renders natively')
+  assert.equal(opened.sceneHidden, false)
+  assert.equal(opened.message, '', 'no fallback message over a captured scene')
+  assert.equal(opened.countLabel, '5 layers')
+  assert.match(opened.status, /^5 layers · /)
+  // Captured at the backing scale: the card's surface keeps its pixel density.
+  assert.ok(
+    opened.imageSizes[0][0] >=
+      Math.floor(opened.layerWidths[0] * opened.atlasScale * opened.backing * 0.95),
+    `Retina capture (${JSON.stringify(opened.imageSizes[0])}, scale ${opened.atlasScale}, backing ${opened.backing})`
   )
+  const sceneRect: Rect = opened.sceneRect
+  assert.ok(
+    sceneRect.y >= opened.headerRect.y + opened.headerRect.height - 0.5 &&
+      sceneRect.y + sceneRect.height <= opened.footerRect.y + 0.5,
+    'the native scene fills the preview between the bars'
+  )
+  await waitFor(async () => (await inspect()).focus === 'scene', 'native scene focused on open')
   assert.equal(
     await page(
       `getComputedStyle(document.querySelector('[data-trezi-three-d]').shadowRoot.querySelector('dialog')).backgroundColor`,
       true
     ),
     'rgba(0, 0, 0, 0)',
-    'the modal dialog paints nothing of its own'
+    'the capture dialog paints nothing between snapshots'
   )
-  const transform = () =>
-    page(
-      `document.querySelector('[data-trezi-three-d]')?.shadowRoot?.querySelector('.scene')?.style.transform`,
+  assert.equal(
+    await page(
+      `document.querySelector('[data-trezi-three-d]').shadowRoot.querySelectorAll('.scene,.stage').length`,
       true
-    )
-  const beforeCamera = await transform()
+    ),
+    0,
+    'no in-page CSS scene'
+  )
   const pageInputs = await page('window.previewInputs?.length ?? 0')
   await host.request('previewInput', { key: 'ArrowRight' })
-  await waitFor(async () => (await transform()) !== beforeCamera, 'arrow key rotates the 3D camera')
-  const afterArrow = await transform()
-  await host.request('previewInput', { key: '+' })
-  await waitFor(async () => (await transform()) !== afterArrow, 'plus key zooms the 3D camera')
+  await page('true', true)
   assert.equal(
     await page('window.previewInputs?.length ?? 0'),
     pageInputs,
-    'camera keys do not leak to the live page'
+    'keys do not leak to the live page'
   )
   assert.deepEqual(
     await page('({width:innerWidth,height:innerHeight})'),
@@ -90,28 +135,48 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     'live viewport stays unchanged'
   )
   assert.ok(
-    await page(`document.querySelector('#native-title').isConnected`),
+    await page(`document.querySelector('#three-d-card').isConnected`),
     'live component remains mounted'
   )
-  assert.equal(await host.request('threeDPerform', { action: 'front' }), true)
-  await waitFor(async () => (await inspect()).separation === 0, 'Front syncs the slider')
-  assert.match(await transform(), /rotateX\(0deg\) rotateY\(0deg\)/)
-  await host.request('threeDPerform', { action: 'separation', value: 82 })
-  await waitFor(async () => (await inspect()).separation === 82, 'native slider syncs the scene')
-  await host.request('threeDPerform', { action: 'reset' })
-  await waitFor(async () => (await inspect()).separation === 36, 'Reset syncs the slider')
-  const selectedLayer = opened.layers.length > 1 ? 1 : 0
-  await host.request('threeDPerform', { action: 'layer', value: selectedLayer })
-  await waitFor(
-    async () => (await inspect()).selected === selectedLayer,
-    'native picker selects a layer'
-  )
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.5
+  // Front assembles the layers face-on, Reset restores the camera; the slider follows.
+  assert.equal(await perform('front'), true)
+  const front = await waitFor(async () => {
+    const s = await inspect()
+    return s.pitch === 0 && s.yaw === 0 && s.separation === 0 && near(s.spacing, 0) && s
+  }, 'Front assembles the layers')
+  assert.equal(front.sceneSeparation, 0)
+  await perform('separation', 82)
+  await waitFor(async () => {
+    const s = await inspect()
+    return s.separation === 82 && near(s.spacing, 82)
+  }, 'separation changes the native layer spacing')
+  await perform('separation', 20)
+  await waitFor(async () => near((await inspect()).spacing, 20), 'spacing follows the slider live')
+  await perform('reset')
+  await waitFor(async () => {
+    const s = await inspect()
+    return s.pitch === 48 && s.yaw === -28 && s.separation === 36 && near(s.spacing, 36)
+  }, 'Reset restores the camera and spacing')
+  // Clicking a layer (the scene's own hit test) selects the element; the inspector follows.
+  const leaf = opened.layers.indexOf('b#three-d-bold')
+  assert.equal(await perform('hover', leaf), 'b#three-d-bold', 'hover shows the layer label')
+  assert.equal((await inspect()).hovered, leaf, 'hover highlights the layer')
+  await perform('hover')
+  assert.equal(await perform('click', leaf), leaf, 'click hits the front-most layer')
+  await waitFor(async () => {
+    const s = await inspect()
+    return s.selected === leaf && s.sceneSelected === leaf
+  }, 'clicked layer is selected in the scene and the picker')
   await waitFor(
     async () => (await host.request('inspectorInspect')).visible,
-    'picker opens the inspector'
+    'clicking a layer opens the inspector'
   )
+  const heading = opened.layers.indexOf('h2#three-d-heading')
+  await perform('layer', heading)
+  await waitFor(async () => (await inspect()).sceneSelected === heading, 'picker selects a layer')
   if ((await inspect()).code) {
-    await host.request('threeDPerform', { action: 'code' })
+    await perform('code')
     await waitFor(
       async () => (await host.request('sourceInspect')).visible,
       'Code opens source editor'
@@ -159,41 +224,43 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   })
   await page('true', true)
   assert.equal((await inspect()).selected, live.selected, 'stale layer index is rejected')
-  host.send('deliver', {
-    view: 'preview',
-    message: {
-      type: 'event',
-      channel: PREVIEW_THREE_D_ACTION,
-      args: [
-        { session: live.session, revision: live.revision - 1, action: 'separation', value: 41 }
-      ]
-    }
-  })
-  await waitFor(async () => (await inspect()).separation === 41, 'slider action survives a refresh')
-  for (const [action, expected] of [
-    ['front', 0],
-    ['reset', 36]
-  ] as const) {
-    host.send('deliver', {
-      view: 'preview',
-      message: {
-        type: 'event',
-        channel: PREVIEW_THREE_D_ACTION,
-        args: [{ session: live.session, revision: live.revision - 1, action }]
-      }
-    })
-    await waitFor(
-      async () => (await inspect()).separation === expected,
-      `${action} survives a refresh`
-    )
-  }
+  const backgrounds: string[] = []
   for (const [name, dark] of [
     ['light', false],
     ['dark', true]
   ] as const) {
     const image = await host.request('threeDCapture', { dark })
     writeFileSync(join(artifacts, `three-d-${name}.png`), Buffer.from(image.png, 'base64'))
+    backgrounds.push(image.background)
   }
+  assert.notEqual(backgrounds[0], backgrounds[1], 'scene background follows light and dark')
+  // Capture failure: a clear native message, never a blank scene; a new capture recovers.
+  await host.request('threeDPerform', { action: 'recapture', fail: true })
+  const failed = await waitFor(async () => {
+    const s = await inspect()
+    return s.message.includes("couldn't capture") && s
+  }, 'capture failure shows the native fallback message')
+  assert.equal(failed.planes, 0, 'no blank planes behind the fallback message')
+  const imageFailed = await host.request('threeDCapture', { dark: false })
+  writeFileSync(join(artifacts, 'three-d-failed.png'), Buffer.from(imageFailed.png, 'base64'))
+  await perform('recapture')
+  await waitFor(async () => {
+    const s = await inspect()
+    return s.message === '' && s.rendered === s.layers.length
+  }, 'a later capture replaces the fallback message')
+  // A capture still running when the view closes must not strand the next session on
+  // "Capturing layers…": hold one capture, close, reopen, and the new scene renders again.
+  await host.request('threeDPerform', { action: 'recapture', hold: 2500 })
+  await perform('close')
+  await waitFor(async () => !(await inspect()).active, 'Back closes while a capture is running')
+  const reopened = await open('#three-d-card')
+  assert.notEqual(
+    reopened.session,
+    opened.session,
+    'reopening during a capture starts a new session'
+  )
+  assert.equal(reopened.rendered, reopened.layers.length, 'the reopened scene renders its layers')
+  assert.equal(reopened.message, '', 'no stuck capturing message after a quick reopen')
   const original = (await host.request('inspectorIsland')).window
   try {
     await host.request('inspectorIsland', { windowWidth: 850, windowHeight: 650 })
@@ -217,48 +284,34 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal(await host.request('threeDEscape'), true, 'Escape is handled from chrome focus')
   await waitFor(async () => !(await inspect()).active, 'Escape with native chrome focus closes')
   assert.equal((await inspect()).focus, 'preview', 'native focus returns to WebKit')
+  assert.equal((await inspect()).sceneHidden, true, 'native scene hidden after close')
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 0)
+  await page(removeThreeDCard)
 
-  const second = await open()
+  // A single element: one layer, singular label.
+  const second = await open('#native-title')
   assert.notEqual(second.session, opened.session, 'reopening creates a new session')
+  assert.equal(second.countLabel, '1 layer')
+  assert.match(second.status, /^1 layer · /)
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 1)
-  const sceneSelected = () =>
-    page(
-      `Number(document.querySelector('[data-trezi-three-d]')?.shadowRoot?.querySelector('[data-selected]')?.dataset.layer ?? -1)`,
-      true
-    )
-  const beforeStale = await inspect()
-  assert.equal(beforeStale.selected, await sceneSelected(), 'native picker starts in sync')
-  // The fixture component can be a single layer; the stale action then targets layer 0.
-  const other = Math.max(
-    0,
-    beforeStale.layers.findIndex((_: string, index: number) => index !== beforeStale.selected)
-  )
   host.send('deliver', {
     view: 'preview',
     message: {
       type: 'event',
       channel: PREVIEW_THREE_D_ACTION,
-      args: [
-        {
-          session: beforeStale.session,
-          revision: beforeStale.revision + 5,
-          action: 'layer',
-          value: other
-        }
-      ]
+      args: [{ session: second.session, revision: second.revision + 5, action: 'layer', value: 0 }]
     }
   })
   await page('true', true)
   await waitFor(async () => {
-    const [native, scene] = [(await inspect()).selected, await sceneSelected()]
-    return native === scene && scene === beforeStale.selected
-  }, 'stale-revision layer action is rejected and the native picker matches the scene')
-  await host.request('threeDPerform', { action: 'close' })
+    const s = await inspect()
+    return s.selected === second.selected && s.sceneSelected === second.selected
+  }, 'stale-revision layer action is rejected and the scene matches the picker')
+  await perform('close')
   await waitFor(async () => !(await inspect()).active, 'Back closes native chrome')
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 0)
 
-  const samePage = await open()
+  const samePage = await open('#native-title')
   assert.notEqual(samePage.session, second.session, 'reopening creates a new session')
   await page(`(() => { history.pushState({}, '', '#x'); return true })()`)
   await waitFor(
@@ -271,7 +324,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     'same-document URL change closes the modal scene'
   )
 
-  const third = await open()
+  const third = await open('#native-title')
   await page(`(() => {
     const original = document.querySelector('#native-title');
     original.replaceWith(original.cloneNode(true));
@@ -283,10 +336,11 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   }, 'unique HMR replacement recovers the selected layer')
   const beforeRemoval = await inspect()
   await page(`(() => { document.querySelector('#native-title').remove(); return true })()`)
-  await waitFor(
-    async () => (await inspect()).status.includes('removed'),
-    'removed target invalidates the scene'
-  )
+  const removed = await waitFor(async () => {
+    const s = await inspect()
+    return s.status.includes('removed') && s.message.includes('removed') && s
+  }, 'removed target invalidates the scene with a native message')
+  assert.equal(removed.planes, 0)
   host.send('deliver', {
     view: 'preview',
     message: {
@@ -307,7 +361,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   await host.request('reload', { view: 'preview' })
   await waitFor(async () => !(await inspect()).active, 'navigation clears native chrome')
   const cleared = await inspect()
-  assert.ok(cleared.headerHidden && cleared.footerHidden)
+  assert.ok(cleared.headerHidden && cleared.footerHidden && cleared.sceneHidden)
   await waitFor(() => page(`!!document.querySelector('#native-title')`), 'fixture after navigation')
   assert.deepEqual(await page('({width:innerWidth,height:innerHeight})'), viewport)
 }
