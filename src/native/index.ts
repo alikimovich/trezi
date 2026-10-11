@@ -684,7 +684,7 @@ async function main() {
   // LKM-179: the Layers tree selects and reveals whatever the preview has selected.
   inspectorController.onElement = (element) => layersController.selected(element)
   const sheetController = new NativeSheetController(host!, workspaceController, chatController)
-  installNativeStart(chatController, workspaceController, () => sheetController.newProject())
+  installNativeStart(chatController, workspaceController)
   const gitController = new NativeGitController(
     sheetController,
     activityController,
@@ -994,7 +994,7 @@ async function main() {
       supportSheets.diagnose(workspaceController.state.activeKey)
     else if (kind === 'review' && key)
       void reviewController.open(key).catch((error) => workspaceController.reportError(error))
-    else if (kind === 'new-project') sheetController.newProject()
+    else if (kind === 'new-project') void chatController.beginPlanning(false)
     else if (kind === 'memory' && key)
       void sheetController.memory(key).catch((error) => workspaceController.reportError(error))
   }
@@ -1141,6 +1141,7 @@ async function main() {
       preferred: resolvePreferredSettings(parsePreferredModelState(preferred))
     })
     await chatController.command({ type: 'attach' })
+    if (!workspaceController.active && !testing) await chatController.resumePlanning()
     // LKM-232: the centered start screen; the smoke suite opts in from its own check.
     if (!testing) chatController.checkReadiness()
     if (requestedProject && !testing)

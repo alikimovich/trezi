@@ -68,7 +68,6 @@ struct StartContent: View {
                             Button(recent.name) { run("start-recent", recent.root) }.help(recent.root)
                         }
                         Button("Open Project…") { run("start-open") }
-                        Button("New Project…") { run("start-new") }
                     }.controlSize(.small).buttonStyle(.bordered).lineLimit(1)
                 }
             }
@@ -130,7 +129,8 @@ extension WorkspaceLayout {
         let chat = chatState["chat"] as? String ?? ""
         let target: CGFloat = wantsCentered ? 0 : 1
         guard chat != start.chat || target != start.target else { return }
-        let glide = chat == start.chat && target == 1 && start.progress < 1 && !start.reduced
+        let planningArrival = start.chat == "" && startState["planning"] as? Bool == true
+        let glide = (chat == start.chat || planningArrival) && target == 1 && start.progress < 1 && !start.reduced
         let appeared = target == 0 && (chat != start.chat || start.target != 0)
         start.chat = chat; start.target = target
         start.timer?.invalidate(); start.timer = nil
@@ -190,7 +190,12 @@ extension WorkspaceLayout {
             if !tint.isEmpty { appearance.performAsCurrentDrawingAppearance { color = NSColor.windowBackgroundColor.usingColorSpace(.sRGB) ?? color } }
             host.shell.updatePreviewColor(color)
         }
-        let welcome = host.welcome.wanted && !(starting && startState["home"] as? Bool == true)
+        if host.welcome.model.planning != planning { host.welcome.model.planning = planning }
+        if planning {
+            let left = width() * fraction
+            host.welcome.frame = NSRect(x: left, y: 0, width: max(0, bounds.width - left), height: bounds.height)
+        } else { host.welcome.frame = bounds }
+        let welcome = planning || (host.welcome.wanted && !(starting && startState["home"] as? Bool == true))
         if host.welcome.isHidden == welcome { host.welcome.isHidden = !welcome; host.welcome.model.cat.show(welcome) }
     }
     func startInspect() -> [String: Any] {

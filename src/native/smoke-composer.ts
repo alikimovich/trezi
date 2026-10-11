@@ -3,10 +3,12 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { nativeWorkspace } from './workspace-runtime'
 
 /** Foreground composer evidence; provider calls are intercepted, never sent. */
 export async function checkVisibleComposer(host: NativeBridge, fixture: string, artifacts: string) {
   const initial = await host.request('chatAcceptance', { prepare: true })
+  const preferred = { ...nativeWorkspace.preferred }
   try {
     for (const width of [440, 320]) {
       // Re-activate before each pass: the window may lose key status between passes
@@ -17,6 +19,11 @@ export async function checkVisibleComposer(host: NativeBridge, fixture: string, 
   } finally {
     // Always restore the width, even after a failure, so later checks start from it.
     await host.request('chatAcceptance', { prepare: true, width: initial.chatWidth })
+    assert.deepEqual(
+      nativeWorkspace.preferred,
+      preferred,
+      'Composer checks restore the preferred model'
+    )
   }
 }
 
@@ -273,6 +280,7 @@ async function checkComposerAtWidth(
     nativeChat.services.invoke = invoke
     nativeChat.choices = choices
     chat.settings = settings
+    nativeChat.settingsChanged(chat)
     nativeChat.changed(chat)
   }
 }

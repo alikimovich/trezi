@@ -66,17 +66,6 @@ export async function checkNativeSheets(host: NativeBridge, key: string, artifac
   )
   await host.request('sheetPerform', { action: 'cancel' })
   await wait((state) => !state.visible)
-  await host.request('shellPerform', { action: 'new-project' })
-  const projectWindow = await wait((state) => state.visible && state.title === 'New project')
-  if (projectWindow.attached || !projectWindow.closable || !projectWindow.resizable)
-    throw new Error('Forms must use standalone native windows with window controls')
-  await new Promise((resolve) => setTimeout(resolve, 250))
-  writeFileSync(
-    join(artifacts, 'new-project.png'),
-    Buffer.from(await host.request('captureSheet'), 'base64')
-  )
-  await host.request('sheetPerform', { action: 'closeWindow' })
-  await wait((state) => !state.visible)
   host.emit('shell-action', { action: 'memory', project: key })
   await wait((state) => state.visible && state.fields.includes('content'))
   await host.request('sheetPerform', {
