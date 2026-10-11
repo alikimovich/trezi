@@ -124,6 +124,13 @@ export function snapshot(
   const selection = resolveSelection(providers, chat.settings)
   const { provider, model, permissionMode } = chat.settings
   const cards: NativeChatCard[] = []
+  if (start?.planning)
+    cards.push({
+      id: 'planning',
+      title: 'New project',
+      detail: 'Plan here. No project files are created until you confirm the destination.',
+      actions: [{ label: 'Cancel project', action: 'planning-cancel' }]
+    })
   if (chat.error)
     cards.push({
       id: 'error',
@@ -251,7 +258,7 @@ export function snapshot(
       thinking,
       enabled:
         ready &&
-        (!start?.centered || start.ready) &&
+        (!(start?.centered || start?.planning) || start.ready) &&
         (stop || (!chat.switching && (!!chat.text.trim() || !!chat.attachments.length))),
       sendLabel: stop ? 'Stop' : sendBlock(chat) ? 'Queue message' : 'Send message',
       context: (context?.selection ?? chat.draftSelection)?.label ?? '',

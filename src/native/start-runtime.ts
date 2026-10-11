@@ -9,8 +9,7 @@ import type { NativeWorkspaceController } from './workspace-controller'
  */
 export function installNativeStart(
   chat: NativeChatController,
-  workspace: NativeWorkspaceController,
-  newProject: () => void
+  workspace: NativeWorkspaceController
 ) {
   chat.start.workspace = {
     project: () => workspace.active?.name ?? null,
@@ -22,7 +21,7 @@ export function installNativeStart(
   const effect = chat.services.effect
   chat.services.effect = (value) => {
     if (value.type === 'start-project') {
-      if (value.create) newProject()
+      if (value.create) void chat.beginPlanning(false)
       else
         void workspace
           .command({ type: 'open', ...(value.root ? { root: value.root } : {}) })
@@ -30,6 +29,27 @@ export function installNativeStart(
     } else if (value.type === 'start-chat') {
       const entry = workspace.state.projects.find((p) => p.root === value.root)
       if (entry) void workspace.command({ type: 'new-chat', key: entry.key }).catch(fail)
+    } else if (value.type === 'planning-created') {
+      const planning = chat.start.planningKey ? chat.chats.get(chat.start.planningKey) : undefined
+      const preferred = workspace.preferred
+      if (planning) workspace.preferred = { ...planning.settings }
+      void workspace
+        .command({ type: 'open', root: value.root })
+        .then(async () => {
+          chat.start.planningKey = null
+          chat.start.returnChat = null
+          const active = workspace.active
+          if (active)
+            await chat.command({
+              type: 'submit',
+              chat: active.activeSessionKey,
+              text: 'Continue implementing the project we planned in this conversation.'
+            })
+        })
+        .catch(fail)
+        .finally(() => {
+          workspace.preferred = preferred
+        })
     } else effect(value)
   }
   // The no-project screen shows the workspace's own progress ("Opening Site…") and recents.

@@ -19,6 +19,8 @@ import type {
 import { backgroundAgentOptions, describeAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
 import type { ChatRecordLookup } from '../shared/chat-islands'
+import type { ChatAgentSettings } from '../shared/chat-settings'
+import type { ChatUiAnswer } from '../shared/chat-ui'
 import { dependencyNotice } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
@@ -94,6 +96,7 @@ import {
 } from './project-memory'
 import { refineProjectMemory } from './project-memory-evaluation'
 import { memoryDate } from './project-memory-format'
+import { PLANNING_PROJECT, type PlanningAttachment, ProjectPlanning } from './project-planning'
 import { cancelProjectUi, projectUiInstructions, setProjectUiEnabled } from './project-ui'
 import { providerOwner } from './provider-owner'
 import { startProviderSession } from './provider-sessions'
@@ -102,6 +105,7 @@ import { generatePublishDescription } from './publish-description'
 import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
 import type { RpcHandlerRegistry } from './rpc-router'
+import { createProject } from './scaffold'
 import { incidents } from './self-heal/incidents'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
@@ -177,6 +181,25 @@ const memoryUpdateQueue = (): ProjectMemoryUpdateQueue =>
     for (const listener of memoryUpdateListeners) listener(update)
   }))
 const memoryUpdateListeners = new Set<(update: ProjectMemoryUpdate) => void>()
+let planningSmoke: {
+  complete: (prompt: string, options: AgentOptions, signal: AbortSignal) => Promise<string | null>
+  create: (
+    root: string,
+    template: 'react' | 'empty'
+  ) => Promise<{ ok: boolean; root?: string; error?: string }>
+} | null = null
+/** Native test profile only: deterministic planning intelligence with the real owners. */
+export function stubPlanningForSmoke(stub: NonNullable<typeof planningSmoke>) {
+  if (!process.env.TREZI_NATIVE_TEST_DIR)
+    throw new Error('Planning stubs need a native test profile.')
+  const prior = planningSmoke
+  planningSmoke = stub
+  return {
+    restore: () => {
+      planningSmoke = prior
+    }
+  }
+}
 /** Hears every automatic memory update the owner committed (the native note). */
 export function onProjectMemoryUpdated(
   listener: (update: ProjectMemoryUpdate) => void
@@ -946,6 +969,40 @@ export function registerAgentIpc(
 ): void {
   ipcMain = router
   getWindow_ = getWindow // share with finalizeSpawn (runs outside this closure)
+  const planning = new ProjectPlanning({
+    owner: {
+      save: (record, current) => conversation().save(record, current),
+      remove: (id) => conversation().remove(id)
+    },
+    store: {
+      current: (key) => store().current(key),
+      get: (id) => store().get(id)
+    },
+    complete: (prompt, options, signal) =>
+      planningSmoke?.complete(prompt, options, signal) ??
+      pickProvider(options).complete?.(prompt, options, signal) ??
+      Promise.resolve(null),
+    create: (root, template) =>
+      planningSmoke?.create(root, template) ?? createProject(root, { template })
+  })
+  ipcMain.handle('planning:resume', () => planning.resume())
+  ipcMain.handle('planning:start', (_e, settings: ChatAgentSettings) => planning.start(settings))
+  ipcMain.handle('planning:options', (_e, id: string, settings: ChatAgentSettings) =>
+    planning.options(id, settings)
+  )
+  ipcMain.handle(
+    'planning:send',
+    (
+      _e,
+      id: string,
+      turn: string,
+      text: string,
+      options: AgentOptions,
+      attachments: PlanningAttachment[]
+    ) => planning.send(id, turn, text, options, attachments)
+  )
+  ipcMain.handle('planning:cancel', (_e, id: string) => planning.cancel(id))
+  ipcMain.handle('planning:stop', (_e, id: string) => planning.stop(id))
   // v9 per-chat worktree isolation — deps-injected so this module barely grows.
   initChatIsolation({ worktreesDir, store, getWindow, describe: describeChangeWith })
   // LKM-136: idle and old-name chat workspace cleanup; Settings shows the usage.
@@ -1595,7 +1652,9 @@ export function registerAgentIpc(
     find: (key, id) => sessions.get(key)?.record.transcript.find((e) => e.ui?.id === id)?.ui
   })
   ipcMain.handle('agent:chat-ui-answer', (_e, key: string, id: string, answer: unknown) =>
-    answerChatUi(key, id, answer)
+    key === planning.resume()?.id || key === PLANNING_PROJECT
+      ? planning.answer(key, id, answer as ChatUiAnswer)
+      : answerChatUi(key, id, answer)
   )
 
   /** LKM-182: a send to a chat still being prepared waits for what is missing. Stop
@@ -1746,7 +1805,16 @@ export function registerAgentIpc(
         if (preparation.cancelled || sessions.get(key) !== session)
           throw new Error('Message cancelled before sending.')
         // A model switch: the fresh provider gets the recorded conversation, once.
-        const history = handoff ? (handoffHistory.get(key) ?? []) : []
+        const planningHistory = session.record.planningCompleted
+          ? session.record.transcript.slice(0, -1)
+          : []
+        if (session.record.planningCompleted) {
+          session.record.planningCompleted = false
+          void conversation()
+            .checkpoint(key, session.record)
+            .catch(() => {})
+        }
+        const history = handoff ? (handoffHistory.get(key) ?? []) : planningHistory
         if (handoff) handoffHistory.delete(key)
         // LKM-182: a new chat's dependency install may still be running.
         const installNotice = dependencies

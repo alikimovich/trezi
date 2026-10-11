@@ -165,12 +165,13 @@ final class WorkspaceLayout {
     }
     /// The selected project finished opening. Before that (opening, failed open) the
     /// column keeps its width, so nothing moves when the chat appears, but stays empty.
-    var chatReady: Bool { shellState["project"] is String && shellState["chatReady"] as? Bool == true }
+    var planning: Bool { (chatState["start"] as? [String: Any])?["planning"] as? Bool == true }
+    var chatReady: Bool { planning || (shellState["project"] is String && shellState["chatReady"] as? Bool == true) }
     func layout() {
         guard let host, !layingOut else { return }
         layingOut = true; defer { layingOut = false }
         let bounds = host.canvas.bounds
-        let leading: CGFloat = shellState["project"] is String ? width() * fraction : 0
+        let leading: CGFloat = shellState["project"] is String || planning ? width() * fraction : 0
         host.shell.setChatGeometry(leading)
         let state = nativeChatState()
         host.chat.place(state, composer: host.composer)

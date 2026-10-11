@@ -6,6 +6,7 @@ final class WelcomeModel: ObservableObject {
     @Published var busy = true
     @Published var label = "Opening Trezi…"
     @Published var recents: [WelcomeRecent] = []
+    @Published var planning = false
     let cat = CatAnimator()
     init() { cat.update(running: true, questioning: false) }
 }
@@ -13,12 +14,18 @@ struct WelcomeContent: View {
     @ObservedObject var model: WelcomeModel
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            Color.clear
+            if model.planning { Color(nsColor: .windowBackgroundColor) }
+            else { Color.clear }
             VStack(spacing: 20) {
                 if model.busy {
                     NativeCat(animator: model.cat).scaleEffect(1.5).padding(12)
                     Text(model.label).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 } else {
+                    if model.planning {
+                        Text("Planning your project").font(.headline)
+                        Text("Choose the details in chat. Your project will appear here after you confirm its destination.")
+                            .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    } else {
                     if !model.label.isEmpty { Text(model.label).foregroundStyle(.secondary).multilineTextAlignment(.center) }
                     if !model.recents.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -35,6 +42,7 @@ struct WelcomeContent: View {
                         Button("Open project") { emit(["event":"menu", "action":"open-project"]) }.keyboardShortcut("o", modifiers: .command)
                         Button("New project") { emit(["event":"menu", "action":"new-project"]) }
                     }.controlSize(.large)
+                    }
                 }
             }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
             if !model.busy { NativeCat(animator: model.cat).padding(20) }

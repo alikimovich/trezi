@@ -74,6 +74,10 @@ const sameModel = (a: ChatAgentSettings, b: ChatAgentSettings) =>
 export class StartFlow {
   /** Off in the smoke suite until a check opts in, so other groups keep their layout. */
   enabled = false
+  /** The app-managed conversation that is planning a project before a repository exists. */
+  planningKey: string | null = null
+  /** The project chat to return to when New Project is cancelled. */
+  returnChat: string | null = null
   /** A send from the no-project draft waits for a destination. */
   pending = false
   /** The chat whose draft follows the next chat switch (a project picked from it). */
@@ -122,14 +126,11 @@ export class StartFlow {
       !chat.sending &&
       !chat.login &&
       !blocked(chat)
-    const centered =
-      this.enabled &&
-      empty &&
-      (home ||
-        ((chat.ready || this.target === chat.chat) && (usable.length > 0 || checking(readiness))))
+    const centered = this.enabled && empty && home
     return {
       centered,
       home,
+      planning: chat.chat === this.planningKey,
       ready: selectable(chat, usable),
       heading: START_HEADING,
       notice: centered ? this.notice(chat, usable, readiness) : undefined,
@@ -196,14 +197,14 @@ export class StartFlow {
     if (!raw.trim() && !chat.attachments.length) return
     if (!selectable(chat, usableProviders(controller.choices, controller.readiness))) return
     chat.text = raw
-    this.pending = true
-    controller.changed(chat)
+    void controller.beginPlanning(true)
   }
 
-  /** A centered chat whose selected provider cannot answer keeps its draft unsent. */
+  /** A home or planning chat whose selected provider cannot answer keeps its draft unsent.
+   *  Ordinary project chats are never held: their own sign-in cards handle a lost provider. */
   holds(controller: NativeChatController, chat: Chat) {
     const state = this.state(chat, controller.choices, controller.readiness)
-    return state.centered && !state.ready
+    return this.enabled && (state.centered || state.planning) && !state.ready
   }
 
   /** The start surface's own actions; false leaves the action to the chat's cards. */
@@ -212,10 +213,13 @@ export class StartFlow {
       case 'start-open':
       case 'start-recent':
       case 'start-new':
+        if (action.action === 'start-new') {
+          void controller.beginPlanning(false)
+          return true
+        }
         if (this.hasDraft(chat) || this.pending) this.carry = chat.chat
         controller.services.effect({
           type: 'start-project',
-          ...(action.action === 'start-new' ? { create: true } : {}),
           ...(action.action === 'start-recent' && action.value ? { root: action.value } : {})
         })
         return true
