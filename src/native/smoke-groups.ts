@@ -95,7 +95,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'quit-alert': ['chat'],
   composer: ['composer'],
   'chat-drafts': ['composer'],
-  'visible-composer': ['composer']
+  'visible-composer': ['composer'],
+  'start-composer': ['composer']
 }
 
 /** Only the checks the selection names, plus the prelude, in their original order.

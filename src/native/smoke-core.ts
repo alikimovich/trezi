@@ -63,6 +63,7 @@ import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
+import { checkStartComposer, restoreStartComposer } from './smoke-start'
 import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
@@ -899,6 +900,17 @@ export async function runNativeCoreSmoke(
         await checkVisibleComposer(host, fixture, artifacts)
       },
       cleanup: async () => {
+        await clearComposer()
+      }
+    },
+    {
+      name: 'start-composer',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkStartComposer(host, fixture, artifacts)
+      },
+      cleanup: async () => {
+        await restoreStartComposer(host)
         await clearComposer()
       }
     },

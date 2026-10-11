@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Centered start composer (LKM-232)
+
+- [x] A new, empty chat (and the no-project screen) centers the one existing composer under "What do you want to create?" with attach, model, project menu and Send; centering is derived from chat state on every snapshot.
+- [x] The first accepted send glides the same composer and chat into the left column and reveals the preview (instant with Reduce Motion); draft, attachments, model, focus and streaming are kept, and the prompt is sent once.
+- [x] No project: Open/New/recent from the composer's project menu or the screen carry the draft into the project's new chat and send it once; Cancel keeps it. Uses LKM-231's readiness: zero providers shows its sign-in actions, a lost selected provider keeps the draft and offers a switch.
+- [x] Unit `chat-start`; native `start-composer` (group `composer`) with light/dark captures at normal and narrow widths.
+- [ ] Manager: native verification of every group, independent review and merge.
+
 ## Native provider sign-in (LKM-231)
 
 - [x] Start and auth-error cards offer Claude and Codex sign-in through provider-managed browser flows, with cancel and retry.

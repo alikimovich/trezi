@@ -43,11 +43,14 @@ struct WelcomeContent: View {
 }
 final class NativeWelcome: NSHostingView<WelcomeContent> {
     let model = WelcomeModel()
+    /// The shell asks for the welcome screen; the centered start composer (LKM-232) takes its place.
+    private(set) var wanted = false
     init() { super.init(rootView: WelcomeContent(model: model)); sizingOptions = []; autoresizingMask = [.width, .height] }
     required init(rootView: WelcomeContent) { fatalError("init(rootView:) has not been implemented") }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func update(_ state: [String: Any]) {
-        isHidden = !(state["visible"] as? Bool ?? false) || (state["blocked"] as? Bool ?? false)
+        wanted = (state["visible"] as? Bool ?? false) && !(state["blocked"] as? Bool ?? false)
+        isHidden = !wanted
         model.busy = state["busy"] as? Bool ?? false
         model.label = state["label"] as? String ?? ""
         model.recents = (state["recents"] as? [[String: String]] ?? []).compactMap { item in

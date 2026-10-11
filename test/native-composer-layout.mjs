@@ -11,6 +11,7 @@ if (process.platform !== 'darwin') {
       'ScrollerDrag',
       'ChatLatestButton',
       'Composer',
+      'ComposerProject',
       'ComposerVerification',
       'ComposerAttachments',
       'AttachmentThumbnail',

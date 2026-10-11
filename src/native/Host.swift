@@ -49,6 +49,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     lazy var previewHistory = PreviewHistory(host: self)
     let canvas = Canvas()
     let chatColumn = Canvas()
+    /// The centered start composer's heading and status, under the chat column (LKM-232).
+    let startSurface = NativeStart()
     var views: [String: WKWebView] = [:]
     /// Session-owned pages live outside the window and never become responders.
     var agentBrowsers: [String: Date] = [:]
@@ -116,7 +118,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         threeD.preview = views["preview"]; threeD.world = world
         shell = NativeShell(window: window, canvas: canvas)
         previewSurface = PreviewSurface(preview: views["preview"]!, canvas: canvas, container: canvas.superview!)
-        previewSurface.colorChanged = { [weak self] color in self?.shell.updatePreviewColor(color) }
+        previewSurface.colorChanged = { [weak self] color in if self?.nativeLayout?.start.tint.isEmpty != false { self?.shell.updatePreviewColor(color) } }
+        startSurface.appearanceChanged = { [weak self] in self?.nativeLayout?.layout() }
         shell.updatePreviewColor(views["preview"]!.underPageBackgroundColor)
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
@@ -126,6 +129,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         canvas.addSubview(threeD.header); canvas.addSubview(threeD.footer)
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
+        canvas.addSubview(startSurface)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
         chat = NativeChat(); chatColumn.addSubview(chat)
         composer = NativeComposer(frame: .zero); chatColumn.addSubview(composer)
@@ -286,8 +290,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "composerFocus": window.makeFirstResponder(composer.text)
         case "shellState":
             let state = c["state"] as? [String: Any] ?? [:]
-            shell.update(state); previewStatus.update(state); previewLoad.update(state); nativeLayout.update(state)
+            // The welcome first: the layout may give its place to the start composer (LKM-232).
             if let home = state["homeState"] as? [String: Any] { welcome.update(home) }
+            shell.update(state); previewStatus.update(state); previewLoad.update(state); nativeLayout.update(state)
         case "captureFeedback":
             let content = window.contentView?.superview ?? shell.split.view
             guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { reply(id, NSNull()); return }

@@ -15,6 +15,7 @@ import { menuItems } from './chat-island-refs'
 import { loginCard, startLoginCard } from './chat-login'
 import { queueNote, sendBlock } from './chat-queue'
 import { recoveryCards } from './chat-recovery'
+import type { StartFlow } from './chat-start'
 import type { Chat } from './chat-state'
 import { displayContext } from './display-paths'
 export const permissionModes = [
@@ -112,8 +113,13 @@ export function tokens(turn: TokenUsage, total: TokenUsage) {
 export function snapshot(
   chat: Chat,
   choices: ModelChoice[],
-  readiness?: ProviderReadinessMap
+  readiness?: ProviderReadinessMap,
+  flow?: StartFlow
 ): NativeChatState {
+  const start = flow && readiness ? flow.state(chat, choices, readiness) : undefined
+  // The centered no-project draft takes text, files and picks before it has a session.
+  const home = !!start?.home && start.centered
+  const ready = chat.ready || home
   const providers = providerOptions(choices)
   const selection = resolveSelection(providers, chat.settings)
   const { provider, model, permissionMode } = chat.settings
@@ -226,7 +232,9 @@ export function snapshot(
     cards: shown.cards,
     questions: chat.questions,
     messages: shown.messages,
+    ...(start ? { start } : {}),
     composer: {
+      ...(home ? { home } : {}),
       queue: chat.queue.map((q) => ({
         id: `queued-${q.id}`,
         text: q.text,
@@ -238,11 +246,12 @@ export function snapshot(
       caret: chat.caret,
       revision: chat.revision,
       stop,
-      ready: chat.ready && !chat.switching,
+      ready: ready && !chat.switching,
       running: chat.isRunning,
       thinking,
       enabled:
-        chat.ready &&
+        ready &&
+        (!start?.centered || start.ready) &&
         (stop || (!chat.switching && (!!chat.text.trim() || !!chat.attachments.length))),
       sendLabel: stop ? 'Stop' : sendBlock(chat) ? 'Queue message' : 'Send message',
       context: (context?.selection ?? chat.draftSelection)?.label ?? '',
@@ -262,7 +271,7 @@ export function snapshot(
         {
           label: 'Provider',
           value: selection.option?.key ?? provider,
-          disabled: !chat.ready || chat.isRunning || chat.switching || !!chat.signingIn,
+          disabled: !ready || chat.isRunning || chat.switching || !!chat.signingIn,
           options: providers.length
             ? providers.map((p) => ({ value: p.key, label: p.label }))
             : [{ value: provider, label: provider === 'codex' ? 'Codex' : 'Claude' }]
@@ -270,7 +279,7 @@ export function snapshot(
         {
           label: 'Model',
           value: selection.choice?.value ?? model,
-          disabled: !chat.ready || chat.isRunning || chat.switching || !!chat.signingIn,
+          disabled: !ready || chat.isRunning || chat.switching || !!chat.signingIn,
           // The selected row names what the session runs ("Opus 5.5"), LKM-164.
           options: (
             selection.option?.models.map((c) => ({ value: c.value, label: c.label })) ?? [
@@ -285,7 +294,7 @@ export function snapshot(
         {
           label: 'Permission mode',
           value: permissionMode,
-          disabled: !chat.ready || chat.switching,
+          disabled: !ready || chat.switching,
           options: permissionModes
         }
       ]
