@@ -8,10 +8,11 @@ import type {
   NativeChatState
 } from '../shared/native-chat'
 import { providerOptions, resolveSelection } from '../shared/provider-choices'
+import type { ProviderReadinessMap } from '../shared/provider-readiness'
 import { formatTokens, isEmptyUsage, type TokenUsage } from '../shared/run-stats'
 import { agentCard } from './chat-agent-card'
 import { menuItems } from './chat-island-refs'
-import { loginCard } from './chat-login'
+import { loginCard, startLoginCard } from './chat-login'
 import { queueNote, sendBlock } from './chat-queue'
 import { recoveryCards } from './chat-recovery'
 import type { Chat } from './chat-state'
@@ -108,7 +109,11 @@ export function tokens(turn: TokenUsage, total: TokenUsage) {
     detail: `Tokens across this turn’s model calls, not current context size.\nInput: ${n(turn.input)}\nCached input (included above): ${n(turn.cached)}\nOutput: ${n(turn.output)}\nThis chat so far: ${n(total.input)} input, ${n(total.output)} output`
   }
 }
-export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
+export function snapshot(
+  chat: Chat,
+  choices: ModelChoice[],
+  readiness?: ProviderReadinessMap
+): NativeChatState {
   const providers = providerOptions(choices)
   const selection = resolveSelection(providers, chat.settings)
   const { provider, model, permissionMode } = chat.settings
@@ -122,6 +127,10 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
     })
   const login = loginCard(chat)
   if (login) cards.push(login)
+  if (readiness) {
+    const start = startLoginCard(chat, readiness)
+    if (start) cards.push(start)
+  }
   if (chat.pendingModel)
     cards.push({
       id: 'model-confirm',
@@ -253,7 +262,7 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
         {
           label: 'Provider',
           value: selection.option?.key ?? provider,
-          disabled: !chat.ready || chat.isRunning || chat.switching,
+          disabled: !chat.ready || chat.isRunning || chat.switching || !!chat.signingIn,
           options: providers.length
             ? providers.map((p) => ({ value: p.key, label: p.label }))
             : [{ value: provider, label: provider === 'codex' ? 'Codex' : 'Claude' }]
@@ -261,7 +270,7 @@ export function snapshot(chat: Chat, choices: ModelChoice[]): NativeChatState {
         {
           label: 'Model',
           value: selection.choice?.value ?? model,
-          disabled: !chat.ready || chat.isRunning || chat.switching,
+          disabled: !chat.ready || chat.isRunning || chat.switching || !!chat.signingIn,
           // The selected row names what the session runs ("Opus 5.5"), LKM-164.
           options: (
             selection.option?.models.map((c) => ({ value: c.value, label: c.label })) ?? [

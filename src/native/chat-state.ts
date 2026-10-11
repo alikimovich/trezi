@@ -11,6 +11,7 @@ import { migrateChatTitle } from '../shared/chat-title'
 import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeLiveChange } from '../shared/native-chat'
 import type { NativeChatContext, NativeChatMirror } from '../shared/native-chat-controller'
+import type { BuiltinProvider } from '../shared/provider-readiness'
 import { emptyUsage, type TokenUsage } from '../shared/run-stats'
 import type { ChatLogin } from './chat-login'
 
@@ -68,6 +69,8 @@ export interface Chat extends NativeChatMirror {
   last?: Submission
   /** The provider login card (`chat-login.ts`), from an `error` with a code. */
   login?: ChatLogin
+  signingIn?: BuiltinProvider
+  signInMessage?: string
   /** This turn's usage reported before its response exists (`assistant` attaches it). */
   pendingUsage?: TokenUsage
   /** LKM-147: when the current step (thinking, writing, a tool) began, and when the

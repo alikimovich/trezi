@@ -341,7 +341,7 @@ extension ProviderOwner {
                     if code == .null { continue }
                     guard case .number(let n) = code, n == n.rounded(), abs(n) <= 255 else { return nil }
                 }
-            case "executable", "authMethod", "detail", "keychainList", "keychainDefault", "credentialsPath":
+            case "executable", "configDir", "authMethod", "detail", "keychainList", "keychainDefault", "credentialsPath":
                 guard let text = field.text, text.count <= 4096, !text.contains(0) else { return nil }
                 if let token, !token.isEmpty, text.string.contains(token) { return nil }
             default: return nil

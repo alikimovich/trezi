@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native provider sign-in (LKM-231)
+
+- [x] Start and auth-error cards offer Claude and Codex sign-in through provider-managed browser flows, with cancel and retry.
+- [x] Shared per-provider readiness contract and deterministic adapter tests; the saved prompt, attachments and model are not auto-sent.
+- [ ] Operator: complete live browser consent with a test account for each provider and verify the resumed chat identity and native foreground card.
+- [ ] Manager: native chat verification, full suite, independent review and merge.
+
 ## Branch and CI status (LKM-228)
 
 - [x] Show ahead/behind, publish step, PR and CI state in the native branch control; poll GitHub with ETags and refresh on focus.

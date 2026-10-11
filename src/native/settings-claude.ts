@@ -18,7 +18,7 @@ async function pane(sheets: NativeSheetController, report?: ProviderLoginReport)
   const { hasToken }: { hasToken: boolean } = await sheets.invoke('providers:seat-token-status')
   return {
     detail:
-      'Claude chats use the Claude CLI’s sign-in. If a chat says it is not logged in, run `claude auth login` in Terminal, or run `claude setup-token` and paste the token it prints here. The token is encrypted with your Keychain and given only to Claude chats.',
+      'Claude chats use Claude Code sign-in. Choose Sign in to Claude in the chat to open its browser flow. You can also save a token from `claude setup-token` here; it is encrypted with your Keychain and given only to Claude chats.',
     fields: [
       {
         id: 'token',
