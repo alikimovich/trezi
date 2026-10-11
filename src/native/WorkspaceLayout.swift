@@ -30,6 +30,8 @@ final class WorkspaceLayout {
     /// The page's clip radius: the opening's corner at the bezel's scale, 0 on desktop.
     private(set) var pageRadius: CGFloat = 0
     private var animation: Timer?
+    /// The centered start composer and its glide into the left column (LKM-232).
+    let start = StartTransition()
     private var layingOut = false
     private var lastFrame = NSRect.zero
     private var lastLeading: CGFloat = -1
@@ -152,11 +154,13 @@ final class WorkspaceLayout {
     }
     func nativeChatState() -> [String: Any] {
         guard let host else { return chatState }
+        syncStart()
         var state = chatState
         let full = width(), shown = full * fraction
         let visible = chatReady && shown > 60 && host.canvas.bounds.height > 30
         state["visible"] = visible
         state["bounds"] = ["x":0.0, "y":0.0, "width":Double(full), "height":Double(host.canvas.bounds.height)]
+        startComposer(&state, column: full)
         return state
     }
     /// The selected project finished opening. Before that (opening, failed open) the
@@ -171,15 +175,18 @@ final class WorkspaceLayout {
         let state = nativeChatState()
         host.chat.place(state, composer: host.composer)
         host.chat.isHidden = !(state["visible"] as? Bool ?? false)
-        host.composer.isHidden = host.chat.isHidden
+        host.composer.isHidden = !(state["composerVisible"] as? Bool ?? !host.chat.isHidden)
+        host.chat.alphaValue = starting ? start.progress : 1
         host.chat.model.cat.show(!host.chat.isHidden)
-        // Clip the disappearing column while retaining the text and glass layout.
-        host.chatColumn.frame = NSRect(x: 0, y: 0, width: leading, height: bounds.height)
-        host.chatColumn.isHidden = leading < 1 || !chatReady
+        // Clip the disappearing column while retaining the text and glass layout. The
+        // centered composer's column spans the window and narrows as it docks.
+        host.chatColumn.frame = NSRect(x: 0, y: 0, width: starting ? bounds.width + (leading - bounds.width) * start.progress : leading, height: bounds.height)
+        host.chatColumn.isHidden = !starting && (leading < 1 || !chatReady)
+        placeStart(bounds)
         var dividerState = state
         dividerState["bounds"] = ["x":0, "y":0, "width":Double(leading), "height":Double(bounds.height)]
         host.chatDivider.update(dividerState)
-        host.chatDivider.isHidden = host.chat.isHidden || fraction < 1
+        host.chatDivider.isHidden = host.chat.isHidden || fraction < 1 || starting
         // No docked column takes width from the preview: the inspector floats over it.
         let right: CGFloat = 0
         let bottom = host.dockedSource != nil ? min(sourceHeight, bounds.height * 0.8) : 0

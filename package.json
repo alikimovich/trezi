@@ -135,6 +135,7 @@
     "test:type-metrics": "bun test/type-metrics.mjs",
     "test:skills-install": "bun test/skills-install.mjs",
     "test:native-chat-controller": "bun test/native-chat-controller.mjs",
+    "test:chat-start": "bun test/chat-start.mjs",
     "dev": "bun scripts/dev-native.mjs",
     "build": "bun scripts/build-native.mjs",
     "start": "bun scripts/start-native.mjs",

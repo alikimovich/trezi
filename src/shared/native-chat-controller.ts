@@ -69,6 +69,10 @@ export type NativeChatEffect =
   /** Bring the active project's preview into view: the docked editor steps aside (LKM-210). */
   | { type: 'preview' }
   | { type: 'layers' | 'focus' | 'history' }
+  /** LKM-232: the start composer's destination: open (a recent `root` or the picker) or
+   *  create a project; `start-chat` starts a new chat in `root` for a carried draft. */
+  | { type: 'start-project'; root?: string; create?: boolean }
+  | { type: 'start-chat'; root: string }
 export type NativeChatCommand =
   | { type: 'attach' }
   | { type: 'context'; context: NativeChatContext }
