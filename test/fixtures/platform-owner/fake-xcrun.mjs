@@ -3,10 +3,12 @@
 // to calls.jsonl, and a waiting `bootstatus` records its pid (and a child's) so the test
 // can prove a Stop ended them.
 import { spawn } from 'node:child_process'
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const dir = process.env.FAKE_SIM_DIR
+// Whole-file writes, so the test never reads a half-written record.
+const writeAtomic = (path, text) => { writeFileSync(`${path}.${process.pid}.tmp`, text); renameSync(`${path}.${process.pid}.tmp`, path) }
 const mode = existsSync(join(dir, 'mode.json')) ? JSON.parse(readFileSync(join(dir, 'mode.json'), 'utf8')) : {}
 const args = process.argv.slice(2)
 appendFileSync(join(dir, 'calls.jsonl'), `${JSON.stringify({ tool: 'xcrun', args, pid: process.pid })}\n`)
@@ -39,11 +41,11 @@ if (key === 'simctl help') {
 } else if (args[0] === 'simctl' && args[1] === 'boot') {
   if (mode.bootFail) fail('An error was encountered processing the command (domain=com.apple.CoreSimulator.SimError, code=405)')
   if (booted.includes(args[2])) fail('An error was encountered processing the command (domain=com.apple.CoreSimulatorService, code=164):\nUnable to boot device in current state: Booted', 149)
-  writeFileSync(statePath, JSON.stringify([...booted, args[2]]))
+  writeAtomic(statePath, JSON.stringify([...booted, args[2]]))
 } else if (args[0] === 'simctl' && args[1] === 'bootstatus') {
   if (mode.slowBoot) {
     const child = spawn('/bin/sleep', ['60'], { stdio: 'ignore' })
-    writeFileSync(join(dir, 'bootstatus.json'), JSON.stringify({ pid: process.pid, child: child.pid }))
+    writeAtomic(join(dir, 'bootstatus.json'), JSON.stringify({ pid: process.pid, child: child.pid }))
     setTimeout(() => {}, 60_000)
   }
 } else if (args[0] === 'simctl' && args[1] === 'io' && args[3] === 'screenshot') {

@@ -51,6 +51,7 @@ final class WorkflowOwner: @unchecked Sendable {
         "createProject": (["root", "files", "install", "intent"], [], "create"),
         "update": (["root", "intent"], [], "update"),
         "feedback": (["root", "title", "body", "intent"], [], "feedback"),
+        "ciRerun": (["root", "commit", "intent"], ["leases"], "rerun"),
         "skills": (["root", "packId", "scope", "repo", "skills", "title", "intent"], [], "skills"),
         "updateCheck": (["root"], ["leases"], nil),
         "remember": (["root", "diagnosis"], [], nil),
@@ -58,7 +59,7 @@ final class WorkflowOwner: @unchecked Sendable {
     ]
     static let reads: Set<String> = ["workflows", "diagnosis"]
     /// Workflows that are durable records (the rest answer directly).
-    static let recorded: Set<String> = ["publish", "handoff", "branchPr", "connect", "remoteUpdate", "setup", "uninstall", "createProject", "update", "feedback", "skills"]
+    static let recorded: Set<String> = ["publish", "handoff", "branchPr", "connect", "remoteUpdate", "setup", "uninstall", "createProject", "update", "feedback", "skills", "ciRerun"]
     /// One open publication per repository, as the legacy publish lock allowed.
     static let exclusive: Set<String> = ["publish", "handoff", "branchPr", "connect"]
     static let busyMessage = "A publish is already in progress for this repository."
@@ -226,6 +227,7 @@ final class WorkflowOwner: @unchecked Sendable {
             case "createProject": outcome = try WorkflowSetup(context: context).create(record, prior: prior)
             case "update": outcome = try WorkflowSetup(context: context).update(record, prior: prior)
             case "feedback": outcome = try WorkflowTools(context: context).feedback(record, prior: prior)
+            case "ciRerun": outcome = try WorkflowTools(context: context).ciRerun(record, prior: prior)
             case "skills": outcome = try WorkflowTools(context: context).skills(record)
             default: throw ServiceContractFailure.invalidRequest
             }
@@ -413,6 +415,10 @@ final class WorkflowOwner: @unchecked Sendable {
             guard install == .null || install == .string(JSText("bun")) || install == .string(JSText("npm")) else { throw ServiceContractFailure.invalidRequest }
             return object([("files", try WorkflowSetup.projectFiles(body.value("files"))), ("install", install)])
         case "feedback": return try WorkflowTools.feedbackParams(body)
+        case "ciRerun":
+            let commit = try body.string("commit")
+            guard commit.range(of: #"^[0-9a-f]{40}$"#, options: .regularExpression) != nil else { throw ServiceContractFailure.invalidRequest }
+            return object([("commit", .string(JSText(commit)))])
         case "skills": return try WorkflowTools.skillsParams(body)
         default: return .object([])
         }

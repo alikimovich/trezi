@@ -1,7 +1,7 @@
 import type { GithubStatus, GitRemoteStatus, PublishResult } from '../shared/api'
 import { versionConflict } from '../shared/dependency-issue'
 import { sanitizeRepoName } from '../shared/github'
-import type { NativeShellState } from '../shared/native-shell'
+import type { BranchStatus, NativeShellState } from '../shared/native-shell'
 import {
   type PublishProgress,
   publishCancellable,
@@ -12,6 +12,7 @@ import {
 import type { NativeActivityController } from './activity-controller'
 import type { NativeChatController } from './chat-controller'
 import type { NativePreferences } from './preferences'
+import { AUTO_FIX_CI_KEY } from './settings-controller'
 import type { NativeSheetController } from './sheets-runtime'
 
 /** A publish the toolbar shows for one project (LKM-187), kept per root across switches. */
@@ -27,12 +28,35 @@ interface PublishRun {
   shipping?: boolean
   timer?: ReturnType<typeof setTimeout>
 }
+interface CIRepair {
+  check: string
+  attempts: number
+  failedCommit: string
+  publishId?: string
+  phase: 'agent' | 'awaiting-publish' | 'watching'
+  deadline: number
+}
 
 const OPEN = new Set(['running', 'describe'])
 
 export class NativeGitController {
   readonly branches = new Map<string, string[]>()
   readonly connections = new Map<string, GithubStatus | null>()
+  readonly statuses = new Map<string, BranchStatus>()
+  private readonly statusTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly statusFlights = new Set<string>()
+  private readonly reruns = new Map<
+    string,
+    { started: number; running: boolean; offered: boolean }
+  >()
+  private readonly ciFixes = new Map<string, string>()
+  private readonly repairs = new Map<string, CIRepair>()
+  /** The last CI failure offered per project, for the notification's actions. */
+  private readonly failures = new Map<
+    string,
+    { status: BranchStatus; fix: () => Promise<void>; view: () => Promise<void> }
+  >()
+  private readonly recentPublishes = new Set<string>()
   private readonly revisions = new Map<string, number>()
   /** Publishes under way, by root: the toolbar follows the active project's. */
   readonly runs = new Map<string, PublishRun>()
@@ -76,6 +100,8 @@ export class NativeGitController {
       ...state,
       branch: entry?.branch ?? null,
       branches: this.branches.get(root) ?? [],
+      branchStatus: this.statuses.get(root),
+      publishStep: run?.step,
       publishing: !!run,
       publishCancellable: !!run && !run.cancelling && publishCancellable(run.step),
       publishMode: this.mode,
@@ -106,6 +132,217 @@ export class NativeGitController {
     this.connections.set(root, status)
     this.render()
     if (!this.runs.has(root)) await this.adopt(root)
+    void this.pollStatus(root)
+  }
+  /** Running checks are refreshed within a minute; settled checks every ten minutes. */
+  async pollStatus(root: string) {
+    if (this.statusFlights.has(root)) return
+    this.statusFlights.add(root)
+    clearTimeout(this.statusTimers.get(root))
+    try {
+      const status: BranchStatus = await this.invoke('github:branch-status', root)
+      const previous = this.statuses.get(root)
+      this.statuses.set(root, status)
+      this.render()
+      if (status.ci === 'passed') this.recentPublishes.delete(root)
+      const repair = this.repairs.get(root)
+      if (repair) await this.watchRepair(root, status, repair)
+      if (status.commit && status.ci === 'running') {
+        const rerun = this.reruns.get(`${root}:${status.commit}`)
+        if (rerun) rerun.running = true
+      }
+      if (
+        !this.repairs.has(root) &&
+        status.ci === 'failed' &&
+        (this.recentPublishes.has(root) ||
+          (!!previous?.commit && !!status.commit && previous.commit !== status.commit) ||
+          (!!status.commit && this.reruns.has(`${root}:${status.commit}`)))
+      ) {
+        this.recentPublishes.delete(root)
+        await this.handleFailure(root, status)
+      }
+    } catch {
+      this.statuses.delete(root)
+      this.render()
+    }
+    this.statusFlights.delete(root)
+    if (!this.workspace.state.projects.some((project) => project.root === root)) return
+    const current = this.statuses.get(root)
+    clearTimeout(this.statusTimers.get(root))
+    const timer = setTimeout(
+      () => void this.pollStatus(root),
+      current?.ci === 'running' ||
+        this.runs.has(root) ||
+        this.repairs.has(root) ||
+        (current?.commit &&
+          this.reruns.has(`${root}:${current.commit}`) &&
+          !this.reruns.get(`${root}:${current.commit}`)?.offered &&
+          current.ci === 'failed')
+        ? 45_000
+        : 600_000
+    )
+    timer.unref?.()
+    this.statusTimers.set(root, timer)
+  }
+  private async handleFailure(root: string, status: BranchStatus, offer = true): Promise<boolean> {
+    if (!status.commit) return false
+    const key = `${root}:${status.commit}`
+    let rerun = this.reruns.get(key)
+    if (!rerun) {
+      rerun = { started: Date.now(), running: false, offered: false }
+      this.reruns.set(key, rerun)
+      const result = await this.invoke('github:ci-rerun', root, status.commit).catch(() => ({
+        ok: false
+      }))
+      if (result.ok) {
+        this.log.append('Rerunning failed CI jobs once before repair', 'success')
+        return false
+      }
+      // A run may not be rerunnable (for example an external check).
+      rerun.started = 0
+    }
+    if (rerun.offered || (rerun.started && !rerun.running && Date.now() - rerun.started < 60_000))
+      return rerun.offered
+    rerun.offered = true
+    if (offer) this.ciFailed(root, status)
+    return true
+  }
+  private async watchRepair(root: string, status: BranchStatus, repair: CIRepair) {
+    if (Date.now() > repair.deadline) return this.finishRepair(root, repair, false)
+    if (repair.phase === 'agent') return
+    if (!status.commit || status.commit === repair.failedCommit) return
+    if (repair.phase === 'awaiting-publish') {
+      const progress: PublishProgress | null = await this.invoke('publish:progress', root).catch(
+        () => null
+      )
+      if (
+        !progress ||
+        progress.id === repair.publishId ||
+        progress.state !== 'done' ||
+        !progress.result?.ok
+      )
+        return
+      repair.phase = 'watching'
+    }
+    if (status.ci === 'passed') {
+      await this.invoke('project-memory:ci-rule', root, repair.check).catch(() => {})
+      return this.finishRepair(root, repair, true)
+    }
+    if (status.ci === 'failed') {
+      const key = `${root}:${status.commit}`
+      if (!this.reruns.get(key)?.offered && !(await this.handleFailure(root, status, false))) return
+      if (repair.attempts >= 2) return this.finishRepair(root, repair, false)
+      repair.phase = 'agent'
+      repair.failedCommit = status.commit
+      await this.startRepair(root, status, repair)
+    }
+  }
+  private finishRepair(root: string, repair: CIRepair, green: boolean) {
+    if (this.repairs.get(root) !== repair) return
+    this.repairs.delete(root)
+    this.log.append(
+      green
+        ? `CI green after ${repair.attempts} repair attempt(s).`
+        : `CI repair gave up after ${repair.attempts} attempt(s).`,
+      green ? 'success' : 'warning'
+    )
+  }
+  private ciFailed(root: string, status: BranchStatus) {
+    const message = `CI failed on ${status.pr?.state === 'merged' ? status.base : 'branch'} after publish: ${status.failing.length} checks`
+    this.log.append(message, 'needs-action')
+    const mode = this.preferences.get(AUTO_FIX_CI_KEY) ?? 'ask'
+    const fix = { label: 'Fix with agent', run: async () => this.fixCI(root, status) }
+    const view = { label: 'View checks', run: async () => this.viewChecks(status) }
+    this.failures.set(root, { status, fix: fix.run, view: view.run })
+    this.sheets.toast(message, mode === 'off' ? [view] : [fix, view], 15)
+    // The optional macOS notification follows the same setting: Off keeps CI quiet
+    // outside the app; the host only posts it while Trezi is in the background.
+    if (mode !== 'off')
+      this.sheets.host.send('notify', {
+        root,
+        title: message,
+        body:
+          mode === 'auto'
+            ? 'A background agent is fixing it.'
+            : 'Fix with agent or view the checks.'
+      })
+    if (mode === 'auto') void this.fixCI(root, status)
+  }
+  private viewChecks(status: BranchStatus) {
+    if (status.checksUrl) this.openExternal(status.checksUrl)
+  }
+  /** A macOS notification action routes to the toast's handlers for the same failure. */
+  async notificationAction(action: { action?: string; root?: string }) {
+    const failure = action.root ? this.failures.get(action.root) : undefined
+    if (!failure) return
+    if (action.action === 'fix') await failure.fix()
+    else await failure.view()
+  }
+  private async fixCI(root: string, status: BranchStatus) {
+    if (!status.commit || this.repairs.has(root)) return
+    const repair: CIRepair = {
+      check: status.failing[0] ?? 'CI',
+      attempts: 0,
+      failedCommit: status.commit,
+      phase: 'agent',
+      deadline: Date.now() + 20 * 60_000
+    }
+    this.repairs.set(root, repair)
+    await this.startRepair(root, status, repair)
+  }
+  private async startRepair(root: string, status: BranchStatus, repair: CIRepair) {
+    const entry = this.workspace.state.projects.find((project) => project.root === root)
+    if (!entry?.activeSessionKey || !status.commit) return this.finishRepair(root, repair, false)
+    repair.attempts++
+    repair.publishId = (await this.invoke('publish:progress', root).catch(() => null))?.id
+    const context = await this.invoke(
+      'github:failure-context',
+      root,
+      status.commit,
+      status.pr?.number
+    ).catch(() => ({
+      log: '',
+      diff: ''
+    }))
+    const prompt = [
+      `Fix CI failure on ${status.pr?.state === 'merged' ? status.base : entry.branch}.`,
+      `Failing checks: ${status.failing.join(', ')}. Commit: ${status.commit}.`,
+      'Reproduce locally where possible. Make the smallest fix in your private worktree, verify it, call land_now, and publish through the normal publish_update or publish_merge tool. The app watches CI and bounds repair attempts. Preserve unrelated user changes.',
+      `Failed job log (bounded):\n${context.log || '(unavailable)'}`,
+      `Commit diff (bounded):\n${context.diff || '(unavailable)'}`
+    ].join('\n\n')
+    const result = await this.invoke(
+      'agent:spawn-comment',
+      root,
+      prompt,
+      entry.activeSessionKey,
+      {},
+      'comment',
+      'Fix CI checks'
+    ).catch(() => null)
+    if (!result?.ok) {
+      return this.finishRepair(root, repair, false)
+    }
+    this.ciFixes.set(result.spawnId, root)
+    this.log.append('Fixing CI in the background', 'success')
+  }
+  /** A finished background repair writes a dated rule only after its work landed. */
+  async agentEvent(event: {
+    type?: string
+    sessionId?: string
+    outcome?: string
+    summary?: string
+  }) {
+    if (event.type !== 'spawn-finished' || !event.sessionId) return
+    const root = this.ciFixes.get(event.sessionId)
+    if (!root) return
+    this.ciFixes.delete(event.sessionId)
+    const repair = this.repairs.get(root)
+    if (!repair) return
+    if (event.outcome === 'applied') {
+      repair.phase = 'awaiting-publish'
+      await this.pollStatus(root)
+    } else this.finishRepair(root, repair, false)
   }
   async branch(key: string, name: string, create = false) {
     if (!name.trim()) return
@@ -154,6 +391,18 @@ export class NativeGitController {
         result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
         return
       }
+      run.step = 'checks'
+      run.since = Date.now()
+      this.render()
+      const memory = await this.invoke('project-memory:get', root).catch(() => null)
+      const checklist = await this.invoke('github:prepublish', root, memory?.content ?? '').catch(
+        () => ({ warnings: ['Could not run local pre-publish checks.'] })
+      )
+      for (const warning of checklist.warnings ?? []) this.log.append(warning, 'warning')
+      if (run.cancelling) {
+        result = { ok: false, cancelled: true, error: 'Cancelled before anything changed.' }
+        return
+      }
       await this.workspace.transact(key, async () => {
         // transact queues behind other work on the project: a Cancel that arrived while
         // waiting must still stop the publish before anything changes.
@@ -167,6 +416,7 @@ export class NativeGitController {
         run.shipping = true
         this.follow(root, run)
         result = await this.invoke('publish:ship', root, undefined, mode)
+        if (result?.ok) this.recentPublishes.add(root)
         run.shipping = false
         if (!result?.ok) return
         // Tagging the chat is bookkeeping: its failure doesn't fail the publish.

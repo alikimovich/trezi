@@ -150,6 +150,9 @@ export function serviceWorkflows(
       if (healed && 'error' in healed) return { ok: false, error: healed.error }
       return finish(await call('publish', { root, mode, intent: 'publish', ...leases() }), describe)
     },
+    async ciRerun(root, commit) {
+      return (await call('ciRerun', { root, commit, intent: 'rerun', ...leases() })).result
+    },
     async handoff(root, title, notes, describe) {
       return finish(
         await call('handoff', {
