@@ -200,10 +200,11 @@ export class StartFlow {
     void controller.beginPlanning(true)
   }
 
-  /** A centered chat whose selected provider cannot answer keeps its draft unsent. */
+  /** A home or planning chat whose selected provider cannot answer keeps its draft unsent.
+   *  Ordinary project chats are never held: their own sign-in cards handle a lost provider. */
   holds(controller: NativeChatController, chat: Chat) {
     const state = this.state(chat, controller.choices, controller.readiness)
-    return this.enabled && !state.ready
+    return this.enabled && (state.centered || state.planning) && !state.ready
   }
 
   /** The start surface's own actions; false leaves the action to the chat's cards. */

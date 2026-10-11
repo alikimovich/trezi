@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-11 — LKM-233 review repair: the start gate holds only home and planning chats
+
+- Review found `StartFlow.holds()` had widened from the centered home chat to every chat once `start.enabled` is true (production), so a normal project chat on a built-in Claude/Codex seat silently dropped sends while readiness was `checking`, `signed_out` or `failed`, breaking the LKM-231 in-chat sign-in recovery. It is now `enabled && (centered || planning) && !ready`; ordinary project chats are never held.
+- `test/chat-start.mjs` now sends from an ordinary project chat with `start.enabled` on and readiness `signed_out`, then `checking`, and asserts the send reaches the provider path (or queues) and the draft is consumed. It fails against the widened gate. The smoke suite runs with `start.enabled=false`, which is why it never caught this.
+
 ## 2026-10-11 — LKM-233 review repair: restore the composer fixture's preferred model
 
 - The manager's full native run found the `native-chat` product-log check looking for a Claude turn after `start-composer`. The backend had logged the turn correctly, but under `provider=codex model=composer-b`: `visible-composer` restored its chat settings only in memory, leaving its temporary model as the saved preference. The New Project fixture closed and reopened the original project, exposing that leaked preference.

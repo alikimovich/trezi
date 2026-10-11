@@ -191,4 +191,25 @@ await controller.command({
 })
 assert.equal(last().start.centered, false)
 assert.equal(last().start.home, false)
+
+// An ordinary project chat is never held by the start gate, whatever the sign-in state:
+// its send reaches the provider path (and its own sign-in card), it is not dropped.
+for (const status of ['signed_out', 'checking']) {
+  if (status === 'signed_out') {
+    login.codex = false
+    await controller.refreshReadiness()
+    assert.equal(controller.readiness.codex.status, 'signed_out')
+  } else controller.readiness.codex = { status: 'checking' }
+  assert.equal(controller.start.enabled, true)
+  const project = controller.get('project-chat')
+  assert.equal(controller.start.holds(controller, project), false, `${status}: not held`)
+  // The first turn keeps the stub chat running, so the second is queued, not sent.
+  const handled = () =>
+    calls.filter(([channel]) => channel === 'agent:send').length + project.queue.length
+  const before = handled()
+  await input(`Edit the hero (${status})`, 'project-chat')
+  await controller.composer({ chat: 'project-chat', action: 'send' })
+  await until(() => handled() === before + 1, `${status}: the project chat send is not dropped`)
+  assert.equal(project.text, '', `${status}: the draft was submitted`)
+}
 console.log('chat-start: ok')
