@@ -19,14 +19,14 @@ extension NativeComposer {
         project.isHidden = !shown
         guard shown, let start else { return }
         let info = start["project"] as? [String: Any] ?? [:]
-        let title = info["title"] as? String ?? "Choose Project"
+        let title = info["title"] as? String ?? "New Project"
         let recents = info["recents"] as? [[String: Any]] ?? []
         let signature = title + "|" + recents.compactMap { $0["root"] as? String }.joined(separator: "|")
         guard signature != projectSignature else { return }
         projectSignature = signature
         project.removeAllItems(); project.addItem(withTitle: title)
         project.item(at: 0)?.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
-        project.toolTip = info["title"] is String ? "Project: " + title : "Choose where this message goes"
+        project.toolTip = info["title"] is String ? "Project: " + title : "Start a new project conversation"
         func add(_ label: String, _ action: String, _ value: String? = nil) {
             let item = NSMenuItem(title: label, action: nil, keyEquivalent: "")
             var payload: [String: Any] = ["action":action]

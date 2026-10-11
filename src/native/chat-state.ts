@@ -211,7 +211,14 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
         at: entry.at,
         text: entry.text,
         statuses: [],
-        segments: [{ kind: 'text', text: entry.text, at: entry.at }]
+        segments: [{ kind: 'text', text: entry.text, at: entry.at }],
+        attachments: entry.planningAttachments?.map((a) => ({
+          id: crypto.randomUUID(),
+          kind: a.type.startsWith('image/') ? 'image' : 'file',
+          name: a.name,
+          path: '',
+          ...(a.type.startsWith('image/') ? { url: `data:${a.type};base64,${a.data}` } : {})
+        }))
       })
     } else {
       if (entry.ui) placeUi(chat, entry.ui)

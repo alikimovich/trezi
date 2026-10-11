@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Conversational New Project (LKM-233)
+
+- [x] Home has no sidebar or preview toolbar; an empty restored project chat remains docked, and the composer names New Project by default.
+- [x] New Project entries open a planning chat without a sheet or project files. The first send docks it and uses a tool-free provider completion; its transcript is saved by the Swift conversation owner.
+- [x] The plan and editable destination appear in a native chat form. A confirmed destination calls the service-owned creation workflow, then opens the project with the same session record and a provider handoff.
+- [x] Unit coverage for the planning record, confirmation, duplicate submit, cancellation, draft/model retention and the no-sheet route.
+- [ ] Native foreground acceptance for home and project creation, including light/dark and narrow captures; full suite and independent review by the manager.
+
 ## Centered start composer (LKM-232)
 
 - [x] A new, empty chat (and the no-project screen) centers the one existing composer under "What do you want to create?" with attach, model, project menu and Send; centering is derived from chat state on every snapshot.

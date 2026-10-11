@@ -73,6 +73,7 @@ export type NativeChatEffect =
    *  create a project; `start-chat` starts a new chat in `root` for a carried draft. */
   | { type: 'start-project'; root?: string; create?: boolean }
   | { type: 'start-chat'; root: string }
+  | { type: 'planning-created'; root: string }
 export type NativeChatCommand =
   | { type: 'attach' }
   | { type: 'context'; context: NativeChatContext }

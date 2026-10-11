@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-11 — LKM-233 review repair: restore the composer fixture's preferred model
+
+- The manager's full native run found the `native-chat` product-log check looking for a Claude turn after `start-composer`. The backend had logged the turn correctly, but under `provider=codex model=composer-b`: `visible-composer` restored its chat settings only in memory, leaving its temporary model as the saved preference. The New Project fixture closed and reopened the original project, exposing that leaked preference.
+- `visible-composer` now restores settings through the normal workspace effect and asserts the preferred model matches its initial value. The `chat` and `composer` native groups pass together (17 checks), including the original exact Claude turn-log assertion. Agent OS quick verification passes 220 unit checks, typechecks and lint.
+
+## 2026-10-11 — LKM-233: native creation check and card correction
+
+- Agent OS quick verification passed 220 unit checks, typechecks and lint. Native groups `composer`, `core`, `settings` and `sidebar` passed 40 checks, including a stubbed planning question, a service-created fixture, session binding and managed preview. Foreground home captures at normal and narrow widths in light and dark show the full-width home with one Open Project action.
+- Reviewing the planning capture found that the native quick-pick renderer rejected empty option notes. Planning now supplies a valid note and only offers a pick card when at least two choices exist; the unit test validates generated form and option cards against the shared schema. Quick verification passed again. Native verification reached its three-call limit before this visual correction, so the manager must confirm the corrected capture in final verification.
+
+## 2026-10-11 — LKM-233: app-managed New Project conversation
+
+- Home collapses its sidebar without changing the project's saved layout, hides preview toolbar actions, and keeps recent projects plus one Open Project action. Empty restored project chats stay docked. The composer labels the no-project choice New Project.
+- New Project routes, including the former sheet entry, open a planning chat. A first send docks it and keeps the selected model and attachments. The Swift conversation owner persists a synthetic planning session with a stable record and turn id; the provider's tool-free completion asks for missing details. Native chat UI cards offer quick answers or an editable name, stack and destination. No project workflow runs before confirmation.
+- After confirmation the existing service-owned scaffold workflow creates the destination; the session record is rebound to the real project, opened in the workspace, and handed to the provider for implementation. Unit checks exercise confirmation, duplicate sends, cancellation and the no-sheet route. Native acceptance remains with Agent OS verification.
+
 ## 2026-10-10 — LKM-232: centered start composer, then left chat + preview
 
 - `src/native/chat-start.ts` (`StartFlow`) derives `start.centered` on every snapshot from the chat itself: no messages, queue, run, card or question, and a provider that can answer (or readiness still checking). There is no global one-shot flag, so a new empty chat centers and a reopened conversation opens docked. The flow is off until `checkReadiness()` runs. The app calls it at attach; the smoke suite opts in from its own check so other groups keep their layout.

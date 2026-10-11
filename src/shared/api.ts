@@ -588,6 +588,8 @@ export interface SessionTranscriptEntry {
   at: number
   /** LKM-208: a status entry's answer component (`chat_ui`), with the user's answer. */
   ui?: ChatUiRecord
+  /** Files retained with an app-managed project planning conversation. */
+  planningAttachments?: { name: string; type: string; data: string }[]
 }
 
 /**
@@ -598,6 +600,8 @@ export interface SessionTranscriptEntry {
  */
 export interface SessionRecord {
   id: string
+  /** Planning transcript needs one provider handoff after the directory is created. */
+  planningCompleted?: boolean
   projectKey: string
   projectRoot: string
   projectName: string

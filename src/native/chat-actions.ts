@@ -247,6 +247,10 @@ export async function cardAction(
 
 /** Sends `text` as the user's next message, leaving their composer draft alone. */
 function sendReply(controller: NativeChatController, chat: Chat, text: string) {
+  if (chat.chat === controller.start.planningKey) {
+    void controller.submit(chat, text)
+    return
+  }
   const submission: Submission = {
     id: crypto.randomUUID(),
     text,

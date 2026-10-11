@@ -100,6 +100,8 @@ export interface NativeChatActivity {
 export interface NativeChatStart {
   centered: boolean
   home: boolean
+  /** An app-managed planning conversation, before a project exists. */
+  planning?: boolean
   /** The selected provider can answer now; Send waits for it (the draft never does). */
   ready: boolean
   heading: string

@@ -26,14 +26,22 @@ the source-built host requires launch arguments and its bundled XPC service.
 | Welcome, loading/errors, animated pixel cat | SwiftUI |
 | Conversation, Markdown tables/code, cards/questions | SwiftUI |
 | Composer, attachments and slash completion | AppKit NSTextView and native controls |
-| Settings/providers, new project, memory, Git/publish, review, feedback | SwiftUI forms in standalone AppKit windows with Bun controllers |
+| Settings/providers, memory, Git/publish, review, feedback | SwiftUI forms in standalone AppKit windows with Bun controllers |
 | Activity | AppKit selectable log, bounded buffer |
 | Source files, search/replace, media, pop-outs | AppKit outline/NSTextView/AVKit |
 | Layers | AppKit outline with selection and drag reordering |
 | Properties, styles, tokens, custom/animation controls | SwiftUI with shared editing services |
 | Project website and DOM instrumentation | WKWebView with isolated preview script |
 
-The sidebar starts with Open Project and New Project buttons, separated by a gap
+With no project open, the sidebar and preview toolbar are hidden. Home has one
+Open Project action, recent projects and a composer set to New Project. A send
+starts an app-managed planning transcript outside user repositories. The tool-free
+provider completion asks for missing details; its native answer cards and the
+destination form live in chat. Only confirming that form calls the Swift workflow
+owner to create the project. The new project opens with the same session record and
+the agent continues the agreed plan there.
+
+When a project is open, the sidebar starts with Open Project and New Project buttons, separated by a gap
 from projects with consistent native outline folder symbols and a More menu for
 memory, ordering and closing. History above the chat provides open/saved sessions,
 rename and review/resume. Background runs appear as actionable chat cards. Project

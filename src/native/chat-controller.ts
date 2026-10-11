@@ -70,6 +70,8 @@ export class NativeChatController {
   readonly closed = new Set<string>()
   private loading = new Map<string, { chat: Chat; promise: Promise<void> }>()
   private devErrors = new Map<string, DevErrorReader>()
+  private beginningPlanning?: Promise<void>
+  private planningQueued = new Map<string, string[]>()
   constructor(readonly services: ChatServices) {}
   get(key: string) {
     let chat = this.chats.get(key)
@@ -100,6 +102,128 @@ export class NativeChatController {
   /** Whether the active chat shows the centered start composer (LKM-232). */
   get centered() {
     return this.start.state(this.get(this.active), this.choices, this.readiness).centered
+  }
+  /** A planning chat is persisted by the Swift conversation owner, with no repo root. */
+  async beginPlanning(send: boolean) {
+    if (this.beginningPlanning) return this.beginningPlanning
+    const operation = (async () => {
+      const from = this.active
+      const record = await this.services.invoke('planning:start', this.get(HOME).settings)
+      const source = this.get(HOME)
+      const chat = this.get(record.id)
+      this.start.planningKey = record.id
+      if (from !== record.id) this.start.returnChat = from !== HOME ? from : null
+      chat.ready = true
+      chat.root = ''
+      chat.settings = record.planning?.settings ? record.planning.settings : { ...source.settings }
+      chat.context = {
+        chat: record.id,
+        root: null,
+        selection: null,
+        setup: { needed: false, dismissed: false, status: null },
+        tokens: { needed: false, dismissed: false },
+        notes: [],
+        spawns: [],
+        turn: {}
+      }
+      hydrate(chat, record.transcript)
+      if (from === HOME && this.start.hasDraft(source) && !this.start.hasDraft(chat)) {
+        chat.text = source.text
+        chat.caret = source.caret
+        chat.attachments = source.attachments
+        source.text = ''
+        source.caret = 0
+        source.attachments = []
+      }
+      this.active = chat.chat
+      this.changed(chat)
+      if (send && this.start.hasDraft(chat)) await this.submit(chat)
+    })()
+    this.beginningPlanning = operation
+    try {
+      await operation
+    } catch (error) {
+      this.fail(this.get(this.active), error)
+    } finally {
+      if (this.beginningPlanning === operation) this.beginningPlanning = undefined
+    }
+  }
+  async resumePlanning() {
+    const record = await this.services.invoke('planning:resume')
+    if (!record || this.active !== HOME) return
+    const chat = this.get(record.id)
+    this.start.planningKey = record.id
+    chat.ready = true
+    chat.root = ''
+    if (record.planning?.settings) chat.settings = record.planning.settings
+    chat.context = {
+      chat: record.id,
+      root: null,
+      selection: null,
+      setup: { needed: false, dismissed: false, status: null },
+      tokens: { needed: false, dismissed: false },
+      notes: [],
+      spawns: [],
+      turn: {}
+    }
+    hydrate(chat, record.transcript)
+    this.active = chat.chat
+    this.changed(chat)
+  }
+  private async planningSend(chat: Chat, raw: string) {
+    if (chat.sending || chat.isRunning) {
+      if (raw.trim())
+        this.planningQueued.set(chat.chat, [...(this.planningQueued.get(chat.chat) ?? []), raw])
+      return
+    }
+    if (!raw.trim() && !chat.attachments.length) return
+    const turn = crypto.randomUUID()
+    const attachments = chat.attachments
+    chat.text = ''
+    chat.caret = 0
+    chat.attachments = []
+    chat.sending = true
+    chat.isRunning = true
+    const cancellation = chat.cancellation
+    chat.messages.push({
+      id: turn,
+      role: 'user',
+      at: Date.now(),
+      text: raw,
+      statuses: [],
+      segments: [{ kind: 'text', text: raw }],
+      attachments: attachments.map((a) => ({
+        id: a.id,
+        kind: a.type.startsWith('image/') ? 'image' : 'file',
+        name: a.name,
+        path: a.path
+      }))
+    })
+    this.changed(chat)
+    try {
+      const result = await this.services.invoke(
+        'planning:send',
+        chat.chat,
+        turn,
+        raw,
+        agentOptionsFor(chat.settings),
+        attachments.map((a) => ({ name: a.name, type: a.type, data: a.data }))
+      )
+      if (chat.cancellation !== cancellation || this.start.planningKey !== chat.chat) return
+      hydrate(chat, result.record.transcript)
+      if (result.createdRoot)
+        this.services.effect({ type: 'planning-created', root: result.createdRoot })
+    } catch (error) {
+      if (chat.cancellation === cancellation) chat.error = String(error)
+    } finally {
+      chat.sending = false
+      chat.isRunning = false
+      this.changed(chat)
+      const queued = this.planningQueued.get(chat.chat)
+      const next = queued?.shift()
+      if (!queued?.length) this.planningQueued.delete(chat.chat)
+      if (next && this.start.planningKey === chat.chat) void this.planningSend(chat, next)
+    }
   }
   /** LKM-232: the app's start screen needs to know which providers can answer before
    *  any chat is visible. Idempotent; the smoke suite opts in from its own check. */
@@ -449,6 +573,10 @@ export class NativeChatController {
   }
   async submit(chat: Chat, raw = chat.text) {
     if (chat.chat === HOME) return this.start.request(this, chat, raw)
+    if (chat.chat === this.start.planningKey) {
+      if (this.start.holds(this, chat)) return
+      return this.planningSend(chat, raw)
+    }
     if (this.start.holds(this, chat)) return
     if (!chat.ready) await this.initialize(chat)
     if (!chat.ready || chat.switching || (!raw.trim() && !chat.attachments.length)) return
@@ -571,6 +699,15 @@ export class NativeChatController {
     if (next) await this.run(chat, next)
   }
   async stop(chat: Chat) {
+    if (chat.chat === this.start.planningKey) {
+      chat.cancellation++
+      chat.isRunning = false
+      chat.sending = false
+      chat.error = 'Planning stopped. Your conversation is saved.'
+      await this.services.invoke('planning:stop', chat.chat)
+      this.changed(chat)
+      return
+    }
     chat.paused = true
     chat.cancellation++
     chat.stopping = true
@@ -588,7 +725,7 @@ export class NativeChatController {
   }
   async choice(chat: Chat, label: string, value: string) {
     // The no-project draft has no session yet: its picks are kept for its project (LKM-232).
-    const home = chat.chat === HOME
+    const home = chat.chat === HOME || chat.chat === this.start.planningKey
     if ((!chat.ready && !home) || chat.switching) return
     if (label === 'Permission mode') {
       if (!permissionModes.some((m) => m.value === value)) return
@@ -598,6 +735,8 @@ export class NativeChatController {
           permissionMode: value as ChatAgentSettings['permissionMode']
         }
         this.start.picked = true
+        if (chat.chat === this.start.planningKey)
+          await this.services.invoke('planning:options', chat.chat, chat.settings)
         return
       }
       chat.switching = true
@@ -633,6 +772,8 @@ export class NativeChatController {
     }
     if (home) {
       chat.settings = next
+      if (chat.chat === this.start.planningKey)
+        await this.services.invoke('planning:options', chat.chat, chat.settings)
       this.start.picked = true
     } else if (chat.messages.some((m) => m.role === 'user')) chat.pendingModel = next
     else await this.changeModel(chat, next)
@@ -704,6 +845,19 @@ export class NativeChatController {
     if (action.chat !== this.active) return
     const chat = this.get(action.chat)
     try {
+      if (action.action === 'planning-cancel' && chat.chat === this.start.planningKey) {
+        chat.cancellation++
+        this.planningQueued.delete(chat.chat)
+        await this.services.invoke('planning:cancel', chat.chat)
+        this.start.planningKey = null
+        this.active =
+          this.start.returnChat && !this.closed.has(this.start.returnChat)
+            ? this.start.returnChat
+            : HOME
+        this.start.returnChat = null
+        this.changed(this.get(this.active))
+        return
+      }
       if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)
     } catch (error) {
       this.fail(chat, error)

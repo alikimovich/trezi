@@ -54,6 +54,14 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private(set) var sidebarButtons: [String: NSButton] = [:]
     private var previewState: [String: Any] = [:]
     private var sidebarBeforeExpand = false
+    private var sidebarBeforeHome = false
+    private var showingHome = true
+    private var planning = false
+    func setPlanning(_ value: Bool) {
+        guard planning != value else { return }
+        planning = value
+        toolbar.isVisible = currentProject != nil && !planning
+    }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
     private let chatActions = ChatToolbarActions(frame: .zero)
@@ -135,6 +143,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         split.addSplitViewItem(detailItem)
         window.contentViewController = split
         split.splitView.setPosition(230, ofDividerAt: 0)
+        // Home has no project rail. Keep the previous project layout only in memory.
+        sidebarItem.isCollapsed = true
         toolbar = NSToolbar(identifier: "TreziNativePreviewToolbar")
         toolbar.delegate = self; toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false; toolbar.autosavesConfiguration = false
@@ -442,6 +452,15 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if nextProject != currentProject && address.currentEditor() != nil { window?.makeFirstResponder(nil) }
         let projectChanged = nextProject != currentProject
         currentProject = nextProject
+        toolbar.isVisible = nextProject != nil && !planning
+        if nextProject == nil && !showingHome {
+            sidebarBeforeHome = sidebarItem.isCollapsed
+            sidebarItem.isCollapsed = true
+            showingHome = true
+        } else if nextProject != nil && showingHome {
+            sidebarItem.isCollapsed = sidebarBeforeHome
+            showingHome = false
+        }
         chatReady = nextProject != nil && state["chatReady"] as? Bool == true
         selectedID = state["selected"] as? String
         ready = state["previewReady"] as? Bool ?? false
@@ -568,6 +587,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             setSidebarContentWidth(width, in: split); return true
         }
         if action == "toggle-sidebar" {
+            if currentProject == nil { return false }
             // No animation in the pipe test: an occluded/locked desktop can pause
             // AppKit animations even though the collapsed state already changed.
             sidebarItem.isCollapsed.toggle(); split.view.layoutSubtreeIfNeeded(); return true
