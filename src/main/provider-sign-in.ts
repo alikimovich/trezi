@@ -137,13 +137,15 @@ export async function codexManagedLogin(
         complete?.(
           message.params.success === true
             ? { ok: true }
-            : /expired|timed out/i.test(String(message.params.error ?? ''))
-              ? { ok: false, reason: 'expired', detail: 'Codex sign-in expired. Try again.' }
-              : {
-                  ok: false,
-                  reason: 'failed',
-                  detail: 'Codex sign-in did not complete. Try again.'
-                }
+            : signal.aborted
+              ? { ok: false, reason: 'cancelled', detail: 'Codex sign-in cancelled.' }
+              : /expired|timed out/i.test(String(message.params.error ?? ''))
+                ? { ok: false, reason: 'expired', detail: 'Codex sign-in expired. Try again.' }
+                : {
+                    ok: false,
+                    reason: 'failed',
+                    detail: 'Codex sign-in did not complete. Try again.'
+                  }
         )
       }
     } catch {
@@ -156,8 +158,13 @@ export async function codexManagedLogin(
     pending.clear()
     complete?.(value)
   }
+  // A spawn `signal` that aborts kills the child and emits an AbortError here first.
   child.on('error', () =>
-    stopped({ ok: false, reason: 'missing', detail: 'Codex is unavailable.' })
+    stopped(
+      signal.aborted
+        ? { ok: false, reason: 'cancelled', detail: 'Codex sign-in cancelled.' }
+        : { ok: false, reason: 'missing', detail: 'Codex is unavailable.' }
+    )
   )
   child.on('exit', () =>
     stopped({

@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-231 review repair 2: Codex cancel reports "cancelled"
+
+- `codexManagedLogin`: aborting the spawn `signal` makes the child emit an AbortError before the adapter's own listener, which was reported as "Codex is unavailable." Both that error and a provider `account/login/completed` failure that arrives after an abort now resolve `cancelled`. `test/provider-sign-in.mjs` emits the AbortError from the fake child on abort, as a real spawn does, and asserts `reason === 'cancelled'`.
+
 ## 2026-10-10 — LKM-231 review repair: Codex recovery card, status parsing, adapter tests
 
 - Codex seat failures (missing CLI, signed out, 401/rejected token) now end the turn with `code: 'auth'` (`src/main/backends/codex-auth.ts`), so mid-conversation they show the sign-in card instead of a "run `codex login`" warning line. Custom connections never get it. The card names the chat's provider.

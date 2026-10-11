@@ -108,8 +108,30 @@ for (const success of [true, false]) {
     async () => abort.abort(),
     () => server.child
   )
-  assert.equal(result.ok, false)
+  assert.deepEqual([result.ok, result.reason], [false, 'cancelled'])
   assert.ok(server.requests.some((r) => r.method === 'account/login/cancel'))
+}
+{
+  // A real spawn({ signal }) kills the child and emits an AbortError before the
+  // adapter's own abort listener runs; that is a cancel, never a missing CLI.
+  const server = fakeServer()
+  const abort = new AbortController()
+  const result = await codexManagedLogin(
+    'fixture-codex',
+    abort.signal,
+    async () => abort.abort(),
+    (_bin, _args, options) => {
+      options.signal.addEventListener('abort', () => {
+        const error = new Error('The operation was aborted')
+        error.name = 'AbortError'
+        error.code = 'ABORT_ERR'
+        server.child.emit('error', error)
+      })
+      return server.child
+    }
+  )
+  assert.deepEqual([result.ok, result.reason], [false, 'cancelled'])
+  assert.ok(!/unavailable/i.test(result.detail ?? ''), result.detail)
 }
 {
   const child = new EventEmitter()
