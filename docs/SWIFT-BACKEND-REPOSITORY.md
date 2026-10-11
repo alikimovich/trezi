@@ -202,6 +202,7 @@ Mutations take an optional `leases` array (the leases the calling chain holds).
 | `pruneOrphans` | `{root, worktreesDir, skip, parked, intent:"recover"}` | `[{id, dirty, branch, repoRoot}]` |
 | `pruneBranches` | `{root, protected, intent:"integrated"}` | `{deleted, preserved}` |
 | `removeLegacyFolder` | `{root: <old-name worktrees folder>, intent:"legacy"}` | `{removed}` |
+| `clearStaleLock` | `{root, minAge, intent:"unlock"}` | `{removed, reason?, age?}`: removes `.git/index.lock` only when older than `minAge` seconds and no Git process works in the checkout (`RepositoryLock.swift`, LKM-225) |
 | `commitLive` | `{root, files, title, body?}` | `{committed, sha?, files}` |
 | `checkout` / `switchBranch` | `{root, branch}` | `BranchResult` |
 | `strandedLandings` (read) | `{root}` | `{current, branches:[{branch, tip, count}]}` |

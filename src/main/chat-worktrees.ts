@@ -7,6 +7,7 @@ import { DependencyConflictError, hasConflictMarkers, markerConflict } from './c
 import { editingOwner } from './editing-owner'
 import { productLog } from './product-log'
 import { repositoryOwner } from './repository-owner'
+import { withGitLockRecovery } from './self-heal/git-lock'
 import { dependenciesInstalling, provisionDependencies } from './worktree-dependencies'
 import { createWorktree, type Worktree } from './worktrees'
 
@@ -149,11 +150,13 @@ export async function completeTurn(
   message: string,
   opts: { land?: boolean; keepHistory?: boolean } = {}
 ): Promise<TurnOutcome> {
-  return repositoryOwner().completeTurn(
-    { ...wt, repoRoot: liveRoot },
-    message,
-    opts.land !== false,
-    opts.keepHistory
+  return withGitLockRecovery([liveRoot, wt.path], () =>
+    repositoryOwner().completeTurn(
+      { ...wt, repoRoot: liveRoot },
+      message,
+      opts.land !== false,
+      opts.keepHistory
+    )
   )
 }
 

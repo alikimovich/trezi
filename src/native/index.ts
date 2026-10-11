@@ -46,6 +46,7 @@ import { setProviderDataOwner } from '../main/provider-data'
 import { setProviderOwner } from '../main/provider-owner'
 import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-owner'
 import { createProject } from '../main/scaffold'
+import { PROVIDER_FALLBACK_KEY, setProviderFallbackSource } from '../main/self-heal/fallback'
 import { registerSetupIpc } from '../main/setup'
 import { registerSimulatorIpc } from '../main/simulator'
 import { observedSourceOwner } from '../main/source-changes'
@@ -107,6 +108,7 @@ import { withBuildCheckSetting } from './settings-build-check'
 import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
 import { withDreamerPane } from './settings-dreamer'
+import { withProviderFallbackSetting } from './settings-provider-fallback'
 import { NativeSheetController } from './sheets-runtime'
 import { NativeShellController } from './shell-controller'
 import { installShutdown } from './shutdown'
@@ -917,15 +919,19 @@ async function main() {
   const reviewController = new NativeReviewController(sheetController, (url) =>
     shell.openExternal(url)
   )
-  const settingsController = withBuildCheckSetting(
-    withDreamerPane(
-      withClaudePane(
-        new NativeSettingsController(sheetController, preferences, refreshPreferences)
+  setProviderFallbackSource(() => preferences.get(PROVIDER_FALLBACK_KEY))
+  const settingsController = withProviderFallbackSetting(
+    withBuildCheckSetting(
+      withDreamerPane(
+        withClaudePane(
+          new NativeSettingsController(sheetController, preferences, refreshPreferences)
+        ),
+        preferences
       ),
-      preferences
+      preferences,
+      () => void buildStatus.check()
     ),
-    preferences,
-    () => void buildStatus.check()
+    preferences
   )
   const dreamerController = new NativeDreamerController(sheetController, preferences, {
     pickExport: async (name) => {

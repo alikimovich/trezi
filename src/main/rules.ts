@@ -15,11 +15,11 @@
  * Bump TREZI_RULES_VERSION whenever the rule text changes (so logs/tests can pin it).
  */
 import { chatIslandGuidance } from '../shared/chat-island-guidance'
-import { SURFACE_CONTROLS_SKILL } from './bundled-skills'
+import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 40
+export const TREZI_RULES_VERSION = 41
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -96,6 +96,9 @@ export function treziRules(opts?: {
         ]),
     `Never reset or otherwise rewrite the live checkout. Its preview refreshes`,
     `when you call land_now or the turn ends.`,
+    `When a provider, workspace, Git or preview error interrupts work, read and follow`,
+    `the bundled doctor skill at ${JSON.stringify(DOCTOR_SKILL)}. Diagnose and recover`,
+    `within its safe actions before asking the user to debug.`,
     ``,
     `## Project memory is not work`,
     `Trezi keeps a project memory of durable rules and preferences and updates it itself`,

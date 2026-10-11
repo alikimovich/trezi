@@ -37,6 +37,7 @@ export const SOURCES = [
   'RepositoryAgentGit',
   'RepositoryBranches',
   'RepositoryCleanup',
+  'RepositoryLock',
   'RepositoryMerge',
   'RepositoryOwner',
   'SourcePaths',

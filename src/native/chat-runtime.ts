@@ -95,7 +95,9 @@ export function installNativeChat(
     effect: (effect) => {
       if (effect.type === 'focus') host.send('composerFocus')
     },
-    notice
+    notice,
+    // The smoke suite needs the parked card to stay put, like the landing check.
+    autoResolve: checkLandings
   })
   // The composer's "#" picker lists the chat's islands (LKM-181).
   setIslandDirectory((key) =>

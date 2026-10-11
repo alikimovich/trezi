@@ -133,8 +133,8 @@ export function assertSectionEvidence(
     )
   else
     assert.ok(
-      ids.every((id) => id === 'connection'),
-      'AI Providers shows only its provider picker'
+      ids.every((id) => id === 'connection' || id === 'providerFallback'),
+      'AI Providers shows only its provider picker and the provider fallback picker'
     )
   const lines = evidence.text.map(words)
   for (const required of [

@@ -6,6 +6,7 @@
 // - lanes: FIFO per common directory (live checkout and worktrees share one), leases,
 //   re-entrancy, unrelated repositories concurrent, competing chats landing;
 // - external: a foreign index lock, an external commit and the user's staged work;
+// - git-lock: a stale index.lock is removed, a fresh one or one under a live Git is kept (LKM-225);
 // - intent: removal/discard/landing refused without their explicit intent, and never
 //   aimed at the main checkout, a folder outside the profile or a path-like name;
 // - crash: SIGKILL inside a landing, a reconciliation reset and a removal leaves the
@@ -21,6 +22,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -308,6 +310,80 @@ try {
     )
     assert.equal(g(live, 'rev-parse', 'HEAD^'), outside)
     assert.equal(g(live, 'diff', '--cached', '--name-only'), 'c.txt')
+    setRepositoryOwner(null)
+    await stop(owned)
+  })
+
+  // LKM-225: a crashed Git's `index.lock` is removed only when old enough and no Git
+  // process works in that checkout; a fresh lock or a live Git keeps it.
+  await section('git-lock', async () => {
+    const owned = await fixture(profile('git-lock'))
+    const owner = await install(owned)
+    const live = repo({ 'a.txt': 'one\n' })
+    const lock = join(live, '.git', 'index.lock')
+    const age = (seconds) => {
+      const then = new Date(Date.now() - seconds * 1000)
+      utimesSync(lock, then, then)
+    }
+    assert.deepEqual(await owner.clearStaleLock(live, 30), {
+      removed: false,
+      reason: 'none',
+      age: null
+    })
+    writeFileSync(lock, '')
+    const fresh = await owner.clearStaleLock(live, 30)
+    assert.equal(fresh.removed, false)
+    assert.equal(fresh.reason, 'fresh')
+    assert.ok(existsSync(lock), 'a fresh lock is kept')
+    age(120)
+    // A real Git process waiting on stdin, working in this checkout, may own the lock.
+    const running = spawn('git', ['hash-object', '--stdin'], { cwd: live, stdio: 'pipe' })
+    await sleep(300)
+    const held = await owner.clearStaleLock(live, 30)
+    assert.equal(held.removed, false)
+    assert.equal(held.reason, 'git-running')
+    assert.ok(existsSync(lock), 'a lock is kept while a Git process runs in the checkout')
+    // Another repository's Git does not hold this lock; this one ends, so the lock goes.
+    const elsewhere = repo()
+    const other = spawn('git', ['hash-object', '--stdin'], { cwd: elsewhere, stdio: 'pipe' })
+    running.kill()
+    await new Promise((resolve) => running.once('exit', resolve))
+    await sleep(100)
+    const cleared = await owner.clearStaleLock(live, 30)
+    other.kill()
+    assert.equal(cleared.removed, true, JSON.stringify(cleared))
+    assert.equal(cleared.reason, 'removed')
+    assert.ok(cleared.age >= 120)
+    assert.ok(!existsSync(lock), 'a stale lock with no Git running is removed')
+    // Not a plain file: never removed.
+    mkdirSync(lock)
+    assert.equal((await owner.clearStaleLock(live, 0)).reason, 'unsafe')
+    rmSync(lock, { recursive: true })
+    // A linked worktree has its own index lock.
+    const dir = join(scratch, 'git-lock', 'trezi', 'worktrees')
+    const wt = await chat(live, dir, 'lock1')
+    const wtLock = join(g(wt.path, 'rev-parse', '--absolute-git-dir'), 'index.lock')
+    writeFileSync(wtLock, '')
+    const wtOld = new Date(Date.now() - 90_000)
+    utimesSync(wtLock, wtOld, wtOld)
+    assert.equal((await owner.clearStaleLock(wt.path, 30)).removed, true)
+    assert.ok(!existsSync(wtLock))
+    // The recovery helper: a stale lock under a failing live commit is cleared and the commit runs once more.
+    writeFileSync(join(wt.path, 'a.txt'), 'one, by the chat\n')
+    const outcome = await completeTurn(live, wt, 'turn under a stale lock')
+    assert.equal(outcome.outcome, 'merged')
+    writeFileSync(lock, '')
+    age(300)
+    const healed = await commitLiveTurn(live, outcome.files, { title: 'after a stale lock' })
+    assert.equal(healed.committed, true, 'a stale lock no longer blocks the commit')
+    assert.ok(!existsSync(lock))
+    // A fresh lock is the user's Git: the commit stays refused and the lock stays.
+    writeFileSync(join(live, 'a.txt'), 'one, again\n')
+    writeFileSync(lock, '')
+    const refused = await commitLiveTurn(live, ['a.txt'], { title: 'fresh lock' })
+    assert.equal(refused.committed, false)
+    assert.ok(existsSync(lock), 'a fresh lock survives the recovery attempt')
+    rmSync(lock)
     setRepositoryOwner(null)
     await stop(owned)
   })

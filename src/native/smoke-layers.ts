@@ -222,12 +222,21 @@ export async function checkLayersIsland(host: NativeBridge, artifacts: string, s
       'the paragraph moved before the heading in index.html',
       10000,
       // A refusal or an agent fallback shows only as a notice.
-      async () => ({
-        notice: (await island()).notice,
-        drop,
-        heading: h1.source,
-        paragraph: p.source
-      })
+      async () => {
+        const text = readFileSync(index, 'utf8')
+        const state = await island()
+        return {
+          notice: state.notice,
+          drop,
+          heading: h1.source,
+          paragraph: p.source,
+          nativeRows: state.count,
+          sourceRows: (await nodes()).length,
+          headingOffset: text.indexOf('id="native-title"'),
+          paragraphOffset: text.indexOf('Bun owns this server'),
+          sourceChanged: text !== original
+        }
+      }
     )
     // The paragraph now has the heading's old row.
     await waitFor(

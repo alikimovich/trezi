@@ -5,6 +5,7 @@ import { type DiscoveredSkill, discoverSkillsInDirectory } from './skills'
 export const BUNDLED_SKILLS_DIR = join(__dirname, '../../agent-plugin/skills')
 
 export const SURFACE_CONTROLS_SKILL = join(BUNDLED_SKILLS_DIR, 'surface-controls/SKILL.md')
+export const DOCTOR_SKILL = join(BUNDLED_SKILLS_DIR, 'trezi-doctor/SKILL.md')
 /** LKM-207: the states workbench skill, user-invoked only as `/states`. */
 export const STATES_SKILL = join(BUNDLED_SKILLS_DIR, 'component-states/SKILL.md')
 export const STATES_COMMAND = 'states'

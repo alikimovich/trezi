@@ -11,7 +11,7 @@ struct ChatMessage: Decodable, Identifiable {
     let id: String; let role: String; let text: String; let segments: [ChatSegment]
     let at: Double?; let workedMs: Double?
     let attachments: [ChatAttachment]?; let selection: ChatSelection?; let revertGroup: String?
-    let comment: ChatComment?; let landingCheck: ChatLandingCheck?; let liveChange: ChatLiveChange?
+    let comment: ChatComment?; let landingCheck: ChatLandingCheck?; let liveChange: ChatLiveChange?; let incident: ChatIncident?
 }
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool? }
 struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo? }
@@ -35,7 +35,7 @@ private extension ChatSnapshot {
     var followHead: [String] { [chat, activity?.label ?? "", String(running)] + cards.map { $0.id + $0.title } + questions.map { $0.id } }
     var followContent: [String] {
         followHead + messages.flatMap { message in
-            [message.id, message.text] + message.segments.flatMap { segment in
+            [message.id, message.text, message.incident?.line ?? "", message.incident?.detail ?? ""] + message.segments.flatMap { segment in
                 if let island = segment.island { return [island.id, String(island.revision)] }
                 if let record = segment.ui?.record { return [record.id, record.images.keys.sorted().joined(separator: ","), String(record.answer != nil)] }
                 return [segment.text ?? ""] + (segment.statuses ?? [])
@@ -166,7 +166,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
             lastConversation = conversation
             let messages = frame.messages ?? (kept ? previous?.messages : nil) ?? []
             let snapshot = ChatSnapshot(activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
-            let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false)
+            let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false) && snapshot.messages.last?.incident == nil
             model.cat.update(running: snapshot.running, questioning: !snapshot.questions.isEmpty || snapshot.cards.contains { $0.agent?.question != nil || $0.actions.contains { $0.action == "permission" } }, completed: completed)
             model.revealAgentQuestions(snapshot.cards)
             let follow = kept ? previous?.followHead != snapshot.followHead : previous?.followContent != snapshot.followContent
@@ -208,6 +208,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "comments":model.snapshot?.messages.compactMap { m in m.comment.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
          "landingChecks":model.snapshot?.messages.compactMap { m in m.landingCheck.map { ["id":m.id, "problem":$0.problem, "line":$0.line, "errors":$0.errors] as [String: Any] } } ?? [],
          "liveChanges":model.snapshot?.messages.compactMap { m in m.liveChange.map { ["id":m.id, "line":$0.line, "agent":$0.agent, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
+         "incidents":model.snapshot?.messages.compactMap { m in m.incident.map { ["id":m.id, "class":$0.class, "line":$0.line, "detail":$0.detail, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
          "footerFrames":model.footerFrames.mapValues { NSStringFromRect($0) }, "revealedActions":model.revealedActions, "messageFrames":model.messageFrames.mapValues { NSStringFromRect($0) },
          "statusLines":model.statusLines, "attachmentFrames":model.attachmentFrames.mapValues { NSStringFromRect($0) }, "attachmentPreview":model.attachmentPreview ?? "",
          "attachmentPopover":NSApp.windows.contains { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }, "activityTokens":model.snapshot?.activity?.tokens?.label ?? "",
@@ -301,6 +302,7 @@ struct ChatConversation: View {
                     if let comment = message.comment { ChatCommentRow(message: message, comment: comment, model: model) }
                     else if let check = message.landingCheck { ChatLandingCheckRow(message: message, check: check, model: model) }
                     else if let change = message.liveChange { ChatLiveChangeRow(message: message, change: change, model: model) }
+                    else if let incident = message.incident { ChatIncidentRow(message: message, incident: incident, model: model) }
                     else {
                         NativeMessageRow(message: message, running: snapshot.running && message.id == snapshot.streamingId, activity: message.id == snapshot.streamingId ? snapshot.activity : nil,
                                          latest: message.id == snapshot.messages.last?.id, model: model)
