@@ -127,6 +127,7 @@ import {
   SmokeRunFailure
 } from './smoke-report'
 import { serviceSource } from './source-service'
+import { installNativeStart } from './start-runtime'
 import { installStatesWorkbench } from './states-install'
 import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
@@ -683,6 +684,7 @@ async function main() {
   // LKM-179: the Layers tree selects and reveals whatever the preview has selected.
   inspectorController.onElement = (element) => layersController.selected(element)
   const sheetController = new NativeSheetController(host!, workspaceController, chatController)
+  installNativeStart(chatController, workspaceController, () => sheetController.newProject())
   const gitController = new NativeGitController(
     sheetController,
     activityController,
@@ -1139,6 +1141,8 @@ async function main() {
       preferred: resolvePreferredSettings(parsePreferredModelState(preferred))
     })
     await chatController.command({ type: 'attach' })
+    // LKM-232: the centered start screen; the smoke suite opts in from its own check.
+    if (!testing) chatController.checkReadiness()
     if (requestedProject && !testing)
       await workspaceController.command({ type: 'open', root: resolve(requestedProject) })
     attached = true

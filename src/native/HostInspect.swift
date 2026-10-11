@@ -215,6 +215,10 @@ extension Host {
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "welcomeInspect": reply(id, welcome.inspect())
+        case "startInspect": reply(id, nativeLayout.startInspect())
+        case "startPerform":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in do { reply(id, try await startPerform(c)) } catch { reply(id, error: error.localizedDescription) } }
         case "dividerInspect": reply(id, ["visible":!chatDivider.isHidden, "width":chatDivider.width, "dragging":chatDivider.dragging, "frame":NSStringFromRect(chatDivider.frame), "hitTarget":canvas.hitTest(NSPoint(x: chatDivider.frame.midX, y: chatDivider.frame.midY)) === chatDivider])
         case "dividerPerform":
             guard ephemeral else { reply(id, false); return true }

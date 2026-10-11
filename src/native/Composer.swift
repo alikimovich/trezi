@@ -40,6 +40,9 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     let readyBeam = ComposerBeamHost()
     var welcomedChats = Set<String>()
     let plus = NSPopUpButton(frame: .zero, pullsDown: true)
+    /// The start composer's project menu, beside Send (LKM-232, ComposerProject.swift).
+    let project = NSPopUpButton(frame: .zero, pullsDown: true)
+    var projectSignature = ""
     let chips = NSStackView()
     let controls = NSStackView()
     let context = NSButton()
@@ -125,6 +128,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         }
         sendButton.bezelStyle = .circular; sendButton.isBordered = true
         sendButton.target = self; sendButton.action = #selector(send(_:))
+        configureProject(); controls.addArrangedSubview(project)
         controls.addArrangedSubview(sendButton)
         plus.widthAnchor.constraint(equalToConstant: 30).isActive = true
         sendButton.widthAnchor.constraint(equalToConstant: 30).isActive = true
@@ -205,7 +209,8 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     func textDidChange(_ notification: Notification) { changed() }
     func textViewDidChangeSelection(_ notification: Notification) { if !text.hasMarkedText() { changed() } }
     func changed() {
-        guard !applying, !chat.isEmpty else { return }
+        // The no-project chat ('') takes a draft only on the start screen (LKM-232).
+        guard !applying, !chat.isEmpty || state["home"] as? Bool == true else { return }
         revision += 1
         emitAction("input", ["text":text.string, "caret":text.selectedRange().location, "revision":revision])
     }
@@ -359,6 +364,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         chips.isHidden = empty; chipsHeight.constant = empty ? 0 : 22
         skillEntries = next["suggestions"] as? [[String: Any]] ?? []
         rebuildSkills()
+        updateProject(next["start"] as? [String: Any])
     }
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()

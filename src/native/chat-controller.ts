@@ -28,6 +28,7 @@ import { autoResolve } from './chat-auto-resolve'
 import { menuQuery, withReferences } from './chat-island-refs'
 import { sendBlock } from './chat-queue'
 import { matches, permissionModes, snapshot } from './chat-snapshot'
+import { HOME, StartFlow } from './chat-start'
 import {
   append,
   assistant,
@@ -61,6 +62,8 @@ export class NativeChatController {
   choices: ModelChoice[] = []
   readonly readiness = initialProviderReadiness()
   private readinessStarted = false
+  /** LKM-232: the centered start composer and the no-project draft's handoff. */
+  readonly start = new StartFlow()
   layout: NativeChatLayout = { visible: false, bounds: { x: 0, y: 0, width: 0, height: 0 } }
   private streamUpdates = new Map<string, ReturnType<typeof setTimeout>>()
   private mirrors = new Map<string, string>()
@@ -86,8 +89,26 @@ export class NativeChatController {
       this.mirrors.set(chat.chat, signature)
       this.services.effect({ type: 'mirror', state })
     }
-    if (chat.chat === this.active)
-      this.services.render({ ...snapshot(chat, this.choices, this.readiness), ...this.layout })
+    if (chat.chat === this.active) {
+      this.start.seed(chat, this.choices, this.readiness)
+      this.services.render({
+        ...snapshot(chat, this.choices, this.readiness, this.start),
+        ...this.layout
+      })
+    }
+  }
+  /** Whether the active chat shows the centered start composer (LKM-232). */
+  get centered() {
+    return this.start.state(this.get(this.active), this.choices, this.readiness).centered
+  }
+  /** LKM-232: the app's start screen needs to know which providers can answer before
+   *  any chat is visible. Idempotent; the smoke suite opts in from its own check. */
+  checkReadiness() {
+    this.start.enabled = true
+    this.changed()
+    if (this.readinessStarted) return
+    this.readinessStarted = true
+    void this.refreshReadiness()
   }
   async refreshChoices() {
     try {
@@ -162,6 +183,7 @@ export class NativeChatController {
       chat.ready = true
       this.settingsChanged(chat)
       this.changed(chat)
+      void this.start.settle(this, chat)
     })()
       .catch((error) => this.fail(chat, error))
       .finally(() => {
@@ -184,16 +206,21 @@ export class NativeChatController {
     }
     if (command.type === 'context') {
       const context = command.context
-      const switched = this.active !== context.chat
+      const from = this.active
+      const switched = from !== context.chat
       this.closed.delete(context.chat)
       this.active = context.chat
       const chat = this.get(context.chat)
       chat.context = context
       chat.needsReview = false
       // Refresh the active shell mirror when switching chats.
-      if (switched) this.mirrors.delete(chat.chat)
+      if (switched) {
+        this.mirrors.delete(chat.chat)
+        this.start.arrive(this, from, chat)
+      }
       this.changed(chat)
       if (context.root) await this.initialize(chat)
+      await this.start.settle(this, chat)
       this.startReadinessIfVisible()
       return
     }
@@ -277,6 +304,10 @@ export class NativeChatController {
     if (event.type === 'progress' && !chat.isRunning) return
     const priorPhase = chat.phase
     reduce(chat, event)
+    // A seat that refused a turn is signed out for the start screen too (LKM-232).
+    const seat = chat.settings.provider
+    if (event.type === 'error' && event.code === 'auth' && !chat.settings.connectionId)
+      if (seat === 'claude' || seat === 'codex') this.readiness[seat] = { status: 'signed_out' }
     if (event.type === 'error' || (event.type === 'isolation' && event.state === 'parked')) {
       if (chat.setup || chat.awaitingLanding)
         this.services.effect({
@@ -417,6 +448,8 @@ export class NativeChatController {
     this.services.effect({ type: 'selection-clear', chat: chat.chat, prompt })
   }
   async submit(chat: Chat, raw = chat.text) {
+    if (chat.chat === HOME) return this.start.request(this, chat, raw)
+    if (this.start.holds(this, chat)) return
     if (!chat.ready) await this.initialize(chat)
     if (!chat.ready || chat.switching || (!raw.trim() && !chat.attachments.length)) return
     const submission: Submission = {
@@ -554,9 +587,19 @@ export class NativeChatController {
     await this.services.invoke('agent:interrupt', chat.chat)
   }
   async choice(chat: Chat, label: string, value: string) {
-    if (!chat.ready || chat.switching) return
+    // The no-project draft has no session yet: its picks are kept for its project (LKM-232).
+    const home = chat.chat === HOME
+    if ((!chat.ready && !home) || chat.switching) return
     if (label === 'Permission mode') {
       if (!permissionModes.some((m) => m.value === value)) return
+      if (home) {
+        chat.settings = {
+          ...chat.settings,
+          permissionMode: value as ChatAgentSettings['permissionMode']
+        }
+        this.start.picked = true
+        return
+      }
       chat.switching = true
       this.changed(chat)
       try {
@@ -588,7 +631,10 @@ export class NativeChatController {
       provider: model.provider,
       connectionId: model.connectionId
     }
-    if (chat.messages.some((m) => m.role === 'user')) chat.pendingModel = next
+    if (home) {
+      chat.settings = next
+      this.start.picked = true
+    } else if (chat.messages.some((m) => m.role === 'user')) chat.pendingModel = next
     else await this.changeModel(chat, next)
   }
   async changeModel(chat: Chat, settings: ChatAgentSettings) {
@@ -658,7 +704,7 @@ export class NativeChatController {
     if (action.chat !== this.active) return
     const chat = this.get(action.chat)
     try {
-      await cardAction(this, chat, action)
+      if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)
     } catch (error) {
       this.fail(chat, error)
     }

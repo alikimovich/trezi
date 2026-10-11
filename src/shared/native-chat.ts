@@ -94,6 +94,24 @@ export interface NativeChatActivity {
   /** The running turn's counter and its tooltip, on its own line under the status. */
   tokens?: { label: string; detail: string }
 }
+/** LKM-232: the centered start composer. Derived from the chat on every snapshot, never
+ *  a one-shot flag: `centered` while a new chat is empty and a provider can answer.
+ *  `home` is the no-project chat (key ''), whose draft waits for a destination. */
+export interface NativeChatStart {
+  centered: boolean
+  home: boolean
+  /** The selected provider can answer now; Send waits for it (the draft never does). */
+  ready: boolean
+  heading: string
+  /** One line under the composer (a destination to choose, a lost provider, progress). */
+  notice?: {
+    text: string
+    progress?: boolean
+    actions: { label: string; action: string; value?: string; disabled?: boolean }[]
+  }
+  /** The composer's project menu: the chosen project (null: none yet) and recents. */
+  project: { title: string | null; recents: { root: string; name: string }[] }
+}
 export interface NativeChatState {
   activity: NativeChatActivity | null
   streamingId: string | null
@@ -102,7 +120,10 @@ export interface NativeChatState {
   running: boolean
   cards: NativeChatCard[]
   questions: QuestionRequest[]
+  start?: NativeChatStart
   composer: {
+    /** The no-project draft (LKM-232): the composer takes input without a chat key. */
+    home?: boolean
     queue: { id: string; text: string; attachments: number }[]
     queuePaused: boolean
     /** LKM-151: why a paused queue will not send on its own, and whether "Send now" can. */

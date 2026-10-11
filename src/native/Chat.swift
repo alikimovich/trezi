@@ -193,6 +193,10 @@ final class NativeChat: NSHostingView<ChatConversation> {
         layoutLatestButton()
         input["chat"] = state["chat"]; input["visible"] = !isHidden && !(state["chat"] as? String ?? "").isEmpty
         input["bounds"] = ChatLayout.composerBounds(in: frame, height: composerHeight)
+        // The centered start composer (LKM-232) places itself, with or without a transcript.
+        if let visible = state["composerVisible"] as? Bool { input["visible"] = visible }
+        if let bounds = state["composerFrame"] as? [String: Double] { input["bounds"] = bounds }
+        input["start"] = state["start"]
         composer.update(input)
     }
     /// The conversation's SwiftUI-backed NSScrollView, found through its style probe.

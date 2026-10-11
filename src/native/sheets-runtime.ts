@@ -259,25 +259,41 @@ export class NativeSheetController {
         if (this.current?.state.id !== action.id) return
         if (!result.ok || !result.root) throw new Error(result.error || 'Could not create project')
         this.close()
-        await this.workspace.command({ type: 'open', root: result.root })
+        const text = action.values.details?.trim() ?? ''
+        const preference =
+          setup === 'custom'
+            ? 'Let’s plan a new project and choose the environment together.'
+            : `Let’s plan a new ${setup === 'next' ? 'Next.js' : 'Svelte'} project.`
+        const planning =
+          preference +
+          ' Please ask me what I want to build and help me decide any remaining setup choices before creating the app.\n' +
+          text
+        // LKM-232: a start-screen draft moves into the new project's chat on open; the
+        // sheet's text goes ahead of it, so the project starts with exactly one turn.
+        const start = this.chat.start
+        const carried =
+          this.chat.centered &&
+          (start.hasDraft(this.chat.chats.get(this.chat.active)) || start.pending)
+        if (carried) {
+          start.carry = this.chat.active
+          start.prefix = setup === 'react' ? { text, send: false } : { text: planning, send: true }
+        }
+        try {
+          await this.workspace.command({ type: 'open', root: result.root })
+        } finally {
+          if (carried) start.prefix = undefined
+        }
         const project = this.workspace.active
         if (!project || project.root !== result.root) return
-        const text = action.values.details?.trim() ?? ''
-        if (setup === 'react') {
-          if (text) await this.chat.command({ type: 'seed', chat: project.activeSessionKey, text })
-        } else {
-          const preference =
-            setup === 'custom'
-              ? 'Let’s plan a new project and choose the environment together.'
-              : `Let’s plan a new ${setup === 'next' ? 'Next.js' : 'Svelte'} project.`
-          await this.chat.command({
-            type: 'submit',
-            chat: project.activeSessionKey,
-            text:
-              preference +
-              ' Please ask me what I want to build and help me decide any remaining setup choices before creating the app.\n' +
-              text
-          })
+        if (!carried) {
+          if (setup !== 'react')
+            await this.chat.command({
+              type: 'submit',
+              chat: project.activeSessionKey,
+              text: planning
+            })
+          else if (text)
+            await this.chat.command({ type: 'seed', chat: project.activeSessionKey, text })
         }
         if (result.warning) this.workspace.reportError(result.warning)
       }
