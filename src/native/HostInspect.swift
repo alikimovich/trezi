@@ -272,6 +272,12 @@ extension Host {
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "chatInspect": reply(id, chat.inspect())
+        case "chatIncidentRow":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await verifyIncidentRow(c)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "chatCommentRows":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in

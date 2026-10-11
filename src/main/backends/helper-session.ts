@@ -5,15 +5,19 @@ import { projectKey } from '../../shared/projectKey'
 import { currentAgentFileAccess } from '../agent-file-access'
 import { currentAgentGitAccess } from '../agent-git-access'
 import { type HelperHandlers, providerOwner } from '../provider-owner'
+import { fallbackCandidate, fallbackOptions, fallbackProvider } from '../self-heal/fallback'
+import { fallbackNote } from '../self-heal/status'
 import { runTreziTool, type SessionTool } from '../session-tools'
 import { claudeProvider } from './claude'
 import { claudeUserPluginsAllowed } from './claude-isolation'
 import { resumeSummary } from './claude-resume'
 import { codexProvider } from './codex'
+import { handoffPrompt } from './conversation-handoff'
 import { geminiProvider } from './gemini'
 import { createRecordCapture } from './record'
 import { withSkillMenu } from './skill-menu'
 import { sendToRenderer } from './tools'
+import { createTurnRecovery } from './turn-recovery'
 import type {
   ModelProvider,
   PendingPrompt,
@@ -69,6 +73,13 @@ async function startHelperSession(
   let disposed = false
   let gone: string | null = null
   let reportedResume: string | undefined
+  // LKM-225: a turn the original provider could not connect for runs on the other one; the
+  // chat keeps its own provider and returns to it on the next message.
+  let active = provider
+  let activeOptions = options
+  const onFallback = (): boolean => active !== provider
+  const exitWaiters: Array<() => void> = []
+  let recovery: ReturnType<typeof createTurnRecovery> | null = null
 
   const emit = (event: AgentEvent): void => {
     if (disposed) return
@@ -110,13 +121,14 @@ async function startHelperSession(
         })
       } else if (event.type === 'permission-resolved') pending.delete(event.id)
       else if (event.type === 'question-resolved') pendingQuestions.delete(event.id)
-      emit(event)
+      if (!recovery?.event(event)) emit(event)
     },
     record: (delta) => {
       record.transcript.push(...delta.entries)
       if (delta.filesTouched)
         record.filesTouched = [...new Set([...record.filesTouched, ...delta.filesTouched])]
-      if (delta.sdkSessionId && delta.sdkSessionId !== reportedResume) {
+      // A fallback provider's own session id is not the chat's resumable one.
+      if (!onFallback() && delta.sdkSessionId && delta.sdkSessionId !== reportedResume) {
         reportedResume = delta.sdkSessionId
         record.sdkSessionId = delta.sdkSessionId
         if (delta.sdkCwd) record.sdkCwd = delta.sdkCwd
@@ -128,6 +140,7 @@ async function startHelperSession(
     tool: (tool, args) => runTreziTool(tool as SessionTool, args, scope),
     exit: (reason) => {
       gone = reason
+      for (const wake of exitWaiters.splice(0)) wake()
     }
   }
 
@@ -136,15 +149,15 @@ async function startHelperSession(
       {
         session,
         chat: emitKey,
-        provider,
+        provider: active,
         root,
         liveRoot: ctx?.liveRoot ?? root,
         background: !!ctx?.sessionId
       },
       {
         options: {
-          ...options,
-          ...(provider === 'claude' ? { claudeUserPlugins: claudeUserPluginsAllowed() } : {}),
+          ...activeOptions,
+          ...(active === 'claude' ? { claudeUserPlugins: claudeUserPluginsAllowed() } : {}),
           agentFileAccess: currentAgentFileAccess(),
           agentGitAccess: currentAgentGitAccess()
         },
@@ -187,6 +200,53 @@ async function startHelperSession(
     return reopening
   }
 
+  /** The recorded conversation (without the message being sent) ahead of `text`. */
+  const withHistory = (text: string): string => {
+    const turns = record.transcript
+    return handoffPrompt(turns.at(-1)?.role === 'user' ? turns.slice(0, -1) : turns, text)
+  }
+
+  recovery = createTurnRecovery({
+    emit,
+    interactive: !ctx?.sessionId,
+    canFallback: () => !onFallback() && fallbackCandidate(provider, options) !== null,
+    exited: () =>
+      gone
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, 1000)
+            timer.unref?.()
+            exitWaiters.push(() => {
+              clearTimeout(timer)
+              resolve()
+            })
+          }),
+    canRestart: () => gone !== 'violation' && !onFallback(),
+    restart: async (text, images) => {
+      await reopen()
+      await owner.send(session, text, images)
+    },
+    fallback: async (text, images) => {
+      const to = await fallbackProvider(provider, options, root)
+      if (!to) return false
+      void owner.close(session).catch(ignore)
+      session = randomUUID()
+      gone = null
+      active = to
+      activeOptions = fallbackOptions(options, to)
+      try {
+        await open(undefined, undefined)
+      } catch (error) {
+        active = provider
+        activeOptions = options
+        throw error
+      }
+      emit({ type: 'status', text: fallbackNote(provider, to) })
+      await owner.send(session, withHistory(text), images)
+      return true
+    }
+  })
+
   return {
     key,
     root,
@@ -195,8 +255,16 @@ async function startHelperSession(
       if (gone && (gone === 'violation' || ctx?.sessionId)) {
         return refuse(`The provider helper is not running (${gone}). Start a new chat to continue.`)
       }
-      void (gone || reopening ? reopen() : Promise.resolve())
-        .then(() => owner.send(session, text, images))
+      recovery?.begin(text, images)
+      // After a fallback turn the chat goes back to its own provider, which has not seen that
+      // turn: it gets the recorded conversation once, like after a model switch.
+      const back = onFallback()
+      if (back) {
+        active = provider
+        activeOptions = options
+      }
+      void (back || gone || reopening ? reopen() : Promise.resolve())
+        .then(() => owner.send(session, back ? withHistory(text) : text, images))
         .catch((error) => refuse(error instanceof Error ? error.message : String(error)))
     },
     pending,
@@ -220,6 +288,7 @@ async function startHelperSession(
     // The owner holds the deadline and kills the helper itself; it has then already
     // ended the turn (an `error`, one `done`), so the chat only needs rebuilding.
     interrupt: async () => {
+      recovery?.stop()
       const { escalate } = await owner.cancel(session).catch(() => ({ escalate: false }))
       return escalate ? { hardStopped: true } : undefined
     }

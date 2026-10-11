@@ -27,6 +27,7 @@ export const SOURCES = [
   'RepositoryAgentGit',
   'RepositoryBranches',
   'RepositoryCleanup',
+  'RepositoryLock',
   'RepositoryMerge',
   'RepositoryOwner'
 ].map((name) => `src/service/${name}.swift`)

@@ -49,7 +49,10 @@ extension NativeSheets {
         }
         content.layoutSubtreeIfNeeded()
         content.displayIfNeeded()
-        let fields = model.state!.fields.filter { $0.kind == "choice" }
+        // Only the selected pane renders; another pane's picker must not match this pane's popup
+        // when both offer the same choices (On/Off).
+        let shown = model.section ?? model.state!.sections?.first?.id
+        let fields = model.state!.fields.filter { $0.kind == "choice" && ($0.section == nil || $0.section == shown) }
         let popups = renderedPickers(in: content).filter { !$0.isHiddenOrHasHiddenAncestor }
         let sidebar = split?.outline
         let sidebarView = split?.sidebarItem.viewController.view

@@ -31,6 +31,8 @@ export interface NativeChatMessage {
   /** LKM-215: the live checkout changed outside this chat during the turn, one compact
    *  warning row with Details. */
   liveChange?: NativeLiveChange
+  /** One classified provider/workspace incident for this turn. */
+  incident?: { class: string; line: string; detail: string }
   /** Tokens this assistant turn's model calls reported (cached is part of input). */
   usage?: { input: number; output: number; cached: number }
 }

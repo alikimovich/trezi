@@ -711,11 +711,20 @@ try {
     setProviderOwner(owner)
     const crash = await helperChat()
     const crashed = await crash.turn('crash')
+    // LKM-225: an interactive turn's crashed helper is restarted and the turn resumed, at
+    // most twice (this prompt crashes every time); only then does the one error show.
     assert.deepEqual(
       crashed.map((e) => e.type),
-      ['error', 'done']
+      ['status', 'commands', 'model', 'status', 'commands', 'model', 'error', 'done']
     )
-    assert.match(crashed[0].message, /stopped unexpectedly \(status 7\)/)
+    assert.deepEqual(
+      crashed.filter((e) => e.type === 'status').map((e) => e.text),
+      ['Restarting provider…', 'Restarting provider…']
+    )
+    assert.match(
+      crashed.find((e) => e.type === 'error').message,
+      /stopped unexpectedly \(status 7\)/
+    )
     await sleep(100)
     assert.equal(crash.events.filter((e) => e.type === 'done').length, 1)
     assert.deepEqual((await f.cmd({ cmd: 'journal' })).groups, [], 'its group left the journal')

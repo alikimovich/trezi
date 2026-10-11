@@ -10,6 +10,22 @@ import { recoveryAction } from './chat-recovery'
 import { assistant, begin, type Chat, placeUi, type Submission } from './chat-state'
 import { landingFixPrompt } from './landing-check'
 
+/** Resolve for a chat whose changes are held: the agent fixes the conflict markers in a turn. */
+export async function resolveHeld(controller: NativeChatController, chat: Chat) {
+  if (chat.isRunning || chat.sending) return
+  chat.paused = false
+  const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
+  if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
+  if (result.prompt && result.conflicted.length)
+    await controller.run(chat, {
+      id: crypto.randomUUID(),
+      text: result.prompt,
+      attachments: [],
+      selection: null,
+      turn: {}
+    })
+}
+
 /** Card actions call application services directly; shell effects only refresh web panels. */
 export async function cardAction(
   controller: NativeChatController,
@@ -142,21 +158,9 @@ export async function cardAction(
     }
     // Resolve, Discard and Retry are the user's way out: the queue follows once the held
     // changes land or go (the isolation event drains it, LKM-169).
-    case 'resolve': {
-      if (chat.isRunning || chat.sending) return
-      chat.paused = false
-      const result = await invoke('agent:resolve-conflict', chat.chat)
-      if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
-      if (result.prompt && result.conflicted.length)
-        await controller.run(chat, {
-          id: crypto.randomUUID(),
-          text: result.prompt,
-          attachments: [],
-          selection: null,
-          turn: {}
-        })
+    case 'resolve':
+      await resolveHeld(controller, chat)
       break
-    }
     case 'discard':
       if (chat.isRunning || chat.sending) return
       chat.paused = false

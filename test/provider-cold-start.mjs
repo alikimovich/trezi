@@ -58,7 +58,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const args = process.argv.slice(2)
 if (args[0] === 'auth') {
   const start = Date.now()
-  await sleep(500)
+  // Long enough that two stand-ins started together still overlap when the machine is busy
+  // enough to delay one process's start by a second (the unit tier runs 8 workers).
+  await sleep(2000)
   appendFileSync(${JSON.stringify(PROBES)}, JSON.stringify({ name: ${JSON.stringify(name)}, start, end: Date.now() }) + '\\n')
   console.log(JSON.stringify({ loggedIn: ${loggedIn}, authMethod: 'claude.ai' }))
   process.exit(${loggedIn ? 0 : 1})

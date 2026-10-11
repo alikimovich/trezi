@@ -24,6 +24,9 @@ import { parseCodexModels } from '../model-catalog'
 import { resolveConnection } from '../providers'
 import { scrubSecret } from '../providers-store'
 import { treziRules } from '../rules'
+import { classifyError } from '../self-heal/catalog'
+import { providerReachable, recoveryDelay } from '../self-heal/network'
+import { RECOVERED_STATUS, reconnectingStatus } from '../self-heal/status'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
 import { codexSeatAuthFailure } from './codex-auth'
@@ -259,6 +262,7 @@ async function startSession(
   // A connection's key, held only so `emitError` can blank it out (below). Set once
   // the connection resolves; null for the ChatGPT seat, where there is no key.
   let connKey: string | null = null
+  let networkHost = 'https://chatgpt.com'
   // Always attribute errors to the Codex backend (so the user knows which provider
   // failed, and the renderer's login-banner heuristic can key on it).
   //
@@ -295,6 +299,7 @@ async function startSession(
     // and answer with a different model than the picker says is selected.
     const conn = options.connectionId ? await resolveConnection(options.connectionId) : null
     connKey = conn?.apiKey ?? null
+    if (conn) networkHost = new URL(conn.baseUrl).origin
     if (options.connectionId && !conn) {
       throw new Error(
         "that model's connection is missing or its key could not be read — re-add it in Settings."
@@ -482,7 +487,31 @@ async function startSession(
     // next listed model on a fresh copy of the thread, say so, and keep it for later
     // turns; main reads the notice (`provider-sessions.ts`). Connections never do this.
     const wasDefault = !threadOptions.model
-    let rejected = await attempt(thread, text)
+    let result = await attempt(thread, text)
+    // A routing-discovery failure occurs before the model has produced output.
+    // Recreate the CLI process, preserving the thread id and the original prompt.
+    let networkRetries = 0
+    for (
+      let tries = 0;
+      result.network && openThread && tries < 3 && !turnAbort.signal.aborted;
+      tries++
+    ) {
+      networkRetries++
+      if (tries === 0) emit({ type: 'status', text: reconnectingStatus('codex') })
+      // This uses the helper's proxy and certificate environment, exactly as the CLI does.
+      await providerReachable(networkHost)
+      await new Promise<void>((resolve) => setTimeout(resolve, recoveryDelay(tries)))
+      if (disposed || aborted || turnAbort.signal.aborted) break
+      stopUsageWatch()
+      thread = openThread(resumeId)
+      result = await attempt(thread, text)
+    }
+    // Main's incident tracker logs the outcome from these two lines (self-heal/status.ts).
+    if (networkRetries && !result.network && !result.rejected && !turnAbort.signal.aborted)
+      emit({ type: 'status', text: RECOVERED_STATUS })
+    if (result.network && !disposed && !aborted && !turnAbort.signal.aborted)
+      emitError(result.network)
+    let rejected = result.rejected
     for (let tries = 0; rejected && openThread && tries < 3; tries++) {
       const fallback = nextCodexModel(
         await listedCodexModels(),
@@ -496,7 +525,8 @@ async function startSession(
       stopUsageWatch()
       thread = openThread(resumeId)
       if (thread.id) startUsageWatch(thread.id)
-      rejected = await attempt(thread, text)
+      result = await attempt(thread, text)
+      rejected = result.rejected
     }
     if (rejected && !aborted && !turnAbort.signal.aborted)
       emitError(codexModelUnavailable(rejected))
@@ -509,7 +539,10 @@ async function startSession(
   }
 
   /** One run of the turn's prompt: the model this login rejected, or null. */
-  const attempt = async (thread: Thread, text: string): Promise<string | null> => {
+  const attempt = async (
+    thread: Thread,
+    text: string
+  ): Promise<{ rejected: string | null; network: string | null }> => {
     const signal = turnAbort?.signal
     // Per turn, not per session: a retry cause from an earlier turn must not be
     // grafted onto a later, unrelated failure.
@@ -519,6 +552,7 @@ async function startSession(
     // only the longer tail — which is why replies arrived starting mid-word.
     items.reset()
     let rejected: string | null = null
+    let network: string | null = null
     let produced = false
     // The seat's "not supported with a ChatGPT account" 400, before any output: in a
     // stream `error` or `turn.failed` event (the real CLI's JSON body) or the exec error.
@@ -556,7 +590,12 @@ async function startSession(
             noteUsage(readUsage((ev as { usage?: unknown }).usage))
             break
           case 'turn.failed':
-            if (!rejection(ev.error)) emitError(retryCause.explain(errorText(ev.error ?? ev)))
+            if (!rejection(ev.error)) {
+              const message = retryCause.explain(errorText(ev.error ?? ev))
+              if (classifyError(message).class === 'provider-network' && !produced)
+                network = message
+              else emitError(message)
+            }
             break
           case 'error': {
             if (rejection(ev)) break
@@ -570,9 +609,12 @@ async function startSession(
             // error stream (they're progress, not outcomes) while remembering WHY,
             // and let the terminal error borrow that reason.
             if (retryCause.note(message)) {
-              emit({ type: 'status', text: oneLine(message, 100) })
+              // The CLI reports every reconnect attempt; one status row is enough.
             } else {
-              emitError(retryCause.explain(message))
+              const explained = retryCause.explain(message)
+              if (classifyError(explained).class === 'provider-network' && !produced)
+                network = explained
+              else emitError(explained)
             }
             break
           }
@@ -584,15 +626,17 @@ async function startSession(
       if (!aborted && !signal?.aborted && !rejection(raw)) {
         const m = retryCause.explain(raw)
         // A missing/unauthenticated `codex` CLI surfaces here (e.g. spawn ENOENT).
-        emitError(
-          /codex/i.test(m)
-            ? m
-            : `turn failed: ${m}. Is the \`codex\` CLI installed and \`codex login\` done?`,
-          codexSeatAuthFailure(m, options.connectionId)
-        )
+        if (classifyError(m).class === 'provider-network' && !produced) network = m
+        else
+          emitError(
+            /codex/i.test(m)
+              ? m
+              : `turn failed: ${m}. Is the \`codex\` CLI installed and \`codex login\` done?`,
+            codexSeatAuthFailure(m, options.connectionId)
+          )
       }
     }
-    return rejected
+    return { rejected, network }
   }
 
   return {
