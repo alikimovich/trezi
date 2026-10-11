@@ -175,6 +175,7 @@ export function serviceRepository(
       effect('pruneBranches', { root, protected: protectedIds, intent: 'integrated' }),
     removeLegacyFolder: async (directory) =>
       (await effect('removeLegacyFolder', { root: directory, intent: 'legacy' })).removed,
+    clearStaleLock: (root, minAge) => effect('clearStaleLock', { root, minAge, intent: 'unlock' }),
     commitLive: (root, files, title, body, mergeParent) =>
       effect('commitLive', {
         root,

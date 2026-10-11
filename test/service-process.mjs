@@ -290,6 +290,7 @@ try {
         'src/service/RepositoryAgentGit.swift',
         'src/service/RepositoryBranches.swift',
         'src/service/RepositoryCleanup.swift',
+        'src/service/RepositoryLock.swift',
         'src/service/RepositoryMerge.swift',
         'src/service/RepositoryOwner.swift',
         'src/service/SourcePaths.swift',

@@ -2,6 +2,35 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-225 review repair: rules version, cat completion, doctor skill catalog
+
+- **Rules v41** (`src/main/rules.ts`): the doctor-skill rule changed the text, so the version is bumped; `test/rules.mjs` pins 41 and asserts the rules name the `trezi-doctor` skill path (`DOCTOR_SKILL`).
+- **Pet-cat completion** (`Chat.swift`): a failed turn ends in an incident row whose text is the clean class line, not "⚠️ …", so it counted as completed. A last message that carries an incident no longer counts as completed; the ⚠️ check stays for remaining warning text.
+- **Doctor skill** (`agent-plugin/skills/trezi-doctor/SKILL.md`): it pointed at `docs/SELF-HEAL.md`, which does not exist in a user's project. The class → recovery table is now in the skill itself.
+
+## 2026-10-10 — LKM-225 review repair: fallback, restart, Git lock, auto Resolve, telemetry
+
+- **Provider fallback and helper restart live in the helper session** (`helper-session.ts` + `turn-recovery.ts`), not in the Codex adapter: the Swift event protocol is an allowlist, so recovery progress is plain `status` text (`self-heal/status.ts`) that main's incident tracker parses. A failed turn's `error`/`done` are held until the outcome is known. Fallback closes the helper, opens one on the other provider without resume, posts "Codex could not connect; this turn used Claude" and sends the recorded conversation (`handoffPrompt`); the next message returns to the chat's provider the same way. Setting "Automatic provider fallback" (default on). Restarts: at most two, resume id kept, original or "continue" prompt; never after Stop, a grant violation, in background runs or on a fallback turn.
+- **Git lock cleanup is owner-mediated:** new `clearStaleLock` in `RepositoryOwner.swift`/`RepositoryLock.swift` (stale > 30 s and no Git process), wrapped around `completeTurn` and `commitLiveTurn` by `withGitLockRecovery`. Swift's `commitLive` reports a Git failure as `committed:false`, so the wrapper takes a `declined` predicate.
+- **Telemetry:** one `Incident` line per class per turn with the final outcome (recovered / fell-back / failed); the per-attempt `Incident recovery` log lines were removed. Unknown errors keep a redacted one-line summary as the row line.
+- **Automatic Resolve** (`chat-auto-resolve.ts`): one try per park through the Resolve path, production only (`installNativeChat`'s `checkLandings`), so the smoke suite keeps the parked card. **Dev-server recovery** is the existing preview supervisor (LKM-146); nothing new was added. **Doctor** is a deterministic module (`self-heal/doctor.ts`), not an LLM subagent; reset-time queueing was not implemented.
+- **Settings placement (attempt 2).** The row first went into General, which clipped `quitDontAsk` at 760 pt; raising the height to 830 pt then kept the Settings window from ever getting foreground on the ~828-pt native test display (smoke timed out). "Automatic provider fallback" now lives in AI Providers after the provider picker, which has room, and the Settings height (760), the test-size cap (800) and the General picker list are back to their previous values; the AI Providers evidence check accepts `providerFallback`.
+- **Cold-start test.** The stand-in `claude auth` probe in `test/provider-cold-start.mjs` sleeps 2 s instead of 0.5 s, so two probes started together still overlap when the 8-worker unit tier delays one process start; the overlap assertion is unchanged.
+- Tests: `test/codex-model.mjs` (retry loop: one "Reconnecting" status, ≤3 re-runs with the same thread and prompt, "Recovered", one error, reachability probe stubbed), `test/self-heal-recovery.mjs`, `test/chat-auto-resolve.mjs`, `test/repository-owner.mjs` (real Swift fixture). `test/codex-model.mjs` needs a unix socket, so it does not run inside the worker sandbox.
+
+## 2026-10-10 — LKM-225 review repair: Layers drop survives a stale tree
+
+- The manager's full native run timed out waiting for a Layers paragraph reorder after the native outline accepted the drop. The isolated `core` group passed, so the failure is intermittent. A move whose row or target is absent from the Bun controller's current tree now refreshes that tree once before handling the action, rather than silently dropping the request. A unit case covers the stale-tree path.
+- The Layers smoke keeps its source-order assertion and now reports the native notice, row counts, source offsets and whether the file changed if the reorder times out. That makes a repeated full-run failure distinguish an ignored event from a source-owner refusal. The previous full run also reached its 300-second launcher limit after the reorder failure; the manager will verify the full suite.
+- Quick verification exposed a separate simulator-fixture race: a reader could parse `bootstatus.json` mid-write and throw `Unexpected EOF`. The test now treats an incomplete or briefly absent status as pending, while still waiting for the same boot status. A standalone rerun in this worker sandbox reached `No free port found from 17800`; manager verification must confirm that socket-dependent case.
+- The first post-fix native `core` call passed all 29 smoke checks, including Layers, then the separate chat-scroll capture failed because its window had lost foreground. The shared test bridge now prepares the foreground before `captureShell` and retries once only for the two foreground capture errors; the real capture guard and pixel assertions remain intact.
+
+## 2026-10-10 — LKM-225 partial: classified incidents and Codex reconnect recovery
+
+- Native `chat` group passes 13/13 including `incident-row`: duplicate routing errors yield one row (collapsed 39 pt), with readable expanded Details and Copy details; foreground PNGs reviewed. Agent OS quick passes 212 unit checks, typechecks and lint.
+- Added a catalog for provider, workspace and Git failures. Provider errors now render as one compact native incident row with collapsed, copyable Details; repeated errors of the same class in a turn update that row. The real Codex routing-discovery strings are unit fixtures.
+- Codex retries a pre-output network failure up to three times from its supervised helper, checking provider reachability and backing off between attempts. A recovered turn gets a short status; classified incidents and outcomes are logged for Dreamer. Bundled doctor guidance and `docs/SELF-HEAL.md` describe safe diagnosis and the existing recovery paths.
+- Remaining work is tracked in `docs/TASKS.md`: automatic provider fallback and reset-time queueing, same-turn helper restart, owner-mediated Git lock cleanup, automatic Resolve/dev-server actions, and a tool-limited doctor agent.
 ## 2026-10-10 — LKM-227: exploded view rendered natively
 
 - The in-page CSS perspective scene, camera and pointer handling are gone. The preview keeps `three-d-paint.ts` capture and layer identity, packs surfaces into at most six viewport-sized atlas pages (`packAtlas`) and sends only bounded geometry; `threeDStateAllowed` mirrors the Swift checks.

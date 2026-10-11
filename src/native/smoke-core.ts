@@ -27,6 +27,7 @@ import {
 } from './smoke-editor-freshness'
 import { smokeFocusHooks } from './smoke-focus'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
+import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import { checkInspectorIsland } from './smoke-inspector-island'
 import { checkIslandNewChat, restoreIslandNewChat } from './smoke-island-new-chat'
@@ -925,6 +926,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkCommentRows(host, artifacts)
+      }
+    },
+    {
+      name: 'incident-row',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkIncidentRow(host, artifacts)
       }
     },
     {

@@ -1,3 +1,4 @@
+import { classifyError, incidentDetail } from '../main/self-heal/catalog'
 import type {
   AgentEvent,
   DependencyIssue,
@@ -82,6 +83,8 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
+  /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
+  autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
   /** LKM-151: the files and undo group of the last turn that landed on the live tree. */
@@ -329,7 +332,28 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
         const message = chat.messages.find((m) => m.id === chat.streamingId)
         if (message && !message.text && !message.statuses.length)
           chat.messages = chat.messages.filter((m) => m !== message)
-      } else append(chat, `\n\n⚠️ ${event.message}`)
+      } else {
+        const incident = classifyError(event.message)
+        const detail = incidentDetail(event.message)
+        const lastUser = [...chat.messages].reverse().findIndex((m) => m.role === 'user')
+        const turnMessages =
+          lastUser < 0 ? chat.messages : chat.messages.slice(chat.messages.length - lastUser)
+        const prior = [...turnMessages].reverse().find((m) => m.incident?.class === incident.class)
+        if (prior?.incident) {
+          if (!prior.incident.detail.includes(detail)) prior.incident.detail += `\n\n${detail}`
+          prior.incident.line = incident.line
+        } else {
+          chat.messages.push({
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            at: now,
+            text: incident.line,
+            statuses: [],
+            segments: [],
+            incident: { class: incident.class, line: incident.line, detail }
+          })
+        }
+      }
       chat.paused = true
       finish(chat)
       break
