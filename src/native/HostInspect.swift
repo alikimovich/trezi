@@ -175,15 +175,22 @@ extension Host {
                        "layersFrame":NSStringFromRect(layers.frame), "layersHidden":layers.isHidden,
                        "inspectorRect":rect(editingInspector.frame), "layersRect":rect(layers.frame),
                        "insets":["top":insets.top, "bottom":insets.bottom, "left":insets.left, "right":insets.right],
-                       "focus":window.firstResponder === views["preview"] ? "preview" : threeD.ownsFocus(window.firstResponder) ? "chrome" : "other",
+                       "focus":window.firstResponder === views["preview"] ? "preview" : window.firstResponder === threeD.scene ? "scene" : threeD.ownsFocus(window.firstResponder) ? "chrome" : "other",
                        "dockedSourceRect":dockedSource.map { rect($0.frame) } ?? [:],
                        "headerType":String(describing: type(of: threeD.header)),
                        "footerType":String(describing: type(of: threeD.footer)),
-                       "palette":threeD.palette(threeD.header.effectiveAppearance)])
+                       "sceneType":String(describing: type(of: threeD.scene))].merging(threeD.inspectScene()) { old, _ in old })
         case "threeDPerform":
-            guard ephemeral, threeD.active, let action = c["action"] as? String,
-                  ["close", "code", "front", "reset", "separation", "layer"].contains(action) else { reply(id, false); return true }
-            threeD.model.action(action, value: c["value"] as? Int); reply(id, true)
+            guard ephemeral, threeD.active, let action = c["action"] as? String else { reply(id, false); return true }
+            let value = c["value"] as? Int
+            switch action {
+            case "close", "code", "front", "reset", "separation", "layer": threeD.model.action(action, value: value); reply(id, true)
+            // Through the scene's own hit test, at the layer's projected centre.
+            case "click": reply(id, value.flatMap(threeD.scene.screenPoint).flatMap { threeD.scene.click(at: $0) } ?? -1)
+            case "hover": threeD.scene.hoverLayer(value); reply(id, threeD.scene.hoverText)
+            case "recapture": threeD.recapture(fail: c["fail"] as? Bool == true, hold: (c["hold"] as? Double ?? 0) / 1000); reply(id, true)
+            default: reply(id, false)
+            }
         case "threeDFocus":
             guard ephemeral, threeD.active else { reply(id, false); return true }
             let target: NSResponder = c["target"] as? String == "chat" ? composer.text : threeD.header
@@ -199,7 +206,12 @@ extension Host {
                 defer { window.appearance = prior }
                 content.layoutSubtreeIfNeeded(); content.displayIfNeeded()
                 try? await Task.sleep(nanoseconds: 350_000_000)
-                do { reply(id, try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)) }
+                do {
+                    var value = try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)
+                    // The native scene's semantic background under the captured appearance.
+                    value["background"] = threeD.scene.backgroundHex
+                    reply(id, value)
+                }
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "welcomeInspect": reply(id, welcome.inspect())

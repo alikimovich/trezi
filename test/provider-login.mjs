@@ -718,46 +718,53 @@ esac
       }
       console.log('PROVIDER-LOGIN no-keychain PASS')
     }
-    const list = real(['list-keychains', '-d', 'user'], true)
-    const fallback = real(['default-keychain'], true)
-    const line = (run) =>
-      (run.stdout ?? '')
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .join(' ')
-        .slice(0, 500)
-    if (list.status !== 0 || fallback.status !== 0 || !line(fallback)) {
-      const exit = (run) =>
-        run.status === null
-          ? `did not run (${run.error?.code ?? run.signal})`
-          : `exit ${run.status}`
-      console.log(
-        `PROVIDER-LOGIN real-keychain SKIP — no usable user keychain in this session (security list-keychains ${exit(list)}, default-keychain ${exit(fallback)}), so the real Keychain probe is not exercised here; the fake-security parts above still ran`
-      )
+    // A real user keychain may raise a system prompt. Only the operator runs this
+    // part explicitly; ordinary worker/CI verification uses the private-HOME and
+    // fake-security cases above.
+    if (process.env.TREZI_TEST_REAL_KEYCHAIN !== '1') {
+      console.log('PROVIDER-LOGIN real-keychain SKIP — operator-only opt-in')
     } else {
-      const run = await fixture({ bundled: loggedOut, security: SECURITY })
-      try {
-        const report = await run.owner.data.checkLogin('claude', WT)
-        const find = real(['find-generic-password', '-s', 'Claude Code-credentials'], false)
-        assert.deepEqual(report.keychain, { listKeychains: 0, defaultKeychain: 0 }, report.detail)
-        assert.equal(report.keychainList, line(list) || 'none')
-        assert.equal(report.keychainDefault, line(fallback))
-        // The item lookup matches this process's (null only if one of them timed out).
-        if (find.status !== null && report.keychainItemExit !== null)
-          assert.equal(report.keychainItemExit, find.status)
-        assert.equal(
-          report.keychainItem,
-          report.keychainItemExit === null ? null : report.keychainItemExit === 0
+      const list = real(['list-keychains', '-d', 'user'], true)
+      const fallback = real(['default-keychain'], true)
+      const line = (run) =>
+        (run.stdout ?? '')
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .join(' ')
+          .slice(0, 500)
+      if (list.status !== 0 || fallback.status !== 0 || !line(fallback)) {
+        const exit = (run) =>
+          run.status === null
+            ? `did not run (${run.error?.code ?? run.signal})`
+            : `exit ${run.status}`
+        console.log(
+          `PROVIDER-LOGIN real-keychain SKIP — no usable user keychain in this session (security list-keychains ${exit(list)}, default-keychain ${exit(fallback)}), so the real Keychain probe is not exercised here; the fake-security parts above still ran`
         )
-        assert.match(
-          report.detail,
-          /Keychain in this helper: security list-keychains exit 0; security default-keychain exit 0\n/
-        )
-      } finally {
-        await stop(run)
+      } else {
+        const run = await fixture({ bundled: loggedOut, security: SECURITY })
+        try {
+          const report = await run.owner.data.checkLogin('claude', WT)
+          const find = real(['find-generic-password', '-s', 'Claude Code-credentials'], false)
+          assert.deepEqual(report.keychain, { listKeychains: 0, defaultKeychain: 0 }, report.detail)
+          assert.equal(report.keychainList, line(list) || 'none')
+          assert.equal(report.keychainDefault, line(fallback))
+          // The item lookup matches this process's (null only if one of them timed out).
+          if (find.status !== null && report.keychainItemExit !== null)
+            assert.equal(report.keychainItemExit, find.status)
+          assert.equal(
+            report.keychainItem,
+            report.keychainItemExit === null ? null : report.keychainItemExit === 0
+          )
+          assert.match(
+            report.detail,
+            /Keychain in this helper: security list-keychains exit 0; security default-keychain exit 0\n/
+          )
+        } finally {
+          await stop(run)
+        }
+        console.log('PROVIDER-LOGIN real-keychain PASS')
       }
-      console.log('PROVIDER-LOGIN real-keychain PASS')
     }
   }
 
@@ -781,12 +788,13 @@ esac
     )
     let card = snapshot(c, []).cards.find((x) => x.id === 'login')
     assert.equal(card.title, 'Not logged in to Claude')
-    assert.match(card.detail, /Not logged in · Please run \/login/)
-    assert.match(card.detail, /claude auth login/)
-    assert.match(card.detail, /claude setup-token.*Settings → AI providers → Claude/)
+    assert.match(card.detail, /Claude needs sign-in/)
+    assert.match(card.detail, /Sign in to Claude, then choose Retry/)
     assert.deepEqual(
       card.actions.map((a) => [a.action, !!a.disabled]),
       [
+        ['sign-in-claude', false],
+        ['sign-in-codex', false],
         ['login-dismiss', false],
         ['login-check', false],
         ['login-retry', false]
@@ -804,6 +812,7 @@ esac
         }
       },
       changed: () => {},
+      refreshReadiness: async () => {},
       run: async (_chat, submission) => {
         runs.push(submission)
       }

@@ -146,7 +146,28 @@ async function checkPointer(
   await page.selectMode(true)
   try {
     const before = await move('page')
-    await waitFor(hoverBox, 'select-mode hover over the page')
+    // One synthetic move can land before the page has armed select mode (the mode reaches the
+    // page asynchronously), and WebKit then never sees another. A pointer keeps moving, so
+    // move again over the same point about once a second until the hover shows.
+    let polls = 0
+    let repeated: unknown = null
+    await waitFor(
+      async () => {
+        if (await hoverBox()) return true
+        if (++polls % 12 === 0) repeated = await move('page', (polls / 12) % 2)
+        return false
+      },
+      'select-mode hover over the page',
+      10000,
+      async () => ({
+        polls,
+        repeated,
+        selectMode: await page.evaluate(
+          `(() => { const o = document.querySelector('[data-trezi-overlay]'); return { overlay: !!o, hover: !!o?.shadowRoot?.querySelector('[data-trezi-hover]') }; })()`,
+          true
+        )
+      })
+    )
     const over = await move('island', 0, false, false, true)
     await waitFor(
       async () => !(await hoverBox()),

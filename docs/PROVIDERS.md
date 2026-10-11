@@ -449,9 +449,10 @@ text) or stayed on "Thinking…" forever, although `claude` worked in Terminal. 
   in, the session uses the installed one (`pathToClaudeCodeExecutable`,
   `src/main/backends/claude-login.ts`).
 - A sign-in failure (and `/login` or `/logout` typed in the chat, which never reach the
-  model) is an `auth` error: the chat shows a "Not logged in to Claude" card with the
-  steps (`claude auth login`, or `claude setup-token` plus Settings), **Check login**
-  and **Retry** (a fresh helper, then the last message again). A turn with no first
+  model) is an `auth` error: the chat shows a "Not logged in to Claude" card with
+  **Sign in to Claude**, **Sign in to Codex**, **Check login** and **Retry**. The first
+  action runs Claude Code's own browser login with the CLI the chat uses; Retry starts
+  a fresh helper and sends the saved message only after the user chooses it. A turn with no first
   event within 90 s ends with "Claude did not respond — check login (claude auth
   status) and retry" in the same card. A helper crash or exit is always an error.
 - **Check login** (the card and Settings → AI providers → Claude…) starts a helper

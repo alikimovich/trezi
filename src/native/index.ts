@@ -454,7 +454,8 @@ async function main() {
   })
   host.on('three-d-action', (action) => {
     if (typeof action?.session !== 'string' || !Number.isInteger(action?.revision)) return
-    if (!['close', 'code', 'front', 'reset', 'separation', 'layer'].includes(action?.action)) return
+    // Camera and separation are native; atlas paints go straight from the host to the preview.
+    if (!['close', 'code', 'layer'].includes(action?.action)) return
     previewView.webContents.send(channels.PREVIEW_THREE_D_ACTION, action)
   })
   const chatController = installNativeChat(

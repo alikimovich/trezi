@@ -261,10 +261,19 @@ final class WorkspaceLayout {
         let threeDVisible = host.threeD.place(in: page, visible: shown && host.views["preview"]?.isHidden == false, occluders: occluders)
         if host.threeD.active && !threeDVisible { host.threeD.dismiss() }
         if host.threeD.active {
+            // The scene sits just above the page, under the islands; the bars over everything.
+            // Reorder only when needed: re-adding a view drops its first-responder status.
+            if let preview = host.views["preview"] {
+                if let at = host.canvas.subviews.firstIndex(of: preview), host.canvas.subviews.firstIndex(of: host.threeD.backdrop) != at + 1 {
+                    host.canvas.addSubview(host.threeD.backdrop, positioned: .above, relativeTo: preview)
+                }
+                if let at = host.canvas.subviews.firstIndex(of: preview), host.canvas.subviews.firstIndex(of: host.threeD.scene) != at + 2 {
+                    host.canvas.addSubview(host.threeD.scene, positioned: .above, relativeTo: host.threeD.backdrop)
+                }
+            }
             host.canvas.addSubview(host.threeD.header, positioned: .above, relativeTo: nil)
             host.canvas.addSubview(host.threeD.footer, positioned: .above, relativeTo: nil)
         }
-        if host.threeD.active { host.sendThreeDAppearance() }
         sourceDivider.isHidden = bottom == 0; sourceDivider.frame = NSRect(x: leading, y: bounds.height - bottom - 3, width: bounds.width - leading, height: 6)
         // Straddles the island's left edge below and above its rounded corners.
         let corner = min(NativeEditingInspector.cornerRadius, island.height / 2)

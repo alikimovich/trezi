@@ -29,6 +29,7 @@ import { providerReachable, recoveryDelay } from '../self-heal/network'
 import { RECOVERED_STATUS, reconnectingStatus } from '../self-heal/status'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
+import { codexSeatAuthFailure } from './codex-auth'
 import { gitAccessHook, isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
 import {
   codexFallbackNotice,
@@ -270,9 +271,16 @@ async function startSession(
   // process whose environment holds CODEX_API_KEY. No CLI path is known to print the
   // key, but this text is both shown to the user and persisted into the session
   // record, so it's the wrong place to rely on that staying true.
-  const emitError = (m: string): void => {
+  //
+  // `auth` marks a ChatGPT-seat failure (missing CLI, signed out, rejected token) so the
+  // chat shows its sign-in card (LKM-231); a custom connection never gets it.
+  const emitError = (m: string, auth = codexSeatAuthFailure(m, options.connectionId)): void => {
     const safe = scrubSecret(m, connKey)
-    emit({ type: 'error', message: /codex/i.test(safe) ? safe : `Codex: ${safe}` })
+    emit({
+      type: 'error',
+      message: /codex/i.test(safe) ? safe : `Codex: ${safe}`,
+      ...(auth ? { code: 'auth' as const } : {})
+    })
   }
 
   // Build the thread up front (the SDK spawns the `codex` CLI; auth = `codex login`,
@@ -623,7 +631,8 @@ async function startSession(
           emitError(
             /codex/i.test(m)
               ? m
-              : `turn failed: ${m}. Is the \`codex\` CLI installed and \`codex login\` done?`
+              : `turn failed: ${m}. Is the \`codex\` CLI installed and \`codex login\` done?`,
+            codexSeatAuthFailure(m, options.connectionId)
           )
       }
     }

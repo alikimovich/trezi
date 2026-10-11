@@ -50,7 +50,6 @@ import {
   PREVIEW_OVERLAY_GEOMETRY,
   PREVIEW_OVERLAY_LINES,
   PREVIEW_THREE_D_ACTION,
-  PREVIEW_THREE_D_APPEARANCE,
   PREVIEW_THREE_D_STATE,
   PREVIEW_READINESS as READINESS,
   PREVIEW_SELECTION_LOST as SELECTION_LOST,
@@ -2037,22 +2036,11 @@ if (!IS_SIM_BRIDGE) {
   // After the listeners above, which see the shield as overlay and drop the hover box.
   nativeCover.install()
   ipcRenderer.on(PREVIEW_THREE_D_ACTION, (_e, action: ThreeDAction) => threeD.action(action))
-  ipcRenderer.on(
-    PREVIEW_THREE_D_APPEARANCE,
-    (
-      _e,
-      value: {
-        palette: Record<string, string>
-        top: number
-        bottom: number
-        left: number
-        right: number
-      }
-    ) => {
-      if (value && typeof value === 'object')
-        threeD.appearance(value.palette ?? {}, value.top, value.bottom, value.left, value.right)
-    }
-  )
+  // The host paints atlas pages here and snapshots only when this answers true (LKM-227).
+  // A global of the isolated world: the page cannot reach it.
+  ;(globalThis as { __treziThreeDAction?: (action: unknown) => boolean }).__treziThreeDAction = (
+    action
+  ) => threeD.action(action as ThreeDAction)
   // Main sends them on every load and whenever the host's layout changes them.
   ipcRenderer.on(PREVIEW_COVERED, (_e, rects: unknown) => nativeCover.set(rects))
   ipcRenderer.on(PREVIEW_OVERLAY_LINES, (_e, lines: unknown) => overlayGuides.set(lines))

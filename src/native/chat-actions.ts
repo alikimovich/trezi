@@ -41,6 +41,9 @@ export async function cardAction(
     case 'login-dismiss':
     case 'login-check':
     case 'login-retry':
+    case 'sign-in-claude':
+    case 'sign-in-codex':
+    case 'sign-in-cancel':
       await loginAction(controller, chat, action.action)
       break
     case 'model-cancel':

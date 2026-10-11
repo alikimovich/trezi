@@ -16,6 +16,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Simulate a helper network failure end to end against a real provider (needs authorization for live calls; the stand-in CLI covers it offline).
 - [x] Native foreground capture and JSON geometry for the compact row and expanded Details (`chat` group).
 - [ ] Simulate a helper network failure end to end; verify retries and fallback without a live provider call.
+## Native provider sign-in (LKM-231)
+
+- [x] Start and auth-error cards offer Claude and Codex sign-in through provider-managed browser flows, with cancel and retry.
+- [x] Shared per-provider readiness contract and deterministic adapter tests; the saved prompt, attachments and model are not auto-sent.
+- [ ] Operator: complete live browser consent with a test account for each provider and verify the resumed chat identity and native foreground card.
+- [ ] Manager: native chat verification, full suite, independent review and merge.
+
 ## Branch and CI status (LKM-228)
 
 - [x] Show ahead/behind, publish step, PR and CI state in the native branch control; poll GitHub with ETags and refresh on focus.
@@ -1408,6 +1415,7 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
 ## Code access in exploded view (2026-09-18)
 
 - [x] LKM-214: Move exploded-view controls and status to native Swift; follow effective light/dark appearance with a bounded scene contract.
+- [x] LKM-227: Render the exploded view natively (Core Animation planes from a bounded atlas capture at backing scale); remove the in-page CSS scene, keep capture, show a native message when capture fails.
 
 - [x] Keep the selected layer's Code action available inside the 3D workspace.
 

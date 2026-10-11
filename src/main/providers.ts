@@ -18,6 +18,7 @@ import {
   setProviderDataDir,
   connectionStore as store
 } from './provider-data'
+import { cancelProviderSignIn, checkCodexLogin, signInProvider } from './provider-sign-in'
 import { modelsUrl, parseModelCatalog, sameOrigin, scrubSecret } from './providers-store'
 import type { RpcHandlerRegistry } from './rpc-router'
 
@@ -457,6 +458,19 @@ export function registerProviderIpc(
     'providers:check-login',
     async (_e, provider: string, root?: string): Promise<ProviderLoginReport> => {
       const id = typeof provider === 'string' ? provider : 'claude'
+      if (id === 'codex') {
+        const loggedIn = await checkCodexLogin()
+        return {
+          provider: id,
+          loggedIn,
+          detail:
+            loggedIn === null
+              ? 'Codex status unavailable.'
+              : loggedIn
+                ? 'Codex is ready.'
+                : 'Codex is signed out.'
+        }
+      }
       try {
         return await seatLogin.check(id, typeof root === 'string' && root ? root : tmpdir())
       } catch (err) {
@@ -468,6 +482,15 @@ export function registerProviderIpc(
       }
     }
   )
+
+  ipcMain.handle('providers:sign-in', (_e, provider: string, root?: string) => {
+    if (provider !== 'claude' && provider !== 'codex')
+      return { ok: false, reason: 'failed', detail: 'Unsupported provider.' }
+    return signInProvider(provider, typeof root === 'string' && root ? root : tmpdir())
+  })
+  ipcMain.handle('providers:cancel-sign-in', (_e, provider: string) => {
+    if (provider === 'claude' || provider === 'codex') cancelProviderSignIn(provider)
+  })
 
   ipcMain.handle(
     'providers:catalog',
