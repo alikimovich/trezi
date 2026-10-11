@@ -382,6 +382,7 @@ export async function checkClaudeLogin(
     loggedIn: auth.loggedIn,
     source: cli.source,
     ...(path ? { executable: path } : {}),
+    ...(env.CLAUDE_CONFIG_DIR ? { configDir: env.CLAUDE_CONFIG_DIR } : {}),
     ...(auth.authMethod ? { authMethod: auth.authMethod } : {}),
     token: !!env.CLAUDE_CODE_OAUTH_TOKEN,
     keychain: keychain.codes,

@@ -17,6 +17,7 @@ export const needsResolve = (chat: Chat) =>
   chat.isolation === 'parked' && chat.stopped !== 'held' && !chat.landingError
 
 export function sendBlock(chat: Chat): SendBlock | null {
+  if (chat.signingIn) return 'login'
   if (chat.isRunning || chat.sending) return chat.phase === 'applying' ? 'landing' : 'running'
   if (needsResolve(chat)) return 'resolve'
   if (chat.login) return 'login'
@@ -37,7 +38,7 @@ const BLOCK_NOTES: Record<SendBlock, string> = {
  *  running turn, so it is named before one. */
 export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolean } {
   const block = sendBlock(chat)
-  const waiting = needsResolve(chat) ? 'resolve' : chat.login ? 'login' : null
+  const waiting = needsResolve(chat) ? 'resolve' : chat.login || chat.signingIn ? 'login' : null
   if (waiting) return { queueNote: BLOCK_NOTES[waiting], queueCanSend: false }
   if (!chat.paused) return { queueNote: block ? BLOCK_NOTES[block] : '', queueCanSend: !block }
   if (chat.isolation === 'parked' && chat.landingError)
