@@ -15,6 +15,7 @@ export type SignInResult = {
 type Process = ChildProcessWithoutNullStreams
 type RpcResponse = { error?: unknown; result?: { loginId?: string; authUrl?: string } }
 const execFileP = promisify(execFile)
+const SIGN_IN_TIMEOUT_MS = 10 * 60_000
 const authEnvironment = (provider: BuiltinProvider): NodeJS.ProcessEnv => {
   const names = [
     'HOME',
@@ -52,19 +53,22 @@ async function codexBinary(): Promise<string> {
 }
 
 export async function checkCodexLogin(): Promise<boolean | null> {
+  // The CLI prints its status to stderr and signals "not logged in" with exit code 1,
+  // so decide from the exit code and both streams. Timeouts and spawn errors stay unknown.
+  const decide = (output: string): boolean | null =>
+    /not logged in/i.test(output) ? false : /logged in/i.test(output) ? true : null
   try {
-    const { stdout } = await execFileP(await codexBinary(), ['login', 'status'], {
+    const { stdout, stderr } = await execFileP(await codexBinary(), ['login', 'status'], {
       timeout: 5000,
       maxBuffer: 4096,
       cwd: tmpdir(),
       env: authEnvironment('codex')
     })
-    if (/not logged in/i.test(stdout)) return false
-    if (/logged in/i.test(stdout)) return true
-    return null
+    return decide(`${stdout}\n${stderr}`)
   } catch (error) {
-    const output = String((error as { stdout?: string }).stdout ?? '')
-    return /not logged in/i.test(output) ? false : null
+    const failure = error as { stdout?: string; stderr?: string; code?: unknown; killed?: boolean }
+    if (failure.killed || typeof failure.code !== 'number') return null
+    return decide(`${failure.stdout ?? ''}\n${failure.stderr ?? ''}`)
   }
 }
 
@@ -89,7 +93,8 @@ export async function codexManagedLogin(
   bin: string,
   signal: AbortSignal,
   open: (url: string) => Promise<unknown> = (url) => shell.openExternal(url),
-  launch: typeof spawn = spawn
+  launch: typeof spawn = spawn,
+  timeoutMs = SIGN_IN_TIMEOUT_MS
 ): Promise<SignInResult> {
   let child: Process
   try {
@@ -114,7 +119,7 @@ export async function codexManagedLogin(
   const timeout = setTimeout(() => {
     complete?.({ ok: false, reason: 'expired', detail: 'Sign-in timed out. Try again.' })
     child.kill()
-  }, 10 * 60_000)
+  }, timeoutMs)
   const rpc = (id: number, method: string, params: unknown): Promise<RpcResponse> =>
     new Promise((resolve) => {
       pending.set(id, resolve)
@@ -218,7 +223,8 @@ export async function claudeManagedLogin(
   executable: string,
   signal: AbortSignal,
   launch: typeof spawn = spawn,
-  configDir?: string
+  configDir?: string,
+  timeoutMs = SIGN_IN_TIMEOUT_MS
 ): Promise<SignInResult> {
   return new Promise((resolve) => {
     const child = launch(executable, ['auth', 'login'], {
@@ -230,7 +236,7 @@ export async function claudeManagedLogin(
     const timeout = setTimeout(() => {
       resolve({ ok: false, reason: 'expired', detail: 'Sign-in timed out. Try again.' })
       child.kill()
-    }, 10 * 60_000)
+    }, timeoutMs)
     child.on('error', () => {
       clearTimeout(timeout)
       resolve({

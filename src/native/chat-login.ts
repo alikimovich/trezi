@@ -19,7 +19,7 @@ export interface ChatLogin {
   checking?: boolean
 }
 
-const name = (provider: BuiltinProvider) => (provider === 'claude' ? 'Claude' : 'Codex')
+const name = (provider: string) => (provider === 'claude' ? 'Claude' : 'Codex')
 const signInActions = (chat: Chat) =>
   (['claude', 'codex'] as const).map((provider) => ({
     label:
@@ -66,22 +66,17 @@ export function loginSummary(report: ProviderLoginReport): string {
 export function loginCard(chat: Chat): NativeChatCard | null {
   const login = chat.login
   if (!login) return null
-  const claude = chat.settings.provider === 'claude'
   const title =
     login.code === 'auth'
-      ? claude
-        ? 'Not logged in to Claude'
-        : 'Not logged in'
-      : claude
-        ? 'Claude did not respond'
-        : 'The provider did not respond'
+      ? `Not logged in to ${name(chat.settings.provider)}`
+      : `${name(chat.settings.provider)} did not respond`
   const report = login.report ? `${loginSummary(login.report)}\n${login.report.detail}` : ''
   const detail = [
     login.code === 'auth'
-      ? `${claude ? 'Claude' : 'Codex'} needs sign-in.`
-      : 'The provider did not respond.',
+      ? `${name(chat.settings.provider)} needs sign-in.`
+      : `${name(chat.settings.provider)} did not respond.`,
     chat.signInMessage ??
-      `Sign in to ${claude ? 'Claude' : 'Codex'}, then choose Retry to send this message.`,
+      `Sign in to ${name(chat.settings.provider)}, then choose Retry to send this message.`,
     report
   ]
     .filter(Boolean)
@@ -108,6 +103,14 @@ export function loginCard(chat: Chat): NativeChatCard | null {
   }
 }
 
+/** Retry restarts the chat with its own provider, so it only helps when that one signed in. */
+function readyHint(chat: Chat, provider: string): string {
+  if (!(chat.last && chat.login)) return 'Send your message when ready.'
+  return chat.settings.provider === provider
+    ? 'Choose Retry to send the saved message.'
+    : `This chat uses ${name(chat.settings.provider)}. Start a new chat with ${name(provider)} or switch the provider in the model picker, then send your message again.`
+}
+
 export async function loginAction(
   controller: NativeChatController,
   chat: Chat,
@@ -128,7 +131,7 @@ export async function loginAction(
     try {
       const result = await controller.services.invoke('providers:sign-in', provider, chat.root)
       chat.signInMessage = result.ok
-        ? `${name(provider)} is ready. ${chat.last && chat.login ? 'Choose Retry to send the saved message.' : 'Send your message when ready.'}`
+        ? `${name(provider)} is ready. ${readyHint(chat, provider)}`
         : result.reason === 'cancelled'
           ? 'Sign-in cancelled. Your message is still here.'
           : (result.detail ?? 'Sign-in did not complete. Retry when ready.')

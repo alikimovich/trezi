@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-10 — LKM-231 review repair: Codex recovery card, status parsing, adapter tests
+
+- Codex seat failures (missing CLI, signed out, 401/rejected token) now end the turn with `code: 'auth'` (`src/main/backends/codex-auth.ts`), so mid-conversation they show the sign-in card instead of a "run `codex login`" warning line. Custom connections never get it. The card names the chat's provider.
+- `checkCodexLogin` decides from exit code plus stdout+stderr (the CLI prints to stderr and exits 1 when signed out); timeout or spawn failure stays unknown. A signed-in seat is `ready`, a signed-out one `signed_out`.
+- After a sign-in the card says "Choose Retry" only when the provider that signed in is the chat's own; otherwise it says how to switch and never changes provider or model.
+- `test/provider-sign-in.mjs` adds stubs for Claude cancel/expiry/missing, Codex expiry, `codex login status` fixtures (ready, signed out, garbled, crash, absent), `signInProvider` routing (chat executable and config folder, same-identity re-check, concurrent refusal, cancel, missing) and the Codex auth card. Live consent is still the user's to check.
+
 ## 2026-10-10 — LKM-231: native Claude and Codex sign-in
 
 - Chat start and auth-recovery cards now launch the provider-owned browser flows. Claude uses the selected Claude Code CLI's `auth login`; Codex uses app-server `account/login/start` with managed ChatGPT auth, opens only an approved provider URL, listens for `account/login/completed`, and cancels with `account/login/cancel`. Both credential stores remain provider-owned; no OAuth URL, CLI output, or raw auth error is put in the transcript or product log.
