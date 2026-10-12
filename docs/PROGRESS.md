@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-11 — LKM-234: hosted app build and Bun dependency audit
+
+- CI now runs a separately named ad hoc `app build` on macOS 26 and checks the assembled host, XPC service, bundled runtime, backend and resources with the existing distribution/version checks and `codesign --verify`. The typecheck/unit job and seven-day logs remain; `candidate` push was removed, and read-only permissions, timeouts and superseded-run cancellation were added.
+- `dependency audit` reads the resolved `bun.lock` graph with Bun's own audit command and prints the entire advisory baseline. For PRs it compares with the base commit and fails on newly introduced high/critical package/advisory pairs. The worker sandbox cannot reach the registry audit endpoint (`ConnectionRefused`), so the baseline and hosted results remain for the manager's GitHub run. GitHub dependency review was not chosen because documented dependency-graph parsing does not establish Bun lockfile coverage.
+- Branch enforcement, hosted run links, and normal-merge proof require the manager's GitHub lifecycle after these jobs run. Agent OS's `reviewer.ts` consumes GitHub checks, but a search of its source found no commit-status or check-run publisher. A specific SHA-bound native-result integration is recorded in TASKS; no status is claimed here.
+
 ## 2026-10-11 — LKM-233 review repair: the start gate holds only home and planning chats
 
 - Review found `StartFlow.holds()` had widened from the centered home chat to every chat once `start.enabled` is true (production), so a normal project chat on a built-in Claude/Codex seat silently dropped sends while readiness was `checking`, `signed_out` or `failed`, breaking the LKM-231 in-chat sign-in recovery. It is now `enabled && (centered || planning) && !ready`; ordinary project chats are never held.

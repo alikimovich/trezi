@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Free-plan GitHub CI and main enforcement (LKM-234)
+
+- [x] Add a separate ad hoc signed macOS app-build check; retain typecheck/unit and logs; remove the `candidate` push trigger; bound permissions, time and concurrency.
+- [x] Add a Bun-lockfile dependency audit with a PR-base high/critical gate and explicit baseline output.
+- [ ] Manager: record hosted run links/results and the measured advisory baseline; confirm exact required-check contexts.
+- [ ] Manager: preserve existing rules, require PRs plus both hosted checks on `main`, read back the effective settings, and prove a normal reviewed PR merge.
+- [ ] Agent OS follow-up: its current PR gate (`reviewer.ts`) reads GitHub checks, but no commit-status or check-run publishing path was found. Add a publisher after native verification that binds the result to the exact tested SHA, reports skips separately, links only redacted evidence, and never carries success to a changed PR head. Confirm the merge actor's token can write statuses before enabling it.
+
 ## Conversational New Project (LKM-233)
 
 - [x] Home has no sidebar or preview toolbar; an empty restored project chat remains docked, and the composer names New Project by default.
