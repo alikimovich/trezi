@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-11 — LKM-234: hosted app build and Bun dependency audit
+
+- Second repair (PR #255 `typecheck + unit tests` red at `ef1d67d1`): the worker sandbox cannot run `gh`, so the failed job log was not readable and the failing unit test is unidentified. Changes with a plausible link: `cancel-in-progress` is now true only for `pull_request` events (a `main` push is never cancelled), and `app build` checks out full history so the commit-count build number is real. The job itself is unchanged; if the log shows a single hosted-runner flake it needs its own fix. Before branch enforcement, the manager must confirm `app build` and `dependency audit` are green on the head SHA and record the audit's nonzero package/advisory baseline. `test/dependency-audit.mjs` now also asserts the workflow shape.
+- Review repair: a push to `main` has no PR base SHA, so the audit now classifies every finding as baseline and never gates that event on existing advisories. The PR comparison still blocks newly introduced high/critical pairs. `test/dependency-audit.mjs` exercises both cases and is in the unit tier.
+- CI now runs a separately named ad hoc `app build` on macOS 26 and checks the assembled host, XPC service, bundled runtime, backend and resources with the existing distribution/version checks and `codesign --verify`. The typecheck/unit job and seven-day logs remain; `candidate` push was removed, and read-only permissions, timeouts and superseded-run cancellation were added.
+- `dependency audit` reads the resolved `bun.lock` graph with Bun's own audit command and prints the entire advisory baseline. For PRs it compares with the base commit and fails on newly introduced high/critical package/advisory pairs. The worker sandbox cannot reach the registry audit endpoint (`ConnectionRefused`), so the baseline and hosted results remain for the manager's GitHub run. GitHub dependency review was not chosen because documented dependency-graph parsing does not establish Bun lockfile coverage.
+- Branch enforcement, hosted run links, and normal-merge proof require the manager's GitHub lifecycle after these jobs run. Agent OS's `reviewer.ts` consumes GitHub checks, but a search of its source found no commit-status or check-run publisher. A specific SHA-bound native-result integration is recorded in TASKS; no status is claimed here.
+
 ## 2026-10-11 — LKM-235: evidence-backed unused-code and tool audit
 
 - `docs/UNUSED-CODE-AUDIT.md` traces the Swift/Bun/preview/build roots, bridge and owner dispatch, provider registration and grants, CLI entry points, dynamic selectors, retained compatibility and the retirement census. It classifies three uncalled wrappers, test-only utilities, uncertain parity helpers, dynamic entry points and deprecated read shims; none was removed because the prior helper review explicitly retained them.

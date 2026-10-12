@@ -457,9 +457,11 @@ full suite.
 
 ## GitHub CI
 
-`.github/workflows/ci.yml` runs one job, "typecheck + unit tests".
+`.github/workflows/ci.yml` runs `typecheck + unit tests`, `app build`, and
+`dependency audit` with read-only repository permissions and bounded timeouts.
+Superseded runs for the same PR or branch are cancelled.
 
-- **Triggers.** It runs on a push to `main` or `candidate` and on every pull
+- **Triggers.** It runs on a push to `main` and on every pull
   request. Pushes to other branches (throwaway and worker branches) do not start
   a run.
 - **Runner.** The job runs on `macos-26`, GitHub's hosted macOS 26 (Tahoe) arm64
@@ -483,9 +485,33 @@ full suite.
   commit, restored by prefix), so unchanged Swift fixtures are not recompiled
   ([Unit tier speed](#unit-tier-speed-lkm-167)).
 
-  If a step fails, the run uploads `test/artifacts/runs/` as `unit-test-logs`.
+- **App build.** A separate `macos-26` job runs the same toolchain check and
+  frozen install, then `TREZI_SIGN_IDENTITY=- bun run build`. It checks that
+  the host, bundled Bun, secrets helper, XPC service, backend bundles, syntax
+  bundle and icon are nonempty; `test/distribution.mjs` and
+  `test/versioning.mjs` inspect the assembled app and matching version stamps.
+  `codesign --verify --deep --strict` checks its ad hoc signature. There are no
+  distribution signing credentials in Actions.
+- **Dependency audit.** An `ubuntu-latest` job runs `bun audit --json`, which
+  reads the full resolved `bun.lock` graph, including transitive and dev
+  packages. The script refuses a lockfile with zero resolved packages or an
+  invalid/failed audit response. On PRs it also audits the base commit and
+  blocks only new high or critical package/advisory pairs. All findings,
+  including existing and lower-severity ones, are printed for triage. Pushes
+  to `main` report the current baseline without treating existing findings as
+  newly introduced. The audit service requires network access; an unavailable
+  advisory endpoint fails the job. GitHub dependency review is not used because
+  the dependency graph's documented manifest list does not establish that it
+  parses `bun.lock` for this repository.
+
+  If a unit step fails, the run uploads `test/artifacts/runs/` as
+  `unit-test-logs`.
   CI runs no native GUI tier and no live tier. The runner has no desktop session
   for the smoke suite and no provider credentials. Run those tiers on a Mac.
+  Branch protection and required check contexts must be configured only after
+  successful hosted runs establish their exact names. Public repositories on
+  GitHub Free can use these protections; availability can differ if the repo
+  later becomes private.
 - **Skips off macOS.** Unit tests that compile Swift call the gates in
   `test/helpers/darwin.mjs`. The service-owner fixtures in `test/helpers/*-fixture.mjs`,
   the ledger, preferences, memory, workspace and platform owner tests, and every
