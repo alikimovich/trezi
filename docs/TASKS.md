@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Evidence-backed unused-code audit (LKM-235)
+
+- [x] Trace shipped Swift, Bun, preview, CLI and provider-tool entry points; classify uncalled helpers, dynamic callbacks and compatibility shims in [the audit](UNUSED-CODE-AUDIT.md).
+- [x] Separate provider-specific unregistered tools, broken routes and valid tools without usage evidence; record confirmed routing bugs separately.
+- [x] Preserve previously retained helpers and public tools; recommend narrow follow-ups instead of removing behavior from a documentation-only audit.
+
 ## Conversational New Project (LKM-233)
 
 - [x] Home has no sidebar or preview toolbar; an empty restored project chat remains docked, and the composer names New Project by default.

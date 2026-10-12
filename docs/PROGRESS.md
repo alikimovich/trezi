@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-11 — LKM-235: evidence-backed unused-code and tool audit
+
+- `docs/UNUSED-CODE-AUDIT.md` traces the Swift/Bun/preview/build roots, bridge and owner dispatch, provider registration and grants, CLI entry points, dynamic selectors, retained compatibility and the retirement census. It classifies three uncalled wrappers, test-only utilities, uncertain parity helpers, dynamic entry points and deprecated read shims; none was removed because the prior helper review explicitly retained them.
+- The tool inventory distinguishes provider-specific unregistered names from broken routing (none confirmed) and registered capabilities without usage telemetry. It lists broken advertised capabilities separately (none confirmed) and recommends a later provider-contract comparison without changing LKM-234's CI files.
+- Quick verification initially found a literal old project name in the new report via `legacy-names-audit`; the text was changed to describe the shims without repeating the names. The rerun passed: 217 unit checks, typechecks and lint (3 existing skips). No runtime behavior or public tool changed.
+
 ## 2026-10-11 — LKM-233 review repair: the start gate holds only home and planning chats
 
 - Review found `StartFlow.holds()` had widened from the centered home chat to every chat once `start.enabled` is true (production), so a normal project chat on a built-in Claude/Codex seat silently dropped sends while readiness was `checking`, `signed_out` or `failed`, breaking the LKM-231 in-chat sign-in recovery. It is now `enabled && (centered || planning) && !ready`; ordinary project chats are never held.
