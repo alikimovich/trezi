@@ -10,6 +10,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Manager: record hosted run links/results and the measured advisory baseline; confirm exact required-check contexts.
 - [ ] Manager: preserve existing rules, require PRs plus both hosted checks on `main`, read back the effective settings, and prove a normal reviewed PR merge.
 - [ ] Agent OS follow-up: its current PR gate (`reviewer.ts`) reads GitHub checks, but no commit-status or check-run publishing path was found. Add a publisher after native verification that binds the result to the exact tested SHA, reports skips separately, links only redacted evidence, and never carries success to a changed PR head. Confirm the merge actor's token can write statuses before enabling it.
+## Evidence-backed unused-code audit (LKM-235)
+
+- [x] Trace shipped Swift, Bun, preview, CLI and provider-tool entry points; classify uncalled helpers, dynamic callbacks and compatibility shims in [the audit](UNUSED-CODE-AUDIT.md).
+- [x] Separate provider-specific unregistered tools, broken routes and valid tools without usage evidence; record confirmed routing bugs separately.
+- [x] Preserve previously retained helpers and public tools; recommend narrow follow-ups instead of removing behavior from a documentation-only audit.
 
 ## Conversational New Project (LKM-233)
 
