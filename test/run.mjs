@@ -122,6 +122,7 @@ const UNIT = [
   'publish-progress',
   'branch-status',
   'dependency-issue',
+  'dependency-audit',
   'native-support-sheets',
   'native-cat-assets',
   'project-ui',
