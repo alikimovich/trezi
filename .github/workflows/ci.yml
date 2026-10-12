@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# Only a superseded pull_request run is cancelled. A push to main always finishes, so a
+# cancelled conclusion is never read as a failed main check.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -77,8 +79,12 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
+      # Full history: the build stamps the commit count of HEAD as the build number and
+      # test/versioning.mjs compares the built plist with it (scripts/version.mjs).
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
