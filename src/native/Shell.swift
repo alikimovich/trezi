@@ -57,10 +57,35 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var sidebarBeforeHome = false
     private var showingHome = true
     private var planning = false
-    func setPlanning(_ value: Bool) {
-        guard planning != value else { return }
+    private var planningCentered = false
+    private var planningToolbar = false
+    private var sidebarAvailable: Bool { currentProject != nil || (planning && !planningCentered) }
+    private func updatePlanningToolbar() {
+        let compact = planning && currentProject == nil && !planningCentered
+        guard compact != planningToolbar else { return }
+        planningToolbar = compact
+        if compact {
+            for index in stride(from: toolbar.items.count - 1, through: 2, by: -1) { toolbar.removeItem(at: index) }
+        } else {
+            for identifier in toolbarDefaultItemIdentifiers(toolbar).dropFirst(2) {
+                toolbar.insertItem(withItemIdentifier: identifier, at: toolbar.items.count)
+            }
+        }
+    }
+    private func updateSidebarAvailability() {
+        let home = !sidebarAvailable
+        if home != showingHome {
+            if home { sidebarBeforeHome = sidebarItem.isCollapsed; sidebarItem.isCollapsed = true }
+            else { sidebarItem.isCollapsed = sidebarBeforeHome }
+            showingHome = home
+        }
+        toolbar.isVisible = sidebarAvailable
+        updatePlanningToolbar()
+    }
+    func setPlanning(_ value: Bool, centered: Bool) {
         planning = value
-        toolbar.isVisible = currentProject != nil && !planning
+        planningCentered = centered
+        updateSidebarAvailability()
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
@@ -433,15 +458,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if nextProject != currentProject && address.currentEditor() != nil { window?.makeFirstResponder(nil) }
         let projectChanged = nextProject != currentProject
         currentProject = nextProject
-        toolbar.isVisible = nextProject != nil && !planning
-        if nextProject == nil && !showingHome {
-            sidebarBeforeHome = sidebarItem.isCollapsed
-            sidebarItem.isCollapsed = true
-            showingHome = true
-        } else if nextProject != nil && showingHome {
-            sidebarItem.isCollapsed = sidebarBeforeHome
-            showingHome = false
-        }
+        updateSidebarAvailability()
         chatReady = nextProject != nil && state["chatReady"] as? Bool == true
         selectedID = state["selected"] as? String
         ready = state["previewReady"] as? Bool ?? false
@@ -568,7 +585,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             setSidebarContentWidth(width, in: split); return true
         }
         if action == "toggle-sidebar" {
-            if currentProject == nil { return false }
+            if !sidebarAvailable { return false }
             // No animation in the pipe test: an occluded/locked desktop can pause
             // AppKit animations even though the collapsed state already changed.
             sidebarItem.isCollapsed.toggle(); split.view.layoutSubtreeIfNeeded(); return true

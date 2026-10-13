@@ -745,6 +745,9 @@ export class NativeInspectorController {
       }
       if (action.action === 'cancel-preview') {
         await this.send('styles:clear-preview', {})
+        // A style-watch read may have cached the temporary inline value. Re-read
+        // the authored declaration after cancel so a var() stays visible.
+        await this.refresh(true)
         return
       }
       const write = async () => {
