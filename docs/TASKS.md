@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview subtitle spinner (LKM-244)
+
+- [x] Replace the animated branch subtitle arrow with a native inline progress indicator driven by the existing publish step and running-CI state.
+- [x] Cover running, success, failure and cancellation, with light/dark foreground captures at normal and narrow widths and accessibility state in the native fixture.
+- [ ] Manager: inspect the foreground captures, run full native verification and independent review, then merge.
+
 ## Compact native Layout controls (LKM-236)
 
 - [x] Replace linked spacing actions with independent individual-side view toggles and compact width, height, padding, margin, radius and opacity rows.
