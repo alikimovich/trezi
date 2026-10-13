@@ -87,6 +87,8 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
     return original(channel, ...args)
   }
 
+  if ((await host.request('shellInspect')).sidebarCollapsed)
+    await host.request('shellPerform', { action: 'toggle-sidebar' })
   await nativeWorkspace.command({ type: 'close', key: project.key })
   nativeChat.checkReadiness()
   await nativeChat.refreshReadiness()
@@ -102,6 +104,7 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
   assert.equal(home.composer.projectVisible, true)
   assert.equal(home.surface.recents.includes(project.name), true)
   assert.equal((await host.request('shellInspect')).sidebarCollapsed, true)
+  assert.equal(await host.request('shellPerform', { action: 'toggle-sidebar' }), false)
   assert.equal((await host.request('sheetInspect')).visible, false)
 
   for (const size of [NORMAL, NARROW]) {
@@ -132,11 +135,44 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
   assert.equal(nativeChat.get(planningId).messages[0].text, 'Build a pricing page')
   assert.equal((await host.request('sheetInspect')).visible, false, 'No setup sheet appears')
   assert.equal(nativeWorkspace.active, null, 'Planning does not fabricate an open project')
+  const planningShell = await host.request('shellInspect')
+  assert.equal(planningShell.sidebarCollapsed, false, 'Docked planning restores the sidebar')
+  assert.ok(
+    planningShell.visibleToolbar.includes('NSToolbarToggleSidebarItem'),
+    'Native sidebar toggle is visible'
+  )
+  assert.deepEqual(planningShell.sidebarActions, ['new-project', 'open-project'])
+  assert.equal(await host.request('shellPerform', { action: 'toggle-sidebar' }), true)
+  assert.equal((await host.request('shellInspect')).sidebarCollapsed, true)
+  assert.equal(await host.request('shellPerform', { action: 'toggle-sidebar' }), true)
+  assert.equal((await host.request('shellInspect')).sidebarCollapsed, false)
+  assert.equal(nativeChat.active, planningId)
+  assert.equal(nativeChat.get(planningId).messages[0].text, 'Build a pricing page')
+  assert.equal(completions, 1, 'Toggling the sidebar does not send again')
   const planning = await host.request('startPerform', {
     appearance: 'light',
     capture: background() ? 'offscreen' : 'foreground'
   })
   writeFileSync(join(artifacts, 'start-planning-light.png'), Buffer.from(planning.png, 'base64'))
+  for (const size of [NORMAL, NARROW]) {
+    await host.request('startPerform', size)
+    for (const appearance of ['light', 'dark']) {
+      const capture = await host.request('startPerform', {
+        appearance,
+        capture: background() ? 'offscreen' : 'foreground'
+      })
+      const shell = await host.request('shellInspect')
+      assert.equal(shell.sidebarCollapsed, false)
+      assert.ok(shell.sidebarWidth >= 180 && shell.detailWidth >= 500)
+      const name = `start-planning-${size === NARROW ? 'narrow' : 'normal'}-${appearance}`
+      writeFileSync(join(artifacts, `${name}.png`), Buffer.from(capture.png, 'base64'))
+      writeFileSync(
+        join(artifacts, `${name}.json`),
+        JSON.stringify({ start: capture.start, shell }, null, 2)
+      )
+    }
+  }
+  await host.request('startPerform', NORMAL)
   await host.request('startPerform', { appearance: null })
   const question = nativeChat
     .get(planningId)

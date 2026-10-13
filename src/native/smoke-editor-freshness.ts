@@ -75,7 +75,10 @@ export async function checkEditorFreshness(
     await waitFor(async () => (await island()).tab === name, `${name} tab`)
   }
   const computed = (prop: string) =>
-    page(`getComputedStyle(document.querySelector('#fresh-box')).getPropertyValue('${prop}')`)
+    page(`(() => {
+      const box = document.querySelector('#fresh-box');
+      return box ? getComputedStyle(box).getPropertyValue('${prop}') : null;
+    })()`)
   const evidence: Record<string, unknown> = {}
 
   writeFileSync(join(fixture, 'fresh.module.css'), '.fresh-box { opacity: 0.5; }\n')

@@ -207,6 +207,7 @@ assert.equal(
   'Discovering animation controls must not open the inspector'
 )
 
+let previewing = false
 const asymmetric = new NativeInspectorController(
   async (channel) => {
     if (channel === 'styles:read')
@@ -222,7 +223,7 @@ const asymmetric = new NativeInspectorController(
           'margin-bottom': '0px'
         },
         specified: {
-          'padding-left': 'var(--space)',
+          'padding-left': previewing ? '14px' : 'var(--space)',
           'padding-right': '18px',
           'margin-left': 'auto',
           'margin-right': '-6px'
@@ -231,7 +232,10 @@ const asymmetric = new NativeInspectorController(
     if (channel === 'controls:list' || channel === 'controls:get') return []
     return null
   },
-  async () => {},
+  async (channel) => {
+    if (channel === 'styles:preview') previewing = true
+    if (channel === 'styles:clear-preview') previewing = false
+  },
   () => {},
   async () => {},
   async () => {}
@@ -245,6 +249,25 @@ await asymmetric.action({
   root: '/a',
   generation: asymmetric.state.generation,
   action: 'spacing:padding'
+})
+assert.equal(
+  asymmetric.state.fields.find((f) => f.id === 'style:padding-left').value,
+  'var(--space)'
+)
+await asymmetric.action({
+  root: '/a',
+  generation: asymmetric.state.generation,
+  action: 'preview',
+  field: 'style:padding-left',
+  value: '14'
+})
+await asymmetric.invalidated()
+assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-left').value, '14px')
+await asymmetric.action({
+  root: '/a',
+  generation: asymmetric.state.generation,
+  action: 'cancel-preview',
+  field: 'style:padding-left'
 })
 assert.equal(
   asymmetric.state.fields.find((f) => f.id === 'style:padding-left').value,

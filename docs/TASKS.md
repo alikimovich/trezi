@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar during project planning (LKM-242)
+
+- [x] Make the sidebar available once planning docks, retaining the saved collapsed state; keep centered home sidebar-free.
+- [x] Cover toggle, no duplicate send, no physical project and normal/narrow light/dark geometry in the native planning check.
+- [x] Cover return to the pending planning conversation with its draft, attachment, model and transcript intact in the chat unit check.
+- [ ] Manager: inspect foreground captures, run full native verification and independent review.
 ## Preview subtitle spinner (LKM-244)
 
 - [x] Replace the animated branch subtitle arrow with a native inline progress indicator driven by the existing publish step and running-CI state.
