@@ -99,7 +99,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var moreShift: CGFloat = 46
     let addressHeader = ToolbarAddressView()
     private var chatHeaderWidth: NSLayoutConstraint!
-    private var previewTextColor = NSColor.labelColor
+    private var previewTextColor = NSColor.labelColor { didSet { branchMenu.dot.textColor = previewTextColor } }
     let address = NSTextField()
     let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
     let statesMenu = NSPopUpButton(frame: .zero, pullsDown: true)

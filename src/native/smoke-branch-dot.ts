@@ -12,6 +12,15 @@ type State = Record<string, any>
 
 const states = ['none', 'unknown', 'running', 'passed', 'failed'] as const
 
+/** The colours the old glyphs had: only running is orange; no checks and unknown use the title text colour. */
+const colors = {
+  none: 'text',
+  unknown: 'text',
+  running: 'orange',
+  passed: 'green',
+  failed: 'red'
+} as const
+
 /**
  * LKM-245: the subtitle's CI dot is one drawn circle in a fixed slot. Every ordered
  * transition between CI states, into and out of the running spinner, keeps its window
@@ -40,6 +49,7 @@ export async function checkBranchDot(
     )
     assert.ok(state.branchDotVisible && state.branchDotFits, `The ${ci} dot is in its slot`)
     assert.equal(state.branchDotFilled, ci === 'passed' || ci === 'failed', `${ci} fill`)
+    assert.equal(state.branchDotColor, colors[ci], `${ci} keeps its status colour`)
     return state
   }
   const geometry = (s: State) => ({

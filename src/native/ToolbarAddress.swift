@@ -91,15 +91,20 @@ final class BranchPopUpCell: NSPopUpButtonCell {
 
 /// The CI status dot (LKM-245): one drawn circle of fixed diameter, so no state swaps in
 /// a glyph with other metrics. Passed and failed fill it; running (dashed), no checks
-/// and unknown stroke it inside the same outer edge. The spinner stays a separate view.
+/// and unknown stroke it inside the same outer edge. Colours are the glyphs' old ones:
+/// red failed, green passed, orange running, the title text colour otherwise. The
+/// spinner stays a separate view.
 final class BranchStatusDot: NSView {
     static let diameter: CGFloat = 7
     /// Two en spaces reserve the dot's room in the title text.
     static let slot = "\u{2002}\u{2002}"
     var state = "unknown" { didSet { if state != oldValue { needsDisplay = true } } }
+    /// The title's text colour, which follows the preview header (`NativeShell.previewTextColor`).
+    var textColor = NSColor.labelColor { didSet { needsDisplay = true } }
     var filled: Bool { state == "passed" || state == "failed" }
+    var colorRole: String { state == "failed" ? "red" : state == "passed" ? "green" : state == "running" ? "orange" : "text" }
     private var color: NSColor {
-        state == "failed" ? .systemRed : state == "passed" ? .systemGreen : state == "unknown" ? .secondaryLabelColor : .systemOrange
+        switch colorRole { case "red": return .systemRed; case "green": return .systemGreen; case "orange": return .systemOrange; default: return textColor }
     }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func isAccessibilityElement() -> Bool { false }
@@ -114,7 +119,7 @@ final class BranchStatusDot: NSView {
     }
     func inspect(slot: NSRect, in button: NSView) -> [String: Any] {
         let frame = convert(bounds, to: nil), title = button.convert(slot, to: nil)
-        return ["branchDotState":state, "branchDotFilled":filled, "branchDotVisible":!isHidden && window != nil,
+        return ["branchDotState":state, "branchDotFilled":filled, "branchDotColor":colorRole, "branchDotVisible":!isHidden && window != nil,
                 "branchDotFrame":NSStringFromRect(frame), "branchDotLocalFrame":NSStringFromRect(self.frame), "branchDotDiameter":[frame.width, frame.height],
                 "branchDotSlot":NSStringFromRect(title), "branchDotFits":slot.contains(self.frame),
                 "branchDotBaseline":frame.midY - title.midY]
