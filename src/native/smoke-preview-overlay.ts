@@ -237,12 +237,48 @@ export async function checkPreviewOverlay(
         windowWidth: size.minWindow.width,
         windowHeight: size.minWindow.height
       })
-    for (const dark of [false, true])
+    for (const dark of [false, true]) {
       clipEvidence[`${name}-${dark ? 'dark' : 'light'}`] = await captureBounded(
         `${name}-${dark ? 'dark' : 'light'}`,
         dark,
         false
       )
+      if (!narrow && !dark) {
+        // Scroll the real WebKit document, then use the preview-viewport hook to set
+        // pageZoom. Remove the fixture spacer before the DOM preservation check.
+        await page(`(() => {
+          const spacer = document.createElement('div')
+          spacer.id = 'overlay-scroll-spacer'
+          spacer.style.height = '1800px'
+          document.body.appendChild(spacer)
+          scrollTo(0, 400)
+          return scrollY
+        })()`)
+        try {
+          const scrolled = await until((s) => s.page.scrollY > 0, 'overlay scrolled page')
+          assert.ok(scrolled.page.scrollY >= 300, 'WebKit scrolled toward 400 CSS px')
+          clipEvidence['normal-scrolled'] = await captureBounded('normal-scrolled', false, false)
+          await host.request('previewViewport', { width: 900 })
+          const zoomed = await until(
+            (s) => Math.abs(s.page.width - 900) <= 20 && s.scale < 0.9,
+            'overlay page zoom'
+          )
+          assert.ok(zoomed.scale < 1, 'The preview applies a non-unit page zoom')
+          clipEvidence['normal-zoomed'] = await captureBounded('normal-zoomed', false, false)
+        } finally {
+          await host.request('previewViewport', {})
+          await page(`(() => {
+            document.querySelector('#overlay-scroll-spacer')?.remove()
+            scrollTo(0, 0)
+            return scrollY
+          })()`)
+        }
+        await until(
+          (s) => s.page.scrollY === 0 && Math.abs(s.scale - 1) < 0.01,
+          'overlay scroll and zoom restored'
+        )
+      }
+    }
     if (narrow)
       await host.request('inspectorIsland', {
         windowWidth: size.window.width,

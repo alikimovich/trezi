@@ -7,6 +7,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Clip guide and grid drawing to local preview bounds at every corner radius; keep guide hits inside the viewport.
 - [x] Add geometry and foreground color-bleed assertions for extreme columns in normal, narrow and mobile layouts.
+- [x] Capture the same clip and geometry assertions after WebKit scroll and non-unit page zoom, then restore the fixture DOM.
 - [ ] Manager: inspect the captured images, run final verification and independent review, then merge.
 
 ## Sidebar during project planning (LKM-242)

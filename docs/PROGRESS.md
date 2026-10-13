@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-247 review repair: scroll and zoom clip evidence
+
+- The `preview-overlay` native fixture now scrolls a temporary tall page by 400 CSS px, captures the extreme grid, applies the existing preview viewport zoom hook and captures again. Both captures use the same WebKit/guide frame and scale assertions and foreground magenta pixel count as the normal, narrow and mobile cases. The fixture restores viewport width and scroll and removes the spacer before asserting the page DOM is unchanged.
+
 ## 2026-10-13 — LKM-247: confine layout grids to the preview
 
 - The square-corner guide layer previously disabled `masksToBounds`, and `PreviewGuideView.draw` filled full column rectangles without a local clip. It now keeps the layer mask on at every radius, clips drawing to its bounds and rejects guide hits outside those bounds. Column settings, snapping and coordinate conversion are unchanged.
