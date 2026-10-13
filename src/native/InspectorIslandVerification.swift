@@ -5,6 +5,9 @@ import WebKit
 /// resizes, a left-edge drag, hit targets around the island and its own scrolling.
 extension Host {
     func verifyInspectorIsland(_ c: [String: Any]) -> [String: Any] {
+        if let appearance = c["appearance"] as? String {
+            window.appearance = appearance == "dark" ? NSAppearance(named: .darkAqua) : appearance == "light" ? NSAppearance(named: .aqua) : nil
+        }
         if let width = c["windowWidth"] as? Double, let height = c["windowHeight"] as? Double {
             let size = NSSize(width: max(window.minSize.width, width), height: max(window.minSize.height, height))
             window.setFrame(NSRect(x: window.frame.minX, y: window.frame.maxY - size.height, width: size.width, height: size.height), display: true)
@@ -34,11 +37,16 @@ extension Host {
             "window":["width":Double(window.frame.width), "height":Double(window.frame.height)], "minWindow":["width":Double(window.minSize.width), "height":Double(window.minSize.height)],
             // Window coordinates: the toolbar and address bar end at contentLayoutRect's top.
             "toolbarGap":Double(window.contentLayoutRect.maxY - editingInspector.convert(editingInspector.bounds, to: nil).maxY),
-            "inspectorWidth":Double(nativeLayout.inspectorWidth), "hits":hits]
+            "inspectorWidth":Double(nativeLayout.inspectorWidth), "hits":hits, "appearance":window.effectiveAppearance.name.rawValue]
         if let scroll = firstScrollView(in: editingInspector) {
             let frame = scroll.convert(scroll.bounds, to: canvas), visible = scroll.contentView.bounds.height
             let document = scroll.documentView?.frame.height ?? 0
             var scrolled = 0.0
+            if c["scrollTop"] as? Bool == true {
+                window.makeFirstResponder(nil)
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.documentView?.isFlipped == false ? max(0, document - visible) : 0))
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
             if c["scroll"] as? Bool == true, document > visible {
                 scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.documentView?.isFlipped == false ? 0 : document - visible))
                 scroll.reflectScrolledClipView(scroll.contentView)
@@ -61,7 +69,7 @@ extension Host {
         }
         if state.tab != "styles" { editingInspector.model.send("tab", value: "styles"); return ["tab":state.tab] }
         let all = descendants(of: editingInspector), island = editingInspector.frame
-        let field = all.compactMap { $0 as? NSTextField }.first { $0.isEditable && ($0.placeholderString ?? $0.placeholderAttributedString?.string) == "padding-top" }
+        let field = all.compactMap { $0 as? NSTextField }.first { $0.isEditable && ($0.placeholderString ?? $0.placeholderAttributedString?.string) == "Vertical" }
         field?.scrollToVisible(field?.bounds ?? .zero); editingInspector.layoutSubtreeIfNeeded()
         func center(_ view: NSView) -> NSPoint { view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil) }
         let fieldY = field.map { center($0).y } ?? 0
@@ -97,7 +105,7 @@ extension Host {
             return ["point":["x":Double(point.x), "y":Double(point.y)], "owners":owners.map { String(describing: type(of: $0)) }, "picks":previewPicks - picks, "picksTotal":previewPicks,
                     "expectedCover":previewCoverRects(), "firstResponder":window.firstResponder === preview]
         case "edit":
-            guard let field, let value = c["value"] as? String else { throw NSError(domain: "InspectorIsland", code: 3, userInfo: [NSLocalizedDescriptionKey: "No padding-top field"]) }
+            guard let field, let value = c["value"] as? String else { throw NSError(domain: "InspectorIsland", code: 3, userInfo: [NSLocalizedDescriptionKey: "No vertical padding field"]) }
             post(.leftMouseDown, center(field)); post(.leftMouseUp, center(field))
             try await settle()
             guard let editor = window.firstResponder as? NSTextView, editor.isFieldEditor, (editor.delegate as? NSView) === field else {

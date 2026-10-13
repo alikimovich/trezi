@@ -5,6 +5,7 @@ struct InspectorToken: Decodable, Identifiable { let id: String; let label: Stri
 struct InspectorField: Decodable, Identifiable {
     let id: String, label: String, group: String, kind: String, value: String
     let disabled: Bool?, detail: String?, options: [String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
+    let layout: String?, axis: String?, mixed: Bool?, expanded: Bool?
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
@@ -118,6 +119,169 @@ struct UpdatedPulse: View {
             .padding(.trailing, 12).allowsHitTesting(false).accessibilityLabel("Values updated")
     }
 }
+private struct CompactLayoutValue: View {
+    let field: InspectorField
+    @ObservedObject var model: InspectorModel
+    @State private var draft = ""
+    @State private var submitted = ""
+    @State private var cancelling = false
+    @FocusState private var focused: Bool
+    private var title: String {
+        switch field.axis {
+        case "horizontal": return "Horizontal"
+        case "vertical": return "Vertical"
+        case "top": return "Top"
+        case "right": return "Right"
+        case "bottom": return "Bottom"
+        case "left": return "Left"
+        default: return field.id == "style:border-radius" ? "Radius" : field.label.capitalized
+        }
+    }
+    private var symbol: String {
+        switch field.axis {
+        case "horizontal": return "arrow.left.and.right"
+        case "vertical": return "arrow.up.and.down"
+        case "top": return "arrow.up"
+        case "right": return "arrow.right"
+        case "bottom": return "arrow.down"
+        case "left": return "arrow.left"
+        default: return field.id == "style:width" ? "arrow.left.and.right" : field.id == "style:height" ? "arrow.up.and.down" : "circle.dashed"
+        }
+    }
+    private func commit() {
+        if draft.isEmpty {
+            model.send("cancel-preview", field: field.id)
+            return
+        }
+        guard draft != field.value, draft != submitted else { return }
+        submitted = draft
+        model.send("apply", field: field.id, value: draft)
+    }
+    private var bareNumber: Bool {
+        draft.range(of: "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$", options: .regularExpression) != nil
+    }
+    private func cancel() {
+        cancelling = true
+        draft = field.value
+        submitted = field.value
+        focused = false
+        model.send("cancel-preview", field: field.id)
+    }
+    private func increment(_ direction: Double) {
+        guard let current = Double(draft), let step = field.step else { return }
+        let next = min(field.max ?? .infinity, max(field.min ?? -.infinity, current + direction * step))
+        draft = String(format: "%g", next)
+        model.send("preview", field: field.id, value: draft)
+    }
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 13)
+                .accessibilityHidden(true)
+            TextField(title, text: $draft, prompt: Text(field.mixed == true ? "Mixed" : title))
+                .textFieldStyle(.roundedBorder).controlSize(.small).font(.system(size: 11))
+                .focused($focused).onSubmit(commit)
+                .onChange(of: focused) { next in if !next && !cancelling { commit() }; if next { cancelling = false } }
+                .onChange(of: draft) { next in
+                    if focused && !cancelling && bareNumber && next != field.value {
+                        model.send("preview", field: field.id, value: next)
+                    }
+                }
+                .onMoveCommand { direction in
+                    if direction == .up { increment(1) }
+                    if direction == .down { increment(-1) }
+                }
+                .onExitCommand(perform: cancel)
+                .accessibilityLabel(title + " " + (field.layout ?? ""))
+                .help(field.detail ?? title)
+            if let unit = field.unit, !unit.isEmpty, bareNumber {
+                Text(unit).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
+            }
+            if let tokens = field.tokens, !tokens.isEmpty {
+                Menu { ForEach(tokens) { token in Button(token.label) { model.send("token", field: field.id, value: token.id) } } }
+                    label: { Image(systemName: "swatchpalette") }.menuStyle(.borderlessButton).fixedSize()
+                    .help("Choose design token for " + title)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let detail = field.detail, (detail.contains("var(") || detail.contains("calc(")) {
+                Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                    .truncationMode(.middle).help(detail).offset(y: 12)
+            }
+        }
+        .disabled(field.disabled == true || model.state?.busy == true)
+        .onAppear { draft = field.value; submitted = field.value }
+        .onChange(of: field.value) { next in if !focused { draft = next; submitted = next } }
+    }
+}
+
+private struct CompactSpacingRow: View {
+    let group: String
+    let fields: [InspectorField]
+    @ObservedObject var model: InspectorModel
+    private var expanded: Bool { fields.first?.expanded == true }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(group.capitalized).font(.system(size: 11, weight: .medium))
+                Spacer()
+                Button {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    DispatchQueue.main.async { model.send("spacing:" + group) }
+                } label: {
+                    FourEdgeInsetIcon().frame(width: 14, height: 14)
+                        .frame(width: 24, height: 24)
+                        .background(expanded ? Color.accentColor.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                }
+                .buttonStyle(.plain).accessibilityLabel(group == "padding" ? "Individual padding" : "Individual margins")
+                .accessibilityAddTraits(expanded ? .isSelected : [])
+                .help(group == "padding" ? "Edit each padding side" : "Edit each margin side")
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
+                ForEach(fields) { field in CompactLayoutValue(field: field, model: model) }
+            }
+        }
+    }
+}
+
+private struct FourEdgeInsetIcon: View {
+    var body: some View {
+        SwiftUI.Canvas { context, size in
+            let bounds = CGRect(x: 1, y: 1, width: size.width - 2, height: size.height - 2)
+            context.stroke(Path(roundedRect: bounds, cornerRadius: 1.5), with: .color(.secondary), lineWidth: 1)
+            let center = CGRect(x: 4.5, y: 4.5, width: size.width - 9, height: size.height - 9)
+            context.stroke(Path(roundedRect: center, cornerRadius: 0.8), with: .color(.primary), lineWidth: 1)
+        }.accessibilityHidden(true)
+    }
+}
+
+private struct CompactLayoutFields: View {
+    let fields: [InspectorField]
+    @ObservedObject var model: InspectorModel
+    private func row(_ name: String) -> [InspectorField] { fields.filter { $0.layout == name } }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Layout").font(.headline).padding(.top, 5)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
+                ForEach(row("size")) { field in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(field.id == "style:width" ? "Width" : "Height").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                        CompactLayoutValue(field: field, model: model)
+                    }
+                }
+            }
+            CompactSpacingRow(group: "padding", fields: row("padding"), model: model)
+            CompactSpacingRow(group: "margin", fields: row("margin"), model: model)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
+                ForEach(row("finish")) { field in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(field.id == "style:border-radius" ? "Radius" : "Opacity").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                        CompactLayoutValue(field: field, model: model)
+                    }
+                }
+            }
+        }
+    }
+}
 struct EditingInspectorContent: View {
     @ObservedObject var model: InspectorModel
     var body: some View {
@@ -140,8 +304,16 @@ struct EditingInspectorContent: View {
                 if !state.error.isEmpty { Text(state.error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        ForEach(Array(state.fields.enumerated()), id: \.element.id) { index, field in
-                            if index == 0 || field.group != state.fields[index - 1].group { if !field.group.isEmpty { Text(field.group.capitalized).font(.headline).padding(.top, 5) } }
+                        if state.tab == "styles" {
+                            let layout = state.fields.filter { $0.layout != nil }
+                            if !layout.isEmpty { CompactLayoutFields(fields: layout, model: model) }
+                        }
+                        ForEach(Array(state.fields.filter { state.tab != "styles" || $0.layout == nil }.enumerated()), id: \.element.id) { index, field in
+                            if index == 0 || field.group != state.fields.filter({ state.tab != "styles" || $0.layout == nil })[index - 1].group {
+                                if !field.group.isEmpty && !(state.tab == "styles" && field.group == "layout") {
+                                    Text(field.group == "appearance" ? "Color & Effects" : field.group.capitalized).font(.headline).padding(.top, 5)
+                                }
+                            }
                             InspectorFieldView(field: field, model: model)
                         }
                     // Trailing room keeps units and apply buttons clear of the overlay scroller.

@@ -119,6 +119,8 @@ const previewTimings = {
  *  each maps 1:1 to a panel control and to a `styles:preview` override. */
 const TRACKED_STYLES = [
   // Layout
+  'width',
+  'height',
   'padding-top',
   'padding-right',
   'padding-bottom',

@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Compact native Layout controls (LKM-236)
+
+- [x] Replace linked spacing actions with independent individual-side view toggles and compact width, height, padding, margin, radius and opacity rows.
+- [x] Commit paired spacing edits as one source transaction for supported JSX, Svelte and unique CSS class rules; preserve single-side edits and show a clear fallback for unsupported source paths.
+- [x] Add controller and source transaction checks, plus foreground inspector captures at normal and narrow widths in light and dark mode.
+- [x] Repair compact field preview/cancel, unit and token display, and visible size/finish labels; cover asymmetric spacing, token and auto/negative margins, expansion, Mixed state and ledger Undo in the native fixture.
+- [ ] Manager: review foreground images, run full native verification and independent review, then merge.
+
 ## Free-plan GitHub CI and main enforcement (LKM-234)
 
 - [x] Add a separate ad hoc signed macOS app-build check; retain typecheck/unit and logs; remove the `candidate` push trigger; bound permissions, time and concurrency.

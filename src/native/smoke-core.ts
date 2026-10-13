@@ -125,7 +125,7 @@ export async function runNativeCoreSmoke(
   mkdirSync(artifacts, { recursive: true })
   writeFileSync(
     join(fixture, 'native-style.tsx'),
-    'export function Fixture() { return <h1 style={{ opacity: 1 }}>Hello</h1> }'
+    'export function Fixture() { return <h1 style={{ opacity: 1, paddingLeft: "var(--space-a)", paddingRight: "18px", paddingTop: "6px", paddingBottom: "6px", marginLeft: "auto", marginRight: "-4px", marginTop: "-2px", marginBottom: "3px" }}>Hello</h1> }'
   )
   let firstProject = '',
     originalURL = '',
@@ -656,6 +656,10 @@ export async function runNativeCoreSmoke(
       name: 'inspector',
       dependsOn: ['open-project'],
       run: async () => {
+        await page(`(() => {
+          document.documentElement.style.setProperty('--space-a', '8px');
+          document.querySelector('#native-title').style.cssText = 'padding-left:var(--space-a);padding-right:18px;padding-top:6px;padding-bottom:6px;margin-left:auto;margin-right:-4px;margin-top:-2px;margin-bottom:3px';
+        })()`)
         // Give the real preview selection the style fixture's source. A synthetic
         // element-picked event races with WebKit's layout-driven selection refresh.
         await page(
@@ -718,6 +722,35 @@ export async function runNativeCoreSmoke(
           })
           throw error
         }
+        const beforePair = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: inspector.generation,
+            action: 'apply',
+            field: 'style:padding-vertical',
+            value: '12'
+          }
+        })
+        await wait(() => {
+          const source = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
+          return source.includes('paddingTop: "12px"') && source.includes('paddingBottom: "12px"')
+        }, 'one vertical pair source edit')
+        const paired = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
+        for (const untouched of [
+          'paddingLeft: "var(--space-a)"',
+          'paddingRight: "18px"',
+          'marginLeft: "auto"',
+          'marginRight: "-4px"',
+          'marginTop: "-2px"',
+          'marginBottom: "3px"'
+        ])
+          assert.ok(paired.includes(untouched), `pair kept ${untouched}`)
+        assert.ok((await invoke('edit:undo', fixture)).ok, 'one ledger Undo reverts the pair')
+        await wait(
+          () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8') === beforePair,
+          'one Undo restores both vertical sides'
+        )
         await host.request('inspectorPerform', {
           action: { root: fixture, generation: inspector.generation, action: 'close' }
         })
@@ -733,6 +766,10 @@ export async function runNativeCoreSmoke(
             styles: (prop) => invoke('styles:read', [prop]),
             select: async () => {
               // Source edits live-reload the page, which drops the stamp set above.
+              await page(`(() => {
+                document.documentElement.style.setProperty('--space-a', '8px');
+                document.querySelector('#native-title').style.cssText = 'padding-left:var(--space-a);padding-right:18px;padding-top:6px;padding-bottom:6px;margin-left:auto;margin-right:-4px;margin-top:-2px;margin-bottom:3px';
+              })()`)
               await page(
                 `document.querySelector('#native-title').setAttribute('data-trezi-source','native-style.tsx:1:36')`
               )

@@ -63,6 +63,8 @@ assert(formatCssNumber({ n: 13, unit: 'px' }) === '13px', 'format 13px')
 // --- metadata table: every v1 property present, correctly grouped/flagged ---
 const V1 = {
   layout: [
+    'width',
+    'height',
     'padding-top',
     'padding-right',
     'padding-bottom',
@@ -154,7 +156,7 @@ assert(m('color')?.control === 'color', 'color uses ColorControl')
 assert(m('background-color')?.control === 'color', 'background-color uses ColorControl')
 assert(m('font-family')?.control === 'readonly', 'font-family read-only chip')
 assert(m('display')?.control === 'readonly', 'display read-only chip')
-assert(stylePropMeta('width') === null, 'width out of scope v1')
+assert(stylePropMeta('width')?.group === 'layout', 'width is editable in Layout')
 assert(stylePropMeta('box-shadow')?.control === 'text', 'box-shadow uses a CSS text control')
 
 // --- s/ms normalization ---

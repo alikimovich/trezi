@@ -108,6 +108,7 @@ const UNIT = [
   'native-updates',
   'native-inspector',
   'style-class-rule',
+  'style-pair',
   'native-slider-ticks',
   'native-layers',
   'native-editor',

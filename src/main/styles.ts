@@ -6,9 +6,9 @@ import { STYLE_PROPS as STYLE_PROP_LIST } from '../shared/style-props'
 import { mergeStyleObjectSource } from './inline-style'
 import { renderJsxAttribute } from './jsx-attribute-literals'
 import { classNameStringNode, commitEdit, findElementAtLine, resolveSource } from './props'
-import { applyClassRule, resolveClassRule } from './style-class-rule'
+import { applyClassRule, resolveClassRule, rewriteClassRule } from './style-class-rule'
 import { type ResolvedTokenRef, resolveTokenRef, tokenClassRewrite } from './style-tokens'
-import { applyStyleEditSvelte } from './styles-svelte'
+import { applyStyleEditSvelte, applyStylePairSvelte } from './styles-svelte'
 import { looksTailwind } from './tw-styles'
 
 /**
@@ -248,10 +248,120 @@ export async function applyStyleEdit(root: string, edit: StyleEdit): Promise<Sty
   return toAgent()
 }
 
+/** Two spacing longhands are prepared against one source snapshot and committed once. */
+export async function applyStylePair(
+  root: string,
+  edit: Pick<StyleEdit, 'source' | 'classes' | 'value'> & { props: string[] },
+  classRule = false
+): Promise<StyleEditResult> {
+  const [first, second] = edit.props ?? []
+  if (
+    !first ||
+    !second ||
+    first === second ||
+    !/^(padding|margin)-(top|right|bottom|left)$/.test(first) ||
+    !/^(padding|margin)-(top|right|bottom|left)$/.test(second) ||
+    first.split('-')[0] !== second.split('-')[0] ||
+    !isSafeStyleValue(edit.value)
+  )
+    return { applied: false, error: 'Invalid spacing pair.' }
+  if (
+    first.startsWith('padding-') &&
+    (/^-/.test(edit.value.trim()) || /^auto$/i.test(edit.value.trim()))
+  )
+    return { applied: false, error: 'Padding cannot be negative or auto.' }
+  if (classRule) {
+    const rule = await resolveClassRule(root, edit.classes)
+    if (!rule)
+      return { applied: false, error: 'The CSS rule is missing or ambiguous. Refresh the island.' }
+    const file = resolveSource(root, `${rule.file}:1`)?.file
+    if (!file) return { applied: false, error: 'Could not resolve the CSS rule.' }
+    const before = await readFile(file, 'utf8')
+    const one = rewriteClassRule(before, rule.className, first, edit.value)
+    const after = one && rewriteClassRule(one, rule.className, second, edit.value)
+    if (!after)
+      return { applied: false, error: 'The CSS rule changed or is ambiguous. Refresh the island.' }
+    return committed(
+      await commitEdit(
+        root,
+        file,
+        before,
+        after,
+        `${rule.file}:${rule.className}:${first}+${second}`
+      ),
+      'inline'
+    )
+  }
+  const loc = resolveSource(root, edit.source)
+  if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
+  const fallback = (): StyleEditResult => ({
+    applied: false,
+    error:
+      'This spacing pair needs an authored style object or a unique CSS rule. Edit the sides individually or use chat for this source convention.'
+  })
+  if (loc.file.endsWith('.svelte')) return applyStylePairSvelte(root, edit, loc)
+  let code: string
+  try {
+    code = await readFile(loc.file, 'utf8')
+  } catch {
+    return { applied: false, error: 'Could not read the source file.' }
+  }
+  const found = await findElementAtLine(code, loc.line, loc.column)
+  if (!found || (found.opening.attributes ?? []).some((a) => a.type === 'JSXSpreadAttribute'))
+    return fallback()
+  if (looksTailwind(edit.classes)) {
+    const classAttr = (found.opening.attributes ?? []).find(
+      (a) => a.type === 'JSXAttribute' && (a.name as { name?: string })?.name === 'className'
+    )
+    const strNode = classNameStringNode(classAttr?.value ?? null)
+    if (strNode) {
+      const current = String((strNode as unknown as { value: string }).value)
+      const one = tokenClassRewrite(current, { ...edit, prop: first }, null)
+      const two = one && tokenClassRewrite(one, { ...edit, prop: second }, null)
+      if (two) {
+        const next =
+          code.slice(0, strNode.start) +
+          (classAttr?.value?.type === 'StringLiteral'
+            ? renderJsxAttribute(two, code[strNode.start])
+            : JSON.stringify(two)) +
+          code.slice(strNode.end)
+        return committed(
+          await commitEdit(root, loc.file, code, next, `${edit.source}:style:${first}+${second}`),
+          'tailwind'
+        )
+      }
+    }
+  }
+  const styleAttr = (found.opening.attributes ?? []).find(
+    (a) => a.type === 'JSXAttribute' && (a.name as { name?: string })?.name === 'style'
+  )
+  const expr =
+    styleAttr?.value?.type === 'JSXExpressionContainer' ? styleAttr.value.expression : undefined
+  if (expr?.type !== 'ObjectExpression') return fallback()
+  const original = code.slice(expr.start, expr.end)
+  const one = mergeStyleObjectSource(original, first, edit.value)
+  const two = one && mergeStyleObjectSource(one, second, edit.value)
+  if (!two) return fallback()
+  const next = code.slice(0, expr.start) + two + code.slice(expr.end)
+  return committed(
+    await commitEdit(root, loc.file, code, next, `${edit.source}:style:${first}+${second}`),
+    'inline'
+  )
+}
+
 export function registerStylesIpc(): void {
   // No sender check (matches props:*); path safety comes from resolveSource's
   // within-root containment + the allowlist/value validation above.
   ipcMain.handle('styles:apply', (_e, root: string, edit: StyleEdit) => applyStyleEdit(root, edit))
+  ipcMain.handle(
+    'styles:apply-pair',
+    (_e, root: string, edit: Parameters<typeof applyStylePair>[1]) => applyStylePair(root, edit)
+  )
+  ipcMain.handle(
+    'styles:apply-class-pair',
+    (_e, root: string, edit: Parameters<typeof applyStylePair>[1]) =>
+      applyStylePair(root, edit, true)
+  )
   ipcMain.handle('styles:resolve-class', (_e, root: string, classes: string[]) =>
     resolveClassRule(root, classes)
   )
