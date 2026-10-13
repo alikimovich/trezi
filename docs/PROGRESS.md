@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-245 review repair: the dot keeps the glyphs' colours
+
+- Review found the first dot recoloured two states: the old `branchTitle` coloured only `●` and `◌` (red failed, green passed, orange running), so the no-checks `○` and unknown `?` used the preview header's text colour. The dot now does the same: orange only for running, and `BranchStatusDot.textColor` (kept in step with `NativeShell.previewTextColor`) for no checks and unknown. `BranchStatusDot.inspect` reports `branchDotColor` (`red`, `green`, `orange` or `text`) and `smoke-branch-dot.ts` pins it for every state.
+
+## 2026-10-13 — LKM-245: fixed-size CI status dot in the preview subtitle
+
+- LKM-244 replaced only the activity arrow; the CI state was still a font glyph (`●`, `◌`, `○`, `?`) with different metrics per state, and the spinner's slot was inserted before it, so the dot changed size and moved when CI started or stopped running. `BranchStatusDot` (`src/native/ToolbarAddress.swift`) now draws one 7 pt circle centred in a two-en-space slot after `branch · `: filled green (passed) or red (failed, count follows), a dashed orange ring (running) or a ring in the title text colour (no checks, unknown), exactly the colours the glyphs had. The spinner remains its own view after the dot; a publish step keeps the dot. Accessibility values keep their glyph wording; the tooltip, menu, ahead count and PR number are unchanged.
+- `src/native/smoke-branch-dot.ts` walks every ordered transition between the five CI states (into and out of the running spinner) at 1320 and 850 pt and asserts identical window frame, diameter and centre line, then saves light/dark captures of filled and hollow dots. The publish fixture checks the dot's frame within the branch control during and after a publish step: the first native run showed the whole address block shifting 2 pt as the Publish label changes, which is toolbar layout rather than the dot.
+
 ## 2026-10-13 — LKM-243 review repair: a pending Send could be dropped by a drafted target chat
 
 - An explicit picker Send sets `pending` and carries home into the opened project. If that project's restored chat already had its own unsent draft, `arrive()` returned early, so `pending` never cleared: the project docked without the prompt, and later Sends from home were ignored. `arrive()` now sends the home draft to a new chat beside the drafted one (`start-chat`, tracked by `StartFlow.reroute`), so the target's draft stays untouched and exactly one send happens. If no new chat can be made (no project entry, the command fails or another switch intervenes), `pending` and `reroute` clear and the home draft stays, with a notice when the target has no root to use. Cancel and planning-cancel also clear `reroute`.
