@@ -236,7 +236,8 @@ last lines of the run. If the host exited without a result or was killed by a
 signal, the launcher adds `SMOKE FAIL host/exit: native host exited with <exit code
 N|signal S> … [artifact: test/artifacts/native/host-exit.log]` and up to 12 of the
 host's last product log lines (`  host log: …`). A failure outside any named check
-reports as `run/setup`. A run that `test/native-runtime.mjs` stopped after 300 s
+reports as `run/setup`. A filtered run that `test/native-runtime.mjs` stopped after 300 s,
+or a full-suite run stopped after 420 s,
 reports as `run/timeout`. Missing sidebar evidence reports as `sidebar/evidence`.
 `test/native-smoke-report.mjs` (unit tier) covers the formatter, the timeout and
 host-exit lines and the exit codes. `test/native-smoke-runner.mjs` covers restore,

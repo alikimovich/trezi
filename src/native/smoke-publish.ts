@@ -128,14 +128,46 @@ export async function checkPublishProgress(
       branchStatus.addressVisible && branchStatus.addressTrailing < branchStatus.rightGroupLeading,
       'Branch status stays inside the toolbar'
     )
-    await capture(host, artifacts, 'branch-status-running')
+    assert.ok(
+      branchStatus.branchBusy && branchStatus.branchProgressNative,
+      'Running CI uses the native spinner'
+    )
+    assert.match(branchStatus.branchAccessibilityValue, /^Busy: /)
+    for (const width of [1320, 850]) {
+      assert.ok(await host.request('shellPerform', { action: 'window-width', row: String(width) }))
+      for (const appearance of ['light', 'dark']) {
+        assert.ok(
+          await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+        )
+        const view = await host.request('shellInspect')
+        assert.ok(
+          view.branchBusy && view.branchProgressFits,
+          `Spinner fits at ${width} in ${appearance}`
+        )
+        assert.equal(view.branchTruncation, 'tail')
+        assert.ok(
+          view.branchChevronTrailing <= view.branchFrameLeading + view.branchFrameWidth + 0.5
+        )
+        writeFileSync(
+          join(artifacts, `branch-status-${width}-${appearance}.json`),
+          JSON.stringify(view, null, 2)
+        )
+        await capture(host, artifacts, `branch-status-running-${width}-${appearance}`)
+      }
+    }
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
+    await host.request('shellPerform', { action: 'window-width', row: '1320' })
     git.statuses.set(root, { ...sample, ci: 'passed' })
     git.render()
-    await until((s) => String(s.branchDisplay).includes('●'), 'Passed CI')
+    await until(
+      (s) => String(s.branchDisplay).includes('●') && !s.branchBusy,
+      'Passed CI stops the spinner'
+    )
     await capture(host, artifacts, 'branch-status-passed')
     git.statuses.set(root, { ...sample, ci: 'failed', failing: ['build', 'lint'] })
     git.render()
     const failed = await until((s) => String(s.branchDisplay).includes('●2'), 'Failed CI')
+    assert.equal(failed.branchBusy, false, 'Failed CI stops the spinner')
     assert.ok(!failed.branchTruncated, 'CI dot and failure count remain visible in toolbar')
     assert.ok(failed.branchTitleWidth <= failed.branchTitleRoom + 0.5, 'Branch title fits control')
     await capture(host, artifacts, 'branch-status-failed')
@@ -171,7 +203,12 @@ export async function checkPublishProgress(
     await until(label('Syncing with GitHub…'), 'Syncing step')
     step('push')
     const pushing = await until(label('Pushing…'), 'Pushing step')
-    await until((s) => /[↗→↑] push/.test(String(s.branchDisplay)), 'Branch publish animation')
+    const branchPush = await until(
+      (s) => s.branchBusy && String(s.branchDisplay).includes('push'),
+      'Branch publish spinner'
+    )
+    assert.ok(branchPush.branchProgressNative && !/[↗→]/.test(String(branchPush.branchDisplay)))
+    assert.match(branchPush.branchAccessibilityValue, /^Busy: /)
     assert.ok(pushing.publishEnabled, 'The menu opens while the step can be cancelled')
     assert.deepEqual(pushing.publishMenu, ['Pushing…', 'Cancel Publish'])
     evidence.pushing = await capture(host, artifacts, 'publish-progress')
@@ -215,6 +252,7 @@ export async function checkPublishProgress(
       'The button returns to normal after success'
     )
     assert.ok(idle.publishClickable && idle.publishMenu.includes('Create PR'))
+    assert.equal(idle.branchBusy, false, 'Successful publish stops the subtitle spinner')
 
     // Cancel while pushing: the owner is asked, and the run ends in a short toast.
     assert.ok(await host.request('shellPerform', { action: 'publish' }))
@@ -232,7 +270,7 @@ export async function checkPublishProgress(
       const state = await host.request('toastInspect')
       return state.visible && state.message === 'Publish cancelled'
     }, 'Cancelled toast')
-    await until((s) => !s.publishing, 'The button returns to normal after cancel')
+    await until((s) => !s.publishing && !s.branchBusy, 'Cancel stops the subtitle spinner')
 
     // Failure: the standard sheet names the step and the conflicting file.
     assert.ok(await host.request('shellPerform', { action: 'publish' }))
@@ -264,7 +302,10 @@ export async function checkPublishProgress(
       join(artifacts, 'publish-failure.png'),
       Buffer.from(await host.request('captureSheet'), 'base64')
     )
-    await until((s) => !s.publishing && s.publishLabel === 'Publish', 'Idle after the failure')
+    await until(
+      (s) => !s.publishing && !s.branchBusy && s.publishLabel === 'Publish',
+      'Failure stops the subtitle spinner'
+    )
     await host.request('sheetPerform', { action: 'cancel' })
     await waitFor(async () => !(await host.request('sheetInspect')).visible, 'Failure sheet closed')
     console.log('Native publish progress', JSON.stringify(evidence))

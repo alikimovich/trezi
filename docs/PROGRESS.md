@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-244 verification repair: full native launcher deadline
+
+- The manager's full native run reached `states-canvas` when `test/native-runtime.mjs` hit its 300-second `spawnSync` deadline. The ensuing "Native host closed" line followed launcher termination; no spinner check had failed. The full suite now has a 420-second launcher watchdog while filtered runs retain 300 seconds. Every named smoke check, its timeout and its assertions remain unchanged. `test/native-smoke-groups.mjs` pins both deadlines.
+- Agent OS quick passed 222 unit checks, typechecks and lint. Native `core` passed 30 checks with no skips, including `publish-progress`. The manager still needs the full-suite run to confirm the longer window and independent review.
+
+## 2026-10-13 — LKM-244: native preview subtitle progress
+
+- `NativeGitController` already owns publish steps per project and CI polling per root; `NativeShell` previously animated the subtitle when the active project's publish step existed or CI was running. The subtitle now uses a compact `NSProgressIndicator` in that same condition. Publish status text, branch menu, CI colors and static Git ahead/behind icons remain.
+- The native publish fixture checks spinner and accessibility state through running CI, passed/failed CI, publish success, cancellation and failure, and writes normal/narrow light/dark foreground captures with geometry JSON. The manager will inspect these after native verification.
+- Agent OS quick passed on the final tree: 219 unit checks, three existing skips, typechecks and lint. Earlier quick attempts intermittently failed unrelated worktree cleanup, performance and owner tests; the final run was green. Native `core` passed all 30 checks with no skips, including publish-progress. The four foreground captures were inspected at normal/narrow widths in light/dark appearance: the spinner fits in the subtitle, the chevron remains in its target and the status text does not truncate. The manager's full-suite verification and independent review remain.
+
 ## 2026-10-13 — LKM-236 review repair: compact field preview and native fixture
 
 - Compact Layout fields now preview numeric edits, support arrow-key increments, and clear previews on Escape. The unit suffix appears only beside bare numbers; authored tokens and expressions keep their text and detail. Visible Width, Height, Radius and Opacity labels distinguish the surrounding rows.
