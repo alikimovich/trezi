@@ -36,6 +36,16 @@ extension Host {
             return value
         }
         var report = nativeLayout.startInspect()
+        if let content = window.contentView?.superview, !startSurface.isHidden {
+            var hits: [String: String] = [:]
+            for (name, rect) in startSurface.model.buttonFrames {
+                let center = NSPoint(x: rect.midX, y: rect.midY)
+                let point = startSurface.convert(center, to: content.superview)
+                let hit = content.hitTest(point)
+                hits[name] = hit === startSurface || hit?.isDescendant(of: startSurface) == true ? "surface" : hit === chatColumn || hit?.isDescendant(of: chatColumn) == true ? "chatColumn" : hit.map { String(describing: type(of: $0)) } ?? "none"
+            }
+            report["hits"] = hits
+        }
         report["window"] = ["width":Double(window.frame.width), "height":Double(window.frame.height)]
         report["composer"] = ["frame":NSStringFromRect(composer.frame), "visible":!composer.isHidden, "projectVisible":!composer.project.isHidden, "projectTitle":composer.project.title,
                               "projectItems":composer.project.itemArray.dropFirst().map(\.title), "firstResponder":window.firstResponder === composer.text,

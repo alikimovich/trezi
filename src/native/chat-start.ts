@@ -80,8 +80,12 @@ export class StartFlow {
   returnChat: string | null = null
   /** A send from the no-project draft waits for a destination. */
   pending = false
+  /** A recent chosen in the composer; selection alone has no workspace effects. */
+  draftTarget: { root: string; name: string } | null = null
   /** The chat whose draft follows the next chat switch (a project picked from it). */
   carry: string | null = null
+  /** A target chat with its own draft: the home draft follows the new chat made beside it. */
+  reroute: string | null = null
   /** The chat that received a carried draft, until it is ready to take it. */
   target: string | null = null
   /** The model picked for the carried draft, applied to its new chat. */
@@ -135,7 +139,7 @@ export class StartFlow {
       heading: START_HEADING,
       notice: centered ? this.notice(chat, usable, readiness) : undefined,
       project: {
-        title: home ? null : (this.workspace?.project() ?? null),
+        title: home ? (this.draftTarget?.name ?? null) : (this.workspace?.project() ?? null),
         recents: (this.workspace?.recents() ?? []).slice(0, 8)
       }
     }
@@ -162,12 +166,8 @@ export class StartFlow {
       }
     if (this.pending && chat.chat === HOME)
       return {
-        text: 'Choose a project for this message. It is sent once the project opens.',
-        actions: [
-          { label: 'Open Project…', action: 'start-open' },
-          { label: 'New Project…', action: 'start-new' },
-          { label: 'Cancel', action: 'start-cancel' }
-        ]
+        text: 'Opening the project for this message. It is sent once the project opens.',
+        actions: [{ label: 'Cancel', action: 'start-cancel' }]
       }
     // The selected provider stopped answering while another still can: keep the draft.
     const lost = usable.length > 0 && !selectable(chat, usable)
@@ -194,10 +194,15 @@ export class StartFlow {
   /** A send from the no-project draft: an empty one stays put, any other waits for a
    *  project. Without a provider that can answer it stays a draft (Send is disabled too). */
   request(controller: NativeChatController, chat: Chat, raw: string) {
+    if (this.pending) return
     if (!raw.trim() && !chat.attachments.length) return
     if (!selectable(chat, usableProviders(controller.choices, controller.readiness))) return
     chat.text = raw
-    void controller.beginPlanning(true)
+    if (this.draftTarget) {
+      this.pending = true
+      this.carry = HOME
+      controller.services.effect({ type: 'start-project', root: this.draftTarget.root })
+    } else void controller.beginPlanning(true)
   }
 
   /** A home or planning chat whose selected provider cannot answer keeps its draft unsent.
@@ -210,6 +215,14 @@ export class StartFlow {
   /** The start surface's own actions; false leaves the action to the chat's cards. */
   async action(controller: NativeChatController, chat: Chat, action: NativeChatAction) {
     switch (action.action) {
+      case 'start-target': {
+        const recent = this.workspace?.recents().find((item) => item.root === action.value)
+        if (recent) this.draftTarget = recent
+        return true
+      }
+      case 'start-target-new':
+        this.draftTarget = null
+        return true
       case 'start-open':
       case 'start-recent':
       case 'start-new':
@@ -217,15 +230,19 @@ export class StartFlow {
           void controller.beginPlanning(false)
           return true
         }
-        if (this.hasDraft(chat) || this.pending) this.carry = chat.chat
+        controller.invalidatePlanningStart()
+        // Direct navigation never submits or moves the unsent home draft.
+        this.carry = null
         controller.services.effect({
           type: 'start-project',
           ...(action.action === 'start-recent' && action.value ? { root: action.value } : {})
         })
         return true
       case 'start-cancel':
+        controller.invalidatePlanningStart()
         this.pending = false
         this.carry = null
+        this.reroute = null
         return true
       case 'start-provider':
         if (action.value) await controller.choice(chat, 'Provider', action.value)
@@ -237,12 +254,29 @@ export class StartFlow {
   /** The active chat changed. A draft from the no-project chat (or one carried from a
    *  chat whose project menu was used) moves into the new chat, never over its own draft. */
   arrive(controller: NativeChatController, from: string, chat: Chat) {
-    const source = controller.chats.get(from)
-    const carrying = from === HOME || from === this.carry
+    const rerouted = from === this.reroute
+    // A switch that is not the new chat beside the target leaves nothing to deliver.
+    if (this.reroute && !rerouted) this.pending = false
+    this.reroute = null
+    const origin = rerouted ? HOME : from
+    const source = controller.chats.get(origin)
+    const carrying = rerouted || origin === this.carry
     this.carry = null
     if (!carrying || !source || source === chat) return
     if (!this.hasDraft(source) && !this.pending) return
-    if (this.hasDraft(chat)) return
+    if (this.hasDraft(chat)) {
+      // The target keeps its own draft. An explicit Send goes to a new chat beside it;
+      // without one, the home draft stays put and nothing stays pending.
+      const root = chat.root || chat.context?.root
+      if (this.pending && origin === HOME && root) {
+        this.reroute = chat.chat
+        controller.services.effect({ type: 'start-chat', root })
+      } else if (this.pending) {
+        this.pending = false
+        source.error = 'That project has its own unsent draft. Your message is kept here.'
+      }
+      return
+    }
     chat.text = source.text
     chat.caret = source.caret
     chat.attachments = source.attachments
@@ -278,6 +312,7 @@ export class StartFlow {
     chat.caret = chat.text.length
     const send = this.pending || !!prefix?.send
     this.pending = false
+    this.draftTarget = null
     controller.changed(chat)
     if (send) await controller.submit(chat)
   }
