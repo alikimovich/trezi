@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Fixed-size preview subtitle CI dot (LKM-245)
+
+- [x] Draw the CI status as one fixed-size native circle in a stable title slot (filled passed/failed, stroked running/no checks/unknown), separate from the LKM-244 spinner, with unchanged accessibility wording.
+- [x] Native fixture: identical dot frame, diameter and centre line across every CI transition and publish steps; light/dark captures at normal and narrow widths.
+- [ ] Manager: inspect the `toolbar-branch-dot-*` captures, run full native verification and independent review, then merge.
+
 ## Preview subtitle spinner (LKM-244)
 
 - [x] Replace the animated branch subtitle arrow with a native inline progress indicator driven by the existing publish step and running-CI state.

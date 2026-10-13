@@ -29,6 +29,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Full access Codex chats no longer warn that the live project changed outside the chat after Trezi's own landings (land now, the turn's landing), Publish, base syncs, conflict files, dependency installs or dev-server output; a real outside change is one compact row with Details, and only the agent's own commands are blamed on the agent (LKM-215).
 - Trezi's keyboard shortcuts work with Russian, Ukrainian, Hebrew, Greek and other non-Latin keyboard layouts: menus, the composer, the code editor, rulers and grid, slow motion, select mode (S) and the states switcher (1-9, H) follow the physical key, and Dvorak keeps its own keys (LKM-219).
 - In full screen the Rulers and Grids popover opens under its toolbar button again instead of at the bottom of the window, follows the button when the toolbar relays out and closes when the window enters or leaves full screen (LKM-229).
+- The CI status dot in the preview branch subtitle keeps one size and position in every state (passed, failed, running, no checks, unknown, and while publishing) instead of switching between glyphs of different sizes and jumping when the spinner appears (LKM-245).
 
 ### Added
 - Branch sync, PR and CI state beside the branch name, with a publish progress indicator, failed-check repair action, an optional macOS notification and local pre-publish checks (LKM-228).

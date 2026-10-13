@@ -176,14 +176,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     private func branchTitle(_ title: String) -> NSAttributedString {
         let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
-        let result = NSMutableAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle:style])
-        let ci = (previewState["branchStatus"] as? [String: Any])?["ci"] as? String ?? ""
-        let color: NSColor = ci == "failed" ? .systemRed : ci == "passed" ? .systemGreen : .systemOrange
-        for dot in ["●", "◌"] {
-            let range = (title as NSString).range(of: dot)
-            if range.location != NSNotFound { result.addAttribute(.foregroundColor, value: color, range: range) }
-        }
-        return result
+        // The CI dot is drawn by `BranchStatusDot`, not a glyph in this title.
+        return NSAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle:style])
     }
     func setChatGeometry(_ width: CGFloat) { previewState["chatWidth"] = Double(width); alignChatHeader() }
     var previewLeading: CGFloat { CGFloat(previewState["chatWidth"] as? Double ?? 440) }
@@ -390,10 +384,13 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let compactPR = (pr?["number"] as? Int).map { "#\($0)" } ?? ""
             let busy = step != nil || ci == "running"
             let prefix = "\(title) · "
-            // Two en spaces reserve the indicator's inline slot without moving the pop-up.
+            // The drawn dot keeps one slot in every state; the spinner's two en spaces follow it.
             let slot = "\u{2002}\u{2002}"
-            let detail = step.map { "\(slot) \($0)" } ?? "\(busy ? slot + " " : "")\(ciText) · \(compactSync)\(compactPR.isEmpty ? "" : " · " + compactPR)"
-            let display = prefix + detail
+            let dotted = prefix + BranchStatusDot.slot + (ci == "failed" ? "\(failing.count)" : "")
+            let rest = step.map { " \($0)" } ?? " · \(compactSync)\(compactPR.isEmpty ? "" : " · " + compactPR)"
+            let display = dotted + (busy ? " " + slot : "") + rest
+            // VoiceOver keeps the glyph wording it had before the dot was drawn.
+            let spoken = prefix + (step.map { " \($0)" } ?? "\(busy ? " " : "")\(ciText) · \(compactSync)\(compactPR.isEmpty ? "" : " · " + compactPR)")
             branchMenu.toolTip = [title, sync, prText, ci == "unknown" ? "CI unknown" : "CI \(ci): \(failing.joined(separator: ", "))"].filter { !$0.isEmpty }.joined(separator: "\n")
             branchMenu.isEnabled = previewState["branch"] is String
             let menu = NSMenu(); menu.autoenablesItems = false
@@ -414,7 +411,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             menu.insertItem(withTitle: display, action: nil, keyEquivalent: "", at: 0)
             menu.items.first?.attributedTitle = branchTitle(display)
             branchMenu.menu = menu
-            branchMenu.setProgress(busy, after: prefix, description: display.replacingOccurrences(of: slot, with: ""))
+            branchMenu.setDot(ci, after: prefix)
+            branchMenu.setProgress(busy, after: dotted + " ", description: spoken)
         }
         if let item = toolbarItems["publish"] as? NSMenuToolbarItem { updatePublish(item, state: previewState, ready: ready) }
         toolbarItems["code"]?.toolTip = previewState["codeOpen"] as? Bool == true ? "Hide Code" : "Show Code"

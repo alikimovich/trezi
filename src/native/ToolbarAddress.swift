@@ -18,6 +18,8 @@ final class BranchPopUpButton: NSPopUpButton {
     static let titleInset: CGFloat = 3
     private let progress = NSProgressIndicator()
     private var progressPrefix = ""
+    let dot = BranchStatusDot()
+    private var dotPrefix = ""
     override init(frame: NSRect, pullsDown: Bool) {
         super.init(frame: frame, pullsDown: pullsDown)
         cell = BranchPopUpCell(textCell: "", pullsDown: pullsDown)
@@ -26,6 +28,7 @@ final class BranchPopUpButton: NSPopUpButton {
         progress.isIndeterminate = true
         progress.isHidden = true
         progress.setAccessibilityLabel("Branch status in progress")
+        addSubview(dot)
         addSubview(progress)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -37,11 +40,27 @@ final class BranchPopUpButton: NSPopUpButton {
         if accessibilityValue() as? String != value { setAccessibilityValue(value) }
         needsLayout = true
     }
+    /// The CI dot sits in `BranchStatusDot.slot`, right after `prefix` in the title.
+    func setDot(_ ci: String, after prefix: String) {
+        dotPrefix = prefix; dot.state = ci
+        needsLayout = true
+    }
+    private func width(_ text: String) -> CGFloat {
+        NSAttributedString(string: text, attributes: [.font:font ?? NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)]).size().width
+    }
+    /// The dot's slot in the title: the same rect in every CI state, busy or not.
+    private var dotSlot: NSRect {
+        let title = cell?.titleRect(forBounds: bounds) ?? bounds
+        return NSRect(x: title.minX + width(dotPrefix), y: title.minY, width: width(BranchStatusDot.slot), height: title.height)
+    }
     override func layout() {
         super.layout()
         let title = cell?.titleRect(forBounds: bounds) ?? bounds
-        let prefixWidth = NSAttributedString(string: progressPrefix, attributes: [.font:font ?? NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)]).size().width
-        progress.frame = NSRect(x: title.minX + prefixWidth, y: title.midY - 6, width: 12, height: 12)
+        progress.frame = NSRect(x: title.minX + width(progressPrefix), y: title.midY - 6, width: 12, height: 12)
+        let slot = dotSlot, size = BranchStatusDot.diameter
+        dot.frame = backingAlignedRect(NSRect(x: slot.midX - size / 2, y: slot.midY - size / 2, width: size, height: size), options: .alignAllEdgesNearest)
+        // Tail truncation keeps the slot only while it and the ellipsis still fit.
+        dot.isHidden = width(itemTitle(at: 0) ?? "") > title.width && slot.maxX + width("…") > title.maxX
     }
     var progressInspect: [String: Any] {
         let frame = progress.convert(progress.bounds, to: nil)
@@ -49,6 +68,7 @@ final class BranchPopUpButton: NSPopUpButton {
         return ["branchBusy":!progress.isHidden, "branchProgressNative":progress.style == .spinning && progress.isIndeterminate,
                 "branchProgressFrame":NSStringFromRect(frame), "branchProgressFits":title.contains(progress.frame),
                 "branchAccessibilityValue":accessibilityValue() as? String ?? ""]
+            .merging(dot.inspect(slot: dotSlot, in: self)) { _, new in new }
     }
     override var intrinsicContentSize: NSSize {
         let size = super.intrinsicContentSize
@@ -66,6 +86,38 @@ final class BranchPopUpCell: NSPopUpButtonCell {
     override func drawTitle(_ title: NSAttributedString, withFrame frame: NSRect, in controlView: NSView) -> NSRect {
         let rect = titleRect(forBounds: controlView.bounds)
         return super.drawTitle(title, withFrame: NSRect(x: rect.minX, y: frame.minY, width: rect.width, height: frame.height), in: controlView)
+    }
+}
+
+/// The CI status dot (LKM-245): one drawn circle of fixed diameter, so no state swaps in
+/// a glyph with other metrics. Passed and failed fill it; running (dashed), no checks
+/// and unknown stroke it inside the same outer edge. The spinner stays a separate view.
+final class BranchStatusDot: NSView {
+    static let diameter: CGFloat = 7
+    /// Two en spaces reserve the dot's room in the title text.
+    static let slot = "\u{2002}\u{2002}"
+    var state = "unknown" { didSet { if state != oldValue { needsDisplay = true } } }
+    var filled: Bool { state == "passed" || state == "failed" }
+    private var color: NSColor {
+        state == "failed" ? .systemRed : state == "passed" ? .systemGreen : state == "unknown" ? .secondaryLabelColor : .systemOrange
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func isAccessibilityElement() -> Bool { false }
+    override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
+    override func draw(_ dirtyRect: NSRect) {
+        color.set()
+        if filled { NSBezierPath(ovalIn: bounds).fill(); return }
+        let line: CGFloat = 1.25, ring = NSBezierPath(ovalIn: bounds.insetBy(dx: line / 2, dy: line / 2))
+        ring.lineWidth = line
+        if state == "running" { ring.setLineDash([1.6, 1.2], count: 2, phase: 0) }
+        ring.stroke()
+    }
+    func inspect(slot: NSRect, in button: NSView) -> [String: Any] {
+        let frame = convert(bounds, to: nil), title = button.convert(slot, to: nil)
+        return ["branchDotState":state, "branchDotFilled":filled, "branchDotVisible":!isHidden && window != nil,
+                "branchDotFrame":NSStringFromRect(frame), "branchDotLocalFrame":NSStringFromRect(self.frame), "branchDotDiameter":[frame.width, frame.height],
+                "branchDotSlot":NSStringFromRect(title), "branchDotFits":slot.contains(self.frame),
+                "branchDotBaseline":frame.midY - title.midY]
     }
 }
 

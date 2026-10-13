@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-245: fixed-size CI status dot in the preview subtitle
+
+- LKM-244 replaced only the activity arrow; the CI state was still a font glyph (`●`, `◌`, `○`, `?`) with different metrics per state, and the spinner's slot was inserted before it, so the dot changed size and moved when CI started or stopped running. `BranchStatusDot` (`src/native/ToolbarAddress.swift`) now draws one 7 pt circle centred in a two-en-space slot after `branch · `: filled green (passed) or red (failed, count follows), stroked orange (no checks; dashed while running) or stroked secondary label colour (unknown). The spinner remains its own view after the dot; a publish step keeps the dot. Accessibility values keep their glyph wording; the tooltip, menu, ahead count and PR number are unchanged.
+- `src/native/smoke-branch-dot.ts` walks every ordered transition between the five CI states (into and out of the running spinner) at 1320 and 850 pt and asserts identical window frame, diameter and centre line, then saves light/dark captures of filled and hollow dots. The publish fixture checks the dot's frame within the branch control during and after a publish step: the first native run showed the whole address block shifting 2 pt as the Publish label changes, which is toolbar layout rather than the dot.
+
 ## 2026-10-13 — LKM-244 verification repair: full native launcher deadline
 
 - The manager's full native run reached `states-canvas` when `test/native-runtime.mjs` hit its 300-second `spawnSync` deadline. The ensuing "Native host closed" line followed launcher termination; no spinner check had failed. The full suite now has a 420-second launcher watchdog while filtered runs retain 300 seconds. Every named smoke check, its timeout and its assertions remain unchanged. `test/native-smoke-groups.mjs` pins both deadlines.
