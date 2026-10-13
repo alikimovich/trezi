@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-243: home draft target and cancellation repair
+
+- The composer picker now records a recent project as the home draft target. Only a valid Send opens it and carries the text, attachments and model. The bottom recent controls and standalone Open Project navigate directly and leave an unsent home draft intact.
+- The centered chat column passes clicks outside the composer through to the start surface. Cancel resets planning and carry state before the asynchronous owner cancellation, so late provider responses cannot resume the canceled chat.
+- Controller and native composer checks cover picker selection, switching back to New Project, direct navigation and sending to an existing project. Agent OS quick passed once (219 unit passes, 3 existing skips), then two subsequent runs hit unrelated timing and performance failures in worktree cleanup, native chat settling and platform owner tests. The focused native `composer` group passed 8 checks with no skips after a fixture timing correction. Foreground normal/narrow light/dark home captures were inspected. Native navigation still uses fixture actions rather than physical mouse and keyboard activation; the manager should review that coverage and run the full suite.
+
 ## 2026-10-13 — LKM-236 review repair: compact field preview and native fixture
 
 - Compact Layout fields now preview numeric edits, support arrow-key increments, and clear previews on Escape. The unit suffix appears only beside bare numbers; authored tokens and expressions keep their text and detail. Visible Width, Height, Radius and Opacity labels distinguish the surrounding rows.

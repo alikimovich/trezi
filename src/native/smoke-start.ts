@@ -210,6 +210,52 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
     (state) => state.wantsCentered && state.progress === 0,
     'closing the new project returns home'
   )
+  const sendsBeforePicker = continuationSends
+  await host.request('startPerform', { action: 'start-target', value: project.root })
+  const selected = await start()
+  assert.equal(selected.composer.projectTitle, project.name)
+  assert.equal(nativeWorkspace.active, null, 'The picker keeps the centered home')
+  assert.equal(selected.progress, 0)
+  assert.equal(continuationSends, sendsBeforePicker)
+  await host.request('composerPerform', { text: 'Use the fixture project' })
+  assert.equal(nativeWorkspace.active, null, 'Typing does not open the project')
+  await host.request('startPerform', { action: 'start-target-new' })
+  assert.equal((await start()).composer.projectTitle, 'New Project')
+  assert.equal(nativeChat.get('').text, 'Use the fixture project')
+  await host.request('startPerform', { action: 'start-target', value: project.root })
+  await host.request('composerPerform', { action: 'send' })
+  await until(
+    start,
+    () => nativeWorkspace.active?.root === project.root && !nativeChat.start.pending,
+    'Send opens and settles the selected target'
+  )
+  assert.equal(nativeChat.get('').text, '', 'The sent draft leaves home once')
+  assert.equal(nativeChat.start.pending, false)
+  await nativeWorkspace.command({ type: 'close', key: nativeWorkspace.active!.key })
+  await until(
+    start,
+    (state) => state.wantsCentered && state.progress === 0,
+    'home after selected project'
+  )
+  await host.request('composerPerform', { text: 'Keep this unsent' })
+  await host.request('startPerform', { action: 'start-recent', value: project.root })
+  await until(
+    start,
+    () => nativeWorkspace.active?.root === project.root,
+    'bottom recent opens directly'
+  )
+  assert.equal(
+    nativeChat.get('').text,
+    'Keep this unsent',
+    'Direct navigation keeps the home draft'
+  )
+  await nativeWorkspace.command({ type: 'close', key: nativeWorkspace.active!.key })
+  await until(
+    start,
+    (state) => state.wantsCentered && state.progress === 0,
+    'home after direct navigation'
+  )
+  await host.request('composerPerform', { text: '' })
   await nativeWorkspace.command({ type: 'open', root: project.root })
   await until(
     start,

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Home project target and cancellation regression (LKM-243)
+
+- [x] Separate composer draft target selection from direct recent and Open Project navigation; carry a prompt only after explicit Send.
+- [x] Restore centered-home hit testing and clear canceled planning state before late callbacks return.
+- [x] Add controller and native composer checks for target selection, switching and direct navigation.
+- [ ] Manager: inspect foreground light/dark captures, run the full native suite and independent review.
+
 ## Compact native Layout controls (LKM-236)
 
 - [x] Replace linked spacing actions with independent individual-side view toggles and compact width, height, padding, margin, radius and opacity rows.

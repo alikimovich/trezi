@@ -133,6 +133,21 @@ login.codex = true
 await controller.refreshReadiness()
 assert.equal(last().start.ready, true)
 assert.equal(last().composer.enabled, false, 'An empty prompt cannot send')
+const effectsBeforePicker = effects.length
+await controller.action({ chat: HOME, action: 'start-target', value: '/fixture' })
+assert.equal(last().start.project.title, 'Fixture')
+assert.equal(effects.length, effectsBeforePicker, 'Selecting a draft target opens nothing')
+await input('Keep this draft')
+await controller.action({ chat: HOME, action: 'start-target-new' })
+assert.equal(last().start.project.title, null)
+assert.equal(controller.get(HOME).text, 'Keep this draft')
+await controller.action({ chat: HOME, action: 'start-recent', value: '/fixture' })
+assert.equal(effects.at(-1).type, 'start-project', 'The bottom recent navigates directly')
+assert.equal(controller.start.pending, false, 'Direct navigation never submits the draft')
+assert.equal(controller.get(HOME).text, 'Keep this draft')
+await controller.action({ chat: HOME, action: 'start-open' })
+assert.equal(effects.at(-1).type, 'start-project', 'Standalone Open Project navigates')
+assert.equal(controller.get(HOME).text, 'Keep this draft')
 await input('Build a pricing page')
 await controller.composer({
   chat: HOME,
