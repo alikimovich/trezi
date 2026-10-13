@@ -250,7 +250,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "chatState":
             let state = c["state"] as? [String: Any] ?? [:]
             nativeLayout.chatState = state
-            shell.setPlanning((state["start"] as? [String: Any])?["planning"] as? Bool == true)
+            let start = state["start"] as? [String: Any] ?? [:]
+            shell.setPlanning(start["planning"] as? Bool == true, centered: start["centered"] as? Bool == true)
             chat.update(nativeLayout.nativeChatState(), composer: composer); nativeLayout.layout()
         case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:])
         case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout()

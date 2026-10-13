@@ -183,12 +183,40 @@ await controller.action({
   value: JSON.stringify({ choice: 'plans' })
 })
 await until(() => sends === 2, 'the native quick pick is a planning turn')
+await input('Keep the draft', plan.id)
+await controller.composer({
+  chat: plan.id,
+  action: 'files',
+  files: [{ name: 'notes.txt', path: '/tmp/notes.txt', type: 'text/plain' }]
+})
+const plannedSettings = { ...controller.get(plan.id).settings }
+const plannedMessages = controller.get(plan.id).messages.length
+await controller.command({
+  type: 'context',
+  context: {
+    chat: 'project-chat',
+    root: '/fixture',
+    selection: null,
+    setup: { needed: false, dismissed: false, status: null },
+    tokens: { needed: false, dismissed: false },
+    notes: [],
+    spawns: [],
+    turn: {}
+  }
+})
+await controller.beginPlanning(false)
+assert.equal(controller.active, plan.id, 'New Project returns to the pending conversation')
+assert.equal(controller.get(plan.id).text, 'Keep the draft')
+assert.equal(controller.get(plan.id).attachments[0].name, 'notes.txt')
+assert.deepEqual(controller.get(plan.id).settings, plannedSettings)
+assert.equal(controller.get(plan.id).messages.length, plannedMessages)
+assert.equal(sends, 2, 'Returning does not submit the draft')
 assert.equal(
   calls.some(([channel]) => channel === 'agent:send'),
   false
 )
 await controller.action({ chat: plan.id, action: 'planning-cancel' })
-assert.equal(controller.active, HOME)
+assert.equal(controller.active, 'project-chat')
 assert.equal(controller.start.planningKey, null)
 
 // An empty restored project conversation retains its ordinary docked layout.
