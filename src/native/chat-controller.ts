@@ -104,6 +104,10 @@ export class NativeChatController {
   get centered() {
     return this.start.state(this.get(this.active), this.choices, this.readiness).centered
   }
+  /** A home navigation supersedes an unfinished planning:start request. */
+  invalidatePlanningStart() {
+    this.planningGeneration++
+  }
   /** A planning chat is persisted by the Swift conversation owner, with no repo root. */
   async beginPlanning(send: boolean) {
     if (this.beginningPlanning) return this.beginningPlanning
@@ -111,7 +115,10 @@ export class NativeChatController {
     const operation = (async () => {
       const from = this.active
       const record = await this.services.invoke('planning:start', this.get(HOME).settings)
-      if (generation !== this.planningGeneration || this.active !== from) return
+      if (generation !== this.planningGeneration || this.active !== from) {
+        void this.services.invoke('planning:cancel', record.id).catch(() => {})
+        return
+      }
       const source = this.get(HOME)
       const chat = this.get(record.id)
       this.start.planningKey = record.id
@@ -146,7 +153,7 @@ export class NativeChatController {
     try {
       await operation
     } catch (error) {
-      this.fail(this.get(this.active), error)
+      if (generation === this.planningGeneration) this.fail(this.get(this.active), error)
     } finally {
       if (this.beginningPlanning === operation) this.beginningPlanning = undefined
     }
@@ -849,7 +856,7 @@ export class NativeChatController {
     const chat = this.get(action.chat)
     try {
       if (action.action === 'planning-cancel' && chat.chat === this.start.planningKey) {
-        this.planningGeneration++
+        this.invalidatePlanningStart()
         chat.cancellation++
         this.planningQueued.delete(chat.chat)
         this.start.planningKey = null

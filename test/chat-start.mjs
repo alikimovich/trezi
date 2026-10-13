@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 import { HOME, START_HEADING, usableProviders } from '../src/native/chat-start.ts'
+import { installNativeStart } from '../src/native/start-runtime.ts'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 async function until(check, label) {
@@ -227,4 +228,78 @@ for (const status of ['signed_out', 'checking']) {
   await until(() => handled() === before + 1, `${status}: the project chat send is not dropped`)
   assert.equal(project.text, '', `${status}: the draft was submitted`)
 }
+
+// An unsuccessful managed open keeps the home draft and permits one explicit retry.
+let openAttempts = 0
+const retry = new NativeChatController({
+  invoke: async (channel) =>
+    channel === 'providers:choices'
+      ? choices
+      : channel === 'providers:check-login'
+        ? { loggedIn: true }
+        : { ok: true },
+  render: () => {},
+  effect: () => {}
+})
+const preferred = controller.start.workspace.preferred()
+const workspace = {
+  active: null,
+  preferred,
+  state: {
+    recents: [{ root: '/fixture', name: 'Fixture' }],
+    projects: [],
+    status: { kind: 'idle' }
+  },
+  reportError: () => {},
+  services: { render: () => {} },
+  command: async () => {
+    openAttempts++
+    throw new Error('Project moved')
+  }
+}
+installNativeStart(retry, workspace)
+await retry.refreshChoices()
+retry.checkReadiness()
+await retry.refreshReadiness()
+await retry.action({ chat: HOME, action: 'start-target', value: '/fixture' })
+retry.get(HOME).text = 'Keep on open failure'
+await retry.composer({ chat: HOME, action: 'send' })
+await until(() => openAttempts === 1 && !retry.start.pending, 'failed open resets pending')
+assert.equal(retry.get(HOME).text, 'Keep on open failure')
+assert.equal(retry.start.draftTarget.root, '/fixture')
+await retry.composer({ chat: HOME, action: 'send' })
+await until(() => openAttempts === 2 && !retry.start.pending, 'one retry')
+assert.equal(retry.get(HOME).text, 'Keep on open failure')
+
+// A late planning:start result cannot replace home after direct navigation.
+let finishStart
+const lateCalls = []
+const late = new NativeChatController({
+  invoke: async (channel) => {
+    lateCalls.push(channel)
+    if (channel === 'providers:choices') return choices
+    if (channel === 'providers:check-login') return { loggedIn: true }
+    if (channel === 'planning:start')
+      return new Promise((resolve) => {
+        finishStart = resolve
+      })
+    return { ok: true }
+  },
+  render: () => {},
+  effect: () => {}
+})
+late.start.workspace = controller.start.workspace
+await late.refreshChoices()
+late.checkReadiness()
+await late.refreshReadiness()
+late.get(HOME).text = 'Plan that is still starting'
+const starting = late.beginPlanning(true)
+await until(() => !!finishStart, 'planning start is in flight')
+await late.action({ chat: HOME, action: 'start-recent', value: '/fixture' })
+finishStart({ ...plan, id: 'late-plan', transcript: [] })
+await starting
+assert.equal(late.active, HOME)
+assert.equal(late.start.planningKey, null)
+assert.equal(late.get(HOME).text, 'Plan that is still starting')
+await until(() => lateCalls.includes('planning:cancel'), 'late planning record canceled')
 console.log('chat-start: ok')

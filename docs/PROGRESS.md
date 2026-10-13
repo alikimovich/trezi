@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-243 review repair: cancellation, reachability and handoff checks
+
+- A direct home navigation now invalidates an unfinished `planning:start`. If its record arrives late, the controller cancels that record and leaves the current chat and draft alone.
+- The native composer fixture now checks picker selection leaves home and the sidebar steady, then verifies one send with the chosen model and attachment, a docked view and the visible sidebar. It starts another planning conversation, cancels it, checks both bottom controls' actual window hit-test ownership, and opens the recent project and Open Project path afterward. The unit fixture covers an open failure and explicit retry plus the late planning record.
+- Agent OS quick passed 222 unit checks, typechecks and lint. Native `composer` passed 8 checks without skips. The native fixture queries real window hit testing at the button centers; keyboard activation is still not directly exercised. The manager's full native suite and independent review remain.
+
 ## 2026-10-13 — LKM-243: home draft target and cancellation repair
 
 - The composer picker now records a recent project as the home draft target. Only a valid Send opens it and carries the text, attachments and model. The bottom recent controls and standalone Open Project navigate directly and leave an unsent home draft intact.

@@ -232,6 +232,7 @@ export class StartFlow {
           void controller.beginPlanning(false)
           return true
         }
+        controller.invalidatePlanningStart()
         // Direct navigation never submits or moves the unsent home draft.
         this.carry = null
         controller.services.effect({
@@ -240,6 +241,7 @@ export class StartFlow {
         })
         return true
       case 'start-cancel':
+        controller.invalidatePlanningStart()
         this.pending = false
         this.carry = null
         return true

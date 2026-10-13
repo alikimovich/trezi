@@ -22,6 +22,8 @@ let saved: {
   root: string
   temporary: string
   stub: { restore(): void }
+  workspaceInvoke: typeof nativeWorkspace.services.invoke
+  choices: typeof nativeChat.choices
 } | null = null
 
 async function until<T>(
@@ -72,9 +74,12 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
     window: (await host.request('startPerform', {})).window,
     root: project.root,
     temporary,
-    stub
+    stub,
+    workspaceInvoke: nativeWorkspace.services.invoke,
+    choices: [...nativeChat.choices]
   }
   let continuationSends = 0
+  let fixtureSends = 0
   const original = saved.invoke
   nativeChat.services.invoke = async (channel, ...args) => {
     if (channel === 'providers:check-login') return { loggedIn: true }
@@ -84,6 +89,13 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
       queueMicrotask(() => nativeChat.event({ type: 'done', projectKey: key }))
       return { ok: true }
     }
+    if (channel === 'agent:send' && nativeWorkspace.active?.root === project.root) {
+      fixtureSends++
+      const key = String(args[2])
+      queueMicrotask(() => nativeChat.event({ type: 'done', projectKey: key }))
+      return { ok: true }
+    }
+    if (channel === 'agent:restart-chat' && args[0] === project.root) return { ok: true }
     return original(channel, ...args)
   }
 
@@ -211,18 +223,42 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
     'closing the new project returns home'
   )
   const sendsBeforePicker = continuationSends
+  const fixtureSendsBeforePicker = fixtureSends
   await host.request('startPerform', { action: 'start-target', value: project.root })
   const selected = await start()
   assert.equal(selected.composer.projectTitle, project.name)
   assert.equal(nativeWorkspace.active, null, 'The picker keeps the centered home')
   assert.equal(selected.progress, 0)
   assert.equal(continuationSends, sendsBeforePicker)
+  assert.equal(fixtureSends, fixtureSendsBeforePicker)
+  assert.equal((await host.request('shellInspect')).sidebarCollapsed, true)
   await host.request('composerPerform', { text: 'Use the fixture project' })
   assert.equal(nativeWorkspace.active, null, 'Typing does not open the project')
+  assert.equal((await host.request('shellInspect')).sidebarCollapsed, true)
+  assert.equal((await start()).progress, 0)
   await host.request('startPerform', { action: 'start-target-new' })
   assert.equal((await start()).composer.projectTitle, 'New Project')
   assert.equal(nativeChat.get('').text, 'Use the fixture project')
   await host.request('startPerform', { action: 'start-target', value: project.root })
+  const homeSettings = nativeChat.get('').settings
+  const baseModel = nativeChat.choices.find((choice) => choice.provider === homeSettings.provider)
+  assert.ok(baseModel, 'The home provider has a model')
+  const otherModel = {
+    ...baseModel,
+    value: 'lkm243-fixture-model',
+    modelId: 'lkm243-fixture-model',
+    label: 'Fixture Model'
+  }
+  nativeChat.choices = [...nativeChat.choices, otherModel]
+  nativeChat.changed()
+  await nativeChat.composer({ chat: '', action: 'choice', label: 'Model', value: otherModel.value })
+  await host.request('composerPerform', { files: [join(_fixture, 'index.html')] })
+  await until(
+    () => Promise.resolve(nativeChat.get('').attachments.length),
+    (count) => count === 1,
+    'the home attachment'
+  )
+  await host.request('composerPerform', { action: 'send' })
   await host.request('composerPerform', { action: 'send' })
   await until(
     start,
@@ -231,6 +267,20 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
   )
   assert.equal(nativeChat.get('').text, '', 'The sent draft leaves home once')
   assert.equal(nativeChat.start.pending, false)
+  await until(
+    () => Promise.resolve(fixtureSends),
+    (count) => count === fixtureSendsBeforePicker + 1,
+    'one provider send'
+  )
+  const sentChat = nativeChat.get(nativeWorkspace.active!.activeSessionKey)
+  assert.equal(sentChat.settings.model, otherModel.value)
+  const sentMessages = sentChat.messages.filter(
+    (message) => message.role === 'user' && message.text === 'Use the fixture project'
+  )
+  assert.equal(sentMessages.length, 1)
+  assert.equal(sentMessages[0].attachments?.[0]?.name, 'index.html')
+  assert.equal((await start()).progress, 1)
+  assert.equal((await host.request('shellInspect')).sidebarCollapsed, false)
   await nativeWorkspace.command({ type: 'close', key: nativeWorkspace.active!.key })
   await until(
     start,
@@ -256,6 +306,49 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
     'home after direct navigation'
   )
   await host.request('composerPerform', { text: '' })
+  await host.request('composerPerform', { text: 'Cancel this plan' })
+  await host.request('composerPerform', { action: 'send' })
+  await until(
+    start,
+    (state) => state.start.planning && state.progress === 1,
+    'planning before cancel'
+  )
+  await nativeChat.action({ chat: nativeChat.start.planningKey!, action: 'planning-cancel' })
+  const canceled = await until(
+    start,
+    (state) =>
+      state.wantsCentered &&
+      state.progress === 0 &&
+      state.surface.home &&
+      state.hits?.[project.root] === 'surface' &&
+      state.hits?.open === 'surface',
+    'cancel returns to reachable home controls'
+  )
+  assert.equal(canceled.composer.projectTitle, 'New Project')
+  await host.request('startPerform', { action: 'start-recent', value: project.root })
+  await until(
+    start,
+    () => nativeWorkspace.active?.root === project.root,
+    'recent opens after planning cancel'
+  )
+  assert.equal(fixtureSends, fixtureSendsBeforePicker + 1, 'recent sends no draft')
+  await nativeWorkspace.command({ type: 'close', key: nativeWorkspace.active!.key })
+  await until(
+    start,
+    (state) => state.wantsCentered && state.progress === 0,
+    'home after canceled-plan recent'
+  )
+  const workspaceInvoke = saved.workspaceInvoke
+  nativeWorkspace.services.invoke = async (channel, ...args) =>
+    channel === 'project:pick' ? project.root : workspaceInvoke(channel, ...args)
+  await host.request('startPerform', { action: 'start-open' })
+  await until(
+    start,
+    () => nativeWorkspace.active?.root === project.root,
+    'Open Project opens after planning cancel'
+  )
+  assert.equal(fixtureSends, fixtureSendsBeforePicker + 1, 'Open Project sends no draft')
+  nativeWorkspace.services.invoke = saved.workspaceInvoke
   await nativeWorkspace.command({ type: 'open', root: project.root })
   await until(
     start,
@@ -266,11 +359,13 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
 
 export async function restoreStartComposer(host: NativeBridge) {
   if (!saved) return
-  const { invoke, readiness, window, root, temporary, stub } = saved
+  const { invoke, readiness, window, root, temporary, stub, workspaceInvoke, choices } = saved
   saved = null
   if (nativeChat.start.planningKey)
     await nativeChat.action({ chat: nativeChat.start.planningKey, action: 'planning-cancel' })
   nativeChat.services.invoke = invoke
+  nativeWorkspace.services.invoke = workspaceInvoke
+  nativeChat.choices = choices
   stub.restore()
   nativeChat.start.enabled = false
   Object.assign(nativeChat.readiness, readiness)
