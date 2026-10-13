@@ -68,6 +68,37 @@ export async function checkPreviewOverlay(
     under(menu.menu, menu.speedButton, `Slow Motion menu (full screen ${full})`, false)
     return { shown, menu: menu.menu }
   }
+  const bounded = (s: State, label: string, rounded: boolean) => {
+    assert.equal(s.clipToBounds, true, `${label}: guide layer clips at every radius`)
+    assert.deepEqual(s.guideFrame, s.frame, `${label}: guide frame follows preview viewport`)
+    assert.deepEqual(s.previewFrame, s.frame, `${label}: overlay and WebKit origins match`)
+    near(s.guideBounds.width, s.frame.width, `${label}: local clip width`)
+    near(s.guideBounds.height, s.frame.height, `${label}: local clip height`)
+    near(s.scale, s.previewScale, `${label}: CSS to WebKit scale`, 0.01)
+    assert.ok(rounded ? s.cornerRadius > 0 : s.cornerRadius === 0, `${label}: corner radius`)
+    assert.ok(s.frame.x >= s.left.x + (s.rulersHidden ? 0 : s.left.width) - 0.5)
+    assert.ok(s.frame.y >= s.top.y + (s.rulersHidden ? 0 : s.top.height) - 0.5)
+  }
+  const captureBounded = async (label: string, dark: boolean, rounded: boolean) => {
+    const state = await inspect()
+    bounded(state, label, rounded)
+    const image = await test({ action: 'capture', dark })
+    assert.ok(image.width > 0 && image.dark === dark, `${label}: foreground capture`)
+    assert.ok(image.magentaInside > 0, `${label}: extreme grid paints in preview`)
+    assert.equal(image.magentaOutside, 0, `${label}: no grid colour outside viewport`)
+    writeFileSync(
+      join(artifacts, `preview-overlay-clip-${label}.png`),
+      Buffer.from(image.png, 'base64')
+    )
+    return {
+      frame: state.frame,
+      page: state.page,
+      scale: state.scale,
+      radius: state.cornerRadius,
+      magentaInside: image.magentaInside,
+      magentaOutside: image.magentaOutside
+    }
+  }
   const first = nativeWorkspace.active!
   const key = (root: string, viewport: string) => JSON.stringify([root, viewport])
   const evidence: Record<string, unknown> = {}
@@ -183,6 +214,78 @@ export async function checkPreviewOverlay(
   assert.ok(widths[1].column.width > widths[0].column.width, 'Columns follow the viewport width')
   await host.request('previewViewport', {})
   evidence.columns = widths
+  // A fixed centered column starts far to the left of the CSS viewport. With square
+  // corners it used to fill across the chat because the guide layer mask was off.
+  const extreme = {
+    ...columns,
+    count: 1,
+    width: 4000,
+    margin: 2000,
+    align: 'center',
+    color: '#ff00ff',
+    opacity: 1
+  }
+  await test({ action: 'set', state: { ...grid.after, rulers: false, grids: [extreme] } })
+  const clipEvidence: Record<string, unknown> = {}
+  for (const [name, narrow] of [
+    ['normal', false],
+    ['narrow', true]
+  ] as const) {
+    const size = await host.request('inspectorIsland', {})
+    if (narrow)
+      await host.request('inspectorIsland', {
+        windowWidth: size.minWindow.width,
+        windowHeight: size.minWindow.height
+      })
+    for (const dark of [false, true]) {
+      clipEvidence[`${name}-${dark ? 'dark' : 'light'}`] = await captureBounded(
+        `${name}-${dark ? 'dark' : 'light'}`,
+        dark,
+        false
+      )
+      if (!narrow && !dark) {
+        // Scroll the real WebKit document, then use the preview-viewport hook to set
+        // pageZoom. Remove the fixture spacer before the DOM preservation check.
+        await page(`(() => {
+          const spacer = document.createElement('div')
+          spacer.id = 'overlay-scroll-spacer'
+          spacer.style.height = '1800px'
+          document.body.appendChild(spacer)
+          scrollTo(0, 400)
+          return scrollY
+        })()`)
+        try {
+          const scrolled = await until((s) => s.page.scrollY > 0, 'overlay scrolled page')
+          assert.ok(scrolled.page.scrollY >= 300, 'WebKit scrolled toward 400 CSS px')
+          clipEvidence['normal-scrolled'] = await captureBounded('normal-scrolled', false, false)
+          await host.request('previewViewport', { width: 900 })
+          const zoomed = await until(
+            (s) => Math.abs(s.page.width - 900) <= 20 && s.scale < 0.9,
+            'overlay page zoom'
+          )
+          assert.ok(zoomed.scale < 1, 'The preview applies a non-unit page zoom')
+          clipEvidence['normal-zoomed'] = await captureBounded('normal-zoomed', false, false)
+        } finally {
+          await host.request('previewViewport', {})
+          await page(`(() => {
+            document.querySelector('#overlay-scroll-spacer')?.remove()
+            scrollTo(0, 0)
+            return scrollY
+          })()`)
+        }
+        await until(
+          (s) => s.page.scrollY === 0 && Math.abs(s.scale - 1) < 0.01,
+          'overlay scroll and zoom restored'
+        )
+      }
+    }
+    if (narrow)
+      await host.request('inspectorIsland', {
+        windowWidth: size.window.width,
+        windowHeight: size.window.height
+      })
+  }
+  await test({ action: 'set', state: { ...grid.after, grids: [columns] } })
   assert.equal(await page(DOM), dom, 'Rulers, guides and grids leave the DOM unchanged')
 
   // Remembered per project (rulers) and per viewport (guides and grids).
@@ -194,6 +297,9 @@ export async function checkPreviewOverlay(
   await host.request('shellPerform', { action: 'device' })
   const mobile = await until((s) => s.key === key(first.root, 'mobile'), 'mobile overlay settings')
   assert.ok(mobile.state.rulers && !mobile.state.guides.length && !mobile.state.grids.length)
+  await test({ action: 'set', state: { ...mobile.state, gridVisible: true, grids: [extreme] } })
+  clipEvidence['mobile-rounded'] = await captureBounded('mobile-rounded', false, true)
+  evidence.clip = clipEvidence
   await test({
     action: 'set',
     state: { ...mobile.state, guides: [{ id: 'm1', axis: 'x', position: 20 }] }

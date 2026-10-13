@@ -10,6 +10,14 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - LKM-244 replaced only the activity arrow; the CI state was still a font glyph (`●`, `◌`, `○`, `?`) with different metrics per state, and the spinner's slot was inserted before it, so the dot changed size and moved when CI started or stopped running. `BranchStatusDot` (`src/native/ToolbarAddress.swift`) now draws one 7 pt circle centred in a two-en-space slot after `branch · `: filled green (passed) or red (failed, count follows), a dashed orange ring (running) or a ring in the title text colour (no checks, unknown), exactly the colours the glyphs had. The spinner remains its own view after the dot; a publish step keeps the dot. Accessibility values keep their glyph wording; the tooltip, menu, ahead count and PR number are unchanged.
 - `src/native/smoke-branch-dot.ts` walks every ordered transition between the five CI states (into and out of the running spinner) at 1320 and 850 pt and asserts identical window frame, diameter and centre line, then saves light/dark captures of filled and hollow dots. The publish fixture checks the dot's frame within the branch control during and after a publish step: the first native run showed the whole address block shifting 2 pt as the Publish label changes, which is toolbar layout rather than the dot.
+## 2026-10-13 — LKM-247 review repair: scroll and zoom clip evidence
+
+- The `preview-overlay` native fixture now scrolls a temporary tall page by 400 CSS px, captures the extreme grid, applies the existing preview viewport zoom hook and captures again. Both captures use the same WebKit/guide frame and scale assertions and foreground magenta pixel count as the normal, narrow and mobile cases. The fixture restores viewport width and scroll and removes the spacer before asserting the page DOM is unchanged.
+
+## 2026-10-13 — LKM-247: confine layout grids to the preview
+
+- The square-corner guide layer previously disabled `masksToBounds`, and `PreviewGuideView.draw` filled full column rectangles without a local clip. It now keeps the layer mask on at every radius, clips drawing to its bounds and rejects guide hits outside those bounds. Column settings, snapping and coordinate conversion are unchanged.
+- The native overlay fixture records guide/WebKit frame and scale agreement, layer radius and mask, and foreground captures with opaque magenta columns extending past the CSS viewport. It counts magenta pixels inside and outside the preview at normal and narrow desktop sizes in light and dark mode, plus a rounded mobile case. The manager's native verification and image inspection determine acceptance.
 
 ## 2026-10-13 — LKM-243 review repair: a pending Send could be dropped by a drafted target chat
 

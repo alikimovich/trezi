@@ -100,7 +100,8 @@ final class PreviewGuideView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, let overlay, let superview else { return nil }
-        return overlay.guide(at: convert(point, from: superview)) == nil ? nil : self
+        let local = convert(point, from: superview)
+        return bounds.contains(local) && overlay.guide(at: local) != nil ? self : nil
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -123,6 +124,9 @@ final class PreviewGuideView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let overlay else { return }
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSBezierPath(rect: bounds).addClip()
         let p = pixel(self), state = overlay.state, scale = overlay.scale
         let rangeX = overlay.css(0, axis: "x")...overlay.css(bounds.width, axis: "x")
         let rangeY = overlay.css(0, axis: "y")...overlay.css(bounds.height, axis: "y")
@@ -163,8 +167,8 @@ final class PreviewGuideView: NSView {
         let size = label.size(), pointer = overlay.pointer ?? .zero
         var box = NSRect(x: 0, y: 0, width: size.width + 10, height: size.height + 4)
         box.origin = drag.axis == "x" ? NSPoint(x: at + 6, y: pointer.y + 10) : NSPoint(x: pointer.x + 10, y: at + 6)
-        box.origin.x = min(max(box.origin.x, 2), bounds.width - box.width - 2)
-        box.origin.y = min(max(box.origin.y, 2), bounds.height - box.height - 2)
+        box.origin.x = max(0, min(max(box.origin.x, 2), bounds.width - box.width - 2))
+        box.origin.y = max(0, min(max(box.origin.y, 2), bounds.height - box.height - 2))
         NSColor.systemPink.withAlphaComponent(drag.removing ? 0.6 : 0.95).setFill()
         NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
         label.draw(at: NSPoint(x: box.minX + 5, y: box.minY + 2))
