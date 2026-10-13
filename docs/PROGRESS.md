@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-243 verification repair: start-composer fixture leaked into `native-chat`
+
+- The full native run failed `native-chat`, `chat-ui` and `quit-alert` ("the turn reached the provider stub"). The runner's `cleanup` only runs after a failure, so a passing `start-composer` never restored its `agent:send` stub. The picker-Send step added a branch that answers sends for the fixture project's root, so later checks' real Sends were swallowed (instant "Worked for 0s", provider stub never called). `start-composer` now restores itself on pass, puts the home model back and stops reopening the already open fixture project. No assertion was weakened.
+- Agent OS quick passed 222 unit checks, typechecks and lint. Native `chat,composer` passed 17 checks without skips, including `start-composer`, `native-chat`, `chat-ui` and `quit-alert`. The manager's full suite remains.
+
 ## 2026-10-13 — LKM-243 review repair: cancellation, reachability and handoff checks
 
 - A direct home navigation now invalidates an unfinished `planning:start`. If its record arrives late, the controller cancels that record and leaves the current chat and draft alone.

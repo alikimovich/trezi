@@ -946,6 +946,8 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkStartComposer(host, fixture, artifacts)
+        // The runner's cleanup only runs after a failure: its sends stub must not outlive a pass.
+        await restoreStartComposer(host)
       },
       cleanup: async () => {
         await restoreStartComposer(host)

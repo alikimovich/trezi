@@ -281,6 +281,14 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
   assert.equal(sentMessages[0].attachments?.[0]?.name, 'index.html')
   assert.equal((await start()).progress, 1)
   assert.equal((await host.request('shellInspect')).sidebarCollapsed, false)
+  // The fixture model was remembered as the preferred one; later checks open chats from it.
+  nativeChat.services.effect({
+    type: 'settings',
+    chat: sentChat.chat,
+    root: sentChat.root,
+    settings: { ...homeSettings }
+  })
+  nativeChat.get('').settings = homeSettings
   await nativeWorkspace.command({ type: 'close', key: nativeWorkspace.active!.key })
   await until(
     start,
@@ -349,7 +357,6 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
   )
   assert.equal(fixtureSends, fixtureSendsBeforePicker + 1, 'Open Project sends no draft')
   nativeWorkspace.services.invoke = saved.workspaceInvoke
-  await nativeWorkspace.command({ type: 'open', root: project.root })
   await until(
     start,
     (state) => !state.wantsCentered && nativeWorkspace.active?.root === project.root,
