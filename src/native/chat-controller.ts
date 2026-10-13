@@ -71,6 +71,7 @@ export class NativeChatController {
   private loading = new Map<string, { chat: Chat; promise: Promise<void> }>()
   private devErrors = new Map<string, DevErrorReader>()
   private beginningPlanning?: Promise<void>
+  private planningGeneration = 0
   private planningQueued = new Map<string, string[]>()
   constructor(readonly services: ChatServices) {}
   get(key: string) {
@@ -103,12 +104,21 @@ export class NativeChatController {
   get centered() {
     return this.start.state(this.get(this.active), this.choices, this.readiness).centered
   }
+  /** A home navigation supersedes an unfinished planning:start request. */
+  invalidatePlanningStart() {
+    this.planningGeneration++
+  }
   /** A planning chat is persisted by the Swift conversation owner, with no repo root. */
   async beginPlanning(send: boolean) {
     if (this.beginningPlanning) return this.beginningPlanning
+    const generation = ++this.planningGeneration
     const operation = (async () => {
       const from = this.active
       const record = await this.services.invoke('planning:start', this.get(HOME).settings)
+      if (generation !== this.planningGeneration || this.active !== from) {
+        void this.services.invoke('planning:cancel', record.id).catch(() => {})
+        return
+      }
       const source = this.get(HOME)
       const chat = this.get(record.id)
       this.start.planningKey = record.id
@@ -143,7 +153,7 @@ export class NativeChatController {
     try {
       await operation
     } catch (error) {
-      this.fail(this.get(this.active), error)
+      if (generation === this.planningGeneration) this.fail(this.get(this.active), error)
     } finally {
       if (this.beginningPlanning === operation) this.beginningPlanning = undefined
     }
@@ -846,16 +856,23 @@ export class NativeChatController {
     const chat = this.get(action.chat)
     try {
       if (action.action === 'planning-cancel' && chat.chat === this.start.planningKey) {
+        this.invalidatePlanningStart()
         chat.cancellation++
         this.planningQueued.delete(chat.chat)
-        await this.services.invoke('planning:cancel', chat.chat)
         this.start.planningKey = null
+        this.start.pending = false
+        this.start.carry = null
+        this.start.reroute = null
+        this.start.target = null
+        this.start.settings = undefined
+        this.start.prefix = undefined
         this.active =
           this.start.returnChat && !this.closed.has(this.start.returnChat)
             ? this.start.returnChat
             : HOME
         this.start.returnChat = null
         this.changed(this.get(this.active))
+        await this.services.invoke('planning:cancel', chat.chat)
         return
       }
       if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)

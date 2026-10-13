@@ -26,6 +26,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - States workbenches can be left and found again: the States switcher has "← Back to <page>" (same page and scroll, the component selected again, ⌘[ / ⌘] move between them) and Continue in Chat; a "States N" menu under the address lists each workbench with where it came from and its last state, with Open, Open All States, Continue in Chat, Rebuild States and Remove (replacing the … menu's Workbenches); Show states on a component that already has a workbench opens it; the list survives restarts; and the Publish warning adds Open Workbench (LKM-220).
 ### Fixed
 - Layout-grid columns and dragged guides stay clipped to the preview viewport at square and rounded corners, including columns that extend beyond the page (LKM-247).
+- Choosing a recent project in the home composer's picker now selects a draft target until Send; canceling project planning restores clickable recent and Open Project controls without sending an unsent draft (LKM-243).
 - Canceling a Styles spacing preview refreshes the inspector's authored value, preserving CSS token references instead of leaving a resolved number in the field.
 - The sidebar and its native toggle return as soon as a new-project planning chat docks, before a destination is chosen; centered home remains sidebar-free (LKM-242).
 - In the mobile viewport the page's corners now follow the iPhone frame's screen corners exactly (the same continuous curve and radius, at any size, in light and dark), with no gap or overlap at the bezel (LKM-217).

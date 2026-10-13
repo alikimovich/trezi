@@ -10,6 +10,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Capture the same clip and geometry assertions after WebKit scroll and non-unit page zoom, then restore the fixture DOM.
 - [ ] Manager: inspect the captured images, run final verification and independent review, then merge.
 
+## Home project target and cancellation regression (LKM-243)
+
+- [x] Separate composer draft target selection from direct recent and Open Project navigation; carry a prompt only after explicit Send.
+- [x] Restore centered-home hit testing and clear canceled planning state before late callbacks return.
+- [x] Add controller and native composer checks for target selection, switching and direct navigation.
+- [ ] Manager: inspect foreground light/dark captures, run the full native suite and independent review.
 ## Sidebar during project planning (LKM-242)
 
 - [x] Make the sidebar available once planning docks, retaining the saved collapsed state; keep centered home sidebar-free.

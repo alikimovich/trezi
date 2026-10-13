@@ -1,8 +1,7 @@
 import AppKit
 
 /// LKM-232: the centered start composer chooses where its message goes. A pull-down beside
-/// Send names the project (or "Choose Project") and offers recents, Open Project… and New
-/// Project…; each item is a start action, answered by the chat controller.
+/// Send names the draft target. Its menu selects a target without opening a workspace.
 extension NativeComposer {
     func configureProject() {
         project.isBordered = false; project.controlSize = .small; project.font = .systemFont(ofSize: 11)
@@ -35,11 +34,10 @@ extension NativeComposer {
         }
         for recent in recents {
             guard let root = recent["root"] as? String, let name = recent["name"] as? String else { continue }
-            add(name, "start-recent", root)
+            add(name, "start-target", root)
         }
         if !recents.isEmpty { project.menu?.addItem(.separator()) }
-        add("Open Project…", "start-open")
-        add("New Project…", "start-new")
+        add("New Project", "start-target-new")
     }
     @objc func chooseProject(_ sender: NSPopUpButton) {
         guard let payload = sender.selectedItem?.representedObject as? [String: Any], let action = payload["action"] as? String else { return }

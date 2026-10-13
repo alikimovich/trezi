@@ -11,6 +11,28 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - The square-corner guide layer previously disabled `masksToBounds`, and `PreviewGuideView.draw` filled full column rectangles without a local clip. It now keeps the layer mask on at every radius, clips drawing to its bounds and rejects guide hits outside those bounds. Column settings, snapping and coordinate conversion are unchanged.
 - The native overlay fixture records guide/WebKit frame and scale agreement, layer radius and mask, and foreground captures with opaque magenta columns extending past the CSS viewport. It counts magenta pixels inside and outside the preview at normal and narrow desktop sizes in light and dark mode, plus a rounded mobile case. The manager's native verification and image inspection determine acceptance.
 
+## 2026-10-13 — LKM-243 review repair: a pending Send could be dropped by a drafted target chat
+
+- An explicit picker Send sets `pending` and carries home into the opened project. If that project's restored chat already had its own unsent draft, `arrive()` returned early, so `pending` never cleared: the project docked without the prompt, and later Sends from home were ignored. `arrive()` now sends the home draft to a new chat beside the drafted one (`start-chat`, tracked by `StartFlow.reroute`), so the target's draft stays untouched and exactly one send happens. If no new chat can be made (no project entry, the command fails or another switch intervenes), `pending` and `reroute` clear and the home draft stays, with a notice when the target has no root to use. Cancel and planning-cancel also clear `reroute`.
+- The pending notice now offers only Cancel: Open Project…/New Project… were direct navigation that could never deliver the draft.
+- `test/chat-start.mjs` covers a drafted target with a new chat beside it (one send, target draft kept) and without one (home draft kept, later Send not blocked).
+
+## 2026-10-13 — LKM-243 verification repair: start-composer fixture leaked into `native-chat`
+
+- The full native run failed `native-chat`, `chat-ui` and `quit-alert` ("the turn reached the provider stub"). The runner's `cleanup` only runs after a failure, so a passing `start-composer` never restored its `agent:send` stub. The picker-Send step added a branch that answers sends for the fixture project's root, so later checks' real Sends were swallowed (instant "Worked for 0s", provider stub never called). `start-composer` now restores itself on pass, puts the home model back and stops reopening the already open fixture project. No assertion was weakened.
+- Agent OS quick passed 222 unit checks, typechecks and lint. Native `chat,composer` passed 17 checks without skips, including `start-composer`, `native-chat`, `chat-ui` and `quit-alert`. The manager's full suite remains.
+
+## 2026-10-13 — LKM-243 review repair: cancellation, reachability and handoff checks
+
+- A direct home navigation now invalidates an unfinished `planning:start`. If its record arrives late, the controller cancels that record and leaves the current chat and draft alone.
+- The native composer fixture now checks picker selection leaves home and the sidebar steady, then verifies one send with the chosen model and attachment, a docked view and the visible sidebar. It starts another planning conversation, cancels it, checks both bottom controls' actual window hit-test ownership, and opens the recent project and Open Project path afterward. The unit fixture covers an open failure and explicit retry plus the late planning record.
+- Agent OS quick passed 222 unit checks, typechecks and lint. Native `composer` passed 8 checks without skips. The native fixture queries real window hit testing at the button centers; keyboard activation is still not directly exercised. The manager's full native suite and independent review remain.
+
+## 2026-10-13 — LKM-243: home draft target and cancellation repair
+
+- The composer picker now records a recent project as the home draft target. Only a valid Send opens it and carries the text, attachments and model. The bottom recent controls and standalone Open Project navigate directly and leave an unsent home draft intact.
+- The centered chat column passes clicks outside the composer through to the start surface. Cancel resets planning and carry state before the asynchronous owner cancellation, so late provider responses cannot resume the canceled chat.
+- Controller and native composer checks cover picker selection, switching back to New Project, direct navigation and sending to an existing project. Agent OS quick passed once (219 unit passes, 3 existing skips), then two subsequent runs hit unrelated timing and performance failures in worktree cleanup, native chat settling and platform owner tests. The focused native `composer` group passed 8 checks with no skips after a fixture timing correction. Foreground normal/narrow light/dark home captures were inspected. Native navigation still uses fixture actions rather than physical mouse and keyboard activation; the manager should review that coverage and run the full suite.
 ## 2026-10-13 — LKM-242 manager-verification repair: authored token after preview cancel
 
 - The manager's full native run passed `start-composer` but failed the inspector check after a spacing preview: the expanded field showed resolved `8` instead of the authored `var(--space-a)`. The inspector now refreshes its style read after canceling the temporary preview; a unit case forces a stale preview read and checks that cancel restores the token.
