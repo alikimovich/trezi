@@ -10,6 +10,7 @@ import {
 import type { PublishResult } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import type { NativeGitController } from './git-controller'
+import { checkBranchDot } from './smoke-branch-dot'
 import { capture } from './smoke-toolbar'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
@@ -121,7 +122,7 @@ export async function checkPublishProgress(
     git.statuses.set(root, sample)
     git.render()
     const branchStatus = await until(
-      (s) => String(s.branchDisplay).includes('2↑') && String(s.branchDisplay).includes('◌'),
+      (s) => String(s.branchDisplay).includes('2↑') && s.branchDotState === 'running',
       'Branch sync and running CI'
     )
     assert.ok(
@@ -157,16 +158,26 @@ export async function checkPublishProgress(
     }
     await host.request('shellPerform', { action: 'window-appearance', row: '' })
     await host.request('shellPerform', { action: 'window-width', row: '1320' })
+    const dot = await checkBranchDot(host, git, root, sample, artifacts)
+    // The Publish label's width can move the whole address block; the dot keeps its
+    // frame inside the branch control and its centre line.
+    const { local: dotFrame, baseline: dotBaseline } = dot[1320] as {
+      local: string
+      baseline: number
+    }
     git.statuses.set(root, { ...sample, ci: 'passed' })
     git.render()
     await until(
-      (s) => String(s.branchDisplay).includes('●') && !s.branchBusy,
+      (s) => s.branchDotState === 'passed' && s.branchDotFilled && !s.branchBusy,
       'Passed CI stops the spinner'
     )
     await capture(host, artifacts, 'branch-status-passed')
     git.statuses.set(root, { ...sample, ci: 'failed', failing: ['build', 'lint'] })
     git.render()
-    const failed = await until((s) => String(s.branchDisplay).includes('●2'), 'Failed CI')
+    const failed = await until(
+      (s) => String(s.branchAccessibilityValue).includes('●2') && s.branchDotState === 'failed',
+      'Failed CI'
+    )
     assert.equal(failed.branchBusy, false, 'Failed CI stops the spinner')
     assert.ok(!failed.branchTruncated, 'CI dot and failure count remain visible in toolbar')
     assert.ok(failed.branchTitleWidth <= failed.branchTitleRoom + 0.5, 'Branch title fits control')
@@ -209,6 +220,13 @@ export async function checkPublishProgress(
     )
     assert.ok(branchPush.branchProgressNative && !/[↗→]/.test(String(branchPush.branchDisplay)))
     assert.match(branchPush.branchAccessibilityValue, /^Busy: /)
+    assert.equal(
+      branchPush.branchDotLocalFrame,
+      dotFrame,
+      'A publish step keeps the CI dot in place'
+    )
+    assert.equal(branchPush.branchDotBaseline, dotBaseline, 'A publish step keeps the dot centred')
+    assert.deepEqual(branchPush.branchDotDiameter, [7, 7])
     assert.ok(pushing.publishEnabled, 'The menu opens while the step can be cancelled')
     assert.deepEqual(pushing.publishMenu, ['Pushing…', 'Cancel Publish'])
     evidence.pushing = await capture(host, artifacts, 'publish-progress')
@@ -253,6 +271,12 @@ export async function checkPublishProgress(
     )
     assert.ok(idle.publishClickable && idle.publishMenu.includes('Create PR'))
     assert.equal(idle.branchBusy, false, 'Successful publish stops the subtitle spinner')
+    assert.equal(idle.branchDotLocalFrame, dotFrame, 'The CI dot stays put after the spinner stops')
+    assert.equal(
+      idle.branchDotBaseline,
+      dotBaseline,
+      'The dot stays centred after the spinner stops'
+    )
 
     // Cancel while pushing: the owner is asked, and the run ends in a short toast.
     assert.ok(await host.request('shellPerform', { action: 'publish' }))
