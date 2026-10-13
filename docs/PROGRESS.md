@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-247: confine layout grids to the preview
+
+- The square-corner guide layer previously disabled `masksToBounds`, and `PreviewGuideView.draw` filled full column rectangles without a local clip. It now keeps the layer mask on at every radius, clips drawing to its bounds and rejects guide hits outside those bounds. Column settings, snapping and coordinate conversion are unchanged.
+- The native overlay fixture records guide/WebKit frame and scale agreement, layer radius and mask, and foreground captures with opaque magenta columns extending past the CSS viewport. It counts magenta pixels inside and outside the preview at normal and narrow desktop sizes in light and dark mode, plus a rounded mobile case. The manager's native verification and image inspection determine acceptance.
+
 ## 2026-10-13 — LKM-244 verification repair: full native launcher deadline
 
 - The manager's full native run reached `states-canvas` when `test/native-runtime.mjs` hit its 300-second `spawnSync` deadline. The ensuing "Native host closed" line followed launcher termination; no spinner check had failed. The full suite now has a 420-second launcher watchdog while filtered runs retain 300 seconds. Every named smoke check, its timeout and its assertions remain unchanged. `test/native-smoke-groups.mjs` pins both deadlines.

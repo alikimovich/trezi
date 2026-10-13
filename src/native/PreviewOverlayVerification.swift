@@ -18,6 +18,10 @@ extension Host {
         }
         return ["key":overlay.key.map { $0 as Any } ?? NSNull(), "viewport":overlay.viewport, "state":overlay.state.json(), "shown":overlay.shown,
                 "scale":Double(overlay.scale), "frame":box(overlay.frame), "top":box(overlay.top.frame), "left":box(overlay.left.frame),
+                "guideBounds":box(overlay.guides.bounds), "guideFrame":box(overlay.guides.frame),
+                "clipToBounds":overlay.guides.layer?.masksToBounds == true, "cornerRadius":Double(overlay.guides.layer?.cornerRadius ?? 0),
+                "previewFrame":views["preview"].map { box($0.frame) } ?? [:],
+                "previewScale":Double((views["preview"]?.pageZoom ?? 1) * (views["preview"]?.magnification ?? 1)),
                 "rulersHidden":overlay.top.isHidden, "guidesHidden":overlay.guides.isHidden, "selected":overlay.selected.map { $0 as Any } ?? NSNull(),
                 "page":["scrollX":overlay.page.scrollX, "scrollY":overlay.page.scrollY, "width":overlay.page.width, "height":overlay.page.height,
                         "selection":overlay.page.selection.map { box($0) as Any } ?? NSNull()],
@@ -107,6 +111,27 @@ extension Host {
         var image = try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)
         image["frame"] = NSStringFromRect(content.convert(overlay.frame, from: canvas))
         image["dark"] = window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        // The fixture uses opaque #ff00ff columns. Count only that distinctive colour
+        // in the foreground capture, inside the preview's vertical band. A column with
+        // a negative start used to paint into the chat even though its view had a frame.
+        if let encoded = image["png"] as? String, let data = Data(base64Encoded: encoded),
+           let bitmap = NSBitmapImageRep(data: data), content.bounds.width > 0, content.bounds.height > 0 {
+            let page = content.convert(overlay.frame, from: canvas)
+            let sx = CGFloat(bitmap.pixelsWide) / content.bounds.width
+            let sy = CGFloat(bitmap.pixelsHigh) / content.bounds.height
+            let left = Int((page.minX - content.bounds.minX) * sx), right = Int((page.maxX - content.bounds.minX) * sx)
+            let top = Int((content.bounds.maxY - page.maxY) * sy), bottom = Int((content.bounds.maxY - page.minY) * sy)
+            var inside = 0, outside = 0
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                    guard let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          c.redComponent > 0.82, c.greenComponent < 0.35, c.blueComponent > 0.75 else { continue }
+                    if x >= left - 1 && x < right + 1 && y >= top - 1 && y < bottom + 1 { inside += 1 } else { outside += 1 }
+                }
+            }
+            image["magentaInside"] = inside; image["magentaOutside"] = outside
+            image["pixelScale"] = ["x":Double(sx), "y":Double(sy)]
+        }
         return image
     }
     private func overlayError(_ message: String) -> NSError { NSError(domain: "PreviewOverlay", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }

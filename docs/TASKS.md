@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview layout-grid clipping (LKM-247)
+
+- [x] Clip guide and grid drawing to local preview bounds at every corner radius; keep guide hits inside the viewport.
+- [x] Add geometry and foreground color-bleed assertions for extreme columns in normal, narrow and mobile layouts.
+- [ ] Manager: inspect the captured images, run final verification and independent review, then merge.
+
 ## Preview subtitle spinner (LKM-244)
 
 - [x] Replace the animated branch subtitle arrow with a native inline progress indicator driven by the existing publish step and running-CI state.
