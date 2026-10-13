@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-236 review repair: compact field preview and native fixture
+
+- Compact Layout fields now preview numeric edits, support arrow-key increments, and clear previews on Escape. The unit suffix appears only beside bare numbers; authored tokens and expressions keep their text and detail. Visible Width, Height, Radius and Opacity labels distinguish the surrounding rows.
+- The native inspector fixture now uses asymmetric padding, a `var(--space-a)` token, and `auto` and negative margins. Native actions check Mixed pairs, expansion without source edits, pair preview and cancellation, a vertical pair source edit and a real ledger Undo that restores both sides. Expanded light and dark captures show the individual sides and token text; normal and narrow light and dark captures were also inspected.
+- Agent OS quick passed 222 unit checks, typechecks and lint; native `core` passed 30 checks with no skips. The manager's final full-suite verification and independent review remain.
+
 ## 2026-10-13 — LKM-236: compact native Layout controls
 
 - The Styles inspector now has one Layout heading with compact size, spacing, radius and opacity rows. Padding and margin each have an independent four-edge toggle; paired values remain Mixed when their authored or computed sides differ, and switching modes does not edit source.

@@ -80,6 +80,14 @@ assert.equal(
   false
 )
 await action('spacing:padding')
+const previewStart = sent.length
+await action('preview', { field: 'style:padding-horizontal', value: '14' })
+assert.deepEqual(sent.slice(previewStart), [
+  ['styles:preview', { prop: 'padding-left', value: '14px' }],
+  ['styles:preview', { prop: 'padding-right', value: '14px' }]
+])
+await action('cancel-preview', { field: 'style:padding-horizontal' })
+assert.deepEqual(sent.at(-1), ['styles:clear-preview', {}])
 await action('apply', { field: 'style:padding-horizontal', value: '17' })
 assert.deepEqual(calls.filter((c) => c[0] === 'styles:apply-pair').at(-1)[2].props, [
   'padding-left',

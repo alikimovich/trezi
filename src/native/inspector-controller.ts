@@ -743,6 +743,10 @@ export class NativeInspectorController {
         await binding.preview?.(action.value ?? '')
         return
       }
+      if (action.action === 'cancel-preview') {
+        await this.send('styles:clear-preview', {})
+        return
+      }
       const write = async () => {
         if (root !== this.state.root || generation !== this.state.generation) return
         this.state.busy = true

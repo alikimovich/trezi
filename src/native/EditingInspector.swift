@@ -124,6 +124,7 @@ private struct CompactLayoutValue: View {
     @ObservedObject var model: InspectorModel
     @State private var draft = ""
     @State private var submitted = ""
+    @State private var cancelling = false
     @FocusState private var focused: Bool
     private var title: String {
         switch field.axis {
@@ -148,9 +149,29 @@ private struct CompactLayoutValue: View {
         }
     }
     private func commit() {
-        guard draft != field.value, draft != submitted, !draft.isEmpty else { return }
+        if draft.isEmpty {
+            model.send("cancel-preview", field: field.id)
+            return
+        }
+        guard draft != field.value, draft != submitted else { return }
         submitted = draft
         model.send("apply", field: field.id, value: draft)
+    }
+    private var bareNumber: Bool {
+        draft.range(of: "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$", options: .regularExpression) != nil
+    }
+    private func cancel() {
+        cancelling = true
+        draft = field.value
+        submitted = field.value
+        focused = false
+        model.send("cancel-preview", field: field.id)
+    }
+    private func increment(_ direction: Double) {
+        guard let current = Double(draft), let step = field.step else { return }
+        let next = min(field.max ?? .infinity, max(field.min ?? -.infinity, current + direction * step))
+        draft = String(format: "%g", next)
+        model.send("preview", field: field.id, value: draft)
     }
     var body: some View {
         HStack(spacing: 5) {
@@ -159,15 +180,32 @@ private struct CompactLayoutValue: View {
             TextField(title, text: $draft, prompt: Text(field.mixed == true ? "Mixed" : title))
                 .textFieldStyle(.roundedBorder).controlSize(.small).font(.system(size: 11))
                 .focused($focused).onSubmit(commit)
-                .onChange(of: focused) { next in if !next { commit() } }
+                .onChange(of: focused) { next in if !next && !cancelling { commit() }; if next { cancelling = false } }
+                .onChange(of: draft) { next in
+                    if focused && !cancelling && bareNumber && next != field.value {
+                        model.send("preview", field: field.id, value: next)
+                    }
+                }
+                .onMoveCommand { direction in
+                    if direction == .up { increment(1) }
+                    if direction == .down { increment(-1) }
+                }
+                .onExitCommand(perform: cancel)
                 .accessibilityLabel(title + " " + (field.layout ?? ""))
-            if let unit = field.unit, !unit.isEmpty, !draft.isEmpty {
+                .help(field.detail ?? title)
+            if let unit = field.unit, !unit.isEmpty, bareNumber {
                 Text(unit).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize()
             }
             if let tokens = field.tokens, !tokens.isEmpty {
                 Menu { ForEach(tokens) { token in Button(token.label) { model.send("token", field: field.id, value: token.id) } } }
                     label: { Image(systemName: "swatchpalette") }.menuStyle(.borderlessButton).fixedSize()
                     .help("Choose design token for " + title)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let detail = field.detail, (detail.contains("var(") || detail.contains("calc(")) {
+                Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                    .truncationMode(.middle).help(detail).offset(y: 12)
             }
         }
         .disabled(field.disabled == true || model.state?.busy == true)
@@ -224,12 +262,22 @@ private struct CompactLayoutFields: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Layout").font(.headline).padding(.top, 5)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
-                ForEach(row("size")) { field in CompactLayoutValue(field: field, model: model) }
+                ForEach(row("size")) { field in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(field.id == "style:width" ? "Width" : "Height").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                        CompactLayoutValue(field: field, model: model)
+                    }
+                }
             }
             CompactSpacingRow(group: "padding", fields: row("padding"), model: model)
             CompactSpacingRow(group: "margin", fields: row("margin"), model: model)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
-                ForEach(row("finish")) { field in CompactLayoutValue(field: field, model: model) }
+                ForEach(row("finish")) { field in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(field.id == "style:border-radius" ? "Radius" : "Opacity").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                        CompactLayoutValue(field: field, model: model)
+                    }
+                }
             }
         }
     }
