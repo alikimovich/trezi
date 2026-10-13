@@ -83,7 +83,7 @@ async function checkPointer(
     return steady >= 3 && state
   }, 'Styles tab with the padding-top field')
   evidence.pointerTargets = targets
-  for (const name of ['field', 'slider', 'tabs']) {
+  for (const name of ['field', 'tabs']) {
     const control = targets.controls[name]
     assert.ok(control.found, `pointer: the island has its ${name}`)
     assert.ok(
@@ -307,6 +307,7 @@ export async function checkInspectorIsland(
       return
     }
     await island({ prepare: true })
+    await island({ scrollTop: true })
     await delay(350)
     const image = await island({ capture: true })
     writeFileSync(join(artifacts, `${stem}.png`), Buffer.from(image.png, 'base64'))
@@ -336,7 +337,11 @@ export async function checkInspectorIsland(
         if (foreground) await checkPointer(island, page, evidence)
         else console.log('SKIP inspector island pointer ownership: TREZI_NATIVE_BACKGROUND_TEST')
       }
-      await capture(`inspector-island-${name}-open`, open)
+      for (const appearance of ['light', 'dark']) {
+        const themed = await island({ appearance })
+        await capture(`inspector-island-${name}-open-${appearance}`, themed)
+      }
+      await island({ appearance: 'system' })
       await setOpen(false)
       const closed = await island()
       assert.deepEqual(closed.island, { x: 0, y: 0, width: 0, height: 0 })
@@ -405,7 +410,7 @@ export async function checkInspectorIsland(
     }
     await setOpen(false)
   } finally {
-    await island(restore)
+    await island({ ...restore, appearance: 'system' })
     await setOpen(initial.visible)
     writeFileSync(join(artifacts, 'inspector-island.json'), JSON.stringify(evidence, null, 2))
   }

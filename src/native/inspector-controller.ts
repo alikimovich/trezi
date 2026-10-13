@@ -36,7 +36,7 @@ export class NativeInspectorController {
     updated: 0
   }
   requestedFile: string | null = null
-  linked = new Set<string>()
+  expanded = new Set<string>()
   element: SelectedElement | null = null
   /** Every selection change, null when cleared; Layers follows it (LKM-179). */
   onElement: (element: SelectedElement | null) => void = () => {}
@@ -271,11 +271,6 @@ export class NativeInspectorController {
     }
     if (element && this.state.tab === 'styles') {
       this.state.actions.unshift({ id: 'replay-style', label: 'Replay transition' })
-      for (const group of ['padding', 'margin'])
-        this.state.actions.unshift({
-          id: 'link:' + group,
-          label: `${this.linked.has(group) ? 'Unlink' : 'Link'} ${group} sides`
-        })
     }
     if (element)
       this.state.actions.unshift(
@@ -344,7 +339,149 @@ export class NativeInspectorController {
         }
     } else if (this.state.tab === 'styles' && element) {
       const values = this.styles?.values ?? element.styles ?? {}
+      const paired = (group: 'padding' | 'margin', axis: 'horizontal' | 'vertical') => {
+        const sides = axis === 'horizontal' ? ['left', 'right'] : ['top', 'bottom']
+        const props = sides.map((side) => `${group}-${side}`)
+        const equal =
+          values[props[0]] === values[props[1]] &&
+          this.styles?.specified[props[0]] === this.styles?.specified[props[1]]
+        const authored = this.styles?.specified[props[0]] ?? values[props[0]] ?? ''
+        const raw = equal
+          ? /^-?\d+(?:\.\d+)?px$/.test(authored)
+            ? authored.slice(0, -2)
+            : authored
+          : ''
+        const id = `style:${group}-${axis}`
+        const cssValue = (input: string) =>
+          /^-?\d+(\.\d+)?$/.test(input.trim()) ? toCssText(props[0], finite(input)) : input
+        add(
+          {
+            id,
+            label: axis === 'horizontal' ? 'Horizontal' : 'Vertical',
+            group: 'layout',
+            kind: 'number',
+            value: raw,
+            mixed: !equal,
+            layout: group,
+            axis,
+            expanded: this.expanded.has(group),
+            disabled: !element.source && !this.classRule,
+            unit: 'px',
+            min: group === 'padding' ? 0 : -400,
+            max: 400,
+            step: 1
+          },
+          {
+            apply: async (input) => {
+              const value = cssValue(input)
+              const result = await this.invoke(
+                element.source ? 'styles:apply-pair' : 'styles:apply-class-pair',
+                root,
+                {
+                  source: element.source ?? '',
+                  props,
+                  value,
+                  classes: element.classes
+                }
+              )
+              return result.applied
+                ? { ...result, nativeStyles: props.map((prop) => ({ prop, value })) }
+                : result
+            },
+            preview: async (input) => {
+              for (const prop of props)
+                await this.send('styles:preview', { prop, value: cssValue(input) })
+            }
+          }
+        )
+      }
+      const spacing = (group: 'padding' | 'margin') => {
+        if (this.expanded.has(group)) {
+          for (const side of ['top', 'right', 'bottom', 'left'])
+            style(`${group}-${side}`, group, side as NativeInspectorField['axis'])
+        } else {
+          paired(group, 'horizontal')
+          paired(group, 'vertical')
+        }
+      }
+      const style = (
+        prop: string,
+        layout?: NativeInspectorField['layout'],
+        axis?: NativeInspectorField['axis']
+      ) => {
+        const meta = STYLE_PROP_META[prop]
+        if (meta.flexGridOnly && !/flex|grid/.test(values.display ?? '')) return
+        const tokens = tokensForProp(this.tokens, prop),
+          value = values[prop] ?? '',
+          id = 'style:' + prop
+        const cssValue = (input: string) =>
+          meta.control === 'number' && /^-?\d+(\.\d+)?$/.test(input.trim())
+            ? toCssText(prop, finite(input))
+            : input
+        const apply = async (input: string, token?: any) => {
+          const result = await this.invoke(
+            element.source ? 'styles:apply' : 'styles:apply-class',
+            root,
+            {
+              source: element.source ?? '',
+              prop,
+              value: cssValue(input),
+              classes: element.classes,
+              authored: this.styles?.specified[prop],
+              token
+            }
+          )
+          return result.applied
+            ? { ...result, nativeStyles: [{ prop, value: cssValue(input) }] }
+            : result
+        }
+        add(
+          {
+            id,
+            label: axis ? axis[0].toUpperCase() + axis.slice(1) : prop,
+            group: meta.group,
+            kind: meta.control,
+            value:
+              this.styles?.specified[prop] ??
+              (meta.control === 'number' ? String(numericValue(prop, values) ?? value) : value),
+            disabled: (!element.source && !this.classRule) || meta.control === 'readonly',
+            min: meta.min,
+            max: meta.max,
+            step: meta.step,
+            unit: meta.unit,
+            options: meta.options,
+            detail: this.styles?.specified[prop],
+            layout,
+            axis,
+            expanded: layout ? this.expanded.has(layout) : undefined,
+            tokens: tokens.map((t, i) => ({
+              id: String(i),
+              label: `${t.token.name} · ${t.token.value}`
+            }))
+          },
+          {
+            apply,
+            preview: (input) => this.send('styles:preview', { prop, value: cssValue(input) }),
+            token: (choice) => {
+              const token = tokens[Number(choice)]
+              if (!token) throw new Error('This token is no longer available.')
+              return apply(token.token.value, { name: token.token.name, group: token.group })
+            }
+          }
+        )
+      }
+      style('width', 'size')
+      style('height', 'size')
+      spacing('padding')
+      spacing('margin')
+      style('border-radius', 'finish')
+      style('opacity', 'finish')
       for (const [prop, meta] of Object.entries(STYLE_PROP_META)) {
+        if (
+          ['width', 'height', 'border-radius', 'opacity'].includes(prop) ||
+          /^(padding|margin)-/.test(prop)
+        )
+          continue
         if (meta.flexGridOnly && !/flex|grid/.test(values.display ?? '')) continue
         const tokens = tokensForProp(this.tokens, prop),
           value = values[prop] ?? '',
@@ -353,10 +490,7 @@ export class NativeInspectorController {
           meta.control === 'number' && /^-?\d+(\.\d+)?$/.test(value.trim())
             ? toCssText(prop, finite(value))
             : value
-        const targets = () =>
-          this.linked.has(prop.split('-')[0])
-            ? ['top', 'right', 'bottom', 'left'].map((side) => prop.split('-')[0] + '-' + side)
-            : [prop]
+        const targets = () => [prop]
         const apply = async (value: string, token?: any) => {
           const group = crypto.randomUUID(),
             changed: { prop: string; value: string }[] = []
@@ -503,11 +637,11 @@ export class NativeInspectorController {
     const root = this.state.root,
       generation = this.state.generation
     try {
-      if (action.action.startsWith('link:')) {
-        const group = action.action.slice(5)
+      if (action.action.startsWith('spacing:')) {
+        const group = action.action.slice(8)
         if (['padding', 'margin'].includes(group)) {
-          if (this.linked.has(group)) this.linked.delete(group)
-          else this.linked.add(group)
+          if (this.expanded.has(group)) this.expanded.delete(group)
+          else this.expanded.add(group)
           this.build()
           this.publish()
         }

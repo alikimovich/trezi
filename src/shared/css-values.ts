@@ -84,6 +84,8 @@ function sideMeta<P extends 'padding' | 'margin'>(
  */
 export const STYLE_PROP_META: Record<string, StylePropMeta> = {
   // --- layout ---
+  width: pxMeta('layout', 0, 2000),
+  height: pxMeta('layout', 0, 2000),
   ...sideMeta('padding', 0, 400),
   ...sideMeta('margin', -400, 400),
   gap: pxMeta('layout', 0, 400, 1, { flexGridOnly: true }),

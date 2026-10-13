@@ -200,3 +200,67 @@ export async function applyStyleEditSvelte(
   const next = `${code.slice(0, styleAttr.start)}style="${merged}"${code.slice(styleAttr.end)}`
   return commit(next, 'inline')
 }
+
+/** Commit a paired spacing edit through one Svelte source write. */
+export async function applyStylePairSvelte(
+  root: string,
+  edit: Pick<StyleEdit, 'source' | 'classes' | 'value'> & { props: string[] },
+  resolved: ResolvedSource
+): Promise<StyleEditResult> {
+  const fallback: StyleEditResult = {
+    applied: false,
+    error:
+      'This spacing pair needs a literal style attribute. Edit sides individually or use chat for this source convention.'
+  }
+  let code: string
+  try {
+    code = await readFile(resolved.file, 'utf8')
+  } catch {
+    return { applied: false, error: 'Could not read the source file.' }
+  }
+  const ast = await parseSvelte(code)
+  const el = ast && findElement(ast, code, resolved.line, resolved.column)
+  if (!el || hasAttrOfType(el, 'SpreadAttribute') || hasAttrOfType(el, 'StyleDirective'))
+    return fallback
+  const classAttr = findAttr(el, 'class')
+  if (
+    looksTailwind(edit.classes) &&
+    classAttr?.literal != null &&
+    !hasAttrOfType(el, 'ClassDirective')
+  ) {
+    const one = tokenClassRewrite(classAttr.literal, { ...edit, prop: edit.props[0] }, null)
+    const two = one && tokenClassRewrite(one, { ...edit, prop: edit.props[1] }, null)
+    if (two && SPLICE_SAFE_RE.test(two)) {
+      const next = `${code.slice(0, classAttr.start)}class="${two}"${code.slice(classAttr.end)}`
+      const result = await commitEdit(
+        root,
+        resolved.file,
+        code,
+        next,
+        `${edit.source}:style:${edit.props.join('+')}`
+      )
+      return result.applied
+        ? { applied: true, strategy: 'tailwind' }
+        : { applied: false, error: result.error }
+    }
+  }
+  const style = findAttr(el, 'style')
+  if (style?.literal == null) return fallback
+  const merged = mergeStyleString(
+    mergeStyleString(style.literal, edit.props[0], edit.value),
+    edit.props[1],
+    edit.value
+  )
+  if (!SPLICE_SAFE_RE.test(merged)) return fallback
+  const next = `${code.slice(0, style.start)}style="${merged}"${code.slice(style.end)}`
+  const result = await commitEdit(
+    root,
+    resolved.file,
+    code,
+    next,
+    `${edit.source}:style:${edit.props.join('+')}`
+  )
+  return result.applied
+    ? { applied: true, strategy: 'inline' }
+    : { applied: false, error: result.error }
+}

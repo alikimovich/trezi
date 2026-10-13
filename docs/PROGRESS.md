@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-236: compact native Layout controls
+
+- The Styles inspector now has one Layout heading with compact size, spacing, radius and opacity rows. Padding and margin each have an independent four-edge toggle; paired values remain Mixed when their authored or computed sides differ, and switching modes does not edit source.
+- A paired horizontal or vertical edit prepares both longhands from one source snapshot and sends one service-owned transaction, so one Undo restores both. JSX and Svelte literal styles, Tailwind class lists and unique CSS class rules use their existing source conventions; unsupported source paths show an explicit fallback. Individual sides keep the existing single-property path. Width and height join the supported style list.
+- Controller and source transaction tests cover view toggling, pair targets, single-side edits, token preservation, negative/auto margins and padding rejection. The native island fixture now targets the vertical padding field and saves normal and narrow foreground captures in light and dark mode. Agent OS quick and focused native verification determine acceptance below.
+- Agent OS quick passed 219 unit checks (3 skips), typechecks and lint. Native `core` passed 30 checks with no skips, including a real vertical padding edit. The four foreground captures were inspected: one visible Layout heading, both four-edge buttons, readable compact fields and no scroller collision. The native fixture uses symmetric spacing; asymmetric values, `auto`/negative margins and tokens have controller/source test coverage, with full fixture acceptance left to the manager's final native run.
+
 ## 2026-10-11 — LKM-234: hosted app build and Bun dependency audit
 
 - Second repair (PR #255 `typecheck + unit tests` red at `ef1d67d1`): the worker sandbox cannot run `gh`, so the failed job log was not readable and the failing unit test is unidentified. Changes with a plausible link: `cancel-in-progress` is now true only for `pull_request` events (a `main` push is never cancelled), and `app build` checks out full history so the commit-count build number is real. The job itself is unchanged; if the log shows a single hosted-runner flake it needs its own fix. Before branch enforcement, the manager must confirm `app build` and `dependency audit` are green on the head SHA and record the audit's nonzero package/advisory baseline. `test/dependency-audit.mjs` now also asserts the workflow shape.
