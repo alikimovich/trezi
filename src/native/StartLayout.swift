@@ -21,6 +21,10 @@ final class StartTransition {
 }
 
 struct StartAction: Identifiable { let label: String; let action: String; let value: String?; let disabled: Bool; var id: String { action + (value ?? "") } }
+private struct StartButtonFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue(), uniquingKeysWith: { _, next in next }) }
+}
 final class StartModel: ObservableObject {
     @Published var chat = ""
     @Published var heading = ""
@@ -30,6 +34,7 @@ final class StartModel: ObservableObject {
     @Published var actions: [StartAction] = []
     @Published var recents: [WelcomeRecent] = []
     @Published var composer = NSRect.zero
+    @Published var buttonFrames: [String: CGRect] = [:]
 }
 struct StartContent: View {
     @ObservedObject var model: StartModel
@@ -66,14 +71,18 @@ struct StartContent: View {
                     HStack(spacing: 8) {
                         ForEach(model.recents.prefix(4)) { recent in
                             Button(recent.name) { run("start-recent", recent.root) }.help(recent.root)
+                                .background(GeometryReader { geometry in Color.clear.preference(key: StartButtonFrames.self, value: [recent.root: geometry.frame(in: .named("start"))]) })
                         }
                         Button("Open Project…") { run("start-open") }
+                            .background(GeometryReader { geometry in Color.clear.preference(key: StartButtonFrames.self, value: ["open": geometry.frame(in: .named("start"))]) })
                     }.controlSize(.small).buttonStyle(.bordered).lineLimit(1)
                 }
             }
             .frame(width: max(0, model.composer.width))
             .padding(.leading, max(0, model.composer.minX)).padding(.top, model.composer.maxY + 18)
         }
+        .coordinateSpace(name: "start")
+        .onPreferenceChange(StartButtonFrames.self) { frames in if model.buttonFrames != frames { model.buttonFrames = frames } }
     }
 }
 final class NativeStart: NSHostingView<StartContent> {
