@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar during project planning (LKM-242)
+
+- [x] Make the sidebar available once planning docks, retaining the saved collapsed state; keep centered home sidebar-free.
+- [x] Cover toggle, no duplicate send, no physical project and normal/narrow light/dark geometry in the native planning check.
+- [x] Cover return to the pending planning conversation with its draft, attachment, model and transcript intact in the chat unit check.
+- [ ] Manager: inspect foreground captures, run full native verification and independent review.
+
 ## Compact native Layout controls (LKM-236)
 
 - [x] Replace linked spacing actions with independent individual-side view toggles and compact width, height, padding, margin, radius and opacity rows.
