@@ -43,7 +43,19 @@ export function installNativeStart(
           })
     } else if (value.type === 'start-chat') {
       const entry = workspace.state.projects.find((p) => p.root === value.root)
-      if (entry) void workspace.command({ type: 'new-chat', key: entry.key }).catch(fail)
+      const release = () => {
+        // The new chat never arrived: its draft stays home and nothing is left pending.
+        if (!chat.start.reroute) return
+        chat.start.reroute = null
+        chat.start.pending = false
+        chat.changed(chat.get(HOME))
+      }
+      if (entry)
+        void workspace.command({ type: 'new-chat', key: entry.key }).catch((error) => {
+          release()
+          fail(error)
+        })
+      else release()
     } else if (value.type === 'planning-created') {
       const planning = chat.start.planningKey ? chat.chats.get(chat.start.planningKey) : undefined
       const preferred = workspace.preferred

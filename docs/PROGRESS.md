@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-243 review repair: a pending Send could be dropped by a drafted target chat
+
+- An explicit picker Send sets `pending` and carries home into the opened project. If that project's restored chat already had its own unsent draft, `arrive()` returned early, so `pending` never cleared: the project docked without the prompt, and later Sends from home were ignored. `arrive()` now sends the home draft to a new chat beside the drafted one (`start-chat`, tracked by `StartFlow.reroute`), so the target's draft stays untouched and exactly one send happens. If no new chat can be made (no project entry, the command fails or another switch intervenes), `pending` and `reroute` clear and the home draft stays, with a notice when the target has no root to use. Cancel and planning-cancel also clear `reroute`.
+- The pending notice now offers only Cancel: Open Project…/New Project… were direct navigation that could never deliver the draft.
+- `test/chat-start.mjs` covers a drafted target with a new chat beside it (one send, target draft kept) and without one (home draft kept, later Send not blocked).
+
 ## 2026-10-13 — LKM-243 verification repair: start-composer fixture leaked into `native-chat`
 
 - The full native run failed `native-chat`, `chat-ui` and `quit-alert` ("the turn reached the provider stub"). The runner's `cleanup` only runs after a failure, so a passing `start-composer` never restored its `agent:send` stub. The picker-Send step added a branch that answers sends for the fixture project's root, so later checks' real Sends were swallowed (instant "Worked for 0s", provider stub never called). `start-composer` now restores itself on pass, puts the home model back and stops reopening the already open fixture project. No assertion was weakened.

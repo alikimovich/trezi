@@ -84,6 +84,8 @@ export class StartFlow {
   draftTarget: { root: string; name: string } | null = null
   /** The chat whose draft follows the next chat switch (a project picked from it). */
   carry: string | null = null
+  /** A target chat with its own draft: the home draft follows the new chat made beside it. */
+  reroute: string | null = null
   /** The chat that received a carried draft, until it is ready to take it. */
   target: string | null = null
   /** The model picked for the carried draft, applied to its new chat. */
@@ -164,12 +166,8 @@ export class StartFlow {
       }
     if (this.pending && chat.chat === HOME)
       return {
-        text: 'Choose a project for this message. It is sent once the project opens.',
-        actions: [
-          { label: 'Open Project…', action: 'start-open' },
-          { label: 'New Project…', action: 'start-new' },
-          { label: 'Cancel', action: 'start-cancel' }
-        ]
+        text: 'Opening the project for this message. It is sent once the project opens.',
+        actions: [{ label: 'Cancel', action: 'start-cancel' }]
       }
     // The selected provider stopped answering while another still can: keep the draft.
     const lost = usable.length > 0 && !selectable(chat, usable)
@@ -244,6 +242,7 @@ export class StartFlow {
         controller.invalidatePlanningStart()
         this.pending = false
         this.carry = null
+        this.reroute = null
         return true
       case 'start-provider':
         if (action.value) await controller.choice(chat, 'Provider', action.value)
@@ -255,12 +254,29 @@ export class StartFlow {
   /** The active chat changed. A draft from the no-project chat (or one carried from a
    *  chat whose project menu was used) moves into the new chat, never over its own draft. */
   arrive(controller: NativeChatController, from: string, chat: Chat) {
-    const source = controller.chats.get(from)
-    const carrying = from === this.carry
+    const rerouted = from === this.reroute
+    // A switch that is not the new chat beside the target leaves nothing to deliver.
+    if (this.reroute && !rerouted) this.pending = false
+    this.reroute = null
+    const origin = rerouted ? HOME : from
+    const source = controller.chats.get(origin)
+    const carrying = rerouted || origin === this.carry
     this.carry = null
     if (!carrying || !source || source === chat) return
     if (!this.hasDraft(source) && !this.pending) return
-    if (this.hasDraft(chat)) return
+    if (this.hasDraft(chat)) {
+      // The target keeps its own draft. An explicit Send goes to a new chat beside it;
+      // without one, the home draft stays put and nothing stays pending.
+      const root = chat.root || chat.context?.root
+      if (this.pending && origin === HOME && root) {
+        this.reroute = chat.chat
+        controller.services.effect({ type: 'start-chat', root })
+      } else if (this.pending) {
+        this.pending = false
+        source.error = 'That project has its own unsent draft. Your message is kept here.'
+      }
+      return
+    }
     chat.text = source.text
     chat.caret = source.caret
     chat.attachments = source.attachments

@@ -862,6 +862,7 @@ export class NativeChatController {
         this.start.planningKey = null
         this.start.pending = false
         this.start.carry = null
+        this.start.reroute = null
         this.start.target = null
         this.start.settings = undefined
         this.start.prefix = undefined
