@@ -3,8 +3,8 @@ import { HOME } from './chat-start'
 import type { NativeWorkspaceController } from './workspace-controller'
 
 /**
- * LKM-232: connects the start composer to the workspace. Its project menu opens a recent
- * or the Open panel, or the New Project sheet; a carried draft whose project reopened an
+ * Connects an explicit Send or direct start-surface navigation to the workspace. A
+ * carried draft whose project reopened an
  * existing conversation gets a new chat there. Never writes anywhere on its own.
  */
 export function installNativeStart(
@@ -25,10 +25,37 @@ export function installNativeStart(
       else
         void workspace
           .command({ type: 'open', ...(value.root ? { root: value.root } : {}) })
-          .catch(fail)
+          .then(() => {
+            if (
+              chat.start.pending &&
+              (workspace.active?.root !== value.root || workspace.state.status.kind === 'error')
+            ) {
+              chat.start.pending = false
+              chat.start.carry = null
+              chat.changed(chat.get(HOME))
+            }
+          })
+          .catch((error) => {
+            chat.start.pending = false
+            chat.start.carry = null
+            fail(error)
+            chat.changed(chat.get(HOME))
+          })
     } else if (value.type === 'start-chat') {
       const entry = workspace.state.projects.find((p) => p.root === value.root)
-      if (entry) void workspace.command({ type: 'new-chat', key: entry.key }).catch(fail)
+      const release = () => {
+        // The new chat never arrived: its draft stays home and nothing is left pending.
+        if (!chat.start.reroute) return
+        chat.start.reroute = null
+        chat.start.pending = false
+        chat.changed(chat.get(HOME))
+      }
+      if (entry)
+        void workspace.command({ type: 'new-chat', key: entry.key }).catch((error) => {
+          release()
+          fail(error)
+        })
+      else release()
     } else if (value.type === 'planning-created') {
       const planning = chat.start.planningKey ? chat.chats.get(chat.start.planningKey) : undefined
       const preferred = workspace.preferred

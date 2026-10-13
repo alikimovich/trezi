@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 import { HOME, START_HEADING, usableProviders } from '../src/native/chat-start.ts'
+import { installNativeStart } from '../src/native/start-runtime.ts'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 async function until(check, label) {
@@ -133,6 +134,21 @@ login.codex = true
 await controller.refreshReadiness()
 assert.equal(last().start.ready, true)
 assert.equal(last().composer.enabled, false, 'An empty prompt cannot send')
+const effectsBeforePicker = effects.length
+await controller.action({ chat: HOME, action: 'start-target', value: '/fixture' })
+assert.equal(last().start.project.title, 'Fixture')
+assert.equal(effects.length, effectsBeforePicker, 'Selecting a draft target opens nothing')
+await input('Keep this draft')
+await controller.action({ chat: HOME, action: 'start-target-new' })
+assert.equal(last().start.project.title, null)
+assert.equal(controller.get(HOME).text, 'Keep this draft')
+await controller.action({ chat: HOME, action: 'start-recent', value: '/fixture' })
+assert.equal(effects.at(-1).type, 'start-project', 'The bottom recent navigates directly')
+assert.equal(controller.start.pending, false, 'Direct navigation never submits the draft')
+assert.equal(controller.get(HOME).text, 'Keep this draft')
+await controller.action({ chat: HOME, action: 'start-open' })
+assert.equal(effects.at(-1).type, 'start-project', 'Standalone Open Project navigates')
+assert.equal(controller.get(HOME).text, 'Keep this draft')
 await input('Build a pricing page')
 await controller.composer({
   chat: HOME,
@@ -240,4 +256,163 @@ for (const status of ['signed_out', 'checking']) {
   await until(() => handled() === before + 1, `${status}: the project chat send is not dropped`)
   assert.equal(project.text, '', `${status}: the draft was submitted`)
 }
+
+// An unsuccessful managed open keeps the home draft and permits one explicit retry.
+let openAttempts = 0
+const retry = new NativeChatController({
+  invoke: async (channel) =>
+    channel === 'providers:choices'
+      ? choices
+      : channel === 'providers:check-login'
+        ? { loggedIn: true }
+        : { ok: true },
+  render: () => {},
+  effect: () => {}
+})
+const preferred = controller.start.workspace.preferred()
+const workspace = {
+  active: null,
+  preferred,
+  state: {
+    recents: [{ root: '/fixture', name: 'Fixture' }],
+    projects: [],
+    status: { kind: 'idle' }
+  },
+  reportError: () => {},
+  services: { render: () => {} },
+  command: async () => {
+    openAttempts++
+    throw new Error('Project moved')
+  }
+}
+installNativeStart(retry, workspace)
+await retry.refreshChoices()
+retry.checkReadiness()
+await retry.refreshReadiness()
+await retry.action({ chat: HOME, action: 'start-target', value: '/fixture' })
+retry.get(HOME).text = 'Keep on open failure'
+await retry.composer({ chat: HOME, action: 'send' })
+await until(() => openAttempts === 1 && !retry.start.pending, 'failed open resets pending')
+assert.equal(retry.get(HOME).text, 'Keep on open failure')
+assert.equal(retry.start.draftTarget.root, '/fixture')
+await retry.composer({ chat: HOME, action: 'send' })
+await until(() => openAttempts === 2 && !retry.start.pending, 'one retry')
+assert.equal(retry.get(HOME).text, 'Keep on open failure')
+
+// A late planning:start result cannot replace home after direct navigation.
+let finishStart
+const lateCalls = []
+const late = new NativeChatController({
+  invoke: async (channel) => {
+    lateCalls.push(channel)
+    if (channel === 'providers:choices') return choices
+    if (channel === 'providers:check-login') return { loggedIn: true }
+    if (channel === 'planning:start')
+      return new Promise((resolve) => {
+        finishStart = resolve
+      })
+    return { ok: true }
+  },
+  render: () => {},
+  effect: () => {}
+})
+late.start.workspace = controller.start.workspace
+await late.refreshChoices()
+late.checkReadiness()
+await late.refreshReadiness()
+late.get(HOME).text = 'Plan that is still starting'
+const starting = late.beginPlanning(true)
+await until(() => !!finishStart, 'planning start is in flight')
+await late.action({ chat: HOME, action: 'start-recent', value: '/fixture' })
+finishStart({ ...plan, id: 'late-plan', transcript: [] })
+await starting
+assert.equal(late.active, HOME)
+assert.equal(late.start.planningKey, null)
+assert.equal(late.get(HOME).text, 'Plan that is still starting')
+await until(() => lateCalls.includes('planning:cancel'), 'late planning record canceled')
+
+// An explicit Send into a project whose restored chat has its own draft: the target's draft is
+// kept and the home prompt goes once into a new chat beside it, or stays home with nothing pending.
+async function draftedTarget(withProject) {
+  const agentSends = []
+  const target = new NativeChatController({
+    invoke: async (channel, ...args) => {
+      if (channel === 'providers:choices') return choices
+      if (channel === 'providers:check-login') return { loggedIn: true }
+      if (channel === 'agent:send') {
+        agentSends.push(args)
+        return { ok: true }
+      }
+      if (channel === 'agent:workspace-snapshot')
+        return {
+          projects: [
+            {
+              root: '/fixture',
+              chats: ['project-chat', 'beside-chat'].map((sessionKey) => ({
+                sessionKey,
+                record: { transcript: [] },
+                isRunning: false,
+                options: { provider: 'codex', model: 'codex:default', permissionMode: 'auto' }
+              }))
+            }
+          ]
+        }
+      return { ok: true }
+    },
+    render: () => {},
+    effect: () => {}
+  })
+  const context = (chat) => ({
+    type: 'context',
+    context: {
+      chat,
+      root: '/fixture',
+      selection: null,
+      turn: {},
+      setup: { needed: false, dismissed: false, status: null },
+      tokens: { needed: false, dismissed: false },
+      notes: [],
+      spawns: []
+    }
+  })
+  const space = {
+    active: null,
+    preferred: { ...controller.start.workspace.preferred() },
+    state: {
+      recents: [{ root: '/fixture', name: 'Fixture' }],
+      projects: withProject ? [{ root: '/fixture', key: 'fixture' }] : [],
+      status: { kind: 'idle' }
+    },
+    reportError: () => {},
+    services: { render: () => {} },
+    command: async (command) => {
+      if (command.type === 'open') {
+        space.active = { root: '/fixture' }
+        await target.command(context('project-chat'))
+      } else if (command.type === 'new-chat') await target.command(context('beside-chat'))
+    }
+  }
+  installNativeStart(target, space)
+  await target.refreshChoices()
+  target.checkReadiness()
+  await target.refreshReadiness()
+  target.get('project-chat').text = 'Existing project draft'
+  await target.action({ chat: HOME, action: 'start-target', value: '/fixture' })
+  target.get(HOME).text = 'Prompt from home'
+  await target.composer({ chat: HOME, action: 'send' })
+  await until(() => !target.start.pending, 'the drafted target settles pending')
+  assert.equal(target.get('project-chat').text, 'Existing project draft', 'target draft kept')
+  assert.equal(target.start.reroute, null)
+  return { target, agentSends }
+}
+const beside = await draftedTarget(true)
+await until(() => beside.agentSends.length === 1, 'one send beside the drafted target')
+assert.equal(JSON.stringify(beside.agentSends[0]).includes('Prompt from home'), true)
+assert.equal(beside.target.get(HOME).text, '', 'the home draft left once')
+assert.equal(beside.target.active, 'beside-chat')
+const stay = await draftedTarget(false)
+assert.equal(stay.agentSends.length, 0, 'no send without a new chat')
+assert.equal(stay.target.get(HOME).text, 'Prompt from home', 'the home draft stays')
+await stay.target.composer({ chat: HOME, action: 'send' })
+assert.equal(stay.target.start.pending, false, 'a later Send is not blocked by a stuck pending')
 console.log('chat-start: ok')

@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Home project target and cancellation regression (LKM-243)
+
+- [x] Separate composer draft target selection from direct recent and Open Project navigation; carry a prompt only after explicit Send.
+- [x] Restore centered-home hit testing and clear canceled planning state before late callbacks return.
+- [x] Add controller and native composer checks for target selection, switching and direct navigation.
+- [ ] Manager: inspect foreground light/dark captures, run the full native suite and independent review.
 ## Sidebar during project planning (LKM-242)
 
 - [x] Make the sidebar available once planning docks, retaining the saved collapsed state; keep centered home sidebar-free.
