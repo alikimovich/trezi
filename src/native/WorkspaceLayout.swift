@@ -183,6 +183,7 @@ final class WorkspaceLayout {
         // centered composer's column spans the window and narrows as it docks.
         host.chatColumn.frame = NSRect(x: 0, y: 0, width: starting ? bounds.width + (leading - bounds.width) * start.progress : leading, height: bounds.height)
         host.chatColumn.isHidden = !starting && (leading < 1 || !chatReady)
+        host.chatColumn.composerOnly = starting && startState["home"] as? Bool == true
         placeStart(bounds)
         var dividerState = state
         dividerState["bounds"] = ["x":0, "y":0, "width":Double(leading), "height":Double(bounds.height)]

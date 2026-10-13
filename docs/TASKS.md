@@ -9,6 +9,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Native fixture: identical dot frame, diameter and centre line across every CI transition and publish steps; light/dark captures at normal and narrow widths.
 - [ ] Manager: inspect the `toolbar-branch-dot-*` captures, run full native verification and independent review, then merge.
 
+## Home project target and cancellation regression (LKM-243)
+
+- [x] Separate composer draft target selection from direct recent and Open Project navigation; carry a prompt only after explicit Send.
+- [x] Restore centered-home hit testing and clear canceled planning state before late callbacks return.
+- [x] Add controller and native composer checks for target selection, switching and direct navigation.
+- [ ] Manager: inspect foreground light/dark captures, run the full native suite and independent review.
 ## Sidebar during project planning (LKM-242)
 
 - [x] Make the sidebar available once planning docks, retaining the saved collapsed state; keep centered home sidebar-free.

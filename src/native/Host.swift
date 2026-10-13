@@ -18,7 +18,18 @@ if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--session" {
     exit(0)
 }
 
-final class Canvas: NSView { var changed: (() -> Void)?; override var isFlipped: Bool { true }; override func layout() { super.layout(); changed?() } }
+class Canvas: NSView { var changed: (() -> Void)?; override var isFlipped: Bool { true }; override func layout() { super.layout(); changed?() } }
+/// The centered composer spans the window, but its empty column must not cover the
+/// start surface's real buttons below it.
+final class StartChatColumn: Canvas {
+    var composerOnly = false
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard composerOnly else { return hit }
+        guard let composer = subviews.first(where: { $0 is NativeComposer }) else { return nil }
+        return hit === composer || hit?.isDescendant(of: composer) == true ? hit : nil
+    }
+}
 final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     var window: NSWindow!
     var shell: NativeShell!
@@ -48,7 +59,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var previewOverlay: PreviewOverlay!
     lazy var previewHistory = PreviewHistory(host: self)
     let canvas = Canvas()
-    let chatColumn = Canvas()
+    let chatColumn = StartChatColumn()
     /// The centered start composer's heading and status, under the chat column (LKM-232).
     let startSurface = NativeStart()
     var views: [String: WKWebView] = [:]
