@@ -18,6 +18,11 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - The square-corner guide layer previously disabled `masksToBounds`, and `PreviewGuideView.draw` filled full column rectangles without a local clip. It now keeps the layer mask on at every radius, clips drawing to its bounds and rejects guide hits outside those bounds. Column settings, snapping and coordinate conversion are unchanged.
 - The native overlay fixture records guide/WebKit frame and scale agreement, layer radius and mask, and foreground captures with opaque magenta columns extending past the CSS viewport. It counts magenta pixels inside and outside the preview at normal and narrow desktop sizes in light and dark mode, plus a rounded mobile case. The manager's native verification and image inspection determine acceptance.
+## 2026-10-13 — LKM-246: transcript scroller follows measured overflow
+
+- The SwiftUI transcript's AppKit probe now compares the laid-out document with the clip height (1 pt tolerance) and enables the vertical scroller only for overflow. Composer clearance remains inside the document; no content minimum height or global scroller setting was changed. The probe already observes document and clip frame/bounds changes, so streaming, chat switches and resizes trigger the same measurement. The scroll view and clip identity stay in place for the reading anchor and input.
+- Windowless geometry cases cover both overlay and legacy modes, empty/short/long transcripts, growth, clear/switch, resize and subpixel layout. Native acceptance now checks real scroller state and captures empty/short/cleared chats in light and dark. Verification results are reported separately by the worker.
+- Agent OS quick passed typechecks, lint and 219 unit checks (3 existing skips), including the windowless composer geometry fixture. Native `chat,composer` passed 17 smoke checks with no skips plus native chat-scroll acceptance. The foreground empty light and short dark captures were inspected; actual legacy geometry had document heights 305/319 pt in a 776 pt clip, `hasVerticalScroller=false`, and no grey track. The manager still runs full verification and independent review.
 
 ## 2026-10-13 — LKM-243 review repair: a pending Send could be dropped by a drafted target chat
 

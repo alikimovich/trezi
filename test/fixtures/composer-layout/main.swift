@@ -244,6 +244,42 @@ for style: NSScroller.Style in [.overlay, .legacy, .overlay] {
 }
 print("Chat spacing and native scroller policy passed without a window")
 
+// The document includes the same top/bottom padding as the SwiftUI transcript.
+// Exercise both native scroller styles without changing macOS preferences.
+for style: NSScroller.Style in [.overlay, .legacy] {
+    let scroll = NSScrollView(frame: CGRect(x: 0, y: 0, width: 420, height: 600))
+    let content = NSView(frame: CGRect(x: 0, y: 0, width: 420, height: 0))
+    scroll.documentView = content
+    ChatScrollStyleProbe.configure(scroll, style: style)
+    func state(_ height: CGFloat, _ visible: Bool, _ label: String) {
+        content.setFrameSize(NSSize(width: scroll.contentSize.width, height: height))
+        ChatScrollStyleProbe.updateScrollerVisibility(scroll)
+        require(scroll.hasVerticalScroller == visible, "\(style) \(label): scroller visibility follows overflow")
+        require(scroll.scrollerStyle == style && scroll.autohidesScrollers == (style == .overlay),
+            "\(style) \(label): system style stays intact")
+        let width = scroll.contentSize.width
+        for _ in 0..<3 { ChatScrollStyleProbe.updateScrollerVisibility(scroll) }
+        require(scroll.contentSize.width == width, "\(style) \(label): gutter does not oscillate")
+    }
+    let clearance = ChatLayout.bottomInset(composerHeight: 120)
+    state(18 + clearance, false, "empty")
+    state(150 + clearance, false, "short chat")
+    state(2000 + clearance, true, "long chat")
+    let before = scroll.contentView.bounds.origin
+    state(2050 + clearance, true, "streaming growth")
+    require(scroll.contentView.bounds.origin == before, "Streaming growth preserves the reading anchor")
+    state(18 + clearance, false, "new/cleared chat")
+    state(150 + clearance, false, "switch to short chat")
+    state(2000 + clearance, true, "switch to long chat")
+    scroll.setFrameSize(NSSize(width: 420, height: 2200))
+    ChatScrollStyleProbe.updateScrollerVisibility(scroll)
+    require(!scroll.hasVerticalScroller, "\(style): taller viewport hides scroller")
+    scroll.setFrameSize(NSSize(width: 420, height: 600))
+    ChatScrollStyleProbe.updateScrollerVisibility(scroll)
+    require(scroll.hasVerticalScroller, "\(style): shorter viewport restores scroller")
+    state(scroll.contentView.bounds.height + 0.5, false, "subpixel remainder")
+}
+
 // Replay the manager's exact one-line -> six-line document geometry without
 // a window. A request against the old bounds cannot reach the new reading end.
 final class FlippedDocument: NSView { override var isFlipped: Bool { true } }
