@@ -154,18 +154,19 @@ export async function checkChatAcceptance(host, artifacts) {
   ]
   const state = {
     chat: 'chat-acceptance',
-    messages: [
-      ...Array.from({ length: 40 }, (_, i) =>
-        message(`history-${i}`, `History ${i}. ${'Scrollable native conversation. '.repeat(8)}`)
-      ),
-      message('latest', 'LATEST VISIBLE MESSAGE')
-    ],
+    messages: [],
     cards: [],
     questions: [],
     running: false,
     status: 'Acceptance fixture',
     composer: { enabled: true, text: '', revision: 100, choices }
   }
+  const longMessages = [
+    ...Array.from({ length: 40 }, (_, i) =>
+      message(`history-${i}`, `History ${i}. ${'Scrollable native conversation. '.repeat(8)}`)
+    ),
+    message('latest', 'LATEST VISIBLE MESSAGE')
+  ]
   host.send('chatState', { state })
   await delay(200)
   const original = await inspect({ prepare: true })
@@ -175,6 +176,54 @@ export async function checkChatAcceptance(host, artifacts) {
   const override = (environment) => inspect({ environment })
   try {
     await wait((s) => s.probeAttached, 'Real SwiftUI probe attachment')
+    for (const preference of ['WhenScrolling', 'Always']) {
+      await override({ scrollers: preference })
+      for (const [name, messages] of [
+        ['empty', []],
+        ['short', [message('short', 'A short reply.')]],
+        ['cleared', []]
+      ]) {
+        state.messages = messages
+        host.send('chatState', { state })
+        await wait(
+          (s) => s.messageCount === messages.length && !s.hasVerticalScroller,
+          `${preference} ${name} transcript hides the native scroller`
+        )
+        for (const appearance of ['light', 'dark']) {
+          await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+          const { image, ...geometry } = await inspect({ capture: true })
+          const stem = join(artifacts, `acceptance-${preference}-${name}-${appearance}`)
+          writeFileSync(`${stem}.png`, Buffer.from(image.png, 'base64'))
+          writeFileSync(`${stem}.json`, JSON.stringify(geometry, null, 2))
+          assert.equal(geometry.hasVerticalScroller, false, `${stem}: no scroller`)
+        }
+      }
+    }
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
+    state.messages = longMessages
+    host.send('chatState', { state })
+    await wait(
+      (s) => s.hasVerticalScroller && s.documentHeight > s.viewportHeight + 100,
+      'Long transcript restores the native scroller'
+    )
+    state.messages = []
+    host.send('chatState', { state })
+    await wait(
+      (s) => s.messageCount === 0 && !s.hasVerticalScroller,
+      'Clearing a long chat removes its scroller'
+    )
+    state.chat = 'chat-acceptance-new'
+    host.send('chatState', { state })
+    await wait(
+      (s) => s.messageCount === 0 && !s.hasVerticalScroller,
+      'New empty chat keeps its scroller hidden'
+    )
+    state.messages = longMessages
+    host.send('chatState', { state })
+    await wait(
+      (s) => s.hasVerticalScroller && s.documentHeight > s.viewportHeight + 100,
+      'Switching back to a long chat restores the scroller'
+    )
     const setDraft = async (lines) => {
       state.composer.text = Array(lines).fill('Multiline composer draft').join('\n')
       state.composer.revision++

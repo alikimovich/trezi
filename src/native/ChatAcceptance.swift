@@ -58,9 +58,10 @@ extension Host {
         if let hover = command["hoverMessage"] { chat.model.hoverOverride = hover as? String }
         window.contentView?.layoutSubtreeIfNeeded()
         guard let probe = descendants(chat).compactMap({ $0 as? ChatScrollStyleProbe }).first,
-              let scroll = probe.enclosingScrollView, let scroller = scroll.verticalScroller else {
-            throw fail("SwiftUI conversation scroller/probe is missing")
+              let scroll = probe.enclosingScrollView else {
+            throw fail("SwiftUI conversation scroll view/probe is missing")
         }
+        let scroller = scroll.verticalScroller
         // Window-targeted events enter the app's own event queue, so the probe's
         // local monitor, NSApplication.sendEvent, NSWindow hit-testing and AppKit
         // tracking loops handle them as input. A pid-posted CGEvent arrived with
@@ -96,8 +97,8 @@ extension Host {
             NSApp.postEvent(event, atStart: false)
         }
         let readingPoint = windowPoint(NSPoint(x: chat.bounds.midX, y: chat.isFlipped ? 80 : chat.bounds.height - 80), in: chat)
-        let knob = scroller.rect(for: .knob)
-        let knobPoint = windowPoint(NSPoint(x: knob.midX, y: knob.midY), in: scroller)
+        let knob = scroller?.rect(for: .knob) ?? .zero
+        let knobPoint = scroller.map { windowPoint(NSPoint(x: knob.midX, y: knob.midY), in: $0) } ?? .zero
         // The thumb drag goes up (+96 window points, toward history).
         if let action = command["input"] as? String {
             switch action {
@@ -105,7 +106,7 @@ extension Host {
             case "hover": try mouse(.mouseMoved, knobPoint)
             case "wheel": try wheel(command["delta"] as? Int ?? 600, at: readingPoint)
             case "drag":
-                guard knob.height > 0 else { throw fail("Native thumb is not draggable") }
+                guard let scroller, scroll.hasVerticalScroller, knob.height > 0 else { throw fail("Native thumb is not draggable") }
                 try mouse(.mouseMoved, knobPoint)
                 try await Task.sleep(nanoseconds: 50_000_000)
                 // A faded overlay knob falls through to the clip view. Reveal it
@@ -193,12 +194,14 @@ extension Host {
             "systemPreferredStyle": NSScroller.preferredScrollerStyle == .overlay ? "overlay" : "legacy",
             "environmentOverridden": environment.isOverridden,
             "style": scroll.scrollerStyle == .overlay ? "overlay" : "legacy",
-            "small": scroller.controlSize == .small, "autohides": scroll.autohidesScrollers,
-            "scrollerHidden": scroller.isHidden, "knobHeight": scroller.rect(for: .knob).height,
+            "small": scroller?.controlSize == .small, "autohides": scroll.autohidesScrollers,
+            "hasVerticalScroller": scroll.hasVerticalScroller,
+            "scrollerHidden": !scroll.hasVerticalScroller || (scroller?.isHidden ?? true), "knobHeight": knob.height,
             "scrollY": scroll.contentView.bounds.minY, "viewportWidth": scroll.contentSize.width,
             "documentHeight": scroll.documentView?.bounds.height ?? 0, "viewportHeight": scroll.contentSize.height,
             "windowContentHeight": window.contentView!.bounds.height,
             "chatWidth": chat.bounds.width, "chatHeight": chat.bounds.height,
+            "messageCount": chat.model.snapshot?.messages.count ?? 0,
             "leftGap": composerFrame.minX, "rightGap": chat.bounds.width - composerFrame.maxX,
             "bottomGap": chat.bounds.height - composerFrame.maxY,
             "latestID": latest, "latestTop": latestFrame.minY, "latestBottom": latestFrame.maxY,
@@ -222,7 +225,7 @@ extension Host {
             "rendered": chat.model.renderedAccessibility.dictionary,
             "scrollAppearance": scroll.appearance?.name.rawValue ?? "",
             "scrollEffectiveAppearance": scroll.effectiveAppearance.name.rawValue,
-            "scrollerEffectiveAppearance": scroller.effectiveAppearance.name.rawValue
+            "scrollerEffectiveAppearance": scroller?.effectiveAppearance.name.rawValue ?? ""
         ]
         if command["capture"] as? Bool == true {
             let image = try await captureVisibleRegion(window: window, view: chat, region: chat.bounds)

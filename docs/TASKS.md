@@ -806,6 +806,12 @@ Root cause of the reported "not logged in" is open (Keychain/service context, se
 - [x] Make `test:native` produce the Settings evidence itself; retain the original `settings.png` capture and `sheetPerform change` autosave check alongside it.
 - [ ] Manager: run configured verification and inspect native Settings help/conditional engine at minimum and wider widths under the desktop lock; complete independent review.
 
+## Chat transcript scroller overflow (LKM-246)
+
+- [x] Measure the SwiftUI conversation document against the AppKit clip after layout; hide the vertical scroller for empty and short chats with subpixel tolerance, and restore it for overflow without changing the preferred macOS style.
+- [x] Cover empty/short/long, streaming growth, clear/new chat, switching and resize in overlay and legacy modes; assert native state and save light/dark captures.
+- [ ] Manager: inspect foreground captures and run full native verification and independent review.
+
 ## Composer spacing and chat scrollbar (LKM-103)
 
 - [x] Native latest button (NSButton) over the conversation: the SwiftUI button never ran its action for the acceptance click (buttonClickCount 0); harness asserts the action runs; fixture regression with SwiftUI negative control.

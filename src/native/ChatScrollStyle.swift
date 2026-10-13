@@ -390,6 +390,7 @@ final class ChatScrollStyleProbe: NSView {
         let viewport = scroll.contentView.bounds.size
         guard document != documentSize || viewport != viewportSize else { return }
         documentSize = document; viewportSize = viewport
+        Self.updateScrollerVisibility(scroll)
         // Never move a reader who scrolled into history.
         if shouldPin { pin(scroll) }
     }
@@ -446,9 +447,20 @@ final class ChatScrollStyleProbe: NSView {
     }
     static func configure(_ scroll: NSScrollView, style: NSScroller.Style = ChatSystemEnvironment.shared.scrollerStyle) {
         if scroll.scrollerStyle != style { scroll.scrollerStyle = style }
-        // Never hide the user's always-visible scroller or alter content insets.
+        // Preserve the user's preferred style whenever there is content to scroll.
         let autohides = style == .overlay
         if scroll.autohidesScrollers != autohides { scroll.autohidesScrollers = autohides }
+        updateScrollerVisibility(scroll)
         if scroll.verticalScroller?.controlSize != .small { scroll.verticalScroller?.controlSize = .small }
+    }
+    /// Use laid-out AppKit geometry, including SwiftUI's composer clearance.
+    /// Removing a legacy scroller widens the clip; adding one narrows it. A
+    /// one-point tolerance avoids a fractional layout remainder becoming a
+    /// scrollable transcript. Leave the scroll view itself in place so wheel,
+    /// keyboard and the reading anchor keep using the same clip view.
+    static func updateScrollerVisibility(_ scroll: NSScrollView) {
+        guard let document = scroll.documentView else { return }
+        let overflowing = document.frame.height > scroll.contentView.bounds.height + 1
+        if scroll.hasVerticalScroller != overflowing { scroll.hasVerticalScroller = overflowing }
     }
 }

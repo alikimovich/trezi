@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-246: transcript scroller follows measured overflow
+
+- The SwiftUI transcript's AppKit probe now compares the laid-out document with the clip height (1 pt tolerance) and enables the vertical scroller only for overflow. Composer clearance remains inside the document; no content minimum height or global scroller setting was changed. The probe already observes document and clip frame/bounds changes, so streaming, chat switches and resizes trigger the same measurement. The scroll view and clip identity stay in place for the reading anchor and input.
+- Windowless geometry cases cover both overlay and legacy modes, empty/short/long transcripts, growth, clear/switch, resize and subpixel layout. Native acceptance now checks real scroller state and captures empty/short/cleared chats in light and dark. Verification results are reported separately by the worker.
+- Agent OS quick passed typechecks, lint and 219 unit checks (3 existing skips), including the windowless composer geometry fixture. Native `chat,composer` passed 17 smoke checks with no skips plus native chat-scroll acceptance. The foreground empty light and short dark captures were inspected; actual legacy geometry had document heights 305/319 pt in a 776 pt clip, `hasVerticalScroller=false`, and no grey track. The manager still runs full verification and independent review.
+
 ## 2026-10-13 — LKM-244 verification repair: full native launcher deadline
 
 - The manager's full native run reached `states-canvas` when `test/native-runtime.mjs` hit its 300-second `spawnSync` deadline. The ensuing "Native host closed" line followed launcher termination; no spinner check had failed. The full suite now has a 420-second launcher watchdog while filtered runs retain 300 seconds. Every named smoke check, its timeout and its assertions remain unchanged. `test/native-smoke-groups.mjs` pins both deadlines.
