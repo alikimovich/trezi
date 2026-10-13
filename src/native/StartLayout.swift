@@ -181,9 +181,9 @@ extension WorkspaceLayout {
         host.startSurface.alphaValue = 1 - start.progress
         if starting { host.startSurface.update(startState, chat: chatState["chat"] as? String ?? "", composer: start.frame) }
         // The page's titlebar fill and edge line (PreviewSurface) arrive with the preview.
-        host.previewSurface.alphaValue = starting ? start.progress : 1
+        host.previewSurface.alphaValue = planning ? 0 : starting ? start.progress : 1
         let appearance = host.window.effectiveAppearance
-        let tint = starting && start.progress < 0.5 ? appearance.name.rawValue : ""
+        let tint = planning || (starting && start.progress < 0.5) ? appearance.name.rawValue : ""
         if tint != start.tint, let preview = host.views["preview"] {
             start.tint = tint
             var color: NSColor = preview.underPageBackgroundColor ?? .white

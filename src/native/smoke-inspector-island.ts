@@ -128,8 +128,16 @@ async function checkPointer(
   await perform('spacing:padding')
   await perform('spacing:margin')
   assert.equal(page.source(), sourceBefore, 'individual-side toggles do not write source')
+  const authored = (await page.styles('padding-left')) as {
+    values?: Record<string, string>
+    specified?: Record<string, string>
+  } | null
   const expanded = (await host.request('inspectorInspect')) as { values: Record<string, string> }
-  assert.equal(expanded.values['style:padding-left'], 'var(--space-a)')
+  assert.equal(
+    expanded.values['style:padding-left'],
+    'var(--space-a)',
+    `the panel keeps the authored token after preview cancellation: ${JSON.stringify({ authored, expanded: expanded.values['style:padding-left'], inline: await page.evaluate("document.querySelector('#native-title').style.paddingLeft") })}`
+  )
   assert.equal(expanded.values['style:margin-left'], 'auto')
   assert.equal(expanded.values['style:margin-right'], '-4px')
   assert.equal(expanded.values['style:padding-horizontal'], undefined)
