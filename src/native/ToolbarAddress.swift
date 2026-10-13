@@ -16,11 +16,40 @@ final class ToolbarAddressView: NSStackView {
 final class BranchPopUpButton: NSPopUpButton {
     /// The stock cell's title inset beyond the alignment edge (macOS 26).
     static let titleInset: CGFloat = 3
+    private let progress = NSProgressIndicator()
+    private var progressPrefix = ""
     override init(frame: NSRect, pullsDown: Bool) {
         super.init(frame: frame, pullsDown: pullsDown)
         cell = BranchPopUpCell(textCell: "", pullsDown: pullsDown)
+        progress.style = .spinning
+        progress.controlSize = .small
+        progress.isIndeterminate = true
+        progress.isHidden = true
+        progress.setAccessibilityLabel("Branch status in progress")
+        addSubview(progress)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+    func setProgress(_ busy: Bool, after prefix: String, description: String) {
+        progressPrefix = prefix
+        if busy { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
+        progress.isHidden = !busy
+        let value = busy ? "Busy: \(description)" : description
+        if accessibilityValue() as? String != value { setAccessibilityValue(value) }
+        needsLayout = true
+    }
+    override func layout() {
+        super.layout()
+        let title = cell?.titleRect(forBounds: bounds) ?? bounds
+        let prefixWidth = NSAttributedString(string: progressPrefix, attributes: [.font:font ?? NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)]).size().width
+        progress.frame = NSRect(x: title.minX + prefixWidth, y: title.midY - 6, width: 12, height: 12)
+    }
+    var progressInspect: [String: Any] {
+        let frame = progress.convert(progress.bounds, to: nil)
+        let title = cell?.titleRect(forBounds: bounds) ?? bounds
+        return ["branchBusy":!progress.isHidden, "branchProgressNative":progress.style == .spinning && progress.isIndeterminate,
+                "branchProgressFrame":NSStringFromRect(frame), "branchProgressFits":title.contains(progress.frame),
+                "branchAccessibilityValue":accessibilityValue() as? String ?? ""]
+    }
     override var intrinsicContentSize: NSSize {
         let size = super.intrinsicContentSize
         return NSSize(width: max(0, size.width - Self.titleInset), height: size.height)

@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Restore centered-home hit testing and clear canceled planning state before late callbacks return.
 - [x] Add controller and native composer checks for target selection, switching and direct navigation.
 - [ ] Manager: inspect foreground light/dark captures, run the full native suite and independent review.
+## Preview subtitle spinner (LKM-244)
+
+- [x] Replace the animated branch subtitle arrow with a native inline progress indicator driven by the existing publish step and running-CI state.
+- [x] Cover running, success, failure and cancellation, with light/dark foreground captures at normal and narrow widths and accessibility state in the native fixture.
+- [ ] Manager: inspect the foreground captures, run full native verification and independent review, then merge.
 
 ## Compact native Layout controls (LKM-236)
 
