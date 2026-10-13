@@ -43,6 +43,12 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
   return new Set(names as NativeSmokeGroup[])
 }
 
+/** Full-suite foreground captures can outlast the focused run's launcher watchdog.
+ *  Each smoke check keeps its own timeout and assertions. */
+export function smokeLauncherTimeoutMs(groups: ReadonlySet<NativeSmokeGroup>): number {
+  return NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 420_000 : 300_000
+}
+
 /** Checks that run for every selection: the setup the groups build on, and the
  *  closing capture plus one-WebKit-view isolation check. */
 export const SMOKE_PRELUDE = ['startup', 'open-project', 'chat-ready', 'final-shell'] as const

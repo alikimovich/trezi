@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseSmokeGroups } from '../src/native/smoke-groups.ts'
+import { parseSmokeGroups, smokeLauncherTimeoutMs } from '../src/native/smoke-groups.ts'
 import { describeFailure, formatFailureLine } from '../src/native/smoke-report.ts'
 
 function assertSidebarEvidence(dir, since) {
@@ -55,6 +55,7 @@ if (process.platform !== 'darwin') {
   const cwd = fileURLToPath(new URL('../', import.meta.url))
   // `--only=group,group` is forwarded to the smoke; see src/native/smoke-groups.ts.
   const groups = parseSmokeGroups(process.argv.slice(2))
+  const timeout = smokeLauncherTimeoutMs(groups)
   const started = Date.now()
   // The -Onone test profile with the shared Swift binary cache (LKM-175). Every run takes
   // focus away once during the prelude's `chat-ready` (LKM-176): the later foreground
@@ -63,7 +64,7 @@ if (process.platform !== 'darwin') {
   const result = spawnSync('bun', ['run', 'dev:native', '--test', ...process.argv.slice(2)], {
     cwd,
     stdio: 'inherit',
-    timeout: 300000,
+    timeout,
     env: {
       ...process.env,
       TREZI_BUILD_PROFILE: process.env.TREZI_BUILD_PROFILE || 'test',
@@ -75,8 +76,8 @@ if (process.platform !== 'darwin') {
       formatFailureLine({
         group: 'run',
         check: 'timeout',
-        message: 'the native build and smoke did not finish within 300 s; the launcher was stopped',
-        expected: 'exit within 300 s',
+        message: `the native build and smoke did not finish within ${timeout / 1000} s; the launcher was stopped`,
+        expected: `exit within ${timeout / 1000} s`,
         actual: `signal ${result.signal ?? 'none'}`
       })
     )
