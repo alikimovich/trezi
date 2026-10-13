@@ -14,7 +14,8 @@ import {
   parseSmokeGroups,
   SMOKE_CHECK_GROUPS,
   SMOKE_PRELUDE,
-  selectSmokeChecks
+  selectSmokeChecks,
+  smokeLauncherTimeoutMs
 } from '../src/native/smoke-groups.ts'
 
 const all = ['core', 'islands', 'shadow-light', 'sidebar', 'settings', 'chat', 'composer']
@@ -40,6 +41,8 @@ assert.throws(() => parseSmokeGroups(['--only']), /--only needs at least one gro
 assert.throws(() => parseSmokeGroups(['--only=core', '--only=chat']), /--only may be given once/)
 assert.throws(() => parseSmokeGroups(['--live', '--only=chat']), /--live needs the core group/)
 assert.deepEqual([...parseSmokeGroups(['--live', '--only=core,chat'])], ['core', 'chat'])
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups([])), 420_000)
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups(['--only=core'])), 300_000)
 console.log(
   'Native smoke group selection: default, subset, unknown/empty/repeated and --live guards passed.'
 )
