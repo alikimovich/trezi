@@ -166,7 +166,7 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
         shown = visible && key != nil && pageFrame.width > 0 && pageFrame.height > 0
         if !shown { drag = nil }
         guides.frame = pageFrame
-        guides.wantsLayer = true; guides.layer?.cornerRadius = radius; guides.layer?.cornerCurve = .continuous; guides.layer?.masksToBounds = radius > 0
+        guides.wantsLayer = true; guides.layer?.cornerRadius = radius; guides.layer?.cornerCurve = .continuous; guides.layer?.masksToBounds = true
         let t = Self.thickness
         top.frame = NSRect(x: area.minX, y: area.minY, width: area.width, height: t)
         left.frame = NSRect(x: area.minX, y: area.minY, width: t, height: area.height)
@@ -224,7 +224,7 @@ final class PreviewOverlay: NSObject, ObservableObject, NSMenuItemValidation, NS
 
     /// The unlocked guide within grabbing distance of a point in the guide view.
     func guide(at point: NSPoint) -> OverlayGuide? {
-        guard shown, state.rulers, !state.locked, drag == nil else { return nil }
+        guard shown, state.rulers, !state.locked, drag == nil, guides.bounds.contains(point) else { return nil }
         return state.guides.last { abs((($0.axis == "x") ? point.x : point.y) - view($0.position, axis: $0.axis)) <= 3 }
     }
     func moved(_ point: NSPoint?) {
