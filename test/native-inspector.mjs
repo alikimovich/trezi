@@ -30,6 +30,8 @@ const invoke = async (channel, ...args) => {
   if (channel === 'controls:list' || channel === 'controls:get') return []
   if (channel === 'props:apply') return { needsAgent: true, agentPrompt: 'set count' }
   if (channel === 'styles:apply') return { applied: true }
+  if (channel === 'styles:apply-pair' || channel === 'styles:apply-class-pair')
+    return { applied: true }
   if (channel === 'styles:resolve-class') return classRule
   if (channel === 'styles:apply-class') return { applied: true }
 }
@@ -60,6 +62,47 @@ assert.equal(controller.state.visible, true, 'An explicitly opened inspector fol
 const action = (action, extra = {}) =>
   controller.action({ root: '/a', generation: controller.state.generation, action, ...extra })
 assert.ok(controller.state.fields.find((f) => f.id === 'style:opacity'))
+assert.deepEqual(
+  controller.state.fields.filter((f) => f.layout === 'size').map((f) => f.id),
+  ['style:width', 'style:height']
+)
+assert.equal(controller.state.fields.find((f) => f.id === 'style:padding-horizontal').mixed, false)
+assert.equal(
+  controller.state.actions.some((a) => a.id.startsWith('link:')),
+  false
+)
+const beforeMode = calls.length
+await action('spacing:padding')
+assert.equal(calls.length, beforeMode, 'View toggle cannot change source')
+assert.ok(controller.state.fields.find((f) => f.id === 'style:padding-left'))
+assert.equal(
+  controller.state.fields.some((f) => f.id === 'style:padding-horizontal'),
+  false
+)
+await action('spacing:padding')
+const previewStart = sent.length
+await action('preview', { field: 'style:padding-horizontal', value: '14' })
+assert.deepEqual(sent.slice(previewStart), [
+  ['styles:preview', { prop: 'padding-left', value: '14px' }],
+  ['styles:preview', { prop: 'padding-right', value: '14px' }]
+])
+await action('cancel-preview', { field: 'style:padding-horizontal' })
+assert.deepEqual(sent.at(-1), ['styles:clear-preview', {}])
+await action('apply', { field: 'style:padding-horizontal', value: '17' })
+assert.deepEqual(calls.filter((c) => c[0] === 'styles:apply-pair').at(-1)[2].props, [
+  'padding-left',
+  'padding-right'
+])
+assert.equal(calls.filter((c) => c[0] === 'styles:apply-pair').at(-1)[2].value, '17px')
+await action('apply', { field: 'style:margin-vertical', value: '-9' })
+assert.deepEqual(calls.filter((c) => c[0] === 'styles:apply-pair').at(-1)[2].props, [
+  'margin-top',
+  'margin-bottom'
+])
+await action('spacing:margin')
+await action('apply', { field: 'style:margin-left', value: 'auto' })
+assert.equal(calls.filter((c) => c[0] === 'styles:apply').at(-1)[2].prop, 'margin-left')
+await action('spacing:margin')
 await action('apply', { field: 'style:opacity', value: '0.7' })
 assert.equal(calls.find((c) => c[0] === 'styles:apply')[2].source, 'a.tsx:3')
 await action('token', { field: 'style:color', value: '0' })
@@ -163,3 +206,53 @@ assert.equal(
   false,
   'Discovering animation controls must not open the inspector'
 )
+
+const asymmetric = new NativeInspectorController(
+  async (channel) => {
+    if (channel === 'styles:read')
+      return {
+        values: {
+          'padding-left': '8px',
+          'padding-right': '18px',
+          'padding-top': '4px',
+          'padding-bottom': '4px',
+          'margin-left': 'auto',
+          'margin-right': '-6px',
+          'margin-top': '-2px',
+          'margin-bottom': '0px'
+        },
+        specified: {
+          'padding-left': 'var(--space)',
+          'padding-right': '18px',
+          'margin-left': 'auto',
+          'margin-right': '-6px'
+        }
+      }
+    if (channel === 'controls:list' || channel === 'controls:get') return []
+    return null
+  },
+  async () => {},
+  () => {},
+  async () => {},
+  async () => {}
+)
+await asymmetric.activate('/a')
+await asymmetric.select(element)
+assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-horizontal').mixed, true)
+assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:margin-horizontal').mixed, true)
+assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-vertical').mixed, false)
+await asymmetric.action({
+  root: '/a',
+  generation: asymmetric.state.generation,
+  action: 'spacing:padding'
+})
+assert.equal(
+  asymmetric.state.fields.find((f) => f.id === 'style:padding-left').value,
+  'var(--space)'
+)
+await asymmetric.action({
+  root: '/a',
+  generation: asymmetric.state.generation,
+  action: 'spacing:padding'
+})
+assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-horizontal').mixed, true)

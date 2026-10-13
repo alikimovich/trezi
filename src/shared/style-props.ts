@@ -23,6 +23,8 @@
 
 export const STYLE_PROPS = [
   // layout
+  'width',
+  'height',
   'padding-top',
   'padding-right',
   'padding-bottom',

@@ -58,9 +58,11 @@ export type IslandPage = {
  *  inside it never pick. LKM-173: a move over the page hovers, over the island it does
  *  not, and back on the page it hovers again. */
 async function checkPointer(
+  host: NativeBridge,
   island: (params?: Record<string, unknown>) => Promise<Island>,
   page: IslandPage,
-  evidence: Record<string, unknown>
+  evidence: Record<string, unknown>,
+  captureExpanded: (stem: string, state: Island) => Promise<void>
 ) {
   // The page's selection did not survive the island's open/close and resize cycles above
   // (styles:read had no element), so a Styles edit had nothing to preview on: select again.
@@ -83,7 +85,62 @@ async function checkPointer(
     return steady >= 3 && state
   }, 'Styles tab with the padding-top field')
   evidence.pointerTargets = targets
-  for (const name of ['field', 'slider', 'tabs']) {
+  const inspector = (await host.request('inspectorInspect')) as {
+    root: string
+    generation: number
+    mixed: Record<string, boolean>
+    values: Record<string, string>
+  }
+  assert.equal(
+    inspector.mixed['style:padding-horizontal'],
+    true,
+    'asymmetric padding is Mixed in native panel'
+  )
+  assert.equal(
+    inspector.mixed['style:margin-horizontal'],
+    true,
+    'auto and negative margins are Mixed'
+  )
+  const perform = (action: string, field?: string, value?: string) =>
+    host.request('inspectorPerform', {
+      action: { root: inspector.root, generation: inspector.generation, action, field, value }
+    })
+  const sourceBefore = page.source()
+  await perform('preview', 'style:padding-horizontal', '14')
+  await waitFor(
+    async () =>
+      page.evaluate(`(() => {
+    const style = getComputedStyle(document.querySelector('#native-title'));
+    return style.paddingLeft === '14px' && style.paddingRight === '14px';
+  })()`),
+    'native pair live preview'
+  )
+  assert.equal(page.source(), sourceBefore, 'live preview does not write source')
+  await perform('cancel-preview', 'style:padding-horizontal')
+  await waitFor(
+    async () =>
+      page.evaluate(`(() => {
+    const style = getComputedStyle(document.querySelector('#native-title'));
+    return style.paddingLeft === '8px' && style.paddingRight === '18px';
+  })()`),
+    'cancel restores asymmetric padding'
+  )
+  await perform('spacing:padding')
+  await perform('spacing:margin')
+  assert.equal(page.source(), sourceBefore, 'individual-side toggles do not write source')
+  const expanded = (await host.request('inspectorInspect')) as { values: Record<string, string> }
+  assert.equal(expanded.values['style:padding-left'], 'var(--space-a)')
+  assert.equal(expanded.values['style:margin-left'], 'auto')
+  assert.equal(expanded.values['style:margin-right'], '-4px')
+  assert.equal(expanded.values['style:padding-horizontal'], undefined)
+  for (const appearance of ['light', 'dark']) {
+    const state = await island({ appearance })
+    await captureExpanded(`inspector-island-expanded-${appearance}`, state)
+  }
+  await island({ appearance: 'system' })
+  await perform('spacing:padding')
+  await perform('spacing:margin')
+  for (const name of ['field', 'tabs']) {
     const control = targets.controls[name]
     assert.ok(control.found, `pointer: the island has its ${name}`)
     assert.ok(
@@ -307,6 +364,7 @@ export async function checkInspectorIsland(
       return
     }
     await island({ prepare: true })
+    await island({ scrollTop: true })
     await delay(350)
     const image = await island({ capture: true })
     writeFileSync(join(artifacts, `${stem}.png`), Buffer.from(image.png, 'base64'))
@@ -333,10 +391,14 @@ export async function checkInspectorIsland(
       checkOpen(open, name)
       if (name === 'default') {
         // Posted pointer events and the field editor need the key, frontmost window.
-        if (foreground) await checkPointer(island, page, evidence)
+        if (foreground) await checkPointer(host, island, page, evidence, capture)
         else console.log('SKIP inspector island pointer ownership: TREZI_NATIVE_BACKGROUND_TEST')
       }
-      await capture(`inspector-island-${name}-open`, open)
+      for (const appearance of ['light', 'dark']) {
+        const themed = await island({ appearance })
+        await capture(`inspector-island-${name}-open-${appearance}`, themed)
+      }
+      await island({ appearance: 'system' })
       await setOpen(false)
       const closed = await island()
       assert.deepEqual(closed.island, { x: 0, y: 0, width: 0, height: 0 })
@@ -405,7 +467,7 @@ export async function checkInspectorIsland(
     }
     await setOpen(false)
   } finally {
-    await island(restore)
+    await island({ ...restore, appearance: 'system' })
     await setOpen(initial.visible)
     writeFileSync(join(artifacts, 'inspector-island.json'), JSON.stringify(evidence, null, 2))
   }
