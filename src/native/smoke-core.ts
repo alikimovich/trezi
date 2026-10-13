@@ -715,6 +715,7 @@ export async function runNativeCoreSmoke(
             () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8').includes('0.8'),
             'native style source edit'
           )
+          await inspect('inspectorInspect', (s) => !s.busy)
         } catch (error) {
           console.error('Native inspector failure', {
             expected: inspector,
@@ -736,6 +737,9 @@ export async function runNativeCoreSmoke(
           const source = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
           return source.includes('paddingTop: "12px"') && source.includes('paddingBottom: "12px"')
         }, 'one vertical pair source edit')
+        // The file is written before the ledger records the edit; busy clears only
+        // after the commit reply, so Undo here always sees the pair on top.
+        await inspect('inspectorInspect', (s) => !s.busy)
         const paired = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
         for (const untouched of [
           'paddingLeft: "var(--space-a)"',
