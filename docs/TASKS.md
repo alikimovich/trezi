@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Expanded spacing column order (LKM-258)
+
+- [x] Show right/left controls in the expanded left column and top/bottom controls in the right for Padding and Margin, preserving side values and field bindings.
+- [x] Cover collapsed and expanded order and values in the controller test, and save expanded and collapsed inspector captures.
+- [ ] Manager: inspect captures, run full native verification and independent review, then merge.
+
 ## Publish attribution (LKM-251)
 
 - [x] Append one user-identity empty commit after an automated final tip, preserving the tree and history across reconciliation and retries; reject missing identity.
