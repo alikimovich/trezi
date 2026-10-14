@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-251: publication commit for automated tips
+
+- The service-owned Publish workflow now checks the final tip after each remote reconciliation. A `trezi@local` tip gains one empty commit authored and committed with configured Git identity, preserving the tree and prior history. The handoff and saved-run PR push paths use the same service helper. Ref updates compare the old tip, and pushes name the exact SHA to detect branch drift. Missing identity stops before push with Git configuration guidance; configured identity is not claimed as verified GitHub linkage.
+- Disposable repository tests cover automated and human tips, remote fast-forward, repeat publication, missing identity and a failed push followed by retry. Live Vercel acceptance is pending the user's exact approved GitHub repository and Vercel project. No live repository or deployment was touched.
+
 ## 2026-10-13 — LKM-245 review repair: the dot keeps the glyphs' colours
 
 - Review found the first dot recoloured two states: the old `branchTitle` coloured only `●` and `◌` (red failed, green passed, orange running), so the no-checks `○` and unknown `?` used the preview header's text colour. The dot now does the same: orange only for running, and `BranchStatusDot.textColor` (kept in step with `NativeShell.previewTextColor`) for no checks and unknown. `BranchStatusDot.inspect` reports `branchDotColor` (`red`, `green`, `orange` or `text`) and `smoke-branch-dot.ts` pins it for every state.

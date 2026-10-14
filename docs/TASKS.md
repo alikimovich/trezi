@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Publish attribution (LKM-251)
+
+- [x] Append one user-identity empty commit after an automated final tip, preserving the tree and history across reconciliation and retries; reject missing identity.
+- [x] Apply the same rule to handoff and saved-run PR pushes and cover it with local disposable repository tests.
+- [ ] Live Vercel acceptance: pending the user's exact approved GitHub repository and Vercel project; no live push or deployment was attempted.
+- [ ] Manager: run full verification and independent review, then merge.
+
 ## Fixed-size preview subtitle CI dot (LKM-245)
 
 - [x] Draw the CI status as one fixed-size native circle in a stable title slot (filled passed/failed, stroked running/no checks/unknown), separate from the LKM-244 spinner, with unchanged accessibility wording.

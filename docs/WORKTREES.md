@@ -447,6 +447,16 @@ live checkout by an older build would sync into every chat and break its install
 Publish never force-pushes, rebases, resets, or chooses ours/theirs across the
 repository.
 
+After each reconciliation, Publish examines the final tip. If its author email is
+`trezi@local`, the service appends one empty commit using the repository's configured
+`user.name` and `user.email` for both author and committer. It keeps the same tree and
+parent history; a human-authored tip is left alone. The handoff and saved-run PR
+pushes use the same rule. A retry sees the user-authored tip and does not append
+another commit. Missing identity stops the push with configuration guidance. Git
+configuration is only a claimed identity; Trezi does not verify its GitHub linkage.
+Live Vercel acceptance for LKM-251 is pending an approved exact GitHub repository
+and Vercel project.
+
 Implementation: the workflow owner, `src/service/WorkflowPublish.swift` (since LKM-111
 the only one; the Bun twin `publish-reconcile.ts` was removed). Regression coverage:
 `test/workflow-owner.mjs`.

@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -80,6 +81,20 @@ const git = (cwd, ...args) =>
     cwd,
     encoding: 'utf8',
     env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe']
+  }).trim()
+const gitAs = (cwd, identity, ...args) =>
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      ...env,
+      GIT_AUTHOR_NAME: identity.name,
+      GIT_AUTHOR_EMAIL: identity.email,
+      GIT_COMMITTER_NAME: identity.name,
+      GIT_COMMITTER_EMAIL: identity.email
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   }).trim()
 const write = (cwd, file, content) => writeFileSync(join(cwd, file), content)
@@ -229,6 +244,116 @@ try {
     assert.equal(reused.second.url, reused.first.url)
     assert.equal(reused.state.gh.counts.prCreate, 1)
 
+    const automated = await owned('publish-attribution', async (owner, w) => {
+      const internal = { name: 'Trezi', email: 'trezi@local' }
+      write(w.local, 'a.txt', 'automated\n')
+      git(w.local, 'add', '-A')
+      gitAs(w.local, internal, 'commit', '-qm', 'Internal landing')
+      const parent = git(w.local, 'rev-parse', 'HEAD')
+      const tree = git(w.local, 'rev-parse', 'HEAD^{tree}')
+      const first = await owner.publish(w.local, 'pr', describe)
+      const head = git(w.local, 'rev-parse', 'HEAD')
+      const repeated = await owner.publish(w.local, 'pr', describe)
+      return {
+        first,
+        repeated,
+        parent,
+        tree,
+        head,
+        after: git(w.local, 'rev-parse', 'HEAD'),
+        author: git(w.local, 'show', '-s', '--format=%an <%ae> | %cn <%ce>', 'HEAD'),
+        parentAfter: git(w.local, 'rev-parse', 'HEAD^'),
+        treeAfter: git(w.local, 'rev-parse', 'HEAD^{tree}'),
+        message: git(w.local, 'show', '-s', '--format=%s', 'HEAD')
+      }
+    })
+    assert.equal(automated.first.ok, true)
+    assert.equal(automated.repeated.ok, true)
+    assert.equal(automated.head, automated.after, 'repeated Publish adds no second commit')
+    assert.equal(automated.parent, automated.parentAfter)
+    assert.equal(automated.tree, automated.treeAfter)
+    assert.equal(automated.author, 'Tester <t@example.com> | Tester <t@example.com>')
+    assert.equal(automated.message, 'Publish project changes')
+
+    const human = await owned('publish-human-tip', async (owner, w) => {
+      commit(w.local, 'a.txt', 'human\n')
+      const before = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.publish(w.local, 'pr', describe)
+      return { result, before, after: git(w.local, 'rev-parse', 'HEAD') }
+    })
+    assert.equal(human.result.ok, true)
+    assert.equal(human.before, human.after)
+
+    const remoteAutomated = await owned('publish-remote-automated', async (owner, w) => {
+      const peer = w.peer()
+      git(peer, 'checkout', '-q', '-b', 'trezi/main')
+      write(peer, 'a.txt', 'remote automated\n')
+      git(peer, 'add', '-A')
+      gitAs(peer, { name: 'Trezi', email: 'trezi@local' }, 'commit', '-qm', 'Remote landing')
+      const remoteHead = git(peer, 'rev-parse', 'HEAD')
+      git(peer, 'push', '-q', 'origin', 'trezi/main')
+      const result = await owner.publish(w.local, 'pr', describe)
+      return {
+        result,
+        remoteHead,
+        parent: git(w.local, 'rev-parse', 'HEAD^'),
+        author: git(w.local, 'show', '-s', '--format=%ae', 'HEAD')
+      }
+    })
+    assert.equal(remoteAutomated.result.ok, true)
+    assert.equal(remoteAutomated.parent, remoteAutomated.remoteHead)
+    assert.equal(remoteAutomated.author, 't@example.com')
+
+    const remoteHuman = await owned('publish-remote-human', async (owner, w) => {
+      const peer = w.peer()
+      git(peer, 'checkout', '-q', '-b', 'trezi/main')
+      commit(peer, 'a.txt', 'remote human\n')
+      const remoteHead = git(peer, 'rev-parse', 'HEAD')
+      git(peer, 'push', '-q', 'origin', 'trezi/main')
+      const result = await owner.publish(w.local, 'pr', describe)
+      return { result, remoteHead, localHead: git(w.local, 'rev-parse', 'HEAD') }
+    })
+    assert.equal(remoteHuman.result.ok, true)
+    assert.equal(remoteHuman.localHead, remoteHuman.remoteHead)
+
+    const missingIdentity = await owned('publish-missing-identity', async (owner, w) => {
+      write(w.local, 'a.txt', 'automated\n')
+      git(w.local, 'add', '-A')
+      gitAs(w.local, { name: 'Trezi', email: 'trezi@local' }, 'commit', '-qm', 'Internal landing')
+      git(w.local, 'config', 'user.name', '')
+      git(w.local, 'config', 'user.email', '')
+      const before = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.publish(w.local, 'pr', describe)
+      return { result, before, after: git(w.local, 'rev-parse', 'HEAD') }
+    })
+    assert.match(missingIdentity.result.error, /git config user.name and git config user.email/)
+    assert.match(missingIdentity.result.error, /cannot verify that linkage/)
+    assert.equal(missingIdentity.before, missingIdentity.after)
+
+    const pushFailure = await owned('publish-push-retry', async (owner, w) => {
+      write(w.local, 'a.txt', 'automated\n')
+      git(w.local, 'add', '-A')
+      gitAs(w.local, { name: 'Trezi', email: 'trezi@local' }, 'commit', '-qm', 'Internal landing')
+      const hook = join(w.origin, 'hooks', 'pre-receive')
+      writeFileSync(hook, '#!/bin/sh\nexit 1\n')
+      chmodSync(hook, 0o755)
+      const failed = await owner.publish(w.local, 'pr', describe)
+      const afterFailure = git(w.local, 'rev-parse', 'HEAD')
+      rmSync(hook)
+      const resumed = await owner.publish(w.local, 'pr', describe)
+      return {
+        failed,
+        resumed,
+        afterFailure,
+        afterResume: git(w.local, 'rev-parse', 'HEAD'),
+        author: git(w.local, 'show', '-s', '--format=%ae', 'HEAD')
+      }
+    })
+    assert.equal(pushFailure.failed.ok, false)
+    assert.equal(pushFailure.resumed.ok, true)
+    assert.equal(pushFailure.afterFailure, pushFailure.afterResume)
+    assert.equal(pushFailure.author, 't@example.com')
+
     const conflicted = await owned('publish-conflict', async (owner, w) => {
       const peer = w.peer()
       git(peer, 'checkout', '-q', '-b', 'trezi/main')
@@ -311,6 +436,29 @@ try {
 
     assert.equal(branchPr.result.prUrl, 'https://github.com/fake/repo/pull/1')
     assert.equal(branchPr.missing.error, 'That branch no longer exists.')
+
+    const branchPrAutomated = await owned('branch-pr-attribution', async (owner, w) => {
+      git(w.local, 'checkout', '-q', '-b', 'trezi/chat-1')
+      write(w.local, 'c.txt', 'chat\n')
+      git(w.local, 'add', '-A')
+      gitAs(w.local, { name: 'Trezi', email: 'trezi@local' }, 'commit', '-qm', 'Internal chat')
+      const previous = git(w.local, 'rev-parse', 'HEAD')
+      git(w.local, 'checkout', '-q', 'trezi/main')
+      const checkout = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.branchPr(w.local, 'trezi/chat-1', describe)
+      return {
+        result,
+        previous,
+        checkout,
+        current: git(w.local, 'rev-parse', 'HEAD'),
+        parent: git(w.local, 'rev-parse', 'trezi/chat-1^'),
+        author: git(w.local, 'show', '-s', '--format=%ae', 'trezi/chat-1')
+      }
+    })
+    assert.equal(branchPrAutomated.result.ok, true)
+    assert.equal(branchPrAutomated.current, branchPrAutomated.checkout)
+    assert.equal(branchPrAutomated.parent, branchPrAutomated.previous)
+    assert.equal(branchPrAutomated.author, 't@example.com')
 
     const connected = await owned(
       'connect',
