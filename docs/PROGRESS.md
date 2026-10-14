@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-14 — LKM-258: expanded spacing follows the compact axes
+
+- The shared Padding/Margin row now renders its expanded right/left fields in the left column and top/bottom fields in the right column. The controller emits fields in that column order so keyboard traversal follows the same sequence; each field keeps its own value, icon, unit and token selector.
+- The controller fixture checks both groups' expanded and collapsed order and preserved asymmetric values. The native inspector fixture saves both states in light and dark mode for review.
+
 ## 2026-10-13 — LKM-250 repair: tracked secret-named files stay committable
 
 - The secret-name heuristic in `WorkflowRemote.swift` now applies only to paths entering history (untracked, index-added, rename or copy targets). A tracked file whose name contains "secret" or "credential" (`secrets.ts`, `CredentialsForm.tsx`, a tracked `.npmrc`) stays `eligible: true` when modified or deleted, so the Commit action is no longer lost. `.env` and sidecar exclusions and directory entries are unchanged.

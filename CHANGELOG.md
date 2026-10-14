@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Expanded Padding and Margin now place horizontal side controls in the left column and vertical side controls in the right, matching the collapsed layout (LKM-258).
 - Publish now adds one empty commit with the configured Git identity when reconciliation leaves a Trezi-authored tip, so deployment attribution can use that identity; an unconfigured identity stops publishing with setup guidance (LKM-251).
 
 ### Added

@@ -242,6 +242,19 @@ const asymmetric = new NativeInspectorController(
 )
 await asymmetric.activate('/a')
 await asymmetric.select(element)
+const spacingFields = (group) => asymmetric.state.fields.filter((field) => field.layout === group)
+const spacingSnapshot = (group) =>
+  Object.fromEntries(spacingFields(group).map((field) => [field.id, field.value]))
+assert.deepEqual(
+  spacingFields('padding').map((field) => field.axis),
+  ['horizontal', 'vertical']
+)
+assert.deepEqual(
+  spacingFields('margin').map((field) => field.axis),
+  ['horizontal', 'vertical']
+)
+const collapsedPadding = spacingSnapshot('padding')
+const collapsedMargin = spacingSnapshot('margin')
 assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-horizontal').mixed, true)
 assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:margin-horizontal').mixed, true)
 assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-vertical').mixed, false)
@@ -249,6 +262,17 @@ await asymmetric.action({
   root: '/a',
   generation: asymmetric.state.generation,
   action: 'spacing:padding'
+})
+assert.deepEqual(
+  spacingFields('padding').map((field) => field.axis),
+  ['right', 'left', 'top', 'bottom']
+)
+assert.deepEqual(spacingSnapshot('margin'), collapsedMargin)
+assert.deepEqual(spacingSnapshot('padding'), {
+  'style:padding-right': '18px',
+  'style:padding-left': 'var(--space)',
+  'style:padding-top': '4',
+  'style:padding-bottom': '4'
 })
 assert.equal(
   asymmetric.state.fields.find((f) => f.id === 'style:padding-left').value,
@@ -278,4 +302,30 @@ await asymmetric.action({
   generation: asymmetric.state.generation,
   action: 'spacing:padding'
 })
+assert.deepEqual(
+  spacingFields('padding').map((field) => field.axis),
+  ['horizontal', 'vertical']
+)
+assert.deepEqual(spacingSnapshot('padding'), collapsedPadding)
 assert.equal(asymmetric.state.fields.find((f) => f.id === 'style:padding-horizontal').mixed, true)
+await asymmetric.action({
+  root: '/a',
+  generation: asymmetric.state.generation,
+  action: 'spacing:margin'
+})
+assert.deepEqual(
+  spacingFields('margin').map((field) => field.axis),
+  ['right', 'left', 'top', 'bottom']
+)
+assert.deepEqual(spacingSnapshot('margin'), {
+  'style:margin-right': '-6px',
+  'style:margin-left': 'auto',
+  'style:margin-top': '-2',
+  'style:margin-bottom': '0'
+})
+await asymmetric.action({
+  root: '/a',
+  generation: asymmetric.state.generation,
+  action: 'spacing:margin'
+})
+assert.deepEqual(spacingSnapshot('margin'), collapsedMargin)
