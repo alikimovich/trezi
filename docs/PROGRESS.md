@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-249 review repair: product wording for the startup docs
+
+- Review asked that `docs/NATIVE.md` read as product documentation and not as a run log. The section now states the check, exit codes (78 non-graphical, 1 other setup errors), the `dev.trezi.host`/`startup` log, what the reported stack does and does not show, and operator steps. It labels two open limits: cold/warm `trezi` and `open -a Trezi` launches were not run (no LaunchServices fixture; GUI app start can raise Keychain/privacy dialogs), and a standalone `codesign --verify --deep --strict` of a build made after the `bundle-bun` change was not re-run. The stale app left in this work tree still fails on `Helpers/bun`; the build itself now verifies the bundled Bun.
+
 ## 2026-10-13 — LKM-249 manager-verification repair: platform-owner bridge-close race
 
 - The manager's unit run failed only `platform-owner` ("the previous bridge is closed" still connectable after a restart) under 8-worker load; no LKM-249 file touches that path and the previous attempt passed the same test. `SimulatorBridge.close()` cancelled the dispatch listener but the socket was closed later in its async cancel handler, so a restart or Stop could return while the old port still accepted connections. `close()` now waits (bounded, 2 s) for the cancel handler to release the port. The worker sandbox forbids local port binding, so this test could not be run locally; only the manager's run confirms it.
