@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict'
-import { cachedGithubApi, deriveChecks, deriveSync } from '../src/main/branch-status.ts'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  branchStatus,
+  cachedGithubApi,
+  deriveChecks,
+  deriveSync
+} from '../src/main/branch-status.ts'
 import { prepublishCommands, prepublishRunWarning } from '../src/main/prepublish-checks.ts'
 
 assert.deepEqual(deriveSync('0\t0', 'main'), { ahead: 0, behind: 0, sync: 'up to date' })
@@ -27,7 +36,7 @@ assert.deepEqual(
   { ci: 'failed', failing: ['build'] }
 )
 assert.deepEqual(deriveChecks([{ name: 'build', status: 'completed', conclusion: 'cancelled' }]), {
-  ci: 'none',
+  ci: 'unknown',
   failing: []
 })
 assert.deepEqual(
@@ -44,6 +53,90 @@ const api = cachedGithubApi(async () => {
   throw Object.assign(new Error('304'), { stdout: 'HTTP/2.0 304 Not Modified\r\n\r\n' })
 })
 assert.deepEqual(await api('/repo', 'path'), { ok: true })
+// Local Git is real; all provider replies are fixtures, so no account is contacted.
+const fixture = mkdtempSync(join(tmpdir(), 'trezi-status-'))
+try {
+  const git = (...args) => execFileSync('git', args, { cwd: fixture, encoding: 'utf8' }).trim()
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.name', 'Fixture')
+  git('config', 'user.email', 'fixture@example.test')
+  writeFileSync(join(fixture, 'page.txt'), 'one\n')
+  git('add', '.')
+  git('commit', '-qm', 'base')
+  git('remote', 'add', 'origin', 'https://github.com/example/site.git')
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+  git('checkout', '-qb', 'feature')
+  writeFileSync(join(fixture, 'page.txt'), 'two\n')
+  git('commit', '-qam', 'feature')
+  const feature = git('rev-parse', 'HEAD')
+  git('checkout', '-q', 'main')
+  writeFileSync(join(fixture, 'page.txt'), 'two\n')
+  git('commit', '-qam', 'squash')
+  const main = git('rev-parse', 'HEAD')
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+  git('checkout', '-q', 'feature')
+  git('branch', '--set-upstream-to=origin/main')
+  const requests = []
+  let remoteBaseSha = main
+  const reads = {
+    run: async (file, args) =>
+      file === 'gh' ? JSON.stringify({ nameWithOwner: 'example/site' }) : git(...args),
+    api: async (_root, path) => {
+      requests.push(path)
+      if (path.includes('/branches/main')) return { commit: { sha: remoteBaseSha } }
+      if (path.includes('/pulls?'))
+        return git('branch', '--show-current') === 'behind'
+          ? []
+          : [
+              {
+                number: 126,
+                state: 'closed',
+                merged_at: 'today',
+                head: { sha: feature },
+                base: { ref: 'main' },
+                html_url: 'https://github.com/example/site/pull/126'
+              }
+            ]
+      if (path.includes('/check-runs?'))
+        return { check_runs: [{ name: 'main CI', status: 'in_progress' }] }
+      if (path.includes('/deployments/1/statuses'))
+        return [{ state: 'failure', target_url: 'https://example.test/failure' }]
+      if (path.includes('/deployments?')) return [{ id: 1, sha: main }]
+      throw new Error(`Unexpected API: ${path}`)
+    }
+  }
+  const merged = await branchStatus(fixture, reads)
+  assert.equal(merged.ahead, 1, 'history divergence remains')
+  assert.equal(merged.unpublished, false, 'equivalent files are published')
+  assert.equal(merged.pr?.state, 'merged')
+  assert.equal(merged.commit, main, 'merged PR checks follow default SHA')
+  assert.equal(merged.ci, 'running')
+  assert.equal(merged.deployment.state, 'failed')
+  assert.equal(merged.unpushed, 1, 'upstream commits are distinct from content')
+  writeFileSync(join(fixture, 'page.txt'), 'three\n')
+  const changed = await branchStatus(fixture, reads)
+  assert.equal(changed.dirty, true)
+  assert.equal(changed.unpublished, true)
+  assert.equal(changed.pr, undefined, 'old merged PR does not follow new content')
+  assert.equal(changed.deployment.state, 'stale', 'old deployment does not follow head')
+  assert.equal(changed.ci, 'unknown', 'unpushed local SHA has no remote CI result')
+  assert.ok(!requests.some((path) => path.includes(`/commits/${feature}/check-runs?`)))
+  writeFileSync(join(fixture, 'page.txt'), 'two\n')
+  remoteBaseSha = 'a'.repeat(40)
+  const stale = await branchStatus(fixture, reads)
+  assert.equal(stale.stale, true, 'outdated fetched default is marked stale')
+  assert.equal(stale.commit, remoteBaseSha, 'main checks use the remote SHA')
+  git('checkout', '-qb', 'behind', `${feature}~1`)
+  git('branch', '--set-upstream-to=origin/main')
+  remoteBaseSha = main
+  const behind = await branchStatus(fixture, reads)
+  assert.equal(behind.ahead, 0)
+  assert.equal(behind.behind, 1)
+  assert.equal(behind.unpublished, false, 'main-only changes are not unpublished content')
+  assert.equal(behind.dirty, false)
+} finally {
+  rmSync(fixture, { recursive: true, force: true })
+}
 assert.deepEqual(await api('/repo', 'path'), { ok: true })
 assert.deepEqual(
   prepublishCommands(

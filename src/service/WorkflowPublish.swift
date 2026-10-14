@@ -73,12 +73,20 @@ struct WorkflowPublish {
             let staged = try context.run(["diff", "--cached", "--name-only"])
             if !staged.isEmpty { try context.run(["commit", "-m", "Prepare project changes for publishing"]) }
             try context.done("commit", [("committed", .bool(!staged.isEmpty))])
-            let ahead = (try? context.run(["rev-list", "--count", "\(base)..\(branch)"])) ?? "0"
-            // A branch synced with a squash-merged base is ahead by commits that change nothing.
-            let remoteTip = (try? context.run(["ls-remote", "--heads", "origin", "refs/heads/\(branch)"]))?
-                .split(separator: "\t").first.map(String.init)
+            // The default-branch content check must use the latest fetched tip.
+            try context.run(["fetch", "--prune", "origin"])
+            let baseRef = (try? context.run(["rev-parse", "--verify", "refs/remotes/origin/\(base)"])) != nil
+                ? "refs/remotes/origin/\(base)" : "refs/heads/\(base)"
+            let fork = (try? context.run(["merge-base", baseRef, branch])) ?? baseRef
+            let changed = ((try? context.run(["diff", "--name-only", fork, branch])) ?? "")
+                .split(separator: "\n").map(String.init)
+            let stillDifferent = Set(((try? context.run(["diff", "--name-only", baseRef, branch])) ?? "")
+                .split(separator: "\n").map(String.init))
+            // A remote branch may have advanced to work this publish must reconcile,
+            // even when the local branch has no remaining content change against base.
+            let remoteTip = try? context.run(["rev-parse", "--verify", "refs/remotes/origin/\(branch)"])
             let localTip = try context.run(["rev-parse", "HEAD"])
-            if staged.isEmpty && (ahead == "0" || context.succeeds(["diff", "--quiet", base, branch]))
+            if changed.allSatisfy({ !stillDifferent.contains($0) })
                 && (remoteTip == nil || remoteTip == localTip) {
                 return WorkflowContext.fail("Nothing to publish — no changes since \(base).")
             }
@@ -472,18 +480,23 @@ struct WorkflowPublish {
         ((try? context.run(["diff", "--name-only", "--diff-filter=U", "--"])) ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
     }
 
-    /// Tracked files this branch changed, committed work included (publish-scope.ts).
+    /// Paths changed since the fork, excluding content already in the base tip.
     private func changedSince() -> [String] {
         let flags = ["-c", "core.quotePath=false", "diff", "--name-only"]
-        var out: String
-        if let base = try? context.run(["merge-base", "HEAD", context.defaultBase()]) {
-            out = (try? context.run(flags + [base])) ?? ""
-        } else { out = (try? context.run(flags + ["HEAD"])) ?? "" }
-        return out.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let base = context.defaultBase()
+        let ref = ["refs/remotes/origin/\(base)", "refs/heads/\(base)", "HEAD"].first {
+            context.succeeds(["rev-parse", "--verify", $0])
+        } ?? "HEAD"
+        let fork = (try? context.run(["merge-base", ref, "HEAD"])) ?? "HEAD"
+        let changed = ((try? context.run(flags + [fork])) ?? "")
+            .split(separator: "\n").map(String.init)
+        let different = Set(((try? context.run(flags + [ref])) ?? "")
+            .split(separator: "\n").map(String.init))
+        return changed.filter { different.contains($0) }
     }
 
     private func aheadOfBase(_ base: String) -> Int {
-        for ref in [base, "origin/\(base)"] {
+        for ref in ["refs/remotes/origin/\(base)", "refs/heads/\(base)"] {
             if let count = try? context.run(["rev-list", "--count", "\(ref)..HEAD"]), let value = Int(count) { return value }
         }
         return 0

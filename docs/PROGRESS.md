@@ -6,6 +6,16 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - The service-owned Publish workflow now checks the final tip after each remote reconciliation. A `trezi@local` tip gains one empty commit authored and committed with configured Git identity, preserving the tree and prior history. The handoff and saved-run PR push paths use the same service helper. Ref updates compare the old tip, and pushes name the exact SHA to detect branch drift. Missing identity stops before push with Git configuration guidance; configured identity is not claimed as verified GitHub linkage.
 - Disposable repository tests cover automated and human tips, remote fast-forward, repeat publication, missing identity and a failed push followed by retry. Live Vercel acceptance is pending the user's exact approved GitHub repository and Vercel project. No live repository or deployment was touched.
+## 2026-10-13 — LKM-248 review repair: main-only changes are outside publish scope
+
+- Review found that comparing the checkout directly with the latest default tip counted commits added only on main as unpublished. Publish scope and the service now intersect fork-relative changes with files still different from the fetched tip. A behind-only branch has nothing to publish, while squash-equivalent files remain excluded.
+- Status refresh now queues a new read until `git:list` has settled and discards replies from an older revision. Native details inspection covers content, upstream, history, PR, CI and deployment rows, including stale, behind-only and unavailable-check states.
+
+## 2026-10-13 — LKM-248: separate published content, Git history and provider status
+
+- Publish scope and the service workflow compare current content with the fetched default branch. This avoids counting squash-equivalent files as new work while retaining later edits. The toolbar's compact ↑ now means commits ahead of upstream; default-branch divergence is labeled as history in the menu.
+- Branch status binds PR and CI to the selected branch and SHA, shows GitHub production deployment status independently, and treats older deployment revisions as stale. The controller discards refresh replies from an older branch selection. Running CI keeps its own spinner and does not claim a publish is active.
+- Offline Git/provider fixtures and native toolbar states cover a squash-equivalent merge, new edits, upstream commits, PR lifecycle, CI and deployment. The manager will inspect normal/narrow light/dark captures and run full native verification.
 
 ## 2026-10-13 — LKM-245 review repair: the dot keeps the glyphs' colours
 

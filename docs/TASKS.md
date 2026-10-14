@@ -9,6 +9,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Apply the same rule to handoff and saved-run PR pushes and cover it with local disposable repository tests.
 - [ ] Live Vercel acceptance: pending the user's exact approved GitHub repository and Vercel project; no live push or deployment was attempted.
 - [ ] Manager: run full verification and independent review, then merge.
+## Preview publish and check status (LKM-248)
+
+- [x] Compare current content with the fetched default branch and keep upstream commits separate from default-branch history.
+- [x] Bind PR, CI and deployment details to the selected branch and revision; discard outdated status replies.
+- [x] Show independent publish, CI and deployment signals in the native subtitle and expanded menu, with fixture cases and foreground captures.
+- [x] Review repair: exclude main-only changes from publish scope, recover status during an in-flight refresh, and keep unavailable CI links disabled.
+- [ ] Manager: run full native verification, inspect captures, review provider behavior and merge.
 
 ## Fixed-size preview subtitle CI dot (LKM-245)
 
