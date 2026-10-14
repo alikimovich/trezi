@@ -13,6 +13,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -374,6 +375,64 @@ try {
         },
         false
       )
+      // A reviewed scope includes staged and new files, but leaves runtime secrets alone.
+      write(w.local, 'main.txt', 'local tracked change\n')
+      git(w.local, 'add', 'main.txt')
+      write(w.local, 'local-note.txt', 'new local note\n')
+      write(w.local, '.env', 'TEST_SECRET=never-commit\n')
+      const reviewed = await owner.remoteStatus(w.local, false)
+      assert.deepEqual(reviewed.changes.map((change) => change.path).sort(), [
+        'local-note.txt',
+        'main.txt'
+      ])
+      const beforeCommit = git(w.local, 'rev-parse', 'HEAD')
+      const drifted = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep local work', changeToken: 'stale token' }
+        },
+        false
+      )
+      assert.equal(drifted.ok, false)
+      assert.equal(git(w.local, 'rev-parse', 'HEAD'), beforeCommit)
+      const hook = join(w.local, '.git', 'hooks', 'pre-commit')
+      writeFileSync(hook, '#!/bin/sh\nexit 1\n')
+      chmodSync(hook, 0o755)
+      const rejected = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep local work', changeToken: reviewed.changeToken }
+        },
+        false
+      )
+      assert.equal(rejected.ok, false)
+      assert.equal(git(w.local, 'rev-parse', 'HEAD'), beforeCommit)
+      rmSync(hook)
+      const fresh = await owner.remoteStatus(w.local, false)
+      const recovered = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep local work', changeToken: fresh.changeToken }
+        },
+        false
+      )
+      assert.equal(recovered.ok, true, recovered.message)
+      assert.equal(git(w.local, 'log', '-1', '--format=%s'), 'Keep local work')
+      assert.equal(
+        git(w.local, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'),
+        'local-note.txt\nmain.txt'
+      )
+      assert.equal(readFileSync(join(w.local, '.env'), 'utf8'), 'TEST_SECRET=never-commit\n')
+      assert.equal(git(w.local, 'rev-list', '--count', `${beforeCommit}..HEAD`), '1')
       const update = await owner.updateCheck(w.local)
       let outside
       try {

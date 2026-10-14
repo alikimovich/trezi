@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 /// Remote Git actions (S13): the Swift twins of `src/main/github.ts` (Connect to
 /// GitHub) and `src/main/git-remote.ts` (fetch, pull, switch to a remote branch), with
@@ -103,7 +104,66 @@ struct WorkflowRemote {
     func status(fetch: Bool) throws -> JSValue {
         try requireRoot()
         if fetch { try context.run(["fetch", "--all", "--prune", "--no-recurse-submodules"]) }
-        return try snapshot().value
+        let base = try snapshot().value
+        guard case .object(let fields) = base else { return base }
+        let (changes, token) = try localChanges()
+        return .object(fields + [(JSText("changes"), .array(changes.map { change in
+            WorkflowOwner.object([("path", Self.text(change.path)), ("state", Self.text(change.state)), ("eligible", .bool(change.eligible)),
+                                  ("preview", Self.text(change.preview))])
+        })), (JSText("changeToken"), Self.text(token))])
+    }
+
+    private struct LocalChange { let path: String, state: String, eligible: Bool, preview: String }
+
+    private func sensitive(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent.lowercased()
+        return name.contains("secret") || name.contains("credential") || name.hasSuffix(".pem") || name.hasSuffix(".key")
+            || name == "id_rsa" || name == "id_ed25519" || name == ".npmrc" || name == ".pypirc"
+    }
+
+    private func preview(_ path: String, untracked: Bool) -> String {
+        let args = untracked
+            ? ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--", "/dev/null", path]
+            : ["diff", "HEAD", "--no-ext-diff", "--no-textconv", "--", path]
+        guard let output = try? context.git.run(root, args), output.status == 0 || output.status == 1 else { return "Preview unavailable." }
+        if output.stdout.count > 12_000 { return String(decoding: output.stdout.prefix(12_000), as: UTF8.self) + "\n… preview truncated" }
+        return String(decoding: output.stdout, as: UTF8.self)
+    }
+
+    /// The displayed scope and its content fingerprint are sampled together in the
+    /// repository lane. HEAD, index, tracked diffs and eligible new-file bytes all
+    /// participate; a same-path edit after review cannot be committed silently.
+    private func localChanges() throws -> ([LocalChange], String) {
+        let raw = try context.git.text(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+        let records = raw.split(separator: "\0").map(String.init)
+        var changes: [LocalChange] = [], index = 0
+        while index < records.count {
+            let record = records[index]
+            guard record.count >= 4 else { index += 1; continue }
+            let path = String(record.dropFirst(3)), state = String(record.prefix(2))
+            let eligible = !RepositoryPaths.excluded(path) && !sensitive(path)
+            if eligible || state != "??" { changes.append(LocalChange(path: path, state: state, eligible: eligible,
+                preview: eligible ? preview(path, untracked: state == "??") : "Excluded from automatic commits.")) }
+            if state.contains("R") || state.contains("C") {
+                index += 1
+                if index < records.count {
+                    let source = records[index]
+                    let allowed = !RepositoryPaths.excluded(source) && !sensitive(source)
+                    changes.append(LocalChange(path: source, state: state + " source", eligible: allowed,
+                        preview: allowed ? preview(source, untracked: false) : "Excluded from automatic commits."))
+                }
+            }
+            index += 1
+        }
+        let head = try context.run(["rev-parse", "HEAD"])
+        let staged = try context.git.data(root, ["diff", "--cached", "--binary", "--no-ext-diff"])
+        let unstaged = try context.git.data(root, ["diff", "--binary", "--no-ext-diff"])
+        var bytes = Data(head.utf8) + Data(raw.utf8) + staged + unstaged
+        for change in changes where change.state == "??" {
+            bytes.append(Data(change.path.utf8))
+            bytes.append(try context.git.data(root, ["hash-object", "--", change.path]))
+        }
+        return (changes, SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
     }
 
     struct Snapshot {
@@ -140,7 +200,7 @@ struct WorkflowRemote {
         let changes = try context.git.text(root, ["status", "--porcelain", "-z"]).split(separator: "\0").map(String.init).filter { !$0.isEmpty }
         // Runtime sidecars stay outside commits; anything else blocks the update.
         if changes.contains(where: { !$0.hasPrefix("?? ") || !RepositoryPaths.excluded(String($0.dropFirst(3))) }) {
-            throw Self.refuse("Commit or stash the project’s uncommitted changes before pulling or switching branches.")
+            throw Self.refuse("Local changes block this update. Review and commit them in Git updates, then retry.")
         }
         for state in ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "BISECT_START"] {
             let path = try context.run(["rev-parse", "--git-path", state])
@@ -154,18 +214,39 @@ struct WorkflowRemote {
     func update(_ record: WorkflowRecord) throws -> WorkflowOutcome {
         let action = record.param("action") ?? "", ref = record.param("ref") ?? ""
         let expected = record.param("expectedBranch"), busy = record.params["busy"] == .bool(true)
+        let commitMessage = record.param("commitMessage"), changeToken = record.param("changeToken")
         do {
             try requireRoot()
             guard action == "pull" || action == "checkout" else { throw Self.refuse("Unknown Git action.") }
-            func ready() throws {
+            func ready(clean: Bool = true) throws {
                 if busy { throw Self.refuse("Wait for this project’s agents to finish before pulling or switching branches.") }
                 guard let expected, context.currentBranch() == expected else { throw Self.refuse("The current branch changed. Refresh Git updates and try again.") }
-                try requireClean()
+                if clean { try requireClean() }
             }
-            try ready()
+            try ready(clean: commitMessage == nil)
             guard let requested = try snapshot().branches.first(where: { $0.ref == ref }) else {
                 throw Self.refuse("Fetch updates and choose an available remote branch.")
             }
+            if let commitMessage {
+                guard let changeToken, !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      commitMessage.utf16.count <= 256 else { throw Self.refuse("Enter a commit message and review the changes again.") }
+                let (changes, currentToken) = try localChanges()
+                guard currentToken == changeToken else { throw Self.refuse("Local changes changed since review. Refresh Git updates and try again.") }
+                guard !changes.isEmpty, changes.allSatisfy(\.eligible) else {
+                    throw Self.refuse("A staged excluded file blocks this update. Remove it from the staged changes before retrying.")
+                }
+                let paths = Array(Set(changes.map(\.path))).sorted()
+                try context.begin("commit")
+                do {
+                    try context.run(["add", "-A", "--"] + paths)
+                    try context.run(["-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit", "--only", "-m", commitMessage, "--"] + paths)
+                    try context.done("commit", [("head", Self.text(try context.run(["rev-parse", "HEAD"])))])
+                } catch {
+                    context.failed("commit", "\(error)")
+                    throw Self.refuse("Commit failed. Your files are kept. \(WorkflowJournal.redact("\(error)"))")
+                }
+            }
+            try ready()
             try context.begin("fetch")
             try context.run(["fetch", "--prune", "--no-recurse-submodules", "--", requested.remote])
             try context.done("fetch")

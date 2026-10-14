@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-250: Git updates dirty-tree recovery
+
+- Git updates displays tracked, staged and eligible new files blocking Pull or Switch, names the current and destination branches, and offers an editable commit message. The service checks a content fingerprint against the reviewed scope, uses the repository lane and workflow journal, requires the commit to succeed before fetching or switching, and keeps Fetch available while dirty. Excluded staged files stay blocked. Cancel and failed commits leave user files in place.
+- The recovery sheet now shows bounded read-only diffs; common credential and private-key filenames are excluded. The owner fixture covers a pre-staged file, a new file, `.env`, stale review, hook refusal and one successful commit. A native fixture checks sheet actions and records foreground light/dark captures at 1320 and 850 pt.
+- The first native run reached the new fixture but its capture asked for the main window while the sheet was key. The test-only host capture now targets the sheet's foreground window through the existing visible-capture path; the fixture uses that route for the four captures.
+- Image inspection after the passing core run showed the standalone sheet stayed dark when only the main window appearance changed. The test hook now sets the sheet window appearance for each capture and restores it afterwards.
+
 ## 2026-10-13 — LKM-245 review repair: the dot keeps the glyphs' colours
 
 - Review found the first dot recoloured two states: the old `branchTitle` coloured only `●` and `◌` (red failed, green passed, orange running), so the no-checks `○` and unknown `?` used the preview header's text colour. The dot now does the same: orange only for running, and `BranchStatusDot.textColor` (kept in step with `NativeShell.previewTextColor`) for no checks and unknown. `BranchStatusDot.inspect` reports `branchDotColor` (`red`, `green`, `orange` or `text`) and `smoke-branch-dot.ts` pins it for every state.
