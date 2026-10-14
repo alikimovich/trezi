@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-14 — LKM-257 review repair: assembly guides remain readable
+
+- Review of the first native capture showed the dashed guides nearly disappearing: a translucent tertiary label stroke was multiplied by 0.55 layer opacity. The guides now use the appearance-aware label color at 0.65 alpha with full layer opacity while exploded; zero separation still sets opacity to zero. The scene stroke remains one screen point wide.
+
 ## 2026-10-14 — LKM-257: depth and assembly guides in the native exploded scene
 
 - The preview now sends each captured surface's nearest captured DOM ancestor. The native scene uses the overlapping layout footprint of each parent/child pair to place two matching corner guides in world space. Thin backing planes add restrained Z depth; guides and backs vanish at zero separation and are removed on recapture/clear.

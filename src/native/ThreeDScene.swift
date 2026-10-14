@@ -52,7 +52,8 @@ final class ThreeDSceneView: NSView {
     var sideInsets = (left: 0.0, right: 0.0) { didSet { if sideInsets != oldValue { apply(animated: false) } } }
     let hoverLabel = NSTextField(labelWithString: "")
     let messageLabel = NSTextField(wrappingLabelWithString: "")
-    private var colors = (outline: CGColor(gray: 0.6, alpha: 1), accent: CGColor(gray: 0.3, alpha: 1), back: CGColor(gray: 0.5, alpha: 1))
+    private var colors = (outline: CGColor(gray: 0.6, alpha: 1), accent: CGColor(gray: 0.3, alpha: 1),
+                          back: CGColor(gray: 0.5, alpha: 1), guide: CGColor(gray: 0.25, alpha: 0.65))
     private var dragStart: NSPoint?
     private var dragged = false
 
@@ -115,7 +116,7 @@ final class ThreeDSceneView: NSView {
             layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             grid.dot = NSColor.quaternaryLabelColor.cgColor
             colors = (NSColor.tertiaryLabelColor.cgColor, NSColor.controlAccentColor.cgColor,
-                      NSColor.separatorColor.cgColor)
+                      NSColor.separatorColor.cgColor, NSColor.labelColor.withAlphaComponent(0.65).cgColor)
             hoverLabel.backgroundColor = .controlBackgroundColor
             hoverLabel.textColor = .labelColor
             hoverLabel.layer?.borderColor = NSColor.separatorColor.cgColor; hoverLabel.layer?.borderWidth = 1
@@ -256,13 +257,13 @@ final class ThreeDSceneView: NSView {
             path.move(to: CGPoint(x: 0, y: line / 2))
             path.addLine(to: CGPoint(x: length, y: line / 2))
             guide.path = path
-            guide.strokeColor = colors.outline
+            guide.strokeColor = colors.guide
             guide.lineWidth = line
             guide.lineDashPattern = [NSNumber(value: Double(3 * line)), NSNumber(value: Double(4 * line))]
             guide.position = CGPoint(x: link.x, y: link.y)
             guide.transform = CATransform3DConcat(CATransform3DMakeRotation(.pi / 2, 0, 1, 0),
                                                    CATransform3DMakeTranslation(0, 0, CGFloat((child.z + parent.z) / 2)))
-            guide.opacity = separation < 1 ? 0 : 0.55
+            guide.opacity = separation < 1 ? 0 : 1
         }
         CATransaction.commit()
     }
