@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-14 — LKM-258: expanded spacing follows the compact axes
+
+- The shared Padding/Margin row now renders its expanded right/left fields in the left column and top/bottom fields in the right column. The controller emits fields in that column order so keyboard traversal follows the same sequence; each field keeps its own value, icon, unit and token selector.
+- The controller fixture checks both groups' expanded and collapsed order and preserved asymmetric values. The native inspector fixture saves both states in light and dark mode for review.
 ## 2026-10-14 — LKM-257 review repair: assembly guides remain readable
 
 - Review of the first native capture showed the dashed guides nearly disappearing: a translucent tertiary label stroke was multiplied by 0.55 layer opacity. The guides now use the appearance-aware label color at 0.65 alpha with full layer opacity while exploded; zero separation still sets opacity to zero. The scene stroke remains one screen point wide.

@@ -398,7 +398,9 @@ export class NativeInspectorController {
       }
       const spacing = (group: 'padding' | 'margin') => {
         if (this.expanded.has(group)) {
-          for (const side of ['top', 'right', 'bottom', 'left'])
+          // Column order matches the compact horizontal/vertical pair. Keep each
+          // axis's existing side order (right/left and top/bottom).
+          for (const side of ['right', 'left', 'top', 'bottom'])
             style(`${group}-${side}`, group, side as NativeInspectorField['axis'])
         } else {
           paired(group, 'horizontal')
