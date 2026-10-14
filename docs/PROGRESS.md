@@ -13,6 +13,16 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - The `trezi` command already uses LaunchServices; `bun run dev` and tests directly execute the host. The reported HIServices abort supplies no evidence that the LaunchServices database, signing or AppKit UI code is at fault. This worktree had no matching built app or crash report, so root cause and cold/warm launch acceptance remain unverified.
 - TreziHost now refuses a proven non-graphical security session before `NSApplication.shared`, with a readable stderr error and a bounded unified-log startup line. An unavailable probe only logs and proceeds. Pre-AppKit failure no longer creates an AppKit alert, which could repeat a registration abort. The launcher unit fixture covers graphical, unknown and denied session outcomes and a clean status-78 refusal. Agent OS quick passed 219 unit checks (3 skips), typechecks and lint; native `core` passed 30 smoke checks (no skips). The operator's cold/warm `trezi` and LaunchServices launch, matching-build symbolication and reported crash reproduction remain unverified.
+## 2026-10-13 — LKM-248 review repair: main-only changes are outside publish scope
+
+- Review found that comparing the checkout directly with the latest default tip counted commits added only on main as unpublished. Publish scope and the service now intersect fork-relative changes with files still different from the fetched tip. A behind-only branch has nothing to publish, while squash-equivalent files remain excluded.
+- Status refresh now queues a new read until `git:list` has settled and discards replies from an older revision. Native details inspection covers content, upstream, history, PR, CI and deployment rows, including stale, behind-only and unavailable-check states.
+
+## 2026-10-13 — LKM-248: separate published content, Git history and provider status
+
+- Publish scope and the service workflow compare current content with the fetched default branch. This avoids counting squash-equivalent files as new work while retaining later edits. The toolbar's compact ↑ now means commits ahead of upstream; default-branch divergence is labeled as history in the menu.
+- Branch status binds PR and CI to the selected branch and SHA, shows GitHub production deployment status independently, and treats older deployment revisions as stale. The controller discards refresh replies from an older branch selection. Running CI keeps its own spinner and does not claim a publish is active.
+- Offline Git/provider fixtures and native toolbar states cover a squash-equivalent merge, new edits, upstream commits, PR lifecycle, CI and deployment. The manager will inspect normal/narrow light/dark captures and run full native verification.
 
 ## 2026-10-13 — LKM-245 review repair: the dot keeps the glyphs' colours
 

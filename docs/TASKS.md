@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview publish and check status (LKM-248)
+
+- [x] Compare current content with the fetched default branch and keep upstream commits separate from default-branch history.
+- [x] Bind PR, CI and deployment details to the selected branch and revision; discard outdated status replies.
+- [x] Show independent publish, CI and deployment signals in the native subtitle and expanded menu, with fixture cases and foreground captures.
+- [x] Review repair: exclude main-only changes from publish scope, recover status during an in-flight refresh, and keep unavailable CI links disabled.
+- [ ] Manager: run full native verification, inspect captures, review provider behavior and merge.
+
 ## Fixed-size preview subtitle CI dot (LKM-245)
 
 - [x] Draw the CI status as one fixed-size native circle in a stable title slot (filled passed/failed, stroked running/no checks/unknown), separate from the LKM-244 spinner, with unchanged accessibility wording.
