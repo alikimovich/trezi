@@ -133,7 +133,12 @@ export async function checkGitUpdates(
     if ((await host.request('sheetInspect')).visible)
       await host.request('sheetAppearance', { appearance: '' })
     await host.request('shellPerform', { action: 'window-width', row: '1320' })
-    if ((await host.request('sheetInspect')).visible)
+    if ((await host.request('sheetInspect')).visible) {
       await host.request('sheetPerform', { action: 'cancel' })
+      await waitFor(
+        async () => !(await host.request('sheetInspect')).visible,
+        'Git updates final dismissal'
+      )
+    }
   }
 }

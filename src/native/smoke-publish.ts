@@ -98,10 +98,29 @@ export async function checkPublishProgress(
   const label = (text: string) => (s: State) => s.publishLabel === text
   const evidence: Record<string, unknown> = {}
   const invoke = git.sheets.invoke
+  // The controller's own status poll (activation refresh, publish end) would replace the
+  // synthetic branch status with the disposable repo's real one mid-check. While the fixture
+  // pins a status, the poll reads that same status back.
+  // A real refresh would also clear the synthetic status and reset the toolbar's branch
+  // from the disposable repo; the fixture owns the status, so none runs while it does.
+  const refresh = git.refresh
+  git.refresh = async () => {}
+  let pinned: BranchStatus | undefined
+  const polled = new WeakSet<object>()
+  const setStatus = git.statuses.set
+  git.statuses.set = (key, value) => {
+    if (key === root && !polled.has(value)) pinned = value
+    return setStatus.call(git.statuses, key, value)
+  }
   Object.defineProperty(git.sheets, 'invoke', {
     configurable: true,
-    value: (channel: string, ...args: unknown[]) =>
-      channel === 'github:prepublish' ? Promise.resolve({ warnings: [] }) : invoke(channel, ...args)
+    value: async (channel: string, ...args: unknown[]) => {
+      if (channel === 'github:prepublish') return { warnings: [] }
+      if (channel !== 'github:branch-status') return invoke(channel, ...args)
+      const result = pinned ? { ...pinned } : await invoke(channel, ...args)
+      polled.add(result)
+      return result
+    }
   })
   setWorkflowOwner(stub)
   git.githubStatus = async () => ({
@@ -145,10 +164,49 @@ export async function checkPublishProgress(
         assert.ok(
           await host.request('shellPerform', { action: 'window-appearance', row: appearance })
         )
-        const view = await host.request('shellInspect')
+        // The width and appearance actions return before the deferred toolbar layout:
+        // wait for the requested width, the running status and two identical spinner frames.
+        let previous = ''
+        const view = await waitFor(
+          async () => {
+            const current = await host.request('shellInspect')
+            const frame = `${current.windowWidth}|${current.branchProgressFrame}|${current.branchFrameWidth}`
+            const settled =
+              Math.abs(Number(current.windowWidth) - width) < 1 &&
+              current.branchBusy &&
+              frame === previous
+            previous = frame
+            return settled ? current : null
+          },
+          `Settled running spinner at ${width} in ${appearance}`,
+          5000,
+          async () => {
+            const s = await host.request('shellInspect')
+            return {
+              windowWidth: s.windowWidth,
+              branchBusy: s.branchBusy,
+              branchProgressFits: s.branchProgressFits,
+              branchProgressFrame: s.branchProgressFrame,
+              branchFrameWidth: s.branchFrameWidth,
+              branchDisplay: s.branchDisplay
+            }
+          }
+        )
+        const geometry = {
+          width,
+          appearance,
+          windowWidth: view.windowWidth,
+          branchProgressFrame: view.branchProgressFrame,
+          branchFrameWidth: view.branchFrameWidth,
+          branchDisplay: view.branchDisplay
+        }
         assert.ok(
-          view.branchBusy && view.branchProgressFits,
-          `Spinner fits at ${width} in ${appearance}`
+          view.branchBusy,
+          `Spinner active at ${width} in ${appearance}: ${JSON.stringify(geometry)}`
+        )
+        assert.ok(
+          view.branchProgressFits,
+          `Spinner fits at ${width} in ${appearance}: ${JSON.stringify(geometry)}`
         )
         assert.equal(view.branchTruncation, 'tail')
         assert.ok(
@@ -336,6 +394,7 @@ export async function checkPublishProgress(
     await capture(host, artifacts, 'branch-status-failed')
     if (priorStatus) git.statuses.set(root, priorStatus)
     else git.statuses.delete(root)
+    pinned = undefined
     git.render()
     await until(label('Publish'), 'Publish is idle')
     // Immediate feedback: the label and spinner before the owner reports anything.
@@ -487,6 +546,8 @@ export async function checkPublishProgress(
     console.log('Native publish progress', JSON.stringify(evidence))
   } finally {
     Object.defineProperty(git.sheets, 'invoke', { configurable: true, value: invoke })
+    git.statuses.set = setStatus
+    git.refresh = refresh
     setWorkflowOwner(real)
     git.githubStatus = status
     // A failed assertion mid-run: end the stubbed publish so the button returns to normal.
