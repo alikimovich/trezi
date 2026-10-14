@@ -858,7 +858,7 @@ export class NativeGitController {
       {
         title: 'Commit changes to continue',
         alert: false,
-        detail: `Current branch: ${status.current}\n${selected === 'pull' ? 'Pull from' : 'Switch to'}: ${destination.label}\n\nThe commit includes exactly these ${changes.length} local path(s), including already staged changes. Ignored files and runtime sidecars are excluded. Review the list before continuing:\n${names.join('\n')}`,
+        detail: `Current branch: ${status.current}\n${selected === 'pull' ? 'Pull from' : 'Switch to'}: ${destination.label}\n\nThe commit includes exactly these ${changes.length} local path(s), including already staged changes. Ignored files and runtime sidecars are excluded. Review the list before continuing:\n${names.join('\n')}${eligible ? '' : '\n\nTrezi will not commit the files marked excluded, so the changes cannot be committed here. Move or ignore those files (or unstage them), then choose Refresh changes.'}`,
         fields: [
           {
             id: 'review',

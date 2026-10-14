@@ -121,10 +121,15 @@ struct WorkflowRemote {
             || name == "id_rsa" || name == "id_ed25519" || name == ".npmrc" || name == ".pypirc"
     }
 
+    /// An untracked directory entry is a nested repository: a commit would record a gitlink, not files.
+    private func committable(_ path: String) -> Bool {
+        !RepositoryPaths.excluded(path) && !sensitive(path) && !path.hasSuffix("/")
+    }
+
     private func preview(_ path: String, untracked: Bool) -> String {
         let args = untracked
             ? ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--", "/dev/null", path]
-            : ["diff", "HEAD", "--no-ext-diff", "--no-textconv", "--", path]
+            : ["--literal-pathspecs", "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--", path]
         guard let output = try? context.git.run(root, args), output.status == 0 || output.status == 1 else { return "Preview unavailable." }
         if output.stdout.count > 12_000 { return String(decoding: output.stdout.prefix(12_000), as: UTF8.self) + "\n… preview truncated" }
         return String(decoding: output.stdout, as: UTF8.self)
@@ -141,14 +146,16 @@ struct WorkflowRemote {
             let record = records[index]
             guard record.count >= 4 else { index += 1; continue }
             let path = String(record.dropFirst(3)), state = String(record.prefix(2))
-            let eligible = !RepositoryPaths.excluded(path) && !sensitive(path)
-            if eligible || state != "??" { changes.append(LocalChange(path: path, state: state, eligible: eligible,
+            let eligible = committable(path)
+            // Untracked runtime sidecars and .env files never block (see requireClean); every
+            // other path that blocks an update is listed, committable or not.
+            if eligible || state != "??" || !RepositoryPaths.excluded(path) { changes.append(LocalChange(path: path, state: state, eligible: eligible,
                 preview: eligible ? preview(path, untracked: state == "??") : "Excluded from automatic commits.")) }
             if state.contains("R") || state.contains("C") {
                 index += 1
                 if index < records.count {
                     let source = records[index]
-                    let allowed = !RepositoryPaths.excluded(source) && !sensitive(source)
+                    let allowed = committable(source)
                     changes.append(LocalChange(path: source, state: state + " source", eligible: allowed,
                         preview: allowed ? preview(source, untracked: false) : "Excluded from automatic commits."))
                 }
@@ -161,7 +168,8 @@ struct WorkflowRemote {
         var bytes = Data(head.utf8) + Data(raw.utf8) + staged + unstaged
         for change in changes where change.state == "??" {
             bytes.append(Data(change.path.utf8))
-            bytes.append(try context.git.data(root, ["hash-object", "--", change.path]))
+            // A nested repository or an unreadable entry has no blob to hash; its path still counts.
+            if !change.path.hasSuffix("/"), let blob = try? context.git.data(root, ["hash-object", "--", change.path]) { bytes.append(blob) }
         }
         return (changes, SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
     }
@@ -197,7 +205,8 @@ struct WorkflowRemote {
     }
 
     private func requireClean() throws {
-        let changes = try context.git.text(root, ["status", "--porcelain", "-z"]).split(separator: "\0").map(String.init).filter { !$0.isEmpty }
+        // The same listing as localChanges: what the sheet shows is exactly what blocks.
+        let changes = try context.git.text(root, ["status", "--porcelain", "-z", "--untracked-files=all"]).split(separator: "\0").map(String.init).filter { !$0.isEmpty }
         // Runtime sidecars stay outside commits; anything else blocks the update.
         if changes.contains(where: { !$0.hasPrefix("?? ") || !RepositoryPaths.excluded(String($0.dropFirst(3))) }) {
             throw Self.refuse("Local changes block this update. Review and commit them in Git updates, then retry.")
@@ -232,14 +241,15 @@ struct WorkflowRemote {
                       commitMessage.utf16.count <= 256 else { throw Self.refuse("Enter a commit message and review the changes again.") }
                 let (changes, currentToken) = try localChanges()
                 guard currentToken == changeToken else { throw Self.refuse("Local changes changed since review. Refresh Git updates and try again.") }
+                // Refused before anything is staged: a path Trezi will not commit would block the update afterwards.
                 guard !changes.isEmpty, changes.allSatisfy(\.eligible) else {
-                    throw Self.refuse("A staged excluded file blocks this update. Remove it from the staged changes before retrying.")
+                    throw Self.refuse("Some local changes cannot be committed by Trezi (excluded, secret or nested repository files). Move, ignore or unstage them, then refresh Git updates.")
                 }
                 let paths = Array(Set(changes.map(\.path))).sorted()
                 try context.begin("commit")
                 do {
-                    try context.run(["add", "-A", "--"] + paths)
-                    try context.run(["-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit", "--only", "-m", commitMessage, "--"] + paths)
+                    try context.run(["--literal-pathspecs", "add", "-A", "--"] + paths)
+                    try context.run(["--literal-pathspecs", "-c", "user.name=Trezi", "-c", "user.email=trezi@local", "commit", "--only", "-m", commitMessage, "--"] + paths)
                     try context.done("commit", [("head", Self.text(try context.run(["rev-parse", "HEAD"])))])
                 } catch {
                     context.failed("commit", "\(error)")
