@@ -12,6 +12,15 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - Manager verification failed `publish-progress` ("Spinner fits at 1320 in light"). The saved log recorded neither half of the combined assertion; the repair run showed `branchBusy` false and the toolbar title reset to "Branch", i.e. a real `GitController.refresh` (activation or publish end) had cleared the synthetic status and reset the branch from the disposable repo. The fixture now stubs `git.refresh` for its duration, pins `github:branch-status` polls to the status it set, waits for the requested window width, the running spinner and two identical spinner frames before asserting, and reports width, `branchBusy`, `branchProgressFits`, spinner frame and branch width separately. The fit assertion is unchanged. The Git updates fixture now waits for its final sheet dismissal. Fixture-only; no product change.
 
+## 2026-10-13 — LKM-251 repair: native inspector Undo smoke race (not a Publish regression)
+
+- The manager's native run failed `core/inspector` ("one Undo restores both vertical sides"); the branch differs from main only in Publish and docs, so the cause is the fixture. It inferred that an edit had settled from the source text and `busy`, but a selection refresh resets `busy` while the write is still in flight. The inspector state now carries a monotonic `edits` count (finished writes, never reset by a selection); the broker's `inspectorInspect` reports it and the fixture waits for it to pass the value seen before each request. The Undo assertion is unchanged; on a mismatch it now logs the before, paired and after source, the Undo result and the inspector state.
+- `test:workflow-owner` (incl. `branch-pr-attribution`) passed 4 of 4 repeated local runs; the earlier saved-run branch-state failure did not reproduce. Live Vercel acceptance remains pending.
+
+## 2026-10-13 — LKM-251: publication commit for automated tips
+
+- The service-owned Publish workflow now checks the final tip after each remote reconciliation. A `trezi@local` tip gains one empty commit authored and committed with configured Git identity, preserving the tree and prior history. The handoff and saved-run PR push paths use the same service helper. Ref updates compare the old tip, and pushes name the exact SHA to detect branch drift. Missing identity stops before push with Git configuration guidance; configured identity is not claimed as verified GitHub linkage.
+- Disposable repository tests cover automated and human tips, remote fast-forward, repeat publication, missing identity and a failed push followed by retry. Live Vercel acceptance is pending the user's exact approved GitHub repository and Vercel project. No live repository or deployment was touched.
 ## 2026-10-13 — LKM-248 review repair: main-only changes are outside publish scope
 
 - Review found that comparing the checkout directly with the latest default tip counted commits added only on main as unpublished. Publish scope and the service now intersect fork-relative changes with files still different from the fetched tip. A behind-only branch has nothing to publish, while squash-equivalent files remain excluded.

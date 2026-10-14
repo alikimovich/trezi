@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Publish attribution (LKM-251)
+
+- [x] Append one user-identity empty commit after an automated final tip, preserving the tree and history across reconciliation and retries; reject missing identity.
+- [x] Apply the same rule to handoff and saved-run PR pushes and cover it with local disposable repository tests.
+- [ ] Live Vercel acceptance: pending the user's exact approved GitHub repository and Vercel project; no live push or deployment was attempted.
+- [ ] Manager: run full verification and independent review, then merge.
 ## Preview publish and check status (LKM-248)
 
 - [x] Compare current content with the fetched default branch and keep upstream commits separate from default-branch history.

@@ -9,7 +9,7 @@ struct InspectorField: Decodable, Identifiable {
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
-struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int? }
+struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int?; let edits: Int? }
 final class InspectorModel: ObservableObject {
     @Published var state: InspectorState?
     /// LKM-216: a re-read after a source/CSS change altered the same selection's values;

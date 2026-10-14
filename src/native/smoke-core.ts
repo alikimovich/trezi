@@ -702,46 +702,50 @@ export async function runNativeCoreSmoke(
           join(artifacts, 'inspector.png'),
           Buffer.from(await host.request('captureShell'), 'base64')
         )
-        await host.request('inspectorPerform', {
-          action: {
-            root: fixture,
-            generation: inspector.generation,
-            action: 'apply',
-            field: 'style:opacity',
-            value: '0.8'
-          }
-        })
-        try {
-          await wait(
-            () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8').includes('0.8'),
-            'native style source edit'
-          )
-          await inspect('inspectorInspect', (s) => !s.busy)
-        } catch (error) {
-          console.error('Native inspector failure', {
-            expected: inspector,
-            actual: await host.request('inspectorInspect')
+        const styleSource = () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
+        // `busy` alone cannot say an edit finished: a selection refresh resets it while
+        // the write is still in flight. The controller counts finished edits (`edits`,
+        // never reset), so wait for that count to move past the one seen before the
+        // request, then for the expected source text.
+        const performEdit = async (
+          field: string,
+          value: string,
+          landed: (s: string) => boolean
+        ) => {
+          const seen = (await host.request('inspectorInspect')).edits
+          await host.request('inspectorPerform', {
+            action: {
+              root: fixture,
+              generation: inspector.generation,
+              action: 'apply',
+              field,
+              value
+            }
           })
-          throw error
-        }
-        const beforePair = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
-        await host.request('inspectorPerform', {
-          action: {
-            root: fixture,
-            generation: inspector.generation,
-            action: 'apply',
-            field: 'style:padding-vertical',
-            value: '12'
+          try {
+            await wait(async () => {
+              const state = await host.request('inspectorInspect')
+              return state.edits > seen && !state.busy && landed(styleSource())
+            }, `${field} edit settled`)
+          } catch (error) {
+            console.error('Native inspector failure', {
+              field,
+              seen,
+              expected: inspector,
+              actual: await host.request('inspectorInspect'),
+              source: styleSource()
+            })
+            throw error
           }
-        })
-        await wait(() => {
-          const source = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
-          return source.includes('paddingTop: "12px"') && source.includes('paddingBottom: "12px"')
-        }, 'one vertical pair source edit')
-        // The file is written before the ledger records the edit; busy clears only
-        // after the commit reply, so Undo here always sees the pair on top.
-        await inspect('inspectorInspect', (s) => !s.busy)
-        const paired = readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
+        }
+        await performEdit('style:opacity', '0.8', (s) => s.includes('0.8'))
+        const beforePair = styleSource()
+        await performEdit(
+          'style:padding-vertical',
+          '12',
+          (s) => s.includes('paddingTop: "12px"') && s.includes('paddingBottom: "12px"')
+        )
+        const paired = styleSource()
         for (const untouched of [
           'paddingLeft: "var(--space-a)"',
           'paddingRight: "18px"',
@@ -751,11 +755,21 @@ export async function runNativeCoreSmoke(
           'marginBottom: "3px"'
         ])
           assert.ok(paired.includes(untouched), `pair kept ${untouched}`)
-        assert.ok((await invoke('edit:undo', fixture)).ok, 'one ledger Undo reverts the pair')
-        await wait(
-          () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8') === beforePair,
-          'one Undo restores both vertical sides'
-        )
+        const undone = await invoke('edit:undo', fixture)
+        assert.ok(undone.ok, 'one ledger Undo reverts the pair')
+        try {
+          await wait(() => styleSource() === beforePair, 'one Undo restores both vertical sides')
+        } catch (error) {
+          console.error('Native inspector Undo mismatch', {
+            beforePair,
+            paired,
+            after: styleSource(),
+            undone,
+            generation: inspector.generation,
+            actual: await host.request('inspectorInspect')
+          })
+          throw error
+        }
         await host.request('inspectorPerform', {
           action: { root: fixture, generation: inspector.generation, action: 'close' }
         })
