@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-14 — LKM-260 review repair: sibling reflow recaptures
+
+- Independent review found that the mutation filter skipped sibling attribute and text changes even when they resized the inspected root. Every otherwise ignored mutation now compares the root's current bounds with the last captured bounds, so a flex/grid reflow schedules a capture while a static unrelated update does not.
+- The nested native fixture now changes a sibling class selected by a sibling-combinator rule and requires both a smaller root and a new capture, alongside the existing no-recapture check for a fixed unrelated element.
+
 ## 2026-10-14 — LKM-260: original exploded colors and stable capture frames
 
 - Gray depth backing planes in `src/native/ThreeDScene.swift` showed through translucent captured faces, tinting authored colors. Backing now draws an offset contour with no fill; face images, selection outline and assembly guides stay intact.

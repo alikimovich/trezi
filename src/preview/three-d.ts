@@ -293,8 +293,14 @@ export function createThreeDInspector(options: {
         const changed =
           record.type === 'childList' ? [...record.addedNodes, ...record.removedNodes] : []
         if (changed.some((node) => node.contains(root))) return true
-        if (!(record.target instanceof Element) || !record.target.contains(root)) return false
-        if (record.type !== 'childList') return true // An ancestor can change inherited styles.
+        if (
+          record.target instanceof Element &&
+          record.target.contains(root) &&
+          record.type !== 'childList'
+        )
+          return true // An ancestor can change inherited styles.
+        // A sibling's text or style can reflow the selected root in a flex/grid layout.
+        // Check its bounds for every otherwise unrelated mutation, not just childList.
         const rect = root.getBoundingClientRect()
         return (
           rect.x !== rootBounds.x ||

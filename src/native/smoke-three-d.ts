@@ -14,15 +14,28 @@ const intersects = (a: Rect, b: Rect) =>
 /** Nested fixture for the exploded view: section > div > h2, section > p > b (5 layers). */
 const CARD = `(() => {
   document.querySelector('#three-d-card')?.remove();
+  document.querySelector('#three-d-sibling')?.remove();
+  document.querySelector('#three-d-sibling-style')?.remove();
+  const style = document.createElement('style');
+  style.id = 'three-d-sibling-style';
+  style.textContent = '#three-d-sibling.wide + #three-d-card { width:240px !important }';
+  document.head.append(style);
+  const sibling = document.createElement('div');
+  sibling.id = 'three-d-sibling';
   const card = document.createElement('section');
   card.id = 'three-d-card';
   card.style.cssText = 'margin:12px;padding:16px;width:320px;background:#f4e3c1;border-radius:12px';
   card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
-  document.body.prepend(card);
+  document.body.prepend(sibling, card);
   card.scrollIntoView({ block: 'nearest' });
   return true;
 })()`
-export const removeThreeDCard = `(() => { document.querySelector('#three-d-card')?.remove(); return true })()`
+export const removeThreeDCard = `(() => {
+  document.querySelector('#three-d-card')?.remove();
+  document.querySelector('#three-d-sibling')?.remove();
+  document.querySelector('#three-d-sibling-style')?.remove();
+  return true;
+})()`
 
 /** The real isolated preview opens the scene; the host renders it natively (LKM-227). */
 export async function checkThreeD(host: NativeBridge, artifacts: string, fixture: string) {
@@ -111,9 +124,22 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     stableCaptures,
     'unrelated page activity does not recapture the scene'
   )
-  await page(`document.querySelector('#three-d-head').style.backgroundColor = 'rgb(215, 42, 80)'`)
+  const originalWidth = await page(
+    `document.querySelector('#three-d-card').getBoundingClientRect().width`
+  )
+  await page(`document.querySelector('#three-d-sibling').classList.add('wide')`)
+  const reflowWidth = await page(
+    `document.querySelector('#three-d-card').getBoundingClientRect().width`
+  )
+  assert.ok(reflowWidth < originalWidth, 'sibling class restyles the inspected root width')
   await waitFor(
     async () => (await inspect()).captures > stableCaptures,
+    'sibling reflow recaptures'
+  )
+  const reflowCaptures = (await inspect()).captures
+  await page(`document.querySelector('#three-d-head').style.backgroundColor = 'rgb(215, 42, 80)'`)
+  await waitFor(
+    async () => (await inspect()).captures > reflowCaptures,
     'authored color change recaptures'
   )
   const colorCapture = await host.request('threeDCapture', { dark: false })
