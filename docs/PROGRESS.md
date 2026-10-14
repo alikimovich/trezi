@@ -11,6 +11,7 @@ Newest first. Append a dated entry when you finish a chunk of work.
 ## 2026-10-13 — LKM-250 repair: publish-progress smoke fixture races
 
 - Manager verification failed `publish-progress` ("Spinner fits at 1320 in light"). The saved log recorded neither half of the combined assertion; the repair run showed `branchBusy` false and the toolbar title reset to "Branch", i.e. a real `GitController.refresh` (activation or publish end) had cleared the synthetic status and reset the branch from the disposable repo. The fixture now stubs `git.refresh` for its duration, pins `github:branch-status` polls to the status it set, waits for the requested window width, the running spinner and two identical spinner frames before asserting, and reports width, `branchBusy`, `branchProgressFits`, spinner frame and branch width separately. The fit assertion is unchanged. The Git updates fixture now waits for its final sheet dismissal. Fixture-only; no product change.
+- The full-suite run still failed after that (core-only passed): the foreground capture showed the toolbar with no branch status. Checks before it leave a `pollStatus` in flight; against the disposable repo it throws and its `catch` deletes the status the fixture had just set. The fixture now waits for `statusFlights`/`refreshingStatus` to clear before setting the sample and refuses `statuses.delete` for the project while it owns a status (originals restored in `finally`). All seven groups then passed in one run (52/52).
 
 ## 2026-10-13 — LKM-249 review repair: product wording for the startup docs
 

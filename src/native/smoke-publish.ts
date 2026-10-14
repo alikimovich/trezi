@@ -112,6 +112,11 @@ export async function checkPublishProgress(
     if (key === root && !polled.has(value)) pinned = value
     return setStatus.call(git.statuses, key, value)
   }
+  // A poll already in flight when the fixture starts fails against the disposable repo and
+  // would clear the status it pinned; no controller path may clear a status the fixture owns.
+  const deleteStatus = git.statuses.delete
+  git.statuses.delete = (key) =>
+    key === root && pinned ? false : deleteStatus.call(git.statuses, key)
   Object.defineProperty(git.sheets, 'invoke', {
     configurable: true,
     value: async (channel: string, ...args: unknown[]) => {
@@ -130,6 +135,17 @@ export async function checkPublishProgress(
     remoteUrl: 'https://github.com/example/folder-alpha.git'
   })
   try {
+    // Earlier checks leave refreshes and status polls in flight. Let them settle first: one
+    // that finished after the sample below would replace it with the repo's real status.
+    const pending = git as unknown as {
+      statusFlights: Set<string>
+      refreshingStatus: Map<string, number>
+    }
+    await waitFor(
+      () => !pending.statusFlights.has(root) && !pending.refreshingStatus.has(root),
+      'Git status polls settled',
+      15000
+    )
     const priorStatus = git.statuses.get(root)
     const sample = {
       base: 'main',
@@ -392,9 +408,9 @@ export async function checkPublishProgress(
     assert.ok(!failed.branchTruncated, 'CI dot and failure count remain visible in toolbar')
     assert.ok(failed.branchTitleWidth <= failed.branchTitleRoom + 0.5, 'Branch title fits control')
     await capture(host, artifacts, 'branch-status-failed')
-    if (priorStatus) git.statuses.set(root, priorStatus)
-    else git.statuses.delete(root)
     pinned = undefined
+    if (priorStatus) setStatus.call(git.statuses, root, priorStatus)
+    else deleteStatus.call(git.statuses, root)
     git.render()
     await until(label('Publish'), 'Publish is idle')
     // Immediate feedback: the label and spinner before the owner reports anything.
@@ -547,6 +563,7 @@ export async function checkPublishProgress(
   } finally {
     Object.defineProperty(git.sheets, 'invoke', { configurable: true, value: invoke })
     git.statuses.set = setStatus
+    git.statuses.delete = deleteStatus
     git.refresh = refresh
     setWorkflowOwner(real)
     git.githubStatus = status
