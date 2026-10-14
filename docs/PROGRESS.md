@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-249: pre-AppKit graphical-session diagnosis
+
+- The `trezi` command already uses LaunchServices; `bun run dev` and tests directly execute the host. The reported HIServices abort supplies no evidence that the LaunchServices database, signing or AppKit UI code is at fault. This worktree had no matching built app or crash report, so root cause and cold/warm launch acceptance remain unverified.
+- TreziHost now refuses a proven non-graphical security session before `NSApplication.shared`, with a readable stderr error and a bounded unified-log startup line. An unavailable probe only logs and proceeds. Pre-AppKit failure no longer creates an AppKit alert, which could repeat a registration abort. The launcher unit fixture covers graphical, unknown and denied session outcomes and a clean status-78 refusal. Agent OS quick passed 219 unit checks (3 skips), typechecks and lint; native `core` passed 30 smoke checks (no skips). The operator's cold/warm `trezi` and LaunchServices launch, matching-build symbolication and reported crash reproduction remain unverified.
+
 ## 2026-10-13 — LKM-245 review repair: the dot keeps the glyphs' colours
 
 - Review found the first dot recoloured two states: the old `branchTitle` coloured only `●` and `◌` (red failed, green passed, orange running), so the no-checks `○` and unknown `?` used the preview header's text colour. The dot now does the same: orange only for running, and `BranchStatusDot.textColor` (kept in step with `NativeShell.previewTextColor`) for no checks and unknown. `BranchStatusDot.inspect` reports `branchDotColor` (`red`, `green`, `orange` or `text`) and `smoke-branch-dot.ts` pins it for every state.

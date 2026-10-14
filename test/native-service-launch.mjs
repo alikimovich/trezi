@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultProfile, launchBun, nativeServiceLaunchSpec } from '../scripts/start-native.mjs'
+import { swiftBuild } from './helpers/swift-build.mjs'
 
 const directory = mkdtempSync(join(tmpdir(), 'trezi-launch-'))
 try {
@@ -39,6 +41,33 @@ try {
   assert.equal(test.env.TREZI_LOG_DIR, join(directory, 'logs'))
   assert.equal(current.env.TREZI_LOG_DIR, env.TREZI_LOG_DIR)
   assert.equal(test.args[1], 'ephemeral')
+  if (process.platform === 'darwin') {
+    const main = join(directory, 'main.swift')
+    writeFileSync(
+      main,
+      `import Security
+let graphic = SessionAttributeBits.sessionHasGraphicAccess
+precondition(HostLaunch.graphicSessionProblem(status: errSecSuccess, attributes: graphic) == nil)
+precondition(HostLaunch.graphicSessionProblem(status: -1, attributes: SessionAttributeBits(rawValue: 0)) == nil)
+precondition(HostLaunch.graphicSessionProblem(status: errSecSuccess, attributes: SessionAttributeBits(rawValue: 0))?.contains("graphical login session") == true)
+if CommandLine.arguments.contains("deny") { HostLaunch.fail("Trezi needs a macOS graphical login session.") }
+`
+    )
+    const probe = swiftBuild('host-launch-preflight', [
+      main,
+      'src/native/HostLaunch.swift',
+      '-framework',
+      'AppKit',
+      '-framework',
+      'Security'
+    ])
+    const good = spawnSync(probe, [], { encoding: 'utf8' })
+    assert.equal(good.status, 0, good.stderr)
+    const denied = spawnSync(probe, ['deny'], { encoding: 'utf8' })
+    assert.equal(denied.signal, null, 'startup refusal must not abort')
+    assert.equal(denied.status, 78)
+    assert.match(denied.stderr, /Trezi needs a macOS graphical login session/)
+  }
   // The default profile comes from the service, which makes the `Praxis Native` alias.
   assert.throws(() => defaultProfile(join(directory, 'no-build'), directory), /run bun run build/)
   const out = fileURLToPath(new URL('../out/native', import.meta.url))

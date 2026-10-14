@@ -18,6 +18,27 @@ effect materials. This migration was verified on macOS 26.4.1, not every support
 OS version. Start through `scripts/start-native.mjs` (via the CLI/dev/start scripts):
 the source-built host requires launch arguments and its bundled XPC service.
 
+### Startup registration diagnostics (LKM-249)
+
+`trezi` and `open -a Trezi` enter through LaunchServices; `bun run dev` and
+native tests execute TreziHost directly from a terminal. These routes inherit
+different bootstrap and shell environments. Before AppKit registration, the host
+now checks whether its macOS security session has graphical access. A known
+non-graphical session exits with a readable message and status 78; a probe error
+is logged but does not claim the session is invalid. Pre-AppKit startup failures
+also appear in the unified log under subsystem `dev.trezi.host`, category
+`startup`, without requiring an AppKit alert.
+
+The reported 0.1.0 build 1067 SIGABRT stack reaches HIServices registration, but
+does not identify the reason. This worktree had no matching built app or crash
+report for symbolication, and no safe cold/warm launch was made against the
+operator's profile. To investigate a recurrence, an operator can capture the
+host's stderr and the `dev.trezi.host` startup errors/faults in Console, along
+with the app's `codesign --verify --deep --strict` result and the exact build
+number. Use a disposable `TREZI_USER_DATA` profile for reproduction; check both
+the desktop `trezi` route and a GUI-session terminal's development route. Do not
+infer a LaunchServices database or signing defect from the stack alone.
+
 ## Native ownership
 
 | Surface | Implementation |

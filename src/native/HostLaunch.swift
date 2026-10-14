@@ -1,5 +1,7 @@
 import AppKit
 import Darwin
+import Security
+import os.log
 
 /// How this TreziHost was started, and the service launch it asks for.
 ///
@@ -14,6 +16,7 @@ import Darwin
 ///
 /// Anything else (a direct exec with the wrong arguments) is refused with status 64.
 enum HostLaunch {
+    private static let startupLog = OSLog(subsystem: "dev.trezi.host", category: "startup")
     /// Started by LaunchServices (not by the launcher or a test).
     static let launchServices: Bool = {
         let rest = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-psn_") }
@@ -27,6 +30,24 @@ enum HostLaunch {
     static var arguments: [String] { resolve().arguments }
     /// The environment the service passes to Bun and the helpers.
     static var environment: [String: String] { resolve().environment }
+
+    /// AppKit's application registration requires a graphical security session.
+    /// Check before NSApplication.shared: a registration abort cannot be caught in Swift.
+    static func requireGraphicSession() {
+        var session = SecuritySessionId(0)
+        var attributes = SessionAttributeBits(rawValue: 0)
+        let status = SessionGetInfo(SecuritySessionId(bitPattern: -1), &session, &attributes)
+        if let problem = graphicSessionProblem(status: status, attributes: attributes) { fail(problem) }
+        // An unavailable SecuritySession probe is not proof that AppKit will fail.
+        if status != errSecSuccess {
+            os_log("Graphic session probe unavailable before AppKit (status %{public}d)", log: startupLog, type: .error, status)
+        }
+    }
+
+    static func graphicSessionProblem(status: OSStatus, attributes: SessionAttributeBits) -> String? {
+        guard status == errSecSuccess, !attributes.contains(.sessionHasGraphicAccess) else { return nil }
+        return "Trezi needs a macOS graphical login session. Open it from the desktop with trezi or open -a Trezi; run development tests from a terminal in that session."
+    }
 
     private static func resolve() -> (arguments: [String], environment: [String: String]) {
         if let resolved { return resolved }
@@ -107,19 +128,11 @@ enum HostLaunch {
         return (process.terminationStatus, String(decoding: stdout, as: UTF8.self), String(decoding: stderr, as: UTF8.self))
     }
 
-    /// A launch that cannot start: an alert under LaunchServices (there is no terminal).
+    /// Fail before AppKit. Creating an NSAlert here could trigger the same registration abort.
     static func fail(_ message: String) -> Never {
         fputs("\(message)\n", stderr)
-        if launchServices {
-            let application = NSApplication.shared
-            application.setActivationPolicy(.regular)
-            application.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = "Trezi could not start"
-            alert.informativeText = message
-            alert.runModal()
-        }
-        exit(1)
+        os_log("Trezi startup refused before AppKit: %{public}@", log: startupLog, type: .error, message)
+        exit(78)
     }
 
     /// Restart after an update: the same way Trezi was started, with the active project.
