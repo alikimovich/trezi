@@ -117,6 +117,8 @@ export class NativeGitController {
   async refresh(root: string) {
     const revision = (this.revisions.get(root) ?? 0) + 1
     this.revisions.set(root, revision)
+    this.statuses.delete(root)
+    this.render()
     const git = await this.invoke('git:list', root)
     if (this.revisions.get(root) !== revision) return
     const entry = this.workspace.state.projects.find((p) => p.root === root)
@@ -137,10 +139,18 @@ export class NativeGitController {
   /** Running checks are refreshed within a minute; settled checks every ten minutes. */
   async pollStatus(root: string) {
     if (this.statusFlights.has(root)) return
+    const revision = this.revisions.get(root) ?? 0
+    const branch = this.workspace.state.projects.find((p) => p.root === root)?.branch
     this.statusFlights.add(root)
     clearTimeout(this.statusTimers.get(root))
     try {
       const status: BranchStatus = await this.invoke('github:branch-status', root)
+      if (
+        this.revisions.get(root) !== revision ||
+        this.workspace.state.projects.find((p) => p.root === root)?.branch !== branch ||
+        (status.branch && status.branch !== branch)
+      )
+        throw new Error('Stale branch status')
       const previous = this.statuses.get(root)
       this.statuses.set(root, status)
       this.render()
@@ -162,10 +172,16 @@ export class NativeGitController {
         await this.handleFailure(root, status)
       }
     } catch {
-      this.statuses.delete(root)
-      this.render()
+      if (this.revisions.get(root) === revision) {
+        this.statuses.delete(root)
+        this.render()
+      }
     }
     this.statusFlights.delete(root)
+    if (this.revisions.get(root) !== revision) {
+      void this.pollStatus(root)
+      return
+    }
     if (!this.workspace.state.projects.some((project) => project.root === root)) return
     const current = this.statuses.get(root)
     clearTimeout(this.statusTimers.get(root))

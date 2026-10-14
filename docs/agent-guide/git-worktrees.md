@@ -52,6 +52,8 @@ Moved from the old `CLAUDE.md` ("Gotchas", "Conventions") and `AGENTS.md`
   (partial) commit, so a user's unrelated dirty/staged work is never swept in.
   Consequence for anything that asks "what did this session change?": a diff vs
   `HEAD` now returns nothing — compare against the merge base with the default
-  branch instead (`src/main/publish-scope.ts` does, for the publish paths).
+  branch instead for session attribution. For publishability, compare current
+  content to the fetched default branch (`src/main/publish-scope.ts`), so squash
+  or cherry-pick history does not count as unpublished files.
 - **A tool callback's `root` is the chat's WORKTREE, not the live tree** — persist app
   state under `SpawnContext.liveRoot` (details in [gotchas.md](gotchas.md)).

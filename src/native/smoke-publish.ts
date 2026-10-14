@@ -8,6 +8,7 @@ import {
   workflowOwner
 } from '../main/workflow-owner'
 import type { PublishResult } from '../shared/api'
+import type { BranchStatus } from '../shared/native-shell'
 import type { NativeBridge } from './bridge'
 import type { NativeGitController } from './git-controller'
 import { checkBranchDot } from './smoke-branch-dot'
@@ -115,6 +116,10 @@ export async function checkPublishProgress(
       base: 'main',
       ahead: 2,
       behind: 0,
+      unpushed: 2,
+      upstream: 'origin/trezi/main',
+      unpublished: true,
+      dirty: false,
       sync: '2 ahead · 0 behind main',
       ci: 'running' as const,
       failing: [] as string[]
@@ -158,6 +163,106 @@ export async function checkPublishProgress(
     }
     await host.request('shellPerform', { action: 'window-appearance', row: '' })
     await host.request('shellPerform', { action: 'window-width', row: '1320' })
+    const statusCase = async (
+      name: string,
+      patch: Partial<BranchStatus>,
+      includes: string[],
+      excludes: string[]
+    ) => {
+      git.statuses.set(root, { ...sample, ...patch })
+      git.render()
+      const view = await waitFor(async () => {
+        const current = await host.request('shellInspect')
+        const display = String(current.branchDisplay)
+        return includes.every((fragment) => display.includes(fragment)) &&
+          excludes.every((fragment) => !display.includes(fragment))
+          ? current
+          : null
+      }, `${name} toolbar status`)
+      for (const fragment of includes)
+        assert.ok(String(view.branchDisplay).includes(fragment), `${name}: ${fragment}`)
+      for (const fragment of excludes)
+        assert.ok(!String(view.branchDisplay).includes(fragment), `${name}: no ${fragment}`)
+      assert.ok(view.addressTrailing < view.rightGroupLeading, `${name}: status fits toolbar`)
+    }
+    await statusCase(
+      'squash-merged',
+      {
+        ahead: 42,
+        unpushed: 0,
+        unpublished: false,
+        pr: { number: 126, state: 'merged', url: 'https://github.com/o/r/pull/126' },
+        ci: 'passed',
+        deployment: {
+          state: 'failed',
+          revision: 'base-sha',
+          url: 'https://github.com/o/r/deployments/1'
+        }
+      },
+      ['✓', '#126', 'Deploy failed'],
+      ['42↑', 'Changes']
+    )
+    for (const width of [1320, 850]) {
+      assert.ok(await host.request('shellPerform', { action: 'window-width', row: String(width) }))
+      for (const appearance of ['light', 'dark']) {
+        assert.ok(
+          await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+        )
+        const view = await host.request('shellInspect')
+        assert.ok(view.addressTrailing < view.rightGroupLeading)
+        assert.ok(view.branchProgressFits)
+        writeFileSync(
+          join(artifacts, `branch-status-merged-${width}-${appearance}.json`),
+          JSON.stringify(view, null, 2)
+        )
+        await capture(host, artifacts, `branch-status-merged-${width}-${appearance}`)
+      }
+    }
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
+    await host.request('shellPerform', { action: 'window-width', row: '1320' })
+    await statusCase(
+      'new-content',
+      { ahead: 42, unpushed: 0, unpublished: true, ci: 'running', pr: undefined },
+      ['Changes'],
+      ['42↑', '#126']
+    )
+    await statusCase(
+      'deployment-pending',
+      { ci: 'passed', deployment: { state: 'pending', revision: 'base-sha' } },
+      ['Deploy pending'],
+      ['Deploy failed']
+    )
+    assert.equal((await host.request('shellInspect')).branchBusy, true)
+    await statusCase(
+      'unpushed',
+      { ahead: 42, unpushed: 2, unpublished: true, ci: 'passed' },
+      ['2↑', 'Changes'],
+      ['42↑']
+    )
+    await statusCase(
+      'dirty',
+      { dirty: true, unpublished: true, unpushed: 0, ci: 'none' },
+      ['Edited'],
+      ['↑']
+    )
+    await statusCase(
+      'open-pr',
+      { pr: { number: 127, state: 'open', url: 'https://github.com/o/r/pull/127' }, ci: 'passed' },
+      ['#127'],
+      ['#126']
+    )
+    await statusCase(
+      'closed-pr',
+      {
+        pr: { number: 128, state: 'closed', url: 'https://github.com/o/r/pull/128' },
+        ci: 'failed',
+        failing: ['build']
+      },
+      ['#128'],
+      ['#127']
+    )
+    git.statuses.set(root, sample)
+    git.render()
     const dot = await checkBranchDot(host, git, root, sample, artifacts)
     // The Publish label's width can move the whole address block; the dot keeps its
     // frame inside the branch control and its centre line.

@@ -396,7 +396,6 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         do {
             let title = previewState["branch"] as? String ?? "Branch"
             let status = previewState["branchStatus"] as? [String: Any] ?? [:]
-            let sync = status["sync"] as? String ?? ""
             let ci = status["ci"] as? String ?? "unknown"
             let failing = status["failing"] as? [String] ?? []
             let step = previewState["publishStep"] as? String
@@ -404,19 +403,27 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let prText = (pr?["number"] as? Int).map { "PR #\($0) \(pr?["state"] as? String ?? "open")" } ?? ""
             let ciText = ci == "failed" ? "●\(failing.count)" : ci == "running" ? "◌" : ci == "passed" ? "●" : ci == "none" ? "○" : "?"
             let ahead = status["ahead"] as? Int ?? 0, behind = status["behind"] as? Int ?? 0
-            let compactSync = ahead == 0 && behind == 0 ? "✓" : [ahead > 0 ? "\(ahead)↑" : "", behind > 0 ? "\(behind)↓" : ""].filter { !$0.isEmpty }.joined(separator: " ")
+            let unpushed = status["unpushed"] as? Int
+            let unpublished = status["unpublished"] as? Bool ?? false
+            let dirty = status["dirty"] as? Bool ?? false
+            let stale = status["stale"] as? Bool ?? false
+            let compactSync = [dirty ? "Edited" : stale ? "Refs stale" : unpublished ? "Changes" : "", (unpushed ?? 0) > 0 ? "\(unpushed!)↑" : "", behind > 0 ? "\(behind)↓" : ""].filter { !$0.isEmpty }.joined(separator: " ")
+            let deployment = status["deployment"] as? [String: Any] ?? [:]
+            let deployState = deployment["state"] as? String ?? "unknown"
+            let syncMark = compactSync.isEmpty ? (unpushed == nil ? "?" : "✓") : compactSync
             // The check state comes first so AppKit's tail truncation cannot hide it.
             let compactPR = (pr?["number"] as? Int).map { "#\($0)" } ?? ""
-            let busy = step != nil || ci == "running"
+            let busy = step != nil || ci == "running" || deployState == "pending"
             let prefix = "\(title) · "
             // The drawn dot keeps one slot in every state; the spinner's two en spaces follow it.
             let slot = "\u{2002}\u{2002}"
             let dotted = prefix + BranchStatusDot.slot + (ci == "failed" ? "\(failing.count)" : "")
-            let rest = step.map { " \($0)" } ?? " · \(compactSync)\(compactPR.isEmpty ? "" : " · " + compactPR)"
+            let deployMark = deployState == "failed" ? " · Deploy failed" : deployState == "pending" ? " · Deploy pending" : ""
+            let rest = step.map { " \($0)" } ?? "\(deployMark) · \(syncMark)\(compactPR.isEmpty ? "" : " · " + compactPR)"
             let display = dotted + (busy ? " " + slot : "") + rest
             // VoiceOver keeps the glyph wording it had before the dot was drawn.
-            let spoken = prefix + (step.map { " \($0)" } ?? "\(busy ? " " : "")\(ciText) · \(compactSync)\(compactPR.isEmpty ? "" : " · " + compactPR)")
-            branchMenu.toolTip = [title, sync, prText, ci == "unknown" ? "CI unknown" : "CI \(ci): \(failing.joined(separator: ", "))"].filter { !$0.isEmpty }.joined(separator: "\n")
+            let spoken = prefix + (step.map { " \($0)" } ?? "\(busy ? " " : "")\(ciText)\(deployMark) · \(syncMark)\(compactPR.isEmpty ? "" : " · " + compactPR)")
+            branchMenu.toolTip = [title, stale ? "Fetched default branch is stale" : dirty ? "Working tree edited" : unpublished ? "Content to publish" : "No content to publish", unpushed.map { "\($0) commits ahead of upstream" } ?? "Upstream unknown", "History: \(ahead) ahead · \(behind) behind \(status["base"] as? String ?? "default")", prText, "CI \(ci)\(failing.isEmpty ? "" : ": " + failing.joined(separator: ", "))", "Deployment \(deployState)"].filter { !$0.isEmpty }.joined(separator: "\n")
             branchMenu.isEnabled = previewState["branch"] is String
             let menu = NSMenu(); menu.autoenablesItems = false
             func add(_ title: String, _ action: String, _ value: String = "") {
@@ -425,11 +432,15 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                 if action == "branch" { entry.state = value == previewState["branch"] as? String ? .on : .off }
                 menu.addItem(entry)
             }
-            if !sync.isEmpty { let row = NSMenuItem(title: sync, action: nil, keyEquivalent: ""); row.isEnabled = false; menu.addItem(row) }
+            for detail in [stale ? "Fetched default branch is stale · Refresh Git updates" : dirty ? "Working tree edited" : unpublished ? "Content to publish" : "No content to publish", unpushed.map { "\($0) commits ahead of \(status["upstream"] as? String ?? "upstream")" } ?? "Upstream unknown", "History: \(ahead) ahead · \(behind) behind \(status["base"] as? String ?? "default")"] {
+                let row = NSMenuItem(title: detail, action: nil, keyEquivalent: ""); row.isEnabled = false; menu.addItem(row)
+            }
             if let pr = status["pr"] as? [String: Any], let number = pr["number"] as? Int {
                 add("PR #\(number) \(pr["state"] as? String ?? "open") · View on GitHub", "branch-open-url", pr["url"] as? String ?? "")
             }
             if ci != "unknown" { add("CI \(ci)\(failing.isEmpty ? "" : ": " + failing.joined(separator: ", ")) · View checks", "branch-open-url", status["checksUrl"] as? String ?? "") }
+            if let url = deployment["url"] as? String, !url.isEmpty { add("Deployment \(deployState) · View details", "branch-open-url", url) }
+            else { let row = NSMenuItem(title: "Deployment \(deployState)", action: nil, keyEquivalent: ""); row.isEnabled = false; menu.addItem(row) }
             add("Git Updates…", "git-updates"); menu.addItem(.separator())
             for branch in previewState["branches"] as? [String] ?? [] { add(branch, "branch", branch) }
             menu.addItem(.separator()); add("New Branch…", "new-branch")

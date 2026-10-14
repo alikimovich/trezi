@@ -73,9 +73,11 @@ struct WorkflowPublish {
             let staged = try context.run(["diff", "--cached", "--name-only"])
             if !staged.isEmpty { try context.run(["commit", "-m", "Prepare project changes for publishing"]) }
             try context.done("commit", [("committed", .bool(!staged.isEmpty))])
-            let ahead = (try? context.run(["rev-list", "--count", "\(base)..\(branch)"])) ?? "0"
-            // A branch synced with a squash-merged base is ahead by commits that change nothing.
-            if staged.isEmpty && (ahead == "0" || context.succeeds(["diff", "--quiet", base, branch])) {
+            // The default-branch content check must use the latest fetched tip.
+            try context.run(["fetch", "--prune", "origin"])
+            let baseRef = (try? context.run(["rev-parse", "--verify", "refs/remotes/origin/\(base)"])) != nil
+                ? "refs/remotes/origin/\(base)" : "refs/heads/\(base)"
+            if context.succeeds(["diff", "--quiet", baseRef, branch]) {
                 return WorkflowContext.fail("Nothing to publish — no changes since \(base).")
             }
             try context.begin("push")
@@ -422,18 +424,19 @@ struct WorkflowPublish {
         ((try? context.run(["diff", "--name-only", "--diff-filter=U", "--"])) ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
     }
 
-    /// Tracked files this branch changed, committed work included (publish-scope.ts).
+    /// Files whose current content differs from the fetched default branch.
     private func changedSince() -> [String] {
         let flags = ["-c", "core.quotePath=false", "diff", "--name-only"]
-        var out: String
-        if let base = try? context.run(["merge-base", "HEAD", context.defaultBase()]) {
-            out = (try? context.run(flags + [base])) ?? ""
-        } else { out = (try? context.run(flags + ["HEAD"])) ?? "" }
+        let base = context.defaultBase()
+        let ref = ["refs/remotes/origin/\(base)", "refs/heads/\(base)", "HEAD"].first {
+            context.succeeds(["rev-parse", "--verify", $0])
+        } ?? "HEAD"
+        let out = (try? context.run(flags + [ref])) ?? ""
         return out.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     private func aheadOfBase(_ base: String) -> Int {
-        for ref in [base, "origin/\(base)"] {
+        for ref in ["refs/remotes/origin/\(base)", "refs/heads/\(base)"] {
             if let count = try? context.run(["rev-list", "--count", "\(ref)..HEAD"]), let value = Int(count) { return value }
         }
         return 0

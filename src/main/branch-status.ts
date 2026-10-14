@@ -50,14 +50,13 @@ export function deriveChecks(
       : current.some((check) => check.status !== 'completed')
         ? 'running'
         : current.length &&
-            current.some(
-              (check) =>
-                check.conclusion === 'success' ||
-                check.conclusion === 'neutral' ||
-                check.conclusion === 'skipped'
+            current.every((check) =>
+              ['success', 'neutral', 'skipped'].includes(check.conclusion ?? '')
             )
           ? 'passed'
-          : 'none',
+          : current.length
+            ? 'unknown'
+            : 'none',
     failing
   }
 }
@@ -99,53 +98,145 @@ export function cachedGithubApi(
 }
 const api = cachedGithubApi((root, args) => run('gh', args, root))
 
-/** Reads only local refs and GitHub REST. A disconnected/offline project becomes unknown. */
-export async function branchStatus(root: string): Promise<BranchStatus> {
+/** Reads only local refs and GitHub REST. Injectable reads keep fixture tests offline. */
+export async function branchStatus(
+  root: string,
+  reads: { run: typeof run; api: typeof api } = { run, api }
+): Promise<BranchStatus> {
+  const { run: read, api: request } = reads
   const base = await defaultBase(root)
+  const branch = await read('git', ['branch', '--show-current'], root).catch(() => '')
+  const head = await read('git', ['rev-parse', 'HEAD'], root).catch(() => '')
+  const remote = await read('git', ['remote', 'get-url', 'origin'], root).catch(() => '')
+  const baseRef = `refs/remotes/origin/${base}`
+  const baseSha = await read('git', ['rev-parse', '--verify', baseRef], root).catch(() => '')
+  const localBase = await read('git', ['rev-parse', '--verify', `refs/heads/${base}`], root).catch(
+    () => ''
+  )
+  const compareRef = baseSha ? baseRef : localBase ? `refs/heads/${base}` : ''
   let counts = '0 0'
   try {
-    counts = await run(
-      'git',
-      ['rev-list', '--left-right', '--count', `origin/${base}...HEAD`],
-      root
-    )
+    if (compareRef)
+      counts = await read(
+        'git',
+        ['rev-list', '--left-right', '--count', `${compareRef}...HEAD`],
+        root
+      )
   } catch {}
   const sync = deriveSync(counts, base)
-  const status: BranchStatus = { base, ...sync, ci: 'unknown', failing: [] }
+  const dirty = !!(await read(
+    'git',
+    ['status', '--porcelain', '--untracked-files=normal'],
+    root
+  ).catch(() => ''))
+  const unpublished = compareRef
+    ? !(await read('git', ['diff', '--quiet', compareRef], root).then(
+        () => true,
+        () => false
+      ))
+    : dirty
+  const upstream = await read(
+    'git',
+    ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+    root
+  ).catch(() => '')
+  const unpushed = upstream
+    ? Number(
+        await read('git', ['rev-list', '--count', `${upstream}..HEAD`], root).catch(() => 'NaN')
+      )
+    : null
+  const status: BranchStatus = {
+    base,
+    branch,
+    ...sync,
+    dirty,
+    unpublished: unpublished || dirty,
+    unpushed: Number.isSafeInteger(unpushed) ? unpushed : null,
+    upstream: upstream || undefined,
+    remote: remote || undefined,
+    ci: 'unknown',
+    failing: [],
+    deployment: { state: 'unknown' }
+  }
   try {
-    const branch = await run('git', ['branch', '--show-current'], root)
-    const repo = JSON.parse(await run('gh', ['repo', 'view', '--json', 'nameWithOwner'], root))
+    const repo = JSON.parse(await read('gh', ['repo', 'view', '--json', 'nameWithOwner'], root))
       .nameWithOwner as string
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return status
-    const prs = await api(
-      root,
-      `repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${repo.split('/')[0]}:${branch}`)}&per_page=1`
+    // gh's current repo must be the origin whose refs were used above.
+    if (
+      !new RegExp(`[:/]${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).test(
+        remote.replace(/\.git$/, '')
+      )
     )
-    const pr = Array.isArray(prs) ? prs[0] : undefined
+      return status
+    const remoteBase = await request(root, `repos/${repo}/branches/${encodeURIComponent(base)}`)
+    const currentBaseSha = remoteBase?.commit?.sha as string | undefined
+    status.stale = !!baseSha && !!currentBaseSha && baseSha !== currentBaseSha
+    const prs = await request(
+      root,
+      `repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${repo.split('/')[0]}:${branch}`)}&per_page=20`
+    )
+    const pr = Array.isArray(prs)
+      ? (prs.find(
+          (item) =>
+            item.head?.sha === head &&
+            item.base?.ref === base &&
+            (!item.merged_at || !status.unpublished)
+        ) ??
+        prs.find((item) => item.state === 'open' && item.base?.ref === base) ??
+        (!status.unpublished && baseSha
+          ? prs.find((item) => item.merged_at && item.base?.ref === base)
+          : undefined))
+      : undefined
     if (pr)
       status.pr = {
         number: pr.number,
         state: pr.merged_at ? 'merged' : pr.state === 'closed' ? 'closed' : 'open',
         url: pr.html_url
       }
-    try {
-      const comparison = await api(
-        root,
-        `repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}`
-      )
-      if (Number.isSafeInteger(comparison.ahead_by) && Number.isSafeInteger(comparison.behind_by))
-        Object.assign(status, deriveSync(`${comparison.behind_by} ${comparison.ahead_by}`, base))
-    } catch {}
     const sha =
-      status.pr?.state === 'merged'
-        ? (await api(root, `repos/${repo}/branches/${encodeURIComponent(base)}`)).commit.sha
-        : (pr?.head?.sha ?? (await run('git', ['rev-parse', 'HEAD'], root)))
+      status.pr?.state === 'merged' && !status.unpublished && currentBaseSha ? currentBaseSha : head
     status.commit = sha
     status.checksUrl = `https://github.com/${repo}/commit/${sha}/checks`
-    const checks = await api(root, `repos/${repo}/commits/${sha}/check-runs?per_page=100`)
-    Object.assign(status, deriveChecks(Array.isArray(checks.check_runs) ? checks.check_runs : []))
+    if (sha === head && (status.unpushed ?? 0) > 0) {
+      status.ci = 'unknown'
+    } else {
+      const checks = await request(root, `repos/${repo}/commits/${sha}/check-runs?per_page=100`)
+      Object.assign(status, deriveChecks(Array.isArray(checks.check_runs) ? checks.check_runs : []))
+    }
+    // GitHub deployment statuses are revision-bound. A deployment of an older SHA
+    // remains visible as stale rather than being credited to the selected commit.
+    try {
+      const deployments = await request(
+        root,
+        `repos/${repo}/deployments?environment=production&per_page=1`
+      )
+      const deployment = Array.isArray(deployments) ? deployments[0] : undefined
+      if (deployment?.sha) {
+        const response = await request(
+          root,
+          `repos/${repo}/deployments/${deployment.id}/statuses?per_page=1`
+        )
+        const latest = Array.isArray(response) ? response[0] : undefined
+        const state =
+          latest?.state === 'success'
+            ? 'passed'
+            : ['failure', 'error'].includes(latest?.state)
+              ? 'failed'
+              : ['pending', 'in_progress', 'queued'].includes(latest?.state)
+                ? 'pending'
+                : 'unknown'
+        status.deployment = {
+          state: deployment.sha === sha ? state : 'stale',
+          revision: deployment.sha,
+          url: latest?.target_url || latest?.log_url || deployment?.html_url
+        }
+      } else status.deployment = { state: 'none' }
+    } catch {
+      status.deployment = { state: 'error' }
+    }
   } catch {
-    status.ci = 'unknown'
+    status.ci = 'error'
     status.failing = []
   }
   return status

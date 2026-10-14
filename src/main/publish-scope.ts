@@ -36,10 +36,9 @@ export async function defaultBase(root: string): Promise<string> {
   }
 }
 
-/** How many commits HEAD is ahead of the default branch (local ref first, then the
- *  remote-tracking one). 0 when neither resolves — e.g. a repo never pushed anywhere. */
+/** History only; prefer the fetched remote tip over a potentially stale local base. */
 export async function aheadOfBase(root: string, base: string): Promise<number> {
-  for (const ref of [base, `origin/${base}`]) {
+  for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`]) {
     try {
       const n = Number(await git(root, ['rev-list', '--count', `${ref}..HEAD`]))
       if (Number.isFinite(n)) return n
@@ -51,23 +50,23 @@ export async function aheadOfBase(root: string, base: string): Promise<number> {
 }
 
 /**
- * Tracked files this branch changed — COMMITTED work included. Diffs against the merge
- * base with the default branch, two-dot (i.e. vs the WORKING TREE) so uncommitted edits
- * still count, and falls back to HEAD when there's no base to compare against (no
- * origin, unborn branch, or the checkout IS the base branch). Clean paths — no porcelain
- * quoting or rename arrows.
+ * Files whose current content differs from the fetched default branch, including
+ * working tree edits. A merge-base diff would count already squash-merged files.
  */
 export async function changedSince(root: string): Promise<string[]> {
   const flags = ['-c', 'core.quotePath=false', 'diff', '--name-only']
   let out: string
-  try {
-    const mergeBase = await git(root, ['merge-base', 'HEAD', await defaultBase(root)])
-    out = await git(root, [...flags, mergeBase])
-  } catch {
-    out = await git(root, [...flags, 'HEAD'])
+  const base = await defaultBase(root)
+  for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`, 'HEAD']) {
+    try {
+      out = await git(root, [...flags, ref])
+      return out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+    } catch {
+      /* Try the next available ref. */
+    }
   }
-  return out
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
+  return []
 }

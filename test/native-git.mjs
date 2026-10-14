@@ -346,6 +346,31 @@ await git.pollStatus('/a')
 assert.equal(lastToast().action, 'View checks')
 assert.equal(lastToast().actions, undefined)
 assert.equal(notifications().length, notified, 'Off sends no macOS notification')
+// A reply started before refresh cannot restore a previous branch's status.
+const previousInvoke = sheets.invoke
+let releaseStatus
+let delayed = true
+Object.defineProperty(sheets, 'invoke', {
+  configurable: true,
+  value: (channel, ...args) =>
+    channel === 'github:branch-status' && delayed
+      ? new Promise((resolve) => {
+          releaseStatus = resolve
+        })
+      : previousInvoke(channel, ...args)
+})
+const staleRead = git.pollStatus('/a')
+await tick()
+assert.ok(releaseStatus, 'old status read started')
+delayed = false
+branch = 'main'
+await git.refresh('/a')
+releaseStatus({ ...ciStatus, branch: 'feature', commit: '6'.repeat(40) })
+await staleRead
+await tick()
+assert.equal(git.statuses.get('/a')?.commit, ciStatus.commit, 'refresh reruns after stale reply')
+assert.equal(git.statuses.get('/a')?.branch, undefined, 'old branch identity was discarded')
+Object.defineProperty(sheets, 'invoke', { configurable: true, value: previousInvoke })
 console.log(
   'Native Git: branch scope, publish mode/concurrency, conflicts, connection and remote update passed'
 )
