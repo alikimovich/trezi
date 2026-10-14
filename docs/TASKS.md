@@ -1505,6 +1505,7 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
 
 - [x] LKM-214: Move exploded-view controls and status to native Swift; follow effective light/dark appearance with a bounded scene contract.
 - [x] LKM-227: Render the exploded view natively (Core Animation planes from a bounded atlas capture at backing scale); remove the in-page CSS scene, keep capture, show a native message when capture fails.
+- [x] LKM-257: Add restrained native Z backing and dashed guides at matching corners of captured parent/child blocks; hide guides when assembled.
 
 - [x] Keep the selected layer's Code action available inside the 3D workspace.
 

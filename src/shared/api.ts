@@ -1364,6 +1364,8 @@ export interface ThreeDLayer {
   id: number
   label: string
   depth: number
+  /** Index of the nearest captured DOM ancestor, or -1 for the root. */
+  parent: number
   x: number
   y: number
   width: number

@@ -88,6 +88,13 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   ])
   assert.equal(opened.planes, 5)
   assert.equal(opened.rendered, 5, 'every layer renders natively')
+  assert.equal(opened.guides, 8, 'two guides join each captured parent and child')
+  assert.deepEqual(opened.guideParents, [0, 0, 1, 1, 0, 0, 3, 3])
+  const guideCapture = await host.request('threeDCapture', { dark: false })
+  writeFileSync(
+    join(artifacts, 'three-d-exploded-guides.png'),
+    Buffer.from(guideCapture.png, 'base64')
+  )
   assert.equal(opened.sceneHidden, false)
   assert.equal(opened.message, '', 'no fallback message over a captured scene')
   assert.equal(opened.countLabel, '5 layers')
@@ -146,10 +153,11 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     return s.pitch === 0 && s.yaw === 0 && s.separation === 0 && near(s.spacing, 0) && s
   }, 'Front assembles the layers')
   assert.equal(front.sceneSeparation, 0)
+  assert.equal(front.guides, 0, 'guides disappear when the layers assemble')
   await perform('separation', 82)
   await waitFor(async () => {
     const s = await inspect()
-    return s.separation === 82 && near(s.spacing, 82)
+    return s.separation === 82 && near(s.spacing, 82) && s.guides === 8
   }, 'separation changes the native layer spacing')
   await perform('separation', 20)
   await waitFor(async () => near((await inspect()).spacing, 20), 'spacing follows the slider live')
