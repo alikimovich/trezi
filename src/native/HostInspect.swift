@@ -134,6 +134,11 @@ extension Host {
             if c["action"] as? String == "closeWindow" { sheets.panel?.performClose(nil) }
             else { sheets.model.perform(c["action"] as? String ?? "") }
             reply(id, true)
+        case "sheetAppearance":
+            guard ephemeral, let panel = sheets.panel else { reply(id, false); return true }
+            let appearance = c["appearance"] as? String
+            panel.appearance = appearance == "dark" ? NSAppearance(named: .darkAqua) : appearance == "light" ? NSAppearance(named: .aqua) : nil
+            reply(id, true)
         // The in-window confirmation toast (LKM-170); perform clicks its action.
         case "toastInspect":
             let point = NSPoint(x: toast.frame.midX, y: toast.frame.midY)

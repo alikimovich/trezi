@@ -550,6 +550,64 @@ try {
         },
         false
       )
+      // A reviewed scope includes staged and new files, but leaves runtime secrets alone.
+      write(w.local, 'main.txt', 'local tracked change\n')
+      git(w.local, 'add', 'main.txt')
+      write(w.local, 'local-note.txt', 'new local note\n')
+      write(w.local, '.env', 'TEST_SECRET=never-commit\n')
+      const reviewed = await owner.remoteStatus(w.local, false)
+      assert.deepEqual(reviewed.changes.map((change) => change.path).sort(), [
+        'local-note.txt',
+        'main.txt'
+      ])
+      const beforeCommit = git(w.local, 'rev-parse', 'HEAD')
+      const drifted = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep local work', changeToken: 'stale token' }
+        },
+        false
+      )
+      assert.equal(drifted.ok, false)
+      assert.equal(git(w.local, 'rev-parse', 'HEAD'), beforeCommit)
+      const hook = join(w.local, '.git', 'hooks', 'pre-commit')
+      writeFileSync(hook, '#!/bin/sh\nexit 1\n')
+      chmodSync(hook, 0o755)
+      const rejected = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep local work', changeToken: reviewed.changeToken }
+        },
+        false
+      )
+      assert.equal(rejected.ok, false)
+      assert.equal(git(w.local, 'rev-parse', 'HEAD'), beforeCommit)
+      rmSync(hook)
+      const fresh = await owner.remoteStatus(w.local, false)
+      const recovered = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep local work', changeToken: fresh.changeToken }
+        },
+        false
+      )
+      assert.equal(recovered.ok, true, recovered.message)
+      assert.equal(git(w.local, 'log', '-1', '--format=%s'), 'Keep local work')
+      assert.equal(
+        git(w.local, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'),
+        'local-note.txt\nmain.txt'
+      )
+      assert.equal(readFileSync(join(w.local, '.env'), 'utf8'), 'TEST_SECRET=never-commit\n')
+      assert.equal(git(w.local, 'rev-list', '--count', `${beforeCommit}..HEAD`), '1')
       const update = await owner.updateCheck(w.local)
       let outside
       try {
@@ -565,6 +623,225 @@ try {
     assert.equal(remote.busy.ok, false)
     assert.match(remote.outside, /top-level folder/)
     assert.deepEqual(remote.update, { status: 'idle', behind: 0 }) // the fixture branch is not behind its own upstream
+
+    // Recovery from a dirty tree: drift, busy, conflict, retry and Switch (LKM-250).
+    await owned('remote-recovery', async (owner, w) => {
+      const peer = w.peer()
+      git(peer, 'checkout', '-q', '-b', 'feature/design')
+      commit(peer, 'feature.txt', 'remote feature\n')
+      git(peer, 'push', '-q', 'origin', 'feature/design')
+      git(peer, 'checkout', '-q', 'main')
+      commit(peer, 'a.txt', 'peer change\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      await owner.remoteStatus(w.local, true)
+      const pull = (commitInput, expectedBranch = 'trezi/main', busy = false) =>
+        owner.remoteUpdate(
+          w.local,
+          {
+            action: 'pull',
+            ref: 'refs/remotes/origin/main',
+            expectedBranch,
+            ...(commitInput ? { commit: commitInput } : {})
+          },
+          busy
+        )
+      const head = () => git(w.local, 'rev-parse', 'HEAD')
+      const start = head()
+
+      // The guard stays: a dirty tree blocks a plain pull and nothing is touched.
+      write(w.local, 'a.txt', 'local change\n')
+      write(w.local, 'glob*.txt', 'literal name\n')
+      write(w.local, 'globA.txt', 'not in scope by wildcard\n')
+      const reviewed = await owner.remoteStatus(w.local, false)
+      assert.deepEqual(reviewed.changes.map((change) => change.path).sort(), [
+        'a.txt',
+        'glob*.txt',
+        'globA.txt'
+      ])
+      assert.ok(reviewed.changes.every((change) => change.eligible))
+      const blocked = await pull(null)
+      assert.equal(blocked.ok, false)
+      assert.equal(head(), start)
+
+      // Branch drift and a busy project are refused before anything is staged.
+      for (const refused of [
+        await pull({ message: 'Keep work', changeToken: reviewed.changeToken }, 'other'),
+        await pull({ message: 'Keep work', changeToken: reviewed.changeToken }, 'trezi/main', true)
+      ]) {
+        assert.equal(refused.ok, false)
+        assert.equal(head(), start)
+        assert.equal(git(w.local, 'diff', '--cached', '--name-only'), '', 'nothing staged')
+      }
+      assert.equal(readFileSync(join(w.local, 'a.txt'), 'utf8'), 'local change\n')
+
+      // The commit lands, the conflicting merge is aborted, the recovery commit is kept.
+      const conflicted = await pull({ message: 'Keep work', changeToken: reviewed.changeToken })
+      assert.equal(conflicted.ok, false)
+      assert.equal(git(w.local, 'rev-list', '--count', `${start}..HEAD`), '1')
+      assert.equal(git(w.local, 'log', '-1', '--format=%s'), 'Keep work')
+      assert.equal(
+        git(w.local, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD')
+          .split('\n')
+          .sort()
+          .join('\n'),
+        'a.txt\nglob*.txt\nglobA.txt'
+      )
+      assert.equal(git(w.local, 'status', '--porcelain'), '', 'merge aborted to a clean tree')
+      assert.equal(existsSync(join(w.local, '.git', 'MERGE_HEAD')), false)
+      const kept = head()
+
+      // The same reviewed token again: refused, no second commit.
+      const duplicate = await pull({ message: 'Keep work', changeToken: reviewed.changeToken })
+      assert.equal(duplicate.ok, false)
+      assert.match(duplicate.message, /changed since review/)
+      assert.equal(head(), kept)
+      assert.equal(git(w.local, 'rev-list', '--count', `${start}..HEAD`), '1')
+
+      // Switch recovery: commit on the current branch, then the checkout completes.
+      write(w.local, 'note.txt', 'switch note\n')
+      const forSwitch = await owner.remoteStatus(w.local, false)
+      const switchPlain = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'checkout',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'trezi/main'
+        },
+        false
+      )
+      assert.equal(switchPlain.ok, false)
+      assert.equal(git(w.local, 'rev-parse', '--abbrev-ref', 'HEAD'), 'trezi/main')
+      const switched = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'checkout',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'trezi/main',
+          commit: { message: 'Keep note', changeToken: forSwitch.changeToken }
+        },
+        false
+      )
+      assert.equal(switched.ok, true, switched.message)
+      assert.equal(switched.branch, 'feature/design')
+      assert.equal(git(w.local, 'log', '-1', '--format=%s', 'trezi/main'), 'Keep note')
+      assert.equal(git(w.local, 'status', '--porcelain'), '')
+
+      // A hook rejection leaves every working-tree file byte-identical and the pull unattempted.
+      write(w.local, 'hooked.txt', 'hooked\n')
+      write(w.local, 'feature.txt', 'edited feature\n')
+      const hooked = await owner.remoteStatus(w.local, false)
+      const hook = join(w.local, '.git', 'hooks', 'pre-commit')
+      writeFileSync(hook, '#!/bin/sh\nexit 1\n')
+      chmodSync(hook, 0o755)
+      const before = ['hooked.txt', 'feature.txt'].map((file) => readFileSync(join(w.local, file)))
+      const refusedByHook = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/feature/design',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Hooked', changeToken: hooked.changeToken }
+        },
+        false
+      )
+      rmSync(hook)
+      assert.equal(refusedByHook.ok, false)
+      const after = ['hooked.txt', 'feature.txt'].map((file) => readFileSync(join(w.local, file)))
+      assert.deepEqual(after, before, 'working-tree files are byte-identical')
+      assert.equal(
+        git(w.local, 'log', '-1', '--format=%s'),
+        'change feature.txt',
+        'no commit was made'
+      )
+
+      // Tracked files whose names look secret are already in history: modifying them stays committable.
+      commit(w.local, 'secrets.ts', 'export const a = 1\n')
+      commit(w.local, 'CredentialsForm.tsx', 'export const b = 1\n')
+      write(w.local, 'secrets.ts', 'export const a = 2\n')
+      rmSync(join(w.local, 'CredentialsForm.tsx'))
+      write(w.local, 'credentials.json', '{"token":"never"}\n') // new, so still excluded from the scope check below
+      const mixed = await owner.remoteStatus(w.local, false)
+      const tracked = Object.fromEntries(mixed.changes.map((change) => [change.path, change]))
+      assert.equal(tracked['secrets.ts']?.eligible, true)
+      assert.equal(tracked['CredentialsForm.tsx']?.eligible, true)
+      assert.equal(tracked['credentials.json']?.eligible, false)
+      rmSync(join(w.local, 'credentials.json'))
+      const trackedScope = await owner.remoteStatus(w.local, false)
+      assert.ok(trackedScope.changes.every((change) => change.eligible))
+      const beforeTracked = head()
+      const trackedRecovery = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/main',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep tracked secrets', changeToken: trackedScope.changeToken }
+        },
+        false
+      )
+      assert.equal(trackedRecovery.ok, true, trackedRecovery.message)
+      assert.equal(git(w.local, 'rev-list', '--count', `${beforeTracked}..HEAD`), '3') // recovery commit, peer commit, merge
+      assert.equal(readFileSync(join(w.local, 'secrets.ts'), 'utf8'), 'export const a = 2\n')
+      assert.equal(existsSync(join(w.local, 'CredentialsForm.tsx')), false)
+      assert.equal(git(w.local, 'status', '--porcelain'), '')
+      return {}
+    })
+
+    // Sensitive and nested-repository files are listed as excluded and never committed.
+    await owned('remote-excluded', async (owner, w) => {
+      write(w.local, 'credentials.json', '{"token":"never"}\n')
+      write(w.local, 'server.key', 'KEY\n')
+      write(w.local, '.npmrc', '//registry/:_authToken=never\n')
+      write(w.local, 'ok.txt', 'fine\n')
+      mkdirSync(join(w.local, 'nested'))
+      git(join(w.local, 'nested'), 'init', '-q')
+      git(join(w.local, 'nested'), 'config', 'user.name', 'N')
+      git(join(w.local, 'nested'), 'config', 'user.email', 'n@example.com')
+      commit(join(w.local, 'nested'), 'inner.txt', 'inner\n')
+      const status = await owner.remoteStatus(w.local, false)
+      const byPath = Object.fromEntries(status.changes.map((change) => [change.path, change]))
+      for (const path of ['credentials.json', 'server.key', '.npmrc', 'nested/'])
+        assert.equal(byPath[path]?.eligible, false, `${path} is listed as excluded`)
+      assert.equal(byPath['ok.txt']?.eligible, true)
+      const start = git(w.local, 'rev-parse', 'HEAD')
+      const staged = git(w.local, 'diff', '--cached', '--name-only')
+      for (const input of [undefined, { message: 'Try commit', changeToken: status.changeToken }]) {
+        const result = await owner.remoteUpdate(
+          w.local,
+          {
+            action: 'pull',
+            ref: 'refs/remotes/origin/main',
+            expectedBranch: 'trezi/main',
+            ...(input ? { commit: input } : {})
+          },
+          false
+        )
+        assert.equal(result.ok, false)
+        assert.equal(git(w.local, 'rev-parse', 'HEAD'), start, 'no commit was made')
+        assert.equal(git(w.local, 'diff', '--cached', '--name-only'), staged, 'nothing was staged')
+      }
+      assert.equal(readFileSync(join(w.local, 'credentials.json'), 'utf8'), '{"token":"never"}\n')
+      // Once the user moves the excluded files away, only the eligible file is committed.
+      for (const file of ['credentials.json', 'server.key', '.npmrc']) rmSync(join(w.local, file))
+      rmSync(join(w.local, 'nested'), { recursive: true })
+      const cleaned = await owner.remoteStatus(w.local, false)
+      assert.deepEqual(
+        cleaned.changes.map((change) => change.path),
+        ['ok.txt']
+      )
+      const recovered = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/main',
+          expectedBranch: 'trezi/main',
+          commit: { message: 'Keep ok', changeToken: cleaned.changeToken }
+        },
+        false
+      )
+      assert.equal(recovered.ok, true, recovered.message)
+      return {}
+    })
 
     const setup = await owned('setup', async (owner, w) => {
       write(

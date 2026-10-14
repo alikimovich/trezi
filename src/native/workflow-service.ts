@@ -189,6 +189,8 @@ export function serviceWorkflows(
         action: action.action,
         ref: action.ref,
         expectedBranch: action.expectedBranch ?? null,
+        commitMessage: action.commit?.message ?? null,
+        changeToken: action.commit?.changeToken ?? null,
         busy,
         intent: 'update',
         ...leases()

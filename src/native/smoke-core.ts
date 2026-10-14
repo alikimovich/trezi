@@ -26,6 +26,7 @@ import {
   restoreEditorFreshness
 } from './smoke-editor-freshness'
 import { smokeFocusHooks } from './smoke-focus'
+import { checkGitUpdates } from './smoke-git-updates'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
@@ -1142,6 +1143,15 @@ export async function runNativeCoreSmoke(
           await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
         if ((await host.request('sourceInspect')).visible)
           await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+      }
+    },
+    {
+      name: 'git-updates',
+      dependsOn: ['chat-ready'],
+      run: () => checkGitUpdates(host, git, artifacts),
+      cleanup: async () => {
+        if ((await host.request('sheetInspect')).visible)
+          await host.request('sheetPerform', { action: 'cancel' })
       }
     },
     {

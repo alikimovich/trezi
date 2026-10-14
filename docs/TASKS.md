@@ -1587,6 +1587,9 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
 
 ## Git updates and remote branches (2026-09-16)
 
+- [x] LKM-250: Show the exact dirty-tree scope in Git updates and offer a guarded
+      service-owned commit before continuing Pull or Switch; Fetch remains available.
+
 - [x] Preserve the preview freeze when handing off from the branch menu to Git
       updates, and verify native visibility through updates and dismissal.
 
