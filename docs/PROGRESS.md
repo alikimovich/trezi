@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-14 — LKM-257 review repair: assembly guides remain readable
+
+- Review of the first native capture showed the dashed guides nearly disappearing: a translucent tertiary label stroke was multiplied by 0.55 layer opacity. The guides now use the appearance-aware label color at 0.65 alpha with full layer opacity while exploded; zero separation still sets opacity to zero. The scene stroke remains one screen point wide.
+
+## 2026-10-14 — LKM-257: depth and assembly guides in the native exploded scene
+
+- The preview now sends each captured surface's nearest captured DOM ancestor. The native scene uses the overlapping layout footprint of each parent/child pair to place two matching corner guides in world space. Thin backing planes add restrained Z depth; guides and backs vanish at zero separation and are removed on recapture/clear.
+- The contract rejects invalid parent indices and depth relationships. The 3D smoke fixture checks the nested parent mapping, expanded and collapsed guide visibility, and saves `three-d-exploded-guides.png` for visual review.
+
 ## 2026-10-13 — LKM-250 repair: tracked secret-named files stay committable
 
 - The secret-name heuristic in `WorkflowRemote.swift` now applies only to paths entering history (untracked, index-added, rename or copy targets). A tracked file whose name contains "secret" or "credential" (`secrets.ts`, `CredentialsForm.tsx`, a tracked `.npmrc`) stays `eligible: true` when modified or deleted, so the Commit action is no longer lost. `.env` and sidecar exclusions and directory entries are unchanged.

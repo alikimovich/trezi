@@ -39,6 +39,9 @@ final class ThreeDSceneView: NSView {
     private let stage = CALayer()
     private let world = CATransformLayer()
     private(set) var planes: [CALayer] = []
+    private var backs: [CALayer] = []
+    private var guides: [CAShapeLayer] = []
+    private var guideLinks: [(child: Int, x: Double, y: Double)] = []
     private(set) var layers: [ThreeDLayer] = []
     private var extent = CGSize(width: 1, height: 1)
     private var maxDepth = 0
@@ -49,7 +52,8 @@ final class ThreeDSceneView: NSView {
     var sideInsets = (left: 0.0, right: 0.0) { didSet { if sideInsets != oldValue { apply(animated: false) } } }
     let hoverLabel = NSTextField(labelWithString: "")
     let messageLabel = NSTextField(wrappingLabelWithString: "")
-    private var colors = (outline: CGColor(gray: 0.6, alpha: 1), accent: CGColor(gray: 0.3, alpha: 1))
+    private var colors = (outline: CGColor(gray: 0.6, alpha: 1), accent: CGColor(gray: 0.3, alpha: 1),
+                          back: CGColor(gray: 0.5, alpha: 1), guide: CGColor(gray: 0.25, alpha: 0.65))
     private var dragStart: NSPoint?
     private var dragged = false
 
@@ -111,7 +115,8 @@ final class ThreeDSceneView: NSView {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             grid.dot = NSColor.quaternaryLabelColor.cgColor
-            colors = (NSColor.tertiaryLabelColor.cgColor, NSColor.controlAccentColor.cgColor)
+            colors = (NSColor.tertiaryLabelColor.cgColor, NSColor.controlAccentColor.cgColor,
+                      NSColor.separatorColor.cgColor, NSColor.labelColor.withAlphaComponent(0.65).cgColor)
             hoverLabel.backgroundColor = .controlBackgroundColor
             hoverLabel.textColor = .labelColor
             hoverLabel.layer?.borderColor = NSColor.separatorColor.cgColor; hoverLabel.layer?.borderWidth = 1
@@ -128,10 +133,35 @@ final class ThreeDSceneView: NSView {
     func show(_ next: [ThreeDLayer], images: [CGImage?], width: Double, height: Double) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         planes.forEach { $0.removeFromSuperlayer() }
+        backs.forEach { $0.removeFromSuperlayer() }
+        guides.forEach { $0.removeFromSuperlayer() }
+        backs = []; guides = []; guideLinks = []
         layers = next
         extent = CGSize(width: max(1, width), height: max(1, height))
         maxDepth = next.map(\.depth).max() ?? 0
+        for (index, item) in next.enumerated() where item.parent >= 0 {
+            let parent = next[item.parent]
+            let left = max(item.x, parent.x), right = min(item.x + item.width, parent.x + parent.width)
+            let top = max(item.y, parent.y), bottom = min(item.y + item.height, parent.y + parent.height)
+            guard right - left >= 8, bottom - top >= 8 else { continue }
+            // Opposite corners of the shared layout footprint are the same attachment points
+            // on both planes. Keep them in world coordinates so the camera moves them together.
+            for (x, y) in [(left, top), (right, bottom)] {
+                let guide = CAShapeLayer()
+                guide.fillColor = nil
+                guide.lineCap = .round
+                world.addSublayer(guide)
+                guides.append(guide)
+                guideLinks.append((index, x - extent.width / 2, extent.height / 2 - y))
+            }
+        }
         planes = next.enumerated().map { index, item in
+            let back = CALayer()
+            back.bounds = CGRect(x: 0, y: 0, width: max(1, item.width), height: max(1, item.height))
+            back.backgroundColor = colors.back
+            back.opacity = 0.55
+            world.addSublayer(back)
+            backs.append(back)
             let plane = CALayer()
             plane.bounds = CGRect(x: 0, y: 0, width: max(1, item.width), height: max(1, item.height))
             plane.contents = index < images.count ? images[index] : nil
@@ -150,7 +180,9 @@ final class ThreeDSceneView: NSView {
     func clearPlanes(message text: String) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         planes.forEach { $0.removeFromSuperlayer() }
-        planes = []; layers = []; selected = -1
+        backs.forEach { $0.removeFromSuperlayer() }
+        guides.forEach { $0.removeFromSuperlayer() }
+        planes = []; backs = []; guides = []; guideLinks = []; layers = []; selected = -1
         CATransaction.commit()
         hover(-1, at: nil)
         setMessage(text)
@@ -206,12 +238,38 @@ final class ThreeDSceneView: NSView {
             let c = planeCenter(index)
             plane.position = CGPoint(x: c.x, y: c.y)
             plane.transform = CATransform3DMakeTranslation(0, 0, CGFloat(c.z))
+            let back = backs[index]
+            back.position = plane.position
+            back.transform = CATransform3DMakeTranslation(0, 0, CGFloat(c.z - min(5, separation * 0.12)))
+            back.backgroundColor = colors.back
+            back.isHidden = separation < 1
             let marked = index == selected || index == hovered
             plane.borderColor = marked ? colors.accent : colors.outline
             plane.borderWidth = marked ? 2 * line : line
         }
+        for (index, guide) in guides.enumerated() {
+            let link = guideLinks[index]
+            let child = planeCenter(link.child)
+            let parent = planeCenter(layers[link.child].parent)
+            let length = CGFloat(abs(child.z - parent.z))
+            guide.bounds = CGRect(x: 0, y: 0, width: length, height: line)
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 0, y: line / 2))
+            path.addLine(to: CGPoint(x: length, y: line / 2))
+            guide.path = path
+            guide.strokeColor = colors.guide
+            guide.lineWidth = line
+            guide.lineDashPattern = [NSNumber(value: Double(3 * line)), NSNumber(value: Double(4 * line))]
+            guide.position = CGPoint(x: link.x, y: link.y)
+            guide.transform = CATransform3DConcat(CATransform3DMakeRotation(.pi / 2, 0, 1, 0),
+                                                   CATransform3DMakeTranslation(0, 0, CGFloat((child.z + parent.z) / 2)))
+            guide.opacity = separation < 1 ? 0 : 1
+        }
         CATransaction.commit()
     }
+
+    var visibleGuides: Int { guides.filter { $0.opacity > 0 && $0.superlayer != nil }.count }
+    var guideParents: [Int] { guideLinks.map { layers[$0.child].parent } }
 
     /// Spacing actually applied between adjacent depths, read back from the planes.
     var spacing: Double {
