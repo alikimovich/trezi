@@ -158,7 +158,9 @@ final class ThreeDSceneView: NSView {
         planes = next.enumerated().map { index, item in
             let back = CALayer()
             back.bounds = CGRect(x: 0, y: 0, width: max(1, item.width), height: max(1, item.height))
-            back.backgroundColor = colors.back
+            // A filled backing shows through translucent authored faces and grays their color.
+            // Keep the offset contour as a depth cue without tinting the captured surface.
+            back.borderColor = colors.back
             back.opacity = 0.55
             world.addSublayer(back)
             backs.append(back)
@@ -173,9 +175,11 @@ final class ThreeDSceneView: NSView {
         }
         if !layers.indices.contains(selected) { selected = -1 }
         if !layers.indices.contains(hovered) { hover(-1, at: nil) }
-        CATransaction.commit()
         setMessage(next.isEmpty ? "This component has no visible layers to show in 3D." : "")
+        // Position new planes before publishing the replacement transaction. Otherwise one
+        // display frame can show every new plane at the default origin during a recapture.
         apply(animated: false)
+        CATransaction.commit()
     }
     func clearPlanes(message text: String) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -241,7 +245,8 @@ final class ThreeDSceneView: NSView {
             let back = backs[index]
             back.position = plane.position
             back.transform = CATransform3DMakeTranslation(0, 0, CGFloat(c.z - min(5, separation * 0.12)))
-            back.backgroundColor = colors.back
+            back.borderColor = colors.back
+            back.borderWidth = line
             back.isHidden = separation < 1
             let marked = index == selected || index == hovered
             plane.borderColor = marked ? colors.accent : colors.outline
@@ -269,6 +274,7 @@ final class ThreeDSceneView: NSView {
     }
 
     var visibleGuides: Int { guides.filter { $0.opacity > 0 && $0.superlayer != nil }.count }
+    var filledBacks: Int { backs.filter { $0.backgroundColor != nil }.count }
     var guideParents: [Int] { guideLinks.map { layers[$0.child].parent } }
 
     /// Spacing actually applied between adjacent depths, read back from the planes.
