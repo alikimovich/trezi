@@ -748,7 +748,42 @@ try {
       assert.equal(refusedByHook.ok, false)
       const after = ['hooked.txt', 'feature.txt'].map((file) => readFileSync(join(w.local, file)))
       assert.deepEqual(after, before, 'working-tree files are byte-identical')
-      assert.equal(git(w.local, 'log', '-1', '--format=%s'), 'change feature.txt')
+      assert.equal(
+        git(w.local, 'log', '-1', '--format=%s'),
+        'change feature.txt',
+        'no commit was made'
+      )
+
+      // Tracked files whose names look secret are already in history: modifying them stays committable.
+      commit(w.local, 'secrets.ts', 'export const a = 1\n')
+      commit(w.local, 'CredentialsForm.tsx', 'export const b = 1\n')
+      write(w.local, 'secrets.ts', 'export const a = 2\n')
+      rmSync(join(w.local, 'CredentialsForm.tsx'))
+      write(w.local, 'credentials.json', '{"token":"never"}\n') // new, so still excluded from the scope check below
+      const mixed = await owner.remoteStatus(w.local, false)
+      const tracked = Object.fromEntries(mixed.changes.map((change) => [change.path, change]))
+      assert.equal(tracked['secrets.ts']?.eligible, true)
+      assert.equal(tracked['CredentialsForm.tsx']?.eligible, true)
+      assert.equal(tracked['credentials.json']?.eligible, false)
+      rmSync(join(w.local, 'credentials.json'))
+      const trackedScope = await owner.remoteStatus(w.local, false)
+      assert.ok(trackedScope.changes.every((change) => change.eligible))
+      const beforeTracked = head()
+      const trackedRecovery = await owner.remoteUpdate(
+        w.local,
+        {
+          action: 'pull',
+          ref: 'refs/remotes/origin/main',
+          expectedBranch: 'feature/design',
+          commit: { message: 'Keep tracked secrets', changeToken: trackedScope.changeToken }
+        },
+        false
+      )
+      assert.equal(trackedRecovery.ok, true, trackedRecovery.message)
+      assert.equal(git(w.local, 'rev-list', '--count', `${beforeTracked}..HEAD`), '3') // recovery commit, peer commit, merge
+      assert.equal(readFileSync(join(w.local, 'secrets.ts'), 'utf8'), 'export const a = 2\n')
+      assert.equal(existsSync(join(w.local, 'CredentialsForm.tsx')), false)
+      assert.equal(git(w.local, 'status', '--porcelain'), '')
       return {}
     })
 

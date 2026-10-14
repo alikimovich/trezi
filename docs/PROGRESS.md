@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-250 repair: tracked secret-named files stay committable
+
+- The secret-name heuristic in `WorkflowRemote.swift` now applies only to paths entering history (untracked, index-added, rename or copy targets). A tracked file whose name contains "secret" or "credential" (`secrets.ts`, `CredentialsForm.tsx`, a tracked `.npmrc`) stays `eligible: true` when modified or deleted, so the Commit action is no longer lost. `.env` and sidecar exclusions and directory entries are unchanged.
+- `remote-recovery` in `test/workflow-owner.mjs` commits a tracked `secrets.ts` and `CredentialsForm.tsx`, modifies and deletes them, asserts they are eligible (an untracked `credentials.json` beside them is still not), and checks the recovery commit plus pull succeed.
+
 ## 2026-10-13 — LKM-250: Git updates dirty-tree recovery
 
 - Git updates displays tracked, staged and eligible new files blocking Pull or Switch, names the current and destination branches, and offers an editable commit message. The service checks a content fingerprint against the reviewed scope, uses the repository lane and workflow journal, requires the commit to succeed before fetching or switching, and keeps Fetch available while dirty. Excluded staged files stay blocked. Cancel and failed commits leave user files in place.

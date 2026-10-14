@@ -122,8 +122,11 @@ struct WorkflowRemote {
     }
 
     /// An untracked directory entry is a nested repository: a commit would record a gitlink, not files.
-    private func committable(_ path: String) -> Bool {
-        !RepositoryPaths.excluded(path) && !sensitive(path) && !path.hasSuffix("/")
+    /// The secret-name heuristic guards paths entering history (untracked, index-added, renamed or
+    /// copied targets); a path already in history stays eligible when it is only modified or deleted.
+    private func committable(_ path: String, state: String) -> Bool {
+        let entering = state == "??" || state.contains("A") || state.contains("R") || state.contains("C")
+        return !RepositoryPaths.excluded(path) && !(entering && sensitive(path)) && !path.hasSuffix("/")
     }
 
     private func preview(_ path: String, untracked: Bool) -> String {
@@ -146,7 +149,7 @@ struct WorkflowRemote {
             let record = records[index]
             guard record.count >= 4 else { index += 1; continue }
             let path = String(record.dropFirst(3)), state = String(record.prefix(2))
-            let eligible = committable(path)
+            let eligible = committable(path, state: state)
             // Untracked runtime sidecars and .env files never block (see requireClean); every
             // other path that blocks an update is listed, committable or not.
             if eligible || state != "??" || !RepositoryPaths.excluded(path) { changes.append(LocalChange(path: path, state: state, eligible: eligible,
@@ -155,7 +158,7 @@ struct WorkflowRemote {
                 index += 1
                 if index < records.count {
                     let source = records[index]
-                    let allowed = committable(source)
+                    let allowed = committable(source, state: " D") // the source already is in history
                     changes.append(LocalChange(path: source, state: state + " source", eligible: allowed,
                         preview: allowed ? preview(source, untracked: false) : "Excluded from automatic commits."))
                 }
