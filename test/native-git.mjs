@@ -350,6 +350,8 @@ assert.equal(notifications().length, notified, 'Off sends no macOS notification'
 const previousInvoke = sheets.invoke
 let releaseStatus
 let delayed = true
+let releaseGitList
+let holdGitList = false
 Object.defineProperty(sheets, 'invoke', {
   configurable: true,
   value: (channel, ...args) =>
@@ -357,16 +359,27 @@ Object.defineProperty(sheets, 'invoke', {
       ? new Promise((resolve) => {
           releaseStatus = resolve
         })
-      : previousInvoke(channel, ...args)
+      : channel === 'git:list' && holdGitList
+        ? new Promise((resolve) => {
+            releaseGitList = resolve
+          })
+        : previousInvoke(channel, ...args)
 })
 const staleRead = git.pollStatus('/a')
 await tick()
 assert.ok(releaseStatus, 'old status read started')
 delayed = false
 branch = 'main'
-await git.refresh('/a')
+holdGitList = true
+const refreshing = git.refresh('/a')
+await tick()
+assert.ok(releaseGitList, 'refresh is waiting for git:list')
 releaseStatus({ ...ciStatus, branch: 'feature', commit: '6'.repeat(40) })
 await staleRead
+assert.equal(git.statuses.get('/a'), undefined, 'stale reply stays discarded during refresh')
+holdGitList = false
+releaseGitList({ current: 'main', branches: ['main', 'feature'] })
+await refreshing
 await tick()
 assert.equal(git.statuses.get('/a')?.commit, ciStatus.commit, 'refresh reruns after stale reply')
 assert.equal(git.statuses.get('/a')?.branch, undefined, 'old branch identity was discarded')

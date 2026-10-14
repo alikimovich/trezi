@@ -77,7 +77,12 @@ struct WorkflowPublish {
             try context.run(["fetch", "--prune", "origin"])
             let baseRef = (try? context.run(["rev-parse", "--verify", "refs/remotes/origin/\(base)"])) != nil
                 ? "refs/remotes/origin/\(base)" : "refs/heads/\(base)"
-            if context.succeeds(["diff", "--quiet", baseRef, branch]) {
+            let fork = (try? context.run(["merge-base", baseRef, branch])) ?? baseRef
+            let changed = ((try? context.run(["diff", "--name-only", fork, branch])) ?? "")
+                .split(separator: "\n").map(String.init)
+            let stillDifferent = Set(((try? context.run(["diff", "--name-only", baseRef, branch])) ?? "")
+                .split(separator: "\n").map(String.init))
+            if changed.allSatisfy({ !stillDifferent.contains($0) }) {
                 return WorkflowContext.fail("Nothing to publish — no changes since \(base).")
             }
             try context.begin("push")
@@ -424,15 +429,19 @@ struct WorkflowPublish {
         ((try? context.run(["diff", "--name-only", "--diff-filter=U", "--"])) ?? "").split(separator: "\n").map(String.init).filter { !$0.isEmpty }
     }
 
-    /// Files whose current content differs from the fetched default branch.
+    /// Paths changed since the fork, excluding content already in the base tip.
     private func changedSince() -> [String] {
         let flags = ["-c", "core.quotePath=false", "diff", "--name-only"]
         let base = context.defaultBase()
         let ref = ["refs/remotes/origin/\(base)", "refs/heads/\(base)", "HEAD"].first {
             context.succeeds(["rev-parse", "--verify", $0])
         } ?? "HEAD"
-        let out = (try? context.run(flags + [ref])) ?? ""
-        return out.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let fork = (try? context.run(["merge-base", ref, "HEAD"])) ?? "HEAD"
+        let changed = ((try? context.run(flags + [fork])) ?? "")
+            .split(separator: "\n").map(String.init)
+        let different = Set(((try? context.run(flags + [ref])) ?? "")
+            .split(separator: "\n").map(String.init))
+        return changed.filter { different.contains($0) }
     }
 
     private func aheadOfBase(_ base: String) -> Int {

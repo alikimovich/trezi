@@ -49,21 +49,21 @@ export async function aheadOfBase(root: string, base: string): Promise<number> {
   return 0
 }
 
-/**
- * Files whose current content differs from the fetched default branch, including
- * working tree edits. A merge-base diff would count already squash-merged files.
- */
+/** Files introduced since the fork whose current content is absent from the base tip.
+ * Intersecting both diffs excludes later changes made only on main and files whose
+ * branch changes were already integrated by squash or cherry-pick. */
 export async function changedSince(root: string): Promise<string[]> {
   const flags = ['-c', 'core.quotePath=false', 'diff', '--name-only']
-  let out: string
   const base = await defaultBase(root)
   for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`, 'HEAD']) {
     try {
-      out = await git(root, [...flags, ref])
-      return out
+      const fork = await git(root, ['merge-base', ref, 'HEAD'])
+      const changed = await git(root, [...flags, fork])
+      const stillDifferent = new Set((await git(root, [...flags, ref])).split('\n'))
+      return changed
         .split('\n')
         .map((l) => l.trim())
-        .filter(Boolean)
+        .filter((path) => path && stillDifferent.has(path))
     } catch {
       /* Try the next available ref. */
     }

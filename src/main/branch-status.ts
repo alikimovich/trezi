@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { BranchStatus } from '../shared/native-shell'
-import { defaultBase } from './publish-scope'
+import { changedSince, defaultBase } from './publish-scope'
 
 const exec = promisify(execFile)
 const run = async (file: string, args: string[], root: string) =>
@@ -129,12 +129,7 @@ export async function branchStatus(
     ['status', '--porcelain', '--untracked-files=normal'],
     root
   ).catch(() => ''))
-  const unpublished = compareRef
-    ? !(await read('git', ['diff', '--quiet', compareRef], root).then(
-        () => true,
-        () => false
-      ))
-    : dirty
+  const unpublished = (await changedSince(root)).length > 0
   const upstream = await read(
     'git',
     ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
@@ -150,7 +145,7 @@ export async function branchStatus(
     branch,
     ...sync,
     dirty,
-    unpublished: unpublished || dirty,
+    unpublished,
     unpushed: Number.isSafeInteger(unpushed) ? unpushed : null,
     upstream: upstream || undefined,
     remote: remote || undefined,

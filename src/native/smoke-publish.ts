@@ -183,6 +183,30 @@ export async function checkPublishProgress(
         assert.ok(String(view.branchDisplay).includes(fragment), `${name}: ${fragment}`)
       for (const fragment of excludes)
         assert.ok(!String(view.branchDisplay).includes(fragment), `${name}: no ${fragment}`)
+      const state = { ...sample, ...patch }
+      const details = (
+        view.branchDetails as { title: string; enabled: boolean; action: string }[]
+      ).filter((item) => item.title)
+      const titles = details.map((item) => item.title).join('\n')
+      const content = state.stale
+        ? 'Fetched default branch is stale'
+        : state.dirty
+          ? 'Working tree edited'
+          : state.unpublished
+            ? 'Content to publish'
+            : 'No content to publish'
+      assert.ok(titles.includes(content), `${name}: ${content} in details`)
+      assert.ok(
+        titles.includes(`${state.unpushed} commits ahead of ${state.upstream}`),
+        `${name}: upstream count in details`
+      )
+      assert.ok(
+        titles.includes(`History: ${state.ahead} ahead · ${state.behind} behind ${state.base}`),
+        `${name}: history in details`
+      )
+      if (state.pr) assert.ok(titles.includes(`PR #${state.pr.number} ${state.pr.state}`))
+      if (state.ci !== 'unknown') assert.ok(titles.includes(`CI ${state.ci}`))
+      if (state.deployment) assert.ok(titles.includes(`Deployment ${state.deployment.state}`))
       assert.ok(view.addressTrailing < view.rightGroupLeading, `${name}: status fits toolbar`)
     }
     await statusCase(
@@ -227,6 +251,18 @@ export async function checkPublishProgress(
       ['42↑', '#126']
     )
     await statusCase(
+      'stale-base',
+      { stale: true, ahead: 0, behind: 3, unpushed: 0, unpublished: true },
+      ['Refs stale', '3↓'],
+      ['Changes']
+    )
+    await statusCase(
+      'behind-only',
+      { ahead: 0, behind: 3, unpushed: 0, unpublished: false, dirty: false },
+      ['3↓'],
+      ['Changes']
+    )
+    await statusCase(
       'deployment-pending',
       { ci: 'passed', deployment: { state: 'pending', revision: 'base-sha' } },
       ['Deploy pending'],
@@ -261,6 +297,17 @@ export async function checkPublishProgress(
       ['#128'],
       ['#127']
     )
+    await statusCase(
+      'ci-error',
+      { ci: 'error', checksUrl: undefined, failing: [] },
+      ['Changes'],
+      ['#126']
+    )
+    const ciError = (await host.request('shellInspect')).branchDetails as {
+      title: string
+      enabled: boolean
+    }[]
+    assert.ok(ciError.some((row) => row.title === 'CI error' && !row.enabled))
     git.statuses.set(root, sample)
     git.render()
     const dot = await checkBranchDot(host, git, root, sample, artifacts)

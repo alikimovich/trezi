@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-248 review repair: main-only changes are outside publish scope
+
+- Review found that comparing the checkout directly with the latest default tip counted commits added only on main as unpublished. Publish scope and the service now intersect fork-relative changes with files still different from the fetched tip. A behind-only branch has nothing to publish, while squash-equivalent files remain excluded.
+- Status refresh now queues a new read until `git:list` has settled and discards replies from an older revision. Native details inspection covers content, upstream, history, PR, CI and deployment rows, including stale, behind-only and unavailable-check states.
+
 ## 2026-10-13 — LKM-248: separate published content, Git history and provider status
 
 - Publish scope and the service workflow compare current content with the fetched default branch. This avoids counting squash-equivalent files as new work while retaining later edits. The toolbar's compact ↑ now means commits ahead of upstream; default-branch divergence is labeled as history in the menu.

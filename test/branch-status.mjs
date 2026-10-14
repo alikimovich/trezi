@@ -85,16 +85,18 @@ try {
       requests.push(path)
       if (path.includes('/branches/main')) return { commit: { sha: remoteBaseSha } }
       if (path.includes('/pulls?'))
-        return [
-          {
-            number: 126,
-            state: 'closed',
-            merged_at: 'today',
-            head: { sha: feature },
-            base: { ref: 'main' },
-            html_url: 'https://github.com/example/site/pull/126'
-          }
-        ]
+        return git('branch', '--show-current') === 'behind'
+          ? []
+          : [
+              {
+                number: 126,
+                state: 'closed',
+                merged_at: 'today',
+                head: { sha: feature },
+                base: { ref: 'main' },
+                html_url: 'https://github.com/example/site/pull/126'
+              }
+            ]
       if (path.includes('/check-runs?'))
         return { check_runs: [{ name: 'main CI', status: 'in_progress' }] }
       if (path.includes('/deployments/1/statuses'))
@@ -124,6 +126,14 @@ try {
   const stale = await branchStatus(fixture, reads)
   assert.equal(stale.stale, true, 'outdated fetched default is marked stale')
   assert.equal(stale.commit, remoteBaseSha, 'main checks use the remote SHA')
+  git('checkout', '-qb', 'behind', `${feature}~1`)
+  git('branch', '--set-upstream-to=origin/main')
+  remoteBaseSha = main
+  const behind = await branchStatus(fixture, reads)
+  assert.equal(behind.ahead, 0)
+  assert.equal(behind.behind, 1)
+  assert.equal(behind.unpublished, false, 'main-only changes are not unpublished content')
+  assert.equal(behind.dirty, false)
 } finally {
   rmSync(fixture, { recursive: true, force: true })
 }

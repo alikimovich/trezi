@@ -438,7 +438,11 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             if let pr = status["pr"] as? [String: Any], let number = pr["number"] as? Int {
                 add("PR #\(number) \(pr["state"] as? String ?? "open") · View on GitHub", "branch-open-url", pr["url"] as? String ?? "")
             }
-            if ci != "unknown" { add("CI \(ci)\(failing.isEmpty ? "" : ": " + failing.joined(separator: ", ")) · View checks", "branch-open-url", status["checksUrl"] as? String ?? "") }
+            if ci != "unknown" {
+                let label = "CI \(ci)\(failing.isEmpty ? "" : ": " + failing.joined(separator: ", "))"
+                if let url = status["checksUrl"] as? String, !url.isEmpty { add("\(label) · View checks", "branch-open-url", url) }
+                else { let row = NSMenuItem(title: label, action: nil, keyEquivalent: ""); row.isEnabled = false; menu.addItem(row) }
+            }
             if let url = deployment["url"] as? String, !url.isEmpty { add("Deployment \(deployState) · View details", "branch-open-url", url) }
             else { let row = NSMenuItem(title: "Deployment \(deployState)", action: nil, keyEquivalent: ""); row.isEnabled = false; menu.addItem(row) }
             add("Git Updates…", "git-updates"); menu.addItem(.separator())
@@ -563,6 +567,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let trafficLight = window?.standardWindowButton(.closeButton)
         let trafficFrame = trafficLight.map { $0.convert($0.bounds, to: nil) } ?? .zero
         let branchInspect: [String: Any] = ["branchDisplay":branchMenu.menu?.items.first?.title ?? "",
+                                            "branchDetails":Array(branchMenu.menu?.items.dropFirst() ?? []).map { ["title":$0.title, "enabled":$0.isEnabled, "action":$0.action == #selector(previewMenuAction(_:)) ? "open" : "none"] },
                                             "branchStatus":previewState["branchStatus"] ?? [:],
                                             "publishStep":previewState["publishStep"] ?? ""]
         return ["sidebarContainsTrafficLights":sidebarFrame.contains(trafficFrame),

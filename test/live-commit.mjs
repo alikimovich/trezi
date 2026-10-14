@@ -414,6 +414,17 @@ try {
     writeFileSync(join(repo, 'a.txt'), 'new content\n')
     ok((await changedSince(repo)).includes('a.txt'), 'new content after merge is publishable')
   }
+  {
+    const repo = makeRepo()
+    g(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    g(repo, 'checkout', '-q', '-b', 'feature')
+    g(repo, 'checkout', '-q', 'main')
+    writeFileSync(join(repo, 'a.txt'), 'only main changed\n')
+    g(repo, 'commit', '-qam', 'main only')
+    g(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    g(repo, 'checkout', '-q', 'feature')
+    ok((await changedSince(repo)).length === 0, 'a main-only commit is outside session scope')
+  }
 } finally {
   rmSync(base, { recursive: true, force: true })
 }
