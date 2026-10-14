@@ -1,5 +1,7 @@
 import AppKit
 import Darwin
+import Security
+import os.log
 
 /// How this TreziHost was started, and the service launch it asks for.
 ///
@@ -14,6 +16,7 @@ import Darwin
 ///
 /// Anything else (a direct exec with the wrong arguments) is refused with status 64.
 enum HostLaunch {
+    private static let startupLog = OSLog(subsystem: "dev.trezi.host", category: "startup")
     /// Started by LaunchServices (not by the launcher or a test).
     static let launchServices: Bool = {
         let rest = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-psn_") }
@@ -28,6 +31,26 @@ enum HostLaunch {
     /// The environment the service passes to Bun and the helpers.
     static var environment: [String: String] { resolve().environment }
 
+    /// AppKit's application registration requires a graphical security session.
+    /// Check before NSApplication.shared: a registration abort cannot be caught in Swift.
+    static func requireGraphicSession() {
+        var session = SecuritySessionId(0)
+        var attributes = SessionAttributeBits(rawValue: 0)
+        let status = SessionGetInfo(SecuritySessionId(bitPattern: -1), &session, &attributes)
+        if let problem = graphicSessionProblem(status: status, attributes: attributes) {
+            fail(problem, showAlert: false, exitStatus: 78)
+        }
+        // An unavailable SecuritySession probe is not proof that AppKit will fail.
+        if status != errSecSuccess {
+            os_log("Graphic session probe unavailable before AppKit (status %{public}d)", log: startupLog, type: .error, status)
+        }
+    }
+
+    static func graphicSessionProblem(status: OSStatus, attributes: SessionAttributeBits) -> String? {
+        guard status == errSecSuccess, !attributes.contains(.sessionHasGraphicAccess) else { return nil }
+        return "Trezi needs a macOS graphical login session. Open it from the desktop with trezi or open -a Trezi; run development tests from a terminal in that session."
+    }
+
     private static func resolve() -> (arguments: [String], environment: [String: String]) {
         if let resolved { return resolved }
         let base = ProcessInfo.processInfo.environment
@@ -35,6 +58,9 @@ enum HostLaunch {
             resolved = (CommandLine.arguments, base)
             return resolved!
         }
+        // LaunchServices resolves the profile before Host.swift reaches its AppKit guard.
+        // Check the session first so an unrelated setup failure can still show an alert.
+        requireGraphicSession()
         var environment = loginEnvironment(base: base)
         let out = bundle.deletingLastPathComponent().path
         let bun = bundle.appendingPathComponent("Contents/Helpers/bun").path
@@ -107,10 +133,12 @@ enum HostLaunch {
         return (process.terminationStatus, String(decoding: stdout, as: UTF8.self), String(decoding: stderr, as: UTF8.self))
     }
 
-    /// A launch that cannot start: an alert under LaunchServices (there is no terminal).
-    static func fail(_ message: String) -> Never {
+    /// Preserve readable LaunchServices setup errors after the graphical-session check.
+    /// The non-graphical refusal bypasses AppKit and uses status 78.
+    static func fail(_ message: String, showAlert: Bool = true, exitStatus: Int32 = 1) -> Never {
         fputs("\(message)\n", stderr)
-        if launchServices {
+        os_log("Trezi startup refused before AppKit: %{public}@", log: startupLog, type: .error, message)
+        if launchServices && showAlert {
             let application = NSApplication.shared
             application.setActivationPolicy(.regular)
             application.activate(ignoringOtherApps: true)
@@ -119,7 +147,7 @@ enum HostLaunch {
             alert.informativeText = message
             alert.runModal()
         }
-        exit(1)
+        exit(exitStatus)
     }
 
     /// Restart after an update: the same way Trezi was started, with the active project.
