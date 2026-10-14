@@ -393,6 +393,38 @@ try {
     ok((await changedSince(repo)).includes('c.txt'), 'uncommitted work is still in scope')
     ok((await aheadOfBase(repo, 'nope')) === 0, 'an unresolvable base is 0, not a throw')
   }
+  // A squash has equivalent files but divergent history. The fetched remote
+  // default must win over a stale local main, including after a new edit.
+  {
+    const repo = makeRepo()
+    g(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    g(repo, 'checkout', '-q', '-b', 'feature')
+    writeFileSync(join(repo, 'a.txt'), 'published\n')
+    g(repo, 'commit', '-qam', 'feature history')
+    const tip = g(repo, 'rev-parse', 'HEAD').trim()
+    g(repo, 'checkout', '-q', 'main')
+    writeFileSync(join(repo, 'a.txt'), 'published\n')
+    g(repo, 'commit', '-qam', 'squash on main')
+    g(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    g(repo, 'checkout', '-q', 'feature')
+    g(repo, 'update-ref', 'refs/heads/main', 'HEAD~1')
+    ok(g(repo, 'rev-parse', 'HEAD').trim() === tip, 'fixture feature tip retained')
+    ok((await aheadOfBase(repo, 'main')) === 1, 'history stays divergent after squash')
+    ok((await changedSince(repo)).length === 0, 'squash-equivalent content is published')
+    writeFileSync(join(repo, 'a.txt'), 'new content\n')
+    ok((await changedSince(repo)).includes('a.txt'), 'new content after merge is publishable')
+  }
+  {
+    const repo = makeRepo()
+    g(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    g(repo, 'checkout', '-q', '-b', 'feature')
+    g(repo, 'checkout', '-q', 'main')
+    writeFileSync(join(repo, 'a.txt'), 'only main changed\n')
+    g(repo, 'commit', '-qam', 'main only')
+    g(repo, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    g(repo, 'checkout', '-q', 'feature')
+    ok((await changedSince(repo)).length === 0, 'a main-only commit is outside session scope')
+  }
 } finally {
   rmSync(base, { recursive: true, force: true })
 }
