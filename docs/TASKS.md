@@ -5,9 +5,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Live Publish attribution check (LKM-255)
 
-- [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a prepared clone; confirm the guards and the seeded publication commit offline.
+- [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a test-branch clone with one throwaway trezi@local commit; `test/live-publish-attribution.mjs` covers the publication commit and the guards offline.
 - [ ] Operator (host): check the Vercel Git link and production branch for prj_YwkNbzfDFEdtd9t9hSUj44gjybMH. The worker sandbox could not reach api.vercel.com or api.github.com.
-- [ ] Operator: seed `trezi-lkm255-attribution-test` at main, add the empty trezi@local tip, run the script, collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
+- [ ] Operator: clone lkmv.ch onto the unpushed branch `trezi-lkm255-attribution-test`, run the script (it adds the throwaway commit; Publish pushes), collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
 - [ ] Record that evidence here and tick the LKM-251 live Vercel acceptance item.
 
 ## Publish attribution (LKM-251)
