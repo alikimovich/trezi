@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Live Publish attribution check (LKM-255)
+
+- [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a prepared clone; confirm the guards and the seeded publication commit offline.
+- [ ] Operator (host): check the Vercel Git link and production branch for prj_YwkNbzfDFEdtd9t9hSUj44gjybMH. The worker sandbox could not reach api.vercel.com or api.github.com.
+- [ ] Operator: seed `trezi-lkm255-attribution-test` at main, add the empty trezi@local tip, run the script, collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
+- [ ] Record that evidence here and tick the LKM-251 live Vercel acceptance item.
+
 ## Publish attribution (LKM-251)
 
 - [x] Append one user-identity empty commit after an automated final tip, preserving the tree and history across reconciliation and retries; reject missing identity.
