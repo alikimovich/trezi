@@ -91,6 +91,7 @@ export function createThreeDInspector(options: {
       height = 0,
       originX = 0,
       originY = 0
+    let rootBounds = initial.getBoundingClientRect()
     const publish = (): void => {
       if (!ready) return
       const selectedIndex = surfaces.findIndex((s) => s.element === selected)
@@ -192,6 +193,7 @@ export function createThreeDInspector(options: {
       invalid = false
       revision++
       const rootRect = root.getBoundingClientRect()
+      rootBounds = rootRect
       originX = Math.min(rootRect.left, ...surfaces.map((s) => s.rect.left))
       originY = Math.min(rootRect.top, ...surfaces.map((s) => s.rect.top))
       width = Math.max(1, rootRect.right - originX, ...surfaces.map((s) => s.rect.right - originX))
@@ -283,7 +285,26 @@ export function createThreeDInspector(options: {
         close()
       }
     }
-    const observer = new MutationObserver(scheduleRefresh)
+    const observer = new MutationObserver((records) => {
+      // Unrelated app updates can continue under the modal. Replacing all native planes
+      // for each such mutation causes visible flashes even when this component is static.
+      const affectsSurface = records.some((record) => {
+        if (document.head?.contains(record.target) || root.contains(record.target)) return true
+        const changed =
+          record.type === 'childList' ? [...record.addedNodes, ...record.removedNodes] : []
+        if (changed.some((node) => node.contains(root))) return true
+        if (!(record.target instanceof Element) || !record.target.contains(root)) return false
+        if (record.type !== 'childList') return true // An ancestor can change inherited styles.
+        const rect = root.getBoundingClientRect()
+        return (
+          rect.x !== rootBounds.x ||
+          rect.y !== rootBounds.y ||
+          rect.width !== rootBounds.width ||
+          rect.height !== rootBounds.height
+        )
+      })
+      if (affectsSurface) scheduleRefresh()
+    })
     observer.observe(document.body, {
       subtree: true,
       childList: true,

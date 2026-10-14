@@ -323,6 +323,7 @@ final class ThreeDChrome {
                 "pitch": scene.pitch, "yaw": scene.yaw, "zoom": scene.zoom, "sceneSeparation": scene.separation,
                 "spacing": scene.spacing, "sceneSelected": scene.selected, "hovered": scene.hovered,
                 "guides": scene.visibleGuides, "guideParents": scene.guideParents,
+                "filledBacks": scene.filledBacks,
                 "hoverLabel": scene.hoverText, "message": scene.message, "sceneHidden": scene.isHidden,
                 "sceneRect": ["x": Double(scene.frame.minX), "y": Double(scene.frame.minY), "width": Double(scene.frame.width), "height": Double(scene.frame.height)],
                 "background": scene.backgroundHex, "points": points, "countLabel": threeDLayerCount(model.layers.count),

@@ -89,12 +89,35 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal(opened.planes, 5)
   assert.equal(opened.rendered, 5, 'every layer renders natively')
   assert.equal(opened.guides, 8, 'two guides join each captured parent and child')
+  assert.equal(opened.filledBacks, 0, 'depth contours do not gray authored faces')
   assert.deepEqual(opened.guideParents, [0, 0, 1, 1, 0, 0, 3, 3])
   const guideCapture = await host.request('threeDCapture', { dark: false })
   writeFileSync(
     join(artifacts, 'three-d-exploded-guides.png'),
     Buffer.from(guideCapture.png, 'base64')
   )
+  // An unrelated page update must not replace the native atlas while the scene is static.
+  const stableCaptures = (await inspect()).captures
+  await page(`(() => {
+    const unrelated = document.createElement('div');
+    unrelated.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px';
+    document.body.append(unrelated);
+    return true;
+  })()`)
+  const stableCapture = await host.request('threeDCapture', { dark: false })
+  writeFileSync(join(artifacts, 'three-d-stable.png'), Buffer.from(stableCapture.png, 'base64'))
+  assert.equal(
+    (await inspect()).captures,
+    stableCaptures,
+    'unrelated page activity does not recapture the scene'
+  )
+  await page(`document.querySelector('#three-d-head').style.backgroundColor = 'rgb(215, 42, 80)'`)
+  await waitFor(
+    async () => (await inspect()).captures > stableCaptures,
+    'authored color change recaptures'
+  )
+  const colorCapture = await host.request('threeDCapture', { dark: false })
+  writeFileSync(join(artifacts, 'three-d-colors.png'), Buffer.from(colorCapture.png, 'base64'))
   assert.equal(opened.sceneHidden, false)
   assert.equal(opened.message, '', 'no fallback message over a captured scene')
   assert.equal(opened.countLabel, '5 layers')

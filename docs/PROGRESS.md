@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-14 — LKM-260: original exploded colors and stable capture frames
+
+- Gray depth backing planes in `src/native/ThreeDScene.swift` showed through translucent captured faces, tinting authored colors. Backing now draws an offset contour with no fill; face images, selection outline and assembly guides stay intact.
+- The native scene previously committed newly allocated planes before assigning their positions and transforms, allowing one intermediate frame during recapture. Replacement and positioning now commit together. The preview's body-wide mutation observer also rebuilt the atlas for unrelated page changes; it now checks the selected subtree, inherited styles, stylesheet changes, root replacement and geometry before scheduling a capture.
+- The nested native fixture records stable and recolored screenshots, checks that unrelated body updates do not recapture, and verifies an authored color change does. The manager will attach visual evidence with the PR.
+
 ## 2026-10-14 — LKM-258: expanded spacing follows the compact axes
 
 - The shared Padding/Margin row now renders its expanded right/left fields in the left column and top/bottom fields in the right column. The controller emits fields in that column order so keyboard traversal follows the same sequence; each field keeps its own value, icon, unit and token selector.
