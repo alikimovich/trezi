@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-249 review repair: retain startup alerts and validate cached signatures
+
+- Review found that suppressing every pre-AppKit alert made unrelated LaunchServices setup errors invisible to Finder and Dock users. The host now checks graphical access before LaunchServices profile resolution, keeps the existing alert and exit 1 for graphical setup failures, and skips AppKit only for a proven non-graphical session (exit 78). The launcher fixture checks both exit paths without opening a GUI.
+- Read-only `codesign --verify --deep --strict` failed on this worktree's build 1067 because the bundled Bun signature was invalid; the source Bun also failed verification. The first repair still left an invalid bundled Bun after native smoke passed, so `bundleBun` now replaces the copy on every build and requires strict signature verification. The test uses only disposable copies and ad hoc signing. The reported AppKit abort's cause remains unproven.
+- Cold/warm `trezi` and `open -a` launches were not run by the worker because they can open Keychain or TCC prompts even with a disposable profile; the worker instruction forbids any command that can open such a dialog. The operator must run those GUI entrypoints and capture ready state, host stderr and targeted unified logs. The manager's native test covers the direct test entrypoint.
+- After the cache shortcut was removed, Agent OS quick passed 222 unit checks, typechecks and lint, and native `core` passed 30 smoke checks without skips on build 1068. A separate post-build `codesign --verify --deep --strict` still failed on the bundled Bun. The native tool's three-call limit is exhausted. Treat bundle validity and GUI cold/warm launch as open acceptance checks, not a verified fix.
+
 ## 2026-10-13 — LKM-249: pre-AppKit graphical-session diagnosis
 
 - The `trezi` command already uses LaunchServices; `bun run dev` and tests directly execute the host. The reported HIServices abort supplies no evidence that the LaunchServices database, signing or AppKit UI code is at fault. This worktree had no matching built app or crash report, so root cause and cold/warm launch acceptance remain unverified.

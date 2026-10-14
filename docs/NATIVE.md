@@ -27,12 +27,25 @@ now checks whether its macOS security session has graphical access. A known
 non-graphical session exits with a readable message and status 78; a probe error
 is logged but does not claim the session is invalid. Pre-AppKit startup failures
 also appear in the unified log under subsystem `dev.trezi.host`, category
-`startup`, without requiring an AppKit alert.
+`startup`. LaunchServices setup failures in a graphical session still show the
+existing AppKit alert and exit with status 1. Only a proven non-graphical session
+skips the alert and exits with status 78.
 
 The reported 0.1.0 build 1067 SIGABRT stack reaches HIServices registration, but
 does not identify the reason. This worktree had no matching built app or crash
-report for symbolication, and no safe cold/warm launch was made against the
-operator's profile. To investigate a recurrence, an operator can capture the
+report for symbolication. A read-only check of the local build 1067 found an
+invalid signature on the bundled Bun, which matched the invalid signature on
+the source Bun. The bundle copy cache previously accepted identical bytes without
+checking the signature; builds now replace the copy and verify its signature
+before continuing. The manager's native `core` suite passed on build 1068, but
+a separate post-build `codesign --verify --deep --strict` still failed on the
+bundled Bun. Bundle validity therefore remains unverified and needs investigation;
+this does not establish the cause of the reported HIServices abort. The worker did
+not run cold/warm `trezi` or `open -a` launches:
+those start a real GUI app and could open Keychain or TCC dialogs, which the
+worker's safety instructions prohibit even with a disposable profile. The
+manager's disposable-profile native suite exercises the direct test entrypoint.
+For a recurrence, an operator can capture the
 host's stderr and the `dev.trezi.host` startup errors/faults in Console, along
 with the app's `codesign --verify --deep --strict` result and the exact build
 number. Use a disposable `TREZI_USER_DATA` profile for reproduction; check both

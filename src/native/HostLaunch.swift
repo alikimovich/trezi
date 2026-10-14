@@ -37,7 +37,9 @@ enum HostLaunch {
         var session = SecuritySessionId(0)
         var attributes = SessionAttributeBits(rawValue: 0)
         let status = SessionGetInfo(SecuritySessionId(bitPattern: -1), &session, &attributes)
-        if let problem = graphicSessionProblem(status: status, attributes: attributes) { fail(problem) }
+        if let problem = graphicSessionProblem(status: status, attributes: attributes) {
+            fail(problem, showAlert: false, exitStatus: 78)
+        }
         // An unavailable SecuritySession probe is not proof that AppKit will fail.
         if status != errSecSuccess {
             os_log("Graphic session probe unavailable before AppKit (status %{public}d)", log: startupLog, type: .error, status)
@@ -56,6 +58,9 @@ enum HostLaunch {
             resolved = (CommandLine.arguments, base)
             return resolved!
         }
+        // LaunchServices resolves the profile before Host.swift reaches its AppKit guard.
+        // Check the session first so an unrelated setup failure can still show an alert.
+        requireGraphicSession()
         var environment = loginEnvironment(base: base)
         let out = bundle.deletingLastPathComponent().path
         let bun = bundle.appendingPathComponent("Contents/Helpers/bun").path
@@ -128,11 +133,21 @@ enum HostLaunch {
         return (process.terminationStatus, String(decoding: stdout, as: UTF8.self), String(decoding: stderr, as: UTF8.self))
     }
 
-    /// Fail before AppKit. Creating an NSAlert here could trigger the same registration abort.
-    static func fail(_ message: String) -> Never {
+    /// Preserve readable LaunchServices setup errors after the graphical-session check.
+    /// The non-graphical refusal bypasses AppKit and uses status 78.
+    static func fail(_ message: String, showAlert: Bool = true, exitStatus: Int32 = 1) -> Never {
         fputs("\(message)\n", stderr)
         os_log("Trezi startup refused before AppKit: %{public}@", log: startupLog, type: .error, message)
-        exit(78)
+        if launchServices && showAlert {
+            let application = NSApplication.shared
+            application.setActivationPolicy(.regular)
+            application.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = "Trezi could not start"
+            alert.informativeText = message
+            alert.runModal()
+        }
+        exit(exitStatus)
     }
 
     /// Restart after an update: the same way Trezi was started, with the active project.

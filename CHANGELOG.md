@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- Startup diagnostics now refuse a proven non-graphical macOS session before AppKit; the cause of the reported LKM-249 registration abort remains unconfirmed.
 - A no-project home centers "What do you want to create?" above the native composer, with recent projects and Open Project; New Project is the composer's default. Its first message opens a persisted planning conversation and docks the chat before a project directory exists. The provider asks only for missing details, then presents the plan and editable destination in chat before creation; the same transcript opens in the new project (LKM-232, LKM-233).
 - Native chat now starts Claude Code or Codex-managed ChatGPT sign-in from the start and auth-recovery cards, with progress, cancellation and an explicit retry of the saved message (LKM-231).
 - Self-healing turns (LKM-225): provider and workspace errors become one compact chat row with collapsed, copyable Details, and when Codex cannot connect after its retries the turn runs on Claude (and the other way round) with a note, unless you turn off Settings → AI Providers → Automatic provider fallback; a crashed provider helper restarts and resumes the same turn (up to twice); a stale Git `index.lock` is cleared by the repository owner and the Git step retried; a change held because the project moved is resolved once automatically.
@@ -25,7 +26,6 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - The selected element's toolbar shows a cube for Inspect in 3D and a stack of variants for Show states, and the States switcher's All button uses a matching stack, so neither looks like Layers or the layout grid (LKM-218).
 - States workbenches can be left and found again: the States switcher has "← Back to <page>" (same page and scroll, the component selected again, ⌘[ / ⌘] move between them) and Continue in Chat; a "States N" menu under the address lists each workbench with where it came from and its last state, with Open, Open All States, Continue in Chat, Rebuild States and Remove (replacing the … menu's Workbenches); Show states on a component that already has a workbench opens it; the list survives restarts; and the Publish warning adds Open Workbench (LKM-220).
 ### Fixed
-- Trezi now reports a non-graphical macOS session before AppKit registration, with bounded startup diagnostics for launch failures (LKM-249).
 - Layout-grid columns and dragged guides stay clipped to the preview viewport at square and rounded corners, including columns that extend beyond the page (LKM-247).
 - Empty and short chats hide the transcript scroller; it returns when messages overflow, while keeping the macOS scroller preference (LKM-246).
 - Choosing a recent project in the home composer's picker now selects a draft target until Send; canceling project planning restores clickable recent and Open Project controls without sending an unsent draft (LKM-243).
