@@ -8,6 +8,7 @@ struct ThreeDLayer: Identifiable {
     let id: Int
     let label: String
     let depth: Int
+    let parent: Int
     let x, y, width, height: Double
     let page: Int
     let ax, ay: Double
@@ -195,11 +196,13 @@ final class ThreeDChrome {
             guard let id = row["id"] as? Int, id == index,
                   let label = row["label"] as? String, label.count <= 120,
                   let depth = row["depth"] as? Int, (0...18).contains(depth),
+                  let parent = row["parent"] as? Int, parent >= -1, parent < index,
+                  parent == -1 || layers[parent].depth < depth,
                   let x = finite(row["x"], -100000...100000), let y = finite(row["y"], -100000...100000),
                   let w = finite(row["width"], 0...100000), let h = finite(row["height"], 0...100000),
                   let page = row["page"] as? Int, (0..<pages).contains(page),
                   let ax = finite(row["ax"], 0...100000), let ay = finite(row["ay"], 0...100000) else { return }
-            layers.append(ThreeDLayer(id: id, label: label, depth: depth, x: x, y: y, width: w, height: h, page: page, ax: ax, ay: ay))
+            layers.append(ThreeDLayer(id: id, label: label, depth: depth, parent: parent, x: x, y: y, width: w, height: h, page: page, ax: ax, ay: ay))
         }
         let selected = state["selected"] as? Int ?? -1
         guard selected == -1 || layers.indices.contains(selected) else { return }
@@ -319,6 +322,7 @@ final class ThreeDChrome {
                 "planes": scene.planes.count, "capturedRevision": capturedRevision, "captures": captures,
                 "pitch": scene.pitch, "yaw": scene.yaw, "zoom": scene.zoom, "sceneSeparation": scene.separation,
                 "spacing": scene.spacing, "sceneSelected": scene.selected, "hovered": scene.hovered,
+                "guides": scene.visibleGuides, "guideParents": scene.guideParents,
                 "hoverLabel": scene.hoverText, "message": scene.message, "sceneHidden": scene.isHidden,
                 "sceneRect": ["x": Double(scene.frame.minX), "y": Double(scene.frame.minY), "width": Double(scene.frame.width), "height": Double(scene.frame.height)],
                 "background": scene.backgroundHex, "points": points, "countLabel": threeDLayerCount(model.layers.count),

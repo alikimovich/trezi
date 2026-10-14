@@ -102,6 +102,15 @@ export function createThreeDInspector(options: {
           id,
           label: s.label.slice(0, THREE_D_LIMITS.label),
           depth: s.depth,
+          parent: (() => {
+            let ancestor = s.element.parentElement
+            while (ancestor) {
+              const index = surfaces.findIndex((candidate) => candidate.element === ancestor)
+              if (index >= 0) return index
+              ancestor = ancestor.parentElement
+            }
+            return -1
+          })(),
           x: s.rect.left - originX,
           y: s.rect.top - originY,
           width: s.rect.width,

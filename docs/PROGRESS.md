@@ -6,6 +6,14 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 - The shared Padding/Margin row now renders its expanded right/left fields in the left column and top/bottom fields in the right column. The controller emits fields in that column order so keyboard traversal follows the same sequence; each field keeps its own value, icon, unit and token selector.
 - The controller fixture checks both groups' expanded and collapsed order and preserved asymmetric values. The native inspector fixture saves both states in light and dark mode for review.
+## 2026-10-14 — LKM-257 review repair: assembly guides remain readable
+
+- Review of the first native capture showed the dashed guides nearly disappearing: a translucent tertiary label stroke was multiplied by 0.55 layer opacity. The guides now use the appearance-aware label color at 0.65 alpha with full layer opacity while exploded; zero separation still sets opacity to zero. The scene stroke remains one screen point wide.
+
+## 2026-10-14 — LKM-257: depth and assembly guides in the native exploded scene
+
+- The preview now sends each captured surface's nearest captured DOM ancestor. The native scene uses the overlapping layout footprint of each parent/child pair to place two matching corner guides in world space. Thin backing planes add restrained Z depth; guides and backs vanish at zero separation and are removed on recapture/clear.
+- The contract rejects invalid parent indices and depth relationships. The 3D smoke fixture checks the nested parent mapping, expanded and collapsed guide visibility, and saves `three-d-exploded-guides.png` for visual review.
 
 ## 2026-10-13 — LKM-250 repair: tracked secret-named files stay committable
 
