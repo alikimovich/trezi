@@ -2,6 +2,28 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-250 repair: tracked secret-named files stay committable
+
+- The secret-name heuristic in `WorkflowRemote.swift` now applies only to paths entering history (untracked, index-added, rename or copy targets). A tracked file whose name contains "secret" or "credential" (`secrets.ts`, `CredentialsForm.tsx`, a tracked `.npmrc`) stays `eligible: true` when modified or deleted, so the Commit action is no longer lost. `.env` and sidecar exclusions and directory entries are unchanged.
+- `remote-recovery` in `test/workflow-owner.mjs` commits a tracked `secrets.ts` and `CredentialsForm.tsx`, modifies and deletes them, asserts they are eligible (an untracked `credentials.json` beside them is still not), and checks the recovery commit plus pull succeed.
+
+## 2026-10-13 — LKM-250: Git updates dirty-tree recovery
+
+- Git updates displays tracked, staged and eligible new files blocking Pull or Switch, names the current and destination branches, and offers an editable commit message. The service checks a content fingerprint against the reviewed scope, uses the repository lane and workflow journal, requires the commit to succeed before fetching or switching, and keeps Fetch available while dirty. Excluded staged files stay blocked. Cancel and failed commits leave user files in place.
+- The recovery sheet now shows bounded read-only diffs; common credential and private-key filenames are excluded. The owner fixture covers a pre-staged file, a new file, `.env`, stale review, hook refusal and one successful commit. A native fixture checks sheet actions and records foreground light/dark captures at 1320 and 850 pt.
+- The first native run reached the new fixture but its capture asked for the main window while the sheet was key. The test-only host capture now targets the sheet's foreground window through the existing visible-capture path; the fixture uses that route for the four captures.
+- Image inspection after the passing core run showed the standalone sheet stayed dark when only the main window appearance changed. The test hook now sets the sheet window appearance for each capture and restores it afterwards.
+## 2026-10-13 — LKM-250 repair: excluded and nested files in recovery
+
+- Untracked secret-named files (credentials, `.key`, `.pem`, `id_rsa`, `.npmrc`) and nested repositories are now listed in the Git updates sheet as excluded (`eligible: false`) instead of hidden, because they still block Pull/Switch. Trezi refuses the commit before staging anything when any listed change is ineligible, so it never commits and then refuses on a known path; the sheet tells the user to move, ignore or unstage them. Untracked `.env` and sidecars stay hidden and non-blocking.
+- A directory entry (nested repo) no longer breaks `status()` (no `hash-object` on it); add, commit and the tracked diff use `--literal-pathspecs`, so names with glob characters are not widened.
+- `test/workflow-owner.mjs` gained `remote-recovery` (blocked plain pull, branch drift, busy, conflict after commit keeps exactly one recovery commit and aborts the merge, duplicate token refused, Switch recovery, hook rejection leaves files byte-identical) and `remote-excluded` (credentials.json, server.key, .npmrc, nested repo shown excluded, never committed or staged, then the eligible file commits once they are moved).
+
+## 2026-10-13 — LKM-250 repair: publish-progress smoke fixture races
+
+- Manager verification failed `publish-progress` ("Spinner fits at 1320 in light"). The saved log recorded neither half of the combined assertion; the repair run showed `branchBusy` false and the toolbar title reset to "Branch", i.e. a real `GitController.refresh` (activation or publish end) had cleared the synthetic status and reset the branch from the disposable repo. The fixture now stubs `git.refresh` for its duration, pins `github:branch-status` polls to the status it set, waits for the requested window width, the running spinner and two identical spinner frames before asserting, and reports width, `branchBusy`, `branchProgressFits`, spinner frame and branch width separately. The fit assertion is unchanged. The Git updates fixture now waits for its final sheet dismissal. Fixture-only; no product change.
+- The full-suite run still failed after that (core-only passed): the foreground capture showed the toolbar with no branch status. Checks before it leave a `pollStatus` in flight; against the disposable repo it throws and its `catch` deletes the status the fixture had just set. The fixture now waits for `statusFlights`/`refreshingStatus` to clear before setting the sample and refuses `statuses.delete` for the project while it owns a status (originals restored in `finally`). All seven groups then passed in one run (52/52).
+
 ## 2026-10-13 — LKM-249 review repair: product wording for the startup docs
 
 - Review asked that `docs/NATIVE.md` read as product documentation and not as a run log. The section now states the check, exit codes (78 non-graphical, 1 other setup errors), the `dev.trezi.host`/`startup` log, what the reported stack does and does not show, and operator steps. It labels two open limits: cold/warm `trezi` and `open -a Trezi` launches were not run (no LaunchServices fixture; GUI app start can raise Keychain/privacy dialogs), and a standalone `codesign --verify --deep --strict` of a build made after the `bundle-bun` change was not re-run. The stale app left in this work tree still fails on `Helpers/bun`; the build itself now verifies the bundled Bun.
