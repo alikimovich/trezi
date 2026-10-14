@@ -33,7 +33,8 @@ export class NativeInspectorController {
     actions: [],
     error: '',
     busy: false,
-    updated: 0
+    updated: 0,
+    edits: 0
   }
   requestedFile: string | null = null
   expanded = new Set<string>()
@@ -779,10 +780,9 @@ export class NativeInspectorController {
         } catch (error) {
           if (generation === this.state.generation) this.state.error = String(error)
         } finally {
-          if (generation === this.state.generation) {
-            this.state.busy = false
-            this.publish()
-          }
+          this.state.edits = (this.state.edits ?? 0) + 1
+          if (generation === this.state.generation) this.state.busy = false
+          this.publish()
         }
       }
       this.operation = this.operation.then(write, write)

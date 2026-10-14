@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-251 repair: native inspector Undo smoke race (not a Publish regression)
+
+- The manager's native run failed `core/inspector` ("one Undo restores both vertical sides"); the branch differs from main only in Publish and docs, so the cause is the fixture. It inferred that an edit had settled from the source text and `busy`, but a selection refresh resets `busy` while the write is still in flight. The inspector state now carries a monotonic `edits` count (finished writes, never reset by a selection); the broker's `inspectorInspect` reports it and the fixture waits for it to pass the value seen before each request. The Undo assertion is unchanged; on a mismatch it now logs the before, paired and after source, the Undo result and the inspector state.
+- `test:workflow-owner` (incl. `branch-pr-attribution`) passed 4 of 4 repeated local runs; the earlier saved-run branch-state failure did not reproduce. Live Vercel acceptance remains pending.
+
 ## 2026-10-13 — LKM-251: publication commit for automated tips
 
 - The service-owned Publish workflow now checks the final tip after each remote reconciliation. A `trezi@local` tip gains one empty commit authored and committed with configured Git identity, preserving the tree and prior history. The handoff and saved-run PR push paths use the same service helper. Ref updates compare the old tip, and pushes name the exact SHA to detect branch drift. Missing identity stops before push with Git configuration guidance; configured identity is not claimed as verified GitHub linkage.
