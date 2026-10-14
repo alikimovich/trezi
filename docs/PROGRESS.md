@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-249 review repair: product wording for the startup docs
+
+- Review asked that `docs/NATIVE.md` read as product documentation and not as a run log. The section now states the check, exit codes (78 non-graphical, 1 other setup errors), the `dev.trezi.host`/`startup` log, what the reported stack does and does not show, and operator steps. It labels two open limits: cold/warm `trezi` and `open -a Trezi` launches were not run (no LaunchServices fixture; GUI app start can raise Keychain/privacy dialogs), and a standalone `codesign --verify --deep --strict` of a build made after the `bundle-bun` change was not re-run. The stale app left in this work tree still fails on `Helpers/bun`; the build itself now verifies the bundled Bun.
+
+## 2026-10-13 — LKM-249 manager-verification repair: platform-owner bridge-close race
+
+- The manager's unit run failed only `platform-owner` ("the previous bridge is closed" still connectable after a restart) under 8-worker load; no LKM-249 file touches that path and the previous attempt passed the same test. `SimulatorBridge.close()` cancelled the dispatch listener but the socket was closed later in its async cancel handler, so a restart or Stop could return while the old port still accepted connections. `close()` now waits (bounded, 2 s) for the cancel handler to release the port. The worker sandbox forbids local port binding, so this test could not be run locally; only the manager's run confirms it.
+
+## 2026-10-13 — LKM-249 review repair: retain startup alerts and validate cached signatures
+
+- Review found that suppressing every pre-AppKit alert made unrelated LaunchServices setup errors invisible to Finder and Dock users. The host now checks graphical access before LaunchServices profile resolution, keeps the existing alert and exit 1 for graphical setup failures, and skips AppKit only for a proven non-graphical session (exit 78). The launcher fixture checks both exit paths without opening a GUI.
+- Read-only `codesign --verify --deep --strict` failed on this worktree's build 1067 because the bundled Bun signature was invalid; the source Bun also failed verification. The first repair still left an invalid bundled Bun after native smoke passed, so `bundleBun` now replaces the copy on every build and requires strict signature verification. The test uses only disposable copies and ad hoc signing. The reported AppKit abort's cause remains unproven.
+- Cold/warm `trezi` and `open -a` launches were not run by the worker because they can open Keychain or TCC prompts even with a disposable profile; the worker instruction forbids any command that can open such a dialog. The operator must run those GUI entrypoints and capture ready state, host stderr and targeted unified logs. The manager's native test covers the direct test entrypoint.
+- After the cache shortcut was removed, Agent OS quick passed 222 unit checks, typechecks and lint, and native `core` passed 30 smoke checks without skips on build 1068. A separate post-build `codesign --verify --deep --strict` still failed on the bundled Bun. The native tool's three-call limit is exhausted. Treat bundle validity and GUI cold/warm launch as open acceptance checks, not a verified fix.
+
+## 2026-10-13 — LKM-249: pre-AppKit graphical-session diagnosis
+
+- The `trezi` command already uses LaunchServices; `bun run dev` and tests directly execute the host. The reported HIServices abort supplies no evidence that the LaunchServices database, signing or AppKit UI code is at fault. This worktree had no matching built app or crash report, so root cause and cold/warm launch acceptance remain unverified.
+- TreziHost now refuses a proven non-graphical security session before `NSApplication.shared`, with a readable stderr error and a bounded unified-log startup line. An unavailable probe only logs and proceeds. Pre-AppKit failure no longer creates an AppKit alert, which could repeat a registration abort. The launcher unit fixture covers graphical, unknown and denied session outcomes and a clean status-78 refusal. Agent OS quick passed 219 unit checks (3 skips), typechecks and lint; native `core` passed 30 smoke checks (no skips). The operator's cold/warm `trezi` and LaunchServices launch, matching-build symbolication and reported crash reproduction remain unverified.
 ## 2026-10-13 — LKM-251 repair: native inspector Undo smoke race (not a Publish regression)
 
 - The manager's native run failed `core/inspector` ("one Undo restores both vertical sides"); the branch differs from main only in Publish and docs, so the cause is the fixture. It inferred that an edit had settled from the source text and `busy`, but a selection refresh resets `busy` while the write is still in flight. The inspector state now carries a monotonic `edits` count (finished writes, never reset by a selection); the broker's `inspectorInspect` reports it and the fixture waits for it to pass the value seen before each request. The Undo assertion is unchanged; on a mismatch it now logs the before, paired and after source, the Undo result and the inspector state.

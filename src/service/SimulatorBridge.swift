@@ -25,6 +25,8 @@ final class SimulatorBridge: @unchecked Sendable {
     private let page: Data
     private let interaction: Interaction?
     private let listener: DispatchSourceRead
+    /// Signalled once the listening socket is really closed (the cancel handler runs async).
+    private let released: DispatchSemaphore
     private let condition = NSCondition()
     private var clients: [EventClient] = []
     private var latest: Data?
@@ -32,8 +34,10 @@ final class SimulatorBridge: @unchecked Sendable {
     private var closed = false
     private var capture: FrameCapture?
 
-    private init(port: Int, token: String, page: Data, interaction: Interaction?, listener: DispatchSourceRead) {
+    private init(port: Int, token: String, page: Data, interaction: Interaction?, listener: DispatchSourceRead,
+                         released: DispatchSemaphore) {
         self.port = port; self.token = token; self.page = page; self.interaction = interaction; self.listener = listener
+        self.released = released
     }
 
     var url: String { "http://127.0.0.1:\(port)/?treziSim=1" }
@@ -60,7 +64,9 @@ final class SimulatorBridge: @unchecked Sendable {
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: DispatchQueue(label: "dev.trezi.simulator.accept"))
         let page = Data(SimulatorTools.page(interactive: interaction != nil, token: token, frame: frame).utf8)
-        let bridge = SimulatorBridge(port: port, token: token, page: page, interaction: interaction, listener: source)
+        let released = DispatchSemaphore(value: 0)
+        let bridge = SimulatorBridge(port: port, token: token, page: page, interaction: interaction, listener: source,
+                                     released: released)
         source.setEventHandler { [weak bridge] in
             while true {
                 let connection = Darwin.accept(fd, nil, nil)
@@ -71,7 +77,7 @@ final class SimulatorBridge: @unchecked Sendable {
                 DispatchQueue.global(qos: .userInitiated).async { bridge.serve(connection) }
             }
         }
-        source.setCancelHandler { Darwin.close(fd) }
+        source.setCancelHandler { Darwin.close(fd); released.signal() }
         source.resume()
         return bridge
     }
@@ -122,7 +128,8 @@ final class SimulatorBridge: @unchecked Sendable {
         Data("--\(boundary)\r\nContent-Type: image/jpeg\r\nContent-Length: \(jpeg.count)\r\n\r\n".utf8) + jpeg + Data("\r\n".utf8)
     }
 
-    /// Stops accepting, capturing and every stream. Idempotent.
+    /// Stops accepting, capturing and every stream. Idempotent. Returns once the port is
+    /// released (bounded), so a restart or Stop never leaves the old bridge connectable.
     func close() {
         condition.lock()
         let firstClose = !closed
@@ -133,6 +140,7 @@ final class SimulatorBridge: @unchecked Sendable {
         condition.unlock()
         guard firstClose else { return }
         listener.cancel()
+        _ = released.wait(timeout: .now() + 2)
         capture?.stop()
         for client in targets { client.end() }
     }

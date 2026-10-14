@@ -18,6 +18,73 @@ effect materials. This migration was verified on macOS 26.4.1, not every support
 OS version. Start through `scripts/start-native.mjs` (via the CLI/dev/start scripts):
 the source-built host requires launch arguments and its bundled XPC service.
 
+### Startup registration diagnostics (LKM-249)
+
+`trezi` and `open -a Trezi` enter through LaunchServices; `bun run dev`
+(`scripts/start-native.mjs`) and the native tests execute `TreziHost` directly from
+a terminal. The two routes inherit different bootstrap and shell environments.
+
+**What the host checks.** Before AppKit registration (`NSApplication.shared`), the
+host asks whether its macOS security session has graphical access
+(`src/native/HostLaunch.swift`).
+
+| Situation | Behaviour |
+| --- | --- |
+| Session known to be non-graphical | Readable stderr message, no alert, exit status 78, AppKit never starts |
+| The probe itself errors | Logged, launch continues (the session is not claimed invalid) |
+| LaunchServices setup error in a graphical session | Existing AppKit alert, exit status 1 |
+
+A failed `NSApplication` registration aborts the process and cannot be caught as a
+Swift error, so the only supported guard is refusing the bad condition first. The
+host does not relaunch itself after a failure. Pre-AppKit startup failures are
+also written to the unified log (subsystem `dev.trezi.host`, category `startup`).
+
+**Bundled Bun.** `scripts/bundle-bun.mjs` replaces `Contents/Helpers/bun` on every
+build (the cache used to accept identical bytes without looking at the signature),
+signs it with the build identity when Bun's own signature is missing, invalid or
+ad hoc, then runs `codesign --verify --strict` on it and fails the build if that
+does not pass. The Bun that ran the build on the machine used for this work had an
+invalid signature of its own, so an unverified copy was a plausible defect, but no
+link between it and the reported abort was shown.
+
+**What the reported abort does and does not show.** The 0.1.0 build 1067 stack
+(SIGABRT on the main thread in HIServices `_RegisterApplication` →
+`GetCurrentProcess`, reached from `NSApplication` init) shows that AppKit could not
+register the process with the system. It does not show a LaunchServices database,
+signing, remote-session or UI cause, and it was not reproduced or symbolicated
+against a matching build. The root cause is unproven.
+
+**Limits of local verification.**
+
+- The unit tier covers the session decision, both exit codes and their stderr, and
+  replacement of a bundled Bun with a broken signature, with no GUI. The native
+  suite covers the direct (test/dev) entrypoint on a disposable profile.
+- A cold and a warm launch through `trezi` and through `open -a Trezi`
+  (LaunchServices) were **not** run: no fixture covers LaunchServices, and starting
+  the GUI app from the automated session can raise Keychain or privacy dialogs.
+  They are pending an operator.
+- A standalone `codesign --verify --deep --strict` of a freshly built `Trezi.app`
+  was **not** re-checked after the `bundle-bun` change. An app left over from an
+  earlier build in the work tree still failed on `Helpers/bun`. The build now
+  verifies the bundled Bun itself and stops if it is invalid, but the deep check of
+  the finished bundle is an operator step.
+- The user's machine may differ from the one used here.
+
+**Operator steps** (also for a recurrence). In a logged-in desktop session, with a
+disposable profile (`TREZI_USER_DATA=<temp dir>`; never the real one):
+
+1. `bun run build`, then `codesign --verify --deep --strict out/native/Trezi.app`;
+   note the result and the exact build number.
+2. Cold launch (no Trezi running) and warm launch (already running) through
+   `trezi`, through `open -a Trezi`, and through `bun run dev` from a terminal in
+   that same session. Check that the window appears and the XPC service reaches
+   ready.
+3. On a crash or exit 78, collect the host's stderr, the crash report, and
+   `log show --last 5m --predicate 'subsystem == "dev.trezi.host"'`. Redact paths
+   and machine identifiers before sharing.
+
+Do not infer a LaunchServices database or signing defect from the stack alone.
+
 ## Native ownership
 
 | Surface | Implementation |
