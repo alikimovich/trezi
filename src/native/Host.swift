@@ -517,6 +517,7 @@ guard HostLaunch.arguments.count >= 3 else {
     fputs("TreziHost is started by Trezi: open -a Trezi, the trezi command, or bun run dev.\n", stderr)
     exit(64)
 }
+if !HostLaunch.launchServices { HostLaunch.requireGraphicSession() }
 let application = NSApplication.shared
 let host = Host(directory: HostLaunch.arguments[1], ephemeral: HostLaunch.arguments[2] == "ephemeral")
 application.setActivationPolicy(.regular); application.delegate = host; application.run()
