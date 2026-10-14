@@ -82,7 +82,12 @@ struct WorkflowPublish {
                 .split(separator: "\n").map(String.init)
             let stillDifferent = Set(((try? context.run(["diff", "--name-only", baseRef, branch])) ?? "")
                 .split(separator: "\n").map(String.init))
-            if changed.allSatisfy({ !stillDifferent.contains($0) }) {
+            // A remote branch may have advanced to work this publish must reconcile,
+            // even when the local branch has no remaining content change against base.
+            let remoteTip = try? context.run(["rev-parse", "--verify", "refs/remotes/origin/\(branch)"])
+            let localTip = try context.run(["rev-parse", "HEAD"])
+            if changed.allSatisfy({ !stillDifferent.contains($0) })
+                && (remoteTip == nil || remoteTip == localTip) {
                 return WorkflowContext.fail("Nothing to publish — no changes since \(base).")
             }
             try context.begin("push")
@@ -91,7 +96,10 @@ struct WorkflowPublish {
                 context.failed("push", "conflict")
                 return Self.conflict(pushed.files, pushed.refs, branch: branch, version: pushed.version)
             }
-            let sha = try context.run(["rev-parse", "HEAD"])
+            guard context.currentBranch() == branch else {
+                throw RepositoryRefusal(.conflict, "The branch changed during Publish. Retry on the current branch.")
+            }
+            let sha = try context.run(["rev-parse", "refs/heads/\(branch)"])
             try context.done("push", [("action", Self.text(pushed.action)), ("attempts", .number(Double(pushed.attempts))),
                                       ("recoveryRefs", RepositoryOwner.strings(pushed.refs)), ("head", Self.text(sha))])
             try remember([("branch", Self.text(branch)), ("base", Self.text(base)), ("head", Self.text(sha))])
@@ -240,7 +248,9 @@ struct WorkflowPublish {
             try context.done("branch", [("branch", Self.text(branch)), ("committed", .bool(committed))])
             try remember([("branch", Self.text(branch)), ("original", Self.text(original)), ("committed", .bool(committed))])
             try context.begin("push")
-            try context.run(["push", "-u", "origin", branch])
+            let tip = try publicationTip(branch)
+            try context.run(["push", "-u", "origin", "\(tip):refs/heads/\(branch)"])
+            try checkBranchTip(branch, tip)
             let sha = try context.run(["rev-parse", "HEAD"])
             try context.done("push", [("head", Self.text(sha))])
             let base = context.defaultBase()
@@ -298,7 +308,9 @@ struct WorkflowPublish {
         }
         do {
             try context.begin("push")
-            try context.run(["push", "-u", "origin", branch])
+            let tip = try publicationTip(branch)
+            try context.run(["push", "-u", "origin", "\(tip):refs/heads/\(branch)"])
+            try checkBranchTip(branch, tip)
             let sha = try context.run(["rev-parse", "refs/heads/\(branch)"])
             try context.done("push", [("head", Self.text(sha))])
             let base = context.defaultBase()
@@ -332,6 +344,40 @@ struct WorkflowPublish {
 
     // MARK: Reconciled push
 
+    /// Reuse the final tip's tree, preserving its parent and all recovery refs.
+    /// The compare-and-swap ref update makes retries observe an existing publication
+    /// commit and rejects a concurrent branch move.
+    private func publicationTip(_ branch: String) throws -> String {
+        let ref = "refs/heads/\(branch)"
+        let tip = try context.run(["rev-parse", "--verify", ref])
+        let author = try context.run(["show", "-s", "--format=%ae", tip])
+        guard author.lowercased() == "trezi@local" else { return tip }
+        let name = (try? context.run(["config", "--get", "user.name"])) ?? ""
+        let email = (try? context.run(["config", "--get", "user.email"])) ?? ""
+        let emailParts = email.split(separator: "@", omittingEmptySubsequences: false)
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !name.contains("\n"), !name.contains("\0"), !name.contains("<"), !name.contains(">"),
+              emailParts.count == 2, emailParts.allSatisfy({ !$0.isEmpty }),
+              email.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+              !email.contains("\0"), !email.contains("<"), !email.contains(">"),
+              email.lowercased() != "trezi@local" else {
+            throw RepositoryRefusal(.conflict, "Publish needs your Git name and email. Set git config user.name and git config user.email in this repository (or globally) to the identity linked to your GitHub account, then retry. Trezi cannot verify that linkage here.")
+        }
+        let tree = try context.run(["rev-parse", "\(tip)^{tree}"])
+        let identity = ["GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email,
+                        "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email]
+        let created = try context.git.text(root, ["commit-tree", tree, "-p", tip, "-m", "Publish project changes"], env: identity)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try context.run(["update-ref", ref, created, tip])
+        return created
+    }
+
+    private func checkBranchTip(_ branch: String, _ expected: String) throws {
+        guard try context.run(["rev-parse", "refs/heads/\(branch)"]) == expected else {
+            throw RepositoryRefusal(.conflict, "The branch changed during Publish. Retry to publish its latest commit.")
+        }
+    }
+
     struct Pushed {
         var ok: Bool; var action = ""; var attempts = 0; var refs: [String] = []; var files: [String] = []
         var version: (local: String, remote: String)? = nil
@@ -351,7 +397,12 @@ struct WorkflowPublish {
             do {
                 try context.check()
                 context.phase("push")
-                try context.run(["push", "-u", "origin", branch])
+                guard context.currentBranch() == branch else {
+                    throw RepositoryRefusal(.conflict, "The branch changed during Publish. Retry on the current branch.")
+                }
+                let tip = try publicationTip(branch)
+                try context.run(["push", "-u", "origin", "\(tip):refs/heads/\(branch)"])
+                try checkBranchTip(branch, tip)
                 result.attempts = attempt; result.refs = refs
                 return result
             } catch {

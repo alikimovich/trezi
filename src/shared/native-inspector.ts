@@ -33,6 +33,9 @@ export interface NativeInspectorState {
   /** Counts re-reads after a change that altered what the island shows; each new value
    *  plays the island's "updated" pulse (LKM-216). */
   updated?: number
+  /** Counts edits whose write (and Undo record) finished, applied or not. A selection
+   *  change resets `busy` but never this, so a test can wait for one specific edit. */
+  edits?: number
 }
 export interface NativeInspectorAction {
   root: string
