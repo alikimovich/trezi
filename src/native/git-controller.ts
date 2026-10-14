@@ -45,6 +45,8 @@ export class NativeGitController {
   readonly statuses = new Map<string, BranchStatus>()
   private readonly statusTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly statusFlights = new Set<string>()
+  private readonly refreshingStatus = new Map<string, number>()
+  private readonly queuedStatus = new Set<string>()
   private readonly reruns = new Map<
     string,
     { started: number; running: boolean; offered: boolean }
@@ -117,30 +119,50 @@ export class NativeGitController {
   async refresh(root: string) {
     const revision = (this.revisions.get(root) ?? 0) + 1
     this.revisions.set(root, revision)
-    const git = await this.invoke('git:list', root)
-    if (this.revisions.get(root) !== revision) return
-    const entry = this.workspace.state.projects.find((p) => p.root === root)
-    if (!entry) return
-    entry.branch = git.current ?? null
-    this.branches.set(root, git.branches)
-    this.workspace.changed()
+    this.refreshingStatus.set(root, revision)
+    this.statuses.delete(root)
     this.render()
-    const status =
-      git.current || git.branches.length ? await this.invoke('github:status', root) : null
-    if (!this.workspace.state.projects.includes(entry) || this.revisions.get(root) !== revision)
-      return
-    this.connections.set(root, status)
-    this.render()
-    if (!this.runs.has(root)) await this.adopt(root)
-    void this.pollStatus(root)
+    try {
+      const git = await this.invoke('git:list', root)
+      if (this.revisions.get(root) !== revision) return
+      const entry = this.workspace.state.projects.find((p) => p.root === root)
+      if (!entry) return
+      entry.branch = git.current ?? null
+      this.branches.set(root, git.branches)
+      this.workspace.changed()
+      this.render()
+      const status =
+        git.current || git.branches.length ? await this.invoke('github:status', root) : null
+      if (!this.workspace.state.projects.includes(entry) || this.revisions.get(root) !== revision)
+        return
+      this.connections.set(root, status)
+      this.render()
+      if (!this.runs.has(root)) await this.adopt(root)
+      this.queuedStatus.add(root)
+    } finally {
+      if (this.refreshingStatus.get(root) === revision) {
+        this.refreshingStatus.delete(root)
+        if (this.queuedStatus.delete(root)) void this.pollStatus(root)
+      }
+    }
   }
   /** Running checks are refreshed within a minute; settled checks every ten minutes. */
   async pollStatus(root: string) {
-    if (this.statusFlights.has(root)) return
+    if (this.statusFlights.has(root) || this.refreshingStatus.has(root)) {
+      this.queuedStatus.add(root)
+      return
+    }
+    const revision = this.revisions.get(root) ?? 0
     this.statusFlights.add(root)
     clearTimeout(this.statusTimers.get(root))
     try {
       const status: BranchStatus = await this.invoke('github:branch-status', root)
+      if (
+        this.revisions.get(root) !== revision ||
+        (status.branch &&
+          status.branch !== this.workspace.state.projects.find((p) => p.root === root)?.branch)
+      )
+        throw new Error('Stale branch status')
       const previous = this.statuses.get(root)
       this.statuses.set(root, status)
       this.render()
@@ -162,10 +184,19 @@ export class NativeGitController {
         await this.handleFailure(root, status)
       }
     } catch {
-      this.statuses.delete(root)
-      this.render()
+      if (this.revisions.get(root) === revision) {
+        this.statuses.delete(root)
+        this.render()
+      }
     }
     this.statusFlights.delete(root)
+    if (this.revisions.get(root) !== revision) this.queuedStatus.add(root)
+    if (this.queuedStatus.has(root) && !this.refreshingStatus.has(root)) {
+      this.queuedStatus.delete(root)
+      void this.pollStatus(root)
+      return
+    }
+    if (this.refreshingStatus.has(root)) return
     if (!this.workspace.state.projects.some((project) => project.root === root)) return
     const current = this.statuses.get(root)
     clearTimeout(this.statusTimers.get(root))

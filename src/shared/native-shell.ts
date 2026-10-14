@@ -12,14 +12,27 @@ export interface NativeShellRow {
 }
 export interface BranchStatus {
   base: string
+  branch?: string
+  /** Commits divergent from the default branch. This is history, not content. */
   ahead: number
   behind: number
   sync: string
+  unpublished?: boolean
+  dirty?: boolean
+  unpushed?: number | null
+  upstream?: string
+  remote?: string
+  stale?: boolean
   pr?: { number: number; state: 'open' | 'closed' | 'merged'; url: string }
-  ci: 'running' | 'passed' | 'failed' | 'none' | 'unknown'
+  ci: 'running' | 'passed' | 'failed' | 'none' | 'unknown' | 'stale' | 'error'
   failing: string[]
   checksUrl?: string
   commit?: string
+  deployment?: {
+    state: 'pending' | 'passed' | 'failed' | 'none' | 'unknown' | 'stale' | 'error'
+    revision?: string
+    url?: string
+  }
 }
 export interface NativeShellState {
   previewStatus?: import('./native-workspace').NativeProjectStatus

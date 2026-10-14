@@ -288,6 +288,34 @@ try {
     }))
     assert.equal(nothing.result.error, 'Nothing to publish — no changes since main.')
 
+    const squashEquivalent = await owned('publish-squash-equivalent', async (owner, w) => {
+      commit(w.local, 'a.txt', 'same content\n')
+      const peer = w.peer()
+      commit(peer, 'a.txt', 'same content\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      const before = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.publish(w.local, 'merge', describe)
+      return { result, before, after: git(w.local, 'rev-parse', 'HEAD') }
+    })
+    assert.equal(squashEquivalent.result.error, 'Nothing to publish — no changes since main.')
+    assert.equal(
+      squashEquivalent.before,
+      squashEquivalent.after,
+      'equivalent branch is not rewritten'
+    )
+
+    const behindOnly = await owned('publish-behind-only', async (owner, w) => {
+      const peer = w.peer()
+      commit(peer, 'a.txt', 'main moved forward\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      const before = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.publish(w.local, 'merge', describe)
+      return { result, before, after: git(w.local, 'rev-parse', 'HEAD'), remote: w.gh().counts }
+    })
+    assert.equal(behindOnly.result.error, 'Nothing to publish — no changes since main.')
+    assert.equal(behindOnly.before, behindOnly.after)
+    assert.equal(behindOnly.remote?.prCreate ?? 0, 0, 'no PR was created')
+
     const handoff = await owned('handoff', async (owner, w) => {
       write(w.local, 'a.txt', 'handoff\n')
       mkdirSync(join(w.local, '.trezi'))

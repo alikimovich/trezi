@@ -147,8 +147,8 @@ src/main/
                   files that turn changed, partial-commits so the user's own staged
                   work is untouched, skips non-repo-root projects, never throws
   publish-scope.ts  what a session changed / is there anything to publish (pure) —
-                  measured against the default branch, since committed turns leave
-                  nothing to see in a HEAD-relative diff. Used by annotations.ts
+                  fork-relative changed files intersected with differences from
+                  the fetched default tip; includes committed turns. Used by annotations.ts
   setup.ts, scaffold.ts
   diagnose.ts, diag-cache.ts, diag-rules.ts         sessions-store.ts, edit-history.ts
   project-ui*.ts  Experimental Gen UI (see architecture.md and docs/PROJECT_UI.md)
