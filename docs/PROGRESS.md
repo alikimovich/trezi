@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-13 — LKM-249 manager-verification repair: platform-owner bridge-close race
+
+- The manager's unit run failed only `platform-owner` ("the previous bridge is closed" still connectable after a restart) under 8-worker load; no LKM-249 file touches that path and the previous attempt passed the same test. `SimulatorBridge.close()` cancelled the dispatch listener but the socket was closed later in its async cancel handler, so a restart or Stop could return while the old port still accepted connections. `close()` now waits (bounded, 2 s) for the cancel handler to release the port. The worker sandbox forbids local port binding, so this test could not be run locally; only the manager's run confirms it.
+
 ## 2026-10-13 — LKM-249 review repair: retain startup alerts and validate cached signatures
 
 - Review found that suppressing every pre-AppKit alert made unrelated LaunchServices setup errors invisible to Finder and Dock users. The host now checks graphical access before LaunchServices profile resolution, keeps the existing alert and exit 1 for graphical setup failures, and skips AppKit only for a proven non-graphical session (exit 78). The launcher fixture checks both exit paths without opening a GUI.
