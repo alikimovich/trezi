@@ -44,6 +44,17 @@ function checkToolbar(toolbar: any, popped: boolean) {
       `${id} icon`
     )
   assert.ok(toolbar.pathSelectable && !toolbar.pathEditable, 'The path is selectable, not editable')
+  assert.equal(toolbar.topSeparatorHidden, popped, 'only the docked editor has an outer top rule')
+  assert.equal(toolbar.topSeparatorWidth, toolbar.width, 'top rule spans the editor')
+  assert.equal(
+    toolbar.toolbarSeparatorWidth,
+    toolbar.width,
+    'toolbar rule spans both split regions'
+  )
+  assert.ok(
+    Math.abs(toolbar.toolbarSeparatorY - toolbar.splitTop) < 0.5,
+    'toolbar rule meets the split view'
+  )
 }
 
 /** Toolbar layout (popped out and docked) and the ⌘S/⌘R shortcuts, offered through

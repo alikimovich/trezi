@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Exploded view chrome now meets the toolbar without a header strip, uses a compact one-row footer, and separates the docked code editor and its toolbar with subtle native rules (LKM-262).
 - Exploded view keeps authored layer colors and avoids flashes when unrelated page updates trigger during inspection (LKM-260).
 - Expanded Padding and Margin now place horizontal side controls in the left column and vertical side controls in the right, matching the collapsed layout (LKM-258).
 - Publish now adds one empty commit with the configured Git identity when reconciliation leaves a Trezi-authored tip, so deployment attribution can use that identity; an unconfigured identity stops publishing with setup guidance (LKM-251).

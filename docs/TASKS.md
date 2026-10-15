@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native exploded chrome and code editor polish (LKM-262)
+
+- [x] Align the transparent, input-shielding exploded header with the content edge and keep the scene reservation.
+- [x] Make the exploded footer one row and keep capture and simplification guidance available contextually.
+- [x] Add device-pixel semantic rules to the docked editor top and editor toolbar bottom, avoiding an outer rule in the pop-out.
+- [ ] Manager: inspect foreground captures, run full native verification and independent review, then merge.
+
 ## Expanded spacing column order (LKM-258)
 
 - [x] Show right/left controls in the expanded left column and top/bottom controls in the right for Padding and Margin, preserving side values and field bindings.

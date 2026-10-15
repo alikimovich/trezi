@@ -90,7 +90,12 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.match(opened.headerType, /ThreeDBar/)
   assert.match(opened.footerType, /ThreeDBar/)
   assert.match(opened.sceneType, /ThreeDSceneView/)
-  assert.deepEqual([opened.insets.top, opened.insets.bottom], [48, 76])
+  assert.deepEqual([opened.insets.top, opened.insets.bottom], [48, 44])
+  assert.equal(opened.footerRect.height, 44, 'the single-row footer reclaims scene height')
+  assert.ok(
+    Math.abs(opened.headerRect.y - opened.contentTop) < 0.5,
+    `header meets the toolbar content edge (${opened.headerRect.y} vs ${opened.contentTop})`
+  )
   // N layers render natively, each a Core Animation plane holding its capture.
   assert.deepEqual(opened.layers, [
     'section#three-d-card',
@@ -147,7 +152,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal(opened.sceneHidden, false)
   assert.equal(opened.message, '', 'no fallback message over a captured scene')
   assert.equal(opened.countLabel, '5 layers')
-  assert.match(opened.status, /^5 layers · /)
+  assert.match(opened.status, /^Depth shows nesting/)
   // Captured at the backing scale: the card's surface keeps its pixel density.
   assert.ok(
     opened.imageSizes[0][0] >=
@@ -349,7 +354,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   const second = await open('#native-title')
   assert.notEqual(second.session, opened.session, 'reopening creates a new session')
   assert.equal(second.countLabel, '1 layer')
-  assert.match(second.status, /^1 layer · /)
+  assert.match(second.status, /^Depth shows nesting/)
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 1)
   host.send('deliver', {
     view: 'preview',
