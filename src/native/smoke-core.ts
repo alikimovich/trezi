@@ -1112,9 +1112,10 @@ export async function runNativeCoreSmoke(
       name: 'states-canvas',
       dependsOn: ['open-project'],
       run: async () => {
-        await checkStatesCanvas(host, page, fixture, root, artifacts)
+        await checkStatesCanvas(host, page, fixture, root, artifacts, invoke)
+        await restoreStatesCanvas(fixture, page, invoke)
       },
-      cleanup: () => restoreStatesCanvas(fixture)
+      cleanup: () => restoreStatesCanvas(fixture, page, invoke)
     },
     {
       name: 'states-workbench',

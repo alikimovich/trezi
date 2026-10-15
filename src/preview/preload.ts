@@ -743,6 +743,7 @@ function isOverlay(el: Element | null): boolean {
   return (
     !!el &&
     (!!el.closest(CONTROL_OVERLAY_SELECTOR) ||
+      !!el.closest('[data-trezi-states-canvas]') ||
       nativeCover.contains(el) ||
       (!!overlayHost && (el === overlayHost || overlayHost.contains(el))))
   )
