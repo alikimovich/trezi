@@ -159,6 +159,7 @@ const UNIT = [
   'provider-skills',
   'states-workbench',
   'states-canvas',
+  'states-build',
   'states-return',
   'three-d-contract',
   'github-connect',

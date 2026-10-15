@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Publish now adds one empty commit with the configured Git identity when reconciliation leaves a Trezi-authored tip, so deployment attribution can use that identity; an unconfigured identity stops publishing with setup guidance (LKM-251).
 
 ### Added
+- Show states now works for Next.js and Vite React components: Trezi builds the selected component from its source in memory and draws real styled variants in an isolated view, discovered from props or given by a recipe (providers, actions, routes), with specific messages for server-only components and no project files written (LKM-263).
 - Exploded view now shows subtle depth and dashed assembly guides between related blocks (LKM-257).
 - Startup diagnostics now refuse a proven non-graphical macOS session before AppKit; the cause of the reported LKM-249 registration abort remains unconfirmed.
 - A no-project home centers "What do you want to create?" above the native composer, with recent projects and Open Project; New Project is the composer's default. Its first message opens a persisted planning conversation and docks the chat before a project directory exists. The provider asks only for missing details, then presents the plan and editable destination in chat before creation; the same transcript opens in the new project (LKM-232, LKM-233).

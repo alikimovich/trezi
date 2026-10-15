@@ -157,7 +157,17 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
           })) ?? [],
       visible:
         view?.root === root
-          ? { id: view.recipe.id, state: view.state, status: view.status, reason: view.reason }
+          ? {
+              id: view.subject.key,
+              component: view.subject.component,
+              source: view.subject.source,
+              exportName: view.subject.exportName,
+              states: view.subject.states.map(({ id, label, origin }) => ({ id, label, origin })),
+              missing: view.subject.missing,
+              state: view.state,
+              status: view.status,
+              reason: view.reason
+            }
           : null
     }
   }

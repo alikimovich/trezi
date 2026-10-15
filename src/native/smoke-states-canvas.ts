@@ -1,487 +1,342 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { SelectedElement } from '../shared/api'
 import type { NativeBridge } from './bridge'
+import {
+  removeStatesFixtures,
+  STATES_EDIT,
+  STATES_FOLDER,
+  writeStatesFixtures
+} from './smoke-states-projects'
 import { waitFor } from './smoke-wait'
-import { nativeCanvas } from './states-install'
+import { nativeCanvas, nativeStates } from './states-install'
 
 type Page = (code: string) => Promise<unknown>
-type Inspect = Record<string, any>
+type Invoke = (channel: string, ...args: any[]) => Promise<unknown>
+type Frame = {
+  id: string
+  card: string | null
+  theme: string | null
+  badge: string | null
+  text: string
+  bg: string | null
+  img: boolean
+  error: string | null
+  height: number
+}
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-const rect = (value: string) => {
-  const [x, y, width, height] = (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
-  return { x, y, width, height }
-}
-const luminance = (css: string) => {
-  const [r, g, b] = (css.match(/\d+(?:\.\d+)?/g) ?? []).map(Number)
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-}
+let startURL = ''
 
-/** A real React export and provider, served from the disposable native fixture. Setup
- * happens before inventory is taken; registration/switch/rebuild/close/remove must not
- * change a single project file or the original page. */
+/** What the view draws, read through its open shadow root and the same-origin state frames. */
+const FRAMES = `JSON.stringify((() => {
+  const host = document.querySelector('[data-trezi-states-canvas]')
+  if (!host) return null
+  const shadow = host.shadowRoot
+  return {
+    state: host.getAttribute('data-trezi-state'),
+    status: host.getAttribute('data-trezi-status'),
+    message: shadow.querySelector('[data-trezi-states-message]')?.textContent ?? null,
+    open: !!shadow.querySelector('dialog')?.open,
+    frames: [...shadow.querySelectorAll('[data-trezi-state-frame]')].map((section) => {
+      const iframe = section.querySelector('iframe')
+      const doc = iframe.contentDocument
+      const card = doc?.querySelector('[data-card]')
+      const badge = doc?.querySelector('[data-badge]')
+      const styled = card ?? badge
+      return {
+        id: section.getAttribute('data-trezi-state-frame'),
+        card: card?.getAttribute('data-card') ?? null,
+        theme: card?.getAttribute('data-theme') ?? null,
+        badge: badge?.getAttribute('data-badge') ?? null,
+        text: doc?.getElementById('trezi-root')?.textContent ?? '',
+        bg: styled ? getComputedStyle(styled).backgroundColor : null,
+        img: !!doc?.querySelector('img[src^="data:image/png"]'),
+        error: doc?.querySelector('[data-trezi-state-error]')?.textContent ?? null,
+        height: iframe.getBoundingClientRect().height
+      }
+    })
+  }
+})())`
+
+/**
+ * LKM-263: Show states on a Next.js App Router component and a Vite React component. Trezi
+ * builds each from the project's sources and draws real variants in isolated frames over the
+ * preview; switching, a recipe with an interactive action, an edit redrawing the view, server-only
+ * and async components, and Back to the untouched page are checked. Not one project file changes.
+ */
 export async function checkStatesCanvas(
   host: NativeBridge,
   page: Page,
   fixture: string,
   root: string,
-  artifacts: string
+  artifacts: string,
+  invoke: Invoke
 ) {
-  assert.ok(nativeCanvas, 'canvas controller installed')
+  assert.ok(nativeCanvas && nativeStates, 'states controllers installed')
   const canvas = nativeCanvas
-  await page('(() => { window.canvasBeforeSetup = 1; return true })()')
-  mkdirSync(join(fixture, 'src'), { recursive: true })
-  const entry = join(fixture, 'runtime-entry.js')
-  const runtime = join(fixture, 'runtime.js')
-  const cjsEntry = join(fixture, 'runtime-cjs-entry.js')
-  const cjsRuntime = join(fixture, 'runtime-cjs.js')
-  const module = join(fixture, 'src', 'Orders.js')
-  const hooks = join(fixture, 'src', 'Hooks.js')
-  const boom = join(fixture, 'src', 'Boom.js')
-  const react = join(root, 'node_modules/react/index.js')
-  const dom = join(root, 'node_modules/react-dom/client.js')
-  writeFileSync(
-    entry,
-    `import * as React from ${JSON.stringify(react)}; import {createRoot} from ${JSON.stringify(dom)}; export const createElement=React.createElement; export const Component=React.Component; export {createRoot};`
-  )
-  // What Vite serves for an optimized CommonJS dependency: the only export is `default`.
-  writeFileSync(
-    cjsEntry,
-    `import * as React from ${JSON.stringify(react)}; import {createRoot} from ${JSON.stringify(dom)}; export default {createElement:React.createElement,Component:React.Component,createContext:React.createContext,useState:React.useState,useContext:React.useContext,createRoot};`
-  )
-  const bun = (
-    globalThis as unknown as {
-      Bun: {
-        build(options: {
-          entrypoints: string[]
-          target: string
-          format: string
-        }): Promise<{ success: boolean; logs: unknown[]; outputs: { text(): Promise<string> }[] }>
-      }
-    }
-  ).Bun
-  for (const [from, to] of [
-    [entry, runtime],
-    [cjsEntry, cjsRuntime]
-  ]) {
-    const built = await bun.build({ entrypoints: [from], target: 'browser', format: 'esm' })
-    assert.ok(built.success, `React runtime bundle: ${built.logs.join('; ')}`)
-    writeFileSync(to, await built.outputs[0].text())
-    rmSync(from)
-  }
-  writeFileSync(
-    module,
-    `import {createElement} from '/runtime.js';
-export function Orders({orders}) { if (!orders) return createElement('p',{className:'loading'},'Loading orders');
-  if (!orders.length) return createElement('p',{className:'empty'},'No orders');
-  return createElement('ul',{className:'orders'},orders.map(x=>createElement('li',{key:x.id},x.name))); }
-export function Frame({children}) { return createElement('div',{className:'provider'},children); }`
-  )
-  // The component imports the exact `?v=` URL a Vite project serves: one React instance.
-  writeFileSync(
-    hooks,
-    `import R from '/runtime-cjs.js?v=abc123';
-const Theme = R.createContext('none');
-export function Hooked({label}) { const [n]=R.useState(7); const theme=R.useContext(Theme);
-  return R.createElement('p',{className:'hooked'},label+':'+n+':'+theme); }
-export function HookFrame({children}) { return R.createElement(Theme.Provider,{value:'provided'},children); }`
-  )
-  writeFileSync(
-    boom,
-    `import {createElement} from '/runtime.js';
-export function Boom() { throw new Error('Boom fixture failed'); }
-export function Quiet() { return createElement('p',null,'quiet'); }`
-  )
-  await waitFor(
-    async () => (await page('typeof window.canvasBeforeSetup').catch(() => null)) === 'undefined',
-    'fixture live reload after canvas modules are written',
-    10000
-  )
-  // FSEvents can deliver a second change for the generated bundle after the first reload.
-  await delay(700)
-  const served =
-    (await page(`Promise.all(['/runtime.js','/runtime-cjs.js?v=abc123','/src/Orders.js','/src/Hooks.js'].map(async path => {
-    const response=await fetch(path);return {path,status:response.status,type:response.headers.get('content-type')}
-  }))`)) as { path: string; status: number; type: string }[]
-  assert.ok(
-    served.every((item) => item.status === 200 && item.type.startsWith('text/javascript')),
-    `canvas module responses: ${JSON.stringify(served)}`
-  )
-  await page(`(async()=>{const React=await import('/runtime.js'); const {Orders}=await import('/src/Orders.js');
-    const host=document.createElement('div');host.id='original-orders';document.body.append(host);
-    React.createRoot(host).render(React.createElement(Orders,{orders:[{id:0,name:'Original'}]}));
-    window.canvasDocumentToken=crypto.randomUUID();scrollTo(0,250);return true})()`)
+  const states = nativeStates
+  startURL = String(await page('location.href'))
+  writeStatesFixtures(fixture, join(root, 'node_modules'))
+  // Every write live-reloads the static fixture; let FSEvents settle before navigating.
+  await delay(900)
+  const url = new URL('states.html', startURL).href
+  await invoke('preview:load', url)
   await waitFor(
     async () =>
-      (await page("document.querySelector('#original-orders')?.textContent")) === 'Original',
-    'original component mounted',
+      (await page('!!document.querySelector("#states-badge")').catch(() => false)) === true,
+    'the stamped states page loads',
     10000
   )
-  const snapshot = () =>
-    page(
-      `JSON.stringify({url:location.href,history:history.length,scroll:scrollY,token:window.canvasDocumentToken,original:document.querySelector('#original-orders')?.textContent})`
+  // A live reload still in flight from the writes would drop the token below.
+  await delay(700)
+  await page('(() => { window.statesToken = crypto.randomUUID(); scrollTo(0, 40); return true })()')
+  const snapshot = async () =>
+    JSON.parse(
+      String(
+        await page(
+          'JSON.stringify({url: location.href, history: history.length, scroll: scrollY, token: window.statesToken, card: document.querySelector("#states-card")?.textContent})'
+        )
+      )
     )
   const before = await snapshot()
-  const inventory = () => readdirSync(fixture, { recursive: true }).map(String).sort()
+  const inventory = () =>
+    readdirSync(fixture, { recursive: true })
+      .map(String)
+      .filter((path) => !path.split('/').some((part) => part === 'node_modules' || part === '.git'))
+      .sort()
   const files = inventory()
-  const sourceBefore = readFileSync(module, 'utf8')
-  const pick = (source: string) =>
-    canvas.expect(fixture, {
-      tag: 'div',
-      componentSource: `${source}:1`,
-      layerPath: [0, 0]
-    } as Parameters<typeof canvas.expect>[1])
-  const switcher = () => host.request('statesInspect') as Promise<Inspect>
-  const rendered = async (state: string, expected: string) =>
+  const edited = join(fixture, STATES_EDIT.next)
+  const original = readFileSync(edited, 'utf8')
+  const element = async (id: string): Promise<SelectedElement> => {
+    const raw = JSON.parse(
+      String(
+        await page(`JSON.stringify((() => {
+          const el = document.getElementById(${JSON.stringify(id)})
+          const path = []
+          for (let node = el; node && node !== document.body; node = node.parentElement) path.unshift([...node.parentElement.children].indexOf(node))
+          const r = el.getBoundingClientRect()
+          return { tag: el.tagName.toLowerCase(), path, rect: { x: r.x, y: r.y, width: r.width, height: r.height }, source: el.getAttribute('data-trezi-source'), componentSource: el.getAttribute('data-trezi-component-source'), text: el.textContent }
+        })())`)
+      )
+    )
+    return {
+      tag: raw.tag,
+      id,
+      classes: [],
+      selector: `#${id}`,
+      source: raw.source,
+      componentSource: raw.componentSource,
+      text: raw.text,
+      rect: raw.rect,
+      styles: {},
+      layerPath: raw.path
+    }
+  }
+  const view = async () => JSON.parse(String(await page(FRAMES)))
+  const drawn = (label: string, check: (value: any) => boolean, ms = 20000) =>
     waitFor(
       async () => {
-        const data = JSON.parse(
-          String(
-            await page(
-              `JSON.stringify({state:document.querySelector('[data-trezi-states-canvas]')?.getAttribute('data-trezi-state'),text:document.querySelector('[data-trezi-states-canvas]')?.textContent,frames:[...document.querySelectorAll('[data-trezi-state-frame]')].map(x=>x.getAttribute('data-trezi-state-frame'))})`
-            )
-          )
-        )
-        return data.state === state && data.text.includes(expected) && data
+        const value = await view()
+        return value && check(value) && value
       },
-      `canvas ${state} shows ${expected}`,
-      10000
+      label,
+      ms,
+      async () => ({ view: await view(), status: canvas.view?.status, reason: canvas.view?.reason })
     )
+  const switcher = () => host.request('statesInspect') as Promise<Record<string, any>>
+  const shot = async (name: string) =>
+    writeFileSync(join(artifacts, name), Buffer.from(await host.request('captureShell'), 'base64'))
 
-  pick('src/Orders.js')
-  const recipe = {
-    component: 'Orders',
-    source: 'src/Orders.js',
-    exportName: 'Orders',
-    provider: { source: 'src/Orders.js', exportName: 'Frame' },
-    react: '/runtime.js',
-    reactDom: '/runtime.js',
-    width: 420,
-    states: [
-      { id: 'loading', label: 'Loading', props: { orders: null } },
-      { id: 'empty', label: 'Empty', props: { orders: [] } },
-      {
-        id: 'populated',
-        label: 'Populated',
-        props: {
-          orders: [
-            { id: 1, name: 'Canvas one' },
-            { id: 2, name: 'Canvas two' }
-          ]
-        }
-      }
-    ],
-    missing: [{ id: 'error', label: 'Error', note: 'Not implemented' }]
-  }
-  const registered = await canvas.register(fixture, 'smoke', recipe)
-  assert.ok(registered.id, `recipe registered: ${JSON.stringify(registered)}`)
-  assert.ok(registered.id.startsWith('canvas:'), 'recipe ids have their own namespace')
-  const orders = registered.id
-  const opened = canvas.open(fixture, orders)
-  assert.equal(opened.id, orders)
-  await rendered('loading', 'Loading orders')
-  await waitFor(() => canvas.view?.status === 'ready', 'canvas reports ready', 5000)
-  assert.equal(await host.request('statesPerform', { action: 'select', state: 'empty' }), true)
-  await rendered('empty', 'No orders')
-  await canvas.action('select', 'populated')
-  await rendered('populated', 'Canvas two')
-  assert.equal(await host.request('statesPerform', { action: 'all' }), true)
-  const all = await rendered('all', 'Canvas one')
-  assert.deepEqual(all.frames, ['loading', 'empty', 'populated'])
-  assert.equal(
-    await page("document.querySelectorAll('[data-trezi-state-frame] .provider').length"),
-    3
+  // Next.js: next/image, next/link, next/navigation, next/font, a CSS module, the `@/` alias and
+  // the app's providers.tsx, all from the project's sources.
+  assert.equal(await states.show(fixture, await element('states-card')), true)
+  const next = await drawn(
+    'Next.js ProjectCard states are drawn and ready',
+    (value) => value.status === 'ready' && value.frames.length >= 5
   )
-  const full = await waitFor(
+  assert.equal(canvas.view?.subject.component, 'ProjectCard')
+  assert.equal(next.state, 'all')
+  const byId = (value: { frames: Frame[] }, id: string) =>
+    value.frames.find((frame: Frame) => frame.id === id) as Frame
+  const ids = next.frames.map((frame: Frame) => frame.id)
+  for (const id of ['default', 'loading', 'error', 'disabled', 'no-tags', 'status-paused'])
+    assert.ok(ids.includes(id), `state ${id} in ${ids.join(', ')}`)
+  const ready = byId(next, 'default')
+  assert.equal(ready.card, 'ready')
+  assert.equal(ready.theme, 'studio', 'the conventional providers.tsx wraps every state')
+  assert.equal(ready.bg, 'rgb(250, 240, 255)', 'the CSS module styles apply')
+  assert.ok(ready.img, 'next/image renders the imported PNG')
+  assert.ok(ready.height > 40, `the frame fits its content (${ready.height})`)
+  assert.equal(byId(next, 'loading').card, 'loading')
+  assert.equal(byId(next, 'error').card, 'error')
+  assert.match(byId(next, 'no-tags').text, /No tags yet/)
+  assert.match(byId(next, 'status-paused').text, /paused/)
+  const bar = await waitFor(
     async () => {
       const value = await switcher()
-      return value.visible && value.compact === false && value
+      return value.visible && value.status === 'ready' && value
     },
-    'the full row at the usual width',
+    'the bar reports the states ready',
     5000,
     switcher
   )
-  assert.equal(full.component, 'Orders')
-  assert.equal(full.missing.length, 1)
-  writeFileSync(
-    join(artifacts, 'states-canvas.png'),
-    Buffer.from(await host.request('captureShell'), 'base64')
-  )
-  assert.equal(await snapshot(), before, 'URL, history, scroll and the original page are untouched')
-  assert.deepEqual(inventory(), files)
-  assert.equal(readFileSync(module, 'utf8'), sourceBefore)
+  assert.equal(bar.component, 'ProjectCard')
+  assert.equal(bar.back, 'Back to page')
+  await shot('states-next.png')
 
-  // Light and dark follow the window appearance (a test override, never a system setting), live:
-  // the same dialog element repaints without a re-render.
-  await page(
-    "(() => { document.querySelector('[data-trezi-states-canvas]').setAttribute('data-probe', 'kept'); return true })()"
+  // Switching draws one state, isolated in its own frame.
+  assert.equal(await host.request('statesPerform', { action: 'select', state: 'loading' }), true)
+  const loading = await drawn(
+    'the Loading state alone',
+    (value) => value.state === 'loading' && value.frames.length === 1 && value.status === 'ready'
   )
-  const background = async () =>
-    String(
-      await page(
-        "getComputedStyle(document.querySelector('[data-trezi-states-canvas]')).backgroundColor"
-      )
-    )
-  try {
-    const seen: Record<string, number> = {}
-    for (const appearance of ['light', 'dark'] as const) {
-      await host.request('shellPerform', { action: 'window-appearance', row: appearance })
-      await waitFor(
-        async () => {
-          seen[appearance] = luminance(await background())
-          return appearance === 'light' ? seen[appearance] > 0.8 : seen[appearance] < 0.3
-        },
-        `canvas background follows ${appearance}`,
-        5000,
-        async () => ({ background: await background() })
-      )
-      await delay(350)
-      const row = await waitFor(
-        async () => {
-          const value = await switcher()
-          return value.visible && value.compact === false && value
-        },
-        `${appearance}: the full row at the usual width`,
-        5000,
-        switcher
-      )
-      assert.equal(row.component, 'Orders')
-      assert.equal(row.missing.length, 1)
-      writeFileSync(
-        join(artifacts, `states-canvas-${appearance}.png`),
-        Buffer.from(await host.request('captureShell'), 'base64')
-      )
-      assert.equal(
-        await page(
-          "document.querySelector('[data-trezi-states-canvas]')?.getAttribute('data-probe')"
-        ),
-        'kept',
-        `${appearance}: the canvas was not re-rendered`
-      )
-    }
-    assert.ok(
-      seen.light > seen.dark + 0.5,
-      `light ${seen.light} is clearly lighter than ${seen.dark}`
-    )
-  } finally {
-    await host.request('shellPerform', { action: 'window-appearance', row: '' })
-  }
+  assert.equal(loading.frames[0].card, 'loading')
+  await canvas.action('select', 'default')
+  await drawn(
+    'the Default state alone',
+    (value) => value.state === 'default' && value.status === 'ready'
+  )
 
-  // The shared States menu: a legacy workbench folder is never the open canvas.
-  const recipes = canvas.recipes(fixture).length
+  // Back returns to the page exactly as it was.
+  assert.equal(await host.request('statesPerform', { action: 'back' }), true)
+  await waitFor(async () => (await view()) === null && !canvas.view, 'the view closes', 5000)
+  assert.deepEqual(
+    await snapshot(),
+    before,
+    'URL, history, scroll and the page document are untouched'
+  )
+
+  // Vite React: an enum, a boolean, the vite.config alias and a CSS module.
+  assert.equal(await states.show(fixture, await element('states-badge')), true)
+  const vite = await drawn(
+    'Vite StatusBadge states are drawn and ready',
+    (value) => value.status === 'ready' && value.frames.length >= 3
+  )
+  assert.equal(canvas.view?.subject.component, 'StatusBadge')
+  assert.deepEqual(vite.frames.map((frame: Frame) => frame.badge).slice(0, 3), [
+    'online',
+    'offline',
+    'degraded'
+  ])
+  assert.equal(byId(vite, 'default').bg, 'rgb(240, 246, 255)')
+  assert.deepEqual(
+    canvas.view?.subject.missing.map((item) => item.id),
+    ['interactive']
+  )
+  // A recipe reaches internal state with an action; its states come first.
+  const recipe = await canvas.register(fixture, 'smoke', {
+    component: 'StatusBadge',
+    source: `${STATES_FOLDER}/vite-app/src/components/StatusBadge.tsx`,
+    exportName: 'StatusBadge',
+    states: [
+      {
+        id: 'expanded',
+        label: 'Expanded',
+        props: { status: 'online', label: 'API' },
+        actions: [{ type: 'click' }]
+      }
+    ],
+    missing: []
+  })
+  assert.ok(recipe.id?.startsWith('canvas:'), JSON.stringify(recipe))
+  const expanded = await drawn(
+    'the recipe state with a click action',
+    (value) =>
+      value.status === 'ready' &&
+      value.frames[0]?.id === 'expanded' &&
+      /details/.test(value.frames[0].text)
+  )
+  assert.equal(expanded.frames[0].badge, 'online')
+  await shot('states-vite.png')
+  // The States menu routes by id: a legacy workbench folder is never this view.
   for (const action of ['open', 'grid', 'rebuild', 'remove', 'continue'])
     assert.equal(await canvas.action(action, 'OrderList'), false, `legacy ${action} is not ours`)
-  assert.equal(canvas.recipes(fixture).length, recipes, 'a legacy action keeps the canvas recipe')
-  assert.equal(canvas.view?.recipe.id, orders)
-  assert.equal(canvas.view?.state, 'all')
-  // Remove… from the menu asks first, and Cancel keeps the recipe.
   assert.equal(
-    await host.request('shellPerform', { action: 'states-menu', row: `remove:${orders}` }),
-    true,
-    'Remove is in the States menu for a canvas'
+    await host.request('shellPerform', { action: 'states-menu', row: `remove:${recipe.id}` }),
+    true
   )
   const sheet = await waitFor(
     async () => {
       const value = await host.request('sheetInspect')
       return value.visible && value
     },
-    'the canvas Remove confirmation',
+    'the recipe Remove confirmation',
     5000
   )
-  assert.equal(sheet.title, 'Remove the Orders states canvas?')
-  assert.deepEqual(sheet.actions, ['keep', 'remove'])
-  assert.equal(
-    canvas.recipes(fixture).length,
-    recipes,
-    'nothing is removed before the confirmation'
-  )
+  assert.equal(sheet.title, 'Remove the StatusBadge states recipe?')
   await host.request('sheetPerform', { action: 'keep' })
-  assert.equal(canvas.recipes(fixture).length, recipes)
+  assert.equal(canvas.recipes(fixture).length, 1)
 
-  // Close returns to the page; reopening uses the saved recipe and last state.
-  canvas.close()
-  assert.equal(await snapshot(), before)
-  assert.equal(canvas.open(fixture, orders).id, orders)
-  assert.equal(canvas.view?.state, 'populated')
-  await rendered('populated', 'Canvas two')
-
-  // A render with a thrown component reports the error and its reason to the native bar.
-  pick('src/Boom.js')
-  const broken = await canvas.register(fixture, 'smoke', {
-    component: 'Boom',
-    source: 'src/Boom.js',
-    exportName: 'Boom',
-    react: '/runtime.js',
-    reactDom: '/runtime.js',
-    width: 300,
-    states: [{ id: 'default', label: 'Default', props: {} }],
-    missing: []
-  })
-  assert.ok(broken.id, JSON.stringify(broken))
-  canvas.open(fixture, broken.id)
+  // Server-only and async Server Components get a specific reason, not a blank view.
+  assert.equal(await states.show(fixture, await element('states-server')), true)
+  const server = await drawn('the server-only message', (value) =>
+    /runs only on the server/.test(value.message ?? '')
+  )
+  assert.match(server.message, /imports "server-only", which runs only on the server/)
+  assert.equal(server.state, 'unavailable')
+  assert.equal(server.open, true, 'the message covers the page in the open view')
   await waitFor(
-    () => canvas.view?.status === 'error' && canvas.view.reason.includes('Boom fixture failed'),
-    'a throwing component reports an error',
-    8000,
-    async () => ({ view: canvas.view })
-  )
-  const errored = await switcher()
-  assert.equal(errored.status, 'error')
-  assert.match(errored.reason, /Boom fixture failed/)
-  assert.equal(errored.component, 'Boom')
-  // An export the module lacks is unsupported, not a blank canvas.
-  pick('src/Boom.js')
-  const missing = await canvas.register(fixture, 'smoke', {
-    id: broken.id,
-    component: 'Boom',
-    source: 'src/Boom.js',
-    exportName: 'Absent',
-    react: '/runtime.js',
-    reactDom: '/runtime.js',
-    width: 300,
-    states: [{ id: 'default', label: 'Default', props: {} }],
-    missing: []
-  })
-  assert.equal(missing.id, broken.id)
-  await waitFor(
-    () => canvas.view?.status === 'error' && canvas.view.reason.includes('not exported'),
-    'a missing export is reported as unsupported',
-    8000,
-    async () => ({ view: canvas.view })
-  )
-
-  // An edit to the component's source re-renders the open canvas: the fixture server reloads
-  // the document, and the canvas (same URL) draws again from the new module.
-  canvas.open(fixture, orders, 'empty')
-  await rendered('empty', 'No orders')
-  writeFileSync(module, sourceBefore.replace('No orders', 'No orders yet (edited)'))
-  await rendered('empty', 'No orders yet (edited)')
-  await waitFor(() => canvas.view?.status === 'ready', 'the refreshed canvas is ready', 8000)
-  assert.equal(canvas.view?.recipe.id, orders)
-  assert.equal(
-    JSON.parse(String(await snapshot())).url,
-    JSON.parse(String(before)).url,
-    'the edit did not change the URL'
-  )
-
-  // Many states and long labels at a narrow window: the native bar falls back to its compact
-  // row and stays inside the page.
-  pick('src/Hooks.js')
-  const long = 'A very long state label that keeps going to exercise the picker and the menu'
-  const many = await canvas.register(fixture, 'smoke', {
-    component: 'Hooked component with a very long display name that overflows a bar',
-    source: 'src/Hooks.js',
-    exportName: 'Hooked',
-    provider: { source: 'src/Hooks.js', exportName: 'HookFrame' },
-    react: '/runtime-cjs.js?v=abc123',
-    reactDom: '/runtime-cjs.js?v=abc123',
-    width: 360,
-    states: Array.from({ length: 24 }, (_, index) => ({
-      id: `state-${index + 1}`,
-      label: `${index + 1}. ${long}`.slice(0, 80),
-      props: { label: `S${index + 1}` }
-    })),
-    missing: [{ id: 'offline', label: 'Offline', note: long }]
-  })
-  assert.ok(many.id, `hooks recipe registered: ${JSON.stringify(many)}`)
-  assert.notEqual(many.id, orders)
-  canvas.open(fixture, many.id)
-  // Hooks and context work through the default-only (CommonJS-shaped) runtime and its ?v= URL.
-  await rendered('state-1', 'S1:7:provided')
-  await waitFor(() => canvas.view?.status === 'ready', 'the hooks canvas is ready', 8000)
-  assert.equal(await canvas.action('select', 'state-24'), true)
-  await rendered('state-24', 'S24:7:provided')
-  try {
-    await host.request('shellPerform', { action: 'window-width', row: '850' })
-    const narrow = await waitFor(
-      async () => {
-        const value = await switcher()
-        return value.visible && value.compact && value
-      },
-      'the states bar is compact at a narrow window',
-      5000,
-      switcher
-    )
-    const bounds = rect(narrow.page)
-    const frame = rect(narrow.frame)
-    assert.equal(narrow.states.length, 24)
-    assert.ok(
-      frame.x >= bounds.x - 0.5 &&
-        frame.x + frame.width <= bounds.x + bounds.width + 0.5 &&
-        frame.y >= bounds.y - 0.5 &&
-        frame.y + frame.height <= bounds.y + bounds.height + 0.5,
-      `the bar ${narrow.frame} stays inside the page ${narrow.page}`
-    )
-    writeFileSync(
-      join(artifacts, 'states-canvas-narrow.png'),
-      Buffer.from(await host.request('captureShell'), 'base64')
-    )
-  } finally {
-    await host.request('shellPerform', { action: 'window-width', row: '1320' })
-  }
-  const wide = await waitFor(
-    async () => {
-      const value = await switcher()
-      return value.visible && value
-    },
-    'the states bar at the usual width',
+    async () => (await switcher()).status === 'error',
+    'the bar reports the reason',
     5000
   )
-  const wideFrame = rect(wide.frame)
-  const widePage = rect(wide.page)
-  assert.ok(
-    wideFrame.x >= widePage.x - 0.5 &&
-      wideFrame.x + wideFrame.width <= widePage.x + widePage.width + 0.5,
-    'the bar stays inside the page at the usual width'
+  // The message draws at once; give WebKit a moment to paint it before the window capture.
+  await delay(600)
+  await shot('states-server-only.png')
+  assert.equal(await states.show(fixture, await element('states-async')), true)
+  const asyncView = await drawn(
+    'the async Server Component message',
+    (value) => /async Server Component/.test(value.message ?? ''),
+    10000
   )
+  assert.match(asyncView.message, /Select a client component inside it/)
 
-  // A recipe whose source is gone is stale: explicit, never a silent failure.
-  canvas.open(fixture, broken.id)
-  rmSync(boom)
-  await waitFor(
-    () => canvas.view?.status === 'stale',
-    'a recipe with a missing source is stale',
-    8000,
-    async () => ({ view: canvas.view })
+  // An edit to a module the component imports draws the open view again from the new source.
+  assert.equal(await states.show(fixture, await element('states-card')), true)
+  await canvas.action('select', 'default')
+  await drawn(
+    'Default before the edit',
+    (value) =>
+      value.state === 'default' &&
+      value.status === 'ready' &&
+      /Updated /.test(value.frames[0]?.text ?? '')
   )
-  const stale = await switcher()
-  assert.equal(stale.status, 'stale')
-  assert.match(stale.reason, /no longer exists/)
-  assert.equal(
-    await page(
-      "document.querySelector('[data-trezi-states-canvas]')?.getAttribute('data-trezi-state')"
-    ),
-    'unavailable'
+  writeFileSync(
+    edited,
+    "export function formatDate(_iso: string): string {\n  return 'edited by smoke'\n}\n"
   )
+  await drawn(
+    'the edited module redraws the state',
+    (value) =>
+      value.state === 'default' && /Updated edited by smoke/.test(value.frames[0]?.text ?? ''),
+    20000
+  )
+  writeFileSync(edited, original)
+  assert.equal(await host.request('statesPerform', { action: 'back' }), true)
+  await waitFor(async () => (await view()) === null, 'the view closes after the edit', 5000)
+  assert.equal((await snapshot()).url, before.url, 'the edit never navigated the page')
 
-  // Remove forgets the recipes only; the project's files are as they were.
-  canvas.close()
-  for (const id of [orders, many.id, broken.id]) await canvas.remove(fixture, id)
+  await canvas.remove(fixture, recipe.id as string)
   assert.equal(canvas.recipes(fixture).length, 0)
-  writeFileSync(module, sourceBefore)
-  assert.deepEqual(
-    inventory(),
-    files.filter((file) => file !== join('src', 'Boom.js')),
-    'the project holds the files the test wrote and nothing else'
-  )
-  assert.equal(await page('document.querySelector("[data-trezi-states-canvas]") === null'), true)
-  for (const path of [module, hooks, runtime, cjsRuntime]) rmSync(path, { force: true })
-  await page('document.querySelector("#original-orders")?.remove()')
+  assert.deepEqual(inventory(), files, 'Show states wrote no file into the project')
+  assert.equal(readFileSync(edited, 'utf8'), original)
 }
 
-export async function restoreStatesCanvas(fixture: string) {
+export async function restoreStatesCanvas(fixture: string, page: Page, invoke: Invoke) {
   nativeCanvas?.close()
   for (const recipe of nativeCanvas?.recipes(fixture) ?? [])
     await nativeCanvas?.remove(fixture, recipe.id)
-  for (const path of [
-    join(fixture, 'src/Orders.js'),
-    join(fixture, 'src/Hooks.js'),
-    join(fixture, 'src/Boom.js'),
-    join(fixture, 'runtime.js'),
-    join(fixture, 'runtime-cjs.js'),
-    join(fixture, 'runtime-entry.js'),
-    join(fixture, 'runtime-cjs-entry.js')
-  ])
-    rmSync(path, { force: true })
+  removeStatesFixtures(fixture)
+  if (!startURL) return
+  // Removing the fixtures live-reloads the page in place; navigate once that has settled, or
+  // the reload lands on the removed states.html.
+  await delay(900)
+  await invoke('preview:load', startURL)
+  await waitFor(
+    async () => (await page('location.href').catch(() => '')) === startURL,
+    'the fixture start page is back',
+    10000
+  )
 }
