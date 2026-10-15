@@ -50,6 +50,7 @@ const UNIT = [
   'preview-agent-tools',
   'agent-browser',
   'managed-agent-browser',
+  'managed-browser-path',
   'agent-interact',
   'preview-slow-motion',
   'codex-mcp',

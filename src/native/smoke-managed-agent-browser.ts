@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
+import { managedBrowserDirectory, managedBrowserPath } from '../main/backends/managed-browser-path'
 import { previewServers } from '../main/preview-evidence'
 import { projectKey } from '../shared/projectKey'
 import type { NativeBridge } from './bridge'
@@ -18,12 +19,16 @@ export async function checkManagedAgentBrowser(host: NativeBridge, page: Page, a
   assert.ok(active, 'an open project for browser verification')
   const server = previewServers.get(projectKey(active.root))
   assert.ok(server, 'Trezi-managed preview server is running')
-  const wrapper = [
-    join(__dirname, 'bin/managed/agent-browser'),
-    join(__dirname, '../../bin/managed/agent-browser')
-  ].find(existsSync)
-  assert.ok(wrapper, 'managed browser wrapper exists')
-  const managedDir = dirname(wrapper)
+  // The provider helper's own resolution: same functions, same bundle base (out/native).
+  const managedDir = managedBrowserDirectory(__dirname)
+  assert.ok(managedDir, 'managed browser directory resolves from the built bundle')
+  const wrapper = join(managedDir, 'agent-browser')
+  const helperPath = managedBrowserPath(managedDir, process.env.PATH, process.execPath)
+  const resolved = helperPath
+    .split(':')
+    .map((dir) => join(dir, 'agent-browser'))
+    .find(existsSync)
+  assert.equal(resolved, wrapper, 'agent-browser on the helper PATH is the managed wrapper')
   const focus = () => host.request('smokeFocusSnapshot') as Promise<Record<string, unknown>>
   const before = await focus()
   let expectedFocus = before
@@ -32,7 +37,7 @@ export async function checkManagedAgentBrowser(host: NativeBridge, page: Page, a
   const run = async (phase: string, args: string[], started?: () => Promise<void>) => {
     const proc = spawn(process.execPath, [wrapper, '--session', SESSION, ...args], {
       cwd: active.root,
-      env: { ...process.env, PATH: `${managedDir}:${process.env.PATH ?? ''}` },
+      env: { ...process.env, PATH: helperPath },
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let stdout = ''
@@ -81,7 +86,17 @@ export async function checkManagedAgentBrowser(host: NativeBridge, page: Page, a
     // must leave that app active instead of reactivating Trezi or Chrome.
     await run('another app frontmost', ['wait', '1000'], async () => {
       assert.equal(await host.request('smokeActivateFinder'), true, 'Finder is running')
-      expectedFocus = await focus()
+      // Trezi resigns key asynchronously after the test activates Finder: take the
+      // baseline once Finder is frontmost and two consecutive samples agree.
+      let previous = JSON.stringify(await focus())
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const current = await focus()
+        const serialized = JSON.stringify(current)
+        expectedFocus = current
+        if (current.frontmostBundle === 'com.apple.finder' && serialized === previous) break
+        previous = serialized
+      }
       assert.equal(expectedFocus.frontmostBundle, 'com.apple.finder')
     })
   } catch (error) {
