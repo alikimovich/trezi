@@ -19,7 +19,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 42
+export const TREZI_RULES_VERSION = 43
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -379,12 +379,8 @@ const previewVerification = (background: boolean) => [
   `person would, then confirm the result it returns (the screenshot, the URL, no console`,
   `errors). Looking at the page before the interaction does not prove it works.`,
   ``,
-  `Do not launch an external browser CLI for background verification. Use the`,
-  `private preview tools for supported checks. If a scripted flow needs capabilities`,
-  `\`preview_interact\` lacks, report that exact gap; do not silently substitute`,
-  `Chromium or claim that the flow passed. Honor an explicit browser-engine choice.`,
-  `A separate Chromium run requires an app-managed, focus-safe browser path; an`,
-  `unrestricted shell command and a headless flag do not provide that guarantee.`
+  `Private WebKit observations do not replace required Vercel agent-browser testing.`,
+  ...agentBrowserVerification(background)
 ]
 
 /** Who owns a visual check that waits for landing: the agent after land_now in a chat turn, the user after a background agent. */
@@ -395,15 +391,29 @@ const landingOwner = (background: boolean) =>
 
 const agentBrowserVerification = (background: boolean) => [
   ``,
-  `## Browser verification without private preview tools`,
-  `This provider has no Trezi private preview tools. Do not launch an external`,
-  `browser CLI for background verification: a headless flag does not prevent`,
-  `macOS app activation, and the CLI may reuse a daemon or select the user's Chrome.`,
-  `Report browser verification as unavailable for this provider and name the`,
-  `affected route and interaction. Do not claim a build, typecheck, or DOM guess`,
-  `proved the visual result. Do not install or download a browser automatically.`,
-  `Honor an explicit Chromium requirement; never silently substitute WebKit.`,
-  `${landingOwner(background)}`
+  `## Required browser verification with Vercel agent-browser`,
+  `For web UI changes, visual verification, responsive testing, or browser interaction,`,
+  `you MUST use \`agent-browser\` through Trezi's managed PATH when available. This`,
+  `is required even when private WebKit preview tools are available. A build,`,
+  `typecheck, DOM guess or WebKit capture does not replace Chromium verification.`,
+  `Before the first browser task, run \`command -v agent-browser\`, \`agent-browser`,
+  `--version\` and \`agent-browser --help\`. The resolved path must end in`,
+  `\`bin/managed/agent-browser\`; do not invoke a global or absolute CLI path.`,
+  `The managed command pins a private Chromium headless shell, profile and daemon`,
+  `environment. It refuses the user's Chrome, headed mode, external CDP attachment`,
+  `and unsafe overrides. If that executable or the CLI is missing, report the`,
+  `blocker; never substitute WebKit or install a browser automatically.`,
+  `Use a unique \`--session trezi-<task-id>\` on every command, including close.`,
+  `Close only your own session. Never use \`close --all\`. Open the Trezi-managed`,
+  `preview URL and relevant route; do not start a dev server or attach to the user's`,
+  `browser. Private edits must land before verification. If the served page is stale,`,
+  `never report verification as passed. ${landingOwner(background)}`,
+  `Use \`open <url>\`, \`snapshot\`, \`get text|html|styles|value <sel>\`, \`console\`,`,
+  `\`errors\`, \`click <sel>\`, \`type <sel> <text>\` and \`screenshot <path>\` as needed.`,
+  `Exercise changed interactions and inspect affected screenshots. For layout`,
+  `changes test \`set viewport 390 844\`, \`set viewport 768 1024\` and`,
+  `\`set viewport 1440 900\`; capture and inspect a screenshot at each size.`,
+  `Restore the viewport and report the route, sizes, interactions and blockers.`
 ]
 
 const noDevTools = [

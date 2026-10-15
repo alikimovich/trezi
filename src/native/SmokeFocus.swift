@@ -78,6 +78,12 @@ final class SmokeFocus {
                 "resignCount": lost, "keyLostCount": keyLost, "activationCount": activations,
                 "cursorX": point.x, "cursorY": point.y]
     }
+
+    /// Test-only switch to an already-running Finder, without opening a window.
+    func activateFinder() -> Bool {
+        guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first else { return false }
+        return finder.activate(options: [.activateIgnoringOtherApps])
+    }
 }
 
 extension Host {

@@ -49,6 +49,7 @@ const UNIT = [
   'trezi-agent-tools',
   'preview-agent-tools',
   'agent-browser',
+  'managed-agent-browser',
   'agent-interact',
   'preview-slow-motion',
   'codex-mcp',

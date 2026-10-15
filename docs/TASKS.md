@@ -5,10 +5,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Background browser focus (LKM-264)
 
-- [x] Trace the browser rule branches and remove automatic external CLI launches from background verification; preserve explicit engine requirements.
+- [x] Trace the browser rule branches and restore mandatory Vercel agent-browser verification through Trezi's managed PATH.
 - [x] Add passive native focus telemetry around private WebKit creation, navigation, capture and close.
-- [ ] Add an app-managed, focus-safe Chromium path and enforce it at the shell/tool boundary, including for Codex; exercise cold and warm Chromium sessions and cancellation on a disposable project.
-- [ ] Verify foreground and key responder preservation with Trezi and another app frontmost, then run full native verification and review.
+- [x] Add an app-managed wrapper pinning a dedicated headless-shell executable, private profile/session/daemon environment, and unsafe-option refusal; cover failures and concurrent sessions with a stub.
+- [x] Exercise cold and warm managed Chromium sessions, screenshots, click/type and close in the native disposable project; cover cancellation and another app frontmost.
+- [x] Verify Trezi foreground/key responder preservation and that Finder stays frontmost during a managed browser command in native core.
+- [ ] Measure Finder's own key responder if the test broker can do so without an Accessibility/TCC prompt.
+- [ ] Manager: run full native verification and independent review, then merge.
 
 ## Component states for Next.js and Vite React (LKM-263)
 

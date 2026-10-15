@@ -99,12 +99,14 @@ Providers with Trezi's preview tools (Claude, Codex and Codex-based endpoints)
 must verify web UI in the Trezi preview (LKM-138): `preview_screenshot` (optionally
 cropped to a `selector`), `preview_inspect`, `preview_evaluate`, `preview_console` and
 `preview_viewport` for phone/tablet/desktop checks, restored before finishing.
-Supported clicks, typing and other interactions use the private `preview_interact`
-tool. Background verification does not automatically launch the external
-agent-browser CLI: a headless daemon may still activate a macOS browser. Providers
-without the private preview tools report the missing browser check. Explicit
-Chromium requirements remain separate from WebKit results and need a managed,
-focus-safe path before being reported as verified.
+Vercel agent-browser remains the required browser-testing engine for UI changes
+across providers. Private `preview_*` tools can inspect the Trezi preview but do
+not replace its Chromium results. Provider helpers put Trezi's managed
+`bin/managed/agent-browser` first on PATH. The wrapper requires a unique
+`--session trezi-<task-id>`, pins a dedicated headless-shell executable and
+private profile/daemon environment, and refuses headed mode or attachment to
+the user's browser. A missing CLI or dedicated shell is reported without a
+WebKit fallback or automatic download. Close only the task's session.
 
 The tools run as isolated WKContentWorld scripts (`src/preview/agent-inspect.ts`,
 `src/preview/agent-evaluate.ts`, `src/preview/agent-console.ts`), driven by

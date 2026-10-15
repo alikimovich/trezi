@@ -45,11 +45,16 @@ call them, and every result is bounded. Prefer them to any external browser.
    For interactive changes (filters, tabs, menus, forms), use them with
    `preview_interact` and check the result it returns.
 
-## Interactions the private browser cannot perform
+## Required Vercel agent-browser checks
 
-Report the exact unsupported step. Do not launch an external browser CLI for
-background verification: a headless daemon can still activate Chrome. Do not
-claim that a different browser engine verified an explicitly requested Chromium
-flow. Do not install a browser without the user's permission.
+Use Vercel `agent-browser` during UI changes, including scripted interactions,
+responsive checks and screenshots. In a Trezi provider helper, `command -v
+agent-browser` must resolve to Trezi's `bin/managed/agent-browser` wrapper. It
+pins a dedicated headless Chromium executable, private profile and isolated
+daemon environment. Never call a global or absolute CLI path. Read its
+version-matched help, use `--session trezi-<task-id>` on every command, and close
+only that session. For layout checks, capture phone, tablet and desktop views.
+If the managed command reports a missing CLI or headless shell, report that
+blocker; do not replace the Chromium check with WebKit or install a browser.
 
 Do NOT open Chrome DevTools or a headed browser unless the user explicitly asks.

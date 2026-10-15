@@ -432,6 +432,9 @@ extension Host {
         case "smokeFocusSnapshot":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             reply(id, SmokeFocus.shared.snapshot())
+        case "smokeActivateFinder":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, SmokeFocus.shared.activateFinder())
         case "previewInput":
             guard ephemeral, let preview = views["preview"] else { reply(id, error: "Test preview unavailable"); return true }
             if c["prepare"] as? Bool == true {
