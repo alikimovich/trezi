@@ -88,8 +88,9 @@ ${styles}
 </head><body${attributes(document.body)}><div id="trezi-root"></div><script type="module">${scriptText(command.bundle?.code ?? '')}</script></body></html>`
 }
 
-/** Only the isolated preview can address native IPC. The view lives in a closed-off shadow
- * root outside `<body>` (so Layers and the page's CSS never see it) and draws every state in a
+/** Only the isolated preview can address native IPC. The view lives in an open shadow root
+ * outside `<body>` (the page's CSS does not reach it and Layers skips it through `isOverlay`;
+ * it stays open so the smoke test can read the frames) and draws every state in a
  * sandboxed frame of its own that boots the real component bundle. */
 export function installStatesCanvas(busy: () => boolean): void {
   let current: StatesViewCommand | null = null

@@ -68,7 +68,9 @@ written down below rather than claimed.
      actionable message; Trezi never installs anything.
    - The `@/…` path aliases are resolved from `tsconfig.json` paths, `vite.config`
      aliases, or `@/` as `src/`.
-   - CSS modules compile to the bundle CSS. Plain CSS imports are bundled.
+   - CSS modules compile to the bundle CSS. Plain (global) CSS imports are not
+    bundled: each frame copies the page's own stylesheets instead, and the bundle
+    drops the import.
    - `NEXT_PUBLIC_*` / `VITE_*` variables from `.env*` and `import.meta.env` are
      defined.
    - Images become Next's static image object (or Vite's URL), inlined up to
@@ -158,6 +160,9 @@ Approximations that are documented, not hidden:
 - `next/font` uses the page's font rather than loading the Google font.
 - `$node` props render as text.
 - A CSS module the bundler cannot compile keeps its class names as written.
+- Plain `.css` imports come from the page's stylesheets, not the bundle. A recipe
+  opened from the States menu on a route where the component's own global CSS is
+  not loaded draws without those rules; open it from a page that loads them.
 - A state's write requests (anything but GET/HEAD through `fetch` or XHR) are
   blocked, so a fixture never mutates real data.
 - `next/navigation` hooks report the recipe's `route` (or `/`), and
