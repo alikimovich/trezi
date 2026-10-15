@@ -175,6 +175,7 @@ extension Host {
                        "code":threeD.model.hasSource, "status":threeD.model.status,
                        "header":NSStringFromRect(threeD.header.frame), "footer":NSStringFromRect(threeD.footer.frame),
                        "headerRect":rect(threeD.header.frame), "footerRect":rect(threeD.footer.frame),
+                       "contentTop":window.contentLayoutRect.maxY.isFinite ? canvas.convert(NSPoint(x: 0, y: window.contentLayoutRect.maxY), from: nil).y : 0,
                        "headerHidden":threeD.header.isHidden, "footerHidden":threeD.footer.isHidden,
                        "inspector":NSStringFromRect(editingInspector.frame), "inspectorHidden":editingInspector.isHidden,
                        "layersFrame":NSStringFromRect(layers.frame), "layersHidden":layers.isHidden,

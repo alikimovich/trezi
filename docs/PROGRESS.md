@@ -2,6 +2,18 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-15 — LKM-262 review repair: singular footer fixture
+
+- The manager's full native run passed 51 of 52 checks. The remaining exploded-view assertion still expected the removed persistent footer line to begin with `1 layer ·`, although the separate `countLabel` assertion already checked the singular visible count. The fixture now checks the contextual depth guidance for the reopened single-layer scene, as it does for the earlier five-layer scene. Product code is unchanged.
+- Agent OS quick passed 222 unit checks, typechecks and lint; native `core` passed 31 smoke checks without skips. Foreground light, dark and narrow scene captures show the transparent header and one-row footer; docked and popped-out editor toolbar captures retain their controls and rule placement. The manager will run the full native suite and independent review.
+
+## 2026-10-15 — LKM-262: exploded chrome and code editor separators
+
+- The exploded header no longer paints its own opaque strip or bottom border. Its native hosting view and scene-color backdrop extend to the window content edge when safe-area rounding leaves a seam; the scene's 48-point reservation, button padding and hit shielding remain.
+- The footer now has one controls row with a single visible layer count and a 44-point reservation. Gesture guidance and capture/simplification status remain in contextual help; invalid selection and capture failure still use the scene's error message.
+- The source editor draws semantic one-device-pixel rules at its docked top edge and below its own toolbar across the full split width. The pop-out omits the outer rule.
+- Agent OS quick passed 222 unit checks, typechecks and lint; an ad hoc native build succeeded. The core smoke reached the editor checks, then timed out opening exploded view. A hidden hosting bar's new hit-test fallback could intercept the page's 3D button, so it now returns no hit while hidden. The native call limit was exhausted before that final fix could be smoke-tested; the manager must rerun core and inspect foreground captures.
+
 ## 2026-10-14 — LKM-260 review repair: sibling reflow recaptures
 
 - Independent review found that the mutation filter skipped sibling attribute and text changes even when they resized the inspected root. Every otherwise ignored mutation now compares the root's current bounds with the last captured bounds, so a flex/grid reflow schedules a capture while a static unrelated update does not.
