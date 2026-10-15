@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## chat_ui answer delivery (LKM-265)
+
+- [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.
+- [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
+- [ ] Manager: run full native verification and independent review, then merge.
+
 ## Background browser focus (LKM-264)
 
 - [x] Trace the browser rule branches and restore mandatory Vercel agent-browser verification through Trezi's managed PATH.

@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-15 — LKM-265: durable chat_ui answer hand-off
+
+- Root cause: `src/main/chat-ui.ts:206` accepted and persisted a form answer before `src/native/chat-actions.ts:255` attempted its next user turn. `sendReply` queued that turn while `sendBlock` saw the original provider turn running (`src/native/chat-queue.ts:19`), but the form only said Submitted and the queue gave no running-turn reason. The existing unit fixture answered while `isRunning` was false, so it missed the reported order. `src/native/chat-controller.ts:498` drains on a genuine terminal event; a provider that continues after `show` still owns its turn, so the answer cannot be sent until it finishes. A relaunch also lost the in-memory queue after persisting the answer (`src/native/chat-state.ts:202`).
+- Accepted answers now carry a persisted queued/delivered/cancelled marker and a stable answer turn id. The answer path waits for the conversation owner's checkpoint before reporting acceptance. Hydration rebuilds a queued answer when no later matching user entry exists; an idle restored chat drains it. Delivery is marked only after `agent:send` accepts the turn, and the summary is included only with that turn. Editing or removing a queued answer cancels automatic replay. The form says Answer accepted; its queued card names it as an answer and explains that the current provider turn or landing must finish. The existing Stop and paused-queue recovery stay in place; no provider is interrupted merely because it is quiet.
+- `test/chat-ui.mjs` now covers submitting before a terminal event, exactly-once duplicate rejection, delivery after `done`, restore, provider error and Stop with explicit queue resume, and the backend still reporting busy after the UI mirror went idle. Agent OS quick passed 222 unit checks, typechecks and lint; the native `chat` group passed all 13 checks, including the `chat-ui` smoke. The full native suite and independent review remain with the manager.
+
 ## 2026-10-15 — LKM-264 repair: mandatory managed Vercel browser path
 
 - Review corrected the engine requirement: Vercel agent-browser remains mandatory for UI verification. The earlier WebKit substitution was reversed in the rules, bundled skill, README, providers guide and changelog. Private WebKit observations remain supplementary.

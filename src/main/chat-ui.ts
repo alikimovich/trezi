@@ -20,7 +20,7 @@ import { captureChatUiImage } from './chat-ui-capture'
  */
 export interface ChatUiHost {
   /** Save the record into the chat's transcript (add its entry, or replace its `ui`). */
-  persist: (chat: string, record: ChatUiRecord) => void
+  persist: (chat: string, record: ChatUiRecord) => void | Promise<void>
   /** A record from the chat's transcript (a resumed chat's component). */
   find: (chat: string, id: string) => ChatUiRecord | undefined
 }
@@ -75,9 +75,9 @@ function stored(component: ChatUiComponentInput): ChatUiComponentInput {
   return { ...component, options: component.options.map(({ capture: _, ...option }) => option) }
 }
 
-function publish(chat: string, record: ChatUiRecord, scope: Pick<Scope, 'notify'>) {
+async function publish(chat: string, record: ChatUiRecord, scope: Pick<Scope, 'notify'>) {
   chatRecords(chat).set(record.id, record)
-  host?.persist(chat, record)
+  await host?.persist(chat, record)
   // A copy: later captures must reach the chat as events, not as shared mutations.
   scope.notify('agent:event', {
     type: 'chat-ui',
@@ -96,7 +96,7 @@ async function captureAll(
   for (const option of component.options) {
     if (!option.capture) continue
     await capture(record, option.id, option.capture)
-    publish(chat, record, scope)
+    await publish(chat, record, scope)
   }
 }
 
@@ -126,7 +126,7 @@ function answer(record: ChatUiRecord) {
 }
 
 const GUIDANCE =
-  'The component is on screen in this message. Add or replace option images with update {id, option, capture} after showing each variant in the preview. Then end your turn now and wait: the user’s pick or form values arrive as their next message.'
+  'The component is on screen in this message. Add or replace option images with update {id, option, capture} after showing each variant in the preview. Then end your turn now and wait: the user’s pick or form values arrive as their next message. If the answer confirms completed work is OK, acknowledge it and finish rather than asking again.'
 
 export async function chatUiTool(raw: any, scope: Scope): Promise<unknown> {
   const action = raw?.action
@@ -152,7 +152,7 @@ export async function chatUiTool(raw: any, scope: Scope): Promise<unknown> {
       images: {},
       at: Date.now()
     }
-    publish(chat, record, scope)
+    await publish(chat, record, scope)
     await captureAll(chat, record, component, scope)
     return { shown: true, ...answer(record), guidance: GUIDANCE }
   }
@@ -173,7 +173,7 @@ export async function chatUiTool(raw: any, scope: Scope): Promise<unknown> {
       component.kind === 'options' ? new Set(component.options.map((o) => o.id)) : new Set()
     record.component = stored(component)
     record.images = Object.fromEntries(Object.entries(record.images).filter(([id]) => kept.has(id)))
-    publish(chat, record, scope)
+    await publish(chat, record, scope)
     await captureAll(chat, record, component, scope)
   }
   if (raw.option !== undefined) {
@@ -181,7 +181,7 @@ export async function chatUiTool(raw: any, scope: Scope): Promise<unknown> {
     if (!options.some((o) => o.id === raw.option))
       return { error: `Component ${record.id} has no option ${JSON.stringify(raw.option)}.` }
     const error = await capture(record, raw.option, raw.capture ?? true)
-    publish(chat, record, scope)
+    await publish(chat, record, scope)
     if (error) return { error: `No image for option ${raw.option}: ${error}`, ...answer(record) }
   }
   return { updated: true, ...answer(record), guidance: GUIDANCE }
@@ -191,11 +191,11 @@ export async function chatUiTool(raw: any, scope: Scope): Promise<unknown> {
  * The user's pick or form values: checked against the component, saved with it, and
  * returned as the user's next message. A component is answered once.
  */
-export function answerChatUi(
+export async function answerChatUi(
   chat: string,
   id: string,
   given: unknown
-): { record: ChatUiRecord; message: string } | { error: string } {
+): Promise<{ record: ChatUiRecord; message: string } | { error: string }> {
   const record = lookup(chat, id)
   if (!record) return { error: 'This component is no longer available.' }
   if (record.answer) return { error: 'This component was already answered.' }
@@ -203,16 +203,42 @@ export function answerChatUi(
   if (problems.length) return { error: problems.join(' ') }
   record.answer = given as ChatUiAnswer
   record.answeredAt = Date.now()
+  record.delivery = 'queued'
   chatRecords(chat).set(id, record)
-  host?.persist(chat, record)
+  try {
+    await host?.persist(chat, record)
+  } catch (error) {
+    // A failed checkpoint must leave the form answerable instead of trapping it
+    // as "already answered" with no user turn to carry the answer.
+    delete record.answer
+    delete record.answeredAt
+    delete record.delivery
+    throw error
+  }
   return { record, message: chatUiAnswerText(record) }
 }
 
+/** Persist the hand-off independently of the provider turn's lifecycle. */
+export async function chatUiDelivery(
+  chat: string,
+  id: string,
+  delivery: 'delivered' | 'cancelled'
+) {
+  const record = lookup(chat, id)
+  if (!record?.answer) return
+  if (record.delivery === 'delivered') return
+  record.delivery = delivery
+  await host?.persist(chat, record)
+}
+
 /** The state of this chat's components that changed since the agent last heard of it. */
-export function chatUiContext(chat: string): string {
+export function chatUiContext(chat: string, answerTurn?: string): string {
+  // After relaunch the transcript, not the in-memory map, owns a pending answer.
+  if (answerTurn) lookup(chat, answerTurn)
   const lines: string[] = []
   for (const record of records.get(chat)?.values() ?? []) {
     if (!record.answer) continue
+    if (answerTurn && record.id !== answerTurn) continue
     const summary = chatUiSummary(record)
     const key = `${chat}\n${record.id}`
     if (reported.get(key) === summary) continue

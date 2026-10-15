@@ -245,7 +245,8 @@ export function snapshot(
       queue: chat.queue.map((q) => ({
         id: `queued-${q.id}`,
         text: q.text,
-        attachments: q.attachments.length
+        attachments: q.attachments.length,
+        ...(q.chatUiId ? { chatUiId: q.chatUiId } : {})
       })),
       queuePaused: chat.paused,
       ...queueNote(chat),

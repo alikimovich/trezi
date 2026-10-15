@@ -57,7 +57,7 @@ import { type PendingChat, PendingChats } from './chat-pending'
 import { chatRecordLookup } from './chat-record'
 import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
 import { TurnTracker } from './chat-turns'
-import { answerChatUi, chatUiContext, forgetChatUi, setChatUiHost } from './chat-ui'
+import { answerChatUi, chatUiContext, chatUiDelivery, forgetChatUi, setChatUiHost } from './chat-ui'
 import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
   cleanUpWorkspacesNow,
@@ -1636,9 +1636,10 @@ export function registerAgentIpc(
   // LKM-208: answer components live in the chat's transcript, which the conversation
   // owner persists with the record; a pick or submit is checked and saved there.
   setChatUiHost({
-    persist: (key, record) => {
-      const transcript = sessions.get(key)?.record.transcript
-      if (!transcript) return
+    persist: async (key, record) => {
+      const session = sessions.get(key)
+      if (!session) throw new Error('This chat is closed.')
+      const transcript = session.record.transcript
       const entry = transcript.find((e) => e.ui?.id === record.id)
       if (entry) entry.ui = record
       else
@@ -1648,6 +1649,12 @@ export function registerAgentIpc(
           at: record.at,
           ui: record
         })
+      // Answer acceptance must be durable before the native UI says it succeeded.
+      if (
+        !(await conversation().checkpoint(key, session.record)) &&
+        !(await conversation().checkpoint(key, session.record))
+      )
+        throw new Error('Unable to save this answer. Try again.')
     },
     find: (key, id) => sessions.get(key)?.record.transcript.find((e) => e.ui?.id === id)?.ui
   })
@@ -1655,6 +1662,11 @@ export function registerAgentIpc(
     key === planning.resume()?.id || key === PLANNING_PROJECT
       ? planning.answer(key, id, answer as ChatUiAnswer)
       : answerChatUi(key, id, answer)
+  )
+  ipcMain.handle(
+    'agent:chat-ui-delivery',
+    (_e, key: string, id: string, state: 'delivered' | 'cancelled') =>
+      chatUiDelivery(key, id, state)
   )
 
   /** LKM-182: a send to a chat still being prepared waits for what is missing. Stop
@@ -1801,7 +1813,7 @@ export function registerAgentIpc(
             ? 'The requested project component composition mode requires Claude or Codex. Explain this limitation for UI requests.\n\n'
             : ''
         const islandContext =
-          (await chatIslandContext(key, text)) + chatUiContext(key) + landingCheckContext(key)
+          (await chatIslandContext(key, text)) + chatUiContext(key, id) + landingCheckContext(key)
         if (preparation.cancelled || sessions.get(key) !== session)
           throw new Error('Message cancelled before sending.')
         // A model switch: the fresh provider gets the recorded conversation, once.

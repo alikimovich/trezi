@@ -334,7 +334,7 @@ assert.equal(await check({}, 0, { cancelled: () => true }), null)
   // agent.ts prepends it to the next prompt, with the other once-only contexts.
   assert.match(
     readFileSync(new URL('../src/main/agent.ts', import.meta.url), 'utf8'),
-    /chatUiContext\(key\) \+ landingCheckContext\(key\)/
+    /chatUiContext\(key, id\) \+ landingCheckContext\(key\)/
   )
   // A later pass clears a problem the agent has not heard of yet.
   const scratch = { chat: CHAT, messages: [] }

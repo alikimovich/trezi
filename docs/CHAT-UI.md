@@ -31,8 +31,10 @@ its runtime:
 - `update {id, option, capture}` captures the user's preview as that option's image:
   `true` for the visible page, `{selector}` for one element.
 
-The call returns at once. The agent ends its turn, and the pick or the form values
-arrive as the user's next message, the same way `ask_user` works.
+The call returns without waiting for the user's answer. The agent should end its
+turn. If the user answers while that provider turn is still active, Trezi accepts
+the answer and queues its next user message until the provider really finishes.
+The queued card names the wait; Stop pauses the queue until Send now is chosen.
 
 Background agents get an error. They have no chat to answer in, so they pick the
 reasonable default and name it.
@@ -67,8 +69,11 @@ A component accepts one answer.
   (`src/native/chat-state.ts`), and in the transcript as a status entry carrying
   `ui`. The conversation owner persists it with the chat, so a reopened chat shows
   it, answered or not.
-- `chatUiContext` (`src/main/chat-ui.ts`) adds each answer's summary once, at the
-  head of the next turn's prompt.
+- `chatUiContext` (`src/main/chat-ui.ts`) adds an answer's summary once, at the
+  head of that answer's user turn. Earlier queued messages do not receive it.
+- An accepted answer is persisted as queued before its user turn starts, then marked
+  delivered once the send is accepted. On relaunch, an answer with no later matching
+  user entry is restored to the queue. Edit or Remove cancels that automatic replay.
 - Images are JPEG data URIs: 360 px wide, at most 120 KB
   (`src/main/chat-ui-capture.ts`). They are small because chat frames re-send a
   message whenever it changes. Swift caches the decoded images.

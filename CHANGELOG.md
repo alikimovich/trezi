@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Chat form answers now show when they are accepted but still queued behind an active provider turn, and pending answers survive relaunch without an extra send (LKM-265).
 - Required agent-browser checks now use a Trezi-managed isolated headless Chromium shell and session, avoiding the user's Chrome identity during background verification (LKM-264).
 - Exploded view chrome now meets the toolbar without a header strip, uses a compact one-row footer, and separates the docked code editor and its toolbar with subtle native rules (LKM-262).
 - Exploded view keeps authored layer colors and avoids flashes when unrelated page updates trigger during inspection (LKM-260).
