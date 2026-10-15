@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Component states for Next.js and Vite React (LKM-263)
+
+- [x] Decide and document the architecture (`docs/STATES.md`): Trezi builds the component from source in memory with the project's React instead of importing dev-server module URLs.
+- [x] Discover states from the props type, call-site literals and the live instance; merge explicit recipes (provider, actions, route).
+- [x] Bundle with next/* shims, aliases, CSS modules, assets and public env; draw each state in its own sandboxed frame over the preview; refresh on input edits; return cleanly.
+- [x] Actionable messages for async Server Components, server-only imports, missing React and build errors.
+- [x] Unit tests (`test/states-build.mjs`, `test/states-canvas.mjs`) and the rewritten native `states-canvas` smoke on Next.js and Vite fixtures.
+- [ ] Manager: inspect `states-next.png`, `states-vite.png` and `states-server-only.png`, run full native verification and review, then merge. In the worker's last core run, `states-server-only.png` showed the page rather than the message overlay, though the DOM held the message. The smoke now asserts the dialog is open and waits 600 ms before that capture; this is not yet confirmed natively.
+
 ## Native exploded chrome and code editor polish (LKM-262)
 
 - [x] Align the transparent, input-shielding exploded header with the content edge and keep the scene reservation.

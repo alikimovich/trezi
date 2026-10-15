@@ -60,6 +60,8 @@ export interface StatesServices {
   chatTitle?: (chat: string) => string | undefined
   canvasSelection?: (root: string, element: SelectedElement) => void
   openCanvasForSelection?: (root: string, element: SelectedElement) => boolean
+  /** Opens the isolated states view for a selection; false when no project is visible. */
+  showCanvas?: (root: string, element: SelectedElement) => Promise<boolean>
 }
 
 /** Minimum gap between same-path rescans triggered by preview loads. */
@@ -306,6 +308,9 @@ export class NativeStatesController {
     let bench = find(cached ? this.workbenches(root) : await this.refresh(root))
     if (!bench && cached) bench = find(await this.refresh(root))
     if (!bench) {
+      // LKM-263: Trezi builds the isolated states view itself; the agent is only asked when
+      // the view is unavailable (no project open).
+      if (await this.services.showCanvas?.(root, element)) return true
       if (origin) this.memory.expect(root, origin, chat)
       return false
     }
