@@ -15,13 +15,24 @@ final class SmokeFocus {
     static let shared = SmokeFocus()
     private var lost = 0
     private var observer: NSObjectProtocol?
+    private var keyObserver: NSObjectProtocol?
+    private var activationObserver: NSObjectProtocol?
     private var thief: NSWindow?
+    private var keyLost = 0
+    private var activations = 0
 
     func install(center: NotificationCenter = .default) {
         guard observer == nil else { return }
         observer = center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: nil) { [weak self] _ in
             self?.lost += 1
         }
+        keyObserver = center.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: nil) { [weak self] note in
+            if note.object as? NSWindow === self?.thief { return }
+            self?.keyLost += 1
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: nil
+        ) { [weak self] _ in self?.activations += 1 }
     }
 
     /// Active app with one of Trezi's own windows key (a sheet or panel counts; the thief does not).
@@ -51,6 +62,27 @@ final class SmokeFocus {
         guard let window else { return "none" }
         if window === thief { return "focus simulation window" }
         return "\(type(of: window)) '\(window.title)'"
+    }
+
+    /// Passive focus evidence for browser checks. Never activates or orders a window.
+    func snapshot() -> [String: Any] {
+        install()
+        let front = NSWorkspace.shared.frontmostApplication
+        let responder = NSApp.keyWindow?.firstResponder
+        let point = NSEvent.mouseLocation
+        return ["frontmostPID": front?.processIdentifier ?? -1,
+                "frontmostBundle": front?.bundleIdentifier ?? "unknown",
+                "active": NSApp.isActive,
+                "key": describe(NSApp.keyWindow),
+                "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
+                "resignCount": lost, "keyLostCount": keyLost, "activationCount": activations,
+                "cursorX": point.x, "cursorY": point.y]
+    }
+
+    /// Test-only switch to an already-running Finder, without opening a window.
+    func activateFinder() -> Bool {
+        guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first else { return false }
+        return finder.activate(options: [.activateIgnoringOtherApps])
     }
 }
 

@@ -36,6 +36,7 @@ import { checkChatIslands } from './smoke-islands'
 import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
+import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
@@ -1070,6 +1071,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: async () => {
         await checkAgentInteract(page, artifacts)
+      }
+    },
+    {
+      name: 'managed-agent-browser',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkManagedAgentBrowser(host, page, artifacts)
       }
     },
     {
