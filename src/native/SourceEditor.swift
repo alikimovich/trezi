@@ -63,13 +63,24 @@ final class SourceLineRuler: NSRulerView {
     }
 }
 
+/// A one-device-pixel semantic rule, independent of the split view's vertical divider.
+final class SourceEditorSeparator: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        let scale = window?.backingScaleFactor ?? 2
+        NSColor.separatorColor.setFill()
+        NSRect(x: 0, y: 0, width: bounds.width, height: 1 / scale).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+}
+
 final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegate, NSWindowDelegate {
     var root = "", source = "", revision = 0, state: [String: Any] = [:]
     var files: [String] = [], filtered: [String] = []
     let code = SourceTextView(), scroll = NSScrollView(), tree = SourceFileTree(), search = NSSearchField()
     let status = NSTextField(labelWithString: ""), filename = NSTextField(labelWithString: ""), edited = NSTextField(labelWithString: "•")
     let image = NSImageView(), player = AVPlayerView(), binary = NSTextField(labelWithString: "")
-    let header = NSStackView(), spacer = NSView()
+    let header = NSStackView(), spacer = NSView(), split = NSSplitView()
+    let topSeparator = SourceEditorSeparator(), toolbarSeparator = SourceEditorSeparator()
     var popout: NSWindow?, updating = false
     /// Grammar highlighting (`SourceSyntax.swift`): the last applied revision, the
     /// reported visible lines and a test-only main-thread timing hook.
@@ -91,7 +102,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         for (name, symbol, label) in [("back", "chevron.left", "Back"), ("forward", "chevron.right", "Forward")] { header.addArrangedSubview(iconButton(name, symbol, label)) }
         for view in [filename, edited, spacer] { header.addArrangedSubview(view) }
         for (name, symbol, label) in [("more", "ellipsis.circle", "More"), ("popout", "arrow.up.left.and.arrow.down.right", "Pop Out Editor"), ("hide", "xmark", "Close Editor")] { header.addArrangedSubview(iconButton(name, symbol, label)) }
-        let split = NSSplitView(); split.isVertical = true; split.dividerStyle = .thin
+        split.isVertical = true; split.dividerStyle = .thin
         let sidebar = NSView(), content = NSView(); split.addArrangedSubview(sidebar); split.addArrangedSubview(content)
         search.placeholderString = "Filter files"; search.delegate = self
         let treeScroll = NSScrollView(); treeScroll.hasVerticalScroller = true; treeScroll.autohidesScrollers = true
@@ -117,7 +128,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         image.imageScaling = .scaleProportionallyUpOrDown
         binary.alignment = .center; binary.textColor = .secondaryLabelColor
         status.lineBreakMode = .byTruncatingMiddle; status.font = .systemFont(ofSize: 11); status.textColor = .secondaryLabelColor
-        for view in [header, split, status] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
+        for view in [header, split, status, topSeparator, toolbarSeparator] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
         for view in [search, treeScroll, operations] { view.translatesAutoresizingMaskIntoConstraints = false; sidebar.addSubview(view) }
         for view in [scroll, image, player, binary] { view.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(view); NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo: content.leadingAnchor), view.trailingAnchor.constraint(equalTo: content.trailingAnchor), view.topAnchor.constraint(equalTo: content.topAnchor), view.bottomAnchor.constraint(equalTo: content.bottomAnchor)]) }
         // These alternative viewers fill the editor even while hidden. Their
@@ -129,6 +140,8 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
             view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         NSLayoutConstraint.activate([
+            topSeparator.leadingAnchor.constraint(equalTo: leadingAnchor), topSeparator.trailingAnchor.constraint(equalTo: trailingAnchor), topSeparator.topAnchor.constraint(equalTo: topAnchor), topSeparator.heightAnchor.constraint(equalToConstant: 1),
+            toolbarSeparator.leadingAnchor.constraint(equalTo: leadingAnchor), toolbarSeparator.trailingAnchor.constraint(equalTo: trailingAnchor), toolbarSeparator.bottomAnchor.constraint(equalTo: split.topAnchor), toolbarSeparator.heightAnchor.constraint(equalToConstant: 1),
             header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10), header.topAnchor.constraint(equalTo: topAnchor, constant: 6), header.heightAnchor.constraint(equalToConstant: 28),
             split.leadingAnchor.constraint(equalTo: leadingAnchor), split.trailingAnchor.constraint(equalTo: trailingAnchor), split.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6), split.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -4),
             status.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), status.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10), status.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5), status.heightAnchor.constraint(equalToConstant: 16),
@@ -180,6 +193,8 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     func update(_ value: [String: Any]) {
         let started = SourceWorkClock()
         state = value; root = value["root"] as? String ?? ""; source = value["source"] as? String ?? ""
+        // The pop-out window already supplies its own outer edge.
+        topSeparator.isHidden = value["popped"] as? Bool == true
         let newFiles = value["files"] as? [String] ?? []; if files != newFiles { files = newFiles; filter() }
         // Rewriting an unchanged path would drop the user's selection in it.
         if filename.stringValue != source { filename.stringValue = source; filename.toolTip = source }
@@ -229,7 +244,10 @@ extension NativeSourceEditor {
             let name = view === filename ? "path" : view === edited ? "edited" : view.identifier?.rawValue ?? "", rect = view.convert(view.bounds, to: self)
             return ["id": name, "symbol": symbols[name] ?? "", "toolTip": view.toolTip ?? "", "label": view.accessibilityLabel() ?? "", "title": (view as? NSButton)?.title ?? "", "minX": rect.minX, "maxX": rect.maxX]
         }
-        return ["items": items, "width": bounds.width, "pathSelectable": filename.isSelectable, "pathEditable": filename.isEditable, "path": filename.stringValue]
+        return ["items": items, "width": bounds.width, "pathSelectable": filename.isSelectable, "pathEditable": filename.isEditable, "path": filename.stringValue,
+                "topSeparatorHidden": topSeparator.isHidden, "topSeparatorWidth": topSeparator.frame.width,
+                "toolbarSeparatorWidth": toolbarSeparator.frame.width, "toolbarSeparatorY": toolbarSeparator.frame.minY,
+                "splitTop": split.frame.maxY]
     }
     /// Offers a ⌘-key to the window's key-equivalent pass (which AppKit runs before
     /// the main menu) with focus in the code, the path or outside the editor. A

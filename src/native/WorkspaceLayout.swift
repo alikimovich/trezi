@@ -247,8 +247,7 @@ final class WorkspaceLayout {
         host.statesSwitcher.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         var occluders: [NSRect] = []
         if host.threeD.active {
-            let compact = page.width < 520
-            let top: CGFloat = 48, bottom: CGFloat = compact ? 100 : 76
+            let top: CGFloat = 48, bottom: CGFloat = 44
             let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: max(0, page.height - top - bottom))
             func confined(_ frame: NSRect) -> NSRect {
                 let lower = max(frame.minY, stage.minY), upper = min(frame.maxY, stage.maxY)
