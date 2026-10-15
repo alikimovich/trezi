@@ -131,24 +131,45 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
     '(() => { getSelection()?.selectAllChildren(document.body); scrollTo(0, 40); return true })()'
   )
   const beforePrivate = await visible()
+  const focusBefore = (await bridge().request('smokeFocusSnapshot')) as Record<string, unknown>
+  const focusSamples: Record<string, unknown>[] = []
+  const checkFocus = async (phase: string) => {
+    const after = (await bridge().request('smokeFocusSnapshot')) as Record<string, unknown>
+    focusSamples.push({ phase, ...after })
+    for (const field of [
+      'frontmostPID',
+      'key',
+      'responder',
+      'resignCount',
+      'keyLostCount',
+      'activationCount',
+      'cursorX',
+      'cursorY'
+    ])
+      assert.equal(after[field], focusBefore[field], `${phase}: ${field} changed`)
+  }
   const first = await agentBrowser('native-agent-a', active.root)
   const second = await agentBrowser('native-agent-b', active.root)
+  await checkFocus('create two private pages')
   try {
     const [a, b] = await Promise.all([first.open('/?agent=a'), second.open('/?agent=b')])
     assert.match(a.url, /agent=a/)
     assert.match(b.url, /agent=b/)
+    await checkFocus('cold open and navigation')
     // reload_preview: the same route loads again (soft and hard) instead of returning early.
     const loads = first.navigation
     await first.open('/?agent=a', { reload: true })
     assert.equal(first.navigation, loads + 1, 'a soft reload navigates the agent browser again')
     await first.open('/?agent=a', { reload: true, hard: true })
     assert.equal(first.navigation, loads + 2, 'a hard reload navigates the agent browser again')
+    await checkFocus('warm reload')
     await first.host.setViewport(390)
     const width = await first.host.evaluate('innerWidth', 'preview', 1000)
     assert.equal(width, 390)
     assert.notEqual(await second.host.evaluate('innerWidth', 'preview', 1000), 390)
     const frame = await first.capture()
     assert.ok(frame?.jpeg.length, 'offscreen WebKit snapshot')
+    await checkFocus('viewport and capture')
     const measure = async (run: () => Promise<unknown>) => {
       const samples: number[] = []
       for (let i = 0; i < 5; i++) {
@@ -188,6 +209,8 @@ export async function checkAgentPreview(page: Page, artifacts: string) {
     await closeAgentBrowser('webkit:native-agent-a')
     await closeAgentBrowser('webkit:native-agent-b')
   }
+  await checkFocus('close private pages')
+  evidence.focus = { before: focusBefore, samples: focusSamples }
   assert.equal(
     await visible(),
     beforePrivate,

@@ -429,6 +429,9 @@ extension Host {
         case "smokeFocus":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in reply(id, await smokeFocus(c)) }
+        case "smokeFocusSnapshot":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, SmokeFocus.shared.snapshot())
         case "previewInput":
             guard ephemeral, let preview = views["preview"] else { reply(id, error: "Test preview unavailable"); return true }
             if c["prepare"] as? Bool == true {

@@ -45,12 +45,11 @@ call them, and every result is bounded. Prefer them to any external browser.
    For interactive changes (filters, tabs, menus, forms), use them with
    `preview_interact` and check the result it returns.
 
-## Scripted interactions only: agent-browser
+## Interactions the private browser cannot perform
 
-Use the `agent-browser` CLI against the dev-server URL only for scripted multi-step
-interactions (click, type, a flow across pages) that the preview tools cannot do.
-Never use it just to inspect, evaluate or screenshot. Check `command -v agent-browser`
-first, use `--session trezi-<task-id>`, close only your own session, and do not
-install it without the user's permission.
+Report the exact unsupported step. Do not launch an external browser CLI for
+background verification: a headless daemon can still activate Chrome. Do not
+claim that a different browser engine verified an explicitly requested Chromium
+flow. Do not install a browser without the user's permission.
 
 Do NOT open Chrome DevTools or a headed browser unless the user explicitly asks.

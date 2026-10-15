@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-15 — LKM-264: background browser focus investigation and private-path guard
+
+- The default `preview_*` and `preview_interact` path uses an offscreen WebKit page. The optional Chromium factory is not registered. The rules also required or recommended an external `agent-browser` CLI in provider branches, allowing an uncontrolled daemon/browser launch during background verification. Local CLI help reports version 0.26.0, a configurable executable, `--headed` and daemon sessions; this does not establish focus safety. The cited upstream issue describes system Chrome fallback in a later release, not a proven cause on this machine. No Chrome process was launched in the worker sandbox because it could activate a GUI app.
+- Rules now direct background checks to supported private preview tools and report unsupported browser checks rather than automatically launching the CLI. An explicit Chromium engine remains distinct. The native private-page fixture collects passive frontmost app, key window, responder, activation and cursor evidence around create/open/reload/capture/close. A managed Chromium runner and enforcement for arbitrary provider shell commands remain open work.
+- On macOS 26.4.1 arm64, the installed CLI resolved to `/opt/homebrew/bin/agent-browser` 0.26.0 (a symlink into Hermes). Chrome for Testing and headless-shell binaries are cached under Playwright; their presence does not prove which executable this CLI would select. Process enumeration was denied by the worker sandbox. No cold/warm external CLI launch was attempted because it might activate a GUI app; the cited upstream 0.31.1 fallback therefore remains a hypothesis here. Agent OS quick passed 220 unit checks, typechecks and lint, and native `core` passed 31 checks including passive private-browser focus evidence. Another app frontmost and an actual Chromium run remain unverified.
+
 ## 2026-10-15 — LKM-263: Show states rebuilt for Next.js and Vite React
 
 - Why: the LKM-224 canvas imported the component and React from Vite module URLs. Next.js serves none, so the component URL was a 404 and recipes could not name React. The decision and the rejected options (generated routes, dev-server modules, DOM clones) are in `docs/STATES.md`.

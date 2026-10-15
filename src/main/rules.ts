@@ -19,7 +19,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 41
+export const TREZI_RULES_VERSION = 42
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -379,12 +379,12 @@ const previewVerification = (background: boolean) => [
   `person would, then confirm the result it returns (the screenshot, the URL, no console`,
   `errors). Looking at the page before the interaction does not prove it works.`,
   ``,
-  `Use \`agent-browser\` only for scripted multi-step interactions \`preview_interact\``,
-  `cannot do, never just to inspect, evaluate, or screenshot. When you do, first run`,
-  `\`command -v agent-browser\` and \`agent-browser --help\`; if it is missing, say so`,
-  `and offer setup. Do not install packages without the user's permission. Use a`,
-  `unique \`--session trezi-<task-id>\`, open the Trezi-managed preview URL (do not`,
-  `start another dev server), and close only your own session.`
+  `Do not launch an external browser CLI for background verification. Use the`,
+  `private preview tools for supported checks. If a scripted flow needs capabilities`,
+  `\`preview_interact\` lacks, report that exact gap; do not silently substitute`,
+  `Chromium or claim that the flow passed. Honor an explicit browser-engine choice.`,
+  `A separate Chromium run requires an app-managed, focus-safe browser path; an`,
+  `unrestricted shell command and a headless flag do not provide that guarantee.`
 ]
 
 /** Who owns a visual check that waits for landing: the agent after land_now in a chat turn, the user after a background agent. */
@@ -395,33 +395,15 @@ const landingOwner = (background: boolean) =>
 
 const agentBrowserVerification = (background: boolean) => [
   ``,
-  `## Required browser verification with agent-browser`,
-  `For web UI changes, visual verification, responsive testing, or browser interaction,`,
-  `you MUST use \`agent-browser\` when available. This is required, not a suggestion;`,
-  `a build, typecheck, or DOM-only guess does not replace browser verification.`,
-  `Before your first browser task in a session, run \`command -v agent-browser\` and`,
-  `\`agent-browser --help\` in your execution environment. Recheck after installation`,
-  `or a PATH change. If the installed CLI supports it, read its version-matched guide`,
-  `with \`agent-browser skills get core --full\`; otherwise use its help.`,
-  `If the CLI is missing, or its browser cannot launch, report the actual blocker and`,
-  `offer installation/setup. Do not install packages without the user's permission,`,
-  `silently substitute another browser tool, or claim browser verification passed.`,
-  `Use a unique \`--session trezi-<task-id>\` on every browser command so concurrent`,
-  `chats do not change each other's pages or viewport. Close only your own session.`,
-  `Open the Trezi-managed preview URL and the relevant route; do not start another`,
-  `dev server or attach to the user's browser. Check that the page contains the change`,
-  `being tested. Private worktree edits may not be served until Trezi lands the turn:`,
-  `if the preview still shows older code, never report verification as passed, and do`,
-  `not bypass Trezi's worktree/landing lifecycle to make it visible. ${landingOwner(background)}`,
-  `Use \`open <url>\`, \`snapshot\`, \`get text|html|styles|value <sel>\`, \`console\`,`,
-  `\`errors\`, \`eval <js>\`, \`click <sel>\`, and \`screenshot <path>\` as appropriate.`,
-  `Exercise the changed interaction and inspect screenshots of the affected UI.`,
-  `For layout or responsive changes, test phone, tablet, and desktop CSS viewports:`,
-  `\`set viewport 390 844\`, \`set viewport 768 1024\`, and \`set viewport 1440 900\`,`,
-  `unless the user specifies other sizes. Check overflow, clipped content, and usable`,
-  `controls at each size; capture and inspect a screenshot at each size. Viewport`,
-  `resizing checks layout, not real-device behavior or Safari compatibility.`,
-  `Before finishing, report the route, sizes, interactions checked, and any blockers.`
+  `## Browser verification without private preview tools`,
+  `This provider has no Trezi private preview tools. Do not launch an external`,
+  `browser CLI for background verification: a headless flag does not prevent`,
+  `macOS app activation, and the CLI may reuse a daemon or select the user's Chrome.`,
+  `Report browser verification as unavailable for this provider and name the`,
+  `affected route and interaction. Do not claim a build, typecheck, or DOM guess`,
+  `proved the visual result. Do not install or download a browser automatically.`,
+  `Honor an explicit Chromium requirement; never silently substitute WebKit.`,
+  `${landingOwner(background)}`
 ]
 
 const noDevTools = [

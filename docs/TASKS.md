@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Background browser focus (LKM-264)
+
+- [x] Trace the browser rule branches and remove automatic external CLI launches from background verification; preserve explicit engine requirements.
+- [x] Add passive native focus telemetry around private WebKit creation, navigation, capture and close.
+- [ ] Add an app-managed, focus-safe Chromium path and enforce it at the shell/tool boundary, including for Codex; exercise cold and warm Chromium sessions and cancellation on a disposable project.
+- [ ] Verify foreground and key responder preservation with Trezi and another app frontmost, then run full native verification and review.
+
 ## Component states for Next.js and Vite React (LKM-263)
 
 - [x] Decide and document the architecture (`docs/STATES.md`): Trezi builds the component from source in memory with the project's React instead of importing dev-server module URLs.
