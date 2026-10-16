@@ -186,7 +186,7 @@ extension WorkspaceLayout {
     func placeStart(_ bounds: NSRect) {
         guard let host else { return }
         host.startSurface.frame = bounds
-        host.startSurface.isHidden = !starting
+        host.startSurface.isHidden = !starting || (shellState["project"] is String && !chatReady && !planning)
         host.startSurface.alphaValue = 1 - start.progress
         if starting { host.startSurface.update(startState, chat: chatState["chat"] as? String ?? "", composer: start.frame) }
         // The page's titlebar fill and edge line (PreviewSurface) arrive with the preview.

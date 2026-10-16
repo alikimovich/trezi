@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Keep menu item identity during live updates, respect Reduce Motion, and stop the pulse timer after dismissal.
 - [x] Native `history-menu` smoke (group `chat`) drives the real NSMenu tracking: running, unread, in-place update, Reduce Motion, timer cleanup, light/dark/highlight captures inspected.
 - [ ] Manager: run full verification and independent review.
+## Centered Opening indicator (LKM-270)
+
+- [x] Restore the initial-open chat gate and full workspace Opening indicator while preserving destination chat identity and later reload behavior.
+- [x] Update native and unit checks for hidden opening/error chat, ready chat, planning, and routing behavior.
+- [ ] Manager: run full native verification, inspect foreground captures, and complete independent review.
 
 ## chat_ui answer delivery (LKM-265)
 
@@ -16,7 +21,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
 - [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
 - [ ] Manager: run full native verification and independent review, then merge.
-## Docked chat during project opening (LKM-266)
+## Docked chat during project opening (LKM-266, superseded by LKM-270)
 
 - [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.
 - [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.

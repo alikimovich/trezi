@@ -53,11 +53,22 @@ assert.deepEqual(
 )
 assert.equal(renders.at(-1).rows[0].children[1].title, 'Older chat')
 assert.equal(renders.at(-1).chatReady, true)
-// A preview error leaves the selected project's repair chat available.
-workspace.state.status = { kind: 'error', message: 'The dev server exited' }
+// The initial open hides chat until the selected project is loaded.
+workspace.state.loadedKey = null
+workspace.state.status = { kind: 'busy', label: 'Opening Project…' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, false)
+workspace.state.loadedKey = 'a'
+// Later in-project navigation/reload may be busy without hiding chat.
 shell.render()
 assert.equal(renders.at(-1).chatReady, true)
+// An error reports truthfully and closes the gate until recovery.
+workspace.state.status = { kind: 'error', message: 'The dev server exited' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, false)
 workspace.state.status = { kind: 'running' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, true)
 await shell.action({ action: 'device' })
 assert.equal(active.viewport, 'mobile')
 await shell.action({ action: 'expand' })
