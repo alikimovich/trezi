@@ -128,13 +128,13 @@ export async function cardAction(
     case 'queue-remove':
       for (const q of chat.queue)
         if (`queued-${q.id}` === action.id && q.chatUiId)
-          await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled')
+          await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled').catch(() => {})
       chat.queue = chat.queue.filter((q) => `queued-${q.id}` !== action.id)
       break
     case 'queue-edit':
       for (const q of chat.queue)
         if (`queued-${q.id}` === action.id && q.chatUiId)
-          await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled')
+          await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled').catch(() => {})
       editQueued(chat, action.id)
       effect({ type: 'focus' })
       break

@@ -7,6 +7,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.
 - [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
+- [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
 - [ ] Manager: run full native verification and independent review, then merge.
 
 ## Background browser focus (LKM-264)

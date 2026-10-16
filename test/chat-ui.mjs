@@ -261,6 +261,7 @@ for (const problem of [
 const calls = []
 const prompts = []
 let busyOnce = false
+let cancelFailure = false
 const controller = new NativeChatController({
   invoke: async (name, ...args) => {
     calls.push([name, ...args])
@@ -282,7 +283,10 @@ const controller = new NativeChatController({
       }
     if (name === 'providers:choices') return []
     if (name === 'agent:chat-ui-answer') return answerChatUi(args[0], args[1], args[2])
-    if (name === 'agent:chat-ui-delivery') return chatUiDelivery(args[0], args[1], args[2])
+    if (name === 'agent:chat-ui-delivery') {
+      if (cancelFailure && args[2] === 'cancelled') throw new Error('checkpoint unavailable')
+      return chatUiDelivery(args[0], args[1], args[2])
+    }
     // The mocked provider receives what agent.ts sends: the context, then the user's text.
     if (name === 'agent:send') {
       if (busyOnce) {
@@ -476,6 +480,30 @@ controller.event({ type: 'landing-finished', projectKey: CHAT })
 await tick()
 assert.equal(prompts.length, beforeBusy + 1)
 assert.equal(chat.queue.length, 0)
+cancelFailure = true
+chat.text = 'Keep this draft'
+chat.queue.push({
+  id: 'edit-answer',
+  chatUiId: 'edit-answer',
+  text: 'Answer to edit',
+  attachments: [],
+  selection: null,
+  turn: {}
+})
+await controller.action({ chat: CHAT, action: 'queue-edit', id: 'queued-edit-answer' })
+assert.equal(chat.queue.length, 0, 'Edit works locally when the delivery marker fails')
+assert.equal(chat.text, 'Answer to edit\n\nKeep this draft')
+chat.queue.push({
+  id: 'remove-answer',
+  chatUiId: 'remove-answer',
+  text: 'Answer to remove',
+  attachments: [],
+  selection: null,
+  turn: {}
+})
+await controller.action({ chat: CHAT, action: 'queue-remove', id: 'queued-remove-answer' })
+assert.equal(chat.queue.length, 0, 'Remove works locally when the delivery marker fails')
+assert.equal(chat.text, 'Answer to edit\n\nKeep this draft')
 forgetChatUi(CHAT)
 assert.match(chatUiContext(CHAT, busyForm.id), /the user submitted/)
 

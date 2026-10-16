@@ -534,6 +534,9 @@ async function startSession(
     // `turn.completed`, so the rollout is the only record of what it spent.
     await usageWatch?.poll().catch(() => {})
     stopUsageWatch()
+    // The iterator is closed now. A later session shutdown must not abort its
+    // already-finished child (the SDK removes that child's error listener on close).
+    turnAbort = null
     cap.finalize()
     emit({ type: 'done' })
   }
@@ -568,6 +571,7 @@ async function startSession(
       const { events } = await thread.runStreamed(text, { signal })
       for await (const ev of events) {
         if (disposed || aborted || signal?.aborted) break
+        let terminal = false
         switch (ev.type) {
           case 'thread.started':
             startUsageWatch(ev.thread_id)
@@ -588,6 +592,7 @@ async function startSession(
             // A running thread total, not this turn's own tokens — `noteUsage`
             // emits only the part the rollout tail hasn't already reported.
             noteUsage(readUsage((ev as { usage?: unknown }).usage))
+            terminal = true
             break
           case 'turn.failed':
             if (!rejection(ev.error)) {
@@ -596,6 +601,7 @@ async function startSession(
                 network = message
               else emitError(message)
             }
+            terminal = true
             break
           case 'error': {
             if (rejection(ev)) break
@@ -620,6 +626,10 @@ async function startSession(
           }
           // turn.started needs no extra handling.
         }
+        // The SDK keeps reading until CLI stdout closes, which can lag behind its
+        // terminal turn event. Leaving this loop on a completed/failed turn closes
+        // the iterator (and its CLI child) so runTurn finalizes exactly once now.
+        if (terminal) break
       }
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
