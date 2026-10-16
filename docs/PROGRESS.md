@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-15 — LKM-266: docked chat during project opening
+
+- A committed project selection now activates its conversation before project detection and server startup. Chat visibility follows the selected project rather than preview readiness; opening and error progress stays inside the preview pane. A conversation still loading shows a native progress row, and its composer retains the project draft.
+- The native chat-gate fixture captures opening and failed-open states and checks chat identity and frame stability against the ready state. Manager verification and independent review remain pending.
+
 ## 2026-10-15 — LKM-264 repair: mandatory managed Vercel browser path
 
 - Review corrected the engine requirement: Vercel agent-browser remains mandatory for UI verification. The earlier WebKit substitution was reversed in the rules, bundled skill, README, providers guide and changelog. Private WebKit observations remain supplementary.

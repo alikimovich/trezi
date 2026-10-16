@@ -44,11 +44,10 @@ shell.render()
 assert.equal(renders.at(-1).rows[0].children[0].title, 'Working chat')
 assert.equal(renders.at(-1).rows[0].children[1].title, 'Older chat')
 assert.equal(renders.at(-1).chatReady, true)
-// A ready dev server can exit after selection marked the project loaded.
-// The error view must still close the chat gate until recovery.
+// A preview error leaves the selected project's repair chat available.
 workspace.state.status = { kind: 'error', message: 'The dev server exited' }
 shell.render()
-assert.equal(renders.at(-1).chatReady, false)
+assert.equal(renders.at(-1).chatReady, true)
 workspace.state.status = { kind: 'running' }
 await shell.action({ action: 'device' })
 assert.equal(active.viewport, 'mobile')

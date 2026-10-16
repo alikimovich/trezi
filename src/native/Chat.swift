@@ -19,6 +19,7 @@ struct ChatQuestionOption: Decodable { let label: String; let description: Strin
 struct ChatQuestion: Decodable { let header: String; let question: String; let options: [ChatQuestionOption]; let multiSelect: Bool }
 struct ChatQuestionRequest: Decodable, Identifiable { let id: String; let questions: [ChatQuestion] }
 struct ChatSnapshot: Decodable {
+    let ready: Bool?
     let activity: ChatActivityState?; let streamingId: String?
     let chat: String; let messages: [ChatMessage]; let running: Bool; let cards: [ChatCard]
     let questions: [ChatQuestionRequest]
@@ -26,6 +27,7 @@ struct ChatSnapshot: Decodable {
 /// A `chatState` frame (`chat-frames.ts`): `messages` is absent when they are unchanged
 /// since the last frame for this chat, so a long transcript is not decoded again (LKM-165).
 struct ChatFrame: Decodable {
+    let ready: Bool?
     let activity: ChatActivityState?; let streamingId: String?
     let chat: String; let messages: [ChatMessage]?; let running: Bool; let cards: [ChatCard]
     let questions: [ChatQuestionRequest]
@@ -165,7 +167,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
         } else if let data = try? JSONSerialization.data(withJSONObject: state), let frame = try? JSONDecoder().decode(ChatFrame.self, from: data) {
             lastConversation = conversation
             let messages = frame.messages ?? (kept ? previous?.messages : nil) ?? []
-            let snapshot = ChatSnapshot(activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
+            let snapshot = ChatSnapshot(ready: frame.ready, activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
             let completed = previous?.chat == snapshot.chat && previous?.running == true && !snapshot.running && !(snapshot.messages.last?.text.contains("⚠️") ?? false) && snapshot.messages.last?.incident == nil
             model.cat.update(running: snapshot.running, questioning: !snapshot.questions.isEmpty || snapshot.cards.contains { $0.agent?.question != nil || $0.actions.contains { $0.action == "permission" } }, completed: completed)
             model.revealAgentQuestions(snapshot.cards)
@@ -297,7 +299,11 @@ struct ChatConversation: View {
     @ViewBuilder
     private var conversationContent: some View {
         if let snapshot = model.snapshot {
-            if snapshot.messages.isEmpty && snapshot.cards.isEmpty {
+            if snapshot.ready == false {
+                ProgressView("Loading conversation…")
+                    .frame(maxWidth: .infinity).padding(.top, 28)
+            }
+            if snapshot.ready != false && snapshot.messages.isEmpty && snapshot.cards.isEmpty {
                 Text("Ask for a change, or open a project to preview it on the right.")
                     .foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.top, 28)
             }
