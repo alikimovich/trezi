@@ -54,7 +54,7 @@ export interface NativeShellState {
   /** The newest sidebar pick generation this state already reflects (LKM-204); the host
    *  keeps a newer pick highlighted over an older state. */
   selection?: number
-  /** The selected project finished opening: only then are the chat column and its toolbar actions shown. */
+  /** A committed project selection owns the docked chat, including while its preview opens. */
   chatReady: boolean
   selectMode: boolean
   previewReady: boolean
