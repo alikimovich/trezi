@@ -89,7 +89,17 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
-    private let chatActions = ChatToolbarActions(frame: .zero)
+    let chatActions = ChatToolbarActions(frame: .zero)
+    // The history menu's live indicators (`updateHistoryMenu`); `HistoryVerification.swift` drives them in tests.
+    var historyTracking = false
+    var historyPulse = false
+    var historyTimer: Timer?
+    weak var historyHighlight: NSMenuItem?
+    /// Test seam (ephemeral profile only): replaces the system Reduce Motion preference, which tests never change.
+    var reduceMotionOverride: Bool?
+    var historyWatchdog: Timer?
+    var historyReduceMotion: Bool { reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    deinit { historyTimer?.invalidate(); historyWatchdog?.invalidate() }
     // The address block and its layout (`ToolbarAddress.swift`).
     var addressWidth: NSLayoutConstraint?
     var addressLayout = ToolbarAddressLayout()
@@ -367,22 +377,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         chatTitle.isHidden = !chatReady || chatHidden || (chatHeaderWidth?.constant ?? 0) < 150
         // The header item stays in the toolbar (so the address never shifts); only its contents hide.
         chatActions.isHidden = !chatReady
-        let chatMenu = NSMenu(); chatMenu.autoenablesItems = false
-        for row in rows.first(where: { $0.project == currentProject })?.children ?? [] {
-            let entry = NSMenuItem(title: row.title + (row.running ? " · Working" : ""), action: #selector(contextAction(_:)), keyEquivalent: "")
-            entry.target = self; entry.representedObject = ["event":"shell-action", "action":"select", "id":row.id, "project":row.project]
-            entry.state = row.id == selectedID ? .on : .off
-            entry.image = NSImage(systemSymbolName: row.kind == "history" ? "clock" : "bubble.left", accessibilityDescription: nil)
-            chatMenu.addItem(entry)
-        }
-        if let selectedID, currentProject != nil {
-            chatMenu.addItem(.separator())
-            let rename = NSMenuItem(title: "Rename current chat…", action: #selector(contextAction(_:)), keyEquivalent: "")
-            rename.target = self; rename.representedObject = ["event":"shell-action", "action":"rename-chat", "id":selectedID]; chatMenu.addItem(rename)
-            let close = NSMenuItem(title: "Close current chat", action: #selector(contextAction(_:)), keyEquivalent: "")
-            close.target = self; close.representedObject = ["event":"shell-action", "action":"close", "id":selectedID]; chatMenu.addItem(close)
-        }
-        chatActions.historyMenu = chatMenu; chatActions.updateEnabled(project: chatReady, history: chatReady && !chatMenu.items.isEmpty)
+        updateHistoryMenu()
         address.isEnabled = ready
         if address.currentEditor() == nil { showAddress() }
         toolbarItems["device"]?.isEnabled = previewState["deviceEnabled"] as? Bool ?? false
@@ -460,6 +455,112 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         toolbarItems["expand"]?.toolTip = chatHidden ? "Restore Layout" : "Expand Preview"
         toolbarItems["expand"]?.label = toolbarItems["expand"]?.toolTip ?? "Expand Preview"
         toolbarItems["expand"]?.image = toolbarSymbol(chatHidden ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", chatHidden ? "Restore Layout" : "Expand Preview")
+    }
+    func historyRows() -> [ShellRow] { rows.first(where: { $0.project == currentProject })?.children ?? [] }
+    func updateHistoryMenu() {
+        let current = historyRows()
+        let menu = chatActions.historyMenu ?? NSMenu()
+        let existing = menu.items.compactMap { item -> String? in
+            let info = item.representedObject as? [String: String]
+            return info?["action"] == "select" ? info?["id"] : nil
+        }
+        // AppKit tracks the highlighted item by identity. Never replace items while
+        // tracking; the next opening can reconcile a changed row list.
+        let menuSelection = menu.items.first(where: { ($0.representedObject as? [String: String])?["action"] == "rename-chat" })
+            .flatMap { ($0.representedObject as? [String: String])?["id"] }
+        if !historyTracking && (existing != current.map(\.id) || menuSelection != selectedID || chatActions.historyMenu == nil) {
+            menu.removeAllItems()
+            menu.autoenablesItems = false
+            menu.delegate = self
+            for row in current {
+                let item = NSMenuItem(title: row.title, action: #selector(contextAction(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = ["event":"shell-action", "action":"select", "id":row.id, "project":row.project]
+                item.image = NSImage(systemSymbolName: row.kind == "history" ? "clock" : "bubble.left", accessibilityDescription: nil)
+                menu.addItem(item)
+            }
+            if let selectedID, currentProject != nil {
+                menu.addItem(.separator())
+                for (title, action) in [("Rename current chat…", "rename-chat"), ("Close current chat", "close")] {
+                    let item = NSMenuItem(title: title, action: #selector(contextAction(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = ["event":"shell-action", "action":action, "id":selectedID]
+                    menu.addItem(item)
+                }
+            }
+        }
+        for row in current {
+            guard let item = menu.items.first(where: { ($0.representedObject as? [String: String])?["id"] == row.id }) else { continue }
+            item.state = row.id == selectedID ? .on : .off
+            item.setAccessibilityLabel("\(row.title), \(row.running ? "Running" : row.unread ? "Unread answer" : "Read")")
+            // A constant-width bullet slot keeps the native row geometry fixed. A hidden bullet is a blank
+            // kerned to the bullet's width, not a clear-coloured glyph (a dark menu's vibrancy still draws that faintly).
+            let font = NSFont.menuFont(ofSize: 0)
+            let visible = row.running ? (historyReduceMotion || historyPulse) : row.unread
+            let title = NSMutableAttributedString(string: (visible ? "●" : " ") + "  " + row.title, attributes: [.font: font])
+            if visible {
+                // `willHighlight` runs before AppKit updates `highlightedItem`, so track it ourselves.
+                let color: NSColor = historyHighlight === item ? .selectedMenuItemTextColor : row.running ? .controlAccentColor : .systemGreen
+                title.addAttribute(.foregroundColor, value: color, range: NSRange(location: 0, length: 1))
+            } else {
+                let width = { (text: String) in (text as NSString).size(withAttributes: [.font: font]).width }
+                title.addAttribute(.kern, value: width("●") - width(" "), range: NSRange(location: 0, length: 1))
+            }
+            item.attributedTitle = title
+        }
+        if historyTracking {
+            let animate = current.contains(where: { $0.running }) && !historyReduceMotion
+            if animate && historyTimer == nil {
+                // Menu tracking runs the loop in event-tracking mode: a default-mode timer would never fire.
+                let timer = Timer(timeInterval: 0.55, repeats: true) { [weak self] _ in
+                    guard let self else { return }
+                    self.historyPulse.toggle()
+                    self.updateHistoryMenu()
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                historyTimer = timer
+            } else if !animate {
+                historyTimer?.invalidate()
+                historyTimer = nil
+                historyPulse = true
+            }
+        }
+        chatActions.historyMenu = menu
+        chatActions.updateEnabled(project: chatReady, history: chatReady && !current.isEmpty)
+    }
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === chatActions.historyMenu else { return }
+        historyTracking = true
+        historyPulse = true
+        updateHistoryMenu()
+    }
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === chatActions.historyMenu else { return }
+        historyTracking = false
+        historyHighlight = nil
+        historyTimer?.invalidate()
+        historyTimer = nil
+        updateHistoryMenu()
+    }
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        guard menu === chatActions.historyMenu else { return }
+        historyHighlight = item
+        updateHistoryMenu()
+    }
+    private func historyInspect() -> [String: Any] {
+        let menu = chatActions.historyMenu
+        return ["historyTracking":historyTracking, "historyTimer":historyTimer != nil,
+                "historyReduceMotion":historyReduceMotion,
+                "historyPulse":historyPulse, "historyMenuWidth":menu?.size.width ?? 0,
+                "historyHighlighted":(menu?.highlightedItem?.representedObject as? [String: String])?["id"] ?? "",
+                "historyRows":menu?.items.compactMap { item -> [String: Any]? in
+                    guard let info = item.representedObject as? [String: String], info["action"] == "select" else { return nil }
+                    let rowTitle = historyRows().first(where: { $0.id == info["id"] })?.title ?? item.title
+                    return ["id":info["id"] ?? "", "title":rowTitle,
+                            "label":item.accessibilityLabel() ?? "", "selected":item.state == .on,
+                            "identity":ObjectIdentifier(item).hashValue,
+                            "slotLength":(item.attributedTitle?.length ?? 0) - (rowTitle as NSString).length]
+                } ?? []]
     }
     func update(_ state: [String: Any]) {
         applying = true; defer { applying = false }
@@ -546,6 +647,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     func noteSelection() { selection.note(sidebar: (outline.item(atRow: outline.selectedRow) as? ShellRow)?.project, window: currentProject) }
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === chatActions.historyMenu { updateHistoryMenu(); return }
         menu.removeAllItems()
         guard let row = outline.item(atRow: outline.clickedRow) as? ShellRow else { return }
         for item in projectMenu(row).items { menu.addItem(item.copy() as! NSMenuItem) }
@@ -585,7 +687,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
          "toolbar":toolbar.items.map { $0.itemIdentifier.rawValue }, "branch":previewState["branch"] ?? "", "publishLabel":previewState["publishLabel"] ?? "", "codeOpen":previewState["codeOpen"] ?? false,
          "toolbarGroupsMomentary":toolbar.items.compactMap { $0 as? NSToolbarItemGroup }.allSatisfy { ($0 as? MomentaryToolbarGroup)?.hasMomentaryControl == true }, "visibleToolbar":toolbar.visibleItems?.map { $0.itemIdentifier.rawValue } ?? [], "previewHeaderLightText":previewTextColor == .white, "address":previewAddress, "domain":address.stringValue, "viewport":previewState["viewport"] ?? "", "publishStandard":toolbarItems["publish"]?.view == nil, "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "sidebarAutohidesScrollers":(outline.enclosingScrollView?.autohidesScrollers ?? false), "sidebarActions":sidebarButtons.keys.sorted(), "chatActions":["history", "new-chat"], "historyIDs":chatActions.historyMenu?.items.compactMap { ($0.representedObject as? [String:String])?["id"] } ?? [], "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil, "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x, "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x, "chatWidth":previewState["chatWidth"] ?? 0, "enabled":toolbarItems.mapValues { $0.isEnabled }]
             .merging(branchInspect) { _, new in new }.merging(branchMenu.progressInspect) { _, new in new }
-            .merging(toolbarInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
+            .merging(toolbarInspect()) { _, new in new }.merging(historyInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
             .merging(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
             .merging(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }
     }

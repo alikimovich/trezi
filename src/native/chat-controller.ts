@@ -65,6 +65,20 @@ export class NativeChatController {
   /** LKM-232: the centered start composer and the no-project draft's handoff. */
   readonly start = new StartFlow()
   layout: NativeChatLayout = { visible: false, bounds: { x: 0, y: 0, width: 0, height: 0 } }
+  /** The shell's "expand preview" mode hides the docked chat column (LKM-268). */
+  private hiddenChat = false
+  get chatHidden() {
+    return this.hiddenChat
+  }
+  /** Showing the column again is viewing the active conversation: its answer is read. */
+  set chatHidden(hidden: boolean) {
+    this.hiddenChat = hidden
+    const chat = this.active ? this.chats.get(this.active) : undefined
+    if (!hidden && chat?.unreadAnswer) {
+      chat.unreadAnswer = false
+      this.changed(chat)
+    }
+  }
   private streamUpdates = new Map<string, ReturnType<typeof setTimeout>>()
   private mirrors = new Map<string, string>()
   readonly closed = new Set<string>()
@@ -349,6 +363,7 @@ export class NativeChatController {
       const chat = this.get(context.chat)
       chat.context = context
       chat.needsReview = false
+      chat.unreadAnswer = false
       // Refresh the active shell mirror when switching chats.
       if (switched) {
         this.mirrors.delete(chat.chat)
@@ -439,6 +454,13 @@ export class NativeChatController {
     // A heartbeat racing the turn's end is not news (and must not flag review).
     if (event.type === 'progress' && !chat.isRunning) return
     const priorPhase = chat.phase
+    // Only live assistant output can create an unread answer. Hydration, status,
+    // title, model and terminal events do not represent new answer text.
+    if (
+      (key !== this.active || this.hiddenChat) &&
+      ((event.type === 'delta' && !!event.text) || event.type === 'chat-ui')
+    )
+      chat.unreadAnswer = true
     reduce(chat, event)
     // A seat that refused a turn is signed out for the start screen too (LKM-232).
     const seat = chat.settings.provider

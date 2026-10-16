@@ -35,6 +35,8 @@ export interface Submission {
   turn: NativeChatContext['turn']
 }
 export interface Chat extends NativeChatMirror {
+  /** A live assistant answer arrived since this conversation was last visible. */
+  unreadAnswer: boolean
   phase: 'thinking' | 'writing' | 'working' | 'applying'
   activityDetail: string
   stopping: boolean
@@ -125,6 +127,7 @@ export function newChat(chat: string): Chat {
     workedMs: 0,
     turnStartedAt: null,
     needsReview: false,
+    unreadAnswer: false,
     text: '',
     caret: 0,
     revision: 0,
@@ -479,7 +482,8 @@ export function mirror(chat: Chat): NativeChatMirror {
     usage,
     workedMs,
     turnStartedAt,
-    needsReview
+    needsReview,
+    unreadAnswer
   } = chat
   return {
     chat: key,
@@ -492,6 +496,7 @@ export function mirror(chat: Chat): NativeChatMirror {
     usage,
     workedMs,
     turnStartedAt,
-    needsReview
+    needsReview,
+    unreadAnswer
   }
 }

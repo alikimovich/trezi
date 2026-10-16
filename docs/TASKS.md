@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat history status (LKM-268)
+
+- [x] Separate unread assistant answers from general review activity and show fixed-size running/unread indicators in the native history menu.
+- [x] Keep menu item identity during live updates, respect Reduce Motion, and stop the pulse timer after dismissal.
+- [x] Native `history-menu` smoke (group `chat`) drives the real NSMenu tracking: running, unread, in-place update, Reduce Motion, timer cleanup, light/dark/highlight captures inspected.
+- [ ] Manager: run full verification and independent review.
+
 ## chat_ui answer delivery (LKM-265)
 
 - [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.

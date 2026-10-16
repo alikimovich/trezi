@@ -50,6 +50,7 @@ export interface NativeChatMirror {
   workedMs: number
   turnStartedAt: number | null
   needsReview: boolean
+  unreadAnswer: boolean
 }
 export type NativeChatEffect =
   | { type: 'spawn'; event: AgentEvent }

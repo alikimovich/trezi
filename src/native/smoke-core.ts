@@ -28,6 +28,7 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
+import { checkHistoryMenu, restoreHistoryMenu } from './smoke-history-menu'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import { checkInspectorIsland } from './smoke-inspector-island'
@@ -980,6 +981,14 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkNativeChat(host, join(artifacts, 'swift-chat.png'))
       }
+    },
+    {
+      name: 'history-menu',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkHistoryMenu(host, artifacts)
+      },
+      cleanup: () => restoreHistoryMenu(host)
     },
     {
       name: 'sent-attachments',
