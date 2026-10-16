@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-15 — LKM-255 host live verification passed
+
+- Ran the repaired `scripts/live-publish-attribution.mjs` on the host against a fresh clone of the authorized private `alikimovich/lkmv.ch` repository. The tested `WorkflowPublish.swift` is byte-identical to current Trezi main. The real service workflow created the remote test branch and one PR in PR-only mode; no manual seed push or CLI deployment was used.
+- Vercel project `lkmvch-empire/lkmv-ch` (`prj_YwkNbzfDFEdtd9t9hSUj44gjybMH`) links to GitHub `alikimovich/lkmv.ch`, with production branch `main`.
+- Branch `trezi-lkm255-attribution-test`: internal parent `a554c074095c255e4239720eb27254ac2267027b` retains `Trezi <trezi@local>`. Publication tip `f4f1129ac1a267d740cd7fa0868e3301f7200f21` has author and committer `Andrei Alikimovich <alikimovich@gmail.com>`; GitHub resolves both to `alikimovich`. The publication commit is empty. The only difference from main is the non-rendering `.trezi-publish-verify.txt` test file.
+- Git-triggered Vercel deployment `dpl_9eeAidRPCDESHtuXfo2H4f9Nddia`, https://lkmv-jsl49u66b-lkmvch-empire.vercel.app, is **Ready**, target **preview**, at that exact publication SHA. Full build log ends in `Deployment completed` and `status Ready`, with no `COMMIT_AUTHOR_REQUIRED`.
+- Test PR https://github.com/alikimovich/lkmv.ch/pull/138 is **CLOSED**, `mergedAt: null`. Main before and after is `91373964784ac391ecb9ff254572487fd4ac0dd7`. Production before and after remains `dpl_5QzUJ65eHZSoNz7nojn4gL91e7Tr` (`lkmv-ebc9wjz49-lkmvch-empire.vercel.app`). No production promotion, main push/merge, domain or project setting changes occurred.
+- Host evidence is saved under Agent OS artifacts `8d620268-a1e5-4974-a03b-d2fff573aa18/host-live-verification/` (Publish JSON, deployment inspection, full build log). This resolves the worker network/keychain environment blocker; no user decision remains.
+
 ## 2026-10-13 — LKM-255: live Publish attribution check prepared, not yet run
 
 - Decision f02b4f28: use Publish in PR-only mode, with one temporary PR into main that is never merged and is closed once the evidence is captured. No push or merge to main.

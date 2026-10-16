@@ -6,15 +6,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## Live Publish attribution check (LKM-255)
 
 - [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a test-branch clone with one throwaway trezi@local commit; `test/live-publish-attribution.mjs` covers the publication commit and the guards offline.
-- [ ] Operator (host): check the Vercel Git link and production branch for prj_YwkNbzfDFEdtd9t9hSUj44gjybMH. The worker sandbox could not reach api.vercel.com or api.github.com.
-- [ ] Operator: clone lkmv.ch onto the unpushed branch `trezi-lkm255-attribution-test`, run the script (it adds the throwaway commit; Publish pushes), collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
-- [ ] Record that evidence here and tick the LKM-251 live Vercel acceptance item.
+- [x] Operator (host): check the Vercel Git link and production branch for prj_YwkNbzfDFEdtd9t9hSUj44gjybMH. The worker sandbox could not reach api.vercel.com or api.github.com.
+- [x] Operator: clone lkmv.ch onto the unpushed branch `trezi-lkm255-attribution-test`, run the script (it adds the throwaway commit; Publish pushes), collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
+- [x] Record that evidence here and tick the LKM-251 live Vercel acceptance item.
 
 ## Publish attribution (LKM-251)
 
 - [x] Append one user-identity empty commit after an automated final tip, preserving the tree and history across reconciliation and retries; reject missing identity.
 - [x] Apply the same rule to handoff and saved-run PR pushes and cover it with local disposable repository tests.
-- [ ] Live Vercel acceptance: pending the user's exact approved GitHub repository and Vercel project; no live push or deployment was attempted.
+- [x] Live Vercel acceptance: host test passed on private alikimovich/lkmv.ch; GitHub-linked publication tip f4f1129a produced Ready preview dpl_9eeAidRPCDESHtuXfo2H4f9Nddia. Test PR #138 closed unmerged; main and production unchanged (PROGRESS 2026-10-15).
 - [ ] Manager: run full verification and independent review, then merge.
 ## Preview publish and check status (LKM-248)
 
