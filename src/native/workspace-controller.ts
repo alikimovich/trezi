@@ -408,7 +408,7 @@ export class NativeWorkspaceController {
     this.chosen = chosen
     this.state.activeKey = key
     this.state.status = { kind: 'busy', label: clean ?? 'Opening ' + entry.name + '…' }
-    // Another project hides the chat until it has opened; a restart of this one keeps it.
+    // Preview readiness is separate from the selected project's chat.
     if (this.state.loadedKey !== key) {
       this.state.loadedKey = null
       this.switching?.(key)
@@ -432,6 +432,13 @@ export class NativeWorkspaceController {
     }
     if (this.chosen?.generation === chosen.generation) this.chosen = undefined
     this.adopt()
+    if (!current()) return
+    // Select the destination conversation before detecting the project or starting its
+    // server. The context command publishes its chat frame synchronously; its transcript
+    // may continue loading while the preview opens.
+    void this.services.activate(entry).catch((error) => {
+      if (current()) this.reportError(error)
+    })
     try {
       await this.serialize(key, async () => {
         if (this.closing.has(key)) return
@@ -539,6 +546,8 @@ export class NativeWorkspaceController {
         : { kind: 'setup', name: entry.name }
       this.state.loadedKey = key
       this.changed()
+      // A new project has no owner conversation at the early activation. Retry now
+      // that agent:open-project has created it; existing chats are already active.
       await this.services.activate(entry)
       await this.evictWarm()
     } catch (error) {
@@ -547,8 +556,7 @@ export class NativeWorkspaceController {
       this.state.loadedKey = null
       this.changed()
       this.openFailed?.(entry.name, String(error))
-      // A failed open shows the error and Retry, not the chat (`loadedKey` stays unset);
-      // the agent stays attached so "Draft fix in chat" can reveal it.
+      // The project's conversation remains available for repair after a preview error.
       await this.services.activate(entry)
     }
   }

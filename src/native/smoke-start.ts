@@ -414,6 +414,16 @@ export async function restoreStartComposer(host: NativeBridge) {
   Object.assign(nativeChat.readiness, readiness)
   await host.request('startPerform', { reduceMotion: null, appearance: null, ...window })
   if (nativeWorkspace.active?.root !== root) await nativeWorkspace.command({ type: 'open', root })
+  await until(
+    async () => ({
+      root: nativeWorkspace.active?.root,
+      key: nativeWorkspace.active?.key,
+      loaded: nativeWorkspace.state.loadedKey,
+      status: nativeWorkspace.state.status.kind
+    }),
+    (state) => state.root === root && state.loaded === state.key && state.status === 'running',
+    'restored fixture project ready'
+  )
   rmSync(temporary, { recursive: true, force: true })
   nativeChat.changed()
 }

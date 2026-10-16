@@ -115,6 +115,8 @@ export interface NativeChatStart {
   project: { title: string | null; recents: { root: string; name: string }[] }
 }
 export interface NativeChatState {
+  /** The conversation owner has supplied this chat's transcript. */
+  ready: boolean
   activity: NativeChatActivity | null
   streamingId: string | null
   chat: string

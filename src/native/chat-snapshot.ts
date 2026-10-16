@@ -232,6 +232,7 @@ export function snapshot(
   const stop = chat.isRunning && !chat.text.trim() && !chat.attachments.length
   const shown = collapse(chat, cards, currentActivity)
   return {
+    ready,
     activity: shown.activity,
     streamingId: chat.streamingId,
     chat: chat.chat,

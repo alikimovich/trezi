@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
 - [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
 - [ ] Manager: run full native verification and independent review, then merge.
+## Docked chat during project opening (LKM-266)
+
+- [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.
+- [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.
+- [ ] Manager: run full native verification, inspect the loading capture and review before merge.
 
 ## Background browser focus (LKM-264)
 
