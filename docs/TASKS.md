@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Docked chat during project opening (LKM-266)
+
+- [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.
+- [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.
+- [ ] Manager: run full native verification, inspect the loading capture and review before merge.
+
 ## Background browser focus (LKM-264)
 
 - [x] Trace the browser rule branches and restore mandatory Vercel agent-browser verification through Trezi's managed PATH.

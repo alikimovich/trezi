@@ -122,13 +122,31 @@ assert.deepEqual(controller.active.sessionKeys, ['/one'])
 // LKM-172: a switch to another project is heard before "Opening …" renders; a restart
 // or a re-select of the loaded project is not a switch.
 const switches = []
-controller.switching = (key) => switches.push([key, renders.at(-1)?.status.kind])
+let openingSelected
+const selected = new Promise((resolve) => (openingSelected = resolve))
+controller.switching = (key) => {
+  switches.push([key, renders.at(-1)?.status.kind])
+  if (key === '/slow') openingSelected()
+}
 await controller.command({ type: 'restart', key: '/one' })
 await controller.select('/one')
 assert.deepEqual(switches, [], 'Restarting or re-selecting the loaded project is no switch')
 slow = gate()
+const activate = controller.services.activate
+let openedChat
+const chatSelected = new Promise((resolve) => (openedChat = resolve))
+controller.services.activate = async (entry) => {
+  await activate(entry)
+  if (entry?.key === '/slow') openedChat()
+}
 const opening = controller.open('/slow')
-await tick()
+await selected
+await chatSelected
+controller.services.activate = activate
+assert.equal(controller.state.activeKey, '/slow')
+assert.equal(controller.state.status.kind, 'busy')
+assert.equal(active.at(-1), '/slow', 'Opening activates the destination chat before detection')
+assert.equal(controller.state.loadedKey, null, 'The preview remains unready')
 await controller.open('/two')
 slow.resolve()
 await opening
