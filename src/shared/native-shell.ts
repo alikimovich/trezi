@@ -8,6 +8,7 @@ export interface NativeShellRow {
   session?: string
   record?: string
   running?: boolean
+  unread?: boolean
   children?: NativeShellRow[]
 }
 export interface BranchStatus {
