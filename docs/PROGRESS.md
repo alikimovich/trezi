@@ -4,6 +4,8 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 ## 2026-10-16 — LKM-268: live chat history status
 
+- Review follow-up: the history-menu code moved verbatim from `Shell.swift` (739 → 633 lines) into `src/native/HistoryMenu.swift` (`extension NativeShell`, listed in `scripts/build-native.mjs`); `Shell.swift` keeps the stored properties and the `updateToolbar`/`menuNeedsUpdate` calls. The test-forced menu appearance is now released when `popUp` returns, and `history-menu` asserts `historyAppearanceForced` is false after every dismissal.
+
 - Host diagnosis (no repo change): the first full native run's 5 failures (chat-islands, layers-island, text-edit, editor-freshness, states-workbench) all wait for a static fixture to live-reload after a source write, which uses FSEvents (`src/service/StaticSite.swift`). The same failures appeared on other branches at the same time, and the machine's `fseventsd` was wedged (103% CPU, 3.4 GB RSS after 20 days). The operator restarted it; this branch adds no probe, preflight or watcher change for it.
 
 - History rows now carry a fixed-width native dot that pulses while a turn runs, stays steady with Reduce Motion, and turns green for a background assistant answer. The menu updates existing items during tracking and stops its pulse timer on dismissal.

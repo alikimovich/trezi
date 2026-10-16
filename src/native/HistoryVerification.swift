@@ -24,6 +24,8 @@ extension NativeShell {
                 self.historyWatchdog = watchdog
                 menu.popUp(positioning: nil, at: NSPoint(x: 0, y: -4), in: self.chatActions)
                 watchdog.invalidate()
+                // The forced appearance belongs to this opening only: the persistent menu goes back to the app's.
+                menu.appearance = nil
             }
             RunLoop.main.add(opener, forMode: .common)
             return [:]

@@ -86,6 +86,11 @@ export async function checkHistoryMenu(host: NativeBridge, artifacts: string) {
       return !state.historyTracking && state
     }, 'history menu dismissed')
     if (closed.historyTimer) throw new Error('History pulse timer survived menu dismissal')
+    // The forced appearance is released once `popUp` returns, a moment after the delegate's close.
+    await waitFor(
+      async () => !(await shell()).historyAppearanceForced,
+      'forced menu appearance released after dismissal'
+    )
     return closed
   }
   const steady = async (chat: string) => {
