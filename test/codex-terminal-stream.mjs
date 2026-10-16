@@ -4,10 +4,16 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-// The fake CLI yields a terminal event and then never closes stdout. Returning
-// the SDK iterator must close the stream without waiting for that open pipe.
+// The fake CLI yields a terminal event and then either closes its stream by itself
+// ('natural turn') or never does. An open stream is cut after a short grace period
+// by aborting the signal the adapter hands the SDK, like the real CLI being killed;
+// a stream that ends on its own must not be cut (no return(), no abort).
+process.env.TREZI_CODEX_STREAM_GRACE_MS = '300'
 const prompts = []
 let closed = 0
+let naturalEnds = 0
+let naturalReturned = 0
+let naturalAborted = false
 class FakeCodex {
   startThread() {
     return this.thread()
@@ -18,9 +24,11 @@ class FakeCodex {
   thread() {
     return {
       id: null,
-      runStreamed: async (prompt) => ({
+      runStreamed: async (prompt, options) => ({
         events: (async function* () {
           prompts.push(prompt)
+          const natural = prompt === 'natural turn'
+          let finishedYielding = false
           try {
             yield {
               type: 'item.completed',
@@ -34,9 +42,21 @@ class FakeCodex {
                     usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 }
                   })
             }
-            await new Promise(() => {})
+            if (natural) {
+              await new Promise((resolve) => setTimeout(resolve, 50))
+              finishedYielding = true
+              naturalAborted = options.signal.aborted
+              return
+            }
+            await new Promise((resolve) => {
+              if (options.signal.aborted) resolve()
+              else options.signal.addEventListener('abort', resolve, { once: true })
+            })
           } finally {
-            closed++
+            if (natural) {
+              if (finishedYielding) naturalEnds++
+              else naturalReturned++
+            } else closed++
           }
         })()
       })
@@ -156,6 +176,27 @@ try {
   assert.equal(events.filter((event) => event.type === 'error').length, 1)
   assert.equal(events.filter((event) => event.type === 'done').length, 3)
   assert.equal(closed, 3, 'failed turns also close their open stream')
+  targetDone = 4
+  const naturalCompleted = new Promise((resolve) => {
+    complete = resolve
+  })
+  session.send('natural turn')
+  let naturalTimeout
+  try {
+    await Promise.race([
+      naturalCompleted,
+      new Promise((_, reject) => {
+        naturalTimeout = setTimeout(() => reject(new Error('natural stream did not finish')), 3000)
+      })
+    ])
+  } finally {
+    clearTimeout(naturalTimeout)
+  }
+  assert.equal(naturalEnds, 1, 'the stream ended on its own after the terminal event')
+  assert.equal(naturalReturned, 0, 'the iterator was not closed with return()')
+  assert.equal(naturalAborted, false, 'the CLI was not cut while it was exiting by itself')
+  assert.equal(events.filter((event) => event.type === 'done').length, 4)
+  assert.equal(closed, 3, 'open-stream counter is untouched by the natural stream')
   session.dispose()
 } finally {
   if (previousBin === undefined) delete process.env.TREZI_CODEX_BIN
