@@ -9,7 +9,7 @@ import type {
 } from '../shared/api'
 import { type ChatAgentSettings, defaultChatAgentSettings } from '../shared/chat-settings'
 import { migrateChatTitle } from '../shared/chat-title'
-import type { ChatUiRecord } from '../shared/chat-ui'
+import { type ChatUiRecord, chatUiAnswerText } from '../shared/chat-ui'
 import type { NativeLiveChange } from '../shared/native-chat'
 import type { NativeChatContext, NativeChatMirror } from '../shared/native-chat-controller'
 import type { BuiltinProvider } from '../shared/provider-readiness'
@@ -28,6 +28,8 @@ export interface Attachment {
 export interface Submission {
   id: string
   text: string
+  /** The answer component that created this user turn, when applicable. */
+  chatUiId?: string
   attachments: Attachment[]
   selection: NativeChatContext['selection']
   turn: NativeChatContext['turn']
@@ -230,6 +232,29 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
   }
   if (!chat.isRunning) chat.streamingId = null
   else if (turn && turn.completedAt == null) chat.turnStartedAt = turn.at
+  // The transcript saves an accepted answer before the provider can receive it.
+  // Recreate that pending user turn after relaunch; a recorded user entry wins over
+  // a delivery marker that may not have been persisted before the process exited.
+  for (const entry of transcript) {
+    const record = entry.ui
+    if (!record?.answer || record.delivery !== 'queued') continue
+    const text = chatUiAnswerText(record)
+    if (
+      transcript.some(
+        (e) => e.role === 'user' && e.at >= (record.answeredAt ?? 0) && e.text === text
+      )
+    )
+      continue
+    if (chat.queue.some((q) => q.chatUiId === record.id)) continue
+    chat.queue.push({
+      id: record.id,
+      chatUiId: record.id,
+      text,
+      attachments: [],
+      selection: null,
+      turn: chat.context?.turn ?? {}
+    })
+  }
 }
 export function finish(chat: Chat, landing = false) {
   chat.isRunning = landing

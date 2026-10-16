@@ -317,6 +317,8 @@ export class NativeChatController {
       chat.ready = true
       this.settingsChanged(chat)
       this.changed(chat)
+      // A form answer persisted before a relaunch is still a user turn to send.
+      void this.drain(chat)
       void this.start.settle(this, chat)
     })()
       .catch((error) => this.fail(chat, error))
@@ -664,6 +666,10 @@ export class NativeChatController {
         turn,
         submission.id
       )
+      if (submission.chatUiId)
+        await this.services
+          .invoke('agent:chat-ui-delivery', chat.chat, submission.chatUiId, 'delivered')
+          .catch(() => {})
     } catch (error) {
       // The backend still holds a turn this chat did not know about: the message waits
       // in the queue, never refused, and the chat shows what is running (LKM-165).

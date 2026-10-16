@@ -195,6 +195,7 @@ const UNIT = [
   'model-label',
   'codex-retry-cause',
   'codex-stream',
+  'codex-terminal-stream',
   'interrupt-escalation',
   'turn-terminal',
   'chat-title',

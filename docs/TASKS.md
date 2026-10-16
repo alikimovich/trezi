@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## chat_ui answer delivery (LKM-265)
+
+- [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.
+- [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
+- [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
+- [ ] Manager: run full native verification and independent review, then merge.
 ## Docked chat during project opening (LKM-266)
 
 - [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.

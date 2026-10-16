@@ -80,6 +80,8 @@ export interface ChatUiRecord {
   missing?: Record<string, string>
   answer?: ChatUiAnswer
   answeredAt?: number
+  /** The answer is durable before its next user turn can be sent. */
+  delivery?: 'queued' | 'delivered' | 'cancelled'
   at: number
 }
 

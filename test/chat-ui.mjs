@@ -4,14 +4,18 @@ import { chatUiCatalog, chatUiShape } from '../bin/chat-ui-schema.mjs'
 import {
   answerChatUi,
   chatUiContext,
+  chatUiDelivery,
   chatUiProblems,
   chatUiTool,
+  forgetChatUi,
   setChatUiHost
 } from '../src/main/chat-ui.ts'
 import { registerPreviewSource } from '../src/main/preview-state.ts'
 import { treziRules } from '../src/main/rules.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
+import { queueNote } from '../src/native/chat-queue.ts'
 import { hydrate, newChat } from '../src/native/chat-state.ts'
+import { CHAT_BUSY } from '../src/shared/chat-busy.ts'
 
 // LKM-208: native answer components (options, form) — schema, tool, answer round trip.
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -234,13 +238,15 @@ assert.match(
 )
 
 // --- answers are checked against the component -----------------------------------------
-assert.match(answerChatUi(CHAT, id, { choice: 'z' }).error, /no option "z"/)
-assert.match(answerChatUi(CHAT, id, { choice: null }).error, /Say what to change/)
+assert.match((await answerChatUi(CHAT, id, { choice: 'z' })).error, /no option "z"/)
+assert.match((await answerChatUi(CHAT, id, { choice: null })).error, /Say what to change/)
 const shownForm = await chatUiTool({ action: 'show', component: form }, scope)
 const formId = shownForm.id
-const invalidForm = answerChatUi(CHAT, formId, {
-  values: { radius: 40, shadow: 'yes', density: 'huge', extra: 1 }
-}).error
+const invalidForm = (
+  await answerChatUi(CHAT, formId, {
+    values: { radius: 40, shadow: 'yes', density: 'huge', extra: 1 }
+  })
+).error
 for (const problem of [
   /There is no field extra/,
   /Density: pick one listed option/,
@@ -254,6 +260,8 @@ for (const problem of [
 // --- the native chat: mid-turn component, pick → structured turn → summary next turn ----
 const calls = []
 const prompts = []
+let busyOnce = false
+let cancelFailure = false
 const controller = new NativeChatController({
   invoke: async (name, ...args) => {
     calls.push([name, ...args])
@@ -275,8 +283,18 @@ const controller = new NativeChatController({
       }
     if (name === 'providers:choices') return []
     if (name === 'agent:chat-ui-answer') return answerChatUi(args[0], args[1], args[2])
+    if (name === 'agent:chat-ui-delivery') {
+      if (cancelFailure && args[2] === 'cancelled') throw new Error('checkpoint unavailable')
+      return chatUiDelivery(args[0], args[1], args[2])
+    }
     // The mocked provider receives what agent.ts sends: the context, then the user's text.
-    if (name === 'agent:send') prompts.push(chatUiContext(args[2]) + args[0])
+    if (name === 'agent:send') {
+      if (busyOnce) {
+        busyOnce = false
+        throw new Error(CHAT_BUSY)
+      }
+      prompts.push(chatUiContext(args[2], args[4]) + args[0])
+    }
     return { ok: true }
   },
   render: () => {},
@@ -296,6 +314,7 @@ await controller.command({
   }
 })
 const chat = controller.get(CHAT)
+chat.isRunning = true // chat_ui can show while the provider is still in its tool call.
 controller.event({ type: 'delta', text: 'Here are three directions.', projectKey: CHAT })
 controller.event(events[0])
 const streaming = chat.messages.find((m) => m.id === chat.streamingId)
@@ -315,8 +334,27 @@ await controller.action({
   value: JSON.stringify({ choice: 'b', comment: 'Tighter gap' })
 })
 await tick()
+assert.equal(calls.filter((c) => c[0] === 'agent:send').length, 0)
+assert.equal(chat.queue.length, 1, 'an answer before the terminal event waits for the turn')
+assert.equal(chat.queue[0].chatUiId, id)
+assert.match(queueNote(chat).queueNote, /Answer accepted.*queued/)
+assert.equal(
+  chatUiContext(CHAT, 'earlier-user-turn'),
+  '',
+  'an earlier queued turn cannot consume the answer context'
+)
+await controller.action({
+  chat: CHAT,
+  action: 'chat-ui',
+  id,
+  value: JSON.stringify({ choice: 'b' })
+})
+assert.equal(chat.queue.length, 1, 'a repeat submit never enqueues a second answer')
+controller.event({ type: 'done', projectKey: CHAT })
+await tick()
 const sent = calls.filter((c) => c[0] === 'agent:send')
 assert.equal(sent.length, 1)
+assert.equal(transcript[0].ui.delivery, 'delivered')
 assert.equal(sent[0][1], 'Picked option A: Split hero. Tighter gap')
 assert.equal(chat.messages.filter((m) => m.role === 'user').at(-1).text, sent[0][1])
 assert.equal(streaming.segments[1].ui.answer.choice, 'b', 'the chat shows the pick')
@@ -325,7 +363,7 @@ assert.match(
   /^Answer components in this chat \(chat_ui\):\n- "Hero directions" \(chat_ui options ui-[0-9a-f]+\): User picked option A: Split hero \(id "b"\) and commented: "Tighter gap"\. Apply this variant\./
 )
 assert.equal(transcript[0].ui.answer.comment, 'Tighter gap', 'the answer is saved with the message')
-assert.match(answerChatUi(CHAT, id, { choice: 'd' }).error, /already answered/)
+assert.match((await answerChatUi(CHAT, id, { choice: 'd' })).error, /already answered/)
 assert.match(
   (await chatUiTool({ action: 'update', id, option: 'b' }, scope)).error,
   /already answered/
@@ -355,6 +393,20 @@ assert.match(
 assert.doesNotMatch(prompts.at(-1), /Hero directions/, 'an answer is summarized once')
 assert.equal(chatUiContext(CHAT), '')
 
+// A persisted answer that has not become a user turn survives relaunch. A recorded
+// user entry or a delivery marker prevents reconstruction of an extra turn.
+const pendingRecord = { ...transcript.find((e) => e.ui?.id === formId).ui, delivery: 'queued' }
+const restored = newChat(CHAT)
+hydrate(restored, [{ role: 'status', text: 'Form', at: pendingRecord.at, ui: pendingRecord }])
+assert.equal(restored.queue.length, 1)
+assert.equal(restored.queue[0].chatUiId, formId)
+const alreadySent = newChat(CHAT)
+hydrate(alreadySent, [
+  { role: 'status', text: 'Form', at: pendingRecord.at, ui: pendingRecord },
+  { role: 'user', text: restored.queue[0].text, at: pendingRecord.answeredAt + 1 }
+])
+assert.equal(alreadySent.queue.length, 0)
+
 // A bad answer from the UI is an error on the chat, never a turn.
 const before = calls.filter((c) => c[0] === 'agent:send').length
 await controller.action({ chat: CHAT, action: 'chat-ui', id: formId, value: '{"values":{}}' })
@@ -373,6 +425,102 @@ assert.deepEqual(
   [['text'], ['text', 'ui', 'ui']]
 )
 assert.equal(resumed.messages[1].segments[1].ui.answer.choice, 'b')
+
+// Provider failure leaves an accepted answer queued, with an explicit recovery
+// action. Resume sends it once; Stop likewise pauses until the user resumes.
+for (const terminal of ['error', 'stop']) {
+  const next = await chatUiTool({ action: 'show', component: form }, scope)
+  controller.event({ type: 'chat-ui', projectKey: CHAT, ui: transcript.at(-1).ui })
+  const sendsBefore = calls.filter((c) => c[0] === 'agent:send').length
+  await controller.action({
+    chat: CHAT,
+    action: 'chat-ui',
+    id: next.id,
+    value: JSON.stringify({
+      values: { density: 'airy', radius: 12, gap: 24, accent: '#0a84ff', shadow: true }
+    })
+  })
+  assert.equal(chat.queue.length, 1)
+  if (terminal === 'error')
+    controller.event({ type: 'error', projectKey: CHAT, message: 'fixture failure' })
+  else {
+    await controller.stop(chat)
+    controller.event({ type: 'done', projectKey: CHAT })
+  }
+  await tick()
+  assert.equal(calls.filter((c) => c[0] === 'agent:send').length, sendsBefore)
+  assert.equal(chat.queue.length, 1)
+  await controller.action({ chat: CHAT, action: 'queue-resume' })
+  await tick()
+  assert.equal(calls.filter((c) => c[0] === 'agent:send').length, sendsBefore + 1)
+  assert.equal(chat.queue.length, 0)
+}
+
+// The backend can still own a turn even if the UI's mirror looked idle. Its busy
+// refusal requeues the same stable answer and a later terminal event drains it.
+controller.event({ type: 'done', projectKey: CHAT })
+const busyForm = await chatUiTool({ action: 'show', component: form }, scope)
+controller.event({ type: 'chat-ui', projectKey: CHAT, ui: transcript.at(-1).ui })
+busyOnce = true
+const beforeBusy = prompts.length
+await controller.action({
+  chat: CHAT,
+  action: 'chat-ui',
+  id: busyForm.id,
+  value: JSON.stringify({
+    values: { density: 'airy', radius: 12, gap: 24, accent: '#0a84ff', shadow: true }
+  })
+})
+await tick()
+assert.equal(prompts.length, beforeBusy)
+assert.equal(chat.queue.length, 1)
+assert.equal(chat.queue[0].id, busyForm.id)
+assert.match(queueNote(chat).queueNote, /previous provider turn/)
+controller.event({ type: 'landing-finished', projectKey: CHAT })
+await tick()
+assert.equal(prompts.length, beforeBusy + 1)
+assert.equal(chat.queue.length, 0)
+cancelFailure = true
+chat.text = 'Keep this draft'
+chat.queue.push({
+  id: 'edit-answer',
+  chatUiId: 'edit-answer',
+  text: 'Answer to edit',
+  attachments: [],
+  selection: null,
+  turn: {}
+})
+await controller.action({ chat: CHAT, action: 'queue-edit', id: 'queued-edit-answer' })
+assert.equal(chat.queue.length, 0, 'Edit works locally when the delivery marker fails')
+assert.equal(chat.text, 'Answer to edit\n\nKeep this draft')
+chat.queue.push({
+  id: 'remove-answer',
+  chatUiId: 'remove-answer',
+  text: 'Answer to remove',
+  attachments: [],
+  selection: null,
+  turn: {}
+})
+await controller.action({ chat: CHAT, action: 'queue-remove', id: 'queued-remove-answer' })
+assert.equal(chat.queue.length, 0, 'Remove works locally when the delivery marker fails')
+assert.equal(chat.text, 'Answer to edit\n\nKeep this draft')
+forgetChatUi(CHAT)
+assert.match(chatUiContext(CHAT, busyForm.id), /the user submitted/)
+
+const failedSave = { id: 'ui-save-failure', component: form, images: {}, at: Date.now() }
+setChatUiHost({
+  find: (_chat, id) => (id === failedSave.id ? failedSave : undefined),
+  persist: async () => {
+    throw new Error('checkpoint unavailable')
+  }
+})
+await assert.rejects(
+  answerChatUi(CHAT, failedSave.id, {
+    values: { density: 'airy', radius: 12, gap: 24, accent: '#0a84ff', shadow: true }
+  }),
+  /checkpoint unavailable/
+)
+assert.equal(failedSave.answer, undefined, 'a failed save leaves the answer retryable')
 
 // --- the rules are generated from the catalog -------------------------------------------
 const rules = treziRules({ controlTools: true })
