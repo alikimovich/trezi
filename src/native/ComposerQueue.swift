@@ -5,6 +5,7 @@ struct QueuedComposerMessage: Decodable, Identifiable {
     let id: String
     let text: String
     let attachments: Int
+    let chatUiId: String?
     var label: String { text.isEmpty ? "\(attachments) attachment\(attachments == 1 ? "" : "s")" : text }
     var url: URL? {
         guard let url = URL(string: text), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
@@ -40,8 +41,7 @@ struct ComposerQueue: View {
 
     let messages: [QueuedComposerMessage]
     let paused: Bool
-    /// Why the queue is not sending yet (LKM-151 paused, LKM-169 Resolve or sign-in; a
-    /// running turn or a landing has none, LKM-191), and whether a paused queue can be sent now.
+    /// Why the queue is not sending yet, including an answer waiting for a provider turn.
     var note = ""
     var canSend = true
     var measured: ([String: CGRect]) -> Void = { _ in }
@@ -92,7 +92,7 @@ struct ComposerQueue: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.buttonStyle(.plain)
                 } else {
-                    Text(message.label.replacingOccurrences(of: "\n", with: " "))
+                    Text((message.chatUiId == nil ? "" : "Answer queued · ") + message.label.replacingOccurrences(of: "\n", with: " "))
                         .lineLimit(1).truncationMode(.tail).queueFrame("text-\(index)")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

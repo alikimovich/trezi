@@ -204,7 +204,7 @@ struct ChatUiFormView: View {
                             Text(ChatUiFormat.value(answer.values?[field.id], unit: field.unit)).font(.system(size: 12, weight: .medium)).multilineTextAlignment(.trailing)
                         }.accessibilityElement(children: .combine)
                     }
-                    Label("Submitted", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
+                    Label("Answer accepted", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
                 }
             } else {
                 ForEach(fields, id: \.id) { field in ChatUiFieldView(field: field, value: binding(field.id)) }

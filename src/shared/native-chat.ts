@@ -128,7 +128,7 @@ export interface NativeChatState {
   composer: {
     /** The no-project draft (LKM-232): the composer takes input without a chat key. */
     home?: boolean
-    queue: { id: string; text: string; attachments: number }[]
+    queue: { id: string; text: string; attachments: number; chatUiId?: string }[]
     queuePaused: boolean
     /** LKM-151: why a paused queue will not send on its own, and whether "Send now" can. */
     queueNote: string

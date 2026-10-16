@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Chat form answers now show when they are queued, survive relaunch without an extra send, and proceed when Codex reports a completed turn even if its CLI stream stays open (LKM-265).
 - Opening a project now keeps its docked chat and composer visible while the preview loads, with progress confined to the preview pane (LKM-266).
 - Required agent-browser checks now use a Trezi-managed isolated headless Chromium shell and session, avoiding the user's Chrome identity during background verification (LKM-264).
 - Exploded view chrome now meets the toolbar without a header strip, uses a compact one-row footer, and separates the docked code editor and its toolbar with subtle native rules (LKM-262).
