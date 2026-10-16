@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Chat history now shows a pulsing running dot and a green dot for an unseen assistant answer, with Reduce Motion and accessible status labels (LKM-268).
 - Chat form answers now show when they are queued, survive relaunch without an extra send, and proceed when Codex reports a completed turn even if its CLI stream stays open (LKM-265).
 - Opening a committed project now shows a centered Opening indicator beside the sidebar until it is ready, then restores docked chat (LKM-270, superseding LKM-266).
 - Required agent-browser checks now use a Trezi-managed isolated headless Chromium shell and session, avoiding the user's Chrome identity during background verification (LKM-264).

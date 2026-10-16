@@ -668,3 +668,57 @@ try {
 } finally {
   Date.now = actualNow
 }
+
+// History status is derived from live assistant output, never from restore or
+// unrelated background events. The menu reads it without changing it.
+{
+  const history = new NativeChatController({
+    invoke: async () => ({ ok: true }),
+    render() {},
+    effect() {}
+  })
+  const a = history.get('history-a')
+  const b = history.get('history-b')
+  const view = async (key) =>
+    history.command({
+      type: 'context',
+      context: { ...context(key), root: null }
+    })
+  assert.equal(history.chatHidden, false, 'The chat column starts visible')
+  await view('history-a')
+  a.isRunning = true
+  b.isRunning = true
+  history.event({ projectKey: 'history-a', type: 'delta', text: 'Seen' })
+  history.event({ projectKey: 'history-b', type: 'delta', text: 'Unseen' })
+  assert.equal(a.unreadAnswer, false, 'Visible answer stays read')
+  assert.equal(b.unreadAnswer, true, 'Concurrent background answer is unread')
+  history.event({ projectKey: 'history-b', type: 'done' })
+  assert.equal(b.unreadAnswer, true, 'Completion preserves unread')
+  assert.equal(history.get('history-b').unreadAnswer, true, 'Reading menu state does not mark read')
+  history.event({ projectKey: 'history-a', type: 'done' })
+  assert.equal(a.unreadAnswer, false, 'Visible completion stays read')
+  await view('history-b')
+  assert.equal(b.unreadAnswer, false, 'Viewing conversation marks it read')
+  await view('history-a')
+  b.isRunning = true
+  history.event({ projectKey: 'history-b', type: 'delta', text: 'Partial' })
+  await view('history-b')
+  assert.equal(b.unreadAnswer, false, 'Opening a stream clears unread')
+  history.event({ projectKey: 'history-b', type: 'error', message: 'Stopped' })
+  assert.equal(b.unreadAnswer, false, 'Visible error creates no unread answer')
+  await view('history-a')
+  history.event({ projectKey: 'history-b', type: 'model', model: 'default' })
+  history.event({ projectKey: 'history-b', type: 'title', title: 'Renamed' })
+  history.event({ projectKey: 'history-b', type: 'progress' })
+  assert.equal(b.unreadAnswer, false, 'Background metadata is not an answer')
+  history.chatHidden = true
+  a.isRunning = true
+  history.event({ projectKey: 'history-a', type: 'delta', text: 'While hidden' })
+  history.event({ projectKey: 'history-a', type: 'done' })
+  assert.equal(a.unreadAnswer, true, 'Hidden active chat receives an unread answer')
+  history.chatHidden = false
+  assert.equal(a.unreadAnswer, false, 'Actually viewing the chat clears unread')
+  const restored = history.get('restored')
+  restored.messages.push({ id: 'old', role: 'assistant', text: 'Old', segments: [], statuses: [] })
+  assert.equal(restored.unreadAnswer, false, 'Restored transcript is read')
+}
