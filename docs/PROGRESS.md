@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-16 — LKM-270: restore centered Opening workspace
+
+- LKM-266 made `chatReady` depend on selection rather than a completed open and moved Opening into the preview pane. The shell gate again waits for the selected project's `loadedKey` and a non-error status; the preview status spans the reserved chat column so Opening and errors center beside the sidebar. The chat view, header, composer, and start surface are hidden during an initial committed-project open. The destination conversation still activates early for routing safety, planning still has its own chat gate, and a later busy state with the same loaded key keeps docked chat visible.
+- The native chat-gate capture now checks composer visibility and full-width status geometry while retaining project/chat identity and stable frame checks. The shell unit fixture checks initial loading, later busy, error, and recovered states. LKM-266 remains in this log as history; the changelog records the superseding presentation.
+- Agent OS quick verification passed typechecks, lint and 223 unit checks after two unrelated preflight failures (one lint result and one states-canvas watcher assertion). The native `sidebar,composer` call could not acquire the shared desktop lock for 600 seconds and reported `environment_unavailable`; foreground captures and those native groups remain for manager verification.
+
 ## 2026-10-15 — LKM-265 review repair 2: Codex gets a grace period to exit before it is cut
 
 - Review found that leaving the `for await` loop on `turn.completed`/`turn.failed` called the SDK iterator's `return()`, whose `finally` (`node_modules/@openai/codex-sdk/dist/index.js:307-313`) runs `child.kill()`. Every healthy Codex turn would then get SIGTERM right after its terminal event, before the CLI flushed its rollout file (read by the next `resumeThread` and `usageWatch.poll()`) or stopped its tool children.
