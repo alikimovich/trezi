@@ -26,6 +26,7 @@ import {
   restoreEditorFreshness
 } from './smoke-editor-freshness'
 import { smokeFocusHooks } from './smoke-focus'
+import { checkGitUpdates } from './smoke-git-updates'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
@@ -35,6 +36,7 @@ import { checkChatIslands } from './smoke-islands'
 import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
+import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
@@ -1072,6 +1074,13 @@ export async function runNativeCoreSmoke(
       }
     },
     {
+      name: 'managed-agent-browser',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkManagedAgentBrowser(host, page, artifacts)
+      }
+    },
+    {
       name: 'preview-timing',
       dependsOn: ['open-project'],
       run: async () => {
@@ -1111,9 +1120,10 @@ export async function runNativeCoreSmoke(
       name: 'states-canvas',
       dependsOn: ['open-project'],
       run: async () => {
-        await checkStatesCanvas(host, page, fixture, root, artifacts)
+        await checkStatesCanvas(host, page, fixture, root, artifacts, invoke)
+        await restoreStatesCanvas(fixture, page, invoke)
       },
-      cleanup: () => restoreStatesCanvas(fixture)
+      cleanup: () => restoreStatesCanvas(fixture, page, invoke)
     },
     {
       name: 'states-workbench',
@@ -1142,6 +1152,15 @@ export async function runNativeCoreSmoke(
           await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
         if ((await host.request('sourceInspect')).visible)
           await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+      }
+    },
+    {
+      name: 'git-updates',
+      dependsOn: ['chat-ready'],
+      run: () => checkGitUpdates(host, git, artifacts),
+      cleanup: async () => {
+        if ((await host.request('sheetInspect')).visible)
+          await host.request('sheetPerform', { action: 'cancel' })
       }
     },
     {

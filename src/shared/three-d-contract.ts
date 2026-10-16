@@ -100,6 +100,10 @@ export function threeDStateAllowed(raw: unknown): raw is ThreeDState {
       Number.isInteger(l.depth) &&
       l.depth >= 0 &&
       l.depth <= depth &&
+      Number.isInteger(l.parent) &&
+      l.parent >= -1 &&
+      l.parent < i &&
+      (l.parent === -1 || (s.layers?.[l.parent]?.depth ?? -1) < l.depth) &&
       finite(l.x, -extent, extent) &&
       finite(l.y, -extent, extent) &&
       finite(l.width, 0, extent) &&

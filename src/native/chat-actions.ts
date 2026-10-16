@@ -104,7 +104,7 @@ export async function cardAction(
         break
       }
       placeUi(chat, reply.record)
-      sendReply(controller, chat, reply.message)
+      sendReply(controller, chat, reply.message, action.id)
       break
     }
     // LKM-210: a post-landing check's warning row.
@@ -126,9 +126,15 @@ export async function cardAction(
       break
     }
     case 'queue-remove':
+      for (const q of chat.queue)
+        if (`queued-${q.id}` === action.id && q.chatUiId)
+          await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled').catch(() => {})
       chat.queue = chat.queue.filter((q) => `queued-${q.id}` !== action.id)
       break
     case 'queue-edit':
+      for (const q of chat.queue)
+        if (`queued-${q.id}` === action.id && q.chatUiId)
+          await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled').catch(() => {})
       editQueued(chat, action.id)
       effect({ type: 'focus' })
       break
@@ -246,14 +252,15 @@ export async function cardAction(
 }
 
 /** Sends `text` as the user's next message, leaving their composer draft alone. */
-function sendReply(controller: NativeChatController, chat: Chat, text: string) {
+function sendReply(controller: NativeChatController, chat: Chat, text: string, chatUiId?: string) {
   if (chat.chat === controller.start.planningKey) {
     void controller.submit(chat, text)
     return
   }
   const submission: Submission = {
-    id: crypto.randomUUID(),
+    id: chatUiId ?? crypto.randomUUID(),
     text,
+    ...(chatUiId ? { chatUiId } : {}),
     attachments: [],
     selection: null,
     turn: chat.context?.turn ?? {}

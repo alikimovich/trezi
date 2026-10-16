@@ -772,12 +772,16 @@ export class NativeGitController {
     const generation = this.sheets.generation
     const status: GitRemoteStatus = await this.invoke('git:remote-status', entry.root, fetch)
     if (generation !== this.sheets.generation) return
+    const changes = status.changes ?? []
+    const scope = changes.map(
+      (change) => `${change.state}  ${change.path}${change.eligible ? '' : ' (excluded)'}`
+    )
     this.sheets.present(
       {
         title: 'Git updates',
         // A tool window whether or not the project has remotes, not an alert.
         alert: false,
-        detail: `Current branch: ${status.current ?? 'No branch selected'}. ${status.remotes.length ? 'Choose a remote branch. Pull merges it into your current branch; switching opens that branch instead.' : 'Connect this project to a Git remote to get updates.'}`,
+        detail: `Current branch: ${status.current ?? 'No branch selected'}. ${status.remotes.length ? 'Choose a remote branch. Pull merges it into your current branch; switching opens that branch instead.' : 'Connect this project to a Git remote to get updates.'}${changes.length ? `\n\n${changes.length} local change(s) block Pull and Switch. Trezi can commit them here. Fetch remains available.\n${scope.join('\n')}` : ''}`,
         fields: status.remotes.length
           ? [
               {
@@ -807,6 +811,16 @@ export class NativeGitController {
         }
         if (!status.branches.some((b) => b.ref === action.values.ref))
           throw new Error('Choose an available remote branch.')
+        if (changes.length) {
+          this.recoverUpdates(
+            key,
+            entry.root,
+            status,
+            action.action as 'pull' | 'checkout',
+            action.values.ref
+          )
+          return
+        }
         let files: string[] = []
         await this.workspace.transact(key, async () => {
           const result = await this.invoke('git:remote-update', entry.root, {
@@ -818,6 +832,77 @@ export class NativeGitController {
           files = result.files
           this.log.append(result.message, 'success')
           await this.refresh(entry.root)
+        })
+        await this.workspace.refreshEnvironment(key, files)
+        if (this.sheets.current?.state.id === action.id) await this.updates(key)
+      }
+    )
+  }
+
+  private recoverUpdates(
+    key: string,
+    root: string,
+    status: GitRemoteStatus,
+    selected: 'pull' | 'checkout',
+    ref: string
+  ) {
+    const changes = status.changes ?? []
+    const destination = status.branches.find((branch) => branch.ref === ref)
+    if (!destination || !status.current || !status.changeToken) return
+    const names = changes.map(
+      (change) =>
+        `${change.state}  ${change.path}${change.eligible ? '' : ' (excluded; cannot commit)'}`
+    )
+    const eligible = changes.length > 0 && changes.every((change) => change.eligible)
+    this.sheets.present(
+      {
+        title: 'Commit changes to continue',
+        alert: false,
+        detail: `Current branch: ${status.current}\n${selected === 'pull' ? 'Pull from' : 'Switch to'}: ${destination.label}\n\nThe commit includes exactly these ${changes.length} local path(s), including already staged changes. Ignored files and runtime sidecars are excluded. Review the list before continuing:\n${names.join('\n')}${eligible ? '' : '\n\nTrezi will not commit the files marked excluded, so the changes cannot be committed here. Move or ignore those files (or unstage them), then choose Refresh changes.'}`,
+        fields: [
+          {
+            id: 'review',
+            label: 'Changes for review',
+            kind: 'readonly',
+            value: changes
+              .map(
+                (change) =>
+                  `${change.state}  ${change.path}\n${change.preview || 'Preview unavailable.'}`
+              )
+              .join('\n\n')
+          },
+          {
+            id: 'message',
+            label: 'Commit message',
+            kind: 'text',
+            value: `Save local changes before ${selected === 'pull' ? 'pulling' : 'switching'}`
+          }
+        ],
+        actions: [
+          { id: 'cancel', label: 'Cancel' },
+          { id: 'refresh', label: 'Refresh changes' },
+          ...(eligible
+            ? [{ id: 'commit', label: 'Commit changes and continue', primary: true }]
+            : [])
+        ]
+      },
+      async (action) => {
+        if (action.action === 'refresh') return this.updates(key)
+        const message = action.values.message?.trim()
+        if (!message || message.length > 256)
+          throw new Error('Enter a commit message of at most 256 characters.')
+        let files: string[] = []
+        await this.workspace.transact(key, async () => {
+          const result = await this.invoke('git:remote-update', root, {
+            action: selected,
+            ref,
+            expectedBranch: status.current,
+            commit: { message, changeToken: status.changeToken }
+          })
+          if (!result.ok) throw new Error(result.message)
+          files = result.files
+          this.log.append(result.message, 'success')
+          await this.refresh(root)
         })
         await this.workspace.refreshEnvironment(key, files)
         if (this.sheets.current?.state.id === action.id) await this.updates(key)

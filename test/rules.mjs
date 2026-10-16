@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 41, 'version bumped to 41')
+assert(TREZI_RULES_VERSION === 43, 'version bumped to 43')
 // LKM-225: agents are pointed at the bundled doctor skill instead of telling the user to debug.
 assert(r.includes(JSON.stringify(DOCTOR_SKILL)), 'rules mention the trezi-doctor skill path')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
@@ -178,8 +178,8 @@ assert(
   /Never rewrite or delete commits already landed/.test(fullGit),
   'R-git: Full protects landed commits'
 )
-// R2: browser inspection → agent-browser, never Chrome DevTools unless asked.
-assert(/agent-browser/i.test(r), 'R2: directs the agent to agent-browser')
+// R2: all providers retain the required managed Vercel agent-browser workflow.
+assert(/Required browser verification with Vercel agent-browser/.test(r), 'R2: browser requirement')
 assert(
   /devtools/i.test(r) && /unless the user explicitly asks/i.test(r),
   'R2: no DevTools unless asked'
@@ -217,8 +217,7 @@ assert(
 assert(!/preview_location/.test(r), 'default rendering omits preview_location')
 assert(!/preview_screenshot/.test(r), 'default rendering omits preview_screenshot')
 assert(treziRules({ previewTools: true }) === withTools, 'previewTools rendering is deterministic')
-// LKM-138: with preview tools, verification happens in the Trezi preview and
-// agent-browser is reserved for scripted multi-step interactions.
+// Private preview observations complement the mandatory Chromium check.
 const codexObservers = treziRules({
   previewObservationTools: true,
   controlTools: true,
@@ -238,14 +237,8 @@ for (const rules of [withTools, codexObservers]) {
     /MUST use Trezi's preview tools/.test(rules),
     'preview tools: required for visual verification'
   )
-  assert(
-    /only for scripted multi-step interactions/.test(rules),
-    'preview tools: agent-browser only for scripted flows'
-  )
-  assert(
-    /never just to inspect, evaluate, or screenshot/.test(rules),
-    'preview tools: no agent-browser screenshots'
-  )
+  assert(/MUST use `agent-browser`/.test(rules), 'preview tools: agent-browser stays mandatory')
+  assert(/WebKit observations do not replace/.test(rules), 'no silent engine switch')
   // LKM-230: interactive changes are checked by using them in the agent browser.
   assert(
     /MUST check an interactive change[\s\S]*by using it in your agent browser with\s+`preview_interact`/.test(
@@ -254,8 +247,7 @@ for (const rules of [withTools, codexObservers]) {
     'preview tools: interactive changes are used, not just looked at'
   )
   assert(/never drives the user's preview/.test(rules), 'preview_interact: agent browser only')
-  assert(!/MUST use `agent-browser`/.test(rules), 'preview tools: agent-browser is not mandatory')
-  assert(/--session trezi-<task-id>/.test(rules), 'preview tools: isolated agent-browser sessions')
+  assert(/bin\/managed\/agent-browser/.test(rules), 'managed CLI path required')
   assert(
     /never report verification as passed/.test(rules),
     'preview tools: stale previews cannot prove an edit'
@@ -280,33 +272,19 @@ for (const rules of [withTools, codexObservers]) {
   )
 }
 assert(!/preview_inspect/.test(r), 'default rendering omits preview_inspect')
-// Without preview tools (Gemini), agent-browser verification stays mandatory.
+// Without private tools (Gemini), Vercel agent-browser remains mandatory.
 for (const opts of [{}, { workspaceTools: true }]) {
   const rules = treziRules(opts)
-  assert(/MUST use `agent-browser` when available/.test(rules), 'browser: required when available')
-  assert(/command -v agent-browser/.test(rules), 'browser: check the runtime PATH')
-  assert(/agent-browser --help/.test(rules), 'browser: inspect installed CLI capabilities')
-  assert(
-    /CLI is missing, or its browser cannot launch/.test(rules),
-    'browser: missing binary and launch failure'
-  )
-  assert(
-    /Do not install packages without the user's permission/.test(rules),
-    'browser: no silent installation'
-  )
-  assert(/--session trezi-<task-id>/.test(rules), 'browser: isolated task sessions')
-  assert(/Close only your own session/.test(rules), 'browser: preserve other sessions')
-  for (const size of ['390 844', '768 1024', '1440 900']) {
-    assert(rules.includes(`set viewport ${size}`), `browser: responsive coverage at ${size}`)
-  }
-  assert(
-    /capture and inspect a screenshot at each size/.test(rules),
-    'browser: require visual inspection'
-  )
-  assert(
-    /never report verification as passed/.test(rules),
-    'browser: stale previews cannot prove an edit'
-  )
+  assert(/MUST use `agent-browser`/.test(rules), 'browser: required')
+  assert(/command -v agent-browser/.test(rules), 'browser: inspect PATH')
+  assert(/agent-browser --help/.test(rules), 'browser: version-matched help')
+  assert(/bin\/managed\/agent-browser/.test(rules), 'browser: managed command')
+  assert(/--session trezi-<task-id>/.test(rules), 'browser: isolated session')
+  assert(/Close only your own session/.test(rules), 'browser: isolated teardown')
+  for (const size of ['390 844', '768 1024', '1440 900'])
+    assert(rules.includes(`set viewport ${size}`), `browser: responsive ${size}`)
+  assert(/capture and inspect a screenshot at each size/.test(rules))
+  assert(/never report verification as passed/.test(rules))
   assert(
     /Do not call it\s+pending either: call\s+land_now so the preview serves your edits, then\s+check them/.test(
       rules

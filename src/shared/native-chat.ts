@@ -115,6 +115,8 @@ export interface NativeChatStart {
   project: { title: string | null; recents: { root: string; name: string }[] }
 }
 export interface NativeChatState {
+  /** The conversation owner has supplied this chat's transcript. */
+  ready: boolean
   activity: NativeChatActivity | null
   streamingId: string | null
   chat: string
@@ -126,7 +128,7 @@ export interface NativeChatState {
   composer: {
     /** The no-project draft (LKM-232): the composer takes input without a chat key. */
     home?: boolean
-    queue: { id: string; text: string; attachments: number }[]
+    queue: { id: string; text: string; attachments: number; chatUiId?: string }[]
     queuePaused: boolean
     /** LKM-151: why a paused queue will not send on its own, and whether "Send now" can. */
     queueNote: string

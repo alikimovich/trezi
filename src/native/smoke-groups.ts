@@ -73,6 +73,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'preview-inspector': ['core'],
   'agent-preview': ['core'],
   'agent-interact': ['core'],
+  'managed-agent-browser': ['core'],
   'preview-timing': ['core'],
   'preview-speed': ['core'],
   'preview-history': ['core'],
@@ -81,6 +82,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'states-canvas': ['core'],
   'three-d': ['core'],
   'publish-progress': ['core'],
+  'git-updates': ['core'],
   'live-provider': ['core'],
   // One fixture scope covers both; smoke-islands reads the selection to run either part.
   'chat-islands': ['islands', 'shadow-light'],

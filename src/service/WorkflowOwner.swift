@@ -45,7 +45,7 @@ final class WorkflowOwner: @unchecked Sendable {
         "dismiss": (["workflow", "intent"], [], "dismiss"),
         "connect": (["root", "name", "owner", "private", "intent"], ["leases"], "connect"),
         "remoteStatus": (["root", "fetch"], ["leases"], nil),
-        "remoteUpdate": (["root", "action", "ref", "expectedBranch", "busy", "intent"], ["leases"], "update"),
+        "remoteUpdate": (["root", "action", "ref", "expectedBranch", "busy", "commitMessage", "changeToken", "intent"], ["leases"], "update"),
         "setup": (["root", "files", "intent"], ["leases"], "setup"),
         "uninstall": (["root", "intent"], ["leases"], "uninstall"),
         "createProject": (["root", "files", "install", "intent"], [], "create"),
@@ -408,7 +408,10 @@ final class WorkflowOwner: @unchecked Sendable {
             let action = try body.string("action"), ref = try body.string("ref")
             guard ref.hasPrefix("refs/remotes/"), !ref.contains("..") else { throw ServiceContractFailure.invalidRequest }
             let expected: JSValue = body.value("expectedBranch") == .null ? .null : .string(JSText(try body.string("expectedBranch")))
-            return object([("action", .string(JSText(action))), ("ref", .string(JSText(ref))), ("expectedBranch", expected), ("busy", .bool(try body.bool("busy")))])
+            let message: JSValue = body.value("commitMessage") == .null ? .null : .string(JSText(try body.string("commitMessage")))
+            let token: JSValue = body.value("changeToken") == .null ? .null : .string(JSText(try body.string("changeToken")))
+            return object([("action", .string(JSText(action))), ("ref", .string(JSText(ref))), ("expectedBranch", expected),
+                           ("busy", .bool(try body.bool("busy"))), ("commitMessage", message), ("changeToken", token)])
         case "setup": return object([("files", try WorkflowSetup.helperFiles(body.value("files")))])
         case "createProject":
             let install: JSValue = body.value("install") == .null ? .null : .string(JSText(try body.string("install")))

@@ -14,15 +14,28 @@ const intersects = (a: Rect, b: Rect) =>
 /** Nested fixture for the exploded view: section > div > h2, section > p > b (5 layers). */
 const CARD = `(() => {
   document.querySelector('#three-d-card')?.remove();
+  document.querySelector('#three-d-sibling')?.remove();
+  document.querySelector('#three-d-sibling-style')?.remove();
+  const style = document.createElement('style');
+  style.id = 'three-d-sibling-style';
+  style.textContent = '#three-d-sibling.wide + #three-d-card { width:240px !important }';
+  document.head.append(style);
+  const sibling = document.createElement('div');
+  sibling.id = 'three-d-sibling';
   const card = document.createElement('section');
   card.id = 'three-d-card';
   card.style.cssText = 'margin:12px;padding:16px;width:320px;background:#f4e3c1;border-radius:12px';
   card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
-  document.body.prepend(card);
+  document.body.prepend(sibling, card);
   card.scrollIntoView({ block: 'nearest' });
   return true;
 })()`
-export const removeThreeDCard = `(() => { document.querySelector('#three-d-card')?.remove(); return true })()`
+export const removeThreeDCard = `(() => {
+  document.querySelector('#three-d-card')?.remove();
+  document.querySelector('#three-d-sibling')?.remove();
+  document.querySelector('#three-d-sibling-style')?.remove();
+  return true;
+})()`
 
 /** The real isolated preview opens the scene; the host renders it natively (LKM-227). */
 export async function checkThreeD(host: NativeBridge, artifacts: string, fixture: string) {
@@ -77,7 +90,12 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.match(opened.headerType, /ThreeDBar/)
   assert.match(opened.footerType, /ThreeDBar/)
   assert.match(opened.sceneType, /ThreeDSceneView/)
-  assert.deepEqual([opened.insets.top, opened.insets.bottom], [48, 76])
+  assert.deepEqual([opened.insets.top, opened.insets.bottom], [48, 44])
+  assert.equal(opened.footerRect.height, 44, 'the single-row footer reclaims scene height')
+  assert.ok(
+    Math.abs(opened.headerRect.y - opened.contentTop) < 0.5,
+    `header meets the toolbar content edge (${opened.headerRect.y} vs ${opened.contentTop})`
+  )
   // N layers render natively, each a Core Animation plane holding its capture.
   assert.deepEqual(opened.layers, [
     'section#three-d-card',
@@ -88,10 +106,53 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   ])
   assert.equal(opened.planes, 5)
   assert.equal(opened.rendered, 5, 'every layer renders natively')
+  assert.equal(opened.guides, 8, 'two guides join each captured parent and child')
+  assert.equal(opened.filledBacks, 0, 'depth contours do not gray authored faces')
+  assert.deepEqual(opened.guideParents, [0, 0, 1, 1, 0, 0, 3, 3])
+  const guideCapture = await host.request('threeDCapture', { dark: false })
+  writeFileSync(
+    join(artifacts, 'three-d-exploded-guides.png'),
+    Buffer.from(guideCapture.png, 'base64')
+  )
+  // An unrelated page update must not replace the native atlas while the scene is static.
+  const stableCaptures = (await inspect()).captures
+  await page(`(() => {
+    const unrelated = document.createElement('div');
+    unrelated.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px';
+    document.body.append(unrelated);
+    return true;
+  })()`)
+  const stableCapture = await host.request('threeDCapture', { dark: false })
+  writeFileSync(join(artifacts, 'three-d-stable.png'), Buffer.from(stableCapture.png, 'base64'))
+  assert.equal(
+    (await inspect()).captures,
+    stableCaptures,
+    'unrelated page activity does not recapture the scene'
+  )
+  const originalWidth = await page(
+    `document.querySelector('#three-d-card').getBoundingClientRect().width`
+  )
+  await page(`document.querySelector('#three-d-sibling').classList.add('wide')`)
+  const reflowWidth = await page(
+    `document.querySelector('#three-d-card').getBoundingClientRect().width`
+  )
+  assert.ok(reflowWidth < originalWidth, 'sibling class restyles the inspected root width')
+  await waitFor(
+    async () => (await inspect()).captures > stableCaptures,
+    'sibling reflow recaptures'
+  )
+  const reflowCaptures = (await inspect()).captures
+  await page(`document.querySelector('#three-d-head').style.backgroundColor = 'rgb(215, 42, 80)'`)
+  await waitFor(
+    async () => (await inspect()).captures > reflowCaptures,
+    'authored color change recaptures'
+  )
+  const colorCapture = await host.request('threeDCapture', { dark: false })
+  writeFileSync(join(artifacts, 'three-d-colors.png'), Buffer.from(colorCapture.png, 'base64'))
   assert.equal(opened.sceneHidden, false)
   assert.equal(opened.message, '', 'no fallback message over a captured scene')
   assert.equal(opened.countLabel, '5 layers')
-  assert.match(opened.status, /^5 layers · /)
+  assert.match(opened.status, /^Depth shows nesting/)
   // Captured at the backing scale: the card's surface keeps its pixel density.
   assert.ok(
     opened.imageSizes[0][0] >=
@@ -146,10 +207,11 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     return s.pitch === 0 && s.yaw === 0 && s.separation === 0 && near(s.spacing, 0) && s
   }, 'Front assembles the layers')
   assert.equal(front.sceneSeparation, 0)
+  assert.equal(front.guides, 0, 'guides disappear when the layers assemble')
   await perform('separation', 82)
   await waitFor(async () => {
     const s = await inspect()
-    return s.separation === 82 && near(s.spacing, 82)
+    return s.separation === 82 && near(s.spacing, 82) && s.guides === 8
   }, 'separation changes the native layer spacing')
   await perform('separation', 20)
   await waitFor(async () => near((await inspect()).spacing, 20), 'spacing follows the slider live')
@@ -292,7 +354,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   const second = await open('#native-title')
   assert.notEqual(second.session, opened.session, 'reopening creates a new session')
   assert.equal(second.countLabel, '1 layer')
-  assert.match(second.status, /^1 layer · /)
+  assert.match(second.status, /^Depth shows nesting/)
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 1)
   host.send('deliver', {
     view: 'preview',

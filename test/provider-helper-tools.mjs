@@ -87,8 +87,6 @@ const CALLS = {
     component: 'Card',
     source: 'Card.tsx',
     exportName: 'Card',
-    react: '/node_modules/.vite/deps/react.js',
-    reactDom: '/node_modules/.vite/deps/react-dom_client.js',
     width: 420,
     states: [{ id: 'default', label: 'Default', props: {} }],
     missing: []

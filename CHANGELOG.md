@@ -11,9 +11,17 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Chat form answers now show when they are queued, survive relaunch without an extra send, and proceed when Codex reports a completed turn even if its CLI stream stays open (LKM-265).
+- Opening a project now keeps its docked chat and composer visible while the preview loads, with progress confined to the preview pane (LKM-266).
+- Required agent-browser checks now use a Trezi-managed isolated headless Chromium shell and session, avoiding the user's Chrome identity during background verification (LKM-264).
+- Exploded view chrome now meets the toolbar without a header strip, uses a compact one-row footer, and separates the docked code editor and its toolbar with subtle native rules (LKM-262).
+- Exploded view keeps authored layer colors and avoids flashes when unrelated page updates trigger during inspection (LKM-260).
+- Expanded Padding and Margin now place horizontal side controls in the left column and vertical side controls in the right, matching the collapsed layout (LKM-258).
 - Publish now adds one empty commit with the configured Git identity when reconciliation leaves a Trezi-authored tip, so deployment attribution can use that identity; an unconfigured identity stops publishing with setup guidance (LKM-251).
 
 ### Added
+- Show states now works for Next.js and Vite React components: Trezi builds the selected component from its source in memory and draws real styled variants in an isolated view, discovered from props or given by a recipe (providers, actions, routes), with specific messages for server-only components and no project files written (LKM-263).
+- Exploded view now shows subtle depth and dashed assembly guides between related blocks (LKM-257).
 - Startup diagnostics now refuse a proven non-graphical macOS session before AppKit; the cause of the reported LKM-249 registration abort remains unconfirmed.
 - A no-project home centers "What do you want to create?" above the native composer, with recent projects and Open Project; New Project is the composer's default. Its first message opens a persisted planning conversation and docks the chat before a project directory exists. The provider asks only for missing details, then presents the plan and editable destination in chat before creation; the same transcript opens in the new project (LKM-232, LKM-233).
 - Native chat now starts Claude Code or Codex-managed ChatGPT sign-in from the start and auth-recovery cards, with progress, cancellation and an explicit retry of the saved message (LKM-231).
@@ -29,6 +37,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - The selected element's toolbar shows a cube for Inspect in 3D and a stack of variants for Show states, and the States switcher's All button uses a matching stack, so neither looks like Layers or the layout grid (LKM-218).
 - States workbenches can be left and found again: the States switcher has "← Back to <page>" (same page and scroll, the component selected again, ⌘[ / ⌘] move between them) and Continue in Chat; a "States N" menu under the address lists each workbench with where it came from and its last state, with Open, Open All States, Continue in Chat, Rebuild States and Remove (replacing the … menu's Workbenches); Show states on a component that already has a workbench opens it; the list survives restarts; and the Publish warning adds Open Workbench (LKM-220).
 ### Fixed
+- Git updates now lists blocking local changes and offers an explicit commit with an editable message before retrying Pull or Switch. It checks the reviewed scope again before committing and keeps Fetch available (LKM-250).
 - The preview status separates unpublished content, upstream commits, default-branch history, PR state, CI and deployment; squash-equivalent files no longer appear as unpublished changes, and stale status replies cannot replace a newer branch selection (LKM-248).
 - Layout-grid columns and dragged guides stay clipped to the preview viewport at square and rounded corners, including columns that extend beyond the page (LKM-247).
 - Empty and short chats hide the transcript scroller; it returns when messages overflow, while keeping the macOS scroller preference (LKM-246).

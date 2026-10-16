@@ -236,8 +236,23 @@ private struct CompactSpacingRow: View {
                 .accessibilityAddTraits(expanded ? .isSelected : [])
                 .help(group == "padding" ? "Edit each padding side" : "Edit each margin side")
             }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
-                ForEach(fields) { field in CompactLayoutValue(field: field, model: model) }
+            if expanded {
+                HStack(alignment: .top, spacing: 6) {
+                    VStack(spacing: 5) {
+                        ForEach(fields.filter { $0.axis == "right" || $0.axis == "left" }) { field in
+                            CompactLayoutValue(field: field, model: model)
+                        }
+                    }.frame(maxWidth: .infinity)
+                    VStack(spacing: 5) {
+                        ForEach(fields.filter { $0.axis == "top" || $0.axis == "bottom" }) { field in
+                            CompactLayoutValue(field: field, model: model)
+                        }
+                    }.frame(maxWidth: .infinity)
+                }
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
+                    ForEach(fields) { field in CompactLayoutValue(field: field, model: model) }
+                }
             }
         }
     }

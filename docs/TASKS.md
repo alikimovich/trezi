@@ -9,6 +9,49 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Operator (host): check the Vercel Git link and production branch for prj_YwkNbzfDFEdtd9t9hSUj44gjybMH. The worker sandbox could not reach api.vercel.com or api.github.com.
 - [x] Operator: clone lkmv.ch onto the unpushed branch `trezi-lkm255-attribution-test`, run the script (it adds the throwaway commit; Publish pushes), collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
 - [x] Record that evidence here and tick the LKM-251 live Vercel acceptance item.
+## chat_ui answer delivery (LKM-265)
+
+- [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.
+- [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
+- [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
+- [ ] Manager: run full native verification and independent review, then merge.
+## Docked chat during project opening (LKM-266)
+
+- [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.
+- [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.
+- [ ] Manager: run full native verification, inspect the loading capture and review before merge.
+
+## Background browser focus (LKM-264)
+
+- [x] Trace the browser rule branches and restore mandatory Vercel agent-browser verification through Trezi's managed PATH.
+- [x] Add passive native focus telemetry around private WebKit creation, navigation, capture and close.
+- [x] Add an app-managed wrapper pinning a dedicated headless-shell executable, private profile/session/daemon environment, and unsafe-option refusal; cover failures and concurrent sessions with a stub.
+- [x] Exercise cold and warm managed Chromium sessions, screenshots, click/type and close in the native disposable project; cover cancellation and another app frontmost.
+- [x] Verify Trezi foreground/key responder preservation and that Finder stays frontmost during a managed browser command in native core.
+- [ ] Measure Finder's own key responder if the test broker can do so without an Accessibility/TCC prompt.
+- [ ] Manager: run full native verification and independent review, then merge.
+
+## Component states for Next.js and Vite React (LKM-263)
+
+- [x] Decide and document the architecture (`docs/STATES.md`): Trezi builds the component from source in memory with the project's React instead of importing dev-server module URLs.
+- [x] Discover states from the props type, call-site literals and the live instance; merge explicit recipes (provider, actions, route).
+- [x] Bundle with next/* shims, aliases, CSS modules, assets and public env; draw each state in its own sandboxed frame over the preview; refresh on input edits; return cleanly.
+- [x] Actionable messages for async Server Components, server-only imports, missing React and build errors.
+- [x] Unit tests (`test/states-build.mjs`, `test/states-canvas.mjs`) and the rewritten native `states-canvas` smoke on Next.js and Vite fixtures.
+- [ ] Manager: inspect `states-next.png`, `states-vite.png` and `states-server-only.png`, run full native verification and review, then merge. In the worker's last core run, `states-server-only.png` showed the page rather than the message overlay, though the DOM held the message. The smoke now asserts the dialog is open and waits 600 ms before that capture; this is not yet confirmed natively.
+
+## Native exploded chrome and code editor polish (LKM-262)
+
+- [x] Align the transparent, input-shielding exploded header with the content edge and keep the scene reservation.
+- [x] Make the exploded footer one row and keep capture and simplification guidance available contextually.
+- [x] Add device-pixel semantic rules to the docked editor top and editor toolbar bottom, avoiding an outer rule in the pop-out.
+- [ ] Manager: inspect foreground captures, run full native verification and independent review, then merge.
+
+## Expanded spacing column order (LKM-258)
+
+- [x] Show right/left controls in the expanded left column and top/bottom controls in the right for Padding and Margin, preserving side values and field bindings.
+- [x] Cover collapsed and expanded order and values in the controller test, and save expanded and collapsed inspector captures.
+- [ ] Manager: inspect captures, run full native verification and independent review, then merge.
 
 ## Publish attribution (LKM-251)
 
@@ -1512,6 +1555,8 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
 
 - [x] LKM-214: Move exploded-view controls and status to native Swift; follow effective light/dark appearance with a bounded scene contract.
 - [x] LKM-227: Render the exploded view natively (Core Animation planes from a bounded atlas capture at backing scale); remove the in-page CSS scene, keep capture, show a native message when capture fails.
+- [x] LKM-257: Add restrained native Z backing and dashed guides at matching corners of captured parent/child blocks; hide guides when assembled.
+- [x] LKM-260: Preserve authored colors on exploded faces and keep scene frames stable during recapture and unrelated page updates.
 
 - [x] Keep the selected layer's Code action available inside the 3D workspace.
 
@@ -1593,6 +1638,9 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
       or lockfiles differ; reload attached previews and explain external-server restarts.
 
 ## Git updates and remote branches (2026-09-16)
+
+- [x] LKM-250: Show the exact dirty-tree scope in Git updates and offer a guarded
+      service-owned commit before continuing Pull or Switch; Fetch remains available.
 
 - [x] Preserve the preview freeze when handing off from the branch menu to Git
       updates, and verify native visibility through updates and dismissal.

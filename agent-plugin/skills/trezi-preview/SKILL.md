@@ -45,12 +45,16 @@ call them, and every result is bounded. Prefer them to any external browser.
    For interactive changes (filters, tabs, menus, forms), use them with
    `preview_interact` and check the result it returns.
 
-## Scripted interactions only: agent-browser
+## Required Vercel agent-browser checks
 
-Use the `agent-browser` CLI against the dev-server URL only for scripted multi-step
-interactions (click, type, a flow across pages) that the preview tools cannot do.
-Never use it just to inspect, evaluate or screenshot. Check `command -v agent-browser`
-first, use `--session trezi-<task-id>`, close only your own session, and do not
-install it without the user's permission.
+Use Vercel `agent-browser` during UI changes, including scripted interactions,
+responsive checks and screenshots. In a Trezi provider helper, `command -v
+agent-browser` must resolve to Trezi's `bin/managed/agent-browser` wrapper. It
+pins a dedicated headless Chromium executable, private profile and isolated
+daemon environment. Never call a global or absolute CLI path. Read its
+version-matched help, use `--session trezi-<task-id>` on every command, and close
+only that session. For layout checks, capture phone, tablet and desktop views.
+If the managed command reports a missing CLI or headless shell, report that
+blocker; do not replace the Chromium check with WebKit or install a browser.
 
 Do NOT open Chrome DevTools or a headed browser unless the user explicitly asks.

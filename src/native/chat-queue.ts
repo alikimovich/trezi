@@ -40,7 +40,21 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
   const block = sendBlock(chat)
   const waiting = needsResolve(chat) ? 'resolve' : chat.login || chat.signingIn ? 'login' : null
   if (waiting) return { queueNote: BLOCK_NOTES[waiting], queueCanSend: false }
-  if (!chat.paused) return { queueNote: block ? BLOCK_NOTES[block] : '', queueCanSend: !block }
+  if (!chat.paused) {
+    const answerQueued = chat.queue.some((q) => q.chatUiId)
+    const answerNote =
+      block === 'running'
+        ? 'Answer accepted — queued until the current provider turn finishes'
+        : block === 'landing'
+          ? chat.operation === 'waiting'
+            ? 'Answer accepted — queued until the previous provider turn finishes'
+            : 'Answer accepted — queued until current changes finish landing'
+          : ''
+    return {
+      queueNote: answerQueued ? answerNote : block ? BLOCK_NOTES[block] : '',
+      queueCanSend: !block
+    }
+  }
   if (chat.isolation === 'parked' && chat.landingError)
     return {
       queueNote: 'Waiting — retry, resolve or discard the held changes to send these',

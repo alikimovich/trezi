@@ -11,6 +11,7 @@ let progress = null
 const a = { key: 'a', root: '/a', branch: 'main', activeSessionKey: 'chat-a' },
   b = { key: 'b', root: '/b', branch: 'main', activeSessionKey: 'chat-b' }
 let branch = 'main',
+  localChanges = [],
   ciStatus = null,
   spawned = 0,
   connected = true,
@@ -80,7 +81,9 @@ const invoke = async (channel, ...args) => {
       current: branch,
       remotes: ['origin'],
       upstream: 'origin/main',
-      branches: [{ ref: 'origin/main', label: 'origin/main' }]
+      branches: [{ ref: 'origin/main', label: 'origin/main' }],
+      changes: localChanges,
+      changeToken: 'reviewed-token'
     }
   if (channel === 'git:remote-update')
     return { ok: true, files: ['package.json'], message: 'Updated' }
@@ -262,6 +265,36 @@ assert.deepEqual(calls.find((c) => c[0] === 'github:connect')[2], {
 await git.updates('a')
 await sheets.action({ id: sheets.current.state.id, action: 'pull', values: { ref: 'origin/main' } })
 assert.ok(calls.some((c) => c[0] === 'git:remote-update' && c[2].expectedBranch === 'feature'))
+localChanges = [
+  { path: 'app.ts', state: ' M', eligible: true },
+  { path: 'new.ts', state: '??', eligible: true }
+]
+await git.updates('a')
+assert.match(sheets.current.state.detail, /app\.ts/)
+assert.match(sheets.current.state.detail, /new\.ts/)
+assert.ok(sheets.current.state.actions.some((action) => action.id === 'fetch'))
+await sheets.action({
+  id: sheets.current.state.id,
+  action: 'checkout',
+  values: { ref: 'origin/main' }
+})
+assert.match(sheets.current.state.detail, /Current branch: feature/)
+assert.match(sheets.current.state.detail, /Switch to: origin\/main/)
+const updatesBeforeCancel = calls.filter((c) => c[0] === 'git:remote-update').length
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+assert.equal(calls.filter((c) => c[0] === 'git:remote-update').length, updatesBeforeCancel)
+await git.updates('a')
+await sheets.action({ id: sheets.current.state.id, action: 'pull', values: { ref: 'origin/main' } })
+await sheets.action({
+  id: sheets.current.state.id,
+  action: 'commit',
+  values: { message: 'Keep local work' }
+})
+assert.deepEqual(calls.findLast((c) => c[0] === 'git:remote-update')[2].commit, {
+  message: 'Keep local work',
+  changeToken: 'reviewed-token'
+})
+localChanges = []
 // A new failed published commit offers the background repair, then a landed repair
 // records the dated rule through the memory owner. A settled old failure is silent.
 git.statuses.set('/a', {

@@ -232,6 +232,7 @@ export function snapshot(
   const stop = chat.isRunning && !chat.text.trim() && !chat.attachments.length
   const shown = collapse(chat, cards, currentActivity)
   return {
+    ready,
     activity: shown.activity,
     streamingId: chat.streamingId,
     chat: chat.chat,
@@ -245,7 +246,8 @@ export function snapshot(
       queue: chat.queue.map((q) => ({
         id: `queued-${q.id}`,
         text: q.text,
-        attachments: q.attachments.length
+        attachments: q.attachments.length,
+        ...(q.chatUiId ? { chatUiId: q.chatUiId } : {})
       })),
       queuePaused: chat.paused,
       ...queueNote(chat),

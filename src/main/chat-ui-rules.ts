@@ -16,6 +16,8 @@ export function chatUiRules(): string[] {
     `show returns at once with the component's id and it appears immediately. Then end your`,
     `turn with one short line and wait: the pick or the form's values arrive as the user's next`,
     `message, and the next turn's context summarizes them. A pick means: apply that variant.`,
+    `When the user's answer confirms that completed work is OK, acknowledge it and end the`,
+    `next turn. Do not ask the same question again.`,
     `Ask structured questions with a form, never as plain-text or multiple-choice lists in your`,
     `reply. A component that breaks the schema is rejected with every problem: fix them all and`,
     `show again. update {id} changes a component the user has not answered yet.`,

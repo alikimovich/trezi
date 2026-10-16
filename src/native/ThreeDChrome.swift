@@ -8,6 +8,7 @@ struct ThreeDLayer: Identifiable {
     let id: Int
     let label: String
     let depth: Int
+    let parent: Int
     let x, y, width, height: Double
     let page: Int
     let ax, ay: Double
@@ -67,8 +68,6 @@ struct ThreeDHeader: View {
           }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .bottom) { Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1) }
     }
 }
 
@@ -94,28 +93,19 @@ struct ThreeDFooter: View {
         }.disabled(model.layers.isEmpty)
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if model.compact {
-                HStack(spacing: 8) {
-                    Text("Separation").font(.caption)
-                    Slider(value: separation, in: 0...100).accessibilityLabel("Layer separation")
-                }
-                picker.labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
-                    .help(model.layers.first(where: { $0.id == model.selected })?.label ?? "Component layer")
-            } else {
-                HStack(spacing: 8) {
-                    Text("Separation").font(.caption)
-                    Slider(value: separation, in: 0...100).frame(width: 100).accessibilityLabel("Layer separation")
-                    picker.frame(width: 230)
-                    Spacer(minLength: 0)
-                }
-            }
-            Text(model.compact ? "Drag: orbit · Shift: pan · Pinch: zoom" : "Drag to orbit · Shift-drag or two fingers to pan · Pinch or scroll to zoom")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(model.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(model.status)
+        HStack(spacing: 8) {
+            if !model.compact { Text("Separation").font(.caption) }
+            Slider(value: separation, in: 0...100)
+                .frame(minWidth: 40, maxWidth: model.compact ? .infinity : 100)
+                .accessibilityLabel("Layer separation")
+                .help("Drag to orbit · Shift-drag or two fingers to pan · Pinch or scroll to zoom")
+            Text(threeDLayerCount(model.layers.count)).font(.caption).fixedSize()
+                .help(model.status)
+            picker.labelsHidden().frame(width: model.compact ? 110 : 230)
+                .help(model.status.isEmpty ? model.layers.first(where: { $0.id == model.selected })?.label ?? "Component layer" : model.status)
+            if !model.compact { Spacer(minLength: 0) }
         }
-        .padding(.horizontal, 12).padding(.vertical, 7)
+        .padding(.horizontal, 12).padding(.vertical, 5)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .top) { Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: 1) }
     }
@@ -125,6 +115,11 @@ final class ThreeDBar<Content: View>: NSHostingView<Content> {
     override var acceptsFirstResponder: Bool { true }
     override func scrollWheel(with event: NSEvent) {}
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    // Empty parts of a transparent bar still shield the mounted WebKit page.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHiddenOrHasHiddenAncestor else { return nil }
+        return super.hitTest(point) ?? (bounds.contains(convert(point, from: superview)) ? self : nil)
+    }
 }
 
 struct ThreeDInsets {
@@ -195,11 +190,13 @@ final class ThreeDChrome {
             guard let id = row["id"] as? Int, id == index,
                   let label = row["label"] as? String, label.count <= 120,
                   let depth = row["depth"] as? Int, (0...18).contains(depth),
+                  let parent = row["parent"] as? Int, parent >= -1, parent < index,
+                  parent == -1 || layers[parent].depth < depth,
                   let x = finite(row["x"], -100000...100000), let y = finite(row["y"], -100000...100000),
                   let w = finite(row["width"], 0...100000), let h = finite(row["height"], 0...100000),
                   let page = row["page"] as? Int, (0..<pages).contains(page),
                   let ax = finite(row["ax"], 0...100000), let ay = finite(row["ay"], 0...100000) else { return }
-            layers.append(ThreeDLayer(id: id, label: label, depth: depth, x: x, y: y, width: w, height: h, page: page, ax: ax, ay: ay))
+            layers.append(ThreeDLayer(id: id, label: label, depth: depth, parent: parent, x: x, y: y, width: w, height: h, page: page, ax: ax, ay: ay))
         }
         let selected = state["selected"] as? Int ?? -1
         guard selected == -1 || layers.indices.contains(selected) else { return }
@@ -220,7 +217,8 @@ final class ThreeDChrome {
         self.invalid = invalid
         model.status = invalid
             ? "This component was removed or replaced ambiguously. Return to the page and select it again."
-            : threeDLayerCount(layers.count) + " · Depth shows nesting" + (limited ? " · Capture limited" : "") + (simplified ? " · Some content simplified" : "")
+            : ["Depth shows nesting", limited ? "Capture limited" : nil, simplified ? "Some content simplified" : nil]
+                .compactMap { $0 }.joined(separator: " · ")
         if capturedRevision == revision { scene.select(selected) }
         capture()
     }
@@ -287,8 +285,13 @@ final class ThreeDChrome {
         guard show else { insets = ThreeDInsets(); return false }
         let compact = page.width < 520
         if model.compact != compact { model.compact = compact }
-        let top: CGFloat = 48, bottom: CGFloat = compact ? 100 : 76
-        header.frame = NSRect(x: page.minX, y: page.minY, width: page.width, height: top)
+        let top: CGFloat = 48, bottom: CGFloat = 44
+        // The safe-area edge may round one device pixel below the window's content edge.
+        // Extend only the chrome/backdrop across that seam; the stage and camera keep
+        // their existing 48-point reservation below the page origin.
+        let contentTop = header.window.map { header.superview?.convert(NSPoint(x: 0, y: $0.contentLayoutRect.maxY), from: nil).y ?? page.minY } ?? page.minY
+        let seam = page.minY <= 0.5 ? max(0, page.minY - contentTop) : 0
+        header.frame = NSRect(x: page.minX, y: page.minY - seam, width: page.width, height: top + seam)
         footer.frame = NSRect(x: page.minX, y: page.maxY - bottom, width: page.width, height: bottom)
         var next = ThreeDInsets(top: Double(top), bottom: Double(bottom))
         let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: page.height - top - bottom)
@@ -300,7 +303,8 @@ final class ThreeDChrome {
         }
         insets = next
         // The native scene replaces the page between the bars; islands float above it.
-        scene.frame = stage; backdrop.frame = page
+        scene.frame = stage
+        backdrop.frame = NSRect(x: page.minX, y: page.minY - seam, width: page.width, height: page.height + seam)
         scene.sideInsets = (next.left, next.right)
         if focusOnShow, let window = scene.window {
             focusOnShow = false
@@ -319,6 +323,8 @@ final class ThreeDChrome {
                 "planes": scene.planes.count, "capturedRevision": capturedRevision, "captures": captures,
                 "pitch": scene.pitch, "yaw": scene.yaw, "zoom": scene.zoom, "sceneSeparation": scene.separation,
                 "spacing": scene.spacing, "sceneSelected": scene.selected, "hovered": scene.hovered,
+                "guides": scene.visibleGuides, "guideParents": scene.guideParents,
+                "filledBacks": scene.filledBacks,
                 "hoverLabel": scene.hoverText, "message": scene.message, "sceneHidden": scene.isHidden,
                 "sceneRect": ["x": Double(scene.frame.minX), "y": Double(scene.frame.minY), "width": Double(scene.frame.width), "height": Double(scene.frame.height)],
                 "background": scene.backgroundHex, "points": points, "countLabel": threeDLayerCount(model.layers.count),

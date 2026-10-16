@@ -134,6 +134,11 @@ extension Host {
             if c["action"] as? String == "closeWindow" { sheets.panel?.performClose(nil) }
             else { sheets.model.perform(c["action"] as? String ?? "") }
             reply(id, true)
+        case "sheetAppearance":
+            guard ephemeral, let panel = sheets.panel else { reply(id, false); return true }
+            let appearance = c["appearance"] as? String
+            panel.appearance = appearance == "dark" ? NSAppearance(named: .darkAqua) : appearance == "light" ? NSAppearance(named: .aqua) : nil
+            reply(id, true)
         // The in-window confirmation toast (LKM-170); perform clicks its action.
         case "toastInspect":
             let point = NSPoint(x: toast.frame.midX, y: toast.frame.midY)
@@ -170,6 +175,7 @@ extension Host {
                        "code":threeD.model.hasSource, "status":threeD.model.status,
                        "header":NSStringFromRect(threeD.header.frame), "footer":NSStringFromRect(threeD.footer.frame),
                        "headerRect":rect(threeD.header.frame), "footerRect":rect(threeD.footer.frame),
+                       "contentTop":window.contentLayoutRect.maxY.isFinite ? canvas.convert(NSPoint(x: 0, y: window.contentLayoutRect.maxY), from: nil).y : 0,
                        "headerHidden":threeD.header.isHidden, "footerHidden":threeD.footer.isHidden,
                        "inspector":NSStringFromRect(editingInspector.frame), "inspectorHidden":editingInspector.isHidden,
                        "layersFrame":NSStringFromRect(layers.frame), "layersHidden":layers.isHidden,
@@ -423,6 +429,12 @@ extension Host {
         case "smokeFocus":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in reply(id, await smokeFocus(c)) }
+        case "smokeFocusSnapshot":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, SmokeFocus.shared.snapshot())
+        case "smokeActivateFinder":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, SmokeFocus.shared.activateFinder())
         case "previewInput":
             guard ephemeral, let preview = views["preview"] else { reply(id, error: "Test preview unavailable"); return true }
             if c["prepare"] as? Bool == true {

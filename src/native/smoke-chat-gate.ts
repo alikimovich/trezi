@@ -28,8 +28,7 @@ async function until(
   )
 }
 
-/** LKM-120 evidence for one state: a foreground window capture plus the host's
- *  layout/shell/chat state, asserting the chat is shown only for a loaded project. */
+/** Foreground capture plus native layout/chat identity at each open phase. */
 export async function captureChatGate(
   host: NativeBridge,
   artifacts: string,
@@ -46,6 +45,8 @@ export async function captureChatGate(
     project: nativeWorkspace.active?.name ?? null,
     chatReady: shell.chatReady,
     chatVisible: view.visible,
+    chatSession: view.chat,
+    chatFrame: view.frame,
     chatHeaderContentVisible: shell.chatHeaderContentVisible,
     chatColumnHidden: layout.chatColumnHidden,
     leading: layout.leading,
@@ -70,15 +71,15 @@ export async function captureChatGate(
       chat,
       `Chat gate ${stage}: ${name} must be ${chat ? 'shown' : 'hidden'}: ${JSON.stringify(state)}`
     )
-  if (!chat && nativeWorkspace.active) {
+  if (nativeWorkspace.active && stage !== 'loaded') {
     assert.equal(
       layout.statusHidden,
       false,
       `Chat gate ${stage}: the loading/error state must show`
     )
     assert.ok(
-      layout.status.startsWith('{{0, 0}'),
-      `Chat gate ${stage}: the status must cover the empty chat column: ${layout.status}`
+      layout.status.startsWith(`{{${layout.leading},`),
+      `Chat gate ${stage}: status belongs in the preview pane: ${layout.status}`
     )
     assert.equal(
       layout.previewHidden,
@@ -86,7 +87,7 @@ export async function captureChatGate(
       `Chat gate ${stage}: the last project's page must not cover the status`
     )
   }
-  if (chat)
+  if (stage === 'loaded')
     assert.equal(
       layout.previewHidden,
       false,
@@ -104,8 +105,7 @@ export async function captureChatGate(
   return state
 }
 
-/** Loaded → opening another project → failed open → Retry → switch back, with the
- *  chat hidden until each project has opened and no layout jump between them. */
+/** Loaded → opening another project → failed open → Retry → switch back. */
 export async function checkChatGate(
   host: NativeBridge,
   fixture: string,
@@ -147,7 +147,11 @@ export async function checkChatGate(
     'opening state'
   )
   const gamma = nativeWorkspace.active!
-  const busy = await captureChatGate(host, artifacts, 'opening', false)
+  await until(
+    async () => (await host.request('chatInspect')).chat === gamma.activeSessionKey,
+    'opening chat belongs to Gamma'
+  )
+  const busy = await captureChatGate(host, artifacts, 'opening', true)
   assert.equal(busy.statusView.kind, 'busy', 'The opening capture shows the loading state')
   assert.equal(
     await settled,
@@ -160,7 +164,7 @@ export async function checkChatGate(
       (await host.request('layoutInspect')).statusKind === 'error',
     'failed open'
   )
-  const failed = await captureChatGate(host, artifacts, 'failed-open', false)
+  const failed = await captureChatGate(host, artifacts, 'failed-open', true)
   // LKM-152: a failed open has no automatic recovery, so Activity comes to front by itself,
   // without taking the key window from the chat (the capture above needs it).
   await until(
@@ -186,6 +190,8 @@ export async function checkChatGate(
   )
   host.emit('activity-action', { action: 'hide' })
   for (const state of [busy, failed]) {
+    assert.equal(state.chatSession, gamma.activeSessionKey, `${state.stage}: correct conversation`)
+    assert.equal(state.chatFrame, loaded.chatFrame, `${state.stage}: chat frame stays fixed`)
     assert.equal(
       state.leading,
       loaded.leading,
@@ -231,13 +237,9 @@ export async function checkChatGate(
       }
     }
   )
-  // Switching back hides the chat at once and shows it when that project is ready.
+  // Switching back changes the chat identity before the preview is ready.
   const back = nativeWorkspace.command({ type: 'select', key: first.key })
-  assert.notEqual(
-    nativeWorkspace.state.loadedKey,
-    first.key,
-    'Switching projects hides the chat until the project is ready'
-  )
+  assert.notEqual(nativeWorkspace.state.loadedKey, first.key)
   await back
   await until(
     async () =>

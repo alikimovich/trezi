@@ -19,7 +19,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 41
+export const TREZI_RULES_VERSION = 43
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -379,12 +379,8 @@ const previewVerification = (background: boolean) => [
   `person would, then confirm the result it returns (the screenshot, the URL, no console`,
   `errors). Looking at the page before the interaction does not prove it works.`,
   ``,
-  `Use \`agent-browser\` only for scripted multi-step interactions \`preview_interact\``,
-  `cannot do, never just to inspect, evaluate, or screenshot. When you do, first run`,
-  `\`command -v agent-browser\` and \`agent-browser --help\`; if it is missing, say so`,
-  `and offer setup. Do not install packages without the user's permission. Use a`,
-  `unique \`--session trezi-<task-id>\`, open the Trezi-managed preview URL (do not`,
-  `start another dev server), and close only your own session.`
+  `Private WebKit observations do not replace required Vercel agent-browser testing.`,
+  ...agentBrowserVerification(background)
 ]
 
 /** Who owns a visual check that waits for landing: the agent after land_now in a chat turn, the user after a background agent. */
@@ -395,33 +391,29 @@ const landingOwner = (background: boolean) =>
 
 const agentBrowserVerification = (background: boolean) => [
   ``,
-  `## Required browser verification with agent-browser`,
+  `## Required browser verification with Vercel agent-browser`,
   `For web UI changes, visual verification, responsive testing, or browser interaction,`,
-  `you MUST use \`agent-browser\` when available. This is required, not a suggestion;`,
-  `a build, typecheck, or DOM-only guess does not replace browser verification.`,
-  `Before your first browser task in a session, run \`command -v agent-browser\` and`,
-  `\`agent-browser --help\` in your execution environment. Recheck after installation`,
-  `or a PATH change. If the installed CLI supports it, read its version-matched guide`,
-  `with \`agent-browser skills get core --full\`; otherwise use its help.`,
-  `If the CLI is missing, or its browser cannot launch, report the actual blocker and`,
-  `offer installation/setup. Do not install packages without the user's permission,`,
-  `silently substitute another browser tool, or claim browser verification passed.`,
-  `Use a unique \`--session trezi-<task-id>\` on every browser command so concurrent`,
-  `chats do not change each other's pages or viewport. Close only your own session.`,
-  `Open the Trezi-managed preview URL and the relevant route; do not start another`,
-  `dev server or attach to the user's browser. Check that the page contains the change`,
-  `being tested. Private worktree edits may not be served until Trezi lands the turn:`,
-  `if the preview still shows older code, never report verification as passed, and do`,
-  `not bypass Trezi's worktree/landing lifecycle to make it visible. ${landingOwner(background)}`,
+  `you MUST use \`agent-browser\` through Trezi's managed PATH when available. This`,
+  `is required even when private WebKit preview tools are available. A build,`,
+  `typecheck, DOM guess or WebKit capture does not replace Chromium verification.`,
+  `Before the first browser task, run \`command -v agent-browser\`, \`agent-browser`,
+  `--version\` and \`agent-browser --help\`. The resolved path must end in`,
+  `\`bin/managed/agent-browser\`; do not invoke a global or absolute CLI path.`,
+  `The managed command pins a private Chromium headless shell, profile and daemon`,
+  `environment. It refuses the user's Chrome, headed mode, external CDP attachment`,
+  `and unsafe overrides. If that executable or the CLI is missing, report the`,
+  `blocker; never substitute WebKit or install a browser automatically.`,
+  `Use a unique \`--session trezi-<task-id>\` on every command, including close.`,
+  `Close only your own session. Never use \`close --all\`. Open the Trezi-managed`,
+  `preview URL and relevant route; do not start a dev server or attach to the user's`,
+  `browser. Private edits must land before verification. If the served page is stale,`,
+  `never report verification as passed. ${landingOwner(background)}`,
   `Use \`open <url>\`, \`snapshot\`, \`get text|html|styles|value <sel>\`, \`console\`,`,
-  `\`errors\`, \`eval <js>\`, \`click <sel>\`, and \`screenshot <path>\` as appropriate.`,
-  `Exercise the changed interaction and inspect screenshots of the affected UI.`,
-  `For layout or responsive changes, test phone, tablet, and desktop CSS viewports:`,
-  `\`set viewport 390 844\`, \`set viewport 768 1024\`, and \`set viewport 1440 900\`,`,
-  `unless the user specifies other sizes. Check overflow, clipped content, and usable`,
-  `controls at each size; capture and inspect a screenshot at each size. Viewport`,
-  `resizing checks layout, not real-device behavior or Safari compatibility.`,
-  `Before finishing, report the route, sizes, interactions checked, and any blockers.`
+  `\`errors\`, \`click <sel>\`, \`type <sel> <text>\` and \`screenshot <path>\` as needed.`,
+  `Exercise changed interactions and inspect affected screenshots. For layout`,
+  `changes test \`set viewport 390 844\`, \`set viewport 768 1024\` and`,
+  `\`set viewport 1440 900\`; capture and inspect a screenshot at each size.`,
+  `Restore the viewport and report the route, sizes, interactions and blockers.`
 ]
 
 const noDevTools = [

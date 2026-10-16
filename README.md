@@ -98,8 +98,8 @@ GitHub PR.
   box and computed styles, run read-only bounded JavaScript, read console errors,
   and resize the preview for phone/tablet/desktop checks. All of this runs in the
   WebKit preview, isolated from the page. Codex-based custom endpoints expose the
-  same tools; viewing screenshots requires an image-capable model. agent-browser is
-  used only for scripted multi-step interactions.
+  same tools; viewing screenshots requires an image-capable model. Vercel
+  agent-browser remains required for browser verification during UI changes.
 
 - **Controls from chat.** Ask Claude, Codex, or a custom-endpoint model to surface
   animation controls in the desktop preview. It can select the object and open
@@ -172,10 +172,10 @@ It uses Bun, skips the offer when the CLI is
 already on PATH, and defaults to **No**. Unattended installs skip the prompt.
 An optional browser-install failure does not prevent Trezi installation.
 To install it later: `bun install --global agent-browser && agent-browser install`.
-Trezi's built-in agent instructions verify web UI with Trezi's own preview tools
-(including phone/tablet/desktop checks for layout changes) and use agent-browser
-only for scripted multi-step interactions. Agents
-must report missing browser support or a preview that cannot yet show their edits.
+Trezi's built-in agent instructions require Vercel agent-browser for browser
+verification during UI changes. Provider helpers place Trezi's managed wrapper
+on PATH; it pins an isolated headless Chromium shell, profile and session.
+Agents must report missing browser support or a preview that cannot show edits.
 
 Later, start Trezi from Applications or the terminal:
 

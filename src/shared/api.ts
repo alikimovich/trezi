@@ -76,11 +76,15 @@ export interface GitRemoteStatus {
   remotes: string[]
   upstream: string | null
   branches: { ref: string; remote: string; branch: string; label: string }[]
+  changes?: { path: string; state: string; eligible: boolean; preview?: string }[]
+  changeToken?: string
 }
 export interface GitRemoteAction {
   action: 'pull' | 'checkout'
   ref: string
   expectedBranch: string
+  /** Supplied only after the user reviewed the exact dirty-tree scope. */
+  commit?: { message: string; changeToken: string }
 }
 export interface GitRemoteResult {
   ok: boolean
@@ -1360,6 +1364,8 @@ export interface ThreeDLayer {
   id: number
   label: string
   depth: number
+  /** Index of the nearest captured DOM ancestor, or -1 for the root. */
+  parent: number
   x: number
   y: number
   width: number

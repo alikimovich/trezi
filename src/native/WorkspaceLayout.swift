@@ -157,14 +157,18 @@ final class WorkspaceLayout {
         syncStart()
         var state = chatState
         let full = width(), shown = full * fraction
-        let visible = chatReady && shown > 60 && host.canvas.bounds.height > 30
+        // Shell selection can arrive before the destination's chat frame while the
+        // owner persists its pick. Never expose the previous project's transcript or
+        // composer in that gap.
+        let selected = (shellState["selected"] as? String)?.dropFirst(5)
+        let matching = selected.map { String($0) == state["chat"] as? String } ?? true
+        let visible = chatReady && matching && shown > 60 && host.canvas.bounds.height > 30
         state["visible"] = visible
         state["bounds"] = ["x":0.0, "y":0.0, "width":Double(full), "height":Double(host.canvas.bounds.height)]
         startComposer(&state, column: full)
         return state
     }
-    /// The selected project finished opening. Before that (opening, failed open) the
-    /// column keeps its width, so nothing moves when the chat appears, but stays empty.
+    /// A committed project owns its chat column throughout preview opening and failure.
     var planning: Bool { (chatState["start"] as? [String: Any])?["planning"] as? Bool == true }
     var chatReady: Bool { planning || (shellState["project"] is String && shellState["chatReady"] as? Bool == true) }
     func layout() {
@@ -197,8 +201,9 @@ final class WorkspaceLayout {
         host.inspectorSlot.frame = NSRect(x: leading, y: 0, width: max(0, bounds.width - leading - right), height: max(0, bounds.height - bottom))
         host.inspectorSlot.fit()
         let available = host.canvas.convert(host.inspectorSlot.page, from: host.inspectorSlot)
-        // Opening and failed-open states own the whole content area, the chat column included.
-        host.previewStatus.frame = chatReady ? available : NSRect(x: 0, y: 0, width: available.maxX, height: available.height)
+        // Project progress belongs to the preview pane; the true empty home uses
+        // its own centered start surface.
+        host.previewStatus.frame = available
         // Shown rulers take a strip at the top and left of the area (LKM-205).
         let ruler = host.previewOverlay?.inset ?? 0
         let pageArea = NSRect(x: available.minX + ruler, y: available.minY + ruler, width: max(0, available.width - ruler), height: max(0, available.height - ruler))
@@ -247,8 +252,7 @@ final class WorkspaceLayout {
         host.statesSwitcher.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         var occluders: [NSRect] = []
         if host.threeD.active {
-            let compact = page.width < 520
-            let top: CGFloat = 48, bottom: CGFloat = compact ? 100 : 76
+            let top: CGFloat = 48, bottom: CGFloat = 44
             let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: max(0, page.height - top - bottom))
             func confined(_ frame: NSRect) -> NSRect {
                 let lower = max(frame.minY, stage.minY), upper = min(frame.maxY, stage.maxY)

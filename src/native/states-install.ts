@@ -52,6 +52,7 @@ export function installStatesWorkbench(options: {
     active: () => workspace.active ?? null,
     pageUrl: () => options.preview.webContents.getURL(),
     preview: (channel, payload) => options.preview.webContents.send(channel, payload),
+    probe: (code) => options.preview.webContents.executeJavaScript(code),
     send: (command, payload) => host.send(command, payload as Record<string, unknown>),
     legacyItems: () => legacyItems,
     sheets: options.sheets,
@@ -59,7 +60,7 @@ export function installStatesWorkbench(options: {
     submit: async (root, text, chat) => {
       const entry = project(root)
       if (!entry) return
-      const key = (await focus(root, chat)) ? chat : entry.activeSessionKey
+      const key = chat && (await focus(root, chat)) ? chat : entry.activeSessionKey
       await nativeChat.command({ type: 'submit', chat: key, text })
     },
     focusChat: focus,
@@ -129,7 +130,8 @@ export function installStatesWorkbench(options: {
     },
     chatTitle: (chat) => nativeChat.chats.get(chat)?.title || undefined,
     canvasSelection: (root, element) => canvas.expect(root, element),
-    openCanvasForSelection: (root, element) => canvas.openForSelection(root, element)
+    openCanvasForSelection: (root, element) => canvas.openForSelection(root, element),
+    showCanvas: (root, element) => canvas.show(root, element)
   })
   nativeStates = states
   // A workbench chip tells the agent where the workbench is when the message is sent.

@@ -148,6 +148,19 @@ async function checkPointer(
   await island({ appearance: 'system' })
   await perform('spacing:padding')
   await perform('spacing:margin')
+  const collapsed = (await host.request('inspectorInspect')) as { values: Record<string, string> }
+  assert.equal(collapsed.values['style:padding-horizontal'], '', 'asymmetric padding remains Mixed')
+  assert.equal(collapsed.values['style:margin-horizontal'], '', 'asymmetric margin remains Mixed')
+  assert.equal(
+    collapsed.values['style:padding-vertical'],
+    inspector.values['style:padding-vertical'],
+    'vertical padding keeps its value'
+  )
+  for (const appearance of ['light', 'dark']) {
+    const state = await island({ appearance })
+    await captureExpanded(`inspector-island-collapsed-${appearance}`, state)
+  }
+  await island({ appearance: 'system' })
   for (const name of ['field', 'tabs']) {
     const control = targets.controls[name]
     assert.ok(control.found, `pointer: the island has its ${name}`)

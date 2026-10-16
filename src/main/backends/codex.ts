@@ -206,6 +206,59 @@ const REASONING_EFFORTS = new Set<ModelReasoningEffort>([
 const isEffort = (e: string | undefined): e is ModelReasoningEffort =>
   !!e && REASONING_EFFORTS.has(e as ModelReasoningEffort)
 const oneLine = (s: string, n = 120): string => s.replace(/\s+/g, ' ').trim().slice(0, n)
+
+/**
+ * How long the CLI gets to close its stream by itself after a terminal turn event.
+ * Closing the SDK iterator kills the CLI (SIGTERM), which can cut off its rollout
+ * flush and tool-child cleanup, so a healthy exit is given room first.
+ */
+const streamGraceMs = (): number => {
+  const ms = Number(process.env.TREZI_CODEX_STREAM_GRACE_MS)
+  return Number.isFinite(ms) && ms >= 0 && process.env.TREZI_CODEX_STREAM_GRACE_MS ? ms : 1500
+}
+
+/**
+ * Reads the stream on past a terminal turn event until it closes. True when it
+ * closed by itself; false when the grace period ran out and the stream was cut
+ * (`cut` aborts the CLI, which settles the read still pending on the iterator).
+ * Late events and late errors are ignored: the turn already reported its outcome.
+ */
+async function drainAfterTerminal(
+  it: AsyncIterator<unknown>,
+  cut: () => void,
+  graceMs: number
+): Promise<boolean> {
+  const expired = Symbol('expired')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<typeof expired>((resolve) => {
+    timer = setTimeout(() => resolve(expired), graceMs)
+  })
+  let pending: Promise<{ done?: boolean }> | null = null
+  try {
+    for (;;) {
+      pending = it.next().then(
+        (step) => step,
+        () => ({ done: true })
+      )
+      const step = await Promise.race([pending, timeout])
+      if (step === expired) break
+      if (step.done) return true
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+  cut()
+  void it.return?.()?.catch(() => {})
+  let settle: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    pending,
+    new Promise((resolve) => {
+      settle = setTimeout(resolve, 500)
+    })
+  ])
+  clearTimeout(settle)
+  return false
+}
 /** Items that are the model's own output; after one, a failed turn is not retried. */
 const OUTPUT_ITEMS = new Set<string>([
   'agent_message',
@@ -534,6 +587,9 @@ async function startSession(
     // `turn.completed`, so the rollout is the only record of what it spent.
     await usageWatch?.poll().catch(() => {})
     stopUsageWatch()
+    // The iterator is closed now. A later session shutdown must not abort its
+    // already-finished child (the SDK removes that child's error listener on close).
+    turnAbort = null
     cap.finalize()
     emit({ type: 'done' })
   }
@@ -564,10 +620,27 @@ async function startSession(
     // The real CLI's `error` event text; an event without one is shown as it came.
     const errorText = (ev: { message?: unknown }): string =>
       typeof ev.message === 'string' ? ev.message : JSON.stringify(ev)
+    // The turn's own signal plus a private one to cut a stream that stays open after
+    // its terminal event, without marking the turn itself as cancelled.
+    const streamAbort = new AbortController()
+    const forwardAbort = (): void => streamAbort.abort()
+    if (signal?.aborted) forwardAbort()
+    else signal?.addEventListener('abort', forwardAbort, { once: true })
+    let it: AsyncIterator<unknown> | null = null
+    let closed = false
     try {
-      const { events } = await thread.runStreamed(text, { signal })
-      for await (const ev of events) {
+      const { events } = await thread.runStreamed(text, { signal: streamAbort.signal })
+      const iterator = events[Symbol.asyncIterator]()
+      it = iterator
+      for (;;) {
+        const step = await iterator.next()
+        if (step.done) {
+          closed = true
+          break
+        }
+        const ev = step.value
         if (disposed || aborted || signal?.aborted) break
+        let terminal = false
         switch (ev.type) {
           case 'thread.started':
             startUsageWatch(ev.thread_id)
@@ -588,6 +661,7 @@ async function startSession(
             // A running thread total, not this turn's own tokens — `noteUsage`
             // emits only the part the rollout tail hasn't already reported.
             noteUsage(readUsage((ev as { usage?: unknown }).usage))
+            terminal = true
             break
           case 'turn.failed':
             if (!rejection(ev.error)) {
@@ -596,6 +670,7 @@ async function startSession(
                 network = message
               else emitError(message)
             }
+            terminal = true
             break
           case 'error': {
             if (rejection(ev)) break
@@ -620,6 +695,15 @@ async function startSession(
           }
           // turn.started needs no extra handling.
         }
+        // CLI stdout can stay open after its terminal turn event, which would keep
+        // Writing and Stop up and hold a queued answer. Give the CLI a short grace to
+        // exit on its own (closing the iterator SIGTERMs it mid-flush), then cut the
+        // stream so runTurn finalizes exactly once.
+        if (terminal) {
+          await drainAfterTerminal(iterator, forwardAbort, streamGraceMs())
+          closed = true
+          break
+        }
       }
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
@@ -635,6 +719,10 @@ async function startSession(
             codexSeatAuthFailure(m, options.connectionId)
           )
       }
+    } finally {
+      signal?.removeEventListener('abort', forwardAbort)
+      // A break out of the loop (teardown) must still close the iterator and its CLI.
+      if (it && !closed) await it.return?.()?.catch(() => {})
     }
     return { rejected, network }
   }
