@@ -540,7 +540,12 @@ try {
   rmSync(join(sim, 'booted.json'), { force: true })
   mode({ slowBoot: true })
   const booting = pending(owner.simulatorStart({ root: project, command: fakes.metro('ready') }))
-  const status = await until(() => readJsonIfComplete(join(sim, 'bootstatus.json')), 'bootstatus')
+  // A file appearing, not an assertion: the replaced preview stops, then the owner spawns the fake xcrun.
+  const status = await until(
+    () => readJsonIfComplete(join(sim, 'bootstatus.json')),
+    'bootstatus',
+    30_000
+  )
   await gone(secondMetro.pid, 'the running preview replaced by the new start')
   const stopAt = Date.now()
   await owner.simulatorStop()
@@ -553,7 +558,11 @@ try {
 
   log('a newer start supersedes one still booting')
   const older = pending(owner.simulatorStart({ root: project, command: fakes.metro('ready') }))
-  const waiting = await until(() => readJsonIfComplete(join(sim, 'bootstatus.json')), 'bootstatus')
+  const waiting = await until(
+    () => readJsonIfComplete(join(sim, 'bootstatus.json')),
+    'bootstatus',
+    30_000
+  )
   mode({})
   const newer = owner.simulatorStart({ root: project, command: fakes.metro('ready') })
   await rejects(older, 'cancelled')

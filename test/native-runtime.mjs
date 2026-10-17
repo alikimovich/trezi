@@ -67,6 +67,7 @@ if (process.platform !== 'darwin') {
     timeout,
     env: {
       ...process.env,
+      TREZI_NATIVE_SMOKE_DEADLINE_MS: String(started + timeout),
       TREZI_BUILD_PROFILE: process.env.TREZI_BUILD_PROFILE || 'test',
       TREZI_NATIVE_SMOKE_STEAL_FOCUS: process.env.TREZI_NATIVE_SMOKE_STEAL_FOCUS ?? 'chat-ready'
     }

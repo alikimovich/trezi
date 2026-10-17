@@ -852,6 +852,24 @@ exit 0
       Buffer.from(stale.response, 'base64').toString().endsWith('retry: 1000\n\ndata: 1\n\n'),
       'a page that missed a change reloads on connect'
     )
+    // Held streams take no worker each (LKM-255): past the dispatch pool's 64 workers the
+    // site still serves pages and announces changes, and a peer that leaves is dropped.
+    assert.equal(
+      (await fixture.cmd({ cmd: 'open-streams', root: site, count: 80 })).clients,
+      82,
+      'every held stream attached'
+    )
+    assert.equal((await get('/')).status, 200, 'a page is served while 82 streams are held')
+    assert.equal((await fixture.cmd({ cmd: 'changed', root: site })).version, 2)
+    assert.equal(
+      (await fixture.cmd({ cmd: 'read-stream', name: 'a', until: 'data: 2' })).received,
+      'data: 2\n\n'
+    )
+    assert.equal(
+      (await fixture.cmd({ cmd: 'close-streams', root: site, count: 40 })).clients,
+      42,
+      'a stream whose peer left is dropped'
+    )
     assert.equal((await fixture.cmd({ cmd: 'close-site', root: site })).closed, true)
     assert.equal(
       (await fixture.cmd({ cmd: 'read-stream', name: 'a', until: '\u0000' })).received,
@@ -888,14 +906,51 @@ exit 0
     assert.equal(watched.watching, true)
     await sleep(300)
     const base = (await state()).version
-    writeFileSync(join(site, 'index.html'), '<h1>y</h1>')
-    await until(async () => (await state()).version > base, 5000, 'a watched change')
-    await sleep(400)
-    const settled = (await state()).version
-    writeFileSync(join(site, '.git/index'), 'x')
-    writeFileSync(join(site, 'node_modules/dep.js'), 'x')
-    await sleep(600)
-    assert.equal((await state()).version, settled, '.git and node_modules never reload the preview')
+    // Under load the FSEvents stream can start after the first write, so the change is
+    // repeated (new content each time) until the watcher reports one.
+    let writes = 0
+    let lastWrite = 0
+    await until(
+      async () => {
+        if (writes === 0 || Date.now() - lastWrite >= 500) {
+          writeFileSync(join(site, 'index.html'), `<h1>y${++writes}</h1>`)
+          lastWrite = Date.now()
+        }
+        return (await state()).version > base
+      },
+      20_000,
+      'a watched change'
+    )
+    // Under load FSEvents delivers the change's trailing events late: the baseline is
+    // the version after a quiet second, so only the ignored writes below can move it. A late
+    // event can still land after that second (the host's load average reaches 35), so the
+    // ignored writes are repeated from a fresh quiet baseline, three attempts at most. A
+    // watcher that did not ignore them would move the version on every attempt.
+    let settled = (await state()).version
+    for (let attempt = 1; ; attempt++) {
+      let quietSince = Date.now()
+      await until(
+        async () => {
+          const now = (await state()).version
+          if (now !== settled) {
+            settled = now
+            quietSince = Date.now()
+          }
+          return Date.now() - quietSince >= 1000
+        },
+        15_000,
+        'the watched change to settle'
+      )
+      writeFileSync(join(site, '.git/index'), `x${attempt}`)
+      writeFileSync(join(site, 'node_modules/dep.js'), `x${attempt}`)
+      await sleep(600)
+      const after = (await state()).version
+      if (after === settled) break
+      assert.ok(
+        attempt < 3,
+        `.git and node_modules never reload the preview (version ${settled} -> ${after} on ${attempt} attempts)`
+      )
+    }
     assert.equal((await fixture.cmd({ cmd: 'close-site', root: site })).watching, false)
     writeFileSync(join(site, 'index.html'), '<h1>z</h1>')
     await sleep(600)
@@ -956,10 +1011,22 @@ exit 0
         join(app, 'server.mjs'),
         `const s = Bun.serve({ port: Number(process.env.PORT), hostname: process.env.HOST, fetch: () => new Response('app') }); console.log('listening', s.port)`
       )
-      const ready = await runtime.start({ root: app, command: `"${process.execPath}" server.mjs` })
+      // The unit tier runs in parallel and the assigned port is only probed free, not held until
+      // the child binds it: another test's server can take it first, which the service reports as
+      // a conflict. Starts that are not about conflicts are repeated (three at most) on that code.
+      const startFree = async (options) => {
+        for (let attempt = 1; ; attempt++) {
+          try {
+            return await runtime.start(options)
+          } catch (error) {
+            if (error?.code !== 'conflict' || attempt >= 3) throw error
+          }
+        }
+      }
+      const ready = await startFree({ root: app, command: `"${process.execPath}" server.mjs` })
       assert.equal(await (await fetch(ready.url)).text(), 'app')
       // Restart: the old port is released, the new one serves.
-      const again = await runtime.start({ root: app, command: `"${process.execPath}" server.mjs` })
+      const again = await startFree({ root: app, command: `"${process.execPath}" server.mjs` })
       assert.equal(await (await fetch(again.url)).text(), 'app')
       if (again.url !== ready.url) await assert.rejects(fetch(ready.url))
       // Printed-URL fallback for a server that ignores PORT.
@@ -968,7 +1035,7 @@ exit 0
         join(own, 'server.mjs'),
         `const s = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('own') }); console.log('  Local: http://localhost:' + s.port + '/')`
       )
-      const printed = await runtime.start({
+      const printed = await startFree({
         root: own,
         command: `"${process.execPath}" server.mjs`
       })

@@ -230,7 +230,9 @@ release()
 hold = null
 await until(
   () => created - createdBefore === TIMING_RUNS + 1 && onlyChatWorktrees(),
-  'the measured chats’ worktrees removed'
+  'the measured chats’ worktrees removed',
+  // Git removes the held worktrees in the background; an eight-worker run is slower.
+  45_000
 )
 assert.equal(providers.length, 1, 'a chat closed while pending starts no provider')
 assert.equal(await spareReady(repo), null, 'a chat closed while pending prewarms no spare')

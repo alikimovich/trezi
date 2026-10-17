@@ -110,7 +110,9 @@ Both are recorded in `docs/TASKS.md`.
   `.git` and `node_modules`, bumps the version at once and broadcasts after 80 ms.
   Pages carry the version they were served at, so a change made while no stream
   was open still reloads. A watcher that cannot start is logged and the site
-  still serves. Stopping the site stops the watcher and ends every stream.
+  still serves. Stopping the site stops the watcher and ends every stream. An open
+  stream is watched for its end by a dispatch read source, never a parked thread:
+  64 held streams used to take every dispatch worker and stall the service.
 - **Logs.** Output is split into lines on bytes (a character split across reads
   survives), ANSI is stripped, blank lines are skipped, and each line reaches the
   Activity log as before. Install output is now logged too.

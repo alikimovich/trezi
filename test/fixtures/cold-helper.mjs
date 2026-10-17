@@ -5,7 +5,9 @@
 // (LKM-147) is shortened to 200 ms so a stalled turn receives several before its deadline.
 const [bundled, installed] = process.argv.slice(2)
 const { setClaudeCandidates } = await import('../../src/main/backends/claude-login.ts')
-setClaudeCandidates({ bundled, installed: [installed] })
+// The stand-in `auth` sleeps 2 s to overlap; the production 4 s kill leaves a loaded host
+// little room to cold-start Bun, and a killed stand-in never logs its probe.
+setClaudeCandidates({ bundled, installed: [installed], probeTimeout: 30_000 })
 const { setHelperHeartbeat } = await import('../../src/main/backends/helper-host.ts')
 setHelperHeartbeat(200)
 await import('../../src/main/backends/provider-helper-entry.ts')

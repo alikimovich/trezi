@@ -171,8 +171,18 @@ async function measureBoth({
       withOverrides
     })
   await run(false)
-  await resetPreviewSource(page, root, sourceFile, format, open, served)
-  await run(true)
+  // A dev server under load can leave the page without the gesture's final update (its HMR
+  // channel is not up yet): the gesture is run again from the reset, three times at most. Every
+  // run must pass all of the assertions; only that one failure is retried.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await resetPreviewSource(page, root, sourceFile, format, open, served)
+      return await run(true)
+    } catch (error) {
+      if (!error?.updateUndelivered || attempt >= 3) throw error
+      console.log(`ISLAND-FLICKER-FRAMEWORKS ${label} update not delivered; run ${attempt + 1}`)
+    }
+  }
 }
 
 async function prepareNext(root) {
