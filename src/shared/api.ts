@@ -1070,7 +1070,13 @@ export interface StyleReadResult {
   /** Winning active declaration's origin; absent means a browser default. */
   origins?: Record<
     string,
-    { kind: 'inline' | 'rule'; selector?: string; href?: string; important?: boolean }
+    {
+      kind: 'inline' | 'rule'
+      selector?: string
+      href?: string
+      important?: boolean
+      conditional?: boolean
+    }
   >
   parentDisplay?: string
 }

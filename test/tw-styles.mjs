@@ -340,6 +340,28 @@ eq(
 )
 eq(matchingUtilityClass(['gap-x-4', 'gap-y-2'], 'column-gap'), 'gap-x-4', 'column gap source')
 eq(
+  matchingUtilityClass(['justify-items-center'], 'justify-content'),
+  null,
+  'justify-items is another family'
+)
+eq(
+  matchingUtilityClass(['content-none'], 'align-content'),
+  null,
+  'content property is another family'
+)
+eq(
+  rewriteClassList('justify-items-center', 'justify-content', 'center'),
+  'justify-items-center justify-center',
+  'justify edit preserves justify-items'
+)
+eq(
+  rewriteClassList('content-none', 'align-content', 'center'),
+  'content-none content-center',
+  'align edit preserves content utility'
+)
+eq(tailwindClassFor('align-items', 'normal'), null, 'unsupported items-normal is not emitted')
+eq(tailwindClassFor('align-self', 'normal'), null, 'unsupported self-normal is not emitted')
+eq(
   matchingUtilityClass(['md:gap-x-4'], 'column-gap'),
   null,
   'responsive utility is not blindly rewritten'

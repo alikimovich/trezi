@@ -443,20 +443,26 @@ export class NativeInspectorController {
                 className.startsWith(`_${this.classRule?.className}_`))
           ) &&
           origin.href?.split('?')[0].endsWith(this.classRule.file) &&
-          !origin.important
+          !origin.important &&
+          !origin.conditional
         const utility = matchingUtilityClass(element.classes, prop)
         const ownsUtility =
           origin?.kind === 'rule' &&
           !!element.source &&
           !!utility &&
           origin.selector?.trim() === `.${utility}` &&
-          !origin.important
-        const editable =
+          !origin.important &&
+          !origin.conditional
+        const sourceEditable =
           origin?.kind === 'inline'
             ? !!element.source && !origin.important
             : origin?.kind === 'rule'
               ? !!ownsRule || !!ownsUtility
               : !!element.source || !!this.classRule
+        // Existing baseline controls keep their established utility editing
+        // contract. New layout controls require proof of the winning source.
+        const editable =
+          meta.appliesTo || prop === 'gap' ? sourceEditable : !!element.source || !!this.classRule
         const detail = authored
           ? `${origin?.kind === 'inline' ? 'Inline' : origin?.kind === 'rule' ? `CSS rule ${origin.selector ?? ''}` : 'Authored'}: ${this.styles?.specified[prop] ?? `gap: ${gapShorthand}`}${value && value !== this.styles?.specified[prop] ? ` · resolved ${value}` : ''}`
           : `Computed default: ${value || 'unset'}`
@@ -502,6 +508,7 @@ export class NativeInspectorController {
             step: meta.step,
             unit: meta.unit,
             options: meta.options,
+            optionLabels: meta.optionLabels,
             detail: authored || meta.appliesTo ? detail : undefined,
             layout,
             axis,

@@ -115,16 +115,19 @@ function requestReply<T>(opts: {
   /** Late-bound: the view is created on demand and replaced when the window is. */
   getView: () => NativeView | null
   /** Map a reply payload to the resolved value (null = nothing usable). */
-  parse: (payload: Record<string, unknown>) => T | null
+  parse: (payload: Record<string, unknown>, requested: Record<string, unknown>) => T | null
 }): (payload?: Record<string, unknown>) => Promise<T | null> {
   let seq = 0
-  const pending = new Map<number, (value: T | null) => void>()
+  const pending = new Map<
+    number,
+    { resolve: (value: T | null) => void; requested: Record<string, unknown> }
+  >()
 
   ipcMain.on(opts.reply, (e, p: { id?: unknown } | undefined) => {
     // Untrusted sender check: only the preview may answer its own read.
     if (e.sender !== opts.getView()?.webContents) return
-    const resolve = typeof p?.id === 'number' ? pending.get(p.id) : undefined
-    resolve?.(opts.parse((p ?? {}) as Record<string, unknown>))
+    const entry = typeof p?.id === 'number' ? pending.get(p.id) : undefined
+    if (entry) entry.resolve(opts.parse((p ?? {}) as Record<string, unknown>, entry.requested))
   })
 
   return (payload = {}) => {
@@ -136,10 +139,13 @@ function requestReply<T>(opts: {
         pending.delete(id)
         resolve(null)
       }, opts.timeoutMs)
-      pending.set(id, (value) => {
-        clearTimeout(timer)
-        pending.delete(id)
-        resolve(value)
+      pending.set(id, {
+        requested: payload,
+        resolve: (value) => {
+          clearTimeout(timer)
+          pending.delete(id)
+          resolve(value)
+        }
       })
       view.webContents.send(opts.request, { id, ...payload })
     })
@@ -358,15 +364,55 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     reply: STYLES_READ_REPLY,
     timeoutMs: 500,
     getView: host.getPreviewView,
-    parse: (p) => {
-      const values = p.values as Record<string, string> | null | undefined
-      if (!values) return null
+    parse: (p, requested) => {
+      const props = Array.isArray(requested.props)
+        ? requested.props
+            .filter((key): key is string => typeof key === 'string' && key.length <= 64)
+            .slice(0, 240)
+        : []
+      const record = (raw: unknown): Record<string, unknown> =>
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : {}
+      if (!p.values || typeof p.values !== 'object' || Array.isArray(p.values)) return null
+      const values: Record<string, string> = {}
+      const specified: Record<string, string> = {}
+      const declaredVars: Record<string, string | null> = {}
+      const origins: NonNullable<StyleReadResult['origins']> = {}
+      const rawValues = record(p.values)
+      const rawSpecified = record(p.specified)
+      const rawVars = record(p.declaredVars)
+      const rawOrigins = record(p.origins)
+      for (const prop of props) {
+        if (typeof rawValues[prop] === 'string') values[prop] = rawValues[prop].slice(0, 256)
+        if (typeof rawSpecified[prop] === 'string')
+          specified[prop] = rawSpecified[prop].slice(0, 256)
+        const variable = rawVars[prop]
+        if (variable === null || (typeof variable === 'string' && variable.length <= 128))
+          declaredVars[prop] = variable
+        const source = record(rawOrigins[prop])
+        if (source.kind !== 'inline' && source.kind !== 'rule') continue
+        const selector = source.selector
+        const href = source.href
+        if (selector !== undefined && (typeof selector !== 'string' || selector.length > 256))
+          continue
+        if (href !== undefined && (typeof href !== 'string' || href.length > 256)) continue
+        if (source.important !== undefined && typeof source.important !== 'boolean') continue
+        if (source.conditional !== undefined && typeof source.conditional !== 'boolean') continue
+        origins[prop] = {
+          kind: source.kind,
+          selector,
+          href,
+          important: source.important,
+          conditional: source.conditional
+        }
+      }
       return {
         values,
-        declaredVars: (p.declaredVars as Record<string, string | null> | null) ?? {},
-        specified: (p.specified as Record<string, string> | null) ?? {},
-        origins: (p.origins as StyleReadResult['origins']) ?? {},
-        parentDisplay: typeof p.parentDisplay === 'string' ? p.parentDisplay : ''
+        declaredVars,
+        specified,
+        origins,
+        parentDisplay: typeof p.parentDisplay === 'string' ? p.parentDisplay.slice(0, 64) : ''
       }
     }
   })

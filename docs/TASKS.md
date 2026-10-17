@@ -7,7 +7,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Add contextual flex/grid and child alignment fields, preserve authored text and distinguish defaults.
 - [x] Read active media declarations and guard edits when the winning source is uncertain.
-- [ ] Cover CSS, CSS Module and responsive utility edits in native fixtures and verify Undo.
+- [ ] Verify the native fixture for CSS, CSS Module and utility edits, responsive read-only behavior, capture and Undo.
 - [ ] Manager: inspect native captures, run full verification and independent review.
 
 ## Chat history status (LKM-268)

@@ -7,6 +7,7 @@ export interface NativeInspectorField {
   disabled?: boolean
   detail?: string
   options?: string[]
+  optionLabels?: Record<string, string>
   min?: number
   max?: number
   step?: number

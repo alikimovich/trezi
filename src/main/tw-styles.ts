@@ -69,6 +69,12 @@ const LAYOUT_SUFFIX: Record<string, string> = {
   'space-around': 'around',
   'space-evenly': 'evenly'
 }
+const LAYOUT_VALUES: Record<string, ReadonlySet<string>> = {
+  'justify-content': new Set(['start', 'end', 'center', 'between', 'around', 'evenly', 'stretch']),
+  'align-items': new Set(['start', 'end', 'center', 'baseline', 'stretch']),
+  'align-content': new Set(['start', 'end', 'center', 'between', 'around', 'evenly', 'stretch']),
+  'align-self': new Set(['auto', 'start', 'end', 'center', 'baseline', 'stretch'])
+}
 const RADIUS_PX = new Map([
   [0, 'none'],
   [2, 'xs'],
@@ -154,7 +160,10 @@ export function tailwindClassFor(prop: string, value: string): string | null {
   if (prop === 'flex-wrap' && ['nowrap', 'wrap', 'wrap-reverse'].includes(value))
     return `flex-${value}`
   const layout = LAYOUT_PREFIX[prop]
-  if (layout) return `${layout}-${LAYOUT_SUFFIX[value] ?? value}`
+  if (layout) {
+    const suffix = LAYOUT_SUFFIX[value] ?? value
+    return LAYOUT_VALUES[prop].has(suffix) ? `${layout}-${suffix}` : null
+  }
   switch (prop) {
     case 'box-shadow':
       return value.trim() === 'none' ? 'shadow-none' : arbitrary('shadow', value)
@@ -295,7 +304,10 @@ function isFamilyMatch(prop: string, cls: string): boolean {
   }
   if (prop === 'flex-direction') return /^flex-(?:row|row-reverse|col|col-reverse)$/.test(cls)
   if (prop === 'flex-wrap') return /^flex-(?:nowrap|wrap|wrap-reverse)$/.test(cls)
-  if (LAYOUT_PREFIX[prop]) return anySuffix(cls, LAYOUT_PREFIX[prop])
+  if (LAYOUT_PREFIX[prop]) {
+    const prefix = LAYOUT_PREFIX[prop]
+    return cls.startsWith(`${prefix}-`) && LAYOUT_VALUES[prop].has(cls.slice(prefix.length + 1))
+  }
   switch (prop) {
     case 'box-shadow': {
       const inner = arbitraryInner(cls, 'shadow')

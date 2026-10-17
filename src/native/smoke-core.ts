@@ -130,6 +130,18 @@ export async function runNativeCoreSmoke(
     join(fixture, 'native-style.tsx'),
     'export function Fixture() { return <h1 style={{ opacity: 1, paddingLeft: "var(--space-a)", paddingRight: "18px", paddingTop: "6px", paddingBottom: "6px", marginLeft: "auto", marginRight: "-4px", marginTop: "-2px", marginBottom: "3px" }}>Hello</h1> }'
   )
+  writeFileSync(
+    join(fixture, 'native-layout.module.css'),
+    '.layoutCard { display: grid; row-gap: 8px; column-gap: 16px; }\n'
+  )
+  writeFileSync(
+    join(fixture, 'native-layout.tsx'),
+    'export function Layout() { return <div className="flex gap-4">Layout</div> }\n'
+  )
+  const layoutCss =
+    '.native-layout { display:flex; gap:0; flex-direction:column; flex-wrap:wrap; justify-content:space-between; align-items:end; } #native-layout { align-items:center !important; } @media (min-width: 1px) { .native-layout { row-gap: 1rem; column-gap: calc(2rem + 1px); align-content:normal; } } @media (max-width: 1px) { .native-layout { row-gap: 99px; } }'
+  writeFileSync(join(fixture, 'native-layout.css'), layoutCss)
+  writeFileSync(join(fixture, 'native-plain.css'), '.plainLayout { display:flex; gap:8px; }\n')
   let firstProject = '',
     originalURL = '',
     statesURL = '',
@@ -689,15 +701,15 @@ export async function runNativeCoreSmoke(
         )
         // Wait for the opened inspector's preview relayout to settle before capturing
         // the generation used by the same native action contract as the UI.
-        let inspector = await host.request('inspectorInspect')
+        let inspectorState = await host.request('inspectorInspect')
         for (let i = 0; i < 20; i++) {
           await delay(100)
           const next = await host.request('inspectorInspect')
-          if (next.generation === inspector.generation) {
-            inspector = next
+          if (next.generation === inspectorState.generation) {
+            inspectorState = next
             break
           }
-          inspector = next
+          inspectorState = next
         }
         // Visual evidence for the Styles tab's Layout sliders (LKM-115: no tick marks).
         writeFileSync(
@@ -718,7 +730,7 @@ export async function runNativeCoreSmoke(
           await host.request('inspectorPerform', {
             action: {
               root: fixture,
-              generation: inspector.generation,
+              generation: inspectorState.generation,
               action: 'apply',
               field,
               value
@@ -733,7 +745,7 @@ export async function runNativeCoreSmoke(
             console.error('Native inspector failure', {
               field,
               seen,
-              expected: inspector,
+              expected: inspectorState,
               actual: await host.request('inspectorInspect'),
               source: styleSource()
             })
@@ -767,15 +779,294 @@ export async function runNativeCoreSmoke(
             paired,
             after: styleSource(),
             undone,
-            generation: inspector.generation,
+            generation: inspectorState.generation,
             actual: await host.request('inspectorInspect')
           })
           throw error
         }
+        // Source writes live-reload the page, possibly after the write returns; a late
+        // reload would wipe the next injected fixture, so let it land first.
+        const settleLiveReload = async () => {
+          await page('window.reloadSentinel = true')
+          for (let i = 0; i < 30; i++) {
+            await delay(100)
+            const pending = await page('!!window.reloadSentinel').catch(() => false)
+            if (!pending) break
+          }
+          await wait(
+            () =>
+              page(
+                `document.readyState === 'complete' && !!document.querySelector('#native-title') && !window.reloadSentinel`
+              ).catch(() => false),
+            'live reload settled'
+          )
+        }
+        await settleLiveReload()
+        // Real CSSOM cascade evidence for the new layout controls. The active
+        // media rule wins; the inactive one must not be reported as authored.
+        await page(`(() => {
+          const style = document.createElement('style');
+          style.id = 'native-layout-css';
+          style.setAttribute('data-vite-dev-id', 'native-layout.css');
+          style.textContent = ${JSON.stringify(layoutCss)};
+          document.head.append(style);
+          const layout = document.createElement('div');
+          layout.id = 'native-layout';
+          layout.className = 'native-layout';
+          layout.setAttribute('data-trezi-source', 'index.html:3:1');
+          layout.textContent = 'Layout fixture';
+          document.body.append(layout);
+        })()`)
+        const layoutNodes = await invoke('layers:read')
+        const layoutNode = layoutNodes.nodes.find((n: any) => n.id === 'native-layout')
+        assert.ok(layoutNode, 'layout fixture is selectable')
+        await send('layers:select', {
+          path: layoutNode.path,
+          fingerprint: { tag: layoutNode.tag, source: layoutNode.source }
+        })
+        const layoutState = await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.values?.['style:row-gap'] === '1rem' && state
+        }, 'native layout fields use the winning media rule')
+        assert.equal(layoutState.values['style:column-gap'], 'calc(1px + 2rem)')
+        assert.equal(layoutState.values['style:flex-direction'], 'column')
+        assert.equal(layoutState.values['style:flex-wrap'], 'wrap')
+        assert.equal(layoutState.values['style:justify-content'], 'space-between')
+        assert.equal(layoutState.values['style:align-items'], 'center')
+        assert.equal(layoutState.values['style:align-content'], 'normal')
+        assert.equal(layoutState.disabled['style:row-gap'], true, 'responsive source is read-only')
+        const layoutRead = inspector.styles
+        assert.ok(layoutRead, 'inspector retains the winning layout declarations')
+        assert.equal(layoutRead.specified['row-gap'], '1rem')
+        assert.equal(layoutRead.origins?.['row-gap'].conditional, true)
+        assert.equal(layoutRead.specified['align-items'], 'center')
+        assert.equal(layoutRead.origins?.['align-items'].important, true)
+        const conditionalSource = readFileSync(join(fixture, 'native-layout.css'), 'utf8')
         await host.request('inspectorPerform', {
-          action: { root: fixture, generation: inspector.generation, action: 'close' }
+          action: {
+            root: fixture,
+            generation: layoutState.generation,
+            action: 'apply',
+            field: 'style:row-gap',
+            value: '24px'
+          }
+        })
+        assert.equal(readFileSync(join(fixture, 'native-layout.css'), 'utf8'), conditionalSource)
+        writeFileSync(
+          join(artifacts, 'inspector-layout.png'),
+          Buffer.from(await host.request('captureShell'), 'base64')
+        )
+        await page(`(() => {
+          document.querySelector('#native-layout')?.remove();
+          document.querySelector('#native-layout-css')?.remove();
+          const style = document.createElement('style');
+          style.id = 'native-module-css';
+          style.setAttribute('data-vite-dev-id', 'native-layout.module.css');
+          style.textContent = '._layoutCard_abcde_1 { display:grid; row-gap:8px; column-gap:16px; }';
+          document.head.append(style);
+          const card = document.createElement('div');
+          card.id = 'native-module-card';
+          card.className = '_layoutCard_abcde_1';
+          card.textContent = 'CSS Module fixture';
+          document.body.append(card);
+        })()`)
+        const moduleNodes = await invoke('layers:read')
+        const moduleNode = moduleNodes.nodes.find((n: any) => n.id === 'native-module-card')
+        assert.ok(moduleNode, 'CSS Module fixture is selectable')
+        await send('layers:select', {
+          path: moduleNode.path,
+          fingerprint: { tag: moduleNode.tag, source: moduleNode.source }
+        })
+        const moduleState = await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.values?.['style:row-gap'] === '8px' && state
+        }, 'CSS Module gap fields')
+        assert.equal(
+          moduleState.disabled['style:row-gap'],
+          false,
+          'exact CSS Module rule is editable'
+        )
+        const moduleSource = () => readFileSync(join(fixture, 'native-layout.module.css'), 'utf8')
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: moduleState.generation,
+            action: 'preview',
+            field: 'style:row-gap',
+            value: '12px'
+          }
+        })
+        await wait(
+          () =>
+            page(
+              `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+            ),
+          'CSS Module gap previews live'
+        )
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: moduleState.generation,
+            action: 'cancel-preview',
+            field: 'style:row-gap'
+          }
+        })
+        const moduleEdits = moduleState.edits
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: moduleState.generation,
+            action: 'apply',
+            field: 'style:row-gap',
+            value: '12px'
+          }
+        })
+        await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.edits > moduleEdits && moduleSource().includes('row-gap: 12px')
+        }, 'CSS Module source edit persisted')
+        assert.ok((await invoke('edit:undo', fixture)).ok, 'CSS Module edit has Undo')
+        await wait(() => moduleSource().includes('row-gap: 8px'), 'CSS Module Undo restores source')
+        await settleLiveReload()
+        await page(`(() => {
+          document.querySelector('#native-module-card')?.remove();
+          document.querySelector('#native-module-css')?.remove();
+          const style = document.createElement('style');
+          style.id = 'native-utility-css';
+          style.textContent = '.flex { display:flex } .gap-4 { gap:1rem }';
+          document.head.append(style);
+          const card = document.createElement('div');
+          card.id = 'native-utility-card';
+          card.className = 'flex gap-4';
+          card.setAttribute('data-trezi-source', 'native-layout.tsx:1');
+          card.textContent = 'Utility fixture';
+          document.body.append(card);
+        })()`)
+        const utilityNodes = await invoke('layers:read')
+        const utilityNode = utilityNodes.nodes.find((n: any) => n.id === 'native-utility-card')
+        assert.ok(utilityNode, 'utility fixture is selectable')
+        await send('layers:select', {
+          path: utilityNode.path,
+          fingerprint: { tag: utilityNode.tag, source: utilityNode.source }
+        })
+        const utilityState = await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.values?.['style:gap'] === '1rem' && state
+        }, 'utility gap is authored')
+        assert.equal(utilityState.disabled['style:gap'], false)
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: utilityState.generation,
+            action: 'preview',
+            field: 'style:gap',
+            value: '24px'
+          }
+        })
+        await wait(
+          () =>
+            page(`getComputedStyle(document.querySelector('#native-utility-card')).gap === '24px'`),
+          'utility gap previews live'
+        )
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: utilityState.generation,
+            action: 'cancel-preview',
+            field: 'style:gap'
+          }
+        })
+        const utilitySource = () => readFileSync(join(fixture, 'native-layout.tsx'), 'utf8')
+        const utilityEdits = utilityState.edits
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: utilityState.generation,
+            action: 'apply',
+            field: 'style:gap',
+            value: '24px'
+          }
+        })
+        await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.edits > utilityEdits && utilitySource().includes('gap-6')
+        }, 'utility class rewrite persisted')
+        assert.ok((await invoke('edit:undo', fixture)).ok, 'utility edit has Undo')
+        await wait(() => utilitySource().includes('gap-4'), 'utility Undo restores source')
+        await settleLiveReload()
+        await page(`(() => {
+          document.querySelector('#native-utility-card')?.remove();
+          document.querySelector('#native-utility-css')?.remove();
+          const style = document.createElement('style');
+          style.id = 'native-plain-css';
+          style.setAttribute('data-vite-dev-id', 'native-plain.css');
+          style.textContent = '.plainLayout { display:flex; gap:8px; }';
+          document.head.append(style);
+          const card = document.createElement('div');
+          card.id = 'native-plain-card';
+          card.className = 'plainLayout';
+          card.textContent = 'Plain CSS fixture';
+          document.body.append(card);
+        })()`)
+        const plainNodes = await invoke('layers:read')
+        const plainNode = plainNodes.nodes.find((n: any) => n.id === 'native-plain-card')
+        assert.ok(plainNode, 'plain CSS fixture is selectable')
+        await send('layers:select', {
+          path: plainNode.path,
+          fingerprint: { tag: plainNode.tag, source: plainNode.source }
+        })
+        const plainState = await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.values?.['style:gap'] === '8px' && state
+        }, 'plain CSS gap is authored')
+        assert.equal(plainState.disabled['style:gap'], false)
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: plainState.generation,
+            action: 'preview',
+            field: 'style:gap',
+            value: '12px'
+          }
+        })
+        await wait(
+          () =>
+            page(`getComputedStyle(document.querySelector('#native-plain-card')).gap === '12px'`),
+          'plain CSS gap previews live'
+        )
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: plainState.generation,
+            action: 'cancel-preview',
+            field: 'style:gap'
+          }
+        })
+        const plainSource = () => readFileSync(join(fixture, 'native-plain.css'), 'utf8')
+        const plainEdits = plainState.edits
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: plainState.generation,
+            action: 'apply',
+            field: 'style:gap',
+            value: '12px'
+          }
+        })
+        await wait(async () => {
+          const state = await host.request('inspectorInspect')
+          return state.edits > plainEdits && plainSource().includes('gap:12px')
+        }, 'plain CSS source edit persisted')
+        assert.ok((await invoke('edit:undo', fixture)).ok, 'plain CSS edit has Undo')
+        await wait(() => plainSource().includes('gap:8px'), 'plain CSS Undo restores source')
+        await host.request('inspectorPerform', {
+          action: { root: fixture, generation: plainState.generation, action: 'close' }
         })
         await inspect('inspectorInspect', (s) => !s.visible)
+        await page(`(() => {
+          document.querySelector('#native-plain-card')?.remove();
+          document.querySelector('#native-plain-css')?.remove();
+        })()`)
         await checkInspectorIsland(
           host,
           artifacts,

@@ -1254,18 +1254,28 @@ function readStyles(id: unknown, props: string[]): void {
   )
   const declaredVars: Record<string, string | null> = {}
   const specified: Record<string, string> = {}
+  const boundedOrigins: typeof origins = {}
   for (const [p, text] of Object.entries(spec)) {
     const name = varRefName(text)
     declaredVars[p] = name ? name.slice(0, 128) : null
     specified[p] = text.trim().slice(0, 256)
+    const origin = origins[p]
+    if (origin)
+      boundedOrigins[p] = {
+        kind: origin.kind,
+        selector: origin.selector?.slice(0, 256),
+        href: origin.href?.slice(0, 256),
+        important: origin.important,
+        conditional: origin.conditional
+      }
   }
   ipcRenderer.send(STYLES_READ_REPLY, {
     id,
     values,
     declaredVars,
     specified,
-    origins,
-    parentDisplay: el.parentElement ? getComputedStyle(el.parentElement).display : ''
+    origins: boundedOrigins,
+    parentDisplay: el.parentElement ? getComputedStyle(el.parentElement).display.slice(0, 64) : ''
   })
 }
 

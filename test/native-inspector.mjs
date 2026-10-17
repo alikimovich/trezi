@@ -294,6 +294,46 @@ const moduleInspector = new NativeInspectorController(
 await moduleInspector.activate('/a')
 await moduleInspector.select({ ...element, classes: ['_card_a1b2c_1'] })
 assert.equal(moduleInspector.state.fields.find((f) => f.id === 'style:row-gap').disabled, false)
+moduleInspector.styles.origins['row-gap'].conditional = true
+moduleInspector.build()
+assert.equal(moduleInspector.state.fields.find((f) => f.id === 'style:row-gap').disabled, true)
+
+const utilityInspector = new NativeInspectorController(
+  async (channel) => {
+    if (channel === 'styles:read')
+      return {
+        values: { display: 'block', width: '100px', 'padding-left': '16px' },
+        specified: { width: '100%', 'padding-left': '1rem' },
+        origins: {
+          width: { kind: 'rule', selector: '.w-full' },
+          'padding-left': { kind: 'rule', selector: '.p-4' }
+        },
+        declaredVars: {}
+      }
+    if (channel === 'controls:list' || channel === 'controls:get') return []
+    return null
+  },
+  async () => {},
+  () => {},
+  async () => {},
+  async () => {}
+)
+await utilityInspector.activate('/a')
+await utilityInspector.select({ ...element, classes: ['w-full', 'p-4'] })
+assert.equal(utilityInspector.state.fields.find((f) => f.id === 'style:width').disabled, false)
+await utilityInspector.action({
+  root: '/a',
+  generation: utilityInspector.state.generation,
+  action: 'spacing:padding'
+})
+assert.equal(
+  utilityInspector.state.fields.find((f) => f.id === 'style:padding-left').disabled,
+  false
+)
+assert.equal(
+  utilityInspector.state.fields.find((f) => f.id === 'style:padding-right').disabled,
+  false
+)
 
 let previewing = false
 const asymmetric = new NativeInspectorController(

@@ -23,20 +23,16 @@ export function varRefName(value: string): string | null {
 
 /**
  * The SPECIFIED value of each of `props` on `el` — unlike computed style, this
- * preserves `var(--x)` literally. Checked in a rough cascade approximation:
- * matched same-origin stylesheet rules in document order, THEN inline
- * (`el.style`), which overwrites since it's closest to the top of the real
- * cascade. We don't evaluate `@media`/`@supports` conditions before walking
- * their body — a declaration inside a currently-inactive block still counts as
- * usage evidence, which only WIDENS what's provable, never invents a match to
- * an unrelated token. A cross-origin sheet throws on `.cssRules` access; it
- * can't be the previewed app's own CSS, so it's simply skipped.
+ * preserves `var(--x)` literally. Active media/supports blocks are traversed;
+ * conditional and layered rules retain their context so editors cannot mistake
+ * them for an unconditional class rule. Cross-origin sheets are skipped.
  */
 export interface StyleDeclarationOrigin {
   kind: 'inline' | 'rule'
   selector?: string
   href?: string
   important?: boolean
+  conditional?: boolean
 }
 
 /** Active declarations with their source. A selector whose specificity cannot be
@@ -85,7 +81,7 @@ export function activeDeclarations(
     ).length
     return [ids, classes, types]
   }
-  const walk = (rules: CSSRuleList | undefined, href?: string): void => {
+  const walk = (rules: CSSRuleList | undefined, href?: string, conditional = false): void => {
     if (!rules) return
     for (const rule of Array.from(rules)) {
       if (rule instanceof CSSStyleRule) {
@@ -110,7 +106,7 @@ export function activeDeclarations(
             offer(
               p,
               v,
-              { kind: 'rule', selector, href },
+              { kind: 'rule', selector, href, conditional },
               rule.style.getPropertyPriority(p),
               specificity(selector)
             )
@@ -122,14 +118,14 @@ export function activeDeclarations(
         try {
           if (!rule.styleSheet || (rule.media.length && !matchMedia(rule.media.mediaText).matches))
             continue
-          walk(rule.styleSheet.cssRules, rule.styleSheet.href ?? href)
+          walk(rule.styleSheet.cssRules, rule.styleSheet.href ?? href, conditional)
         } catch {
           /* cross-origin import — not the previewed app's own CSS */
         }
       } else if ('cssRules' in rule) {
         if (rule instanceof CSSMediaRule && !matchMedia(rule.conditionText).matches) continue
         if (rule instanceof CSSSupportsRule && !CSS.supports(rule.conditionText)) continue
-        walk((rule as CSSGroupingRule).cssRules, href)
+        walk((rule as CSSGroupingRule).cssRules, href, true)
       }
     }
   }

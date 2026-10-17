@@ -4,7 +4,7 @@ import SwiftUI
 struct InspectorToken: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorField: Decodable, Identifiable {
     let id: String, label: String, group: String, kind: String, value: String
-    let disabled: Bool?, detail: String?, options: [String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
+    let disabled: Bool?, detail: String?, options: [String]?, optionLabels: [String: String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
     let layout: String?, axis: String?, mixed: Bool?, expanded: Bool?
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
@@ -56,7 +56,9 @@ struct InspectorFieldView: View {
             } else if field.kind == "select" {
                 Picker(field.label, selection: Binding(get: { value }, set: { value = $0; apply() })) {
                     if !(field.options ?? []).contains(value) { Text(value.isEmpty ? "Default" : value).tag(value) }
-                    ForEach(field.options ?? [], id: \.self) { Text($0).tag($0) }
+                    ForEach(field.options ?? [], id: \.self) { option in
+                        Text(field.optionLabels?[option] ?? option.replacingOccurrences(of: "-", with: " ").capitalized).tag(option)
+                    }
                 }.labelsHidden()
             } else {
                 HStack {

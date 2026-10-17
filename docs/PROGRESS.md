@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-16 — LKM-272 review repair: layout source ownership
+
+- Restored editing of established Tailwind Styles fields such as width and padding. New layout fields keep a source-ownership check, and declarations inside media/supports/layer blocks are read-only until an editor can target their exact rule. Utility matching now accepts only values in the correct justify/align family, so unrelated classes such as `justify-items-center` and `content-none` cannot be rewritten.
+- Bounded and validated page-controlled style origins at the preview IPC boundary. Native alignment and flow pickers show human labels while preserving authored CSS text. Added unit coverage for the utility and ownership regressions, plus a native core fixture for active responsive CSS, plain CSS, CSS Modules and utility edit/Undo flows.
+- Agent OS quick verification passed typechecks, lint and 226 unit checks. The native `core` fixture reached the new layout state assertions, but its separate direct `styles:read` probe timed out; the fixture now reads the inspector's retained successful result. The native tool reports zero calls remaining, so the new source edit/Undo assertions and capture still require manager verification.
+
 ## 2026-10-16 — LKM-272: applied layout styles in the inspector
 
 - The Styles inspector now reads a contextual set of flex/grid and child alignment properties, including separate row and column gaps. Authored zero, normal, variables, calc() and units remain in the fields, with resolved values labelled separately. The compact Layout heading and existing padding/margin controls remain.

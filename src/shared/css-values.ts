@@ -53,6 +53,17 @@ const pxMeta = (
 ): StylePropMeta => ({ group, control: 'number', unit: 'px', min, max, step, ...extra })
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
+const LAYOUT_OPTION_LABELS: Record<string, string> = {
+  nowrap: 'No wrap',
+  'row-reverse': 'Reverse row',
+  'column-reverse': 'Reverse column',
+  'wrap-reverse': 'Reverse wrap',
+  'space-between': 'Space between',
+  'space-around': 'Space around',
+  'space-evenly': 'Space evenly',
+  'flex-start': 'Start',
+  'flex-end': 'End'
+}
 
 /** `sideMeta('padding', 0, 400)` → the 4 `padding-{top,right,bottom,left}`
  *  entries, keyed with real literal types (not widened to `string`) so the
@@ -97,18 +108,21 @@ export const STYLE_PROP_META: Record<string, StylePropMeta> = {
     group: 'layout',
     control: 'select',
     appliesTo: 'flex',
+    optionLabels: LAYOUT_OPTION_LABELS,
     options: ['row', 'row-reverse', 'column', 'column-reverse']
   },
   'flex-wrap': {
     group: 'layout',
     control: 'select',
     appliesTo: 'flex',
+    optionLabels: LAYOUT_OPTION_LABELS,
     options: ['nowrap', 'wrap', 'wrap-reverse']
   },
   'justify-content': {
     group: 'layout',
     control: 'select',
     appliesTo: 'flex-grid',
+    optionLabels: LAYOUT_OPTION_LABELS,
     options: [
       'normal',
       'start',
@@ -125,12 +139,14 @@ export const STYLE_PROP_META: Record<string, StylePropMeta> = {
     group: 'layout',
     control: 'select',
     appliesTo: 'flex-grid',
+    optionLabels: LAYOUT_OPTION_LABELS,
     options: ['normal', 'stretch', 'start', 'end', 'center', 'baseline', 'flex-start', 'flex-end']
   },
   'align-content': {
     group: 'layout',
     control: 'select',
     appliesTo: 'flex-grid',
+    optionLabels: LAYOUT_OPTION_LABELS,
     options: [
       'normal',
       'stretch',
@@ -148,6 +164,7 @@ export const STYLE_PROP_META: Record<string, StylePropMeta> = {
     group: 'layout',
     control: 'select',
     appliesTo: 'flex-grid-child',
+    optionLabels: LAYOUT_OPTION_LABELS,
     options: [
       'auto',
       'normal',
