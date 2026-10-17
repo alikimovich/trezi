@@ -2,6 +2,24 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-272 review repair: cascade layers
+
+- `style-provenance.ts` no longer treats `@layer` as conditional (only media/supports/other group rules and media-qualified `@import` are). Layer membership is a separate `layer` on the origin (validated across preload/IPC), and the winner is picked by importance, the style attribute, then layer order (unlayered beats layered, later layers beat earlier, reversed for `!important`, a parent's own rules beat nested layers), then specificity and order. Why: Tailwind v4 emits all utilities in `@layer utilities`, so every utility-backed gap/flow row had gone read-only, and an unlayered rule next to `gap-4` was misreported as losing.
+- The controller accepts a layered utility origin as owned and compares `.class` selectors against their CSS-escaped serialization (`.gap-\[12px\]`).
+- Tests: new `style-provenance` unit (real walk over a CSSOM stand-in: layered vs unlayered, layer order, `!important`, nesting, inline, media in a layer), layered/escaped/conditional/important cases in `native-inspector`; the native core fixtures now wrap the utility rules in `@layer utilities` and add a layered rule that the unlayered winner must beat. The smoke's late live-reload race after source Undo is settled before the next fixture is injected. The `inspector-layout.png` island capture is offscreen; the JSON assertions are the layout-row evidence.
+
+## 2026-10-16 — LKM-272 review repair: layout source ownership
+
+- Restored editing of established Tailwind Styles fields such as width and padding. New layout fields keep a source-ownership check, and declarations inside media/supports/layer blocks are read-only until an editor can target their exact rule. Utility matching now accepts only values in the correct justify/align family, so unrelated classes such as `justify-items-center` and `content-none` cannot be rewritten.
+- Bounded and validated page-controlled style origins at the preview IPC boundary. Native alignment and flow pickers show human labels while preserving authored CSS text. Added unit coverage for the utility and ownership regressions, plus a native core fixture for active responsive CSS, plain CSS, CSS Modules and utility edit/Undo flows.
+- Agent OS quick verification passed typechecks, lint and 226 unit checks. The native `core` fixture reached the new layout state assertions, but its separate direct `styles:read` probe timed out; the fixture now reads the inspector's retained successful result. The native tool reports zero calls remaining, so the new source edit/Undo assertions and capture still require manager verification.
+
+## 2026-10-16 — LKM-272: applied layout styles in the inspector
+
+- The Styles inspector now reads a contextual set of flex/grid and child alignment properties, including separate row and column gaps. Authored zero, normal, variables, calc() and units remain in the fields, with resolved values labelled separately. The compact Layout heading and existing padding/margin controls remain.
+- CSSOM provenance now filters inactive media and supports rules, compares ordinary selector specificity and importance, and reports the winning active declaration's source. An uncertain stylesheet source is shown read-only; a simple uniquely resolved class rule or plain utility may be edited through the existing source commit/Undo path. This is a conservative approximation for complex selectors and cascade layers.
+- Focused metadata, inspector and utility checks pass. Agent OS quick passed 223 unit checks, typechecks and lint; native `core` passed 32 checks. The foreground inspector capture shows the existing one-heading compact layout, though the selected fixture heading is block layout and does not depict the new flex/grid controls. A capture review found redundant default captions in unrelated baseline rows; those are removed in a follow-up native confirmation run. Full verification remains for the manager.
+
 ## 2026-10-16 — LKM-268: live chat history status
 
 - Review follow-up: the history-menu code moved verbatim from `Shell.swift` (739 → 633 lines) into `src/native/HistoryMenu.swift` (`extension NativeShell`, listed in `scripts/build-native.mjs`); `Shell.swift` keeps the stored properties and the `updateToolbar`/`menuNeedsUpdate` calls. The test-forced menu appearance is now released when `popUp` returns, and `history-menu` asserts `historyAppearanceForced` is false after every dismissal.

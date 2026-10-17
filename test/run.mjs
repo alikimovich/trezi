@@ -224,6 +224,7 @@ const UNIT = [
   'sibling-drop',
   'inline-style',
   'css-values',
+  'style-provenance',
   'control-panels',
   'svelte-instance',
   'docs-links',
