@@ -15,6 +15,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.
 - [ ] Manager: run full native verification, inspect the loading capture and review before merge.
 
+## Managed agent-browser under login shells (LKM-269)
+
+- [x] Explicit app-owned route: verified absolute wrapper in `TREZI_AGENT_BROWSER`, Codex per-turn config (resume included) and Claude env plus refusing PreToolUse hooks; PATH stays defence in depth.
+- [x] Rules/skill/docs separate the allowed managed wrapper path from forbidden global paths; wrapper exits 3 `dependency: …` for missing CLI/headless shell.
+- [x] Real `/bin/zsh -c`/`-lc` unit tests (bundle and source bases), provider fixture tests and native smoke shell assertion.
+- [ ] Manager: full native verification and independent review.
+
 ## Background browser focus (LKM-264)
 
 - [x] Trace the browser rule branches and restore mandatory Vercel agent-browser verification through Trezi's managed PATH.
