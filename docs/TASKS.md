@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native previews Stage 2B: native build authority (LKM-275, held branch)
+
+Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (2B), `docs/SWIFT-PREVIEWS.md` (Build authority).
+
+- [x] Resolved settings from `xcodebuild -showBuildSettings -json` (scheme, Debug, `platform=macOS`, Trezi's derived data) or `swift package dump-package`, with the project file as the fallback; the source is reported per module.
+- [x] SWIFT_VERSION, compilation conditions, preprocessor definitions, strict concurrency, upcoming features, deployment target, SDKROOT, search paths and module names applied; OTHER_SWIFT_FLAGS through an allowlist; every dropped flag or setting recorded with its reason and shown.
+- [x] Dependencies: local packages, remote packages at their `Package.resolved` pin, macOS `.framework`/`.xcframework` slices, built as one wrapper package in Trezi's derived data; unsupported kinds named in the plan, the page and the API.
+- [x] App target compiled minus its entry point into an importable module; the app executable is never imported.
+- [x] Asset catalogs via actool (with asset symbols) into the module and the host's `Bundle.main`; package `Bundle.module` from SwiftPM's bundles; plain files copied; other resource kinds named as not bundled.
+- [x] Caches keyed by toolchain, SDK, settings, pins and local package files; derived data under app data; `xcodebuild`'s transient project folders removed (`xcode-tidy.ts`).
+- [x] No new sandbox-disabling flag for `swift build`, `dump-package`, `xcodebuild` or `actool`; environment failures are classified (asserted in `test/swift-preview-settings.mjs`).
+- [x] Tests: `test/swift-preview-settings.mjs` (scripted tools), `test/swift-preview-build.mjs` (real toolchain: `test/fixtures/swift-package-app` and a disposable Scraib-xcode copy matched against xcodebuild, original byte-compared), native smoke `swift-build` (group `core`).
+- [ ] Clang, Objective-C and mixed-language targets; static library `.xcframework` slices; String Catalogs, storyboards, Core Data, Metal; run-script generated sources; xcconfig files without xcodebuild.
+
 ## Native previews Stage 2A: Xcode toolchain selection and intact `#Preview` (LKM-274, held branch)
 
 Stage 2 is partial: only 2A is done. Details: `docs/SWIFT-PREVIEWS-PLAN.md`, `docs/SWIFT-PREVIEWS.md` (Toolchain).
@@ -29,7 +43,7 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] Scraib-shaped fixture `test/fixtures/swift-multi-module`; unit tests `swift-preview-graph`, `swift-preview-target`; native smoke `swift-graph` (group `core`); evidence in `docs/evidence/lkm-273/`.
 - [x] Scraib-xcode disposable-copy discovery and target build recorded as progress (blocked by `#Preview`, then resources and StoreKit).
 - [x] Review repair: the plan doc follows the ticket's Stages 1–8 (decision 9a00253c); `project:native` asks only Trezi's own driver, never a JS dev server (unit assertion in `test/swift-preview-graph.mjs`).
-- [ ] Stage 2 (partial): `#Preview` compiling done as 2A (LKM-274, above); compiler settings, SwiftPM dependencies (local, remote, binary), incremental builds not started.
+- [ ] Stage 2 (partial): `#Preview` compiling done as 2A (LKM-274, above); compiler settings, SwiftPM dependencies (local, pinned remote, macOS frameworks) and cached per-module builds done as 2B (LKM-275, above); mixed-language targets not started.
 - [ ] Stage 3: component selection and a UI that writes the Trezi-side manifest, sample states, environment injection (StoreKit), resources; the choice of the native preview in a mixed repo with a JS dev script.
 - [ ] Stage 4: service-owned host lifecycle (including the second server for mixed repos), driver packaging, OS-level input, glass/material fidelity.
 - [ ] Stages 5–8: agent diagnostics and source feedback, practical Scraib acceptance, full macOS app integration, iOS simulator.

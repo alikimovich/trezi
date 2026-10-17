@@ -24,17 +24,32 @@ export function treziManifestDir(root: string, userData: string): string {
 }
 
 /**
+ * Trezi-owned derived data of every Swift preview build (LKM-275): resolved settings,
+ * package checkouts and builds, compiled resources and modules, per project and
+ * toolchain. Never inside the user's repo or `~/Library/Developer/Xcode`.
+ */
+export function swiftPreviewDerivedData(userData: string): string {
+  return join(userData, 'swift-previews', 'DerivedData')
+}
+
+/**
  * The launch command for a detected Swift project: Trezi's own driver on the Bun that
  * runs this backend, in the project root the runtime owner starts it in, given Trezi's
- * manifest folder for it. Built from these paths only, never from project files.
+ * manifest folder for it and its derived data root. Built from these paths only, never
+ * from project files.
  */
 export function swiftPreviewCommand(
   bun: string = process.execPath,
   driver: string = SWIFT_PREVIEW_DRIVER,
-  manifestDir?: string
+  manifestDir?: string,
+  cacheRoot?: string
 ): string {
   const command = `${quote(bun)} ${quote(driver)}`
-  return manifestDir ? `${command} --manifest-dir ${quote(manifestDir)}` : command
+  return [
+    command,
+    ...(manifestDir ? [`--manifest-dir ${quote(manifestDir)}`] : []),
+    ...(cacheRoot ? [`--cache-root ${quote(cacheRoot)}`] : [])
+  ].join(' ')
 }
 
 /** The project's running server and whether Trezi started it with `swiftPreviewCommand`. */
@@ -65,6 +80,8 @@ export async function nativeProjectInfo(
       repoExists: existsSync(join(root, MANIFEST))
     },
     graph: null,
+    plan: null,
+    build: null,
     toolchain: null,
     error: ''
   }
@@ -83,12 +100,16 @@ export async function nativeProjectInfo(
     })
     const body = (await response.json()) as {
       graph?: unknown
+      plan?: unknown
+      build?: unknown
       toolchain?: NativeToolchainInfo | null
       error?: string
     }
     if (!response.ok) info.error = body.error ?? `The driver answered ${response.status}.`
     else {
       info.graph = body.graph ?? null
+      info.plan = body.plan ?? null
+      info.build = body.build ?? null
       info.toolchain = body.toolchain ?? null
     }
   } catch (error) {

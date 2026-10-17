@@ -1,12 +1,20 @@
 import { posix } from 'node:path'
+import { type DependencyPlan, planDependencies, resolvedFiles } from './dependencies'
 import type { NativeContainer, NativeGraph, NativeTarget } from './graph'
+import { planResources, type ResourcePlan } from './resources'
+import type { ModuleSettings } from './settings'
 
 /**
  * The target-graph build (LKM-273): which modules to compile, in which order, from the
  * manifest's `target` and the project's graph. Each module is a target of the same
  * container: its dependencies are built first, every one into its own `.swiftmodule`
  * and dylib, and app-entry files (`@main`, `main.swift`) are left out so the preview
- * host owns `main`. Pure: the caller reads file contents.
+ * host owns `main`. An app target is compiled this way too: its sources minus the
+ * entry point become a module the previews `@testable import`; the app executable
+ * itself is never built or imported. The Swift packages, binary frameworks and
+ * resources the modules need are planned here (LKM-275, `dependencies.ts`,
+ * `resources.ts`); what cannot be built blocks the build with its reason. Pure: the
+ * caller reads file contents and says which paths exist.
  */
 export interface ModulePlan {
   target: string
@@ -19,6 +27,8 @@ export interface ModulePlan {
   entries: string[]
   /** Module names this one links, already built earlier in the plan. */
   dependencies: string[]
+  /** The resolved settings it compiles with, once the build resolved them (LKM-275). */
+  settings?: ModuleSettings
 }
 
 export interface BuildPlan {
@@ -26,7 +36,11 @@ export interface BuildPlan {
   target: string
   /** Dependencies first; the selected target last. */
   modules: ModulePlan[]
-  /** What stops this build in Stage 1 (packages, C targets, iOS, tests). */
+  /** Swift packages and binary frameworks, and what is not built (LKM-275). */
+  dependencies: DependencyPlan
+  /** Asset catalogs, copied files, and what is not bundled (LKM-275). */
+  resources: ResourcePlan
+  /** What stops this build (unbuildable dependencies, C targets, iOS, tests). */
   blockers: string[]
   /** What builds but may not compile or render as in Xcode. */
   warnings: string[]
@@ -72,7 +86,13 @@ export function planTargetBuild(
     /** The selected toolchain's `#Preview` capability (LKM-274, `toolchain.ts`). */
     preview?: { status: string; message: string }
   },
-  read: (path: string) => string
+  read: (path: string) => string,
+  /** The project root and file checks for local packages and binary frameworks. */
+  files: { root: string; exists: (path: string) => boolean; list: (dir: string) => string[] } = {
+    root: '',
+    exists: () => false,
+    list: () => []
+  }
 ): BuildPlan {
   const { container, target } = findTarget(graph, select.target, select.project)
   const byName = new Map(container.targets.map((t) => [t.name, t]))
@@ -98,11 +118,11 @@ export function planTargetBuild(
   visit(target, [])
 
   const modules = order.map((t): ModulePlan => {
-    for (const product of t.packageProducts)
-      blockers.push(`${t.name} needs the Swift package product ${product} (packages are Stage 2).`)
     for (const note of t.notes)
       if (/ClangTarget|BinaryTarget|SystemLibraryTarget/.test(note))
-        blockers.push(`${t.name} is a ${note}; only Swift targets are built in Stage 1.`)
+        blockers.push(
+          `${t.name} is a ${note}; Trezi compiles only Swift targets itself (a package's C or binary targets build through its products).`
+        )
     const sdk = t.settings.SDKROOT ?? ''
     if (sdk && sdk !== 'macosx' && !/macosx/.test(t.settings.SUPPORTED_PLATFORMS ?? ''))
       blockers.push(
@@ -135,10 +155,6 @@ export function planTargetBuild(
           : `${t.name}: ${files}, which needs PreviewsMacros from a full Xcode selected for Trezi's processes (${preview?.message ?? 'no toolchain was checked'}): ${previews.join(', ')}`
       )
     }
-    if (t.resources.length)
-      warnings.push(
-        `${t.name}: resources are not bundled into the preview (Stage 3): ${t.resources.join(', ')}`
-      )
     return {
       target: t.name,
       module: t.module,
@@ -154,5 +170,61 @@ export function planTargetBuild(
       blockers.push(`Two modules would be named ${module.module}.`)
     seen.add(module.module)
   }
-  return { container: container.path, target: target.name, modules, blockers, warnings }
+
+  // Dependencies: the pins of the container (or its workspace) decide remote versions.
+  const workspaces = graph.structure?.workspaces ?? []
+  let resolved: { path: string; text: string } | null = null
+  for (const path of resolvedFiles(container, workspaces)) {
+    try {
+      resolved = { path, text: read(path) }
+      break
+    } catch {}
+  }
+  const dependencies = planDependencies({
+    root: files.root,
+    container,
+    graph,
+    targets: order,
+    resolved,
+    exists: files.exists,
+    list: files.list
+  })
+  for (const u of dependencies.unsupported) {
+    const what = /package/.test(u.kind)
+      ? `the Swift package product ${u.name}`
+      : `${u.kind} ${u.name}`
+    if (u.required)
+      blockers.push(
+        `${u.target ?? 'The project'} needs ${what}, which Trezi does not build: ${u.reason}.`
+      )
+    else warnings.push(`${u.name} (${u.kind}): ${u.reason}.`)
+  }
+
+  // Resources: an Xcode target's go into the host's bundle; a package target's need its
+  // own Bundle.module, which only SwiftPM generates (for packages built as dependencies).
+  const resources = planResources(
+    container.kind === 'package'
+      ? []
+      : order.map((t) => ({ module: t.module, resources: t.resources }))
+  )
+  if (container.kind === 'package')
+    for (const t of order)
+      for (const path of t.resources)
+        resources.unsupported.push({
+          module: t.module,
+          path,
+          reason:
+            'Bundle.module is not generated for package targets Trezi compiles itself; use the package as a dependency of an app or framework target'
+        })
+  for (const { module, path, reason } of resources.unsupported)
+    warnings.push(`${module}: ${path} is not bundled into the preview: ${reason}.`)
+  return {
+    container: container.path,
+    target: target.name,
+    modules,
+    dependencies,
+    resources,
+    blockers,
+    warnings
+  }
 }

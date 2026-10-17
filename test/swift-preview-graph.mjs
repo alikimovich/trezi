@@ -174,8 +174,11 @@ try {
   assert.ok(app.notes.includes('settings come partly from an .xcconfig file'))
   assert.equal(classic.targets[1].kind, 'other')
   assert.deepEqual(classic.packages, [
-    { kind: 'remote', location: 'https://e.x/sparkle' },
-    { kind: 'local', location: '../Kit' }
+    { kind: 'remote', location: 'https://e.x/sparkle', identity: 'sparkle' },
+    { kind: 'local', location: '../Kit', path: 'Kit', identity: 'kit' }
+  ])
+  assert.deepEqual(app.packageDependencies, [
+    { product: 'Sparkle', package: 'https://e.x/sparkle' }
   ])
   assert.deepEqual(
     workspaceProjects(
@@ -289,7 +292,11 @@ let package = Package(
   const container = described.containers[0]
   assert.equal(container.kind, 'package', JSON.stringify(described))
   assert.deepEqual(
-    container.errors.filter((e) => !/could not sandbox/.test(e)),
+    // Only this environment's sandbox reasons: describe's (LKM-274) and dump-package's,
+    // which LKM-275 never retries unsandboxed.
+    container.errors.filter(
+      (e) => !/could not sandbox|could not apply SwiftPM's manifest sandbox/.test(e)
+    ),
     [],
     'describe ran'
   )
@@ -333,6 +340,8 @@ let package = Package(
     productType: '',
     dependencies: [],
     packageProducts: [],
+    packageDependencies: [],
+    binaries: [],
     sources: [`${name}/A.swift`],
     resources: [],
     settings: {},
@@ -385,7 +394,7 @@ let package = Package(
     'exclude applies'
   )
   assert.ok(deep.warnings.some((w) => /use #Preview/.test(w)))
-  assert.ok(deep.warnings.some((w) => /resources are not bundled/.test(w)))
+  assert.deepEqual(deep.resources.catalogs, [{ module: 'App', path: 'App/Assets.xcassets' }])
   assert.throws(
     () =>
       planTargetBuild(
@@ -400,6 +409,7 @@ let package = Package(
       target('App', {
         dependencies: ['Gone'],
         packageProducts: ['Sparkle (https://e.x/sparkle)'],
+        packageDependencies: [{ product: 'Sparkle', package: 'https://e.x/sparkle' }],
         settings: { SDKROOT: 'iphoneos' },
         notes: ['ClangTarget']
       })

@@ -1,6 +1,16 @@
-import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import {
+  ARCH,
+  type BuildReport,
+  compileModules,
+  describeFailure,
+  moduleInputs,
+  pruneModules,
+  run,
+  stamp,
+  TargetBuilder
+} from './builder'
 import { discoverNative } from './discovery'
 import { type GraphOptions, graphInputs, type NativeGraph, nativeGraph } from './graph'
 import { type PreviewEntry, PreviewHostProcess, type PreviewInputEvent } from './host-client'
@@ -8,12 +18,13 @@ import {
   collectSources,
   type Diagnostic,
   hostCompileArgs,
-  libraryCompileArgs,
   type PreviewManifest,
   parseDiagnostics,
   parseManifest
 } from './manifest'
+import { treeStamps } from './package-build'
 import { type BuildPlan, planTargetBuild } from './plan'
+import { hostBundle } from './resources'
 import type { ToolchainOptions, ToolchainSelection } from './toolchain'
 import { ToolchainPicker } from './toolchain-picker'
 
@@ -42,6 +53,8 @@ export interface SessionState {
   plan: BuildPlan | null
   /** The developer directory every tool runs with, and whether it expands `#Preview` (LKM-274). */
   toolchain: ToolchainSelection | null
+  /** The latest target build's settings sources, packages, resources and cache use (LKM-275). */
+  build: BuildReport | null
 }
 
 const MANIFEST = 'trezi-previews.json'
@@ -70,6 +83,7 @@ export class PreviewSession {
   private graph: Promise<NativeGraph> | null = null
   private graphStamp = ''
   private readonly picker: ToolchainPicker
+  private readonly builder: TargetBuilder
 
   constructor(
     private readonly options: {
@@ -91,6 +105,13 @@ export class PreviewSession {
   ) {
     const treziPath = options.manifestDir ? join(options.manifestDir, MANIFEST) : ''
     this.picker = new ToolchainPicker(options)
+    this.builder = new TargetBuilder({
+      root: options.root,
+      cacheDir: options.cacheDir,
+      xcodebuild: options.graph?.xcodebuild,
+      xcrun: options.graph?.xcrun,
+      log: options.log
+    })
     this.state = {
       status: 'building',
       name: '',
@@ -105,7 +126,8 @@ export class PreviewSession {
       manifest: { source: 'none', path: '', treziPath },
       native: null,
       plan: null,
-      toolchain: null
+      toolchain: null,
+      build: null
     }
   }
 
@@ -238,6 +260,11 @@ export class PreviewSession {
         for (const module of this.state.plan?.modules ?? [])
           for (const file of [...module.sources, ...module.entries])
             parts.push(stamp(join(this.options.root, file)))
+        // Asset catalogs and local packages rebuild too (LKM-275).
+        for (const { path } of this.state.plan?.resources.catalogs ?? [])
+          parts.push(...treeStamps(join(this.options.root, path)))
+        for (const pkg of this.state.plan?.dependencies.packages ?? [])
+          if (pkg.kind === 'local') parts.push(...treeStamps(pkg.location))
       }
     } catch {}
     return parts.join('\n')
@@ -291,7 +318,8 @@ export class PreviewSession {
               exclude: manifest.exclude,
               preview: toolchain.capability ?? undefined
             },
-            (file) => readFileSync(join(this.options.root, file), 'utf8')
+            (file) => readFileSync(join(this.options.root, file), 'utf8'),
+            { root: this.options.root, exists: existsSync, list: listDir }
           )
         : null
       this.built = this.fingerprint()
@@ -309,88 +337,65 @@ export class PreviewSession {
     this.state.name = manifest.name || plan?.target || ''
     const count = sources.length + previews.length
     this.options.log(`Swift previews: ${reason.toLowerCase()}, compiling ${count} files…`)
-    const output = join(this.options.cacheDir, `host-${process.pid}-${builds}`)
+    // Settings, packages and resources first (LKM-275); then modules into their cached folders.
+    if (reason === 'Rebuild requested') this.builder.invalidate()
+    const prepared = plan
+      ? await this.builder.prepare(plan, await this.nativeGraph(), toolchain)
+      : null
+    this.state.build = prepared?.report ?? null
+    if (prepared?.error) return this.fail(started, prepared.error, '', [])
+    const app = join(this.options.cacheDir, `host-${process.pid}-${builds}.app`)
+    const cleanup = () => rmSync(app, { recursive: true, force: true })
     const moduleCache = this.moduleCache()
-    // Library modules first, each into this build's own folder (the host links to it).
-    const libs = join(this.options.cacheDir, `libs-${process.pid}-${builds}`)
-    const cleanup = () => {
-      rmSync(output, { force: true })
-      rmSync(libs, { recursive: true, force: true })
-    }
-    const modules = [
-      ...manifest.libraries.map((library) => ({
-        module: library.name,
-        sources: collectSources(this.options.root, manifest, library.sources),
-        dependencies: [] as string[],
-        testing: false
-      })),
-      ...(plan?.modules ?? []).map((module) => ({
-        module: module.module,
-        sources: module.sources.map((file) => join(this.options.root, file)),
-        dependencies: module.dependencies,
-        testing: true
-      }))
-    ]
-    let compiled: Awaited<ReturnType<typeof run>> = { code: 0, output: '', spawnError: false }
-    let failedModule = ''
-    for (const module of modules) {
-      mkdirSync(libs, { recursive: true })
-      this.options.log(`Swift previews: compiling library ${module.module}…`)
-      compiled = await run(
-        '/usr/bin/xcrun',
-        libraryCompileArgs({
-          name: module.module,
-          sources: module.sources,
-          moduleCache,
-          dir: libs,
-          dependencies: module.dependencies,
-          testing: module.testing
-        }),
-        this.options.root,
-        toolchain.env
-      )
-      if (compiled.code !== 0) {
-        failedModule = module.module
-        break
-      }
-    }
+    const shared = { compile: prepared?.compile ?? [], link: prepared?.link ?? [] }
+    let compiled = await compileModules(moduleInputs(this.options.root, manifest, plan, prepared), {
+      root: this.options.root,
+      cacheDir: this.options.cacheDir,
+      toolchainKey: toolchain.key,
+      moduleCache,
+      env: toolchain.env,
+      ...shared,
+      salt: prepared?.salt ?? '',
+      log: this.options.log
+    })
+    if (this.state.build) this.state.build.modules = compiled.report
+    const failedModule = compiled.failed
+    const output = hostBundle(app, {
+      root: this.options.root,
+      assets: prepared?.assets ?? '',
+      copied: plan?.resources.copied ?? [],
+      accentColor: prepared?.accentColor
+    })
+    const target = prepared ? ['-target', `${ARCH}-apple-macosx${prepared.deploymentTarget}`] : []
     if (compiled.code === 0)
-      compiled = await run(
-        '/usr/bin/xcrun',
-        hostCompileArgs({
-          host: this.options.hostSource,
-          sources: [...sources, ...previews],
-          moduleCache,
-          output,
-          libraries: modules.map(({ module }) => ({ name: module, dir: libs }))
-        }),
-        this.options.root,
-        toolchain.env
-      )
-    // Target-graph builds name the module of each diagnostic; the host is "previews".
-    const attribute = (found: Diagnostic[], module: string) =>
-      plan ? found.map((d) => ({ ...d, module })) : found
+      compiled = {
+        ...compiled,
+        ...(await run(
+          '/usr/bin/xcrun',
+          hostCompileArgs({
+            host: this.options.hostSource,
+            sources: [...sources, ...previews],
+            moduleCache,
+            output,
+            libraries: compiled.built,
+            flags: [...target, ...shared.compile, ...shared.link]
+          }),
+          this.options.root,
+          toolchain.env
+        ))
+      }
     if (this.closed) return cleanup()
     if (compiled.code !== 0) {
       cleanup()
-      const diagnostics = attribute(
-        parseDiagnostics(compiled.output, this.options.root),
-        failedModule || 'previews'
-      )
-      const errors = diagnostics.filter((d) => d.severity === 'error')
-      const where = failedModule && plan ? ` in ${failedModule}` : ''
-      // A #Preview the toolchain cannot expand: say which toolchain and what to do.
-      const macros =
-        /PreviewsMacros|swift-plugin-server/.test(compiled.output) &&
-        toolchain.capability?.status !== 'supported'
-          ? ` ${toolchain.message}`
-          : ''
-      const message = compiled.spawnError
-        ? 'Could not run swiftc: install Xcode or its command-line tools.'
-        : `Build failed${where}: ${errors.length || 'unknown'} error${errors.length === 1 ? '' : 's'}.${macros}`
-      for (const d of errors.slice(0, 20))
+      const failure = describeFailure(compiled, {
+        root: this.options.root,
+        module: failedModule,
+        targetBuild: !!plan,
+        toolchain
+      })
+      for (const d of failure.errors.slice(0, 20))
         this.options.log(`${d.file}:${d.line}:${d.column}: error: ${d.message}`)
-      return this.fail(started, message, compiled.output, diagnostics)
+      return this.fail(started, failure.message, compiled.output, failure.diagnostics)
     }
     const host = new PreviewHostProcess(output, {
       cwd: this.options.root,
@@ -418,13 +423,19 @@ export class PreviewSession {
     const previous = this.host
     this.host = host
     void previous?.stop()
+    pruneModules(
+      this.options.cacheDir,
+      compiled.built.map((b) => b.dir)
+    )
     const built = plan ? ` from ${plan.modules.map((m) => m.module).join(' → ')}` : ''
+    const warnings = parseDiagnostics(compiled.output, this.options.root)
     this.state = {
       ...this.state,
       status: 'ready',
       generation: this.state.generation + 1,
       previews: entries,
-      diagnostics: attribute(parseDiagnostics(compiled.output, this.options.root), 'previews'),
+      // Target-graph builds name the module of each diagnostic; the host is "previews".
+      diagnostics: plan ? warnings.map((d) => ({ ...d, module: 'previews' })) : warnings,
       message: `Built ${entries.length} preview${entries.length === 1 ? '' : 's'}${built}.`,
       output: '',
       durationMs: Date.now() - started,
@@ -444,6 +455,7 @@ export class PreviewSession {
       ...this.state,
       status: 'setup',
       plan: null,
+      build: null,
       message: `${found}No previews are declared yet: add ${MANIFEST} with a "target" and "previews"${this.state.manifest.treziPath ? ` at ${this.state.manifest.treziPath} (Trezi's copy; the repo stays untouched) or` : ''} in the project root.`,
       durationMs: Date.now() - started
     }
@@ -481,35 +493,10 @@ export class PreviewSession {
   }
 }
 
-function stamp(path: string): string {
-  if (!path) return ''
+function listDir(dir: string): string[] {
   try {
-    const stat = statSync(path)
-    return `${path}:${stat.size}:${stat.mtimeMs}`
+    return readdirSync(dir)
   } catch {
-    return `${path}:missing`
+    return []
   }
-}
-
-function run(
-  command: string,
-  args: string[],
-  cwd: string,
-  env: Record<string, string>
-): Promise<{ code: number | null; output: string; spawnError: boolean }> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    let output = ''
-    const collect = (chunk: Buffer) => {
-      output = (output + chunk.toString('utf8')).slice(-200_000)
-    }
-    child.stdout.on('data', collect)
-    child.stderr.on('data', collect)
-    child.on('error', () => resolve({ code: null, output, spawnError: true }))
-    child.on('close', (code) => resolve({ code, output, spawnError: false }))
-  })
 }

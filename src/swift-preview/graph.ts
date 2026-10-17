@@ -11,6 +11,8 @@ import {
   targetKind,
   workspaceProjects
 } from './pbxproj'
+import { packageSettings } from './settings'
+import { tidySwiftPM, tidyXcode } from './xcode-tidy'
 
 export type { NativeTarget, PackageReference }
 
@@ -18,11 +20,11 @@ export type { NativeTarget, PackageReference }
  * A native project's schemes and target graph (LKM-273, `docs/SWIFT-PREVIEWS-PLAN.md`
  * Stage 1). Xcode projects are read from `project.pbxproj` through `plutil` (works
  * with the command-line tools alone); schemes come from `xcodebuild -list -json`, or
- * from the shared scheme files when Xcode is missing; `xcodebuild -showBuildSettings
- * -json` fills the settings of targets configured by `.xcconfig` files; Swift packages
- * come from `swift package describe --type json`. Every tool run has a timeout and a
- * clear error. Nothing is written into the project: SwiftPM's scratch folder is in
- * `cacheDir`.
+ * from the shared scheme files when Xcode is missing; Swift packages come from `swift
+ * package describe --type json`, their settings and product dependencies from `swift
+ * package dump-package`. A build resolves the full settings separately
+ * (`build-settings.ts`, LKM-275). Every tool run has a timeout and a clear error.
+ * Nothing is written into the project: SwiftPM's scratch folder is in `cacheDir`.
  */
 export interface NativeContainer {
   kind: 'workspace' | 'project' | 'package'
@@ -183,11 +185,16 @@ async function schemes(
   options: Required<Pick<GraphOptions, 'xcodebuild' | 'env'>> & { timeoutMs: number }
 ) {
   const flag = container.kind === 'workspace' ? '-workspace' : '-project'
-  const listed = await runTool(options.xcodebuild, ['-list', '-json', flag, container.path], {
-    cwd: root,
-    timeoutMs: options.timeoutMs,
-    env: options.env
-  })
+  // LKM-275: what `-list` creates in the project is removed again or reported.
+  const { value: listed, leftovers } = await tidyXcode(root, container, () =>
+    runTool(options.xcodebuild, ['-list', '-json', flag, container.path], {
+      cwd: root,
+      timeoutMs: options.timeoutMs,
+      env: options.env
+    })
+  )
+  for (const path of leftovers)
+    container.errors.push(`xcodebuild -list left ${path} in the project.`)
   if (!listed.error) {
     try {
       const json = JSON.parse(listed.stdout)
@@ -201,36 +208,6 @@ async function schemes(
   container.schemes = schemeFiles(root, container.path)
   container.schemesFrom = container.schemes.length ? 'scheme files' : 'none'
   return false
-}
-
-/** `xcodebuild -showBuildSettings -json` for one target: where .xcconfig files set them. */
-async function buildSettings(
-  root: string,
-  project: string,
-  target: NativeTarget,
-  options: { xcodebuild: string; timeoutMs: number; env: Record<string, string> }
-) {
-  const result = await runTool(
-    options.xcodebuild,
-    ['-showBuildSettings', '-json', '-project', project, '-target', target.name],
-    { cwd: root, timeoutMs: options.timeoutMs, env: options.env }
-  )
-  if (result.error) return target.notes.push(result.error)
-  try {
-    const settings = JSON.parse(result.stdout)?.[0]?.buildSettings ?? {}
-    for (const key of Object.keys(target.settings))
-      if (typeof settings[key] === 'string') target.settings[key] = settings[key]
-    for (const key of [
-      'SWIFT_VERSION',
-      'MACOSX_DEPLOYMENT_TARGET',
-      'SDKROOT',
-      'PRODUCT_MODULE_NAME'
-    ])
-      if (typeof settings[key] === 'string') target.settings[key] = settings[key]
-    if (settings.PRODUCT_MODULE_NAME) target.module = settings.PRODUCT_MODULE_NAME
-  } catch {
-    target.notes.push('xcodebuild -showBuildSettings returned no JSON.')
-  }
 }
 
 async function xcodeProject(
@@ -265,12 +242,44 @@ async function xcodeProject(
       container.errors.push(`${path}/project.pbxproj: ${(error as Error).message}`)
     }
   }
-  const xcode = await schemes(root, container, options)
-  if (xcode)
-    for (const target of container.targets)
-      if (target.notes.includes('settings come partly from an .xcconfig file'))
-        await buildSettings(root, path, target, options)
+  await schemes(root, container, options)
   return container
+}
+
+/**
+ * `swift package dump-package` (LKM-275): each target's settings and which package each
+ * product comes from. Always with SwiftPM's own manifest sandbox: where it cannot be
+ * applied, the settings stay unread and the error says why. The sandbox is never turned off.
+ */
+export async function dumpPackage(
+  dir: string,
+  scratch: string,
+  options: Required<GraphOptions>,
+  errors: string[]
+): Promise<any> {
+  const result = await runTool(
+    options.xcrun,
+    ['swift', 'package', '--scratch-path', scratch, 'dump-package'],
+    {
+      cwd: dir,
+      timeoutMs: options.timeoutMs,
+      env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
+    }
+  )
+  if (result.error) {
+    errors.push(
+      /sandbox_apply/.test(result.stderr)
+        ? "swift package dump-package could not apply SwiftPM's manifest sandbox in this environment (it runs inside another sandbox); the package's settings were not read. Run Trezi outside a sandbox to read them."
+        : result.error
+    )
+    return {}
+  }
+  try {
+    return JSON.parse(result.stdout.slice(result.stdout.indexOf('{')))
+  } catch {
+    errors.push('swift package dump-package returned no JSON.')
+    return {}
+  }
 }
 
 async function swiftPackage(
@@ -330,14 +339,41 @@ async function swiftPackage(
     container.errors.push('swift package describe returned no JSON.')
     return container
   }
-  container.packages = (json.dependencies ?? []).map((dep: any) => ({
-    kind: dep.type === 'fileSystem' ? 'local' : 'remote',
-    location: dep.url ?? dep.path ?? dep.identity ?? ''
-  }))
+  const dump = await dumpPackage(join(root, dir), scratch, options, container.errors)
+  const dumped = new Map<string, any>((dump.targets ?? []).map((t: any) => [t.name, t]))
+  container.packages = (dump.dependencies ?? json.dependencies ?? []).map((dep: any) => {
+    const local = dep.fileSystem?.[0]
+    const remote = dep.sourceControl?.[0]
+    if (local)
+      return { kind: 'local', location: local.path, path: local.path, identity: local.identity }
+    if (remote) {
+      const url = remote.location?.remote?.[0]?.urlString ?? remote.location?.remote?.[0] ?? ''
+      return {
+        kind: 'remote',
+        location: String(url),
+        identity: remote.identity,
+        requirement: JSON.stringify(remote.requirement ?? {})
+      }
+    }
+    return {
+      kind: dep.type === 'fileSystem' ? 'local' : 'remote',
+      location: dep.url ?? dep.path ?? dep.identity ?? '',
+      identity: dep.identity
+    }
+  })
+  const productsOf = (name: string): NativeTarget['packageDependencies'] =>
+    (dumped.get(name)?.dependencies ?? []).flatMap((dep: any) => {
+      if (dep.product) return [{ product: dep.product[0], package: String(dep.product[1] ?? '') }]
+      const byName = dep.byName?.[0]
+      // A bare name that is not a target of this package names a dependency's product.
+      if (byName && !dumped.has(byName)) return [{ product: byName, package: '' }]
+      return []
+    })
   container.schemes = (json.products ?? []).map((product: any) => product.name)
   container.schemesFrom = container.schemes.length ? 'package products' : 'none'
-  container.targets = (json.targets ?? []).map(
-    (target: any): NativeTarget => ({
+  container.targets = (json.targets ?? []).map((target: any): NativeTarget => {
+    const settings = packageSettings(dump, target.name)
+    return {
       name: target.name,
       module: target.c99name ?? target.name,
       kind:
@@ -351,15 +387,20 @@ async function swiftPackage(
       productType: `swiftpm.${target.type}`,
       dependencies: target.target_dependencies ?? [],
       packageProducts: target.product_dependencies ?? [],
+      packageDependencies: productsOf(target.name),
+      binaries: [],
       sources: (target.sources ?? [])
         .filter((file: string) => file.endsWith('.swift'))
         .map((file: string) => posix.join(dir, target.path, file))
         .sort(),
       resources: (target.resources ?? []).map((r: any) => posix.relative(join(root), r.path ?? '')),
-      settings: {},
-      notes: target.module_type && target.module_type !== 'SwiftTarget' ? [target.module_type] : []
-    })
-  )
+      settings: dump.targets ? settings.values : {},
+      notes: [
+        ...(target.module_type && target.module_type !== 'SwiftTarget' ? [target.module_type] : []),
+        ...settings.dropped.map((d) => `package setting "${d.flag}" is not applied`)
+      ]
+    }
+  })
   return container
 }
 
@@ -403,8 +444,17 @@ export async function nativeGraph(root: string, options: GraphOptions): Promise<
   }
   for (const project of [...projects].sort())
     containers.push(await xcodeProject(root, project, resolved))
-  for (const pkg of structure?.packages ?? [])
-    containers.push(await swiftPackage(root, pkg, resolved))
+  for (const pkg of structure?.packages ?? []) {
+    // LKM-275: the `.swiftpm/configuration` SwiftPM creates there is removed again.
+    const { value: container, leftovers } = await tidySwiftPM(
+      root,
+      [join(root, posix.dirname(pkg))],
+      () => swiftPackage(root, pkg, resolved)
+    )
+    for (const path of leftovers)
+      container.errors.push(`swift package left ${path} in the project.`)
+    containers.push(container)
+  }
   if (!structure) errors.push('No Xcode workspace, Xcode project or Package.swift was found.')
   return { structure, containers, errors, durationMs: Date.now() - started }
 }

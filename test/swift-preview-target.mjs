@@ -99,7 +99,8 @@ try {
     'the library first, the @main file left out'
   )
   assert.deepEqual(plan.blockers, [])
-  assert.ok(plan.warnings.some((w) => /Studio\/Assets\.xcassets/.test(w)))
+  // LKM-275: the catalog is compiled with actool now, not reported as left out.
+  assert.deepEqual(plan.resources.catalogs, [{ module: 'Studio', path: 'Studio/Assets.xcassets' }])
   assert.deepEqual(native.structure.projects, ['Studio.xcodeproj'])
   assert.equal(native.containers[0].schemesFrom, 'scheme files')
   assert.match(session.state.message, /Built 3 previews from StudioKit → Studio\./)
