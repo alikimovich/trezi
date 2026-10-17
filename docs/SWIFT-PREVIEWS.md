@@ -150,6 +150,67 @@ the host build). It never changes the machine's `xcode-select`, which it only re
 - A requested rebuild selects again (and rereads `xcode-select -p`); otherwise the
   selection is redone when the setting, `DEVELOPER_DIR` or an installed Xcode changed.
 
+## Build authority (LKM-275)
+
+A target build uses the project's own build settings, dependencies and resources, and
+everything it writes lives in Trezi's derived data. Per-item status:
+`docs/SWIFT-PREVIEWS-PLAN.md` (2B). (`src/swift-preview/builder.ts` and the files it uses.)
+
+- Derived data: `<userData>/swift-previews/DerivedData/<project hash>/` (the app passes
+  it as `--cache-root`; a bare driver uses `TREZI_SWIFT_PREVIEW_CACHE` or the temporary
+  directory). Inside it: xcodebuild's `-derivedDataPath` per toolchain (`xcode-<key>`),
+  the package build (`packages/toolchain-<key>/`), compiled resources (`resources/`) and
+  the modules. The project is only read: Trezi writes nothing into it, not even
+  something it removes again. xcodebuild and SwiftPM create state next to what they read
+  (`project.xcworkspace/xcshareddata/swiftpm/configuration` in an `.xcodeproj`,
+  `.swiftpm/configuration` and `.swiftpm/xcode` in a package folder), so they never run
+  on the project (`shadow.ts`): `xcodebuild -list`/`-showBuildSettings`, `swift package
+  describe`/`dump-package` run in a shadow under `<derived data>/shadow/` (project
+  folders symlinked, the `.xcodeproj` and each package's `Package.swift`/
+  `Package.resolved` copied, no `.git`/`.build`/`.swiftpm`), removed when the run ends;
+  `swift build` builds a wrapper that refers to Trezi's mirror of the local packages
+  (`packages/toolchain-<key>/locals/`). Paths in the tools' output are mapped back to the
+  project's. If a shadow cannot be made, the tool does not run and the error says so.
+  Limitations: packages deeper than 5 folders (or past 4000 scanned folders) that no
+  manifest or project reference names are not seen by the tools; a crashed run can leave
+  a shadow (in Trezi's derived data) until the next run removes it after 6 hours; every
+  run copies the `.xcodeproj` and links the project's top-level entries.
+- Settings (`build-settings.ts`, `settings.ts`): `xcodebuild -showBuildSettings -json`
+  for the scheme that builds the target, Debug, `platform=macOS`; `swift package
+  dump-package` for package targets; the project file's Debug settings (no xcconfig
+  files) when neither runs. SWIFT_VERSION, compilation conditions, preprocessor
+  definitions, strict concurrency, default actor isolation, upcoming features,
+  MACOSX_DEPLOYMENT_TARGET, SDKROOT, search paths and PRODUCT_MODULE_NAME are applied.
+  OTHER_SWIFT_FLAGS pass through an allowlist. Every flag or setting Trezi does not
+  apply is listed with its reason ("Dropped OTHER_SWIFT_FLAGS -Xfrontend …: not on
+  Trezi's allowlist").
+- Dependencies (`dependencies.ts`, `package-build.ts`): local packages inside the
+  project, remote packages at their `Package.resolved` pin and macOS framework slices of
+  `.framework`/`.xcframework` binaries. The packages build as one generated wrapper
+  package with `swift build` and SwiftPM's sandbox on. Trezi never resolves or updates
+  pins, so a remote package needs its pin and the network on its first build. Any other
+  kind is named as unsupported with its reason.
+- The app target compiles minus its entry point (`@main`, `main.swift`,
+  `@NSApplicationMain`) into a module the previews `@testable import`. The app
+  executable is never built or imported.
+- Resources (`resources.ts`): asset catalogs through the toolchain's `actool`, with
+  generated asset symbols when the target turns them on, and a combined `Assets.car`
+  in the host's `Bundle.main`. Each module's own `Assets.car` also sits beside its
+  dylib, with an `Info.plist` naming a bundle identifier (AppKit finds no named asset
+  in a folder without one), where `Bundle(for:)` of its classes (and so the generated
+  `Color(.brand)`) looks. Package resources come from SwiftPM's bundles
+  (`Bundle.module`) and plain files are copied. String Catalogs, storyboards and XIBs,
+  Core Data models, Metal, `.icon` and StoreKit files are named as not bundled.
+- Caching: the package build is keyed by toolchain, wrapper, pins and local package
+  files; catalogs by toolchain, deployment target and their files; each module by
+  toolchain, SDK, resolved flags, the package key, its dependencies and its sources. An
+  edit to one module rebuilds only it and what depends on it.
+- No tool runs with a sandbox turned off. When Trezi itself runs inside another sandbox
+  that stops SwiftPM's or xcodebuild's, the error says so.
+- Shown in the page's Project panel ("Build settings", "Dependencies", "Resources",
+  "Derived data (Trezi-owned)"), in the driver's `/state` (`build`) and in
+  `project:native` (`build`).
+
 ## How it works
 
 - Detection: `src/main/project-detect.ts` and `src/service/RuntimeDetect.swift` (kept
@@ -229,6 +290,18 @@ the host build). It never changes the machine's `xcode-select`, which it only re
   `xcode-select -p` before and after. Inside a sandbox that stops the compiler's plugin
   server it prints `ENVIRONMENT:` and skips only that real build. The `swift-graph`
   smoke check also asserts the toolchain in the page and in `project:native`.
+- LKM-275: `test/swift-preview-settings.mjs` (unit tier, scripted tools) covers the
+  settings mapping and dropped flags, dependency kinds, pins, cache keys, the package
+  build, actool, the whole build authority and that no new command disables a sandbox.
+  `test/swift-preview-build.mjs` (unit tier, real toolchain) builds and renders
+  `test/fixtures/swift-package-app` (app `Gallery`, framework `GalleryKit`, local
+  package `StudioDesign` with a `Bundle.module` string, an asset catalog color), then a
+  disposable Scraib-xcode copy whose settings must match an independent xcodebuild run
+  (Swift 5, DEBUG, macOS 14), byte-comparing the original afterwards; inside another
+  sandbox it prints `ENVIRONMENT:` instead. The native smoke check `swift-build` (group
+  `core`, `src/native/smoke-swift-build.ts`) opens the fixture in Trezi, checks the
+  settings, package, catalog and panel, and that an app edit reuses the cached module,
+  package and catalog. Its edit is a direct write to the opened copy.
 
 ## Limits and follow-ups
 
@@ -250,10 +323,12 @@ the host build). It never changes the machine's `xcode-select`, which it only re
   simulator preview path. Previews would have to target UIKit/SwiftUI on iOS. The
   host here is macOS-only.
 - **Multi-module projects:** Swift targets of one Xcode project or package build from
-  the target graph (LKM-273, above). Not yet: package products and SwiftPM resolution,
-  remote or binary packages, Clang targets, resource bundles, per-target compiler
-  flags, and Swift 6 / strict-concurrency settings (the driver uses the compiler
-  default). Stages: `docs/SWIFT-PREVIEWS-PLAN.md`.
+  the target graph (LKM-273, above) with their resolved settings, local and pinned
+  remote packages, macOS frameworks and asset catalogs (LKM-275, [Build
+  authority](#build-authority-lkm-275)). Not yet: Clang and mixed-language targets,
+  static library `.xcframework` slices, pin resolution, String Catalogs and other
+  compiled resources, run-script generated sources. Stages:
+  `docs/SWIFT-PREVIEWS-PLAN.md`.
 - **Scraib (read-only inspection and disposable-copy checks; not "supported").**
   Nothing in either Scraib repository was modified. The checks ran on copies under the
   temporary directory with the same driver (`docs/evidence/lkm-271/scraib-validation/`:

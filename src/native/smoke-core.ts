@@ -70,6 +70,7 @@ import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStartComposer, restoreStartComposer } from './smoke-start'
 import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
+import { checkSwiftBuild, restoreSwiftBuild } from './smoke-swift-build'
 import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
 import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
@@ -1196,6 +1197,12 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: () => checkSwiftGraph(host, invoke, fixture, root, artifacts, firstProject),
       cleanup: () => restoreSwiftGraph(host, firstProject)
+    },
+    {
+      name: 'swift-build',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftBuild(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftBuild(host, firstProject)
     },
     {
       name: 'final-shell',

@@ -20,6 +20,10 @@ export interface NativeTarget {
   dependencies: string[]
   /** Swift package products it needs, as `product (package location)`. */
   packageProducts: string[]
+  /** The same products with their package's `location` ('' when the project names none). */
+  packageDependencies: { product: string; package: string }[]
+  /** Project-relative `.framework`/`.xcframework` files it links (LKM-275). */
+  binaries: string[]
   /** Project-relative Swift sources. */
   sources: string[]
   /** Project-relative resources (asset catalogs, storyboards, plists copied as resources). */
@@ -32,7 +36,20 @@ export interface NativeTarget {
 
 export interface PackageReference {
   kind: 'remote' | 'local'
+  /** A remote package's URL, a local one's path as the project or manifest wrote it. */
   location: string
+  /** A local package's project-relative folder, or an absolute one from a package manifest. */
+  path?: string
+  /** SwiftPM's package identity (the URL's or folder's last component, lowercased). */
+  identity?: string
+  /** The declared version requirement, as written (pins decide what is built). */
+  requirement?: string
+}
+
+/** SwiftPM's identity for a package URL or folder. */
+export function packageIdentity(location: string): string {
+  const last = location.replace(/\/+$/, '').split('/').pop() ?? ''
+  return last.replace(/\.git$/, '').toLowerCase()
 }
 
 const REPORTED_SETTINGS = [
@@ -48,7 +65,25 @@ const REPORTED_SETTINGS = [
   'SWIFT_APPROACHABLE_CONCURRENCY',
   'SWIFT_ACTIVE_COMPILATION_CONDITIONS',
   'OTHER_SWIFT_FLAGS',
-  'ENABLE_PREVIEWS'
+  'ENABLE_PREVIEWS',
+  // Build authority (LKM-275, `settings.ts`): read from the file when xcodebuild cannot run.
+  'GCC_PREPROCESSOR_DEFINITIONS',
+  'FRAMEWORK_SEARCH_PATHS',
+  'HEADER_SEARCH_PATHS',
+  'SWIFT_INCLUDE_PATHS',
+  'LIBRARY_SEARCH_PATHS',
+  'OTHER_LDFLAGS',
+  'SWIFT_OBJC_BRIDGING_HEADER',
+  'SWIFT_ENABLE_BARE_SLASH_REGEX',
+  'ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS',
+  'ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME',
+  'ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS',
+  'STRING_CATALOG_GENERATE_SYMBOLS',
+  'SYSTEM_FRAMEWORK_SEARCH_PATHS',
+  'OTHER_CFLAGS',
+  'SWIFT_OPTIMIZATION_LEVEL',
+  'SWIFT_COMPILATION_MODE',
+  'PRODUCT_BUNDLE_IDENTIFIER'
 ]
 
 export function targetKind(productType: string): TargetKind {
@@ -124,10 +159,28 @@ export function parsePbxproj(
   }
   for (const id of Array.isArray(project.packageReferences) ? project.packageReferences : []) {
     const ref = objects[id]
-    if (ref?.isa === 'XCRemoteSwiftPackageReference')
-      packages.push({ kind: 'remote', location: ref.repositoryURL ?? '' })
-    else if (ref?.isa === 'XCLocalSwiftPackageReference')
-      packages.push({ kind: 'local', location: ref.relativePath ?? '' })
+    if (ref?.isa === 'XCRemoteSwiftPackageReference') {
+      const location = ref.repositoryURL ?? ''
+      const requirement = ref.requirement ?? {}
+      const declared = [requirement.kind, requirement.minimumVersion ?? requirement.version]
+        .concat(requirement.branch ?? requirement.revision ?? [])
+        .filter(Boolean)
+        .join(' ')
+      packages.push({
+        kind: 'remote',
+        location,
+        identity: packageIdentity(location),
+        ...(declared ? { requirement: declared } : {})
+      })
+    } else if (ref?.isa === 'XCLocalSwiftPackageReference') {
+      const location = ref.relativePath ?? ''
+      packages.push({
+        kind: 'local',
+        location,
+        path: posix.normalize(posix.join(projectDir || '.', location)),
+        identity: packageIdentity(location)
+      })
+    }
   }
 
   const targetIds: string[] = Array.isArray(project.targets) ? project.targets : []
@@ -139,8 +192,20 @@ export function parsePbxproj(
       const sources = new Set<string>()
       const resources = new Set<string>()
       const productType: string = target.productType ?? 'aggregate'
+      const binaries = new Set<string>()
       for (const phaseId of target.buildPhases ?? []) {
         const phase = objects[phaseId]
+        if (phase?.isa === 'PBXShellScriptBuildPhase')
+          notes.push(
+            `has a run-script phase "${phase.name ?? 'Run Script'}" that previews do not run`
+          )
+        if (phase?.isa === 'PBXFrameworksBuildPhase')
+          for (const fileId of phase.files ?? []) {
+            // Linked bundles inside the project; SDK and built-product frameworks are not files here.
+            const ref = objects[fileId]?.fileRef
+            const path = ref ? pathOf(ref) : null
+            if (path && /\.(xc)?framework$/.test(path)) binaries.add(path)
+          }
         const into =
           phase?.isa === 'PBXSourcesBuildPhase'
             ? sources
@@ -177,30 +242,41 @@ export function parsePbxproj(
       }
       const dependencies: string[] = []
       const packageProducts: string[] = []
+      const packageDependencies: NativeTarget['packageDependencies'] = []
+      const addProduct = (productId: string | undefined) => {
+        const product = productId ? objects[productId] : undefined
+        const name: string = (product?.productName ?? '?').replace(/^plugin:/, '')
+        const location = packageOf(product?.package)
+        if (packageDependencies.some((d) => d.product === name && d.package === location)) return
+        packageDependencies.push({ product: name, package: location })
+        packageProducts.push(`${name} (${location || 'package'})`)
+      }
       for (const depId of target.dependencies ?? []) {
         const dep = objects[depId]
         if (dep?.target && objects[dep.target]) dependencies.push(objects[dep.target].name)
-        else if (dep?.productRef) {
-          const product = objects[dep.productRef]
-          packageProducts.push(`${product?.productName ?? '?'} (${packageOf(product?.package)})`)
-        } else {
+        else if (dep?.productRef) addProduct(dep.productRef)
+        else {
           const proxy = objects[dep?.targetProxy]
           notes.push(`depends on "${proxy?.remoteInfo ?? '?'}" in another project`)
         }
       }
-      for (const productId of target.packageProductDependencies ?? []) {
-        const product = objects[productId]
-        const label = `${product?.productName ?? '?'} (${packageOf(product?.package) || 'package'})`
-        if (!packageProducts.includes(label)) packageProducts.push(label)
-      }
+      for (const productId of target.packageProductDependencies ?? []) addProduct(productId)
       const own = settingsOf(target.buildConfigurationList)
       const merged = { ...projectSettings.settings, ...own.settings }
+      const text = (value: unknown) =>
+        typeof value === 'string' ? value : Array.isArray(value) ? value.join(' ') : undefined
       const settings: Record<string, string> = {}
-      for (const key of REPORTED_SETTINGS) {
-        const value = merged[key]
-        if (typeof value === 'string') settings[key] = value
-        else if (Array.isArray(value)) settings[key] = value.join(' ')
-      }
+      for (const key of Object.keys(merged))
+        if (REPORTED_SETTINGS.includes(key) || key.startsWith('SWIFT_UPCOMING_FEATURE_')) {
+          const value = text(merged[key])
+          // A target's `$(inherited)` is the project level's value (xcconfigs aside).
+          const inherited = key in own.settings ? (text(projectSettings.settings[key]) ?? '') : ''
+          if (value !== undefined)
+            settings[key] = value
+              .replace(/\$[({]inherited[)}]/g, inherited)
+              .replace(/\s+/g, ' ')
+              .trim()
+        }
       if (own.xcconfig || projectSettings.xcconfig)
         notes.push('settings come partly from an .xcconfig file')
       const product = settings.PRODUCT_MODULE_NAME || settings.PRODUCT_NAME || ''
@@ -212,6 +288,8 @@ export function parsePbxproj(
         productType,
         dependencies,
         packageProducts,
+        packageDependencies,
+        binaries: [...binaries].sort(),
         sources: [...sources].sort(),
         resources: [...resources].sort(),
         settings,

@@ -142,6 +142,14 @@ export interface NativeProjectInfo {
   /** The running driver's `NativeGraph` (`src/swift-preview/graph.ts`): schemes and targets. */
   graph: unknown
   /**
+   * The latest `BuildPlan` (`src/swift-preview/plan.ts`, LKM-275): modules with their
+   * resolved settings and dropped flags, the dependency plan with every unsupported
+   * dependency named, and the resource plan. Null before a target build.
+   */
+  plan: unknown
+  /** The latest build's `BuildReport` (`src/swift-preview/builder.ts`): derived data, cache use. */
+  build: unknown
+  /**
    * The driver's `ToolchainSelection` (`src/swift-preview/toolchain.ts`, LKM-274): the
    * developer directory its tools run with, why it was chosen, whether it expands
    * `#Preview`, and an actionable message. Null when the driver was not asked.

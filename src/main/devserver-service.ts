@@ -4,7 +4,12 @@ import { projectKey } from '../shared/projectKey'
 import { previewServers } from './preview-evidence'
 import { installProjectDependencies } from './project-dependencies'
 import type { RpcHandlerRegistry } from './rpc-router'
-import { nativeProjectInfo, swiftPreviewCommand, treziManifestDir } from './swift-preview'
+import {
+  nativeProjectInfo,
+  swiftPreviewCommand,
+  swiftPreviewDerivedData,
+  treziManifestDir
+} from './swift-preview'
 
 /**
  * The dev-server routes under the Swift runtime owner (S06). Same channels and
@@ -61,7 +66,14 @@ export function registerServiceDevServer(
       const driver = opts.framework === 'swift' && !opts.command.trim()
       const server = await runtime.start({
         root: opts.root,
-        command: driver ? swiftPreviewCommand(undefined, undefined, manifestDir) : opts.command,
+        command: driver
+          ? swiftPreviewCommand(
+              undefined,
+              undefined,
+              manifestDir,
+              userData ? swiftPreviewDerivedData(userData()) : undefined
+            )
+          : opts.command,
         framework: opts.framework,
         ...(opts.cleanCache ? { cleanCache: true } : {})
       })

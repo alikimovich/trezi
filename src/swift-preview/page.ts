@@ -169,7 +169,7 @@ export function previewPage(token: string): string {
   let projectShown = ''
   const renderProject = (state) => {
     const native = state.native
-    const key = JSON.stringify([native, state.plan, state.manifest, state.toolchain])
+    const key = JSON.stringify([native, state.plan, state.build, state.manifest, state.toolchain])
     if (key === projectShown) return
     projectShown = key
     if (state.status === 'setup') $('project').open = true
@@ -224,6 +224,47 @@ export function previewPage(token: string): string {
         ...plan.blockers.map((b) => el('li', b, 'blocker')),
         ...plan.warnings.map((w) => el('li', w, 'muted'))
       ]))
+      // Build authority (LKM-275): resolved settings, dropped flags, dependencies, resources.
+      const build = state.build
+      const settings = plan.modules.filter((m) => m.settings)
+      if (settings.length) {
+        body.push(el('h3', 'Build settings'))
+        body.push(list(settings.map((m) => {
+          const s = m.settings
+          const item = el('li')
+          item.dataset.module = m.module
+          item.append(el('code', m.module), ' from ' + ((build && build.settingsFrom[m.module]) || s.from) + ': Swift ' + (s.swiftVersion || 'default') + ', macOS ' + (s.deploymentTarget || 'default') + ', defines ' + (s.defines.join(' ') || 'none'))
+          for (const d of s.dropped) item.append(el('div', 'Dropped ' + d.setting + ' ' + d.flag + ': ' + d.reason, 'muted dropped'))
+          for (const note of s.notes) item.append(el('div', note, 'muted'))
+          return item
+        })))
+      }
+      const deps = plan.dependencies
+      if (deps && (deps.packages.length || deps.binaries.length || deps.unsupported.length)) {
+        body.push(el('h3', 'Dependencies'))
+        body.push(list([
+          ...deps.packages.map((p) => 'Package ' + p.identity + ' (' + p.kind + (p.pin ? ', pinned ' + (p.pin.version || p.pin.revision.slice(0, 12)) : '') + '): ' + p.products.join(', ')),
+          ...deps.binaries.map((b) => 'Framework ' + b.framework + ': ' + b.path),
+          ...deps.unsupported.map((u) => el('li', 'Not built: ' + u.name + ' (' + u.kind + '): ' + u.reason, u.required ? 'blocker unsupported' : 'muted unsupported')),
+          ...(build && build.packages ? [el('li', 'Built in ' + build.packages.bin + (build.packages.cached ? ' (cached)' : ''), 'muted')] : [])
+        ]))
+      }
+      const res = plan.resources
+      if (res && (res.catalogs.length || res.copied.length || res.unsupported.length)) {
+        body.push(el('h3', 'Resources'))
+        body.push(list([
+          ...res.catalogs.map((c) => 'Asset catalog ' + c.path + ' (actool)' + (build && build.resources && build.resources.symbols.includes(c.module) ? ', with asset symbols' : '')),
+          ...res.copied.map((c) => 'Copied ' + c.path),
+          ...res.unsupported.map((u) => el('li', 'Not bundled: ' + u.path + ': ' + u.reason, 'muted unsupported'))
+        ]))
+      }
+      if (build) {
+        const cached = build.modules.filter((m) => m.cached).length
+        body.push(list([
+          el('li', 'Derived data (Trezi-owned): ' + build.derivedData + '; ' + cached + ' of ' + build.modules.length + ' modules from cache', 'muted'),
+          ...build.errors.map((e) => el('li', e, 'muted'))
+        ]))
+      }
     }
     $('project-body').replaceChildren(...body)
   }

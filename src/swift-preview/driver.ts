@@ -12,17 +12,26 @@ import { toolchainInfo } from './toolchain'
  * the "dev server" of a project that has `trezi-previews.json`. It builds the
  * project's declared components into a preview host, serves the preview page on
  * HOST:PORT (both from the runtime owner) and rebuilds when the sources change.
- * Usage: `bun src/swift-preview/driver.ts [projectRoot] [--manifest-dir DIR]` (root
- * default: the cwd). DIR is Trezi's own folder for the project's manifest (LKM-273).
- * `TREZI_DEVELOPER_DIR` is the app's developer directory setting (LKM-274).
+ * Usage: `bun src/swift-preview/driver.ts [projectRoot] [--manifest-dir DIR]
+ * [--cache-root DIR]` (root default: the cwd). `--manifest-dir` is Trezi's own folder
+ * for the project's manifest (LKM-273), `--cache-root` Trezi's derived data for every
+ * preview build (LKM-275, `<userData>/swift-previews/DerivedData`; default
+ * `TREZI_SWIFT_PREVIEW_CACHE`, else a temporary folder). `TREZI_DEVELOPER_DIR` is the
+ * app's developer directory setting (LKM-274).
  */
 const args = process.argv.slice(2)
-const flag = args.indexOf('--manifest-dir')
-const manifestDir = flag >= 0 ? args.splice(flag, 2)[1] : undefined
+const option = (name: string) => {
+  const at = args.indexOf(name)
+  return at >= 0 ? args.splice(at, 2)[1] : undefined
+}
+const manifestDir = option('--manifest-dir')
+const cacheRoot =
+  option('--cache-root') ||
+  process.env.TREZI_SWIFT_PREVIEW_CACHE ||
+  join(tmpdir(), 'trezi-swift-preview')
 const root = args[0] || process.cwd()
 const host = process.env.HOST || '127.0.0.1'
 const port = Number(process.env.PORT) || 5199
-const cacheRoot = process.env.TREZI_SWIFT_PREVIEW_CACHE || join(tmpdir(), 'trezi-swift-preview')
 const project = createHash('sha256').update(root).digest('hex').slice(0, 12)
 const token = randomBytes(16).toString('hex')
 const inputTypes = new Set(['mousedown', 'mouseup', 'mousedrag', 'keydown', 'keyup', 'scroll'])
@@ -79,7 +88,8 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/graph') {
       const graph = await session.nativeGraph()
       const toolchain = session.state.toolchain && toolchainInfo(session.state.toolchain)
-      return json(res, 200, { graph, plan: session.state.plan, toolchain })
+      const { plan, build } = session.state
+      return json(res, 200, { graph, plan, build, toolchain })
     }
     if (req.method === 'GET' && url.pathname === '/frame') {
       const frame = await session.frame(preview)

@@ -11,6 +11,8 @@ import {
   targetKind,
   workspaceProjects
 } from './pbxproj'
+import { packageSettings } from './settings'
+import { findPackageDirs, packageDirs, runInShadow, xcodeSpec } from './shadow'
 
 export type { NativeTarget, PackageReference }
 
@@ -18,11 +20,13 @@ export type { NativeTarget, PackageReference }
  * A native project's schemes and target graph (LKM-273, `docs/SWIFT-PREVIEWS-PLAN.md`
  * Stage 1). Xcode projects are read from `project.pbxproj` through `plutil` (works
  * with the command-line tools alone); schemes come from `xcodebuild -list -json`, or
- * from the shared scheme files when Xcode is missing; `xcodebuild -showBuildSettings
- * -json` fills the settings of targets configured by `.xcconfig` files; Swift packages
- * come from `swift package describe --type json`. Every tool run has a timeout and a
- * clear error. Nothing is written into the project: SwiftPM's scratch folder is in
- * `cacheDir`.
+ * from the shared scheme files when Xcode is missing; Swift packages come from `swift
+ * package describe --type json`, their settings and product dependencies from `swift
+ * package dump-package`. A build resolves the full settings separately
+ * (`build-settings.ts`, LKM-275). Every tool run has a timeout and a clear error.
+ * Nothing is written into the project: SwiftPM's scratch folder is in `cacheDir`, and
+ * `xcodebuild` and SwiftPM run in a Trezi-owned shadow of the project (`shadow.ts`),
+ * because they create state of their own next to the files they read.
  */
 export interface NativeContainer {
   kind: 'workspace' | 'project' | 'package'
@@ -180,14 +184,18 @@ function schemeFiles(root: string, bundle: string): string[] {
 async function schemes(
   root: string,
   container: NativeContainer,
-  options: Required<Pick<GraphOptions, 'xcodebuild' | 'env'>> & { timeoutMs: number }
+  options: Required<Pick<GraphOptions, 'xcodebuild' | 'env' | 'cacheDir'>> & { timeoutMs: number },
+  packages: string[]
 ) {
   const flag = container.kind === 'workspace' ? '-workspace' : '-project'
-  const listed = await runTool(options.xcodebuild, ['-list', '-json', flag, container.path], {
-    cwd: root,
-    timeoutMs: options.timeoutMs,
-    env: options.env
-  })
+  // LKM-275: `-list` runs in a shadow of the project, so what it creates stays there.
+  const listed = await runInShadow(options.cacheDir, xcodeSpec(root, container, packages), (cwd) =>
+    runTool(options.xcodebuild, ['-list', '-json', flag, container.path], {
+      cwd,
+      timeoutMs: options.timeoutMs,
+      env: options.env
+    })
+  )
   if (!listed.error) {
     try {
       const json = JSON.parse(listed.stdout)
@@ -203,40 +211,11 @@ async function schemes(
   return false
 }
 
-/** `xcodebuild -showBuildSettings -json` for one target: where .xcconfig files set them. */
-async function buildSettings(
-  root: string,
-  project: string,
-  target: NativeTarget,
-  options: { xcodebuild: string; timeoutMs: number; env: Record<string, string> }
-) {
-  const result = await runTool(
-    options.xcodebuild,
-    ['-showBuildSettings', '-json', '-project', project, '-target', target.name],
-    { cwd: root, timeoutMs: options.timeoutMs, env: options.env }
-  )
-  if (result.error) return target.notes.push(result.error)
-  try {
-    const settings = JSON.parse(result.stdout)?.[0]?.buildSettings ?? {}
-    for (const key of Object.keys(target.settings))
-      if (typeof settings[key] === 'string') target.settings[key] = settings[key]
-    for (const key of [
-      'SWIFT_VERSION',
-      'MACOSX_DEPLOYMENT_TARGET',
-      'SDKROOT',
-      'PRODUCT_MODULE_NAME'
-    ])
-      if (typeof settings[key] === 'string') target.settings[key] = settings[key]
-    if (settings.PRODUCT_MODULE_NAME) target.module = settings.PRODUCT_MODULE_NAME
-  } catch {
-    target.notes.push('xcodebuild -showBuildSettings returned no JSON.')
-  }
-}
-
 async function xcodeProject(
   root: string,
   path: string,
-  options: Required<Omit<GraphOptions, 'cacheDir' | 'moduleCache'>>
+  options: Required<Omit<GraphOptions, 'moduleCache'>>,
+  scanned: string[]
 ): Promise<NativeContainer> {
   const container: NativeContainer = {
     kind: 'project',
@@ -265,12 +244,43 @@ async function xcodeProject(
       container.errors.push(`${path}/project.pbxproj: ${(error as Error).message}`)
     }
   }
-  const xcode = await schemes(root, container, options)
-  if (xcode)
-    for (const target of container.targets)
-      if (target.notes.includes('settings come partly from an .xcconfig file'))
-        await buildSettings(root, path, target, options)
+  await schemes(root, container, options, packageDirs(root, container.packages, scanned))
   return container
+}
+
+/**
+ * `swift package dump-package` (LKM-275): each target's settings and which package each
+ * product comes from. Always with SwiftPM's own manifest sandbox: where it cannot be
+ * applied, the settings stay unread and the error says why. The sandbox is never turned off.
+ */
+export async function dumpPackage(
+  dir: string,
+  scratch: string,
+  options: Required<GraphOptions>,
+  errors: string[]
+): Promise<any> {
+  // In a shadow of the package: SwiftPM creates `.swiftpm` (and may write `Package.resolved`) there.
+  const result = await runInShadow(options.cacheDir, { root: dir, packages: [dir] }, (cwd) =>
+    runTool(options.xcrun, ['swift', 'package', '--scratch-path', scratch, 'dump-package'], {
+      cwd,
+      timeoutMs: options.timeoutMs,
+      env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
+    })
+  )
+  if (result.error) {
+    errors.push(
+      /sandbox_apply/.test(result.stderr)
+        ? "swift package dump-package could not apply SwiftPM's manifest sandbox in this environment (it runs inside another sandbox); the package's settings were not read. Run Trezi outside a sandbox to read them."
+        : result.error
+    )
+    return {}
+  }
+  try {
+    return JSON.parse(result.stdout.slice(result.stdout.indexOf('{')))
+  } catch {
+    errors.push('swift package dump-package returned no JSON.')
+    return {}
+  }
 }
 
 async function swiftPackage(
@@ -294,23 +304,25 @@ async function swiftPackage(
     `spm-${createHash('sha256').update(join(root, dir)).digest('hex').slice(0, 12)}`
   )
   const describe = (sandbox: boolean) =>
-    runTool(
-      options.xcrun,
-      [
-        'swift',
-        'package',
-        ...(sandbox ? [] : ['--disable-sandbox']),
-        '--scratch-path',
-        scratch,
-        'describe',
-        '--type',
-        'json'
-      ],
-      {
-        cwd: join(root, dir),
-        timeoutMs: options.timeoutMs,
-        env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
-      }
+    runInShadow(options.cacheDir, { root: join(root, dir), packages: [join(root, dir)] }, (cwd) =>
+      runTool(
+        options.xcrun,
+        [
+          'swift',
+          'package',
+          ...(sandbox ? [] : ['--disable-sandbox']),
+          '--scratch-path',
+          scratch,
+          'describe',
+          '--type',
+          'json'
+        ],
+        {
+          cwd,
+          timeoutMs: options.timeoutMs,
+          env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
+        }
+      )
     )
   let described = await describe(true)
   // Inside another sandbox SwiftPM cannot apply its own manifest sandbox; the manifest
@@ -330,14 +342,41 @@ async function swiftPackage(
     container.errors.push('swift package describe returned no JSON.')
     return container
   }
-  container.packages = (json.dependencies ?? []).map((dep: any) => ({
-    kind: dep.type === 'fileSystem' ? 'local' : 'remote',
-    location: dep.url ?? dep.path ?? dep.identity ?? ''
-  }))
+  const dump = await dumpPackage(join(root, dir), scratch, options, container.errors)
+  const dumped = new Map<string, any>((dump.targets ?? []).map((t: any) => [t.name, t]))
+  container.packages = (dump.dependencies ?? json.dependencies ?? []).map((dep: any) => {
+    const local = dep.fileSystem?.[0]
+    const remote = dep.sourceControl?.[0]
+    if (local)
+      return { kind: 'local', location: local.path, path: local.path, identity: local.identity }
+    if (remote) {
+      const url = remote.location?.remote?.[0]?.urlString ?? remote.location?.remote?.[0] ?? ''
+      return {
+        kind: 'remote',
+        location: String(url),
+        identity: remote.identity,
+        requirement: JSON.stringify(remote.requirement ?? {})
+      }
+    }
+    return {
+      kind: dep.type === 'fileSystem' ? 'local' : 'remote',
+      location: dep.url ?? dep.path ?? dep.identity ?? '',
+      identity: dep.identity
+    }
+  })
+  const productsOf = (name: string): NativeTarget['packageDependencies'] =>
+    (dumped.get(name)?.dependencies ?? []).flatMap((dep: any) => {
+      if (dep.product) return [{ product: dep.product[0], package: String(dep.product[1] ?? '') }]
+      const byName = dep.byName?.[0]
+      // A bare name that is not a target of this package names a dependency's product.
+      if (byName && !dumped.has(byName)) return [{ product: byName, package: '' }]
+      return []
+    })
   container.schemes = (json.products ?? []).map((product: any) => product.name)
   container.schemesFrom = container.schemes.length ? 'package products' : 'none'
-  container.targets = (json.targets ?? []).map(
-    (target: any): NativeTarget => ({
+  container.targets = (json.targets ?? []).map((target: any): NativeTarget => {
+    const settings = packageSettings(dump, target.name)
+    return {
       name: target.name,
       module: target.c99name ?? target.name,
       kind:
@@ -351,15 +390,20 @@ async function swiftPackage(
       productType: `swiftpm.${target.type}`,
       dependencies: target.target_dependencies ?? [],
       packageProducts: target.product_dependencies ?? [],
+      packageDependencies: productsOf(target.name),
+      binaries: [],
       sources: (target.sources ?? [])
         .filter((file: string) => file.endsWith('.swift'))
         .map((file: string) => posix.join(dir, target.path, file))
         .sort(),
       resources: (target.resources ?? []).map((r: any) => posix.relative(join(root), r.path ?? '')),
-      settings: {},
-      notes: target.module_type && target.module_type !== 'SwiftTarget' ? [target.module_type] : []
-    })
-  )
+      settings: dump.targets ? settings.values : {},
+      notes: [
+        ...(target.module_type && target.module_type !== 'SwiftTarget' ? [target.module_type] : []),
+        ...settings.dropped.map((d) => `package setting "${d.flag}" is not applied`)
+      ]
+    }
+  })
   return container
 }
 
@@ -378,6 +422,7 @@ export async function nativeGraph(root: string, options: GraphOptions): Promise<
   const containers: NativeContainer[] = []
   const errors: string[] = []
   const projects = new Set(structure?.projects ?? [])
+  const workspaces: NativeContainer[] = []
   for (const workspace of structure?.workspaces ?? []) {
     const container: NativeContainer = {
       kind: 'workspace',
@@ -398,11 +443,20 @@ export async function nativeGraph(root: string, options: GraphOptions): Promise<
       container.errors.push(`${workspace} has no readable contents.xcworkspacedata.`)
     }
     for (const project of container.projects) projects.add(project)
-    await schemes(root, container, resolved)
-    containers.push(container)
+    workspaces.push(container)
   }
+  // Every package folder of the project, so no xcodebuild run reaches one (`shadow.ts`).
+  const scanned = findPackageDirs(root)
+  const projectContainers: NativeContainer[] = []
   for (const project of [...projects].sort())
-    containers.push(await xcodeProject(root, project, resolved))
+    projectContainers.push(await xcodeProject(root, project, resolved, scanned))
+  const referenced = packageDirs(
+    root,
+    projectContainers.flatMap((c) => c.packages),
+    scanned
+  )
+  for (const workspace of workspaces) await schemes(root, workspace, resolved, referenced)
+  containers.push(...workspaces, ...projectContainers)
   for (const pkg of structure?.packages ?? [])
     containers.push(await swiftPackage(root, pkg, resolved))
   if (!structure) errors.push('No Xcode workspace, Xcode project or Package.swift was found.')

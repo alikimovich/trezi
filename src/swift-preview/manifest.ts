@@ -170,6 +170,12 @@ export function libraryCompileArgs(options: {
   dependencies?: string[]
   /** `-enable-testing`, so the preview declarations can `@testable import` it. */
   testing?: boolean
+  /** Dependencies built into their own folders (LKM-275 cached modules), instead of `dir`. */
+  dependencyDirs?: { name: string; dir: string }[]
+  /** The target's mapped build settings (`settings.ts`) and dependency search paths. */
+  flags?: string[]
+  /** Package and framework link flags. */
+  link?: string[]
 }): string[] {
   const dependencies = options.dependencies ?? []
   return [
@@ -185,9 +191,18 @@ export function libraryCompileArgs(options: {
     options.name,
     '-module-cache-path',
     options.moduleCache,
+    ...(options.flags ?? []),
     ...(dependencies.length
       ? ['-I', options.dir, '-L', options.dir, ...dependencies.map((name) => `-l${name}`)]
       : []),
+    ...(options.dependencyDirs ?? []).flatMap(({ name, dir }) => [
+      '-I',
+      dir,
+      '-L',
+      dir,
+      `-l${name}`
+    ]),
+    ...(options.link ?? []),
     '-emit-module-path',
     join(options.dir, `${options.name}.swiftmodule`),
     '-o',
@@ -204,6 +219,8 @@ export function hostCompileArgs(options: {
   output: string
   /** Built library modules: the directory holding <name>.swiftmodule and lib<name>.dylib. */
   libraries?: { name: string; dir: string }[]
+  /** The deployment target, dependency search paths and link flags (LKM-275). */
+  flags?: string[]
 }): string[] {
   const linked = (options.libraries ?? []).flatMap(({ name, dir }) => [
     '-I',
@@ -227,6 +244,7 @@ export function hostCompileArgs(options: {
     '-module-cache-path',
     options.moduleCache,
     ...linked,
+    ...(options.flags ?? []),
     '-o',
     options.output,
     options.host,
