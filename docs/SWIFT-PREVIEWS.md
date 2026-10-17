@@ -14,7 +14,9 @@ discovery and target-graph builds.
 
 1. Build Trezi as usual (`bun run build`) and open it.
 2. Open the folder `test/fixtures/swift-components` (or a copy of it) as a project.
-   Xcode or the command-line tools must provide `xcrun swiftc` for macOS.
+   Xcode or the command-line tools must provide `xcrun swiftc` for macOS; files that
+   use `#Preview` need full Xcode, which Trezi finds and selects itself
+   ([Toolchain](#toolchain-lkm-274)).
 3. The preview pane shows "Swift previews". The first build compiles the Clang module
    cache and can take 20–30 s; later builds of the fixture take about 1.5 s.
 4. Pick Profile card (SwiftUI), Rating control (AppKit `NSView`) or Search panel
@@ -116,6 +118,38 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
 - `bun scripts/swift-preview-discover.ts <folder> [--target NAME]` prints the
   discovery, graph and plan as JSON without writing into the folder.
 
+## Toolchain (LKM-274)
+
+`#Preview` needs the `PreviewsMacros` compiler plugin, which only full Xcode ships.
+Trezi picks a developer directory per project and passes it as `DEVELOPER_DIR` to every
+tool the driver runs (`xcodebuild`, `swift package`, `xcrun swiftc`, the SDK lookup and
+the host build). It never changes the machine's `xcode-select`, which it only reads.
+(`src/swift-preview/toolchain.ts`, `toolchain-picker.ts`.)
+
+- Candidates: every `/Applications/Xcode*.app` (versioned names such as
+  `Xcode-26.5.0.app` included), `xcode-select -p`, `/Library/Developer/CommandLineTools`
+  and `DEVELOPER_DIR`, each with its Xcode and Swift version, macOS SDK and whether
+  `PreviewsMacros` is present.
+- Order: an explicit setting wins, first `"developerDir"` in the manifest (absolute; a
+  `.app` or its `Contents/Developer`), then the app's `TREZI_DEVELOPER_DIR`; then
+  `DEVELOPER_DIR` from the environment; then the newest full Xcode whose probe passes;
+  then `xcode-select -p`. The reason is recorded and shown.
+- The probe compiles a tiny intact `#Preview` with the selected toolchain and the
+  compiler's normal flags. Results are cached beside the project caches
+  (`toolchains.json`) by toolchain path, versions, SDK and plugin file, so an Xcode update
+  or a switch probes again. Module and graph caches are keyed by the selection too.
+- Messages: the command-line tools alone read "Command Line Tools lack PreviewsMacros,
+  so #Preview cannot expand: install or select full Xcode …"; a broken or incompatible
+  plugin names the toolchain and says to reinstall it or select another Xcode. When the
+  compiler's plugin server cannot start because Trezi itself runs inside another sandbox,
+  the result is "unavailable" (not cached) and the newest Xcode is still used; Trezi
+  never disables the compiler's plugin sandbox to get around it.
+- Shown in the page header (for example "Xcode 26.5 (17F42) · #Preview supported"), in
+  the Project panel's Toolchain section, in the driver's `/state` and `/graph`, and in
+  `project:native` (`toolchain`).
+- A requested rebuild selects again (and rereads `xcode-select -p`); otherwise the
+  selection is redone when the setting, `DEVELOPER_DIR` or an installed Xcode changed.
+
 ## How it works
 
 - Detection: `src/main/project-detect.ts` and `src/service/RuntimeDetect.swift` (kept
@@ -189,15 +223,23 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   library error and fix are direct writes to the opened copy (recorded under
   `provenance.syntheticDirectWrites`); the chat path is the `swift-preview` check's.
   Evidence: `docs/evidence/lkm-273/`.
+- LKM-274: `test/swift-preview-toolchain.mjs` (unit tier) covers selection with scripted
+  toolchains and, when a full Xcode is installed, builds a fixture file with an intact
+  `#Preview` through the driver with process-local `DEVELOPER_DIR`, checking
+  `xcode-select -p` before and after. Inside a sandbox that stops the compiler's plugin
+  server it prints `ENVIRONMENT:` and skips only that real build. The `swift-graph`
+  smoke check also asserts the toolchain in the page and in `project:native`.
 
 ## Limits and follow-ups
 
-- **`#Preview` reuse is not supported.** Xcode's `#Preview` macro expands into
-  registry types that only Xcode's preview agent reads, and bare `swiftc` cannot even
-  compile a file that uses it (no `PreviewsMacros` plugin; seen on Scraib). Such files
-  must be left out of `sources`. Trezi asks for explicit
-  `TreziPreviews` declarations instead. Follow-up: generate them from `#Preview`
-  bodies, or load the expanded `DeveloperToolsSupport` registry.
+- **`#Preview` bodies are not shown as previews.** Files that use `#Preview` compile
+  unmodified once a full Xcode is selected for Trezi's processes (see
+  [Toolchain](#toolchain-lkm-274)); with only the command-line tools they fail with
+  `plugin for module 'PreviewsMacros' not found`, and the page says to install or
+  select full Xcode. The macro expands into registry types that only Xcode's preview
+  agent reads, so Trezi still asks for explicit `TreziPreviews` declarations.
+  Follow-up (Stage 3): generate them from `#Preview` bodies, or load the expanded
+  `DeveloperToolsSupport` registry.
 - **Full macOS app launch is not done.** The host previews components, not an app
   with its `@main`, menus, entitlements or bundle resources (`Bundle.main` is the host).
   Path: `xcodebuild` the app scheme into DerivedData, launch it as a child, and stream
@@ -219,14 +261,16 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   - `scraib-xcode` (the Mac App Store app): one Xcode target, no SwiftPM packages,
     only system frameworks (macOS 14 target, Swift 5), `@main` in
     `scraib/scraibApp.swift`, resources in `Assets.xcassets`, `Info.plist` and
-    `scraib.entitlements`. Compiling the whole `scraib` folder with `@main` excluded
-    **fails**: seven files carry `#Preview`, and bare `swiftc` has no `PreviewsMacros`
-    plugin (`plugin for module 'PreviewsMacros' not found`). Listing only the files a
+    `scraib.entitlements`. With the command-line tools selected, compiling the whole
+    `scraib` folder with `@main` excluded **failed**: seven files carry `#Preview`,
+    and the command-line tools have no `PreviewsMacros` plugin (`plugin for module
+    'PreviewsMacros' not found`); Trezi now selects a full Xcode, which has it (LKM-274,
+    `docs/SWIFT-PREVIEWS-PLAN.md` Stage 6 notes). Listing only the files a
     component needs (`ShortcutRecorderView`, `ProviderAPIKeyField`, `AIProviderModels`,
     `GlobalHotKeyManager`) **builds and renders** both views (frames in
     `docs/evidence/lkm-271/scraib-xcode-*.png`). `WelcomeView` needs the
-    `StoreKitManager` environment object, and the whole-folder attempt hit the same
-    `#Preview` error, so it was not rendered.
+    `StoreKitManager` environment object, and the whole-folder attempt (command-line
+    tools) hit the same `#Preview` error, so it was not rendered.
   - `scraib-open` (XcodeGen `project.yml`, Swift 6, macOS 26): the app target is
     `Scraib/`; the local SwiftPM package `ScraibKit` (library at
     `ScraibKit/Sources/ScraibKit`, 29 files, system frameworks only) is imported by the

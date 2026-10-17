@@ -122,12 +122,31 @@ export interface NativeStructure {
 }
 
 /** Result of `project:native` (LKM-273, `src/main/swift-preview.ts`). */
+/** The part of a `ToolchainSelection` the backend API exposes. */
+export interface NativeToolchainInfo {
+  developerDir: string
+  label: string
+  swiftVersion: string
+  sdkVersion: string
+  reason: string
+  preview: 'supported' | 'unsupported' | 'broken' | 'unavailable' | 'none'
+  message: string
+  /** `xcode-select -p`, read only: Trezi never changes it. */
+  systemDefault: string
+}
+
 export interface NativeProjectInfo {
   structure: NativeStructure | null
   /** Where `trezi-previews.json` may live: Trezi's app data (wins) or the repo root. */
   manifest: { trezi: string; treziExists: boolean; repo: string; repoExists: boolean }
   /** The running driver's `NativeGraph` (`src/swift-preview/graph.ts`): schemes and targets. */
   graph: unknown
+  /**
+   * The driver's `ToolchainSelection` (`src/swift-preview/toolchain.ts`, LKM-274): the
+   * developer directory its tools run with, why it was chosen, whether it expands
+   * `#Preview`, and an actionable message. Null when the driver was not asked.
+   */
+  toolchain: NativeToolchainInfo | null
   /** Why the graph is missing, empty when it is there. */
   error: string
 }

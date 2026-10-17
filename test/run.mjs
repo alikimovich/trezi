@@ -241,6 +241,7 @@ const UNIT = [
   'swift-preview',
   'swift-preview-graph',
   'swift-preview-target',
+  'swift-preview-toolchain',
   'lint'
 ]
 
@@ -272,6 +273,9 @@ const UNIT_TIMEOUT_MS = {
   'swift-preview': 240_000,
   // LKM-273: three module compiles per build, six builds, then the driver's own build.
   'swift-preview-target': 300_000,
+  // LKM-274: scripted toolchains are instant; the real check probes Xcode and then the
+  // driver builds the fixture with a cold module cache for that toolchain.
+  'swift-preview-toolchain': 300_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,
   'setup-vite-real': 300_000

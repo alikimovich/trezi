@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { PreviewInputEvent } from './host-client'
 import { previewPage } from './page'
 import { PreviewSession } from './session'
+import { toolchainInfo } from './toolchain'
 
 /**
  * The Swift component preview driver (LKM-271): what Trezi's runtime owner runs as
@@ -13,6 +14,7 @@ import { PreviewSession } from './session'
  * HOST:PORT (both from the runtime owner) and rebuilds when the sources change.
  * Usage: `bun src/swift-preview/driver.ts [projectRoot] [--manifest-dir DIR]` (root
  * default: the cwd). DIR is Trezi's own folder for the project's manifest (LKM-273).
+ * `TREZI_DEVELOPER_DIR` is the app's developer directory setting (LKM-274).
  */
 const args = process.argv.slice(2)
 const flag = args.indexOf('--manifest-dir')
@@ -30,7 +32,9 @@ const session = new PreviewSession({
   cacheDir: join(cacheRoot, project),
   hostSource: join(__dirname, 'PreviewHost.swift'),
   log: (line) => console.log(line),
-  manifestDir
+  manifestDir,
+  // The app's developer directory setting (LKM-274); a manifest's "developerDir" wins.
+  developerDir: process.env.TREZI_DEVELOPER_DIR || undefined
 })
 
 function reply(res: ServerResponse, status: number, body: string | Buffer, type: string) {
@@ -72,8 +76,11 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/')
       return reply(res, 200, previewPage(token), 'text/html; charset=utf-8')
     if (req.method === 'GET' && url.pathname === '/state') return json(res, 200, session.state)
-    if (req.method === 'GET' && url.pathname === '/graph')
-      return json(res, 200, { graph: await session.nativeGraph(), plan: session.state.plan })
+    if (req.method === 'GET' && url.pathname === '/graph') {
+      const graph = await session.nativeGraph()
+      const toolchain = session.state.toolchain && toolchainInfo(session.state.toolchain)
+      return json(res, 200, { graph, plan: session.state.plan, toolchain })
+    }
     if (req.method === 'GET' && url.pathname === '/frame') {
       const frame = await session.frame(preview)
       return reply(res, 200, frame.png, 'image/png')

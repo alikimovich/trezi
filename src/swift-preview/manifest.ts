@@ -11,7 +11,9 @@ import { isAbsolute, join, normalize, relative, sep } from 'node:path'
  * builds an Xcode or SwiftPM target and its dependencies from the project's target graph
  * (`plan.ts`); `project` picks the container when several define that target. The same
  * file may live in Trezi's app data instead of the repo (`src/main/swift-preview.ts`);
- * its `previews` are then relative to that folder. Pure helpers: no process, no clock.
+ * its `previews` are then relative to that folder. `developerDir` (LKM-274) picks the
+ * Xcode (or its `.app`) that builds this project's previews, for Trezi's processes only
+ * (`toolchain.ts`). Pure helpers: no process, no clock.
  */
 export interface PreviewManifest {
   name: string
@@ -21,6 +23,7 @@ export interface PreviewManifest {
   libraries: PreviewLibrary[]
   target?: string
   project?: string
+  developerDir?: string
 }
 
 export interface PreviewLibrary {
@@ -92,6 +95,10 @@ export function parseManifest(text: string): PreviewManifest {
   if (target) manifest.target = target
   const project = name(fields.project, 'project')
   if (project) manifest.project = paths([project], 'project', true)[0]
+  const developerDir = name(fields.developerDir, 'developerDir')
+  if (developerDir && !isAbsolute(developerDir))
+    throw new Error('trezi-previews.json: "developerDir" must be an absolute path.')
+  if (developerDir) manifest.developerDir = normalize(developerDir)
   return manifest
 }
 

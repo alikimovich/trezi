@@ -67,6 +67,7 @@
     "test:swift-preview": "bun test/swift-preview.mjs",
     "test:swift-preview-graph": "bun test/swift-preview-graph.mjs",
     "test:swift-preview-target": "bun test/swift-preview-target.mjs",
+    "test:swift-preview-toolchain": "bun test/swift-preview-toolchain.mjs",
     "test:repository-owner": "bun test/repository-owner.mjs",
     "test:git-messages": "bun test/git-messages.mjs",
     "test:repository-recovery": "bun test/repository-recovery.mjs",
