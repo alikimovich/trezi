@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeProjectInfo } from '../shared/api'
 import type { NativeBridge } from './bridge'
@@ -44,6 +44,7 @@ export async function checkSwiftBuild(
       .filter((line) => line.trim() && !/^.. \.trezi\//.test(line))
       .join('\n')
   assert.equal(gitStatus(), '', 'the copy starts committed')
+  const initialTree = snapshot(project)
   const page = (code: string) => host.request('evaluate', { view: 'preview', code })
   const state = () =>
     page(`(() => {
@@ -133,7 +134,7 @@ export async function checkSwiftBuild(
   )
   assert.match(build.resources.assets, /\/resources\/assets-[0-9a-f]{16}\/Assets\.car$/)
   assert.deepEqual(build.resources.symbols, ['Gallery'])
-  assert.deepEqual([build.leftovers, build.resources.errors], [[], []])
+  assert.deepEqual(build.resources.errors, [])
   assert.deepEqual(
     first.plan.dependencies.packages.map((p: any) => [p.identity, p.kind]),
     [['studiodesign', 'local']]
@@ -192,15 +193,27 @@ export async function checkSwiftBuild(
   writeFileSync(file, original)
   await ready(edited.generation + 1, 'rebuild after the revert')
 
-  // Nothing the build wrote is in the project (Git does not list empty folders: named here).
+  // The build wrote nothing in the project: Git sees no change, and the whole tree
+  // (empty folders and every mtime, the `.xcodeproj` and the package included) is as it was.
   assert.equal(gitStatus(), '', 'the project tree is unchanged (ignored files included)')
-  for (const name of [
-    '.build',
-    'DerivedData',
-    'Gallery.xcodeproj/project.xcworkspace',
-    'Packages/StudioDesign/.swiftpm'
-  ])
-    assert.ok(!existsSync(join(project, name)), `${name} is not in the project`)
+  // The check's own edit (written, then restored) is the one entry it touched itself.
+  const finalTree = snapshot(project)
+  finalTree[CARD] = initialTree[CARD]
+  assert.deepEqual(
+    Object.entries(finalTree).filter(([path, stamp]) => initialTree[path] !== stamp),
+    [],
+    'no entry of the project changed during the builds'
+  )
+  assert.deepEqual(
+    Object.keys(finalTree).filter((path) => !(path in initialTree)),
+    [],
+    'no entry was added to the project'
+  )
+  assert.deepEqual(
+    Object.keys(initialTree).filter((path) => !(path in finalTree)),
+    [],
+    'no entry was removed from the project'
+  )
   evidence.provenance = {
     syntheticDirectWrites: [`${CARD}: "Flags:" → "Build flags:", then back`],
     fixtures: [
@@ -213,6 +226,22 @@ export async function checkSwiftBuild(
   console.log(
     'Native Swift build authority: xcodebuild settings, a local package with Bundle.module and an asset catalog build and render.'
   )
+}
+
+/**
+ * Every entry below `dir` (folders, empty ones too, files, links) with its kind, size and
+ * mtime; Git's own folder and Trezi's `.trezi/` sidecar are left out.
+ */
+function snapshot(dir: string, prefix = '', out: Record<string, string> = {}) {
+  for (const name of readdirSync(dir).sort()) {
+    if (!prefix && (name === '.git' || name === '.trezi')) continue
+    const path = join(dir, name)
+    const stat = lstatSync(path)
+    const kind = stat.isDirectory() ? 'dir' : stat.isSymbolicLink() ? 'link' : 'file'
+    out[`${prefix}${name}`] = `${kind}:${kind === 'file' ? stat.size : 0}:${stat.mtimeMs}`
+    if (kind === 'dir') snapshot(path, `${prefix}${name}/`, out)
+  }
+  return out
 }
 
 /** Back to the first fixture project and its page, with the Xcode project closed. */

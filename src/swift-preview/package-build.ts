@@ -2,13 +2,16 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import { join } from 'node:path'
 import { type DependencyPlan, dependencyKey, WRAPPER, wrapperManifest } from './dependencies'
 import { runTool } from './graph'
-import { tidySwiftPM } from './xcode-tidy'
+import { Shadow } from './shadow'
 
 /**
  * Builds a plan's Swift package products (LKM-275) with `swift build` on the generated
  * wrapper package (`dependencies.ts`), all in Trezi's derived data: the wrapper, its
- * scratch folder (checkouts, build products, resource bundles) and the stamp of the
- * last good build. The project and its local packages are only read. SwiftPM keeps its
+ * scratch folder (checkouts, build products, resource bundles), the stamp of the
+ * last good build and a mirror of the local packages (`locals/`: `Package.swift`
+ * copied, the rest symlinked), which the wrapper refers to instead of the project's
+ * folders, so SwiftPM's own `.swiftpm` state lands in the mirror. The project and its
+ * local packages are only read. SwiftPM keeps its
  * own manifest and plugin sandbox: Trezi never turns it off, and where
  * that sandbox cannot be applied (Trezi itself runs inside another sandbox) the build
  * fails with that reason. Skipped when the key (toolchain, wrapper, pins, local package
@@ -27,8 +30,6 @@ export interface PackageBuild {
   bundles: string[]
   error: string
   output: string
-  /** What SwiftPM left in a local package beyond the configuration folder it removes. */
-  leftovers: string[]
   durationMs: number
 }
 
@@ -75,8 +76,6 @@ export async function buildPackages(
   options: {
     /** Trezi's derived data for the project. */
     cacheDir: string
-    /** The project, which leftovers are relative to. */
-    root?: string
     toolchainKey: string
     env: Record<string, string>
     arch: string
@@ -123,7 +122,6 @@ export async function buildPackages(
       bundles,
       error: '',
       output: '',
-      leftovers: [],
       durationMs: Date.now() - started,
       ...fields
     }
@@ -132,24 +130,55 @@ export async function buildPackages(
   const dylib = join(bin, `lib${WRAPPER}.dylib`)
   if (readText(stampFile) === key && existsSync(dylib)) return result({ cached: true })
 
+  // SwiftPM writes `.swiftpm` into every local package it builds from, so the wrapper
+  // points at Trezi's mirror of them (`shadow.ts`) and the project's folders are only read.
+  const locals = plan.packages.filter((p) => p.kind === 'local').map((p) => p.location)
+  let mirror: Shadow | undefined
+  if (locals.length) {
+    try {
+      mirror = new Shadow(join(dir, 'locals'), { root: locals[0], packages: locals })
+      mirror.create()
+    } catch (error) {
+      return result({
+        error: `Trezi could not mirror the local packages for the build (the project itself is never used to run build tools): ${(error as Error).message}`
+      })
+    }
+  }
+  const mirrored = mirror
+  const wrapped = mirrored
+    ? wrapperManifest(
+        {
+          ...plan,
+          packages: plan.packages.map((p) =>
+            p.kind === 'local' ? { ...p, location: mirrored.of(p.location) } : p
+          )
+        },
+        options.deploymentTarget
+      )
+    : manifest
   mkdirSync(join(wrapper, 'Sources', WRAPPER), { recursive: true })
-  if (readText(join(wrapper, 'Package.swift')) !== manifest)
-    writeFileSync(join(wrapper, 'Package.swift'), manifest)
+  if (readText(join(wrapper, 'Package.swift')) !== wrapped)
+    writeFileSync(join(wrapper, 'Package.swift'), wrapped)
   const source = join(wrapper, 'Sources', WRAPPER, 'Dependencies.swift')
   if (!existsSync(source))
     writeFileSync(source, '// Links the products a Trezi preview uses into one library.\n')
-  const locals = plan.packages.filter((p) => p.kind === 'local').map((p) => p.location)
-  const { value: built, leftovers } = await tidySwiftPM(options.root ?? '/', locals, () =>
-    runTool(options.xcrun ?? '/usr/bin/xcrun', packageBuildArgs(wrapper, scratch), {
+  const built = await runTool(
+    options.xcrun ?? '/usr/bin/xcrun',
+    packageBuildArgs(wrapper, scratch),
+    {
       cwd: wrapper,
       timeoutMs: options.timeoutMs ?? 15 * 60_000,
       env: options.env
-    })
+    }
   )
+  if (mirror) {
+    built.stdout = mirror.map(built.stdout)
+    built.stderr = mirror.map(built.stderr)
+    built.error = mirror.map(built.error)
+  }
   const output = `${built.stdout}\n${built.stderr}`.slice(-8_000)
   if (built.error)
     return result({
-      leftovers,
       error: /sandbox_apply|sandbox-exec/.test(output)
         ? "swift build could not apply SwiftPM's sandbox in this environment (Trezi runs inside another sandbox). Trezi never disables it: run Trezi outside a sandbox to build the package dependencies."
         : /Could not resolve|Failed to clone|unable to access|Could not connect/i.test(output)
@@ -158,13 +187,9 @@ export async function buildPackages(
       output
     })
   if (!existsSync(dylib))
-    return result({
-      error: `swift build left no lib${WRAPPER}.dylib in ${bin}.`,
-      output,
-      leftovers
-    })
+    return result({ error: `swift build left no lib${WRAPPER}.dylib in ${bin}.`, output })
   writeFileSync(stampFile, key)
-  return result({ output, leftovers })
+  return result({ output })
 }
 
 function listNames(dir: string): string[] {

@@ -12,7 +12,8 @@ Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (2B), `docs/SWIFT-PREVIEWS.md` (B
 - [x] Dependencies: local packages, remote packages at their `Package.resolved` pin, macOS `.framework`/`.xcframework` slices, built as one wrapper package in Trezi's derived data; unsupported kinds named in the plan, the page and the API.
 - [x] App target compiled minus its entry point into an importable module; the app executable is never imported.
 - [x] Asset catalogs via actool (with asset symbols) into the module and the host's `Bundle.main`; package `Bundle.module` from SwiftPM's bundles; plain files copied; other resource kinds named as not bundled.
-- [x] Caches keyed by toolchain, SDK, settings, pins and local package files; derived data under app data; `xcodebuild`'s transient project folders removed (`xcode-tidy.ts`).
+- [x] Caches keyed by toolchain, SDK, settings, pins and local package files; derived data under app data.
+- [x] The project is only read: `xcodebuild`, `swift package describe`/`dump-package` run in a Trezi-owned shadow and `swift build` on a mirror of the local packages (`src/swift-preview/shadow.ts`), so nothing is created in the project, not even something removed again; tests compare the whole tree (empty folders, mtimes) before and after (`test/swift-preview-shadow.mjs`).
 - [x] No new sandbox-disabling flag for `swift build`, `dump-package`, `xcodebuild` or `actool`; environment failures are classified (asserted in `test/swift-preview-settings.mjs`).
 - [x] Tests: `test/swift-preview-settings.mjs` (scripted tools), `test/swift-preview-build.mjs` (real toolchain: `test/fixtures/swift-package-app` and a disposable Scraib-xcode copy matched against xcodebuild, original byte-compared), native smoke `swift-build` (group `core`).
 - [ ] Clang, Objective-C and mixed-language targets; static library `.xcframework` slices; String Catalogs, storyboards, Core Data, Metal; run-script generated sources; xcconfig files without xcodebuild.

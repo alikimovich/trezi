@@ -12,7 +12,7 @@ import {
   workspaceProjects
 } from './pbxproj'
 import { packageSettings } from './settings'
-import { tidySwiftPM, tidyXcode } from './xcode-tidy'
+import { findPackageDirs, packageDirs, runInShadow, xcodeSpec } from './shadow'
 
 export type { NativeTarget, PackageReference }
 
@@ -24,7 +24,9 @@ export type { NativeTarget, PackageReference }
  * package describe --type json`, their settings and product dependencies from `swift
  * package dump-package`. A build resolves the full settings separately
  * (`build-settings.ts`, LKM-275). Every tool run has a timeout and a clear error.
- * Nothing is written into the project: SwiftPM's scratch folder is in `cacheDir`.
+ * Nothing is written into the project: SwiftPM's scratch folder is in `cacheDir`, and
+ * `xcodebuild` and SwiftPM run in a Trezi-owned shadow of the project (`shadow.ts`),
+ * because they create state of their own next to the files they read.
  */
 export interface NativeContainer {
   kind: 'workspace' | 'project' | 'package'
@@ -182,19 +184,18 @@ function schemeFiles(root: string, bundle: string): string[] {
 async function schemes(
   root: string,
   container: NativeContainer,
-  options: Required<Pick<GraphOptions, 'xcodebuild' | 'env'>> & { timeoutMs: number }
+  options: Required<Pick<GraphOptions, 'xcodebuild' | 'env' | 'cacheDir'>> & { timeoutMs: number },
+  packages: string[]
 ) {
   const flag = container.kind === 'workspace' ? '-workspace' : '-project'
-  // LKM-275: what `-list` creates in the project is removed again or reported.
-  const { value: listed, leftovers } = await tidyXcode(root, container, () =>
+  // LKM-275: `-list` runs in a shadow of the project, so what it creates stays there.
+  const listed = await runInShadow(options.cacheDir, xcodeSpec(root, container, packages), (cwd) =>
     runTool(options.xcodebuild, ['-list', '-json', flag, container.path], {
-      cwd: root,
+      cwd,
       timeoutMs: options.timeoutMs,
       env: options.env
     })
   )
-  for (const path of leftovers)
-    container.errors.push(`xcodebuild -list left ${path} in the project.`)
   if (!listed.error) {
     try {
       const json = JSON.parse(listed.stdout)
@@ -213,7 +214,8 @@ async function schemes(
 async function xcodeProject(
   root: string,
   path: string,
-  options: Required<Omit<GraphOptions, 'cacheDir' | 'moduleCache'>>
+  options: Required<Omit<GraphOptions, 'moduleCache'>>,
+  scanned: string[]
 ): Promise<NativeContainer> {
   const container: NativeContainer = {
     kind: 'project',
@@ -242,7 +244,7 @@ async function xcodeProject(
       container.errors.push(`${path}/project.pbxproj: ${(error as Error).message}`)
     }
   }
-  await schemes(root, container, options)
+  await schemes(root, container, options, packageDirs(root, container.packages, scanned))
   return container
 }
 
@@ -257,14 +259,13 @@ export async function dumpPackage(
   options: Required<GraphOptions>,
   errors: string[]
 ): Promise<any> {
-  const result = await runTool(
-    options.xcrun,
-    ['swift', 'package', '--scratch-path', scratch, 'dump-package'],
-    {
-      cwd: dir,
+  // In a shadow of the package: SwiftPM creates `.swiftpm` (and may write `Package.resolved`) there.
+  const result = await runInShadow(options.cacheDir, { root: dir, packages: [dir] }, (cwd) =>
+    runTool(options.xcrun, ['swift', 'package', '--scratch-path', scratch, 'dump-package'], {
+      cwd,
       timeoutMs: options.timeoutMs,
       env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
-    }
+    })
   )
   if (result.error) {
     errors.push(
@@ -303,23 +304,25 @@ async function swiftPackage(
     `spm-${createHash('sha256').update(join(root, dir)).digest('hex').slice(0, 12)}`
   )
   const describe = (sandbox: boolean) =>
-    runTool(
-      options.xcrun,
-      [
-        'swift',
-        'package',
-        ...(sandbox ? [] : ['--disable-sandbox']),
-        '--scratch-path',
-        scratch,
-        'describe',
-        '--type',
-        'json'
-      ],
-      {
-        cwd: join(root, dir),
-        timeoutMs: options.timeoutMs,
-        env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
-      }
+    runInShadow(options.cacheDir, { root: join(root, dir), packages: [join(root, dir)] }, (cwd) =>
+      runTool(
+        options.xcrun,
+        [
+          'swift',
+          'package',
+          ...(sandbox ? [] : ['--disable-sandbox']),
+          '--scratch-path',
+          scratch,
+          'describe',
+          '--type',
+          'json'
+        ],
+        {
+          cwd,
+          timeoutMs: options.timeoutMs,
+          env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
+        }
+      )
     )
   let described = await describe(true)
   // Inside another sandbox SwiftPM cannot apply its own manifest sandbox; the manifest
@@ -419,6 +422,7 @@ export async function nativeGraph(root: string, options: GraphOptions): Promise<
   const containers: NativeContainer[] = []
   const errors: string[] = []
   const projects = new Set(structure?.projects ?? [])
+  const workspaces: NativeContainer[] = []
   for (const workspace of structure?.workspaces ?? []) {
     const container: NativeContainer = {
       kind: 'workspace',
@@ -439,22 +443,22 @@ export async function nativeGraph(root: string, options: GraphOptions): Promise<
       container.errors.push(`${workspace} has no readable contents.xcworkspacedata.`)
     }
     for (const project of container.projects) projects.add(project)
-    await schemes(root, container, resolved)
-    containers.push(container)
+    workspaces.push(container)
   }
+  // Every package folder of the project, so no xcodebuild run reaches one (`shadow.ts`).
+  const scanned = findPackageDirs(root)
+  const projectContainers: NativeContainer[] = []
   for (const project of [...projects].sort())
-    containers.push(await xcodeProject(root, project, resolved))
-  for (const pkg of structure?.packages ?? []) {
-    // LKM-275: the `.swiftpm/configuration` SwiftPM creates there is removed again.
-    const { value: container, leftovers } = await tidySwiftPM(
-      root,
-      [join(root, posix.dirname(pkg))],
-      () => swiftPackage(root, pkg, resolved)
-    )
-    for (const path of leftovers)
-      container.errors.push(`swift package left ${path} in the project.`)
-    containers.push(container)
-  }
+    projectContainers.push(await xcodeProject(root, project, resolved, scanned))
+  const referenced = packageDirs(
+    root,
+    projectContainers.flatMap((c) => c.packages),
+    scanned
+  )
+  for (const workspace of workspaces) await schemes(root, workspace, resolved, referenced)
+  containers.push(...workspaces, ...projectContainers)
+  for (const pkg of structure?.packages ?? [])
+    containers.push(await swiftPackage(root, pkg, resolved))
   if (!structure) errors.push('No Xcode workspace, Xcode project or Package.swift was found.')
   return { structure, containers, errors, durationMs: Date.now() - started }
 }

@@ -69,6 +69,7 @@
     "test:swift-preview-target": "bun test/swift-preview-target.mjs",
     "test:swift-preview-toolchain": "bun test/swift-preview-toolchain.mjs",
     "test:swift-preview-settings": "bun test/swift-preview-settings.mjs",
+    "test:swift-preview-shadow": "bun test/swift-preview-shadow.mjs",
     "test:swift-preview-build": "bun test/swift-preview-build.mjs",
     "test:repository-owner": "bun test/repository-owner.mjs",
     "test:git-messages": "bun test/git-messages.mjs",

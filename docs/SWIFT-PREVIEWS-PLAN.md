@@ -158,11 +158,30 @@ Per item:
   toolchain, wrapper manifest, pins and local package files, the catalogs keyed by
   toolchain, deployment target and catalog files, and each module keyed by toolchain,
   SDK, resolved flags, package key, its dependencies' keys and its sources. xcodebuild
-  writes nothing to `~/Library/Developer/Xcode/DerivedData`, and the empty folders
-  `xcodebuild -list`/`-showBuildSettings` create in the `.xcodeproj`, and the
-  `.swiftpm/configuration` and `.swiftpm/xcode` folders xcodebuild, `swift package` and
-  `swift build` create in a local package (`src/swift-preview/xcode-tidy.ts`), are removed again; anything else would
-  be reported as a leftover.
+  writes nothing to `~/Library/Developer/Xcode/DerivedData`.
+- **The project is only read: shadows, not cleanup.** `xcodebuild -list`/
+  `-showBuildSettings` create `project.xcworkspace/xcshareddata/swiftpm/configuration`
+  in the `.xcodeproj`, and `swift package describe`/`dump-package`/`swift build` create
+  `.swiftpm/configuration`, `.swiftpm/xcode` (and may write `Package.resolved`) in a
+  package folder. Creating and removing them is still a write, so no such tool runs on
+  the project (`src/swift-preview/shadow.ts`). xcodebuild and the package reads run in a
+  Trezi-owned shadow under `<derived data>/shadow/` (project folders symlinked, the
+  `.xcodeproj`/`.xcworkspace` bundles and each package's `Package.swift` and
+  `Package.resolved` copied, `.git`/`.build`/`.swiftpm` not mirrored, the layout of local
+  packages outside the project kept) that is removed when the run ends, and the paths in
+  their output are mapped back to the project's. `swift build` runs on the generated
+  wrapper whose local packages are Trezi's mirror of them (`packages/toolchain-<key>/
+  locals/`, `Sources` and `Resources` symlinked). If a shadow cannot be made the tool
+  does not run (an error, never the project as fallback). The tests compare the whole
+  project tree, empty folders and mtimes included, before and after
+  (`test/swift-preview-shadow.mjs`, `-settings.mjs`, `-build.mjs`, the native
+  `swift-build` check).
+- **Limitations of the shadow:** a package outside the 5-level, 4000-folder scan of the
+  project and not referenced by a manifest or the project file is not in the shadow, so
+  a tool cannot see it; hidden folders are not scanned for packages; a crashed run can
+  leave a shadow until the next run sweeps shadows older than 6 hours (in Trezi's
+  derived data, never in the project); each tool run copies the `.xcodeproj` and links
+  the project's top-level entries, which is cheap but not free on a very large project.
 - **Sandboxing: nothing new turns a sandbox off.** `swift build`, `dump-package`,
   `xcodebuild` and `actool` run with their default sandboxing. Where Trezi itself runs
   inside another sandbox they fail with a reason that says so. The pre-existing
@@ -171,10 +190,12 @@ Per item:
 - Coverage: `test/swift-preview-settings.mjs` (scripted tools: settings mapping, the
   allowlist and dropped flags, package settings, pins, every dependency kind and
   message, the wrapper, cache keys, `-showBuildSettings`, the package build, actool and
-  the whole build authority on `test/fixtures/swift-package-app`);
+  the whole build authority on `test/fixtures/swift-package-app`, with the project's tree
+  compared before and after); `test/swift-preview-shadow.mjs` (the shadow itself);
   `test/swift-preview-build.mjs` (the real toolchain: the fixture builds and renders,
   then a disposable Scraib-xcode copy whose settings match an independent xcodebuild
-  run, with the original byte-compared); and the native `swift-build` check
+  run; fixture and copy trees, empty folders and mtimes included, are identical before
+  and after, and the original is byte-compared); and the native `swift-build` check
   (`src/native/smoke-swift-build.ts`).
 - Not done in 2B: Clang, Objective-C and mixed-language targets; static library
   `.xcframework` slices; xcconfig files without xcodebuild; run-script phases and other

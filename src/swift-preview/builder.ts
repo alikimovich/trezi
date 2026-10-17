@@ -25,7 +25,8 @@ import type { ToolchainSelection } from './toolchain'
  * binary frameworks, compiles asset catalogs and their symbols (`resources.ts`), and
  * compiles every module into its own cached folder of Trezi's derived data, keyed by
  * the toolchain, the mapped settings, its sources and its dependencies' keys. Nothing
- * is written to the project. No tool runs with its sandbox disabled.
+ * is written to the project: xcodebuild and SwiftPM run on Trezi-owned shadows of it
+ * (`shadow.ts`). No tool runs with its sandbox disabled.
  */
 export interface BuildReport {
   /** Trezi's derived data for this project and toolchain. */
@@ -33,8 +34,6 @@ export interface BuildReport {
   /** Where the settings came from, per module (`xcodebuild (scheme S)`, `package manifest`, `project file`). */
   settingsFrom: Record<string, string>
   errors: string[]
-  /** Files xcodebuild left in the project (expected: none). */
-  leftovers: string[]
   modules: { module: string; cached: boolean; key: string; durationMs: number }[]
   packages: {
     key: string
@@ -116,7 +115,6 @@ export class TargetBuilder {
       derivedData,
       settingsFrom: {},
       errors: [],
-      leftovers: [],
       modules: [],
       packages: null,
       resources: null
@@ -149,14 +147,13 @@ export class TargetBuilder {
           root,
           container,
           plan.modules.map((m) => m.target),
-          { derivedData, env: toolchain.env, xcodebuild: this.options.xcodebuild }
+          { cacheDir, derivedData, env: toolchain.env, xcodebuild: this.options.xcodebuild }
         )
         this.memo = { key, resolved: found }
       }
       resolved = this.memo.resolved.targets
       scheme = this.memo.resolved.scheme
       report.errors.push(...this.memo.resolved.errors)
-      report.leftovers.push(...this.memo.resolved.leftovers)
     }
 
     const symbols: Record<string, { enabled: boolean; extensions: boolean }> = {}
@@ -220,7 +217,6 @@ export class TargetBuilder {
       )
       const built = await buildPackages(plan.dependencies, {
         cacheDir,
-        root,
         toolchainKey: toolchain.key,
         env: toolchain.env,
         arch: ARCH,
@@ -234,7 +230,6 @@ export class TargetBuilder {
         bin: built.bin,
         bundles: built.bundles
       }
-      report.leftovers.push(...built.leftovers)
       if (built.error) {
         prepared.error = `The Swift packages did not build: ${built.error}`
         report.errors.push(prepared.error)

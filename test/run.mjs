@@ -243,6 +243,7 @@ const UNIT = [
   'swift-preview-target',
   'swift-preview-toolchain',
   'swift-preview-settings',
+  'swift-preview-shadow',
   'swift-preview-build',
   'lint'
 ]

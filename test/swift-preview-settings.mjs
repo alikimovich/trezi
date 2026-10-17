@@ -4,7 +4,8 @@
  * target, the OTHER_SWIFT_FLAGS allowlist and every dropped flag), a package's settings,
  * Package.resolved pins, the dependency plan (local, remote pinned, binary frameworks and
  * every unsupported kind with its message), the wrapper package, cache keys,
- * `xcodebuild -showBuildSettings` (transient folders removed, leftovers reported), the
+ * `xcodebuild -showBuildSettings` (run in a Trezi-owned shadow: the project's tree, empty
+ * folders and mtimes included, is unchanged; shadow paths mapped back), the
  * package build and asset catalogs in Trezi's derived data, and the whole build authority
  * on `test/fixtures/swift-package-app`. Regression: no command any LKM-275 step runs
  * disables a sandbox, and no LKM-275 source can add such a flag.
@@ -15,10 +16,12 @@ import {
   chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   utimesSync,
   writeFileSync
@@ -58,6 +61,16 @@ const list = (dir) => {
   } catch {
     return []
   }
+}
+/** Every entry under a folder (empty folders too) with its kind, size and mtime. */
+const snapshot = (dir, prefix = '', out = {}) => {
+  for (const name of list(dir).sort()) {
+    const stat = lstatSync(join(dir, name))
+    const kind = stat.isDirectory() ? 'dir' : stat.isSymbolicLink() ? 'link' : 'file'
+    out[`${prefix}${name}`] = `${kind}:${kind === 'file' ? stat.size : 0}:${stat.mtimeMs}`
+    if (kind === 'dir') snapshot(join(dir, name), `${prefix}${name}/`, out)
+  }
+  return out
 }
 // Every scripted tool appends its arguments here: the sandbox regression reads them all.
 const LOG = join(temp, 'tools.log')
@@ -602,14 +615,16 @@ try {
     'xcodebuild',
     `case "$1" in
   -list)
+    pwd >> "${temp}/cwd.log"
     mkdir -p "$project/project.xcworkspace/xcshareddata/swiftpm/configuration"
-    mkdir -p "$(dirname "$project")/Packages/StudioDesign/.swiftpm/xcode"
+    mkdir -p Packages/StudioDesign/.swiftpm/xcode
     echo '{"project":{"name":"Gallery","schemes":["Gallery"],"targets":["Gallery","GalleryKit"]}}' ;;
   -showBuildSettings)
+    pwd >> "${temp}/cwd.log"
     mkdir -p "$project/project.xcworkspace/xcshareddata/swiftpm/configuration"
-    mkdir -p "$(dirname "$project")/Packages/StudioDesign/.swiftpm/xcode"
-    [ "$FAKE_MODE" = leftover ] && echo '{}' > "$project/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-    [ "$FAKE_MODE" = fail ] || [ "$FAKE_MODE" = sandbox ] && { echo "xcodebuild: error: The project is damaged." >&2; exit 65; }
+    mkdir -p Packages/StudioDesign/.swiftpm/xcode
+    echo '{}' > "$project/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    [ "$FAKE_MODE" = fail ] || [ "$FAKE_MODE" = sandbox ] && { echo "xcodebuild: error: The project is damaged: $PWD/$project" >&2; exit 65; }
     echo "Command line invocation: ignored"
     cat "${settingsJson}" ;;
 esac`
@@ -630,24 +645,27 @@ esac`
     projects: [],
     errors: []
   }
+  const galleryBefore = snapshot(gallery)
+  const shadows = () =>
+    existsSync(join(temp, 'cache/shadow')) ? readdirSync(join(temp, 'cache/shadow')) : []
   let xcode = await resolveXcodeSettings(gallery, galleryContainer, ['GalleryKit', 'Gallery'], {
+    cacheDir: join(temp, 'cache'),
     derivedData,
     env: {},
     xcodebuild
   })
-  assert.deepEqual([xcode.scheme, xcode.errors, xcode.leftovers], ['Gallery', [], []])
+  assert.deepEqual([xcode.scheme, xcode.errors], ['Gallery', []])
   assert.equal(
     xcode.targets.Gallery.OTHER_SWIFT_FLAGS.trim(),
     '-D GALLERY_FLAG -Xfrontend -warn-long-function-bodies=500'
   )
-  assert.ok(
-    !existsSync(join(gallery, 'Gallery.xcodeproj/project.xcworkspace')),
-    'the empty folders xcodebuild creates are removed'
-  )
-  assert.ok(
-    !existsSync(join(gallery, 'Packages/StudioDesign/.swiftpm')),
-    'and the `.swiftpm/xcode` it creates in a referenced local package'
-  )
+  // xcodebuild ran in Trezi's shadow (where it created its folders), never in the project:
+  // the project's whole tree, empty folders and mtimes included, is as it was.
+  const cwds = readFileSync(join(temp, 'cwd.log'), 'utf8').trim().split('\n')
+  assert.ok(cwds.length > 0 && cwds.every((cwd) => cwd.includes('/cache/shadow/')), cwds.join())
+  assert.ok(!cwds.some((cwd) => cwd === gallery || cwd === realpathSync(gallery)))
+  assert.deepEqual(snapshot(gallery), galleryBefore, 'the project is untouched')
+  assert.deepEqual(shadows(), [], 'and the shadow is removed')
   const showLine = logged().find((line) => line.includes('-showBuildSettings'))
   assert.equal(
     showLine,
@@ -663,33 +681,46 @@ esac`
   ])
     assert.ok(showLine.includes(word), word)
   xcode = await resolveXcodeSettings(gallery, galleryContainer, ['Gallery'], {
-    derivedData,
-    env: { FAKE_MODE: 'leftover' },
-    xcodebuild
-  })
-  assert.deepEqual(
-    xcode.leftovers,
-    ['Gallery.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'],
-    'a file xcodebuild leaves is reported, never deleted'
-  )
-  rmSync(join(gallery, 'Gallery.xcodeproj/project.xcworkspace'), { recursive: true })
-  xcode = await resolveXcodeSettings(gallery, galleryContainer, ['Gallery'], {
+    cacheDir: join(temp, 'cache'),
     derivedData,
     env: { FAKE_MODE: 'fail' },
     xcodebuild
   })
   assert.deepEqual(xcode.targets, {})
   assert.match(xcode.errors[0], /^Scheme Gallery: .*damaged/)
+  assert.ok(
+    xcode.errors[0].includes(`damaged: ${gallery}/Gallery.xcodeproj`),
+    `shadow paths in the tool's output are mapped to the project's: ${xcode.errors[0]}`
+  )
   assert.equal(
     xcode.errors[1],
     'No scheme of Gallery.xcodeproj builds Gallery; its settings come from the project file.'
   )
-  assert.ok(!existsSync(join(gallery, 'Gallery.xcodeproj/project.xcworkspace')))
+  assert.deepEqual(
+    snapshot(gallery),
+    galleryBefore,
+    'a failing run leaves the project untouched too'
+  )
+  assert.deepEqual(shadows(), [])
+  // A shadow that cannot be made: the tool does not run, and the project is not the fallback.
+  writeFileSync(join(temp, 'blocked-cache'), 'a file where the shadow folder belongs')
+  const logCount = logged().length
+  xcode = await resolveXcodeSettings(gallery, galleryContainer, ['Gallery'], {
+    cacheDir: join(temp, 'blocked-cache'),
+    derivedData,
+    env: {},
+    xcodebuild
+  })
+  assert.deepEqual(xcode.targets, {})
+  assert.match(xcode.errors[0], /could not prepare its shadow copy of the project/)
+  assert.equal(logged().length, logCount, 'xcodebuild did not run')
+  assert.deepEqual(snapshot(gallery), galleryBefore)
   const noScheme = await resolveXcodeSettings(
     gallery,
     { ...galleryContainer, schemes: [] },
     ['Gallery'],
     {
+      cacheDir: join(temp, 'cache'),
       derivedData,
       env: {},
       xcodebuild
@@ -743,13 +774,16 @@ case "$1 $2" in
     mkdir -p "$bin/Modules" "$bin/StudioDesign_StudioDesign.bundle" "$bin/Shim.build"
     echo "module Shim {}" > "$bin/Shim.build/module.modulemap"
     touch "$bin/lib${WRAPPER}.dylib"
-    # Like SwiftPM: the local package's configuration folder, and with FAKE_LEFTOVER a file.
-    if [ -n "$FAKE_LOCAL" ]; then
-      mkdir -p "$FAKE_LOCAL/.swiftpm/configuration" "$FAKE_LOCAL/.swiftpm/xcode"
-      if [ -n "$FAKE_LEFTOVER" ]; then echo '{}' > "$FAKE_LOCAL/.swiftpm/configuration/mirrors.json"; fi
-    fi ;;
+    # Like SwiftPM: state in every local package the manifest refers to.
+    for p in $(sed -n 's/.*\\.package(path: "\\(.*\\)").*/\\1/p' Package.swift); do
+      mkdir -p "$p/.swiftpm/configuration" "$p/.swiftpm/xcode"
+      echo '{}' > "$p/Package.resolved"
+      echo "$p" >> "${temp}/packages.log"
+      if [ "$FAKE_MODE" = mapped ]; then echo "error: $p/Package.swift is invalid" >&2; exit 1; fi
+    done ;;
   "swift package")
     mkdir -p .swiftpm/configuration .swiftpm/xcode
+    pwd >> "${temp}/cwd.log"
     case "$*" in
       *dump-package*) echo '{"name":"StudioDesign","toolsVersion":{"_version":"5.9.0"},"targets":[]}' ;;
       *) exit 1 ;;
@@ -786,6 +820,8 @@ esac`
     deploymentTarget: '14.0',
     xcrun
   }
+  const studio = join(gallery, 'Packages/StudioDesign')
+  const studioBefore = snapshot(studio)
   let packages = await buildPackages(local, buildOptions)
   const bin = join(cacheDir, 'packages/toolchain-tc1/scratch/arm64-apple-macosx/debug')
   assert.deepEqual([packages.error, packages.cached, packages.bin], ['', false, bin])
@@ -810,7 +846,22 @@ esac`
     bin
   ])
   const wrapper = join(cacheDir, 'packages/toolchain-tc1/wrapper')
-  assert.equal(readFileSync(join(wrapper, 'Package.swift'), 'utf8'), wrapperManifest(local, '14.0'))
+  // The wrapper refers to Trezi's mirror of the local package, not to the project's folder:
+  // SwiftPM's own state (`.swiftpm`, `Package.resolved`) lands in the mirror.
+  const mirrored = join(cacheDir, 'packages/toolchain-tc1/locals/StudioDesign')
+  assert.equal(
+    readFileSync(join(wrapper, 'Package.swift'), 'utf8'),
+    wrapperManifest({ ...local, packages: [{ ...local.packages[0], location: mirrored }] }, '14.0')
+  )
+  assert.ok(!readFileSync(join(wrapper, 'Package.swift'), 'utf8').includes(studio))
+  assert.deepEqual(readFileSync(join(temp, 'packages.log'), 'utf8').trim().split('\n'), [mirrored])
+  assert.ok(existsSync(join(mirrored, '.swiftpm/xcode')), 'SwiftPM wrote into the mirror')
+  assert.ok(existsSync(join(mirrored, 'Sources')), 'which has the package sources')
+  assert.deepEqual(
+    snapshot(studio),
+    studioBefore,
+    "the project's package folder (listing, empty folders, mtimes) did not change during the build"
+  )
   assert.equal(
     logged()
       .filter((l) => l.startsWith('xcrun swift build'))
@@ -835,27 +886,19 @@ esac`
   packages = await buildPackages(local, { ...buildOptions, toolchainKey: 'tc2' })
   assert.equal(packages.cached, false, 'another toolchain has its own build')
   assert.ok(packages.bin.includes('toolchain-tc2'))
-  // SwiftPM's `.swiftpm/configuration` in a local package is removed; anything else is reported.
-  const studio = join(gallery, 'Packages/StudioDesign')
+  // A failing build names the project's package paths, and leaves the project as it was.
+  const studioEdited = snapshot(studio)
   packages = await buildPackages(local, {
     ...buildOptions,
-    root: gallery,
-    toolchainKey: 'tc-tidy',
-    env: { FAKE_LOCAL: studio }
+    toolchainKey: 'tc-mapped',
+    env: { FAKE_MODE: 'mapped' }
   })
-  assert.deepEqual([packages.error, packages.leftovers], ['', []])
-  assert.ok(!existsSync(join(studio, '.swiftpm')), 'the configuration folder is removed')
-  packages = await buildPackages(local, {
-    ...buildOptions,
-    root: gallery,
-    toolchainKey: 'tc-leftover',
-    env: { FAKE_LOCAL: studio, FAKE_LEFTOVER: '1' }
-  })
-  assert.deepEqual(packages.leftovers, [
-    'Packages/StudioDesign/.swiftpm/configuration/mirrors.json'
-  ])
-  assert.ok(existsSync(join(studio, '.swiftpm/configuration/mirrors.json')), 'never deleted')
-  rmSync(join(studio, '.swiftpm'), { recursive: true })
+  assert.ok(packages.error.includes(`${studio}/Package.swift is invalid`), packages.error)
+  assert.deepEqual(
+    snapshot(studio),
+    studioEdited,
+    'a failed build leaves the package folder as it was'
+  )
   packages = await buildPackages(local, {
     ...buildOptions,
     toolchainKey: 'tc3',
@@ -950,6 +993,7 @@ esac`
     env: {}
   }
   const dumpErrors = []
+  const dumpBefore = snapshot(gallery)
   assert.equal(
     (
       await dumpPackage(
@@ -976,24 +1020,31 @@ esac`
     2,
     'a blocked dump-package is not retried in another mode'
   )
-  // dumpPackage alone does not tidy (the fake's folder); the graph read around it does.
-  rmSync(join(gallery, 'Packages/StudioDesign/.swiftpm'), { recursive: true, force: true })
+  // dump-package ran in a shadow of the package (where the fake created its `.swiftpm`).
+  assert.deepEqual(snapshot(gallery), dumpBefore, 'dump-package wrote nothing in the project')
+  assert.ok(
+    readFileSync(join(temp, 'cwd.log'), 'utf8')
+      .trim()
+      .split('\n')
+      .filter((cwd) => cwd.endsWith('/StudioDesign'))
+      .every((cwd) => cwd.includes('/cache/shadow/')),
+    'in a shadow'
+  )
 
   // --- The whole build authority on the fixture: graph, plan, prepare ---
+  const graphBefore = snapshot(gallery)
   const fixtureGraph = await nativeGraph(gallery, graphOptions)
   assert.equal(fixtureGraph.containers[0].schemesFrom, 'xcodebuild')
-  assert.ok(
-    !existsSync(join(gallery, 'Gallery.xcodeproj/project.xcworkspace')),
-    'the folders `xcodebuild -list` creates are removed too'
-  )
   assert.ok(
     logged().some((l) => l.startsWith('xcrun swift package') && l.includes('describe')),
     'the local package was read'
   )
-  assert.ok(
-    !existsSync(join(gallery, 'Packages/StudioDesign/.swiftpm')),
-    'the `.swiftpm/configuration` SwiftPM creates in a package is removed'
+  assert.deepEqual(
+    snapshot(gallery),
+    graphBefore,
+    '`xcodebuild -list` and the package reads wrote nothing in the project (empty folders and mtimes included)'
   )
+  assert.deepEqual(shadows(), [], 'and no shadow is left behind')
   const fixturePlan = planTargetBuild(
     fixtureGraph,
     { target: 'Gallery', project: 'Gallery.xcodeproj' },
@@ -1056,7 +1107,6 @@ esac`
   const galleryAssets = inputs.find((m) => m.module === 'Gallery').assets
   assert.match(galleryAssets, /resources\/Gallery-[0-9a-f]{16}\/Assets\.car$/)
   assert.ok(existsSync(galleryAssets), 'the module catalog, compiled apart from its symbols')
-  assert.deepEqual(prepared.report.leftovers, [])
   const shows = () => logged().filter((l) => l.includes('-showBuildSettings')).length
   const resolvedBefore = shows()
   await builder.prepare(fixturePlan, fixtureGraph, toolchain)
@@ -1082,14 +1132,12 @@ esac`
     ['project file', 'project file'],
     'without xcodebuild the project file decides, and the report says so'
   )
-  assert.ok(
-    !existsSync(join(gallery, 'Gallery.xcodeproj/project.xcworkspace')),
-    'nothing left in the project'
+  assert.deepEqual(
+    snapshot(gallery),
+    graphBefore,
+    'the whole preparation (settings, packages, resources) wrote nothing in the project'
   )
-  assert.ok(
-    !existsSync(join(gallery, '.build')) &&
-      !existsSync(join(gallery, 'Packages/StudioDesign/.build'))
-  )
+  assert.deepEqual(shadows(), [])
 
   // --- Regression: no LKM-275 command disables a sandbox ---
   const commands = logged()

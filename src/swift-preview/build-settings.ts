@@ -1,14 +1,16 @@
 import { type NativeContainer, runTool } from './graph'
-import { tidyXcode } from './xcode-tidy'
+import { packageDirs, runInShadow, xcodeSpec } from './shadow'
 
 /**
  * Resolved build settings (LKM-275): `xcodebuild -showBuildSettings -json` for the
  * scheme that builds the target, Debug, macOS, with `-derivedDataPath` in Trezi's
  * derived data, so nothing goes to `~/Library/Developer/Xcode/DerivedData` (a bare
  * `-target` query would). Packages are never resolved or updated here
- * (`-disableAutomaticPackageResolution`, `-skipPackageUpdates`). The empty folders
- * xcodebuild creates in the `.xcodeproj` are removed again, and anything else new is
- * reported (`xcode-tidy.ts`).
+ * (`-disableAutomaticPackageResolution`, `-skipPackageUpdates`).
+ * xcodebuild creates state next to the project it reads (`project.xcworkspace`
+ * folders, `.swiftpm` in local packages), so it never runs on the user's project: it
+ * runs in a Trezi-owned shadow of it (`shadow.ts`) and the paths in its answer are
+ * mapped back to the project's.
  * The schemes are tried in order (one named like the target first) until each plan
  * target has its settings.
  */
@@ -18,8 +20,6 @@ export interface ResolvedSettings {
   targets: Record<string, Record<string, string>>
   derivedData: string
   errors: string[]
-  /** New files or folders xcodebuild left in the project (expected: none). */
-  leftovers: string[]
 }
 
 export function showSettingsArgs(project: string, scheme: string, derivedData: string): string[] {
@@ -46,6 +46,8 @@ export async function resolveXcodeSettings(
   container: NativeContainer,
   targets: string[],
   options: {
+    /** Trezi's derived data of the project (the shadow lives beside the build's). */
+    cacheDir: string
     derivedData: string
     env: Record<string, string>
     xcodebuild?: string
@@ -56,8 +58,7 @@ export async function resolveXcodeSettings(
     scheme: '',
     targets: {},
     derivedData: options.derivedData,
-    errors: [],
-    leftovers: []
+    errors: []
   }
   const selected = targets[targets.length - 1] ?? ''
   const schemes = [
@@ -70,37 +71,37 @@ export async function resolveXcodeSettings(
     )
     return resolved
   }
-  const { leftovers } = await tidyXcode(root, container, async () => {
-    for (const scheme of schemes) {
-      if (targets.every((t) => resolved.targets[t])) break
-      const result = await runTool(
+  const spec = xcodeSpec(root, container, packageDirs(root, container.packages))
+  for (const scheme of schemes) {
+    if (targets.every((t) => resolved.targets[t])) break
+    const result = await runInShadow(options.cacheDir, spec, (cwd) =>
+      runTool(
         options.xcodebuild ?? '/usr/bin/xcodebuild',
         showSettingsArgs(container.path, scheme, options.derivedData),
-        { cwd: root, timeoutMs: options.timeoutMs ?? 90_000, env: options.env }
+        { cwd, timeoutMs: options.timeoutMs ?? 90_000, env: options.env }
       )
-      if (result.error) {
-        resolved.errors.push(`Scheme ${scheme}: ${result.error}`)
-        continue
-      }
-      let entries: any[]
-      try {
-        entries = JSON.parse(result.stdout.slice(result.stdout.indexOf('[')))
-      } catch {
-        resolved.errors.push(`Scheme ${scheme}: xcodebuild -showBuildSettings returned no JSON.`)
-        continue
-      }
-      for (const entry of Array.isArray(entries) ? entries : []) {
-        const name = entry?.target ?? entry?.buildSettings?.TARGET_NAME
-        if (!name || !targets.includes(name) || resolved.targets[name]) continue
-        const settings: Record<string, string> = {}
-        for (const [key, value] of Object.entries(entry.buildSettings ?? {}))
-          if (typeof value === 'string') settings[key] = value
-        resolved.targets[name] = settings
-        resolved.scheme ||= scheme
-      }
+    )
+    if (result.error) {
+      resolved.errors.push(`Scheme ${scheme}: ${result.error}`)
+      continue
     }
-  })
-  resolved.leftovers = leftovers
+    let entries: any[]
+    try {
+      entries = JSON.parse(result.stdout.slice(result.stdout.indexOf('[')))
+    } catch {
+      resolved.errors.push(`Scheme ${scheme}: xcodebuild -showBuildSettings returned no JSON.`)
+      continue
+    }
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      const name = entry?.target ?? entry?.buildSettings?.TARGET_NAME
+      if (!name || !targets.includes(name) || resolved.targets[name]) continue
+      const settings: Record<string, string> = {}
+      for (const [key, value] of Object.entries(entry.buildSettings ?? {}))
+        if (typeof value === 'string') settings[key] = value
+      resolved.targets[name] = settings
+      resolved.scheme ||= scheme
+    }
+  }
   const missing = targets.filter((t) => !resolved.targets[t])
   if (missing.length)
     resolved.errors.push(

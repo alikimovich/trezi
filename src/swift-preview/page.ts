@@ -262,8 +262,7 @@ export function previewPage(token: string): string {
         const cached = build.modules.filter((m) => m.cached).length
         body.push(list([
           el('li', 'Derived data (Trezi-owned): ' + build.derivedData + '; ' + cached + ' of ' + build.modules.length + ' modules from cache', 'muted'),
-          ...build.errors.map((e) => el('li', e, 'muted')),
-          ...build.leftovers.map((p) => el('li', 'xcodebuild or SwiftPM left ' + p + ' in the project', 'blocker'))
+          ...build.errors.map((e) => el('li', e, 'muted'))
         ]))
       }
     }

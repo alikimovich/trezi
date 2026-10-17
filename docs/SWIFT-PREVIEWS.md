@@ -160,11 +160,21 @@ everything it writes lives in Trezi's derived data. Per-item status:
   it as `--cache-root`; a bare driver uses `TREZI_SWIFT_PREVIEW_CACHE` or the temporary
   directory). Inside it: xcodebuild's `-derivedDataPath` per toolchain (`xcode-<key>`),
   the package build (`packages/toolchain-<key>/`), compiled resources (`resources/`) and
-  the modules. Nothing is written into the project. The empty
-  `project.xcworkspace/xcshareddata/swiftpm/configuration` folders `xcodebuild` creates
-  in an `.xcodeproj`, and the empty `.swiftpm/configuration` and `.swiftpm/xcode`
-  folders xcodebuild and SwiftPM create in a local package, are removed again (`xcode-tidy.ts`); anything else they leave is reported as
-  a leftover and never deleted.
+  the modules. The project is only read: Trezi writes nothing into it, not even
+  something it removes again. xcodebuild and SwiftPM create state next to what they read
+  (`project.xcworkspace/xcshareddata/swiftpm/configuration` in an `.xcodeproj`,
+  `.swiftpm/configuration` and `.swiftpm/xcode` in a package folder), so they never run
+  on the project (`shadow.ts`): `xcodebuild -list`/`-showBuildSettings`, `swift package
+  describe`/`dump-package` run in a shadow under `<derived data>/shadow/` (project
+  folders symlinked, the `.xcodeproj` and each package's `Package.swift`/
+  `Package.resolved` copied, no `.git`/`.build`/`.swiftpm`), removed when the run ends;
+  `swift build` builds a wrapper that refers to Trezi's mirror of the local packages
+  (`packages/toolchain-<key>/locals/`). Paths in the tools' output are mapped back to the
+  project's. If a shadow cannot be made, the tool does not run and the error says so.
+  Limitations: packages deeper than 5 folders (or past 4000 scanned folders) that no
+  manifest or project reference names are not seen by the tools; a crashed run can leave
+  a shadow (in Trezi's derived data) until the next run removes it after 6 hours; every
+  run copies the `.xcodeproj` and links the project's top-level entries.
 - Settings (`build-settings.ts`, `settings.ts`): `xcodebuild -showBuildSettings -json`
   for the scheme that builds the target, Debug, `platform=macOS`; `swift package
   dump-package` for package targets; the project file's Debug settings (no xcconfig

@@ -42,23 +42,30 @@ const { splitList, swiftVersionFlag } = await import('../src/swift-preview/setti
 const ENVIRONMENT =
   /another sandbox|sandbox_apply|could not apply SwiftPM's|plugin server could not start/
 
-/** Every file and folder under a folder (`.git` aside): path to a content hash. */
+/**
+ * Every file and folder under a folder (`.git` aside, the folder itself included): path
+ * to a content hash and the mtime. Folders, empty ones too, count: creating and removing
+ * a folder in the project is a write even when nothing is left behind (it moves the
+ * parent's mtime).
+ */
 function tree(dir) {
-  const entries = {}
+  const entries = { '.': `folder@${lstatSync(dir).mtimeMs}` }
   const walk = (folder) => {
     for (const name of readdirSync(folder).sort()) {
       if (name === '.git') continue
       const path = join(folder, name)
       const stat = lstatSync(path)
       if (stat.isDirectory()) {
-        entries[`${relative(dir, path)}/`] = 'folder'
+        entries[`${relative(dir, path)}/`] = `folder@${stat.mtimeMs}`
         walk(path)
       } else
-        entries[relative(dir, path)] = stat.isFile()
-          ? createHash('sha256').update(readFileSync(path)).digest('hex')
-          : stat.isSymbolicLink()
-            ? 'symlink'
-            : 'other'
+        entries[relative(dir, path)] = `${
+          stat.isFile()
+            ? createHash('sha256').update(readFileSync(path)).digest('hex')
+            : stat.isSymbolicLink()
+              ? 'symlink'
+              : 'other'
+        }@${stat.mtimeMs}`
     }
   }
   walk(dir)
@@ -169,7 +176,6 @@ async function fixture() {
       existsSync(join(galleryDir, 'Assets.car')),
       `${galleryDir}: ${existsSync(galleryDir) ? readdirSync(galleryDir) : 'missing'}`
     )
-    assert.deepEqual(s.build.leftovers, [])
     const badge = await gallery.session.describe('tagline-badge')
     assert.ok(badge.includes('Tagline: Hello from the package bundle'), JSON.stringify(badge))
     const card = await gallery.session.describe('brand-card')
@@ -183,15 +189,11 @@ async function fixture() {
   } finally {
     await gallery.session.stop()
   }
+  // Not just no leftovers: no write at all. Every entry, empty folders and mtimes included
+  // (the `.xcodeproj` and `Packages/StudioDesign` among them), is as it was.
   assert.deepEqual(changes(before, tree(project)), [], 'nothing was written into the project')
-  for (const name of [
-    '.build',
-    'DerivedData',
-    'build',
-    'Gallery.xcodeproj/project.xcworkspace',
-    'Packages/StudioDesign/.swiftpm'
-  ])
-    assert.ok(!existsSync(join(project, name)), `${name} is not created in the project`)
+  assert.ok(Object.keys(before).includes('Gallery.xcodeproj/'), 'the tree covers the project')
+  assert.ok(Object.keys(before).includes('Packages/StudioDesign/'))
   return true
 }
 
@@ -214,6 +216,10 @@ async function scraib() {
     join(manifestDir, 'trezi-previews.json'),
     JSON.stringify({ name: 'Scraib (disposable copy)', target: 'scraib', previews: ['Previews'] })
   )
+  // The independent xcodebuild query below creates state of its own: it gets its own copy.
+  const check = join(temp, 'scraib-check')
+  cpSync(copy, check, { recursive: true })
+  const copied = tree(copy)
   const built = await run({ root: copy, cacheDir: join(temp, 'DerivedData/scraib'), manifestDir })
   try {
     const s = built.state
@@ -230,7 +236,7 @@ async function scraib() {
           '-showBuildSettings',
           '-json',
           '-project',
-          join(copy, 'scraib.xcodeproj'),
+          join(check, 'scraib.xcodeproj'),
           '-scheme',
           'scraib',
           '-configuration',
@@ -240,7 +246,7 @@ async function scraib() {
           '-derivedDataPath',
           join(temp, 'xcodebuild-check')
         ],
-        { encoding: 'utf8', env: { ...process.env, ...s.toolchain.env }, cwd: copy }
+        { encoding: 'utf8', env: { ...process.env, ...s.toolchain.env }, cwd: check }
       )
       const entries = JSON.parse(shown.stdout.slice(shown.stdout.indexOf('[')))
       const xcode = entries.find((e) => e.target === 'scraib').buildSettings
@@ -262,6 +268,11 @@ async function scraib() {
   } finally {
     await built.session.stop()
   }
+  assert.deepEqual(
+    changes(copied, tree(copy)),
+    [],
+    'the Scraib copy, empty folders and mtimes included (its .xcodeproj too), is as it was'
+  )
   assert.deepEqual(changes(original, tree(SCRAIB)), [], 'the Scraib original is byte-identical')
   console.log('swift-preview-build: Scraib original byte-compared unchanged')
 }
