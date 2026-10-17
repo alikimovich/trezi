@@ -131,11 +131,15 @@ function opener(host, page, wait, url) {
   }
 }
 
-/** True once `url` (the page or the island module) carries `css`; else what it serves instead. */
+/**
+ * True once `url` (the page or the island module) carries `css`; else what it serves instead.
+ * Whitespace is ignored: the dev server may serve `rgba(0, 0, 0, 0.35)` for `rgba(0,0,0,0.35)`.
+ */
 function servedAt(url) {
+  const bare = (text) => text.replace(/\s+/g, '')
   return async (css) => {
     const text = await (await fetch(url, { cache: 'no-store' })).text()
-    if (text.includes(css)) return true
+    if (bare(text).includes(bare(css))) return true
     const at = text.indexOf('rgba(0, 0, 0, 0.35)')
     return at < 0 ? `no shadow literal in ${url}` : text.slice(Math.max(0, at - 30), at + 110)
   }

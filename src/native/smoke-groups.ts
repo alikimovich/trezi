@@ -44,9 +44,10 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
 }
 
 /** Full-suite foreground captures can outlast the focused run's launcher watchdog.
- *  Each smoke check keeps its own timeout and assertions. */
+ *  Passing full runs on a loaded host took 381–404 s (LKM-267), so the full suite gets
+ *  600 s. Each smoke check keeps its own timeout and assertions. */
 export function smokeLauncherTimeoutMs(groups: ReadonlySet<NativeSmokeGroup>): number {
-  return NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 420_000 : 300_000
+  return NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 600_000 : 300_000
 }
 
 /** Checks that run for every selection: the setup the groups build on, and the
