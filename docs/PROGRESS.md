@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-16 — LKM-273 native previews Stage 1: Xcode/SwiftPM discovery and target-graph builds
+
+- Why: LKM-271 compiled hand-listed files into one module. Scraib-shaped apps have an app target with `@main` plus library targets, so previews have to follow the project's own target graph. Plan and statuses for all stages: `docs/SWIFT-PREVIEWS-PLAN.md`.
+- Discovery (`src/swift-preview/discovery.ts`, mirrored in `project-detect.ts`/`RuntimeDetect.swift`): `.xcworkspace`, `.xcodeproj`, `Package.swift` up to two folders deep. A folder with only a native project opens as Swift without a manifest and shows a setup state. A `package.json` with a dev command keeps the JS/Expo launch and only gains `native`. Decision: no automatic switch to Swift previews in such mixed repos (it would silently change what opens).
+- Graph (`graph.ts`, `pbxproj.ts`): `project.pbxproj` through `plutil`, since this machine (and many users) have only the command-line tools and `xcodebuild` then refuses to run. Schemes fall back to the shared scheme files; `-showBuildSettings` is used only for `.xcconfig`-configured targets. `swift package describe` runs with its scratch path in Trezi's cache, so nothing lands in the repo. Tool runs are detached process groups killed on timeout (a hung script's grandchild otherwise held the pipes for 30 s).
+- Plan (`plan.ts`) and session: a manifest `target` builds dependencies first, each into its own module and dylib, then the target with `-enable-testing`, then the host (`@testable import`). `@main`/`main.swift` files are left out. Blockers stop with a reason (package products, Clang/binary/test targets, non-macOS SDKs, module clashes); warnings cover `#Preview` and resources. Diagnostics carry `module`, with messages kept compatible with LKM-271's regexes.
+- Trezi-side manifest: `<userData>/swift-previews/<hash>/trezi-previews.json` wins over the repo's file and is passed as `--manifest-dir`. Stage 1 only reads it; a UI that writes it is later work. Driver `GET /graph`, backend `project:native`, page Project panel.
+- Fixture `test/fixtures/swift-multi-module` (Studio app + StudioKit framework, synchronized folders). Tests: `test/swift-preview-graph.mjs` and `test/swift-preview-target.mjs` (unit), native smoke `swift-graph` (`src/native/smoke-swift-graph.ts`, group `core`). Its error and fix are direct writes to the opened copy and are labelled as such.
+- Scraib-xcode (disposable copy, `docs/evidence/lkm-273/scraib-xcode-discovery.json`): one app target (40 files after `@main`), two test targets, no packages. The target build fails only on the seven `#Preview` files, and excluding them breaks `ClipboardRewriter.swift`. Stage 2's `#Preview` handling is next. This is progress, not support.
+- Verification: quick tier passed (226 PASS, 3 SKIP); the native `core` group passed 34/34, with `swift-graph` at 10.0 s and LKM-271's `swift-preview` still passing. This is not full-suite acceptance. Evidence: `docs/evidence/lkm-273/native/` (captures plus `swift-graph.json`), `unit/` frames, `scraib-xcode-discovery.json`.
+
 ## 2026-10-16 — LKM-271 repair: chat-landed edits and a credible Scraib path
 
 - Review gaps: (1) the native smoke wrote the edit straight into the live tree; (2) Scraib was prose only.

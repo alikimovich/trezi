@@ -21,8 +21,9 @@ export type Framework =
   // A plain static site (vanilla HTML/CSS/JS, no package.json or build step) —
   // served by trezi's own built-in static file server, not a spawned dev command.
   | 'static'
-  // A native Swift project declaring component previews in `trezi-previews.json`,
-  // previewed through Trezi's Swift preview driver (`docs/SWIFT-PREVIEWS.md`).
+  // A native Swift project (an Xcode project/workspace, `Package.swift` or
+  // `trezi-previews.json`), previewed through Trezi's Swift preview driver
+  // (`docs/SWIFT-PREVIEWS.md`).
   | 'swift'
   | 'unknown'
 
@@ -109,6 +110,26 @@ export interface DetectedProject {
   devCommand: string
   /** Web dev server vs iOS Simulator (React Native / Expo → 'simulator'). */
   previewKind: PreviewKind
+  /** Native roots found in the folder (LKM-273), also for a JS project that has them. */
+  native?: NativeStructure
+}
+
+/** Xcode and SwiftPM roots in a project, project-relative (`src/swift-preview/discovery.ts`). */
+export interface NativeStructure {
+  workspaces: string[]
+  projects: string[]
+  packages: string[]
+}
+
+/** Result of `project:native` (LKM-273, `src/main/swift-preview.ts`). */
+export interface NativeProjectInfo {
+  structure: NativeStructure | null
+  /** Where `trezi-previews.json` may live: Trezi's app data (wins) or the repo root. */
+  manifest: { trezi: string; treziExists: boolean; repo: string; repoExists: boolean }
+  /** The running driver's `NativeGraph` (`src/swift-preview/graph.ts`): schemes and targets. */
+  graph: unknown
+  /** Why the graph is missing, empty when it is there. */
+  error: string
 }
 
 /**

@@ -1,0 +1,317 @@
+{
+  "label": "LKM-273 progress on a disposable copy of scraib-xcode, not Scraib support. Commands: bun scripts/swift-preview-discover.ts <copy> --target scraib; bun docs/evidence/lkm-273/scraib-validation/check-target.mjs <trezi> <copy> scraib docs/evidence/lkm-273/scraib-validation/xcode-target-previews.swift [exclude]",
+  "discovery": {
+    "structure": {
+      "workspaces": [],
+      "projects": [
+        "scraib.xcodeproj"
+      ],
+      "packages": []
+    },
+    "graph": {
+      "structure": {
+        "workspaces": [],
+        "projects": [
+          "scraib.xcodeproj"
+        ],
+        "packages": []
+      },
+      "containers": [
+        {
+          "kind": "project",
+          "path": "scraib.xcodeproj",
+          "schemes": [
+            "scraib"
+          ],
+          "schemesFrom": "scheme files",
+          "targets": [
+            {
+              "name": "scraib",
+              "module": "scraib",
+              "kind": "app",
+              "productType": "com.apple.product-type.application",
+              "dependencies": [],
+              "packageProducts": [],
+              "sources": [
+                "scraib/AIProviderModels.swift",
+                "scraib/AIService.swift",
+                "scraib/AppConfig.swift",
+                "scraib/AppMessageManager.swift",
+                "scraib/AppRulesViews.swift",
+                "scraib/AppStoreAuthService.swift",
+                "scraib/AppleIntelligenceManager.swift",
+                "scraib/AuthenticatedRequest.swift",
+                "scraib/ClipboardRewriter.swift",
+                "scraib/ClipboardSession.swift",
+                "scraib/ConfigurationManager.swift",
+                "scraib/ConnectionValidationCoordinator.swift",
+                "scraib/ContentView.swift",
+                "scraib/CustomInstructionsView.swift",
+                "scraib/FloatingLoaderManager.swift",
+                "scraib/GlobalHotKeyManager.swift",
+                "scraib/GlowEffect.swift",
+                "scraib/KeyboardLayoutService.swift",
+                "scraib/LocalAIService.swift",
+                "scraib/MainNavigationView.swift",
+                "scraib/NotificationManager.swift",
+                "scraib/PostHogManager.swift",
+                "scraib/PromptManager.swift",
+                "scraib/ProviderAPIKeyField.swift",
+                "scraib/ResolvedTextOperation.swift",
+                "scraib/RewriteTaskCoordinator.swift",
+                "scraib/RichTextCodec.swift",
+                "scraib/SecretsStorage.swift",
+                "scraib/SettingsView.swift",
+                "scraib/SetupView.swift",
+                "scraib/ShortcutRecorderView.swift",
+                "scraib/StartupManager.swift",
+                "scraib/StatusBarManager.swift",
+                "scraib/StoreKitManager.swift",
+                "scraib/TextProcessingService.swift",
+                "scraib/TranslationLanguage.swift",
+                "scraib/TranslationModels.swift",
+                "scraib/UserDefaults+Extension.swift",
+                "scraib/WelcomeView.swift",
+                "scraib/WrongLayoutConverter.swift",
+                "scraib/scraibApp.swift"
+              ],
+              "resources": [
+                "AppIcon.icon",
+                "Monthly.storekit",
+                "scraib/Assets.xcassets"
+              ],
+              "settings": {
+                "SDKROOT": "macosx",
+                "SWIFT_VERSION": "5.0",
+                "MACOSX_DEPLOYMENT_TARGET": "14.0",
+                "PRODUCT_NAME": "$(TARGET_NAME)",
+                "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)",
+                "ENABLE_PREVIEWS": "YES"
+              },
+              "notes": []
+            },
+            {
+              "name": "scraibTests",
+              "module": "scraibTests",
+              "kind": "test",
+              "productType": "com.apple.product-type.bundle.unit-test",
+              "dependencies": [
+                "scraib"
+              ],
+              "packageProducts": [],
+              "sources": [
+                "scraibTests/RegressionTests.swift",
+                "scraibTests/scraibTests.swift"
+              ],
+              "resources": [
+                "AppIcon.icon",
+                "Monthly.storekit"
+              ],
+              "settings": {
+                "SDKROOT": "macosx",
+                "SWIFT_VERSION": "5.0",
+                "MACOSX_DEPLOYMENT_TARGET": "14.0",
+                "PRODUCT_NAME": "$(TARGET_NAME)",
+                "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)"
+              },
+              "notes": []
+            },
+            {
+              "name": "scraibUITests",
+              "module": "scraibUITests",
+              "kind": "test",
+              "productType": "com.apple.product-type.bundle.ui-testing",
+              "dependencies": [
+                "scraib"
+              ],
+              "packageProducts": [],
+              "sources": [
+                "scraibUITests/scraibUITests.swift",
+                "scraibUITests/scraibUITestsLaunchTests.swift"
+              ],
+              "resources": [
+                "AppIcon.icon",
+                "Monthly.storekit"
+              ],
+              "settings": {
+                "SDKROOT": "macosx",
+                "SWIFT_VERSION": "5.0",
+                "MACOSX_DEPLOYMENT_TARGET": "15.5",
+                "PRODUCT_NAME": "$(TARGET_NAME)",
+                "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG $(inherited)"
+              },
+              "notes": []
+            }
+          ],
+          "packages": [],
+          "projects": [],
+          "errors": [
+            "xcodebuild -list -json needs Xcode, but only the command-line tools are selected (xcode-select -p)."
+          ]
+        }
+      ],
+      "errors": [],
+      "durationMs": 10
+    },
+    "plan": {
+      "container": "scraib.xcodeproj",
+      "target": "scraib",
+      "modules": [
+        {
+          "target": "scraib",
+          "module": "scraib",
+          "kind": "app",
+          "sources": [
+            "scraib/AIProviderModels.swift",
+            "scraib/AIService.swift",
+            "scraib/AppConfig.swift",
+            "scraib/AppMessageManager.swift",
+            "scraib/AppRulesViews.swift",
+            "scraib/AppStoreAuthService.swift",
+            "scraib/AppleIntelligenceManager.swift",
+            "scraib/AuthenticatedRequest.swift",
+            "scraib/ClipboardRewriter.swift",
+            "scraib/ClipboardSession.swift",
+            "scraib/ConfigurationManager.swift",
+            "scraib/ConnectionValidationCoordinator.swift",
+            "scraib/ContentView.swift",
+            "scraib/CustomInstructionsView.swift",
+            "scraib/FloatingLoaderManager.swift",
+            "scraib/GlobalHotKeyManager.swift",
+            "scraib/GlowEffect.swift",
+            "scraib/KeyboardLayoutService.swift",
+            "scraib/LocalAIService.swift",
+            "scraib/MainNavigationView.swift",
+            "scraib/NotificationManager.swift",
+            "scraib/PostHogManager.swift",
+            "scraib/PromptManager.swift",
+            "scraib/ProviderAPIKeyField.swift",
+            "scraib/ResolvedTextOperation.swift",
+            "scraib/RewriteTaskCoordinator.swift",
+            "scraib/RichTextCodec.swift",
+            "scraib/SecretsStorage.swift",
+            "scraib/SettingsView.swift",
+            "scraib/SetupView.swift",
+            "scraib/ShortcutRecorderView.swift",
+            "scraib/StartupManager.swift",
+            "scraib/StatusBarManager.swift",
+            "scraib/StoreKitManager.swift",
+            "scraib/TextProcessingService.swift",
+            "scraib/TranslationLanguage.swift",
+            "scraib/TranslationModels.swift",
+            "scraib/UserDefaults+Extension.swift",
+            "scraib/WelcomeView.swift",
+            "scraib/WrongLayoutConverter.swift"
+          ],
+          "entries": [
+            "scraib/scraibApp.swift"
+          ],
+          "dependencies": []
+        }
+      ],
+      "blockers": [],
+      "warnings": [
+        "scraib: 7 files use #Preview, which bare swiftc cannot expand (Stage 2): scraib/ContentView.swift, scraib/CustomInstructionsView.swift, scraib/FloatingLoaderManager.swift, scraib/MainNavigationView.swift, scraib/SettingsView.swift, scraib/SetupView.swift, scraib/WelcomeView.swift",
+        "scraib: resources are not bundled into the preview (Stage 3): AppIcon.icon, Monthly.storekit, scraib/Assets.xcassets"
+      ]
+    },
+    "planError": ""
+  },
+  "targetBuild": {
+    "manifest": {
+      "name": "Scraib (disposable copy)",
+      "target": "scraib",
+      "previews": [
+        "Previews"
+      ]
+    },
+    "status": "error",
+    "message": "Build failed in scraib: 7 errors.",
+    "durationMs": 2329,
+    "plan": {
+      "target": "scraib",
+      "modules": [
+        {
+          "module": "scraib",
+          "dependencies": [],
+          "sources": 40,
+          "entries": [
+            "scraib/scraibApp.swift"
+          ]
+        }
+      ],
+      "blockers": [],
+      "warnings": [
+        "scraib: 7 files use #Preview, which bare swiftc cannot expand (Stage 2): scraib/ContentView.swift, scraib/CustomInstructionsView.swift, scraib/FloatingLoaderManager.swift, scraib/MainNavigationView.swift, scraib/SettingsView.swift, scraib/SetupView.swift, scraib/WelcomeView.swift",
+        "scraib: resources are not bundled into the preview (Stage 3): AppIcon.icon, Monthly.storekit, scraib/Assets.xcassets"
+      ]
+    },
+    "errorsByFile": {
+      "scraib/ContentView.swift": 1,
+      "scraib/CustomInstructionsView.swift": 1,
+      "scraib/FloatingLoaderManager.swift": 1,
+      "scraib/MainNavigationView.swift": 1,
+      "scraib/SettingsView.swift": 1,
+      "scraib/SetupView.swift": 1,
+      "scraib/WelcomeView.swift": 1
+    },
+    "firstErrors": [
+      "scraib scraib/ContentView.swift:586: external macro implementation type 'PreviewsMacros.SwiftUIView' could not be found for macro 'Preview(_:body:)'; plugin for module 'PreviewsMacros' not found",
+      "scraib scraib/CustomInstructionsView.swift:320: external macro implementation type 'PreviewsMacros.SwiftUIView' could not be found for macro 'Preview(_:body:)'; plugin for module 'PreviewsMacros' not found",
+      "scraib scraib/FloatingLoaderManager.swift:557: external macro implementation type 'PreviewsMacros.SwiftUIView' could not be found for macro 'Preview(_:body:)'; plugin for module 'PreviewsMacros' not found",
+      "scraib scraib/MainNavigationView.swift:145: external macro implementation type 'PreviewsMacros.SwiftUIView' could not be found for macro 'Preview(_:body:)'; plugin for module 'PreviewsMacros' not found",
+      "scraib scraib/SettingsView.swift:836: external macro implementation type 'PreviewsMacros.SwiftUIView' could not be found for macro 'Preview(_:body:)'; plugin for module 'PreviewsMacros' not found",
+      "scraib scraib/SetupView.swift:1727: external macro implementation type 'PreviewsMacros.SwiftUIView' could not be found for macro 'Preview(_:body:)'; plugin for module 'PreviewsMacros' not found"
+    ],
+    "previews": [],
+    "frames": {}
+  },
+  "targetBuildWithoutPreviewMacroFiles": {
+    "manifest": {
+      "name": "Scraib (disposable copy)",
+      "target": "scraib",
+      "previews": [
+        "Previews"
+      ],
+      "exclude": [
+        "scraib/ContentView.swift",
+        "scraib/CustomInstructionsView.swift",
+        "scraib/FloatingLoaderManager.swift",
+        "scraib/MainNavigationView.swift",
+        "scraib/SettingsView.swift",
+        "scraib/SetupView.swift",
+        "scraib/WelcomeView.swift"
+      ]
+    },
+    "status": "error",
+    "message": "Build failed in scraib: 3 errors.",
+    "durationMs": 2651,
+    "plan": {
+      "target": "scraib",
+      "modules": [
+        {
+          "module": "scraib",
+          "dependencies": [],
+          "sources": 33,
+          "entries": [
+            "scraib/scraibApp.swift"
+          ]
+        }
+      ],
+      "blockers": [],
+      "warnings": [
+        "scraib: resources are not bundled into the preview (Stage 3): AppIcon.icon, Monthly.storekit, scraib/Assets.xcassets"
+      ]
+    },
+    "errorsByFile": {
+      "scraib/ClipboardRewriter.swift": 3
+    },
+    "firstErrors": [
+      "scraib scraib/ClipboardRewriter.swift:24: cannot find 'FloatingLoaderManager' in scope",
+      "scraib scraib/ClipboardRewriter.swift:44: cannot find 'FloatingLoaderManager' in scope",
+      "scraib scraib/ClipboardRewriter.swift:45: cannot infer contextual base in reference to member 'translating'"
+    ],
+    "previews": [],
+    "frames": {}
+  }
+}

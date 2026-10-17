@@ -36,6 +36,16 @@ export function previewPage(token: string): string {
   #problems li { margin: 4px 0; white-space: pre-wrap; }
   #problems pre { font: 11px ui-monospace, Menlo, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; opacity: .8; }
   footer { padding: 6px 14px; opacity: .6; font-size: 11px; }
+  body[data-status="setup"] #stage { display: none; }
+  #project { margin: 0 14px 10px; border: 1px solid color-mix(in srgb, CanvasText 12%, transparent); border-radius: 10px; padding: 6px 12px; font-size: 12px; }
+  #project summary { cursor: default; font-weight: 600; padding: 2px 0; }
+  #project-body { max-height: 40vh; overflow: auto; }
+  #project h3 { font-size: 12px; margin: 10px 0 4px; }
+  #project ul { margin: 0; padding-left: 18px; }
+  #project li { margin: 2px 0; }
+  #project code, #project .muted { font: 11px ui-monospace, Menlo, monospace; }
+  #project .muted { opacity: .65; }
+  #project .blocker { color: #d0342c; }
 </style>
 </head>
 <body data-status="building" data-generation="0">
@@ -44,6 +54,7 @@ export function previewPage(token: string): string {
   <div id="stage" tabindex="0" aria-label="Component preview"><img id="frame" alt=""></div>
   <section id="problems" aria-live="polite"><h2 id="problem-title">Build failed</h2><ol id="problem-list"></ol><pre id="problem-output"></pre></section>
 </main>
+<details id="project"><summary id="project-summary">Project</summary><div id="project-body"></div></details>
 <footer id="footer">Click the component to interact; keys go to it while it has focus.</footer>
 <script>
 (() => {
@@ -103,7 +114,7 @@ export function previewPage(token: string): string {
     document.body.dataset.stale = String(state.stale)
     document.body.dataset.preview = api.preview
     $('name').textContent = state.name || 'Swift previews'
-    const labels = { building: 'Building…', ready: 'Ready', failed: 'Build failed', error: 'Not running' }
+    const labels = { building: 'Building…', ready: 'Ready', failed: 'Build failed', error: 'Not running', setup: 'No previews yet' }
     $('status').textContent = labels[state.status] || state.status
     $('status').title = state.message
     const ids = state.previews.map((p) => p.id).join()
@@ -125,12 +136,79 @@ export function previewPage(token: string): string {
     $('problem-title').textContent = state.message + (state.stale ? ' Showing the last good build.' : '')
     $('problem-list').replaceChildren(...errors.map((d) => {
       const item = document.createElement('li')
-      item.textContent = d.file + ':' + d.line + ':' + d.column + ': ' + d.message
+      item.textContent = (d.module ? '[' + d.module + '] ' : '') + d.file + ':' + d.line + ':' + d.column + ': ' + d.message
       return item
     }))
     $('problem-output').textContent = errors.length ? '' : state.output
     $('footer').textContent = state.status === 'ready' ? state.message + ' Click the component to interact; keys go to it while it has focus.' : state.message
+    renderProject(state)
   }
+
+  // The project panel (LKM-273): containers, schemes, targets and the build plan.
+  const el = (tag, text, className) => {
+    const node = document.createElement(tag)
+    if (text !== undefined) node.textContent = text
+    if (className) node.className = className
+    return node
+  }
+  const list = (items) => {
+    const ul = el('ul')
+    ul.append(...items.map((item) => (typeof item === 'string' ? el('li', item) : item)))
+    return ul
+  }
+  let projectShown = ''
+  const renderProject = (state) => {
+    const native = state.native
+    const key = JSON.stringify([native, state.plan, state.manifest])
+    if (key === projectShown) return
+    projectShown = key
+    if (state.status === 'setup') $('project').open = true
+    const containers = native ? native.containers : []
+    const targets = containers.reduce((n, c) => n + c.targets.length, 0)
+    $('project-summary').textContent = native
+      ? 'Project: ' + containers.length + ' container' + (containers.length === 1 ? '' : 's') + ', ' + targets + ' target' + (targets === 1 ? '' : 's')
+      : 'Project'
+    const body = []
+    const manifest = state.manifest
+    body.push(el('h3', 'Manifest'))
+    body.push(list([
+      manifest.source === 'none' ? 'None yet.' : 'Using ' + (manifest.source === 'trezi' ? "Trezi's copy" : "the repo's") + ': ' + manifest.path,
+      ...(manifest.treziPath ? ["Trezi's copy (wins, the repo stays untouched): " + manifest.treziPath] : [])
+    ]))
+    if (!native) body.push(el('p', 'The project structure is read when this panel opens.', 'muted'))
+    for (const error of native ? native.errors : []) body.push(el('p', error, 'muted'))
+    for (const c of containers) {
+      body.push(el('h3', c.kind + ' ' + c.path))
+      const rows = []
+      rows.push('Schemes (' + c.schemesFrom + '): ' + (c.schemes.join(', ') || 'none'))
+      if (c.projects.length) rows.push('Projects: ' + c.projects.join(', '))
+      if (c.packages.length) rows.push('Packages: ' + c.packages.map((p) => p.location).join(', '))
+      for (const t of c.targets) {
+        const item = el('li')
+        item.append(el('code', t.name), ' ' + t.kind + (t.module !== t.name ? ' (module ' + t.module + ')' : '') + ', ' + t.sources.length + ' Swift files')
+        if (t.dependencies.length) item.append(', depends on ' + t.dependencies.join(', '))
+        if (t.packageProducts.length) item.append(', packages ' + t.packageProducts.join(', '))
+        if (t.resources.length) item.append(', ' + t.resources.length + ' resources')
+        for (const note of t.notes) item.append(el('div', note, 'muted'))
+        rows.push(item)
+      }
+      for (const error of c.errors) rows.push(el('li', error, 'muted'))
+      body.push(list(rows))
+    }
+    const plan = state.plan
+    if (plan) {
+      body.push(el('h3', 'Build plan for ' + plan.target + ' (' + plan.container + ')'))
+      body.push(list([
+        ...plan.modules.map((m) => m.module + ': ' + m.sources.length + ' files' + (m.dependencies.length ? ', links ' + m.dependencies.join(', ') : '') + (m.entries.length ? ', leaves out ' + m.entries.join(', ') : '')),
+        ...plan.blockers.map((b) => el('li', b, 'blocker')),
+        ...plan.warnings.map((w) => el('li', w, 'muted'))
+      ]))
+    }
+    $('project-body').replaceChildren(...body)
+  }
+  $('project').addEventListener('toggle', () => {
+    if ($('project').open && api.state && !api.state.native) fetch('/graph', { cache: 'no-store' }).catch(() => {})
+  })
 
   const poll = async () => {
     try {
@@ -144,7 +222,7 @@ export function previewPage(token: string): string {
           reportedBuild = state.builds
           api.failures++
           const first = state.diagnostics.find((d) => d.severity === 'error')
-          console.error('Swift preview build failed: ' + (first ? first.file + ':' + first.line + ': ' + first.message : state.message))
+          console.error('Swift preview build failed: ' + (first ? first.file + ':' + first.line + ': ' + first.message + (first.module ? ' (module ' + first.module + ')' : '') : state.message))
         }
       }
       if (!previous || previous.generation !== state.generation) scheduleFrame(0)

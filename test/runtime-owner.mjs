@@ -203,6 +203,47 @@ try {
       'package.json': JSON.stringify({ scripts: { dev: 'x' } }),
       'trezi-previews.json': ''
     })
+    // Native discovery (LKM-273): workspaces, projects and packages up to two levels
+    // down, never through hidden, dependency or build folders, bundles or symlinks.
+    project({
+      'App.xcworkspace/contents.xcworkspacedata': '',
+      'App.xcodeproj/project.pbxproj': '',
+      'App.xcodeproj/project.xcworkspace/contents.xcworkspacedata': '',
+      'Kit/Package.swift': '',
+      'Packages/Deep/Package.swift': '',
+      'a/b/c/Package.swift': '',
+      'node_modules/x/Package.swift': '',
+      '.hidden/Package.swift': '',
+      'Pods/Pods.xcodeproj/project.pbxproj': '',
+      'Assets.xcassets/Package.swift': '',
+      'Package.swift/notes': '',
+      'Zed.xcodeproj/x': '',
+      'index.html': ''
+    })
+    project({ 'Package.swift': '', 'Sources/A/a.swift': '' })
+    project({ 'nested/Only.xcodeproj/project.pbxproj': '' })
+    project({ 'node_modules/Package.swift': '', 'readme.md': '' })
+    project({
+      'package.json': JSON.stringify({ name: 'tools', devDependencies: { prettier: '3' } }),
+      'Studio.xcodeproj/project.pbxproj': ''
+    })
+    project({
+      'package.json': JSON.stringify({ name: 'mixed', scripts: { dev: 'vite' } }),
+      'Package.swift': ''
+    })
+    project({
+      'package.json': JSON.stringify({ dependencies: { expo: '50', 'react-native': '0.7' } }),
+      'ios/App.xcworkspace/contents.xcworkspacedata': '',
+      'ios/App.xcodeproj/project.pbxproj': '',
+      'ios/Pods/Pods.xcodeproj/project.pbxproj': ''
+    })
+    {
+      const linked = project({ 'readme.md': '' })
+      const target = dir()
+      write(join(target, 'Package.swift'), '')
+      symlinkSync(target, join(linked, 'linked'))
+      symlinkSync(join(target, 'Package.swift'), join(linked, 'Package.swift'))
+    }
     project({
       'package.json': JSON.stringify({
         name: 'vite-app',
@@ -282,6 +323,53 @@ try {
         if (/Enter a command/.test(expected.error)) assert.equal(actual.error, expected.error)
       } else assert.deepEqual(actual, JSON.parse(JSON.stringify(expected)), path)
     }
+    // What the native cases detect (both detectors agree above).
+    const byFiles = async (files) => {
+      const path = dir()
+      for (const [name, content] of Object.entries(files)) write(join(path, name), content)
+      return detectProject(path)
+    }
+    const nested = await byFiles({
+      'App.xcworkspace/contents.xcworkspacedata': '',
+      'App.xcodeproj/project.xcworkspace/contents.xcworkspacedata': '',
+      'Kit/Package.swift': '',
+      'a/b/c/Package.swift': '',
+      'node_modules/x/Package.swift': '',
+      'index.html': ''
+    })
+    assert.equal(nested.framework, 'swift', 'native roots win over a static entry')
+    assert.equal(nested.devCommand, '')
+    assert.deepEqual(nested.native, {
+      workspaces: ['App.xcworkspace'],
+      projects: ['App.xcodeproj'],
+      packages: ['Kit/Package.swift']
+    })
+    const tooling = await byFiles({
+      'package.json': JSON.stringify({ name: 'tools', devDependencies: { prettier: '3' } }),
+      'Studio.xcodeproj/project.pbxproj': ''
+    })
+    assert.equal(tooling.framework, 'swift', 'a tooling-only package.json previews natively')
+    assert.equal(tooling.name, 'tools')
+    const vite = await byFiles({
+      'package.json': JSON.stringify({ scripts: { dev: 'vite' }, devDependencies: { vite: '5' } }),
+      'Package.swift': ''
+    })
+    assert.equal(vite.framework, 'vite', 'a JS app keeps its launch')
+    assert.equal(vite.devCommand, 'npm run dev')
+    assert.deepEqual(vite.native?.packages, ['Package.swift'])
+    const expo = await byFiles({
+      'package.json': JSON.stringify({ dependencies: { expo: '50', 'react-native': '0.7' } }),
+      'ios/App.xcworkspace/contents.xcworkspacedata': '',
+      'ios/Pods/Pods.xcodeproj/project.pbxproj': ''
+    })
+    assert.equal(expo.framework, 'expo')
+    assert.equal(expo.previewKind, 'simulator')
+    assert.deepEqual(expo.native, {
+      workspaces: ['ios/App.xcworkspace'],
+      projects: [],
+      packages: []
+    })
+    assert.equal((await byFiles({ 'index.html': '' })).native, undefined)
     const commandCases = [
       ['npm run dev', 'vite'],
       ['bun run dev', 'sveltekit'],

@@ -1,10 +1,10 @@
 import type { ProjectRuntime } from '../native/runtime-service'
-import type { DevServerInfo, Framework, RunningDevServer } from '../shared/api'
+import type { DevServerInfo, Framework, NativeProjectInfo, RunningDevServer } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { previewServers } from './preview-evidence'
 import { installProjectDependencies } from './project-dependencies'
 import type { RpcHandlerRegistry } from './rpc-router'
-import { swiftPreviewCommand } from './swift-preview'
+import { nativeProjectInfo, swiftPreviewCommand, treziManifestDir } from './swift-preview'
 
 /**
  * The dev-server routes under the Swift runtime owner (S06). Same channels and
@@ -15,7 +15,9 @@ import { swiftPreviewCommand } from './swift-preview'
 export function registerServiceDevServer(
   router: RpcHandlerRegistry,
   runtime: ProjectRuntime,
-  log: (line: string) => void
+  log: (line: string) => void,
+  /** Trezi's app data, holding the Trezi-side Swift preview manifests (LKM-273). */
+  userData?: () => string
 ): void {
   // A newer start or stop for the project discards an older start's result.
   const generations = new Map<string, number>()
@@ -50,10 +52,13 @@ export function registerServiceDevServer(
         if (generations.get(key) !== generation) throw new Error('Preview start was cancelled.')
       }
       // A Swift project has no command of its own: Trezi's preview driver serves it.
+      const manifestDir = userData ? treziManifestDir(opts.root, userData()) : undefined
       const server = await runtime.start({
         root: opts.root,
         command:
-          opts.framework === 'swift' && !opts.command.trim() ? swiftPreviewCommand() : opts.command,
+          opts.framework === 'swift' && !opts.command.trim()
+            ? swiftPreviewCommand(undefined, undefined, manifestDir)
+            : opts.command,
         framework: opts.framework,
         ...(opts.cleanCache ? { cleanCache: true } : {})
       })
@@ -77,5 +82,10 @@ export function registerServiceDevServer(
   router.handle('devserver:info', async (_e, root: string): Promise<DevServerInfo> => {
     const info = await runtime.info(root)
     return info.server ? { running: true, server: info.server } : { running: false }
+  })
+  // A native project's roots, manifest locations and target graph (LKM-273).
+  router.handle('project:native', async (_e, root: string): Promise<NativeProjectInfo> => {
+    const info = await runtime.info(root)
+    return nativeProjectInfo(root, userData?.() ?? '', info.server?.url)
   })
 }

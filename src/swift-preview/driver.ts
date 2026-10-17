@@ -11,9 +11,13 @@ import { PreviewSession } from './session'
  * the "dev server" of a project that has `trezi-previews.json`. It builds the
  * project's declared components into a preview host, serves the preview page on
  * HOST:PORT (both from the runtime owner) and rebuilds when the sources change.
- * Usage: `bun src/swift-preview/driver.ts [projectRoot]` (default: the cwd).
+ * Usage: `bun src/swift-preview/driver.ts [projectRoot] [--manifest-dir DIR]` (root
+ * default: the cwd). DIR is Trezi's own folder for the project's manifest (LKM-273).
  */
-const root = process.argv[2] || process.cwd()
+const args = process.argv.slice(2)
+const flag = args.indexOf('--manifest-dir')
+const manifestDir = flag >= 0 ? args.splice(flag, 2)[1] : undefined
+const root = args[0] || process.cwd()
 const host = process.env.HOST || '127.0.0.1'
 const port = Number(process.env.PORT) || 5199
 const cacheRoot = process.env.TREZI_SWIFT_PREVIEW_CACHE || join(tmpdir(), 'trezi-swift-preview')
@@ -25,7 +29,8 @@ const session = new PreviewSession({
   root,
   cacheDir: join(cacheRoot, project),
   hostSource: join(__dirname, 'PreviewHost.swift'),
-  log: (line) => console.log(line)
+  log: (line) => console.log(line),
+  manifestDir
 })
 
 function reply(res: ServerResponse, status: number, body: string | Buffer, type: string) {
@@ -67,6 +72,8 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/')
       return reply(res, 200, previewPage(token), 'text/html; charset=utf-8')
     if (req.method === 'GET' && url.pathname === '/state') return json(res, 200, session.state)
+    if (req.method === 'GET' && url.pathname === '/graph')
+      return json(res, 200, { graph: await session.nativeGraph(), plan: session.state.plan })
     if (req.method === 'GET' && url.pathname === '/frame') {
       const frame = await session.frame(preview)
       return reply(res, 200, frame.png, 'image/png')
