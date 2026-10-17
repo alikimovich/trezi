@@ -39,7 +39,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Explicit app-owned route: verified absolute wrapper in `TREZI_AGENT_BROWSER`, Codex per-turn config (resume included) and Claude env plus refusing PreToolUse hooks; PATH stays defence in depth.
 - [x] Rules/skill/docs separate the allowed managed wrapper path from forbidden global paths; wrapper exits 3 `dependency: …` for missing CLI/headless shell.
 - [x] Real `/bin/zsh -c`/`-lc` unit tests (bundle and source bases), provider fixture tests and native smoke shell assertion.
-- [ ] Manager: full native verification and independent review.
+- [x] Manager: 229 unit checks, 54 native smoke checks, source-window/chat-scroll/HMR acceptance and independent source review passed. PR review/merge remains separate.
 
 ## Background browser focus (LKM-264)
 
