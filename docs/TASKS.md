@@ -8,7 +8,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Detect a Swift project by `trezi-previews.json` (TS/Swift parity) and run Trezi's own preview driver for it through the runtime owner.
 - [x] AppKit preview host: SwiftUI, `NSView` and `NSViewController` samples with their own state and dependencies; frames, clicks, typing, rebuild on change, compiler errors with the last good build kept, recovery.
 - [x] Unit test (`test/swift-preview.mjs`) and native smoke (`swift-preview`, group `core`); demo steps, limits and evidence in `docs/SWIFT-PREVIEWS.md`.
-- [ ] Follow-ups: `#Preview` reuse, multi-module projects (Scraib's `ScraibKit`), full macOS app launch, iOS simulator.
+- [x] Repair: edits land through the real chat pipeline with a fixture provider (worktree, landing commit, rebuild, compiler diagnostic to the next prompt, recovery); library modules and Scraib disposable-copy checks; evidence refreshed from the passing native run.
+- [ ] Follow-ups: `#Preview` reuse, full Scraib components (StoreKit, Sparkle/PostHog, resources), full macOS app launch, iOS simulator.
 - [ ] Manager: review; keep the merge held.
 
 ## Chat history status (LKM-268)

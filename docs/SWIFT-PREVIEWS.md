@@ -187,17 +187,13 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   apply to native frames. `describe` exposes accessibility values and text field
   contents only.
 - **Verification:** the edit, the compile error and the fix are chat-landed through the
-  real composer, worktree and landing pipeline, and the native check also covers the
-  diagnostic hand-off to the landing check and the next prompt (see the native status
-  below: that part is written but not yet run natively). The provider is a fixture and no live
-  provider ran, so what is not covered is a real model choosing the edit. The unit test
-  `test/swift-preview.mjs` still writes files directly; the native check does not.
-- **Native status of that check:** the last native run (core group) got through turn 1
-  (composer, worktree, landing commit on the live tree, rebuild to generation 2,
-  "Find components" described) and landed the compile error (page `failed`, last good
-  build kept), then timed out waiting for the landing-check row because the smoke suite
-  runs with the post-landing check disabled. The smoke now drives the real check; that
-  last change, and so turns 2 and 3 end to end (diagnostic row, next-prompt context,
-  recovery), have **not** been run natively, because the session's native runs were used up.
-  Run `bun run test:native -- --only=core` to confirm. The check's logic itself is covered
-  by `test/landing-check.mjs` (a build that finishes after the settle time).
+  real composer, worktree and landing pipeline. The native `swift-preview` check passed
+  in the full native suite (55/55 checks, after all three turns asserted): the landing
+  commit on the live tree, the rebuild to generation 2, the `serch` error with the last
+  good build kept, the landing-check row, the diagnostic in the next prompt and recovery
+  to generation 3. The model is a fixture provider (no live provider ran), so a real model
+  choosing the edit is not covered. Clicks and keys are DOM events on the preview page, not
+  OS input. The unit test `test/swift-preview.mjs` still writes files directly; the
+  native check does not. The committed `docs/evidence/lkm-271/swift-preview.json` and its
+  captures come from that passing run (`provenance.chatLanded`, empty
+  `syntheticDirectWrites`).
