@@ -163,6 +163,7 @@ const UNIT = [
   'provider-skills',
   'states-workbench',
   'states-canvas',
+  'states-watch',
   'states-build',
   'states-return',
   'three-d-contract',

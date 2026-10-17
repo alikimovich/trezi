@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-10-17 — LKM-269 CI recovery: immediate states dependency edits
+
+- Hosted CI exposed an existing `StatesWatch` race: Bun 1.3.14 can initialize `watchFile` after an immediate edit, adopting the changed file as its baseline and never reporting that edit. The unchanged canvas test reproduced 6/24 failures with eight concurrent processes; the isolated watcher from unchanged main missed 23/96 immediate edits under the same load, without any controller involved.
+- Capture each input stamp synchronously and use one unreferenced 400 ms polling timer, preserving the 200-input bound and mtime/size comparison. Timer identity fencing stops stale callbacks after close/replacement, including a callback that closes its own watcher.
+- A deterministic regression covers the first edit before any poll, duplicate suppression, deletion/recreation, rewatch/close, unref and the input bound. Under the same Bun 1.3.14 stress setup the fix passed 24/24 unchanged canvas tests and 96/96 immediate-edit probes. Native typecheck, lint and independent source review passed. No assertions or deadlines were relaxed. Hosted CI and native core are rerunning for the candidate.
+
 ## 2026-10-17 — LKM-269 recovery: managed browser dispatch
 
 - Reapplied only LKM-269 routing, provider hooks, dependency errors, documentation and focused coverage to current main. Preserved the original task worktree and excluded its unrelated fixture timing edits.

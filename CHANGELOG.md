@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Keep immediate component dependency edits from being missed while the states watcher starts polling.
 - Keep provider browser verification on Trezi’s managed Vercel route across shell startup and resumed turns.
 - Styles now shows active flex and grid gap, direction, wrap and alignment values, with separate row and column gaps and read-only context for uncertain CSS sources (LKM-272).
 - Chat history now shows a pulsing running dot and a green dot for an unseen assistant answer, with Reduce Motion and accessible status labels (LKM-268).
