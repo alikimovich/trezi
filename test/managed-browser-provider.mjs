@@ -81,11 +81,20 @@ class FakeCodex {
     this.options = options
   }
   startThread() {
-    constructed.push({ kind: 'start', config: this.options.config })
+    constructed.push({
+      kind: 'start',
+      config: this.options.config,
+      overrides: this.options.configOverrides
+    })
     return this.thread()
   }
   resumeThread(id) {
-    constructed.push({ kind: 'resume', id, config: this.options.config })
+    constructed.push({
+      kind: 'resume',
+      id,
+      config: this.options.config,
+      overrides: this.options.configOverrides
+    })
     return this.thread()
   }
   thread() {
@@ -117,10 +126,33 @@ mock.module('../src/main/trezi-agent-tools.ts', () => ({
   registerTreziAgentTools: async () => ({ socketPath: '/nowhere', token: 'fake', dispose() {} }),
   shutdownTreziAgentTools: async () => {}
 }))
-process.env.TREZI_CODEX_BIN = '/usr/bin/true' // only the adapter's version probe
+const versionCli = join(work, 'codex-version')
+writeFileSync(versionCli, '#!/bin/sh\necho codex-cli 0.160.1\n')
+chmodSync(versionCli, 0o755)
+process.env.TREZI_CODEX_BIN = versionCli // only the adapter's version probe
 const { codexProvider } = await import('../src/main/backends/codex.ts')
 const codexRoot = join(work, 'codex')
 mkdirSync(codexRoot, { recursive: true })
+writeFileSync(versionCli, '#!/bin/sh\necho codex-cli 0.161.0\n')
+const unsupportedEvents = []
+const unsupportedSession = await codexProvider.startSession(
+  codexRoot,
+  { provider: 'codex' },
+  () => null,
+  {
+    emitKey: 'unsupported-cli',
+    onEvent: (event) => unsupportedEvents.push(event)
+  }
+)
+unsupportedSession.send('must not execute')
+await waitFor(
+  () => unsupportedEvents.some((event) => event.type === 'error'),
+  'unsupported CLI refusal'
+)
+assert.equal(constructed.length, 0, 'unsupported CLI never constructs a provider execution')
+assert.match(JSON.stringify(unsupportedEvents), /Provider execution is disabled/)
+unsupportedSession.dispose()
+writeFileSync(versionCli, '#!/bin/sh\necho codex-cli 0.160.1\n')
 const codexEvents = []
 const codexSession = await codexProvider.startSession(
   codexRoot,
@@ -139,7 +171,11 @@ assert.ok(
   'a thread was started'
 )
 assert.ok(constructed.filter((c) => c.kind === 'resume').length >= 2, 'turns resume the thread')
-for (const { kind, config } of constructed) {
+for (const { kind, config, overrides } of constructed) {
+  assert.equal(overrides.length, 1, `${kind}: scoped trust encoded as one inline value`)
+  assert.match(overrides[0], /pre_tool_use:0:0/, `${kind}: Git hook trust`)
+  assert.match(overrides[0], /pre_tool_use:1:0/, `${kind}: browser hook trust after final indexing`)
+  assert.doesNotMatch(overrides[0], /bypass/, `${kind}: no blanket hook trust`)
   const set = config.shell_environment_policy.set
   assert.equal(config.allow_login_shell, false, `${kind}: login shells off`)
   assert.equal(set.TREZI_AGENT_BROWSER, wrapper, `${kind}: TREZI_AGENT_BROWSER`)

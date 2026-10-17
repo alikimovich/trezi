@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const {
+  assertCodexHookVersion,
   managedBrowserCodexConfig,
   managedBrowserDirectory,
   managedBrowserEnv,
@@ -12,6 +13,10 @@ const {
   managedBrowserWrapper
 } = await import('../src/main/backends/managed-browser-path.ts')
 const { browserCommandRefusal } = await import('../bin/trezi-browser-policy.mjs')
+for (const version of ['0.159.1', 'codex-cli 0.160.1\n'])
+  assert.doesNotThrow(() => assertCodexHookVersion(version))
+for (const version of [null, '', 'codex-cli 0.161.0', 'codex-cli 0.146.0', '0.160.1-preview'])
+  assert.throws(() => assertCodexHookVersion(version), /Provider execution is disabled/)
 const repo = join(import.meta.dir, '..')
 
 // A checkout-shaped tree: <root>/bin/managed/agent-browser, bundle in out/native,

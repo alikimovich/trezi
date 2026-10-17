@@ -1,6 +1,6 @@
 import { mock } from 'bun:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -88,7 +88,10 @@ const turnsCompleted = new Promise((resolve) => {
   complete = resolve
 })
 const previousBin = process.env.TREZI_CODEX_BIN
-process.env.TREZI_CODEX_BIN = '/usr/bin/true' // only the adapter's version probe; no Codex process
+const versionCli = join(root, 'codex-version')
+writeFileSync(versionCli, '#!/bin/sh\necho codex-cli 0.160.1\n')
+chmodSync(versionCli, 0o755)
+process.env.TREZI_CODEX_BIN = versionCli // only the adapter's version probe; no Codex process
 try {
   const session = await codexProvider.startSession(
     root,

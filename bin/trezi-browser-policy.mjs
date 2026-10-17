@@ -45,7 +45,12 @@ export function browserCommandRefusal(command, wrapper, cwd = '') {
   if (/(?:^|[\s;&|(])(?:export\s+|declare\s+(?:-x\s+)?|typeset\s+)?TREZI_AGENT_BROWSER=/.test(command))
     return `The managed agent-browser route is app-owned and cannot be reassigned. ${wrapperAdvice(wrapper)}`
   for (const segment of command.split(/&&|\|\||[;&|\n]/)) {
-    const words = segment.trim().split(/\s+/).map(unquote).filter(Boolean)
+    const tokens = segment.match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s]+/g) ?? []
+    // Keep a quoted absolute wrapper path intact (Application Support is common).
+    // Embedded shell programs remain unsupported rather than hiding a global call.
+    const words = tokens.map(unquote).filter(Boolean)
+    if (words.some((word) => /\s/.test(word) && /agent-browser|TREZI_AGENT_BROWSER/.test(word) && word !== wrapper))
+      return `Run managed browser verification as a separate command, outside nested shell strings. ${wrapperAdvice(wrapper)}`
     let at = 0
     while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[at] ?? '')) at++
     const assignments = words.slice(0, at)
