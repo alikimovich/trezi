@@ -65,6 +65,7 @@ import {
 } from './claude-login'
 import { failureText, isResumeFailure, RESUME_NOTE, seedPrompt, sessionCwd } from './claude-resume'
 import { interruptWithEscalation } from './interrupt'
+import { managedBrowserEnv, managedBrowserRefusal } from './managed-browser-path'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
 import { withSkillReferences } from './skill-menu'
@@ -1197,6 +1198,12 @@ async function startSession(
       prompt: input,
       options: {
         cwd,
+        // LKM-269: the managed browser route rides the environment of Claude's Bash tool.
+        // It can reorder PATH, so TREZI_AGENT_BROWSER and the hook below are the route.
+        env: {
+          ...process.env,
+          ...managedBrowserEnv(__dirname, process.env.PATH, process.execPath)
+        },
         ...(executable ? { pathToClaudeCodeExecutable: executable } : {}),
         settingSources: ['user', 'project', 'local'],
         // The repo's CLAUDE.md + skills load via settingSources; Trezi's own
@@ -1251,12 +1258,20 @@ async function startSession(
                     ctx?.liveRoot ?? root,
                     root
                   )
-                  if (gitRefusal)
+                  // LKM-269: agent-browser only through Trezi's managed wrapper.
+                  const browserRefusal = managedBrowserRefusal(
+                    __dirname,
+                    pre.tool_name ?? '',
+                    pre.tool_input,
+                    cwd
+                  )
+                  const refusal = gitRefusal ?? browserRefusal
+                  if (refusal)
                     return {
                       hookSpecificOutput: {
                         hookEventName: 'PreToolUse' as const,
                         permissionDecision: 'deny' as const,
-                        permissionDecisionReason: gitRefusal
+                        permissionDecisionReason: refusal
                       }
                     }
                   const denied = liveCheckoutEdit(

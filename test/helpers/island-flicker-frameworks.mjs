@@ -131,11 +131,14 @@ function opener(host, page, wait, url) {
   }
 }
 
-/** True once `url` (the page or the island module) carries `css`; else what it serves instead. */
+/** True once `url` (the page or the island module) carries `css`; else what it serves instead.
+ *  The dev server may echo the literal with other whitespace (`rgba(0, 0, 0, 0.35)` for
+ *  `rgba(0,0,0,0.35)`), so the comparison ignores whitespace but keeps every value exact. */
 function servedAt(url) {
+  const bare = (value) => value.replace(/\s+/g, '')
   return async (css) => {
     const text = await (await fetch(url, { cache: 'no-store' })).text()
-    if (text.includes(css)) return true
+    if (bare(text).includes(bare(css))) return true
     const at = text.indexOf('rgba(0, 0, 0, 0.35)')
     return at < 0 ? `no shadow literal in ${url}` : text.slice(Math.max(0, at - 30), at + 110)
   }
