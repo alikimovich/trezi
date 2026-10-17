@@ -26,9 +26,8 @@ import { MODULE_CACHE, SWIFT_CACHE } from './helpers/swift-build.mjs'
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const FIXTURE = join(ROOT, 'test/fixtures/swift-components')
 const ARTIFACTS = join(ROOT, 'test/artifacts/swift-preview')
-const { collectSources, hostCompileArgs, parseDiagnostics, parseManifest } = await import(
-  '../src/swift-preview/manifest.ts'
-)
+const { collectSources, hostCompileArgs, libraryCompileArgs, parseDiagnostics, parseManifest } =
+  await import('../src/swift-preview/manifest.ts')
 const { PreviewSession } = await import('../src/swift-preview/session.ts')
 const { SWIFT_PREVIEW_DRIVER, swiftPreviewCommand } = await import('../src/main/swift-preview.ts')
 const { detectProject } = await import('../src/main/project-detect.ts')
@@ -39,7 +38,8 @@ assert.deepEqual(manifest, {
   name: 'Swift components demo',
   sources: ['Sources/DemoComponents'],
   previews: ['Previews'],
-  exclude: []
+  exclude: [],
+  libraries: []
 })
 assert.throws(() => parseManifest('{'), /not valid JSON/)
 assert.throws(() => parseManifest('[]'), /must contain an object/)
@@ -51,8 +51,22 @@ assert.deepEqual(parseManifest('{"sources":["a/"],"previews":["./p"],"exclude":[
   name: '',
   sources: ['a'],
   previews: ['p'],
-  exclude: ['a/App.swift']
+  exclude: ['a/App.swift'],
+  libraries: []
 })
+assert.deepEqual(
+  parseManifest('{"sources":["a"],"previews":["p"],"libraries":[{"name":"Kit","sources":["k/"]}]}')
+    .libraries,
+  [{ name: 'Kit', sources: ['k'] }]
+)
+for (const bad of [
+  '{"sources":["a"],"previews":["p"],"libraries":{}}',
+  '{"sources":["a"],"previews":["p"],"libraries":[{"name":"1x","sources":["k"]}]}',
+  '{"sources":["a"],"previews":["p"],"libraries":[{"name":"K","sources":[]}]}',
+  '{"sources":["a"],"previews":["p"],"libraries":[{"name":"K","sources":["../k"]}]}',
+  '{"sources":["a"],"previews":["p"],"libraries":[{"name":"K","sources":["k"]},{"name":"K","sources":["k"]}]}'
+])
+  assert.throws(() => parseManifest(bad), undefined, bad)
 
 const project = mkdtempSync(join(tmpdir(), 'swift-preview-'))
 cpSync(FIXTURE, project, { recursive: true })
@@ -109,6 +123,25 @@ const args = hostCompileArgs({
 })
 assert.deepEqual(args.slice(0, 4), ['--sdk', 'macosx', 'swiftc', '-parse-as-library'])
 assert.deepEqual(args.slice(-2), ['H.swift', 'a.swift'])
+assert.ok(!args.includes('-I'), 'no library, no module search path')
+const linked = hostCompileArgs({
+  host: 'H.swift',
+  sources: ['a.swift'],
+  moduleCache: 'mc',
+  output: 'out',
+  libraries: [{ name: 'Kit', dir: 'libs' }]
+})
+for (const pair of [['-I', 'libs'], ['-L', 'libs'], ['-lKit']])
+  assert.ok(linked.join(' ').includes(pair.join(' ')), `host links ${pair.join(' ')}`)
+const built = libraryCompileArgs({
+  name: 'Kit',
+  sources: ['k.swift'],
+  moduleCache: 'mc',
+  dir: 'libs'
+})
+for (const part of ['-emit-module', '-emit-library', '-module-name Kit', 'libs/libKit.dylib'])
+  assert.ok(built.join(' ').includes(part), `library build has ${part}`)
+assert.equal(built.at(-1), 'k.swift')
 
 assert.equal(swiftPreviewCommand('/A b/bun', "/x'y/driver.ts"), `'/A b/bun' '/x'\\''y/driver.ts'`)
 assert.ok(existsSync(SWIFT_PREVIEW_DRIVER), 'the launch command names the checkout driver')
@@ -340,5 +373,55 @@ try {
   await until(() => driver.exitCode !== null || driver.signalCode !== null, 'driver exit', 10_000)
   rmSync(project, { recursive: true, force: true })
   rmSync(join(project, '..', `${project.split('/').pop()}-cache`), { recursive: true, force: true })
+}
+
+// --- A library module: the app module imports a separately built module ---
+const libraryProject = mkdtempSync(join(tmpdir(), 'swift-preview-lib-'))
+cpSync(join(ROOT, 'test/fixtures/swift-library-app'), libraryProject, { recursive: true })
+const libraryLogs = []
+const librarySession = new PreviewSession({
+  root: libraryProject,
+  cacheDir: join(libraryProject, '..', `${libraryProject.split('/').pop()}-cache`),
+  hostSource: join(ROOT, 'src/swift-preview/PreviewHost.swift'),
+  moduleCache: MODULE_CACHE,
+  log: (line) => libraryLogs.push(line),
+  pollMs: 150
+})
+try {
+  assert.deepEqual(
+    collectSources(
+      libraryProject,
+      parseManifest(readFileSync(join(libraryProject, 'trezi-previews.json'), 'utf8'))
+    ).map((file) => file.slice(libraryProject.length + 1)),
+    ['App/GreetingBadge.swift', 'Previews/TreziPreviews.swift'],
+    'the @main file is excluded and library sources are not app sources'
+  )
+  librarySession.start()
+  await until(
+    () => librarySession.state.status === 'ready',
+    `library build (${libraryLogs.join(' | ')})`
+  )
+  assert.ok(libraryLogs.some((line) => line.includes('library GreetKit')))
+  await until(
+    async () => (await librarySession.describe('greeting-badge')).includes('Hello, Ada!'),
+    'the library greeting is drawn'
+  )
+  const shot = await librarySession.frame('greeting-badge')
+  assert.ok(shot.png.subarray(0, 4).equals(PNG), 'the library-backed view rendered')
+  writeFileSync(join(ARTIFACTS, 'library-greeting-badge.png'), shot.png)
+  // Editing the library's source rebuilds the library and the host.
+  const kit = join(libraryProject, 'Kit/Sources/GreetKit/Greeter.swift')
+  writeFileSync(kit, readFileSync(kit, 'utf8').replace('"Hello"', '"Welcome"'))
+  await until(
+    async () => (await librarySession.describe('greeting-badge')).includes('Welcome, Ada!'),
+    'library edit rebuilt'
+  )
+} finally {
+  await librarySession.stop()
+  rmSync(libraryProject, { recursive: true, force: true })
+  rmSync(join(libraryProject, '..', `${libraryProject.split('/').pop()}-cache`), {
+    recursive: true,
+    force: true
+  })
 }
 console.log('swift-preview: ok')

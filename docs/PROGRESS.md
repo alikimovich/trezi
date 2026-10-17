@@ -2,6 +2,18 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-16 — LKM-271 repair: chat-landed edits and a credible Scraib path
+
+- Review gaps: (1) the native smoke wrote the edit straight into the live tree; (2) Scraib was prose only.
+- Chat landing: `src/native/smoke-swift-preview.ts` (with `smoke-swift-chat.ts`) now sends three turns through the real composer → `agent:send` → per-chat worktree → landing commit → rebuild. Only the provider is a fixture (`stubAgentSendForSmoke`). It asserts the live tree stayed clean until landing, the `trezi/chat-<id>` branch and `Trezi-Chat` trailer, `shown('search-panel', 2)` and `describe` = "Find components". A landed `serch` error then fails the page and its diagnostic reaches the chat as a landing-check `errors` row; the fix turn's prompt must carry that problem. `swift-preview.json` records `provenance.chatLanded` and an empty `syntheticDirectWrites`.
+- Why more than the smoke changed:
+  - `stubAgentSendForSmoke` only replaced `send`; the title, memory and landing commit-message one-shots would still have called the real helper provider after `done`. A stubbed chat now skips all three (`stubbedChats` in `src/main/agent.ts`).
+  - A Swift build outlives the landing check's 2.5 s settle, so a compile error would have been missed. The check now waits (up to 120 s) while the Swift page reports `building` (`test/landing-check.mjs` covers it).
+- Scraib: `src/swift-preview/manifest.ts`/`session.ts` gained `libraries` (a separately built module: `-emit-module -emit-library`, then `-I/-L/-l`/rpath for the host). `test/fixtures/swift-library-app` plus `test/swift-preview.mjs` build and render an app module importing a library and rebuild after a library edit. Disposable-copy checks (never writing into Scraib): scraib-open with `libraries: ScraibKit` renders `ThemePreviewCard`; scraib-xcode renders `ShortcutRecorderView` and `ProviderAPIKeyField` from a hand-picked file list, but a whole-folder build fails on `#Preview` (no `PreviewsMacros` plugin in bare swiftc). Details and what is still unproven: `docs/SWIFT-PREVIEWS.md`. Scraib is not claimed supported.
+- Native runs (3 used): run 1 failed at "composer ready" (no provider read as signed in; the smoke now answers `providers:check-login` only, and types the draft before waiting for Send). Run 2 got through turn 1 (chat-landed edit, rebuild to generation 2, "Find components") and turn 2's landing, then timed out on the landing-check row: the suite disables the production post-landing check (`installNativeChat(..., !testing)`). The smoke now starts the real `LandingChecks` from the same `merged` event. **That last change was not run natively** (no native runs left), so turns 2-3 (diagnostic row, next-prompt context, recovery) are unverified end to end; the status is "needs a native `core` run".
+- Earlier text corrected: "Scraib's app imports ScraibKit/Sparkle" is true of scraib-open, not scraib-xcode (no packages).
+- Evidence: `docs/evidence/lkm-271/scraib-*.png`, `library-greeting-badge.png`, `scraib-validation/`. The earlier `swift-preview.json` there predates chat-landed steps; refresh it from `test/artifacts/native/` after a native run.
+
 ## 2026-10-16 — LKM-271 repair: states-canvas "a dependency edit only builds again"
 
 - Cause (pre-existing, unrelated to the Swift preview change): `StatesWatch` used `fs.watchFile`, and Bun takes its stat baseline on the first poll tick, not when `watchFile` is called. An edit made right after `watch()` is then part of the baseline and is never reported (a standalone repro missed it in 1 of 3 runs). Under load (8 workers plus the swiftc build in `swift-preview`) the first tick comes later, so the test saw 4 builds instead of 5.

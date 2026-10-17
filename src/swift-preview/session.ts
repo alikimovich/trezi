@@ -6,6 +6,7 @@ import {
   collectSources,
   type Diagnostic,
   hostCompileArgs,
+  libraryCompileArgs,
   type PreviewManifest,
   parseDiagnostics,
   parseManifest
@@ -96,7 +97,10 @@ export class PreviewSession {
     }
     stamp(join(this.options.root, MANIFEST))
     try {
-      for (const file of collectSources(this.options.root, this.manifest())) stamp(file)
+      const manifest = this.manifest()
+      for (const file of collectSources(this.options.root, manifest)) stamp(file)
+      for (const library of manifest.libraries)
+        for (const file of collectSources(this.options.root, manifest, library.sources)) stamp(file)
     } catch {}
     return parts.join('\n')
   }
@@ -140,19 +144,44 @@ export class PreviewSession {
     this.state.name = manifest.name
     this.options.log(`Swift previews: ${reason.toLowerCase()}, compiling ${sources.length} files…`)
     const output = join(this.options.cacheDir, `host-${process.pid}-${builds}`)
-    const compiled = await run(
-      '/usr/bin/xcrun',
-      hostCompileArgs({
-        host: this.options.hostSource,
-        sources,
-        moduleCache: this.options.moduleCache ?? join(this.options.cacheDir, '..', 'ModuleCache'),
-        output
-      }),
-      this.options.root
-    )
-    if (this.closed) return
-    if (compiled.code !== 0) {
+    const moduleCache = this.options.moduleCache ?? join(this.options.cacheDir, '..', 'ModuleCache')
+    // Library modules first, each into this build's own folder (the host links to it).
+    const libs = join(this.options.cacheDir, `libs-${process.pid}-${builds}`)
+    const cleanup = () => {
       rmSync(output, { force: true })
+      rmSync(libs, { recursive: true, force: true })
+    }
+    let compiled: Awaited<ReturnType<typeof run>> = { code: 0, output: '', spawnError: false }
+    for (const library of manifest.libraries) {
+      mkdirSync(libs, { recursive: true })
+      this.options.log(`Swift previews: compiling library ${library.name}…`)
+      compiled = await run(
+        '/usr/bin/xcrun',
+        libraryCompileArgs({
+          name: library.name,
+          sources: collectSources(this.options.root, manifest, library.sources),
+          moduleCache,
+          dir: libs
+        }),
+        this.options.root
+      )
+      if (compiled.code !== 0) break
+    }
+    if (compiled.code === 0)
+      compiled = await run(
+        '/usr/bin/xcrun',
+        hostCompileArgs({
+          host: this.options.hostSource,
+          sources,
+          moduleCache,
+          output,
+          libraries: manifest.libraries.map(({ name }) => ({ name, dir: libs }))
+        }),
+        this.options.root
+      )
+    if (this.closed) return cleanup()
+    if (compiled.code !== 0) {
+      cleanup()
       const diagnostics = parseDiagnostics(compiled.output, this.options.root)
       const errors = diagnostics.filter((d) => d.severity === 'error')
       const message = compiled.spawnError
@@ -166,7 +195,7 @@ export class PreviewSession {
       cwd: this.options.root,
       onLog: (line) => this.options.log(`[component] ${line}`),
       onExit: (code, signal) => {
-        rmSync(output, { force: true })
+        cleanup()
         if (this.host !== host || this.closed) return
         this.host = null
         this.state = {
