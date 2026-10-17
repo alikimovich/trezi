@@ -51,6 +51,7 @@ const UNIT = [
   'agent-browser',
   'managed-agent-browser',
   'managed-browser-path',
+  'managed-browser-provider',
   'agent-interact',
   'preview-slow-motion',
   'codex-mcp',

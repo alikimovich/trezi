@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Agents now reach Trezi's managed Vercel agent-browser by its absolute path even when a login shell reorders PATH, so a global CLI no longer wins and no WebKit fallback is used; missing CLI or headless-shell dependencies are reported separately from route errors (LKM-269).
 - Styles now shows active flex and grid gap, direction, wrap and alignment values, with separate row and column gaps and read-only context for uncertain CSS sources (LKM-272).
 - Chat history now shows a pulsing running dot and a green dot for an unseen assistant answer, with Reduce Motion and accessible status labels (LKM-268).
 - Chat form answers now show when they are queued, survive relaunch without an extra send, and proceed when Codex reports a completed turn even if its CLI stream stays open (LKM-265).

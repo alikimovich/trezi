@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 43, 'version bumped to 43')
+assert(TREZI_RULES_VERSION === 44, 'version bumped to 44')
 // LKM-225: agents are pointed at the bundled doctor skill instead of telling the user to debug.
 assert(r.includes(JSON.stringify(DOCTOR_SKILL)), 'rules mention the trezi-doctor skill path')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
@@ -277,8 +277,23 @@ for (const opts of [{}, { workspaceTools: true }]) {
   const rules = treziRules(opts)
   assert(/MUST use `agent-browser`/.test(rules), 'browser: required')
   assert(/command -v agent-browser/.test(rules), 'browser: inspect PATH')
-  assert(/agent-browser --help/.test(rules), 'browser: version-matched help')
+  assert(/"\$TREZI_AGENT_BROWSER" --help/.test(rules), 'browser: version-matched help')
   assert(/bin\/managed\/agent-browser/.test(rules), 'browser: managed command')
+  // LKM-269: Trezi's own wrapper path is allowed, a global CLI path stays forbidden.
+  assert(/only absolute CLI path allowed/.test(rules), 'browser: managed absolute path allowed')
+  assert(
+    /Never call a global `agent-browser` or any other\s+absolute path/.test(rules),
+    'browser: global path forbidden'
+  )
+  assert(
+    /dependency: vercel-cli/.test(rules) && /dependency: headless-shell/.test(rules),
+    'browser: distinct dependency blockers'
+  )
+  assert(
+    /never tell the user to reinstall a browser/.test(rules),
+    'browser: no reinstall for a route problem'
+  )
+  assert(/never substitute\s+WebKit, `preview_evaluate`/.test(rules), 'browser: no WebKit fallback')
   assert(/--session trezi-<task-id>/.test(rules), 'browser: isolated session')
   assert(/Close only your own session/.test(rules), 'browser: isolated teardown')
   for (const size of ['390 844', '768 1024', '1440 900'])
