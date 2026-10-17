@@ -4,6 +4,7 @@ import { projectKey } from '../shared/projectKey'
 import { previewServers } from './preview-evidence'
 import { installProjectDependencies } from './project-dependencies'
 import type { RpcHandlerRegistry } from './rpc-router'
+import { swiftPreviewCommand } from './swift-preview'
 
 /**
  * The dev-server routes under the Swift runtime owner (S06). Same channels and
@@ -48,9 +49,11 @@ export function registerServiceDevServer(
         await installProjectDependencies(opts.root)
         if (generations.get(key) !== generation) throw new Error('Preview start was cancelled.')
       }
+      // A Swift project has no command of its own: Trezi's preview driver serves it.
       const server = await runtime.start({
         root: opts.root,
-        command: opts.command,
+        command:
+          opts.framework === 'swift' && !opts.command.trim() ? swiftPreviewCommand() : opts.command,
         framework: opts.framework,
         ...(opts.cleanCache ? { cleanCache: true } : {})
       })

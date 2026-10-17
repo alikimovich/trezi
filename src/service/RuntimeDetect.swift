@@ -11,11 +11,17 @@ enum RuntimeDetect {
 
     static let setupOnlyEntries: Set<String> = [".git", ".gitignore", ".DS_Store", ".trezi", ".praxis"]
     static let managers = ["bun", "pnpm", "yarn", "npm"]
+    static let swiftPreviewManifest = "trezi-previews.json"
 
     /// `DetectedProject` as a JS object, in the TS key order.
     static func detect(root: String) throws -> JSValue {
         let manifest = root + "/package.json"
         guard exists(manifest) else {
+            // A native Swift project with declared component previews (LKM-271): the
+            // backend runs Trezi's own preview driver, never a command from the project.
+            if exists(root + "/" + swiftPreviewManifest) {
+                return set(staticProject(root: root, name: nil), "framework", .string(JSText("swift")))
+            }
             // No package.json: a vanilla site if there is an HTML entry to serve.
             if staticEntry(root) != nil { return staticProject(root: root, name: nil) }
             let entries: [String]

@@ -1,0 +1,7 @@
+{
+  "name": "Swift app + library demo",
+  "sources": ["App"],
+  "previews": ["Previews"],
+  "exclude": ["App/FixtureApp.swift"],
+  "libraries": [{ "name": "GreetKit", "sources": ["Kit/Sources/GreetKit"] }]
+}

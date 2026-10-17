@@ -24,6 +24,9 @@ src/main/
                   once, shared by styles:read and layers:read
   devserver.ts    registers the devserver:* routes, served by the runtime owner
                   through devserver-service.ts
+  swift-preview.ts the command for a `framework: 'swift'` project (demo, LKM-271):
+                  bundled Bun + src/swift-preview/driver.ts, never a project
+                  command. Driver, AppKit host and limits: docs/SWIFT-PREVIEWS.md
   provider-sign-in.ts  starts user-initiated Claude Code or Codex app-server browser
                   login; provider CLIs own credential storage and the resulting
                   readiness is refreshed through providers:check-login

@@ -238,6 +238,7 @@ const UNIT = [
   'native-smoke-groups',
   'docs-merge-union',
   'versioning',
+  'swift-preview',
   'lint'
 ]
 
@@ -265,6 +266,8 @@ const UNIT_TIMEOUT_MS = {
   'native-composer-layout': 240_000,
   'native-chat-latest-settle': 240_000,
   'keychain-rebuild': 300_000,
+  // LKM-271: four compiles of the preview host and a fixture (6 s warm) outside the lane.
+  'swift-preview': 240_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,
   'setup-vite-real': 300_000

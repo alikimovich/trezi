@@ -365,6 +365,45 @@ assert.equal(await check({}, 0, { cancelled: () => true }), null)
   forgetLandingContext(CHAT)
 }
 
+// LKM-271: a preview that compiles the landed files (Swift components) is still building at
+// the settle time. The check waits for the build, then reads the compile error it logged.
+{
+  let building = 3
+  const { host, calls } = fakeHost({
+    page: async () => ({
+      blank: false,
+      overlay: null,
+      startedAt: -1,
+      servedRevision: OLDER,
+      building: building-- > 0
+    }),
+    errors: async () =>
+      building < 0 ? [{ text: 'Swift preview build failed: A.swift:3: x', at: 5000 }] : []
+  })
+  const result = await checkAfterLanding('/repo', 0, LANDED, host)
+  assert.equal(result.problem, 'errors')
+  assert.deepEqual(result.errors, ['Swift preview build failed: A.swift:3: x'])
+  assert.ok(
+    calls.waited >= LANDING_CHECK.settleMs + 3 * LANDING_CHECK.pollMs,
+    'It waits for the build'
+  )
+
+  // A build that never ends does not hang the check.
+  const stuck = fakeHost({
+    page: async () => ({
+      blank: false,
+      overlay: null,
+      startedAt: -1,
+      servedRevision: OLDER,
+      building: true
+    })
+  })
+  assert.equal(await checkAfterLanding('/repo', 0, LANDED, stuck.host), 'passed')
+  assert.ok(
+    stuck.calls.waited <= LANDING_CHECK.settleMs + LANDING_CHECK.buildMs + LANDING_CHECK.pollMs
+  )
+}
+
 console.log(
-  'LANDING CHECK OK — pass is silent, one warning row per problem type, agent-verified landings skipped, next-turn context, row actions'
+  'LANDING CHECK OK — pass is silent, one warning row per problem type, agent-verified landings skipped, next-turn context, row actions, builds awaited'
 )

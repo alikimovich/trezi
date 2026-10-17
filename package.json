@@ -64,6 +64,7 @@
     "test:project-memory": "bun test/project-memory.mjs",
     "test:memory-owner": "bun test/memory-owner.mjs",
     "test:runtime-owner": "bun test/runtime-owner.mjs",
+    "test:swift-preview": "bun test/swift-preview.mjs",
     "test:repository-owner": "bun test/repository-owner.mjs",
     "test:git-messages": "bun test/git-messages.mjs",
     "test:repository-recovery": "bun test/repository-recovery.mjs",

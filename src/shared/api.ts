@@ -21,6 +21,9 @@ export type Framework =
   // A plain static site (vanilla HTML/CSS/JS, no package.json or build step) —
   // served by trezi's own built-in static file server, not a spawned dev command.
   | 'static'
+  // A native Swift project declaring component previews in `trezi-previews.json`,
+  // previewed through Trezi's Swift preview driver (`docs/SWIFT-PREVIEWS.md`).
+  | 'swift'
   | 'unknown'
 
 /**
