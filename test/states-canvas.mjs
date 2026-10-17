@@ -232,21 +232,33 @@ const built = services.build
 services.build = async (input) => ({ ...(await built(input)), inputs: [sourceFile, toneFile] })
 await controller.show(root, badge)
 const counts = () => [builds.length, probes]
-// The inputs are polled; wait for the rebuild, then a little longer for a stray second one.
-const settle = async (count) => {
-  for (let waited = 0; builds.length < count && waited < 5000; waited += 50)
+// The inputs are polled, and a poll whose baseline was taken after the edit never sees it
+// under host load. Edit `file`, wait until the build count reaches `count` (touching it again
+// every few seconds while nothing has built), then a little longer for a stray second build.
+const settle = async (file, count) => {
+  const deadline = Date.now() + 30_000
+  let touched = Date.now()
+  appendFileSync(file, '\n')
+  while (builds.length < count) {
+    if (Date.now() > deadline)
+      throw new Error(
+        `the edit to ${file} did not build again within 30 s; builds ${builds.length}, probes ${probes}, expected ${count} builds`
+      )
+    if (Date.now() - touched > 3000) {
+      appendFileSync(file, '\n')
+      touched = Date.now()
+    }
     await new Promise((resolve) => setTimeout(resolve, 50))
+  }
   await new Promise((resolve) => setTimeout(resolve, 300))
 }
 const [built0, probed0] = counts()
 const session = controller.view.session
-appendFileSync(toneFile, '\n')
-await settle(built0 + 1)
+await settle(toneFile, built0 + 1)
 assert.deepEqual(counts(), [built0 + 1, probed0], 'a dependency edit only builds again')
 assert.notEqual(controller.view.session, session, 'the rebuilt bundle draws in a new session')
 assert.equal(last().command, 'open')
-appendFileSync(sourceFile, '\n')
-await settle(built0 + 2)
+await settle(sourceFile, built0 + 2)
 assert.deepEqual(counts(), [built0 + 2, probed0 + 1], 'a component edit discovers again')
 assert.equal(await controller.action('back'), true)
 services.build = built
