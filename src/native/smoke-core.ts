@@ -1238,6 +1238,7 @@ export async function runNativeCoreSmoke(
   const results = await runSmokeChecks(selectSmokeChecks(checks, parseSmokeGroups(process.argv)), {
     capture: (name) => captureSmokeFailure(host, artifacts, name),
     restore: () => restoreSmokeState(host, firstProject),
+    deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,
     inject: parseInjectedFailures(process.env.TREZI_NATIVE_SMOKE_FAIL),
     halted: () => (hostClosed ? 'native host (it exited)' : undefined),
     ...smokeFocusHooks(host)

@@ -238,6 +238,10 @@ const settle = async (count) => {
     await new Promise((resolve) => setTimeout(resolve, 50))
   await new Promise((resolve) => setTimeout(resolve, 300))
 }
+// `watchFile` takes its baseline stat on its first poll (400 ms): an edit before it is never
+// seen, which a loaded machine turns into a missed rebuild. Edit only once polling started.
+const polling = () => new Promise((resolve) => setTimeout(resolve, 1000))
+await polling()
 const [built0, probed0] = counts()
 const session = controller.view.session
 appendFileSync(toneFile, '\n')
@@ -245,6 +249,7 @@ await settle(built0 + 1)
 assert.deepEqual(counts(), [built0 + 1, probed0], 'a dependency edit only builds again')
 assert.notEqual(controller.view.session, session, 'the rebuilt bundle draws in a new session')
 assert.equal(last().command, 'open')
+await polling()
 appendFileSync(sourceFile, '\n')
 await settle(built0 + 2)
 assert.deepEqual(counts(), [built0 + 2, probed0 + 1], 'a component edit discovers again')

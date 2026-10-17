@@ -181,6 +181,8 @@ try {
   // --- prewarm and probes -------------------------------------------------------------------
   const a = await chat()
   await until(() => debugLines('CLI started').length === 1, 'the CLI started before any message')
+  // The CLI can start once the faster probe is done; the other probe logs when it finishes.
+  await until(() => probes().length >= 2, 'both CLIs were probed')
   const first = probes()
   assert.deepEqual(
     first.map((p) => p.name).sort(),

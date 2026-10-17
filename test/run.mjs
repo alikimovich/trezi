@@ -260,6 +260,8 @@ const UNIT_TIMEOUT_MS = {
   'workflow-owner': 240_000,
   // Compiles the same workflow fixture through the LKM-255 operator script.
   'live-publish-attribution': 240_000,
+  // Runs Next and Vite dev servers in turn: 52 s alone, over 120 s at load average 35.
+  'island-flicker-frameworks': 240_000,
   // Same (LKM-217): Swift fixtures that compile the shared service or host sources. A cold
   // 8-worker run took 120 s+ for the first two and 106–120 s for the last two, against
   // 22–40 s on a warm tree; a longer budget separates queueing from a real hang.

@@ -87,7 +87,10 @@ const shell = new NativeShellController(
 )
 shell.render()
 
-/** The slowest of a few runs, so one GC pause does not decide it either way. */
+/**
+ * The median of five runs, like the New chat timing (LKM-211): re-serializing the whole chat
+ * slows every run, while one scheduler stall on a loaded machine slows only one.
+ */
 async function measure(label, run) {
   const times = []
   for (let i = 0; i < 5; i++) {
@@ -95,11 +98,11 @@ async function measure(label, run) {
     await run(i)
     times.push(performance.now() - start)
   }
-  const worst = Math.max(...times)
+  const median = [...times].sort((a, b) => a - b)[2]
   console.log(
-    `${label}: worst ${worst.toFixed(1)} ms of ${times.map((t) => t.toFixed(1)).join(', ')}`
+    `${label}: median ${median.toFixed(1)} ms of ${times.map((t) => t.toFixed(1)).join(', ')}`
   )
-  assert.ok(worst < BUDGET_MS, `${label} took ${worst.toFixed(1)} ms (budget ${BUDGET_MS} ms)`)
+  assert.ok(median < BUDGET_MS, `${label} took ${median.toFixed(1)} ms (budget ${BUDGET_MS} ms)`)
 }
 
 // The mode switch: the shell action, plus the chat frame it shares the loop with.

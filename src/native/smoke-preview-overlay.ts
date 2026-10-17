@@ -11,12 +11,14 @@ import { nativeWorkspace } from './workspace-runtime'
 type State = any
 const near = (actual: number, expected: number, label: string, tolerance = 0.5) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: ${actual} ≠ ${expected}`)
-// The project's own DOM, without the preview instrumentation's hosts.
+// The project's own DOM, without the preview instrumentation's hosts. The static site's
+// live-reload snippet carries the tree version it was served at; any file event under the
+// root during the check reloads the page with the next one, which no overlay causes.
 const DOM = `(() => {
   const skip = '[data-trezi-overlay],[data-trezi-cover],[data-trezi-viewport-size],[data-trezi-frame],[data-trezi-frame-style],[data-trezi-status],[data-trezi-composer],[data-trezi-toolbar],[data-trezi-drop-line]'
   const clone = document.documentElement.cloneNode(true)
   for (const el of clone.querySelectorAll(skip)) el.remove()
-  return clone.outerHTML + '|' + document.styleSheets.length
+  return clone.outerHTML.replace(/var v="\\d+",es=new EventSource/, 'var v="",es=new EventSource') + '|' + document.styleSheets.length
 })()`
 
 /** LKM-205: rulers, guides and layout grids. Shortcuts and toolbar, a guide created by

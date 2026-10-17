@@ -131,6 +131,8 @@ export interface ClaudeCandidates {
   installed?: string[]
   /** The `security` tool; by default the first one on PATH, else `/usr/bin/security`. */
   security?: string
+  /** Per-probe kill deadline in ms; defaults to `PROBE_TIMEOUT` (tests with slow stand-ins raise it). */
+  probeTimeout?: number
 }
 
 let cached: Promise<ClaudeCli> | null = null
@@ -160,11 +162,12 @@ export function resolveClaudeCli(
   const probe = (async (): Promise<ClaudeCli> => {
     const path = candidates.bundled !== undefined ? candidates.bundled : bundledClaude()
     const paths = candidates.installed ?? installedClaudes(process.env, path)
+    const timeout = candidates.probeTimeout ?? PROBE_TIMEOUT
     const [auth, installed] = await Promise.all([
       path
-        ? claudeAuthStatus(path)
+        ? claudeAuthStatus(path, timeout)
         : Promise.resolve<ClaudeAuth>({ loggedIn: null, error: 'not found' }),
-      Promise.all(paths.map(async (p) => ({ path: p, auth: await claudeAuthStatus(p) })))
+      Promise.all(paths.map(async (p) => ({ path: p, auth: await claudeAuthStatus(p, timeout) })))
     ])
     const bundled = { path, auth }
     if (auth.loggedIn === true) return { source: 'bundled', bundled, installed }
