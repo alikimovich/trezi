@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native previews Stage 2A: Xcode toolchain selection and intact `#Preview` (LKM-274, held branch)
+
+Stage 2 is partial: only 2A is done. Details: `docs/SWIFT-PREVIEWS-PLAN.md`, `docs/SWIFT-PREVIEWS.md` (Toolchain).
+
+- [x] Discover `/Applications/Xcode*.app`, `xcode-select -p`, the command-line tools and `DEVELOPER_DIR`, each with Xcode/Swift version, macOS SDK and `PreviewsMacros` (`src/swift-preview/toolchain.ts`).
+- [x] Precedence: manifest `developerDir` / `TREZI_DEVELOPER_DIR`, then env `DEVELOPER_DIR`, then the newest Xcode whose probe passes, then `xcode-select`; the reason is recorded.
+- [x] Intact `#Preview` probe with normal compiler flags, cached by toolchain path, versions, SDK and plugin; supported / unsupported / broken / unavailable (environment, not cached) with actionable messages. No sandbox-disabling flags.
+- [x] Process-local `DEVELOPER_DIR` for every spawned tool (graph `xcodebuild`/`plutil`/`swift package`, module and host `xcrun swiftc`); module and graph caches keyed by the selection; `xcode-select` only read.
+- [x] Driver `/state` and `/graph`, backend `project:native` `toolchain`, page header chip and Project panel section.
+- [x] Docs and `plan.ts` warnings corrected: no "bare swiftc"/strip guidance; the requirement is a full Xcode selected process-locally.
+- [x] Tests: `test/swift-preview-toolchain.mjs` (scripted toolchains plus a real intact `#Preview` through the driver with `xcode-select -p` checked); `swift-graph` smoke asserts the toolchain.
+- [ ] A settings UI to pick the developer directory (today: manifest field and `TREZI_DEVELOPER_DIR`).
+- [ ] Show `#Preview` bodies as previews (Stage 3); Scraib full-target build through 2A recorded as Stage 6 evidence.
+
 ## Native previews Stage 1: Xcode/SwiftPM discovery and target-graph builds (LKM-273, held branch)
 
 Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
@@ -15,7 +29,7 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] Scraib-shaped fixture `test/fixtures/swift-multi-module`; unit tests `swift-preview-graph`, `swift-preview-target`; native smoke `swift-graph` (group `core`); evidence in `docs/evidence/lkm-273/`.
 - [x] Scraib-xcode disposable-copy discovery and target build recorded as progress (blocked by `#Preview`, then resources and StoreKit).
 - [x] Review repair: the plan doc follows the ticket's Stages 1–8 (decision 9a00253c); `project:native` asks only Trezi's own driver, never a JS dev server (unit assertion in `test/swift-preview-graph.mjs`).
-- [ ] Stage 2: compiler settings, SwiftPM dependencies (local, remote, binary), incremental builds, `#Preview` compiling.
+- [ ] Stage 2 (partial): `#Preview` compiling done as 2A (LKM-274, above); compiler settings, SwiftPM dependencies (local, remote, binary), incremental builds not started.
 - [ ] Stage 3: component selection and a UI that writes the Trezi-side manifest, sample states, environment injection (StoreKit), resources; the choice of the native preview in a mixed repo with a JS dev script.
 - [ ] Stage 4: service-owned host lifecycle (including the second server for mixed repos), driver packaging, OS-level input, glass/material fidelity.
 - [ ] Stages 5–8: agent diagnostics and source feedback, practical Scraib acceptance, full macOS app integration, iOS simulator.

@@ -14,6 +14,8 @@ import {
   parseManifest
 } from './manifest'
 import { type BuildPlan, planTargetBuild } from './plan'
+import type { ToolchainOptions, ToolchainSelection } from './toolchain'
+import { ToolchainPicker } from './toolchain-picker'
 
 export interface SessionState {
   /** building: compiling; ready: the host runs the latest sources; failed: the
@@ -38,6 +40,8 @@ export interface SessionState {
   native: NativeGraph | null
   /** The latest target-graph build plan, for a manifest with `target`. */
   plan: BuildPlan | null
+  /** The developer directory every tool runs with, and whether it expands `#Preview` (LKM-274). */
+  toolchain: ToolchainSelection | null
 }
 
 const MANIFEST = 'trezi-previews.json'
@@ -65,6 +69,7 @@ export class PreviewSession {
   private closed = false
   private graph: Promise<NativeGraph> | null = null
   private graphStamp = ''
+  private readonly picker: ToolchainPicker
 
   constructor(
     private readonly options: {
@@ -78,9 +83,14 @@ export class PreviewSession {
       /** Trezi's own folder for this project; a manifest there wins over the repo's. */
       manifestDir?: string
       graph?: Partial<GraphOptions>
+      /** The app's developer directory setting (`TREZI_DEVELOPER_DIR`); the manifest's wins. */
+      developerDir?: string
+      /** Discovery and probe options (tests point them at scripted toolchains). */
+      toolchain?: Partial<ToolchainOptions>
     }
   ) {
     const treziPath = options.manifestDir ? join(options.manifestDir, MANIFEST) : ''
+    this.picker = new ToolchainPicker(options)
     this.state = {
       status: 'building',
       name: '',
@@ -94,7 +104,8 @@ export class PreviewSession {
       stale: false,
       manifest: { source: 'none', path: '', treziPath },
       native: null,
-      plan: null
+      plan: null,
+      toolchain: null
     }
   }
 
@@ -112,8 +123,26 @@ export class PreviewSession {
     await this.host?.stop()
   }
 
+  /** Keyed by the selected toolchain, so switching toolchains starts a fresh cache. */
   private moduleCache(): string {
-    return this.options.moduleCache ?? join(this.options.cacheDir, '..', 'ModuleCache')
+    const base = this.options.moduleCache ?? join(this.options.cacheDir, '..', 'ModuleCache')
+    return join(base, `toolchain-${this.state.toolchain?.key || 'none'}`)
+  }
+
+  /**
+   * The developer directory for this project (`toolchain.ts`): the manifest's
+   * `developerDir`, else the app's, else discovery. Selected again when what it
+   * depends on changed, and on a requested rebuild (which also rereads xcode-select).
+   */
+  async toolchain(manifest: PreviewManifest | null, force = false): Promise<ToolchainSelection> {
+    const override = manifest?.developerDir
+      ? { path: manifest.developerDir, from: `${this.state.manifest.path} "developerDir"` }
+      : this.options.developerDir
+        ? { path: this.options.developerDir, from: 'TREZI_DEVELOPER_DIR' }
+        : undefined
+    const selection = await this.picker.pick(override, force)
+    this.state.toolchain = this.picker.current
+    return selection
   }
 
   /**
@@ -129,28 +158,43 @@ export class PreviewSession {
       ) ?? []
     )
     const paths = [...graphInputs(this.options.root, discoverNative(this.options.root)), ...dirs]
-    return paths.map(stamp).join('\n')
+    return [this.state.toolchain?.key ?? '', ...paths.map(stamp)].join('\n')
+  }
+
+  /** The current manifest, or null when there is none or it does not parse. */
+  private manifestOrNull(): PreviewManifest | null {
+    try {
+      return this.loadManifest()?.manifest ?? null
+    } catch {
+      return null
+    }
   }
 
   /**
    * The project's graph, read on first use (a target build, the setup screen or the
-   * page's project panel) and again when its inputs changed.
+   * page's project panel) and again when its inputs or the toolchain changed. Every
+   * tool runs with the selected toolchain's `DEVELOPER_DIR`.
    */
   nativeGraph(): Promise<NativeGraph> {
     if (this.graph && this.nativeStamp() === this.graphStamp) return this.graph
-    const graph = nativeGraph(this.options.root, {
-      cacheDir: this.options.cacheDir,
-      moduleCache: this.moduleCache(),
-      ...this.options.graph
-    }).then((read) => {
-      if (this.graph !== graph) return read
-      this.state.native = read
-      // Reading the targets adds their folders to the stamp.
-      this.graphStamp = this.nativeStamp()
-      for (const error of [...read.errors, ...read.containers.flatMap((c) => c.errors)])
-        this.options.log(`Swift previews: ${error}`)
-      return read
-    })
+    const graph = this.toolchain(this.manifestOrNull())
+      .then((selection) =>
+        nativeGraph(this.options.root, {
+          cacheDir: join(this.options.cacheDir, `graph-${selection.key || 'none'}`),
+          moduleCache: this.moduleCache(),
+          env: selection.env,
+          ...this.options.graph
+        })
+      )
+      .then((read) => {
+        if (this.graph !== graph) return read
+        this.state.native = read
+        // Reading the targets adds their folders to the stamp.
+        this.graphStamp = this.nativeStamp()
+        for (const error of [...read.errors, ...read.containers.flatMap((c) => c.errors)])
+          this.options.log(`Swift previews: ${error}`)
+        return read
+      })
     this.graph = graph
     this.graphStamp = this.nativeStamp()
     return graph
@@ -224,20 +268,29 @@ export class PreviewSession {
     let loaded: LoadedManifest | null
     let previews: string[]
     let sources: string[]
+    let toolchain: ToolchainSelection
     try {
       loaded = this.loadManifest()
+      toolchain = await this.toolchain(loaded?.manifest ?? null, reason === 'Rebuild requested')
       if (!loaded) {
         await this.nativeGraph()
         this.built = this.fingerprint()
         return this.setup(started)
       }
+      if (!toolchain.toolchain || toolchain.toolchain.errors.length)
+        throw new Error(toolchain.message)
       const { manifest, previewRoot } = loaded
       previews = collectSources(previewRoot, manifest, manifest.previews)
       sources = collectSources(this.options.root, manifest, manifest.sources)
       this.state.plan = manifest.target
         ? planTargetBuild(
             await this.nativeGraph(),
-            { target: manifest.target, project: manifest.project, exclude: manifest.exclude },
+            {
+              target: manifest.target,
+              project: manifest.project,
+              exclude: manifest.exclude,
+              preview: toolchain.capability ?? undefined
+            },
             (file) => readFileSync(join(this.options.root, file), 'utf8')
           )
         : null
@@ -293,7 +346,8 @@ export class PreviewSession {
           dependencies: module.dependencies,
           testing: module.testing
         }),
-        this.options.root
+        this.options.root,
+        toolchain.env
       )
       if (compiled.code !== 0) {
         failedModule = module.module
@@ -310,7 +364,8 @@ export class PreviewSession {
           output,
           libraries: modules.map(({ module }) => ({ name: module, dir: libs }))
         }),
-        this.options.root
+        this.options.root,
+        toolchain.env
       )
     // Target-graph builds name the module of each diagnostic; the host is "previews".
     const attribute = (found: Diagnostic[], module: string) =>
@@ -324,9 +379,15 @@ export class PreviewSession {
       )
       const errors = diagnostics.filter((d) => d.severity === 'error')
       const where = failedModule && plan ? ` in ${failedModule}` : ''
+      // A #Preview the toolchain cannot expand: say which toolchain and what to do.
+      const macros =
+        /PreviewsMacros|swift-plugin-server/.test(compiled.output) &&
+        toolchain.capability?.status !== 'supported'
+          ? ` ${toolchain.message}`
+          : ''
       const message = compiled.spawnError
         ? 'Could not run swiftc: install Xcode or its command-line tools.'
-        : `Build failed${where}: ${errors.length || 'unknown'} error${errors.length === 1 ? '' : 's'}.`
+        : `Build failed${where}: ${errors.length || 'unknown'} error${errors.length === 1 ? '' : 's'}.${macros}`
       for (const d of errors.slice(0, 20))
         this.options.log(`${d.file}:${d.line}:${d.column}: error: ${d.message}`)
       return this.fail(started, message, compiled.output, diagnostics)
@@ -433,10 +494,15 @@ function stamp(path: string): string {
 function run(
   command: string,
   args: string[],
-  cwd: string
+  cwd: string,
+  env: Record<string, string>
 ): Promise<{ code: number | null; output: string; spawnError: boolean }> {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, {
+      cwd,
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
     let output = ''
     const collect = (chunk: Buffer) => {
       output = (output + chunk.toString('utf8')).slice(-200_000)

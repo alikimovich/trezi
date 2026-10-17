@@ -65,7 +65,13 @@ export function findTarget(
 
 export function planTargetBuild(
   graph: NativeGraph,
-  select: { target: string; project?: string; exclude?: string[] },
+  select: {
+    target: string
+    project?: string
+    exclude?: string[]
+    /** The selected toolchain's `#Preview` capability (LKM-274, `toolchain.ts`). */
+    preview?: { status: string; message: string }
+  },
   read: (path: string) => string
 ): BuildPlan {
   const { container, target } = findTarget(graph, select.target, select.project)
@@ -120,10 +126,15 @@ export function planTargetBuild(
       if (PREVIEW_MACRO.test(text)) previews.push(file)
     }
     if (!sources.length) blockers.push(`${t.name} has no Swift sources left to build.`)
-    if (previews.length)
+    if (previews.length) {
+      const files = `${previews.length} file${previews.length === 1 ? '' : 's'} use #Preview`
+      const preview = select.preview
       warnings.push(
-        `${t.name}: ${previews.length} file${previews.length === 1 ? '' : 's'} use #Preview, which bare swiftc cannot expand (Stage 2): ${previews.join(', ')}`
+        preview?.status === 'supported'
+          ? `${t.name}: ${files}; they compile with the selected Xcode, but #Preview bodies are not shown as previews yet (Stage 3): ${previews.join(', ')}`
+          : `${t.name}: ${files}, which needs PreviewsMacros from a full Xcode selected for Trezi's processes (${preview?.message ?? 'no toolchain was checked'}): ${previews.join(', ')}`
       )
+    }
     if (t.resources.length)
       warnings.push(
         `${t.name}: resources are not bundled into the preview (Stage 3): ${t.resources.join(', ')}`

@@ -54,6 +54,8 @@ export interface GraphOptions {
   xcodebuild?: string
   xcrun?: string
   plutil?: string
+  /** The selected toolchain's `DEVELOPER_DIR` for every tool run (LKM-274, `toolchain.ts`). */
+  env?: Record<string, string>
 }
 
 interface RunResult {
@@ -178,12 +180,13 @@ function schemeFiles(root: string, bundle: string): string[] {
 async function schemes(
   root: string,
   container: NativeContainer,
-  options: Required<Pick<GraphOptions, 'xcodebuild'>> & { timeoutMs: number }
+  options: Required<Pick<GraphOptions, 'xcodebuild' | 'env'>> & { timeoutMs: number }
 ) {
   const flag = container.kind === 'workspace' ? '-workspace' : '-project'
   const listed = await runTool(options.xcodebuild, ['-list', '-json', flag, container.path], {
     cwd: root,
-    timeoutMs: options.timeoutMs
+    timeoutMs: options.timeoutMs,
+    env: options.env
   })
   if (!listed.error) {
     try {
@@ -205,12 +208,12 @@ async function buildSettings(
   root: string,
   project: string,
   target: NativeTarget,
-  options: { xcodebuild: string; timeoutMs: number }
+  options: { xcodebuild: string; timeoutMs: number; env: Record<string, string> }
 ) {
   const result = await runTool(
     options.xcodebuild,
     ['-showBuildSettings', '-json', '-project', project, '-target', target.name],
-    { cwd: root, timeoutMs: options.timeoutMs }
+    { cwd: root, timeoutMs: options.timeoutMs, env: options.env }
   )
   if (result.error) return target.notes.push(result.error)
   try {
@@ -248,7 +251,7 @@ async function xcodeProject(
   const converted = await runTool(
     options.plutil,
     ['-convert', 'json', '-o', '-', join(path, 'project.pbxproj')],
-    { cwd: root, timeoutMs: options.timeoutMs }
+    { cwd: root, timeoutMs: options.timeoutMs, env: options.env }
   )
   if (converted.error) container.errors.push(converted.error)
   else {
@@ -306,7 +309,7 @@ async function swiftPackage(
       {
         cwd: join(root, dir),
         timeoutMs: options.timeoutMs,
-        env: { CLANG_MODULE_CACHE_PATH: options.moduleCache }
+        env: { ...options.env, CLANG_MODULE_CACHE_PATH: options.moduleCache }
       }
     )
   let described = await describe(true)
@@ -368,6 +371,7 @@ export async function nativeGraph(root: string, options: GraphOptions): Promise<
     xcodebuild: '/usr/bin/xcodebuild',
     xcrun: '/usr/bin/xcrun',
     plutil: '/usr/bin/plutil',
+    env: {},
     ...options
   }
   const structure = discoverNative(root)

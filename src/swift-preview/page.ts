@@ -20,7 +20,9 @@ export function previewPage(token: string): string {
   nav button { font: inherit; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); background: transparent; color: inherit; border-radius: 6px; padding: 4px 10px; cursor: default; }
   nav button[aria-current="true"] { background: color-mix(in srgb, AccentColor 18%, transparent); border-color: AccentColor; }
   nav button small { opacity: .6; margin-left: 4px; }
-  #status { margin-left: auto; padding: 3px 10px; border-radius: 999px; font-weight: 600; background: color-mix(in srgb, CanvasText 10%, transparent); }
+  #toolchain { margin-left: auto; font-size: 11px; opacity: .7; }
+  #toolchain[data-preview="unsupported"], #toolchain[data-preview="broken"], #toolchain[data-preview="unavailable"] { opacity: 1; color: #b25e00; }
+  #status { padding: 3px 10px; border-radius: 999px; font-weight: 600; background: color-mix(in srgb, CanvasText 10%, transparent); }
   body[data-status="ready"] #status { background: color-mix(in srgb, #2e9d4f 22%, transparent); }
   body[data-status="building"] #status { background: color-mix(in srgb, #d18a00 25%, transparent); }
   body[data-status="failed"] #status, body[data-status="error"] #status { background: color-mix(in srgb, #d0342c 25%, transparent); }
@@ -49,7 +51,7 @@ export function previewPage(token: string): string {
 </style>
 </head>
 <body data-status="building" data-generation="0">
-<header><h1 id="name">Swift previews</h1><nav id="picker"></nav><span id="status">Building…</span></header>
+<header><h1 id="name">Swift previews</h1><nav id="picker"></nav><span id="toolchain"></span><span id="status">Building…</span></header>
 <main>
   <div id="stage" tabindex="0" aria-label="Component preview"><img id="frame" alt=""></div>
   <section id="problems" aria-live="polite"><h2 id="problem-title">Build failed</h2><ol id="problem-list"></ol><pre id="problem-output"></pre></section>
@@ -141,6 +143,14 @@ export function previewPage(token: string): string {
     }))
     $('problem-output').textContent = errors.length ? '' : state.output
     $('footer').textContent = state.status === 'ready' ? state.message + ' Click the component to interact; keys go to it while it has focus.' : state.message
+    // The toolchain the driver builds with (LKM-274): its name and whether #Preview expands.
+    const tc = state.toolchain
+    const preview = tc ? (tc.capability ? tc.capability.status : 'none') : ''
+    const marks = { supported: '#Preview supported', unsupported: 'no #Preview', broken: '#Preview broken', unavailable: '#Preview not checked here', none: '' }
+    $('toolchain').textContent = tc ? [(tc.toolchain ? tc.toolchain.label : 'No toolchain'), marks[preview]].filter(Boolean).join(' · ') : ''
+    $('toolchain').title = tc ? tc.message : ''
+    $('toolchain').dataset.preview = preview
+    document.body.dataset.toolchain = preview
     renderProject(state)
   }
 
@@ -159,7 +169,7 @@ export function previewPage(token: string): string {
   let projectShown = ''
   const renderProject = (state) => {
     const native = state.native
-    const key = JSON.stringify([native, state.plan, state.manifest])
+    const key = JSON.stringify([native, state.plan, state.manifest, state.toolchain])
     if (key === projectShown) return
     projectShown = key
     if (state.status === 'setup') $('project').open = true
@@ -175,6 +185,17 @@ export function previewPage(token: string): string {
       manifest.source === 'none' ? 'None yet.' : 'Using ' + (manifest.source === 'trezi' ? "Trezi's copy" : "the repo's") + ': ' + manifest.path,
       ...(manifest.treziPath ? ["Trezi's copy (wins, the repo stays untouched): " + manifest.treziPath] : [])
     ]))
+    const tc = state.toolchain
+    if (tc) {
+      body.push(el('h3', 'Toolchain'))
+      const t = tc.toolchain
+      body.push(list([
+        t ? t.label + ': ' + t.developerDir + ' (Swift ' + (t.swiftVersion || '?') + ', macOS SDK ' + (t.sdkVersion || '?') + ')' : 'None found.',
+        'Why: ' + tc.reason,
+        el('li', tc.message, tc.capability && tc.capability.status === 'supported' ? '' : 'blocker'),
+        el('li', 'For Trezi only (DEVELOPER_DIR); xcode-select stays ' + (tc.systemDefault || 'unset') + '.', 'muted')
+      ]))
+    }
     if (!native) body.push(el('p', 'The project structure is read when this panel opens.', 'muted'))
     for (const error of native ? native.errors : []) body.push(el('p', error, 'muted'))
     for (const c of containers) {

@@ -13,7 +13,7 @@ means no code yet.
 | Stage | Scope | Status |
 | --- | --- | --- |
 | 1 | Discovery, opening, multi-module builds | done (demo), LKM-273 |
-| 2 | Compiler settings, SwiftPM dependencies, incremental builds, `#Preview` handling | not started |
+| 2 | Toolchain selection and `#Preview` (2A), compiler settings, SwiftPM dependencies, incremental builds | partial: 2A done (demo), LKM-274; the rest not started |
 | 3 | Component selection, sample states, environment/dependency injection, resources | not started |
 | 4 | Service-owned host lifecycle, driver packaging in the distributed app, OS-level input, glass/material render fidelity | not started |
 | 5 | Agent diagnostics and source feedback | partial |
@@ -61,10 +61,49 @@ means no code yet.
   (`src/native/smoke-swift-graph.ts`). Evidence: `docs/evidence/lkm-273/`.
 - Not done in Stage 1: no UI to choose a target or write the Trezi-side manifest, no
   native preview in a mixed repo that also launches as JS, and the graph was exercised
-  against real `xcodebuild` output only through scripted fixtures (this machine has only
-  the command-line tools).
+  against real `xcodebuild` output only through scripted fixtures (that run had only
+  the command-line tools selected; Stage 2A selects a full Xcode when one is installed).
 
-## Stage 2: compiler settings, SwiftPM dependencies, incremental builds, `#Preview`: not started
+## Stage 2: toolchain and `#Preview`, compiler settings, SwiftPM dependencies, incremental builds: partial
+
+### 2A: toolchain selection and `#Preview` (LKM-274): done (demo)
+
+`#Preview` is an external macro whose implementation, `PreviewsMacros`, ships only in
+full Xcode (`libPreviewsMacros.dylib` in the macOS platform's compiler plugins). The
+command-line tools do not have it; `swiftc` from a full Xcode expands an intact
+`#Preview` with its normal flags. So the requirement is a full Xcode **selected for
+Trezi's processes**, not source changes: files with `#Preview` compile unmodified.
+
+- Discovery and selection (`src/swift-preview/toolchain.ts`): every
+  `/Applications/Xcode*.app` (versioned names included), `xcode-select -p`, the
+  command-line tools and `DEVELOPER_DIR`, each with its Xcode and Swift version, macOS
+  SDK and whether `PreviewsMacros` is present. Order: an explicit setting (the
+  manifest's `developerDir`, else the app's `TREZI_DEVELOPER_DIR`), then `DEVELOPER_DIR`
+  from the environment, then the newest full Xcode whose probe passes, then
+  `xcode-select -p`. The selection records its reason.
+- The capability probe compiles a tiny intact `#Preview` with the selected toolchain
+  and normal compiler flags; the result is cached by toolchain path, versions, SDK and
+  the plugin file, so an Xcode update or a switch probes again. Results: supported,
+  unsupported (no `PreviewsMacros`: install or select full Xcode), broken (a broken or
+  incompatible plugin: reinstall or select another Xcode) and unavailable (the
+  compiler's plugin server cannot start because Trezi runs inside another sandbox; not
+  cached, and never worked around by disabling the compiler's sandbox).
+- The selected `DEVELOPER_DIR` goes to every tool the driver spawns (`xcodebuild`,
+  `swift package`, `xcrun swiftc`, the SDK lookup, the host build), never to the
+  machine: `xcode-select` is only read. Module and graph caches are keyed by the
+  selection.
+- Reported through the driver (`/state`, `/graph`), the backend (`project:native`
+  `toolchain`) and the page (a header chip and the Project panel's Toolchain section).
+- Coverage: `test/swift-preview-toolchain.mjs` (scripted toolchains: CLT global with
+  Xcode installed, CLT only, broken plugin, environment failure, precedence, cache
+  invalidation, `DEVELOPER_DIR` reaching `xcodebuild`, then a real intact `#Preview`
+  through the driver with `xcode-select -p` unchanged) and the native `swift-graph`
+  check (the toolchain in the page and in `project:native`).
+- Not done in 2A: no settings UI to pick a developer directory (the manifest field and
+  `TREZI_DEVELOPER_DIR` only), and `#Preview` bodies compile but are not shown as
+  previews (Stage 3).
+
+### The rest of Stage 2: not started
 
 - Compiler settings: apply the target's `SWIFT_VERSION`, deployment target, active
   compilation conditions, `OTHER_SWIFT_FLAGS` and strict-concurrency settings. Stage 1
@@ -76,10 +115,7 @@ means no code yet.
   blockers.
 - Incremental builds: reuse unchanged modules instead of a whole-module `swiftc` run
   per edit.
-- `#Preview` handling: files that use it do not compile with bare `swiftc` (no
-  `PreviewsMacros` plugin). Strip or stub the macro in a shadow copy so the files
-  compile. Stage 1 warns. Clang, Objective-C and mixed-language targets also belong
-  here.
+- Clang, Objective-C and mixed-language targets.
 
 ## Stage 3: component selection, sample states, environment injection, resources: not started
 
@@ -140,7 +176,7 @@ picked up by the stage named:
 | Binary or remote SwiftPM dependencies (Sparkle, PostHog) | 2 |
 | StoreKit | 3 (environment and dependency injection) |
 | Resources and asset catalogs | 3 |
-| Reuse of `#Preview` | 2 (compiling the files), 3 (as sample states) |
+| `#Preview` | 2A (compiling the files intact with a selected full Xcode: done, LKM-274), 3 (as sample states) |
 | OS-level input | 4 |
 | Render fidelity | 4 |
 | Driver packaging | 4 |
@@ -162,12 +198,16 @@ Checked only on disposable copies (Scraib's repositories are read-only):
   `scraib/scraibApp.swift` (`@main`) left out, no blockers, and two warnings: seven files
   use `#Preview`, and `AppIcon.icon`, `Monthly.storekit` and `Assets.xcassets` are not
   bundled.
-- The target-graph build of `scraib` **fails** with exactly those seven `#Preview`
-  errors (`plugin for module 'PreviewsMacros' not found`), attributed to module
-  `scraib`. Leaving the seven files out does not help: `ClipboardRewriter.swift` then
-  misses `FloatingLoaderManager`, which one of them defines. Stage 2's `#Preview`
-  handling is the next blocker; StoreKit (`Monthly.storekit`, `StoreKitManager`) and the
-  resources (Stage 3) come after it.
+- With the command-line tools selected (LKM-273), the target-graph build of `scraib`
+  **failed** with exactly those seven `#Preview` errors (`plugin for module
+  'PreviewsMacros' not found`), attributed to module `scraib`. Leaving the seven files
+  out does not help: `ClipboardRewriter.swift` then misses `FloatingLoaderManager`,
+  which one of them defines. The cause was the toolchain, not the files: a manager-run
+  diagnosis on a disposable copy (2026-10-17, outside the test suite) with Xcode 26.5
+  as the process's developer directory built the whole `scraib` target, all seven
+  files intact, into a preview host. Stage 2A now selects that Xcode automatically;
+  a Scraib build through it is still to be recorded as Stage 6 evidence. StoreKit
+  (`Monthly.storekit`, `StoreKitManager`) and the resources (Stage 3) come next.
 - scraib-open (XcodeGen, local `ScraibKit` package, Sparkle and PostHog) was covered by
   LKM-271's `libraries` check and needs Stage 2 (SwiftPM dependencies) for a target
   build.

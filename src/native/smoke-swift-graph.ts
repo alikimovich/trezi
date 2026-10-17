@@ -43,7 +43,10 @@ export async function checkSwiftGraph(
         plan: s.plan && { target: s.plan.target, modules: s.plan.modules.map((m) => ({ module: m.module,
           dependencies: m.dependencies, sources: m.sources, entries: m.entries })),
           blockers: s.plan.blockers, warnings: s.plan.warnings },
-        problems: [...document.querySelectorAll('#problem-list li')].map((li) => li.textContent) }
+        problems: [...document.querySelectorAll('#problem-list li')].map((li) => li.textContent),
+        toolchain: s.toolchain && { dir: s.toolchain.toolchain && s.toolchain.toolchain.developerDir,
+          env: s.toolchain.env, preview: s.toolchain.capability && s.toolchain.capability.status,
+          chip: document.getElementById('toolchain').textContent } }
     })()`)
   const describe = (id: string) =>
     page(`fetch('/describe?preview=${id}').then((r) => r.json()).then((r) => r.texts)`)
@@ -98,6 +101,15 @@ export async function checkSwiftGraph(
   )
   assert.equal(first.manifest.source, 'repo')
   assert.match(first.manifest.treziPath, /swift-previews\/[0-9a-f]{16}\/trezi-previews\.json$/)
+  // LKM-274: the selected developer directory, process-local, shown in the header.
+  const toolchain = (evidence.firstBuild as { toolchain: any }).toolchain
+  assert.ok(toolchain?.dir, 'the build selected a developer directory')
+  assert.deepEqual(toolchain.env, { DEVELOPER_DIR: toolchain.dir })
+  assert.ok(
+    ['supported', 'unsupported', 'unavailable'].includes(toolchain.preview),
+    toolchain.preview
+  )
+  assert.ok(toolchain.chip.includes('#Preview'), `toolchain chip: ${toolchain.chip}`)
 
   // Library SwiftUI and AppKit components and the cross-module app view, in Trezi.
   evidence.swiftui = await select('status-badge', 1)
@@ -117,7 +129,8 @@ export async function checkSwiftGraph(
     () =>
       page(`(() => {
         const text = document.getElementById('project-body').innerText
-        return /StudioKit framework/.test(text) && /Build plan for Studio/.test(text) && text
+        return /StudioKit framework/.test(text) && /Build plan for Studio/.test(text) &&
+          /Toolchain/.test(text) && /xcode-select stays/.test(text) && text
       })()`),
     'project panel'
   )
@@ -126,9 +139,12 @@ export async function checkSwiftGraph(
   const info = (await invoke('project:native', project)) as NativeProjectInfo
   assert.equal(info.error, '', 'the backend read the graph from the driver')
   assert.deepEqual(info.structure?.projects, ['Studio.xcodeproj'])
+  assert.equal(info.toolchain?.developerDir, toolchain.dir, 'project:native reports the toolchain')
+  assert.equal(info.toolchain?.preview, toolchain.preview)
   const graph = info.graph as { containers: { path: string; targets: any[]; errors: string[] }[] }
   evidence.projectNative = {
     structure: info.structure,
+    toolchain: info.toolchain,
     manifest: { repoExists: info.manifest.repoExists, treziExists: info.manifest.treziExists },
     containers: graph.containers.map((c) => ({
       path: c.path,

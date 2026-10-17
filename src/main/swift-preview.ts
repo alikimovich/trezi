@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { NativeProjectInfo } from '../shared/api'
+import type { NativeProjectInfo, NativeToolchainInfo } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { discoverNative } from '../swift-preview/discovery'
 
@@ -45,7 +45,8 @@ export interface NativeServer {
 
 /**
  * `project:native`: the native roots, where the manifest can live, and the target graph
- * the running preview driver read (fetched from it; nothing is spawned here). Only
+ * and selected toolchain (LKM-274) the running preview driver read (fetched from it;
+ * nothing is spawned here). Only
  * Trezi's own driver is asked: a JS or mixed project's server is the user's dev server
  * and gets no request, so `graph` stays null with an explanation.
  */
@@ -64,6 +65,7 @@ export async function nativeProjectInfo(
       repoExists: existsSync(join(root, MANIFEST))
     },
     graph: null,
+    toolchain: null,
     error: ''
   }
   if (!server) {
@@ -79,9 +81,16 @@ export async function nativeProjectInfo(
     const response = await fetch(new URL('/graph', server.url), {
       signal: AbortSignal.timeout(60_000)
     })
-    const body = (await response.json()) as { graph?: unknown; error?: string }
+    const body = (await response.json()) as {
+      graph?: unknown
+      toolchain?: NativeToolchainInfo | null
+      error?: string
+    }
     if (!response.ok) info.error = body.error ?? `The driver answered ${response.status}.`
-    else info.graph = body.graph ?? null
+    else {
+      info.graph = body.graph ?? null
+      info.toolchain = body.toolchain ?? null
+    }
   } catch (error) {
     info.error = `Could not read the graph from the preview driver: ${(error as Error).message}`
   }
