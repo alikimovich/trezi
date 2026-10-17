@@ -15,7 +15,7 @@ final class ComposerTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         if string.isEmpty && !hasMarkedText() {
-            ("Ask Trezi  (/ for skills)" as NSString).draw(at: NSPoint(x: 7, y: 4), withAttributes: [.font:font ?? NSFont.systemFont(ofSize: 14), .foregroundColor:NSColor.placeholderTextColor])
+            ("Ask Trezi" as NSString).draw(at: NSPoint(x: 7, y: 4), withAttributes: [.font:font ?? NSFont.systemFont(ofSize: 14), .foregroundColor:NSColor.placeholderTextColor])
         }
     }
     override func paste(_ sender: Any?) {
