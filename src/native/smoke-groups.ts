@@ -94,6 +94,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   dreamer: ['settings'],
   'security-session': ['settings'],
   'native-chat': ['chat'],
+  'history-menu': ['chat'],
   'sent-attachments': ['chat'],
   'comment-rows': ['chat'],
   'incident-row': ['chat'],

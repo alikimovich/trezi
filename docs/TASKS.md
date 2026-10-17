@@ -3,13 +3,32 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Applied layout styles in the inspector (LKM-272)
+
+- [x] Add contextual flex/grid and child alignment fields, preserve authored text and distinguish defaults.
+- [x] Read active media declarations and guard edits when the winning source is uncertain.
+- [ ] Verify the native fixture for CSS, CSS Module and utility edits, responsive read-only behavior, capture and Undo.
+- [ ] Manager: inspect native captures, run full verification and independent review.
+
+## Chat history status (LKM-268)
+
+- [x] Separate unread assistant answers from general review activity and show fixed-size running/unread indicators in the native history menu.
+- [x] Keep menu item identity during live updates, respect Reduce Motion, and stop the pulse timer after dismissal.
+- [x] Native `history-menu` smoke (group `chat`) drives the real NSMenu tracking: running, unread, in-place update, Reduce Motion, timer cleanup, light/dark/highlight captures inspected.
+- [ ] Manager: run full verification and independent review.
+## Centered Opening indicator (LKM-270)
+
+- [x] Restore the initial-open chat gate and full workspace Opening indicator while preserving destination chat identity and later reload behavior.
+- [x] Update native and unit checks for hidden opening/error chat, ready chat, planning, and routing behavior.
+- [ ] Manager: run full native verification, inspect foreground captures, and complete independent review.
+
 ## chat_ui answer delivery (LKM-265)
 
 - [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.
 - [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
 - [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
 - [ ] Manager: run full native verification and independent review, then merge.
-## Docked chat during project opening (LKM-266)
+## Docked chat during project opening (LKM-266, superseded by LKM-270)
 
 - [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.
 - [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.

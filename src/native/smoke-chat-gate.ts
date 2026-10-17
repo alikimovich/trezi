@@ -28,7 +28,7 @@ async function until(
   )
 }
 
-/** Foreground capture plus native layout/chat identity at each open phase. */
+/** Foreground capture plus native geometry and visibility at each open phase. */
 export async function captureChatGate(
   host: NativeBridge,
   artifacts: string,
@@ -36,8 +36,10 @@ export async function captureChatGate(
   chat: boolean
 ) {
   if (!background()) await restoreSidebarFocus(host, `chat gate ${stage}`)
-  const [layout, shell, view] = await Promise.all(
-    ['layoutInspect', 'shellInspect', 'chatInspect'].map((method) => host.request(method))
+  const [layout, shell, view, composer] = await Promise.all(
+    ['layoutInspect', 'shellInspect', 'chatInspect', 'composerInspect'].map((method) =>
+      host.request(method)
+    )
   )
   const state = {
     stage,
@@ -45,6 +47,7 @@ export async function captureChatGate(
     project: nativeWorkspace.active?.name ?? null,
     chatReady: shell.chatReady,
     chatVisible: view.visible,
+    composerVisible: composer.visible,
     chatSession: view.chat,
     chatFrame: view.frame,
     chatHeaderContentVisible: shell.chatHeaderContentVisible,
@@ -63,6 +66,7 @@ export async function captureChatGate(
   for (const [name, value] of [
     ['chatReady', shell.chatReady],
     ['chat view', view.visible],
+    ['composer', composer.visible],
     ['chat header', shell.chatHeaderContentVisible],
     ['chat column', !layout.chatColumnHidden]
   ] as const)
@@ -78,8 +82,8 @@ export async function captureChatGate(
       `Chat gate ${stage}: the loading/error state must show`
     )
     assert.ok(
-      layout.status.startsWith(`{{${layout.leading},`),
-      `Chat gate ${stage}: status belongs in the preview pane: ${layout.status}`
+      layout.status.startsWith('{{0, 0}'),
+      `Chat gate ${stage}: status must cover the reserved chat column: ${layout.status}`
     )
     assert.equal(
       layout.previewHidden,
@@ -151,7 +155,7 @@ export async function checkChatGate(
     async () => (await host.request('chatInspect')).chat === gamma.activeSessionKey,
     'opening chat belongs to Gamma'
   )
-  const busy = await captureChatGate(host, artifacts, 'opening', true)
+  const busy = await captureChatGate(host, artifacts, 'opening', false)
   assert.equal(busy.statusView.kind, 'busy', 'The opening capture shows the loading state')
   assert.equal(
     await settled,
@@ -164,7 +168,7 @@ export async function checkChatGate(
       (await host.request('layoutInspect')).statusKind === 'error',
     'failed open'
   )
-  const failed = await captureChatGate(host, artifacts, 'failed-open', true)
+  const failed = await captureChatGate(host, artifacts, 'failed-open', false)
   // LKM-152: a failed open has no automatic recovery, so Activity comes to front by itself,
   // without taking the key window from the chat (the capture above needs it).
   await until(
