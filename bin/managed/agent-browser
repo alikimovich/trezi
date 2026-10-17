@@ -13,31 +13,54 @@ import { fileURLToPath } from 'node:url'
 
 const ownDir = dirname(fileURLToPath(import.meta.url))
 const test = process.env.TREZI_BROWSER_TEST === '1'
+// Exit 2: a refused route or policy (flags, session, command). Exit 3: a genuinely
+// missing dependency (`dependency: vercel-cli`, `dependency: headless-shell`) that the
+// user installs; never a PATH or launch-route problem, and no browser was launched.
 const problem = (message) => {
   console.error(`Trezi agent-browser: ${message}`)
   process.exit(2)
 }
+const dependency = (kind, message) => {
+  console.error(`Trezi agent-browser: dependency: ${kind}: ${message}`)
+  process.exit(3)
+}
+const missingCli = () =>
+  dependency(
+    'vercel-cli',
+    'the Vercel agent-browser CLI is not installed (npm install -g agent-browser). Trezi\'s managed wrapper is running correctly; do not reinstall a browser. No browser was launched.'
+  )
+const missingShell = () =>
+  dependency(
+    'headless-shell',
+    'the dedicated Chromium headless shell is not installed (for example: npx playwright install chromium-headless-shell). The CLI was found and the managed route is working. No system Chrome fallback is allowed.'
+  )
 
+// The CLI is the real Vercel one found outside this wrapper's own directory. A global
+// `agent-browser` on PATH is only ever the engine behind this wrapper, never a way around it.
 function installedCli() {
-  if (test && process.env.TREZI_BROWSER_TEST_CLI) return process.env.TREZI_BROWSER_TEST_CLI
+  if (test && process.env.TREZI_BROWSER_TEST_CLI) {
+    const path = process.env.TREZI_BROWSER_TEST_CLI
+    if (!existsSync(path) || !(statSync(path).mode & 0o111)) missingCli()
+    return path
+  }
   for (const dir of (process.env.PATH ?? '').split(delimiter)) {
     if (!dir || resolve(dir) === resolve(ownDir) || dir.includes('/node_modules/')) continue
     const path = join(dir, 'agent-browser')
     if (existsSync(path) && statSync(path).isFile() && (statSync(path).mode & 0o111))
       return realpathSync(path)
   }
-  problem('Vercel agent-browser CLI is unavailable. Install it separately; no browser was launched.')
+  missingCli()
 }
 
 function headlessShell() {
   if (test && process.env.TREZI_BROWSER_TEST_SHELL) {
     const path = process.env.TREZI_BROWSER_TEST_SHELL
     if (!existsSync(path) || basename(path) !== 'chrome-headless-shell' || !(statSync(path).mode & 0o111))
-      problem('A dedicated Chromium headless shell is unavailable. No system Chrome fallback is allowed.')
+      missingShell()
     return path
   }
   const cache = join(homedir(), 'Library/Caches/ms-playwright')
-  if (!existsSync(cache)) problem('A dedicated Chromium headless shell is unavailable. No system Chrome fallback is allowed.')
+  if (!existsSync(cache)) missingShell()
   const candidates = readdirSync(cache)
     .filter((name) => /^chromium_headless_shell-\d+$/.test(name))
     .sort((a, b) => Number(b.split('-').at(-1)) - Number(a.split('-').at(-1)))
@@ -49,7 +72,7 @@ function headlessShell() {
     if (basename(real) === 'chrome-headless-shell' && !real.includes('.app/') && (statSync(real).mode & 0o111))
       return real
   }
-  problem('A dedicated Chromium headless shell is unavailable. No system Chrome fallback is allowed.')
+  missingShell()
 }
 
 const raw = process.argv.slice(2)

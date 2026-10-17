@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-10-17 — LKM-269 recovery: managed browser dispatch
+
+- Reapplied only LKM-269 routing, provider hooks, dependency errors, documentation and focused coverage to current main. Preserved the original task worktree and excluded its unrelated fixture timing edits.
+- Provider shells receive the verified absolute `TREZI_AGENT_BROWSER` entrypoint. Codex disables login shells; Claude and Codex refuse unapproved direct/global routes before execution. PATH remains supplementary because login profiles can reorder it.
+- Independent review caught a POSIX `command` bypass; execution now receives the same route checks and regression coverage. A missing Codex guard fails provider setup. Local standalone 0.159.1 and bundled 0.160.1 CLIs parse the hook configuration without model calls; tagged source confirms the canonical Bash hook contract.
+- Typecheck and lint passed. Focused managed-browser-path, managed-browser-provider, managed-agent-browser and rules checks passed using local subprocesses, mocked provider dispatch and a fake CLI; no real provider calls or native desktop checks were run. Full native verification and independent review remain pending. Provider dispatch fixtures do not establish live subscription behavior.
+
+
 Newest first. Append a dated entry when you finish a chunk of work.
 
 ## 2026-10-17 — LKM-272 review repair: cascade layers

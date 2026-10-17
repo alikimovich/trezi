@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { managedBrowserDirectory, managedBrowserPath } from '../main/backends/managed-browser-path'
+import {
+  managedBrowserCodexConfig,
+  managedBrowserDirectory,
+  managedBrowserEnv,
+  managedBrowserPath,
+  managedBrowserWrapper
+} from '../main/backends/managed-browser-path'
 import { previewServers } from '../main/preview-evidence'
 import { projectKey } from '../shared/projectKey'
 import type { NativeBridge } from './bridge'
@@ -22,13 +28,49 @@ export async function checkManagedAgentBrowser(host: NativeBridge, page: Page, a
   // The provider helper's own resolution: same functions, same bundle base (out/native).
   const managedDir = managedBrowserDirectory(__dirname)
   assert.ok(managedDir, 'managed browser directory resolves from the built bundle')
-  const wrapper = join(managedDir, 'agent-browser')
+  const wrapper = managedBrowserWrapper(__dirname)
+  assert.equal(wrapper, join(managedDir, 'agent-browser'), 'verified absolute managed wrapper')
   const helperPath = managedBrowserPath(managedDir, process.env.PATH, process.execPath)
-  const resolved = helperPath
-    .split(':')
-    .map((dir) => join(dir, 'agent-browser'))
-    .find(existsSync)
-  assert.equal(resolved, wrapper, 'agent-browser on the helper PATH is the managed wrapper')
+  // LKM-269: real provider shells, with a global agent-browser first on the inherited PATH
+  // and a throwaway ZDOTDIR profile that reorders PATH like a login shell does on macOS.
+  const fixture = join(artifacts, 'managed-route')
+  const globalBin = join(fixture, 'global/bin')
+  mkdirSync(globalBin, { recursive: true })
+  writeFileSync(join(globalBin, 'agent-browser'), '#!/bin/sh\necho GLOBAL\n', { mode: 0o755 })
+  writeFileSync(join(fixture, '.zprofile'), `export PATH="${globalBin}:$PATH"\n`)
+  const inherited = `${globalBin}:${process.env.PATH ?? '/usr/bin:/bin'}`
+  const shell = (flags: string, script: string, env: Record<string, string>) => {
+    const proc = spawnSync('/bin/zsh', [flags, script], {
+      env: { ...env, ZDOTDIR: fixture, HOME: fixture },
+      encoding: 'utf8'
+    })
+    assert.equal(proc.status, 0, proc.stderr)
+    return proc.stdout.trim()
+  }
+  const route = managedBrowserEnv(__dirname, inherited, process.execPath)
+  assert.equal(route.TREZI_AGENT_BROWSER, wrapper, 'helper environment carries the wrapper')
+  assert.equal(
+    shell('-c', 'command -v agent-browser', route),
+    wrapper,
+    'non-login shell resolves the wrapper'
+  )
+  assert.equal(
+    shell('-lc', 'echo "$TREZI_AGENT_BROWSER"', route),
+    wrapper,
+    'a login shell that rebuilds PATH still has the absolute wrapper'
+  )
+  assert.equal(
+    shell('-lc', 'command -v agent-browser', route),
+    join(globalBin, 'agent-browser'),
+    'fixture: a login shell alone would pick the global CLI'
+  )
+  const codex = managedBrowserCodexConfig(__dirname, inherited, process.execPath)
+  assert.equal(codex.allow_login_shell, false, 'Codex shell tool runs without a login shell')
+  assert.equal(
+    shell('-c', 'command -v agent-browser', { ...codex.shell_environment_policy?.set }),
+    wrapper,
+    'Codex dispatch environment resolves agent-browser to the managed wrapper'
+  )
   const focus = () => host.request('smokeFocusSnapshot') as Promise<Record<string, unknown>>
   const before = await focus()
   let expectedFocus = before
