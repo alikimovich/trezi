@@ -128,6 +128,7 @@
     "test:key-shortcuts": "bun test/key-shortcuts.mjs",
     "test:inline-style": "bun test/inline-style.mjs",
     "test:css-values": "bun test/css-values.mjs",
+    "test:style-provenance": "bun test/style-provenance.mjs",
     "test:control-panels": "bun test/control-panels.mjs",
     "test:svelte-instance": "bun test/svelte-instance.mjs",
     "test:spring": "bun test/spring.mjs",

@@ -8,19 +8,18 @@ import { claudeProvider } from './claude'
 import { codexProvider } from './codex'
 import { geminiProvider } from './gemini'
 import { runProviderHelper } from './helper-host'
-import { managedBrowserDirectory, managedBrowserPath } from './managed-browser-path'
+import { managedBrowserEnv } from './managed-browser-path'
 import { withSkillMenu } from './skill-menu'
 
 // LKM-168: `TREZI_LOG_DIR` is the one log variable the scrubbed environment keeps.
 initProductLog('helper')
 productLog.info('lifecycle', 'Provider helper process started', { pid: process.pid })
 
-// Every provider's shell tools resolve agent-browser to Trezi's managed wrapper.
-// The bundle's __dirname is out/native; direct tests use the source tree.
-// An absolute global CLI path is not advertised to agents.
-const managedBrowserDir = managedBrowserDirectory(__dirname)
-if (managedBrowserDir)
-  process.env.PATH = managedBrowserPath(managedBrowserDir, process.env.PATH, process.execPath)
+// Every provider's shell tools reach Trezi's managed wrapper. The bundle's __dirname is
+// out/native; direct tests use the source tree. PATH (managed first) is defence in
+// depth: a login shell rebuilds it, so the verified absolute wrapper in
+// TREZI_AGENT_BROWSER is the route (LKM-269). Codex and Claude also get it per turn.
+Object.assign(process.env, managedBrowserEnv(__dirname, process.env.PATH, process.execPath))
 
 runProviderHelper({
   claude: claudeProvider,

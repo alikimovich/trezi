@@ -9,17 +9,43 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Operator (host): check the Vercel Git link and production branch for prj_YwkNbzfDFEdtd9t9hSUj44gjybMH. The worker sandbox could not reach api.vercel.com or api.github.com.
 - [ ] Operator: clone lkmv.ch onto the unpushed branch `trezi-lkm255-attribution-test`, run the script (it adds the throwaway commit; Publish pushes), collect the GitHub author/link and Vercel Preview Ready evidence, and close the test PR unmerged (PROGRESS 2026-10-13 runbook).
 - [ ] Record that evidence here and tick the LKM-251 live Vercel acceptance item.
+## Applied layout styles in the inspector (LKM-272)
+
+- [x] Add contextual flex/grid and child alignment fields, preserve authored text and distinguish defaults.
+- [x] Read active media declarations and guard edits when the winning source is uncertain.
+- [ ] Verify the native fixture for CSS, CSS Module and utility edits, responsive read-only behavior, capture and Undo.
+- [ ] Manager: inspect native captures, run full verification and independent review.
+
+## Chat history status (LKM-268)
+
+- [x] Separate unread assistant answers from general review activity and show fixed-size running/unread indicators in the native history menu.
+- [x] Keep menu item identity during live updates, respect Reduce Motion, and stop the pulse timer after dismissal.
+- [x] Native `history-menu` smoke (group `chat`) drives the real NSMenu tracking: running, unread, in-place update, Reduce Motion, timer cleanup, light/dark/highlight captures inspected.
+- [ ] Manager: run full verification and independent review.
+## Centered Opening indicator (LKM-270)
+
+- [x] Restore the initial-open chat gate and full workspace Opening indicator while preserving destination chat identity and later reload behavior.
+- [x] Update native and unit checks for hidden opening/error chat, ready chat, planning, and routing behavior.
+- [ ] Manager: run full native verification, inspect foreground captures, and complete independent review.
+
 ## chat_ui answer delivery (LKM-265)
 
 - [x] Reproduce submission before the provider turn ends and distinguish accepted, queued and delivered states.
 - [x] Persist pending form answers across relaunch, keep one stable turn id, and cover duplicate, error and Stop paths with fixtures.
 - [x] End Codex turns on terminal stream events even if CLI stdout stays open; cover queued-answer drain and Edit/Remove on a failed marker save.
 - [ ] Manager: run full native verification and independent review, then merge.
-## Docked chat during project opening (LKM-266)
+## Docked chat during project opening (LKM-266, superseded by LKM-270)
 
 - [x] Activate the selected conversation before project detection and server startup; keep chat geometry through loading and error states.
 - [x] Show conversation loading truthfully and assert opening/failed-open chat identity and frame in the native fixture.
 - [ ] Manager: run full native verification, inspect the loading capture and review before merge.
+
+## Managed agent-browser under login shells (LKM-269)
+
+- [x] Explicit app-owned route: verified absolute wrapper in `TREZI_AGENT_BROWSER`, Codex per-turn config (resume included) and Claude env plus refusing PreToolUse hooks; PATH stays defence in depth.
+- [x] Rules/skill/docs separate the allowed managed wrapper path from forbidden global paths; wrapper exits 3 `dependency: …` for missing CLI/headless shell.
+- [x] Real `/bin/zsh -c`/`-lc` unit tests (bundle and source bases), provider fixture tests and native smoke shell assertion.
+- [ ] Manager: full native verification and independent review.
 
 ## Background browser focus (LKM-264)
 

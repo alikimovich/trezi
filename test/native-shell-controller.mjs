@@ -31,7 +31,11 @@ const workspace = {
   },
   changed() {}
 }
-const chat = { chats: new Map([['a', { title: 'Working chat', messages: [], isRunning: true }]]) }
+const chat = {
+  chats: new Map([
+    ['a', { title: 'Working chat', messages: [], isRunning: true, unreadAnswer: true }]
+  ])
+}
 const shell = new NativeShellController(
   workspace,
   chat,
@@ -42,18 +46,35 @@ const shell = new NativeShellController(
 )
 shell.render()
 assert.equal(renders.at(-1).rows[0].children[0].title, 'Working chat')
+assert.deepEqual(
+  [renders.at(-1).rows[0].children[0].running, renders.at(-1).rows[0].children[0].unread],
+  [true, true],
+  'Running and unread reach the native menu independently; the menu gives running precedence'
+)
 assert.equal(renders.at(-1).rows[0].children[1].title, 'Older chat')
 assert.equal(renders.at(-1).chatReady, true)
-// A preview error leaves the selected project's repair chat available.
-workspace.state.status = { kind: 'error', message: 'The dev server exited' }
+// The initial open hides chat until the selected project is loaded.
+workspace.state.loadedKey = null
+workspace.state.status = { kind: 'busy', label: 'Opening Project…' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, false)
+workspace.state.loadedKey = 'a'
+// Later in-project navigation/reload may be busy without hiding chat.
 shell.render()
 assert.equal(renders.at(-1).chatReady, true)
+// An error reports truthfully and closes the gate until recovery.
+workspace.state.status = { kind: 'error', message: 'The dev server exited' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, false)
 workspace.state.status = { kind: 'running' }
+shell.render()
+assert.equal(renders.at(-1).chatReady, true)
 await shell.action({ action: 'device' })
 assert.equal(active.viewport, 'mobile')
 await shell.action({ action: 'expand' })
 assert.equal(projections.at(-1).chatHidden, true)
 assert.equal(values.get('trezi:chat-hidden'), '1')
+assert.equal(chat.chatHidden, true, 'The chat controller learns the column is hidden')
 await shell.action({ action: 'address', value: '/about' })
 assert.deepEqual(calls.at(-1), ['preview:load', 'http://127.0.0.1:7784/about'])
 await assert.rejects(

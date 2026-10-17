@@ -115,20 +115,21 @@ for (const args of [
   ['--session', 'trezi-one', 'batch', 'open http://127.0.0.1:3000']
 ])
   assert.equal(run(args).code, 2, `unsafe call rejected: ${args.join(' ')}`)
-assert.equal(
-  run(['--session', 'trezi-one', 'open', 'http://127.0.0.1:3000'], {
-    TREZI_BROWSER_TEST_CLI: join(root, 'missing-cli')
-  }).code,
-  2,
-  'CLI launch failure is explicit'
-)
-assert.equal(
-  run(['--session', 'trezi-one', 'open', 'http://127.0.0.1:3000'], {
-    TREZI_BROWSER_TEST_SHELL: join(root, 'missing-shell')
-  }).code,
-  2,
-  'missing dedicated shell fails closed'
-)
+// LKM-269: a missing dependency (exit 3, `dependency: …`) is not a route/policy refusal (exit 2).
+const missingCli = run(['--session', 'trezi-one', 'open', 'http://127.0.0.1:3000'], {
+  TREZI_BROWSER_TEST_CLI: join(root, 'missing-cli')
+})
+assert.equal(missingCli.code, 3, 'a missing CLI is a dependency error')
+assert.match(missingCli.err, /dependency: vercel-cli/)
+assert.match(missingCli.err, /npm install -g agent-browser/, 'actionable CLI install guidance')
+const missingShell = run(['--session', 'trezi-one', 'open', 'http://127.0.0.1:3000'], {
+  TREZI_BROWSER_TEST_SHELL: join(root, 'missing-shell')
+})
+assert.equal(missingShell.code, 3, 'missing dedicated shell fails closed as a dependency error')
+assert.match(missingShell.err, /dependency: headless-shell/)
+assert.match(missingShell.err, /playwright install chromium-headless-shell/)
+for (const result of [missingCli, missingShell])
+  assert.doesNotMatch(result.err, /\bPATH\b|launch route/i, 'not a route error')
 
 assert.equal(run(['--session', 'trezi-one', 'close']).code, 0)
 assert.equal(existsSync(join(first.env.HOME, '..')), false, 'close removes only its own profile')

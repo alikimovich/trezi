@@ -73,7 +73,15 @@ const V1 = {
     'margin-right',
     'margin-bottom',
     'margin-left',
-    'gap'
+    'gap',
+    'row-gap',
+    'column-gap',
+    'flex-direction',
+    'flex-wrap',
+    'justify-content',
+    'align-items',
+    'align-content',
+    'align-self'
   ],
   appearance: ['color', 'background-color', 'box-shadow', 'border-radius', 'opacity'],
   typography: [

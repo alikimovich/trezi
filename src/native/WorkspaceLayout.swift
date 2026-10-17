@@ -168,7 +168,7 @@ final class WorkspaceLayout {
         startComposer(&state, column: full)
         return state
     }
-    /// A committed project owns its chat column throughout preview opening and failure.
+    /// Planning can use chat before there is a project; a committed project waits for its first open.
     var planning: Bool { (chatState["start"] as? [String: Any])?["planning"] as? Bool == true }
     var chatReady: Bool { planning || (shellState["project"] is String && shellState["chatReady"] as? Bool == true) }
     func layout() {
@@ -178,9 +178,12 @@ final class WorkspaceLayout {
         let leading: CGFloat = shellState["project"] is String || planning ? width() * fraction : 0
         host.shell.setChatGeometry(leading)
         let state = nativeChatState()
-        host.chat.place(state, composer: host.composer)
+        let openingProject = shellState["project"] is String && !chatReady && !planning
+        var placedState = state
+        if openingProject { placedState["composerVisible"] = false }
+        host.chat.place(placedState, composer: host.composer)
         host.chat.isHidden = !(state["visible"] as? Bool ?? false)
-        host.composer.isHidden = !(state["composerVisible"] as? Bool ?? !host.chat.isHidden)
+        host.composer.isHidden = openingProject || !(placedState["composerVisible"] as? Bool ?? !host.chat.isHidden)
         host.chat.alphaValue = starting ? start.progress : 1
         host.chat.model.cat.show(!host.chat.isHidden)
         // Clip the disappearing column while retaining the text and glass layout. The
@@ -201,9 +204,8 @@ final class WorkspaceLayout {
         host.inspectorSlot.frame = NSRect(x: leading, y: 0, width: max(0, bounds.width - leading - right), height: max(0, bounds.height - bottom))
         host.inspectorSlot.fit()
         let available = host.canvas.convert(host.inspectorSlot.page, from: host.inspectorSlot)
-        // Project progress belongs to the preview pane; the true empty home uses
-        // its own centered start surface.
-        host.previewStatus.frame = available
+        // Opening and failed-open states cover the reserved, hidden chat column too.
+        host.previewStatus.frame = chatReady ? available : NSRect(x: 0, y: 0, width: available.maxX, height: available.height)
         // Shown rulers take a strip at the top and left of the area (LKM-205).
         let ruler = host.previewOverlay?.inset ?? 0
         let pageArea = NSRect(x: available.minX + ruler, y: available.minY + ruler, width: max(0, available.width - ruler), height: max(0, available.height - ruler))

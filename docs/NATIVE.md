@@ -151,6 +151,14 @@ Native inspectors retain source/schema validation, token references, live style
 scrubbing and post-HMR reconciliation. Linked margin/padding writes share an undo
 group. Custom controls support repair/removal and animation Replay. Content
 editor windows were removed in LKM-114.
+The Styles tab keeps one compact Layout group. Flex and grid selections show
+their active gap, direction, wrap and alignment declarations; row and column
+gaps remain independent. Authored text and resolved values are distinguished.
+For a conditional (media/supports) or ambiguous stylesheet rule, the value stays
+visible but editing is disabled until its exact source can be identified. Cascade
+layers are not conditions: the winner is chosen by layer order before specificity
+(`src/preview/style-provenance.ts`), so Tailwind v4 utilities in `@layer utilities`
+stay editable.
 
 ## Build and transport
 

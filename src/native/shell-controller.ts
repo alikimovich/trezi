@@ -31,6 +31,7 @@ export class NativeShellController {
     }) => void
   ) {
     this.hidden = preferences.get('trezi:chat-hidden') === '1'
+    chat.chatHidden = this.hidden
   }
   schedule() {
     if (!this.timer)
@@ -75,7 +76,8 @@ export class NativeShellController {
             session: key,
             kind: 'chat' as const,
             title: chat?.title || title(chat?.messages.find((m) => m.role === 'user')?.text),
-            running: chat?.isRunning ?? false
+            running: chat?.isRunning ?? false,
+            unread: chat?.unreadAnswer ?? false
           }
         }),
         ...(ws.history[p.key] ?? []).map((r) => ({
@@ -99,7 +101,7 @@ export class NativeShellController {
       rows,
       project: active?.key ?? null,
       selection: ws.selection ?? 0,
-      chatReady: !!active,
+      chatReady: !!active && ws.loadedKey === active.key && status.kind !== 'error',
       selected: active ? `chat:${active.activeSessionKey}` : null,
       homeState: {
         visible: !active,
@@ -134,6 +136,7 @@ export class NativeShellController {
     const entry = this.workspace.active
     if (action.action === 'expand') {
       this.hidden = !this.hidden
+      this.chat.chatHidden = this.hidden
       this.render()
       await this.preferences.set('trezi:chat-hidden', this.hidden ? '1' : '0')
       return

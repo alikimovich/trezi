@@ -41,7 +41,7 @@ assert.throws(() => parseSmokeGroups(['--only']), /--only needs at least one gro
 assert.throws(() => parseSmokeGroups(['--only=core', '--only=chat']), /--only may be given once/)
 assert.throws(() => parseSmokeGroups(['--live', '--only=chat']), /--live needs the core group/)
 assert.deepEqual([...parseSmokeGroups(['--live', '--only=core,chat'])], ['core', 'chat'])
-assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups([])), 420_000)
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups([])), 600_000)
 assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups(['--only=core'])), 300_000)
 console.log(
   'Native smoke group selection: default, subset, unknown/empty/repeated and --live guards passed.'
@@ -104,6 +104,7 @@ assert.deepEqual(
     'open-project',
     'chat-ready',
     'native-chat',
+    'history-menu',
     'sent-attachments',
     'comment-rows',
     'incident-row',
@@ -131,7 +132,7 @@ assert.deepEqual(notices, [], 'A full run prints no filter notice')
 selectSmokeChecks(names, parseSmokeGroups(['--only=chat']), (line) => notices.push(line))
 assert.match(
   notices.join(),
-  /^NATIVE SMOKE FILTERED \(--only=chat\): running 13 of \d+ checks.*not full-suite acceptance/
+  /^NATIVE SMOKE FILTERED \(--only=chat\): running 14 of \d+ checks.*not full-suite acceptance/
 )
 console.log(
   'Native smoke check selection: every check classified, prelude kept, dependencies satisfied for each group.'

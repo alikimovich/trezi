@@ -263,6 +263,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-git-updates.ts` | test | — | smoke fixture |
 | `src/native/smoke-build-badge.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat.ts` | test | — | smoke fixture |
+| `src/native/smoke-history-menu.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-gate.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-text.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-ui.ts` | test | — | smoke fixture |

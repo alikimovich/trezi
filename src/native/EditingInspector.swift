@@ -4,7 +4,7 @@ import SwiftUI
 struct InspectorToken: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorField: Decodable, Identifiable {
     let id: String, label: String, group: String, kind: String, value: String
-    let disabled: Bool?, detail: String?, options: [String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
+    let disabled: Bool?, detail: String?, options: [String]?, optionLabels: [String: String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
     let layout: String?, axis: String?, mixed: Bool?, expanded: Bool?
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
@@ -56,7 +56,9 @@ struct InspectorFieldView: View {
             } else if field.kind == "select" {
                 Picker(field.label, selection: Binding(get: { value }, set: { value = $0; apply() })) {
                     if !(field.options ?? []).contains(value) { Text(value.isEmpty ? "Default" : value).tag(value) }
-                    ForEach(field.options ?? [], id: \.self) { Text($0).tag($0) }
+                    ForEach(field.options ?? [], id: \.self) { option in
+                        Text(field.optionLabels?[option] ?? option.replacingOccurrences(of: "-", with: " ").capitalized).tag(option)
+                    }
                 }.labelsHidden()
             } else {
                 HStack {
@@ -273,6 +275,17 @@ private struct CompactLayoutFields: View {
     let fields: [InspectorField]
     @ObservedObject var model: InspectorModel
     private func row(_ name: String) -> [InspectorField] { fields.filter { $0.layout == name } }
+    private func flowLabel(_ field: InspectorField) -> String {
+        switch field.label {
+        case "flex-direction": return "Direction"
+        case "flex-wrap": return "Wrap"
+        case "justify-content": return "Justify"
+        case "align-items": return "Align items"
+        case "align-content": return "Align content"
+        case "align-self": return "Align self"
+        default: return field.label
+        }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Layout").font(.headline).padding(.top, 5)
@@ -286,6 +299,20 @@ private struct CompactLayoutFields: View {
             }
             CompactSpacingRow(group: "padding", fields: row("padding"), model: model)
             CompactSpacingRow(group: "margin", fields: row("margin"), model: model)
+            if !row("gap").isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Gap").font(.system(size: 11, weight: .medium))
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
+                        ForEach(row("gap")) { field in CompactLayoutValue(field: field, model: model) }
+                    }
+                }
+            }
+            ForEach(row("flow")) { field in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(flowLabel(field)).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                    InspectorFieldView(field: field, model: model)
+                }
+            }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 5) {
                 ForEach(row("finish")) { field in
                     VStack(alignment: .leading, spacing: 3) {
