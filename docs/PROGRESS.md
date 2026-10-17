@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-267: isolated composer copy recovery
+
+- Reapplied only the shared native placeholder copy change on current main: home, planning and docked chat now draw “Ask Trezi”. Slash-command handling is unchanged. Earlier speculative verification-harness changes remain outside this recovery branch.
+- Repository search and call-site inspection confirm one shared drawing string. Independent review passed; foreground home, planning and docked captures show “Ask Trezi”, and native slash-skills interaction still passes.
+- Both typechecks, lint and all 227 unit checks passed (224 initially, with the three build-dependent checks rerun successfully after the build). Full native verification passed 54 checks with zero skips, plus chat-scroll/acceptance. Checks ran serially at suite level with three bounded unit workers; no assertions or timeouts changed.
+
 ## 2026-10-17 — LKM-272 review repair: cascade layers
 
 - `style-provenance.ts` no longer treats `@layer` as conditional (only media/supports/other group rules and media-qualified `@import` are). Layer membership is a separate `layer` on the origin (validated across preload/IPC), and the winner is picked by importance, the style attribute, then layer order (unlayered beats layered, later layers beat earlier, reversed for `!important`, a parent's own rules beat nested layers), then specificity and order. Why: Tailwind v4 emits all utilities in `@layer utilities`, so every utility-backed gap/flow row had gone read-only, and an unlayered rule next to `gap-4` was misreported as losing.

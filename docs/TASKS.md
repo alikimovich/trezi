@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Shorter composer placeholder (LKM-267)
+
+- [x] Remove the skills hint from the shared native placeholder, preserving slash-command behavior.
+- [x] Update changelog and progress; keep recovery separate from unrelated harness edits.
+- [x] Verify native home, planning and docked composers and slash skills; complete full verification and independent review.
+
 ## Applied layout styles in the inspector (LKM-272)
 
 - [x] Add contextual flex/grid and child alignment fields, preserve authored text and distinguish defaults.
