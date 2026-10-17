@@ -40,6 +40,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Rules/skill/docs separate the allowed managed wrapper path from forbidden global paths; wrapper exits 3 `dependency: …` for missing CLI/headless shell.
 - [x] Real `/bin/zsh -c`/`-lc` unit tests (bundle and source bases), provider fixture tests and native smoke shell assertion.
 - [x] Manager: 229 unit checks, 54 native smoke checks, source-window/chat-scroll/HMR acceptance and independent source review passed. PR review/merge remains separate.
+- [ ] Integrate the remaining PR #280 hook enforcement and verification repairs after reconciliation with merged PR #281; Linear's historical Done state is unchanged.
 
 ## Background browser focus (LKM-264)
 
