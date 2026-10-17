@@ -37,14 +37,22 @@ export function swiftPreviewCommand(
   return manifestDir ? `${command} --manifest-dir ${quote(manifestDir)}` : command
 }
 
+/** The project's running server and whether Trezi started it with `swiftPreviewCommand`. */
+export interface NativeServer {
+  url: string
+  driver: boolean
+}
+
 /**
  * `project:native`: the native roots, where the manifest can live, and the target graph
- * the running preview driver read (fetched from it; nothing is spawned here).
+ * the running preview driver read (fetched from it; nothing is spawned here). Only
+ * Trezi's own driver is asked: a JS or mixed project's server is the user's dev server
+ * and gets no request, so `graph` stays null with an explanation.
  */
 export async function nativeProjectInfo(
   root: string,
   userData: string,
-  driverUrl: string | undefined
+  server: NativeServer | undefined
 ): Promise<NativeProjectInfo> {
   const treziDir = treziManifestDir(root, userData)
   const info: NativeProjectInfo = {
@@ -58,12 +66,17 @@ export async function nativeProjectInfo(
     graph: null,
     error: ''
   }
-  if (!driverUrl) {
+  if (!server) {
     info.error = 'The Swift preview driver is not running.'
     return info
   }
+  if (!server.driver) {
+    info.error =
+      "This project's preview is its own dev server, not Trezi's Swift preview driver, so the target graph is not read."
+    return info
+  }
   try {
-    const response = await fetch(new URL('/graph', driverUrl), {
+    const response = await fetch(new URL('/graph', server.url), {
       signal: AbortSignal.timeout(60_000)
     })
     const body = (await response.json()) as { graph?: unknown; error?: string }

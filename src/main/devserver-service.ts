@@ -26,10 +26,15 @@ export function registerServiceDevServer(
     generations.set(key, next)
     return next
   }
+  // Projects whose running server is Trezi's Swift preview driver, not a user's dev server.
+  const drivers = new Set<string>()
   runtime.onLog((_root, line) => log(line))
   runtime.onExit((root, url) => {
     const key = projectKey(root)
-    if (previewServers.get(key)?.url === url) previewServers.delete(key)
+    if (previewServers.get(key)?.url === url) {
+      previewServers.delete(key)
+      drivers.delete(key)
+    }
   })
 
   router.handle(
@@ -53,16 +58,18 @@ export function registerServiceDevServer(
       }
       // A Swift project has no command of its own: Trezi's preview driver serves it.
       const manifestDir = userData ? treziManifestDir(opts.root, userData()) : undefined
+      const driver = opts.framework === 'swift' && !opts.command.trim()
       const server = await runtime.start({
         root: opts.root,
-        command:
-          opts.framework === 'swift' && !opts.command.trim()
-            ? swiftPreviewCommand(undefined, undefined, manifestDir)
-            : opts.command,
+        command: driver ? swiftPreviewCommand(undefined, undefined, manifestDir) : opts.command,
         framework: opts.framework,
         ...(opts.cleanCache ? { cleanCache: true } : {})
       })
-      if (generations.get(key) === generation) previewServers.set(key, server)
+      if (generations.get(key) === generation) {
+        previewServers.set(key, server)
+        if (driver) drivers.add(key)
+        else drivers.delete(key)
+      }
       return server
     }
   )
@@ -76,6 +83,7 @@ export function registerServiceDevServer(
     const key = projectKey(root)
     bump(key)
     previewServers.delete(key)
+    drivers.delete(key)
     await runtime.stop(root)
   })
   router.handle('devserver:running', async (_e, root: string) => (await runtime.info(root)).running)
@@ -86,6 +94,10 @@ export function registerServiceDevServer(
   // A native project's roots, manifest locations and target graph (LKM-273).
   router.handle('project:native', async (_e, root: string): Promise<NativeProjectInfo> => {
     const info = await runtime.info(root)
-    return nativeProjectInfo(root, userData?.() ?? '', info.server?.url)
+    const server = info.server && {
+      url: info.server.url,
+      driver: drivers.has(projectKey(root))
+    }
+    return nativeProjectInfo(root, userData?.() ?? '', server)
   })
 }

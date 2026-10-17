@@ -14,7 +14,11 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] Trezi-side manifest in app data (read; wins over the repo's `trezi-previews.json`, which stays supported).
 - [x] Scraib-shaped fixture `test/fixtures/swift-multi-module`; unit tests `swift-preview-graph`, `swift-preview-target`; native smoke `swift-graph` (group `core`); evidence in `docs/evidence/lkm-273/`.
 - [x] Scraib-xcode disposable-copy discovery and target build recorded as progress (blocked by `#Preview`, then resources and StoreKit).
-- [ ] Stage 2 and later (see the plan): compiling `#Preview` files, local package products, resources, remote/binary packages, a UI that writes the Trezi-side manifest.
+- [x] Review repair: the plan doc follows the ticket's Stages 1–8 (decision 9a00253c); `project:native` asks only Trezi's own driver, never a JS dev server (unit assertion in `test/swift-preview-graph.mjs`).
+- [ ] Stage 2: compiler settings, SwiftPM dependencies (local, remote, binary), incremental builds, `#Preview` compiling.
+- [ ] Stage 3: component selection and a UI that writes the Trezi-side manifest, sample states, environment injection (StoreKit), resources; the choice of the native preview in a mixed repo with a JS dev script.
+- [ ] Stage 4: service-owned host lifecycle (including the second server for mixed repos), driver packaging, OS-level input, glass/material fidelity.
+- [ ] Stages 5–8: agent diagnostics and source feedback, practical Scraib acceptance, full macOS app integration, iOS simulator.
 
 ## Native Swift component previews demo (LKM-271, held branch)
 

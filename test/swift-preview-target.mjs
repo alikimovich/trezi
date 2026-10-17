@@ -256,7 +256,7 @@ try {
   )
   const page = await (await fetch(`${base}/`)).text()
   assert.match(page, /id="project"/, 'the page has the project panel')
-  const info = await nativeProjectInfo(project, userData, base)
+  const info = await nativeProjectInfo(project, userData, { url: base, driver: true })
   assert.equal(info.error, '')
   assert.deepEqual([info.manifest.repoExists, info.manifest.treziExists], [true, false])
   assert.equal(info.graph.containers[0].path, 'Studio.xcodeproj')

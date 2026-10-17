@@ -74,7 +74,9 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   `src/service/RuntimeDetect.swift` agree (`test/runtime-owner.mjs`). With a
   `package.json`, the JS or Expo detection wins whenever it finds a dev command and the
   result only gains `native` (the structure); a tooling-only `package.json` beside an
-  Xcode project opens as Swift.
+  Xcode project opens as Swift. Offering the native preview in a repo that also
+  launches as JS is Stage 3 (the choice) and Stage 4 (running both servers) of
+  `docs/SWIFT-PREVIEWS-PLAN.md`.
 - The graph (`src/swift-preview/graph.ts`): targets, kinds, module names, target
   dependencies, package products, resources and notes per container. Xcode projects are
   read from `project.pbxproj` with `plutil` (synchronized folders included); schemes

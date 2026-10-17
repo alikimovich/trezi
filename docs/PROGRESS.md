@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-16 — LKM-273 review repair: ticket stages and the `project:native` request
+
+- Plan doc: `docs/SWIFT-PREVIEWS-PLAN.md` used its own stage scheme. It now follows the ticket's Stages 1–8 (decision 9a00253c): 2 compiler settings, SwiftPM dependencies, incremental builds, `#Preview`; 3 component selection, sample states, environment injection, resources; 4 host lifecycle, packaging, OS-level input, fidelity; 5 agent diagnostics and source feedback (partial); 6 Scraib acceptance; 7 full app; 8 iOS. The out-of-scope table is remapped. Stage numbers cited in code (`plan.ts`: packages and `#Preview` Stage 2, resources Stage 3, iOS Stage 8) already matched. A mixed repo with a JS dev script gets its native preview through Stage 3 (the choice) and Stage 4 (the second server).
+- `project:native` fetched `/graph` from whatever server the runtime reported, which for a JS or mixed project is the user's own dev server. `devserver-service.ts` now records which projects were started with `swiftPreviewCommand` and `nativeProjectInfo` takes `{url, driver}`: for a non-driver server it sends no request and returns the structure and manifest with `graph: null` and an explanation. `test/swift-preview-graph.mjs` stubs `fetch` and asserts no request for the user's server and one `/graph` request for the driver. After an app relaunch that reuses a still-running driver, the graph reads as not available until the project is started again.
+
 ## 2026-10-16 — LKM-273 native previews Stage 1: Xcode/SwiftPM discovery and target-graph builds
 
 - Why: LKM-271 compiled hand-listed files into one module. Scraib-shaped apps have an app target with `@main` plus library targets, so previews have to follow the project's own target graph. Plan and statuses for all stages: `docs/SWIFT-PREVIEWS-PLAN.md`.

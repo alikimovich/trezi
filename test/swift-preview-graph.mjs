@@ -464,6 +464,31 @@ let package = Package(
     [true, false, null]
   )
   assert.match(info.error, /driver is not running/)
+  // A JS or mixed project's server is the user's own: it gets no request at all.
+  const realFetch = globalThis.fetch
+  const requested = []
+  globalThis.fetch = async (url) => {
+    requested.push(String(url))
+    throw new Error('unexpected request')
+  }
+  try {
+    const own = await nativeProjectInfo(project, join(temp, 'userData'), {
+      url: 'http://127.0.0.1:5173',
+      driver: false
+    })
+    assert.deepEqual(requested, [], "no GET /graph to the user's dev server")
+    assert.equal(own.graph, null)
+    assert.match(own.error, /own dev server, not Trezi's Swift preview driver/)
+    assert.deepEqual(own.structure, info.structure, 'the structure and manifest still report')
+    assert.equal(own.manifest.repoExists, true)
+    await nativeProjectInfo(project, join(temp, 'userData'), {
+      url: 'http://127.0.0.1:7777',
+      driver: true
+    })
+    assert.deepEqual(requested, ['http://127.0.0.1:7777/graph'], 'the driver is asked')
+  } finally {
+    globalThis.fetch = realFetch
+  }
 
   // --- Mixed repos: package.json next to native roots ---
   const tooling = join(temp, 'tooling')
