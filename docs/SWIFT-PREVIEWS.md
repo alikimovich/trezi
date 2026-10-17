@@ -5,6 +5,11 @@ declared SwiftUI and AppKit components. The preview is interactive, rebuilds whe
 source changes (including after a chat turn), and shows compiler errors without losing
 the last good build. This is a demo on an isolated branch; it is not merged to main.
 
+The staged plan toward real multi-module apps (Scraib), with each stage's status and
+what is out of scope, is `docs/SWIFT-PREVIEWS-PLAN.md`. Stage 1 (LKM-273, below:
+[Xcode and SwiftPM projects](#xcode-and-swiftpm-projects-lkm-273)) adds project
+discovery and target-graph builds.
+
 ## Try it
 
 1. Build Trezi as usual (`bun run build`) and open it.
@@ -60,6 +65,56 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   - `.viewController(id, title, size:) { SomeViewController(...) }`
 
   For example, `test/fixtures/swift-components/Previews/TreziPreviews.swift`.
+
+## Xcode and SwiftPM projects (LKM-273)
+
+- Discovery: a folder with a `.xcworkspace`, `.xcodeproj` or `Package.swift` (up to two
+  folders deep; build output, `Pods` and hidden folders skipped) opens as a Swift
+  project even without `trezi-previews.json`. `src/main/project-detect.ts` and
+  `src/service/RuntimeDetect.swift` agree (`test/runtime-owner.mjs`). With a
+  `package.json`, the JS or Expo detection wins whenever it finds a dev command and the
+  result only gains `native` (the structure); a tooling-only `package.json` beside an
+  Xcode project opens as Swift. Offering the native preview in a repo that also
+  launches as JS is Stage 3 (the choice) and Stage 4 (running both servers) of
+  `docs/SWIFT-PREVIEWS-PLAN.md`.
+- The graph (`src/swift-preview/graph.ts`): targets, kinds, module names, target
+  dependencies, package products, resources and notes per container. Xcode projects are
+  read from `project.pbxproj` with `plutil` (synchronized folders included); schemes
+  from `xcodebuild -list -json`, or from `xcshareddata/xcschemes` when only the
+  command-line tools are installed; `xcodebuild -showBuildSettings -json` for targets
+  configured by `.xcconfig`; packages from `swift package describe --type json` with
+  its scratch folder in Trezi's cache. Each tool run times out (45 s) and failures read
+  as sentences (for example "xcodebuild -list -json needs Xcode, but only the
+  command-line tools are selected").
+- A target build: name the target instead of listing sources.
+
+  ```json
+  { "name": "Studio", "target": "Studio", "project": "Studio.xcodeproj", "previews": ["Previews"] }
+  ```
+
+  `project` is only needed when several containers define the target. The plan
+  (`src/swift-preview/plan.ts`) builds each dependency target into its own module and
+  dylib (dependencies first), then the target, with `@main`, `main.swift`,
+  `@NSApplicationMain` and `@UIApplicationMain` files left out, then the host, which
+  imports libraries normally and the target with `@testable import` (targets build with
+  `-enable-testing`). Package products, Clang or binary targets, test targets and
+  non-macOS SDKs are blockers; `#Preview` files and resources are warnings.
+  `test/fixtures/swift-multi-module` is the Scraib-shaped example (app `Studio` with
+  `@main`, framework `StudioKit` with SwiftUI and AppKit components, one app view using
+  a library component).
+- Errors name the module: the status reads `Build failed in StudioKit: 1 error.` and
+  the list `[StudioKit] StudioKit/StudioFormat.swift:6:…`. The last good build stays.
+- Trezi's own manifest: `<userData>/swift-previews/<hash>/trezi-previews.json` (the hash
+  is of the project root) wins over the repo's file, and its `previews` paths are
+  relative to that folder, so a project can be previewed without writing into it. The
+  driver gets the folder with `--manifest-dir`. Stage 1 only reads it.
+- Without either manifest the page shows "No previews yet", the discovered targets and
+  both places a manifest can go. The page's Project panel shows the manifest in use,
+  the containers, schemes, targets and the build plan; the driver serves the same as
+  `GET /graph`, and the backend reads it with `project:native`
+  (`src/main/swift-preview.ts`).
+- `bun scripts/swift-preview-discover.ts <folder> [--target NAME]` prints the
+  discovery, graph and plan as JSON without writing into the folder.
 
 ## How it works
 
@@ -127,6 +182,13 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   records the chat-landed steps (branch, commit, files, trailer) under
   `provenance.chatLanded` and lists synthetic direct writes separately (none).
 - The captures from the branch run are kept in `docs/evidence/lkm-271/`.
+- LKM-273: `test/swift-preview-graph.mjs` (discovery, graph, plan, mixed repos) and
+  `test/swift-preview-target.mjs` (target-graph build, library error and recovery,
+  Trezi-side manifest, setup state, driver `/graph`) in the unit tier, and the native
+  smoke check `swift-graph` (group `core`, `src/native/smoke-swift-graph.ts`). Its
+  library error and fix are direct writes to the opened copy (recorded under
+  `provenance.syntheticDirectWrites`); the chat path is the `swift-preview` check's.
+  Evidence: `docs/evidence/lkm-273/`.
 
 ## Limits and follow-ups
 
@@ -145,10 +207,11 @@ A project opts in with `trezi-previews.json` at its root (and no `package.json`)
   (`xcodebuild -sdk iphonesimulator`, `simctl install/launch`) and the existing
   simulator preview path. Previews would have to target UIKit/SwiftUI on iOS. The
   host here is macOS-only.
-- **Multi-module projects:** the app side compiles into one module; separately built
-  library modules are supported through `libraries` (see above) but not SwiftPM
-  resolution, remote packages, resource bundles or Swift 6 / strict-concurrency
-  settings from a package manifest (the driver uses the compiler default).
+- **Multi-module projects:** Swift targets of one Xcode project or package build from
+  the target graph (LKM-273, above). Not yet: package products and SwiftPM resolution,
+  remote or binary packages, Clang targets, resource bundles, per-target compiler
+  flags, and Swift 6 / strict-concurrency settings (the driver uses the compiler
+  default). Stages: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - **Scraib (read-only inspection and disposable-copy checks; not "supported").**
   Nothing in either Scraib repository was modified. The checks ran on copies under the
   temporary directory with the same driver (`docs/evidence/lkm-271/scraib-validation/`:

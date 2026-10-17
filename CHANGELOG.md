@@ -23,6 +23,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Added
 - Demo: native macOS Swift projects that declare `trezi-previews.json` open in Trezi with interactive SwiftUI and AppKit component previews that rebuild on source changes and show compiler errors while keeping the last good build (LKM-271).
 - Demo: a Swift preview manifest can list separately built `libraries` that the previewed sources import (LKM-271).
+- Demo: folders with an Xcode workspace or project or a Swift package open as Swift projects and show their schemes and targets; a preview manifest can name a `target` whose dependency modules are built first, errors name the failing module, and a manifest can live in Trezi's app data instead of the repo (LKM-273).
 - Show states now works for Next.js and Vite React components: Trezi builds the selected component from its source in memory and draws real styled variants in an isolated view, discovered from props or given by a recipe (providers, actions, routes), with specific messages for server-only components and no project files written (LKM-263).
 - Exploded view now shows subtle depth and dashed assembly guides between related blocks (LKM-257).
 - Startup diagnostics now refuse a proven non-graphical macOS session before AppKit; the cause of the reported LKM-249 registration abort remains unconfirmed.

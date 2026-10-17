@@ -1,6 +1,7 @@
 import { access, readdir, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { DetectedProject, Framework, PreviewKind } from '../shared/api'
+import type { DetectedProject, Framework, NativeStructure, PreviewKind } from '../shared/api'
+import { discoverNative } from '../swift-preview/discovery'
 import { projectPackageManager } from './project-dependencies'
 
 /**
@@ -91,17 +92,28 @@ function staticProject(root: string, name?: string): DetectedProject {
 export const SWIFT_PREVIEW_MANIFEST = 'trezi-previews.json'
 
 /**
+ * A native Swift project: the backend runs Trezi's own preview driver for it (no
+ * command from the project). `native` lists the Xcode/SwiftPM roots found (LKM-273).
+ */
+function swiftProject(root: string, name: string | undefined, native: NativeStructure | null) {
+  const project: DetectedProject = { ...staticProject(root, name), framework: 'swift' }
+  if (native) project.native = native
+  return project
+}
+
+/**
  * Given a project folder, detect the framework + package manager and the dev
  * command. A custom-command escape hatch lets the user override the detected
  * command (monorepos, odd setups).
  */
 export async function detectProject(root: string): Promise<DetectedProject> {
   const pkgPath = join(root, 'package.json')
+  // Xcode workspaces/projects and Swift packages (LKM-273). A folder with them, or with
+  // `trezi-previews.json`, previews natively unless its package.json launches a JS app.
+  const native = discoverNative(root)
+  const swift = !!native || (await exists(join(root, SWIFT_PREVIEW_MANIFEST)))
   if (!(await exists(pkgPath))) {
-    // A native Swift project with declared component previews: the backend runs
-    // Trezi's own preview driver for it (no command from the project).
-    if (await exists(join(root, SWIFT_PREVIEW_MANIFEST)))
-      return { ...staticProject(root), framework: 'swift' }
+    if (swift) return swiftProject(root, undefined, native)
     // No package.json — a vanilla HTML/CSS/JS site if there's an HTML entry to
     // serve; otherwise there's nothing we know how to launch, so ask for a command.
     if (await findStaticEntry(root)) return staticProject(root)
@@ -129,7 +141,9 @@ export async function detectProject(root: string): Promise<DetectedProject> {
     // and it ships an HTML entry, treat it as a vanilla static site (many bundler-
     // less repos carry a package.json with no scripts). A recognized framework
     // (vite/next/…) with no dev script has a build-template index.html that won't
-    // serve raw, so ask for a launch command instead.
+    // serve raw, so ask for a launch command instead. A native project whose
+    // package.json only carries tooling previews natively.
+    if (swift) return swiftProject(root, pkg.name, native)
     if (framework === 'unknown' && (await findStaticEntry(root)))
       return staticProject(root, pkg.name)
     throw new Error(
@@ -143,7 +157,7 @@ export async function detectProject(root: string): Promise<DetectedProject> {
       ? `${packageManager} run ${scriptName}`
       : `${packageManager === 'npm' ? 'npx' : packageManager} expo start`
 
-  return {
+  const project: DetectedProject = {
     root,
     name: pkg.name ?? basename(root),
     framework,
@@ -152,6 +166,10 @@ export async function detectProject(root: string): Promise<DetectedProject> {
     devCommand,
     previewKind
   }
+  // A JS app that also holds native roots (an Expo `ios/` workspace) keeps its JS
+  // launch; the native structure is reported alongside.
+  if (native) project.native = native
+  return project
 }
 
 const CONFLICT_RE =

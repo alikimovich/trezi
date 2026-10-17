@@ -7,7 +7,11 @@ import { isAbsolute, join, normalize, relative, sep } from 'node:path'
  * (files or folders) relative to the project root; `exclude` skips paths such as the
  * app's `@main` entry. `libraries` are separately built modules the sources import
  * (a Swift package's library target, such as Scraib's ScraibKit): each is compiled first
- * into its own module and dylib, then found with -I/-L/-l. Pure helpers: no process, no clock.
+ * into its own module and dylib, then found with -I/-L/-l. `target` (LKM-273) instead
+ * builds an Xcode or SwiftPM target and its dependencies from the project's target graph
+ * (`plan.ts`); `project` picks the container when several define that target. The same
+ * file may live in Trezi's app data instead of the repo (`src/main/swift-preview.ts`);
+ * its `previews` are then relative to that folder. Pure helpers: no process, no clock.
  */
 export interface PreviewManifest {
   name: string
@@ -15,6 +19,8 @@ export interface PreviewManifest {
   previews: string[]
   exclude: string[]
   libraries: PreviewLibrary[]
+  target?: string
+  project?: string
 }
 
 export interface PreviewLibrary {
@@ -29,6 +35,8 @@ export interface Diagnostic {
   column: number
   severity: 'error' | 'warning' | 'note'
   message: string
+  /** The module whose compile reported it, in a target-graph build (LKM-273). */
+  module?: string
 }
 
 /** Folders never compiled into the host: build output, packages and hidden folders. */
@@ -72,13 +80,26 @@ export function parseManifest(text: string): PreviewManifest {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw))
     throw new Error('trezi-previews.json must contain an object.')
   const fields = raw as Record<string, unknown>
-  return {
+  // A `target` (LKM-273) builds from the project's target graph, so sources are optional.
+  const target = name(fields.target, 'target')
+  const manifest: PreviewManifest = {
     name: typeof fields.name === 'string' ? fields.name : '',
-    sources: paths(fields.sources, 'sources', true),
+    sources: paths(fields.sources, 'sources', !target),
     previews: paths(fields.previews, 'previews', true),
     exclude: paths(fields.exclude, 'exclude', false),
     libraries: libraries(fields.libraries)
   }
+  if (target) manifest.target = target
+  const project = name(fields.project, 'project')
+  if (project) manifest.project = paths([project], 'project', true)[0]
+  return manifest
+}
+
+function name(value: unknown, field: string): string {
+  if (value === undefined) return ''
+  if (typeof value !== 'string' || !value.trim() || /[\n\r\0]/.test(value))
+    throw new Error(`trezi-previews.json: "${field}" must be a name.`)
+  return value.trim()
 }
 
 /**
@@ -138,19 +159,28 @@ export function libraryCompileArgs(options: {
   sources: string[]
   moduleCache: string
   dir: string
+  /** Modules built earlier into `dir` that this one imports (target-graph builds). */
+  dependencies?: string[]
+  /** `-enable-testing`, so the preview declarations can `@testable import` it. */
+  testing?: boolean
 }): string[] {
+  const dependencies = options.dependencies ?? []
   return [
     '--sdk',
     'macosx',
     'swiftc',
     '-parse-as-library',
     '-Onone',
+    ...(options.testing ? ['-enable-testing'] : []),
     '-emit-module',
     '-emit-library',
     '-module-name',
     options.name,
     '-module-cache-path',
     options.moduleCache,
+    ...(dependencies.length
+      ? ['-I', options.dir, '-L', options.dir, ...dependencies.map((name) => `-l${name}`)]
+      : []),
     '-emit-module-path',
     join(options.dir, `${options.name}.swiftmodule`),
     '-o',

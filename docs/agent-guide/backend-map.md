@@ -26,7 +26,10 @@ src/main/
                   through devserver-service.ts
   swift-preview.ts the command for a `framework: 'swift'` project (demo, LKM-271):
                   bundled Bun + src/swift-preview/driver.ts, never a project
-                  command. Driver, AppKit host and limits: docs/SWIFT-PREVIEWS.md
+                  command. Driver, AppKit host and limits: docs/SWIFT-PREVIEWS.md.
+                  LKM-273: the Trezi-side manifest folder (--manifest-dir) and
+                  project:native (structure + the driver's /graph); staged plan:
+                  docs/SWIFT-PREVIEWS-PLAN.md
   provider-sign-in.ts  starts user-initiated Claude Code or Codex app-server browser
                   login; provider CLIs own credential storage and the resulting
                   readiness is refreshed through providers:check-login
