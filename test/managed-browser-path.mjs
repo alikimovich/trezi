@@ -140,6 +140,11 @@ for (const [name, base] of [
   }
   const refused = [
     'agent-browser open http://x --session trezi-a',
+    'echo $(agent-browser open http://x --session trezi-a)',
+    'echo $(/opt/homebrew/bin/agent-browser open http://x --session trezi-a)',
+    'printf "%s" `agent-browser open http://x --session trezi-a`',
+    'echo $("$TREZI_AGENT_BROWSER" snapshot --session trezi-a)',
+
     'command agent-browser open http://x --session trezi-a',
     'command command agent-browser open http://x --session trezi-a',
     'command -p agent-browser open http://x --session trezi-a',

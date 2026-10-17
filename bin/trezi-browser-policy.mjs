@@ -38,6 +38,10 @@ const wrapperAdvice = (wrapper) =>
  */
 export function browserCommandRefusal(command, wrapper, cwd = '') {
   if (typeof command !== 'string' || !/agent-browser|TREZI_AGENT_BROWSER/.test(command)) return null
+  // Shell substitutions execute even under echo/printf and other inspectors.
+  // Avoid guessing at nested shell grammar: require a separate explicit invocation.
+  if (command.includes('$(') || command.includes('`'))
+    return `Run managed browser verification as a separate command, outside shell substitution. ${wrapperAdvice(wrapper)}`
   if (/(?:^|[\s;&|(])(?:export\s+|declare\s+(?:-x\s+)?|typeset\s+)?TREZI_AGENT_BROWSER=/.test(command))
     return `The managed agent-browser route is app-owned and cannot be reassigned. ${wrapperAdvice(wrapper)}`
   for (const segment of command.split(/&&|\|\||[;&|\n]/)) {
