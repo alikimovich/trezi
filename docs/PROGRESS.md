@@ -2,6 +2,31 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-16 — LKM-271 repair: states-canvas "a dependency edit only builds again"
+
+- Cause (pre-existing, unrelated to the Swift preview change): `StatesWatch` used `fs.watchFile`, and Bun takes its stat baseline on the first poll tick, not when `watchFile` is called. An edit made right after `watch()` is then part of the baseline and is never reported (a standalone repro missed it in 1 of 3 runs). Under load (8 workers plus the swiftc build in `swift-preview`) the first tick comes later, so the test saw 4 builds instead of 5.
+- Fix: `src/native/states-watch.ts` polls with its own `statSync` baseline taken in `watch()` (one 400 ms interval for all files, unref'd). `test/states-canvas.mjs` is unchanged; it passed 6 serial and 8 concurrent runs.
+
+## 2026-10-16 — LKM-271: native Swift component previews (demo, held branch)
+
+- What: a folder with `trezi-previews.json` (and no `package.json`) is detected as `framework: 'swift'` in both `src/main/project-detect.ts` and `src/service/RuntimeDetect.swift`; parity cases are in `test/runtime-owner.mjs`. The backend then launches Trezi's own driver (`src/main/swift-preview.ts`: bundled Bun + `src/swift-preview/driver.ts`) through the unchanged runtime owner, so the project never supplies a command.
+  - The driver compiles `src/swift-preview/PreviewHost.swift` with the manifest's files (`xcrun swiftc`, one module) and serves a page with a picker, frames, input forwarding and an error panel.
+  - It rebuilds on file changes and swaps hosts only after the new one is ready, so a failed build keeps the last good one on screen.
+  - Steps, architecture and limits are in `docs/SWIFT-PREVIEWS.md`.
+- Why this shape: Xcode's `#Preview` registry is private to Xcode's preview agent. Explicit `TreziPreviews` declarations give each sample its own state and dependencies and work for SwiftUI, `NSView` and `NSViewController` alike. A separate host process keeps user code out of Trezi's processes, and the existing runtime owner already provides port, readiness, stop and crash handling.
+- Host findings:
+  - Offscreen windows all report window number 0 here, so input is routed by a per-window tag carried in the event's window number.
+  - AppKit swallows the first click on views that refuse first mouse while the app is inactive (the host never activates), so those get `mouseDown` directly.
+  - `.borderedProminent` and Liquid Glass do not paint offscreen; the fixture uses `.bordered`.
+- Evidence:
+  - `test/swift-preview.mjs` (unit tier, real swiftc and AppKit) covers rendering, SwiftUI/AppKit clicks and typing, an edit rebuild, a compile error at `SearchPanelController.swift:59` with the stale host kept, recovery, and the driver's token and Host checks.
+  - The native smoke `swift-preview` (group `core`) runs the same flow inside Trezi.
+  - Agent OS quick passed (224 pass, 3 skip). The first quick run failed `retirement-census` (the new smoke module needed its census row) and `states-canvas` (the known flaky watcher; passed locally and on rerun).
+  - The first native `core` run failed device-frame, preview-overlay and three-d. All three are window-width checks that ran before `swift-preview`; the window stayed full width in their captures. That run also showed that a passing check gets no `cleanup`, so `swift-preview` now restores the first project itself. The confirming native `core` run passed 33/33 (`swift-preview` 12.8 s).
+  - Captures are in `docs/evidence/lkm-271/`.
+- Scraib was inspected read-only. Its app target imports `ScraibKit`, so it needs that module built first plus `@main`/Sparkle exclusions (follow-up). The demo uses `test/fixtures/swift-components`.
+- Not done: a live provider chat turn (the edit is a live-tree write, where a landed turn writes), `#Preview` reuse, full app launch, iOS.
+
 ## 2026-10-16 — LKM-268: live chat history status
 
 - Review follow-up: the history-menu code moved verbatim from `Shell.swift` (739 → 633 lines) into `src/native/HistoryMenu.swift` (`extension NativeShell`, listed in `scripts/build-native.mjs`); `Shell.swift` keeps the stored properties and the `updateToolbar`/`menuNeedsUpdate` calls. The test-forced menu appearance is now released when `popUp` returns, and `history-menu` asserts `historyAppearanceForced` is false after every dismissal.

@@ -1,0 +1,5 @@
+{
+  "name": "Swift components demo",
+  "sources": ["Sources/DemoComponents"],
+  "previews": ["Previews"]
+}

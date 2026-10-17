@@ -87,6 +87,9 @@ function staticProject(root: string, name?: string): DetectedProject {
   }
 }
 
+/** Declares a native Swift project's component previews (LKM-271, `docs/SWIFT-PREVIEWS.md`). */
+export const SWIFT_PREVIEW_MANIFEST = 'trezi-previews.json'
+
 /**
  * Given a project folder, detect the framework + package manager and the dev
  * command. A custom-command escape hatch lets the user override the detected
@@ -95,6 +98,10 @@ function staticProject(root: string, name?: string): DetectedProject {
 export async function detectProject(root: string): Promise<DetectedProject> {
   const pkgPath = join(root, 'package.json')
   if (!(await exists(pkgPath))) {
+    // A native Swift project with declared component previews: the backend runs
+    // Trezi's own preview driver for it (no command from the project).
+    if (await exists(join(root, SWIFT_PREVIEW_MANIFEST)))
+      return { ...staticProject(root), framework: 'swift' }
     // No package.json — a vanilla HTML/CSS/JS site if there's an HTML entry to
     // serve; otherwise there's nothing we know how to launch, so ask for a command.
     if (await findStaticEntry(root)) return staticProject(root)

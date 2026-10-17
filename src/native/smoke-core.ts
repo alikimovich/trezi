@@ -70,6 +70,7 @@ import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStartComposer, restoreStartComposer } from './smoke-start'
 import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
+import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { checkToolbarMore } from './smoke-toolbar-more'
@@ -1182,6 +1183,12 @@ export async function runNativeCoreSmoke(
         if ((await host.request('sheetInspect')).visible)
           await host.request('sheetPerform', { action: 'cancel' })
       }
+    },
+    {
+      name: 'swift-preview',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftPreview(host, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftPreview(host, firstProject)
     },
     {
       name: 'final-shell',

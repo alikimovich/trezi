@@ -198,6 +198,11 @@ try {
     project({})
     project({ '.gitignore': '', '.trezi/x': '' })
     project({ 'readme.md': '' })
+    project({ 'trezi-previews.json': '{}', 'Package.swift': '', 'index.html': '' })
+    project({
+      'package.json': JSON.stringify({ scripts: { dev: 'x' } }),
+      'trezi-previews.json': ''
+    })
     project({
       'package.json': JSON.stringify({
         name: 'vite-app',
