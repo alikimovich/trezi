@@ -91,6 +91,8 @@ src/main/
                   edit → Tailwind class rewrite, else merge into an EXISTING
                   inline style, else hand to the agent; tw-styles.ts +
                   inline-style.ts are the pure mapping/splicing halves
+                  Layout fields read active CSSOM declarations through
+                  preview/style-provenance.ts; uncertain rule sources stay read-only
   style-tokens.ts re-resolves a design-token pick from the island (name+group
                   only) against the project's own tokens and decides what to
                   write — a `var(--name)` reference or a Tailwind token class

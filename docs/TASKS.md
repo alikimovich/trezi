@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Applied layout styles in the inspector (LKM-272)
+
+- [x] Add contextual flex/grid and child alignment fields, preserve authored text and distinguish defaults.
+- [x] Read active media declarations and guard edits when the winning source is uncertain.
+- [ ] Verify the native fixture for CSS, CSS Module and utility edits, responsive read-only behavior, capture and Undo.
+- [ ] Manager: inspect native captures, run full verification and independent review.
+
 ## Chat history status (LKM-268)
 
 - [x] Separate unread assistant answers from general review activity and show fixed-size running/unread indicators in the native history menu.
