@@ -252,10 +252,24 @@ async function waitServed(served, css, label, timeoutMs = 60000) {
   }
 }
 
-/** After a gesture, wait until settle succeeds and the card shows the final shadow. */
-export async function waitForGestureSettled(page, css, { selector = SELECTOR, key } = {}) {
+/**
+ * After a gesture, wait until settle succeeds and the card shows the final shadow. `nudge`
+ * writes the gesture's final source again (same text) when the dev server's watcher, slow on a
+ * loaded machine, has not delivered it after 5 s, and then every 6 s: it only repeats a write
+ * the server missed, so a page that already shows the final shadow never sees it.
+ */
+export async function waitForGestureSettled(
+  page,
+  css,
+  { selector = SELECTOR, key, nudge, note = '' } = {}
+) {
   const overrideKey = key ?? ''
+  let nudges = 0
   for (let i = 0; i < 240; i++) {
+    if (nudge && i >= 100 && (i - 100) % 120 === 0) {
+      nudges++
+      await nudge()
+    }
     try {
       const ok = await page(`(() => {
         ${PAGE_SHADOW_LAYERS}
@@ -281,10 +295,15 @@ export async function waitForGestureSettled(page, css, { selector = SELECTOR, ke
     error: String(error?.message ?? error)
   }))
   const holding = await page('!!window.__treziIslandOverride?.holding?.()').catch(() => null)
-  throw new Error(
+  const error = new Error(
     `Preview override did not settle after the gesture; holding ${holding}, ` +
-      `observed ${JSON.stringify(observed)}, expected computed(${JSON.stringify(css)})`
+      `observed ${JSON.stringify(observed)}, expected computed(${JSON.stringify(css)}); ` +
+      `source written again ${nudges}x${note ? `; ${note}` : ''}`
   )
+  // Set when the final source was on disk and the page still never showed it: the dev server's
+  // update channel did not deliver, which a fresh run of the gesture may get right.
+  error.updateUndelivered = Boolean(nudge) && !holding
+  throw error
 }
 
 /** Island writes go through the repository queue; reset the fixture source the same way. */
@@ -330,6 +349,35 @@ export async function openOnSource(page, open, served, css, label) {
 }
 
 /**
+ * `openOnSource` for a source the caller has just written. A dev server whose file watcher is
+ * still doing its initial scan (slow on a loaded machine) misses a write made meanwhile and
+ * keeps serving the old source, so `write` runs again, at most every 8 s, while the server has
+ * not picked it up. It may then compile the first write late and the second right after it:
+ * after a re-write, let that settle and load the page again, so no stray HMR lands in the
+ * gesture that follows.
+ */
+async function openOnWrittenSource(page, open, served, css, label, write) {
+  let wrote = Date.now()
+  let rewrote = false
+  const rewriting =
+    served &&
+    (async (shown) => {
+      const result = await served(shown)
+      if (result !== true && Date.now() - wrote > 8000) {
+        wrote = Date.now()
+        rewrote = true
+        await write()
+      }
+      return result
+    })
+  await openOnSource(page, open, rewriting || served, css, label)
+  if (!rewrote) return
+  await Bun.sleep(4000)
+  await clearPreviewMeasurementState(page)
+  await openOnSource(page, open, served, css, `${label} (settled)`)
+}
+
+/**
  * Next streams the server-rendered card long before React hydrates it, and the page-world
  * hydration is invisible from the preview world. A drag that starts first finishes (and its
  * source write lands) before the HMR socket exists: React then hydrates the stale props over
@@ -351,7 +399,9 @@ export async function resetPreviewSource(page, root, sourceFile, format, open, s
   await clearPreviewMeasurementState(page)
   const { code } = islandSource(initial, format)
   await writeSourceFile(root, sourceFile, code)
-  await openOnSource(page, open, served, steps[0], 'reset')
+  await openOnWrittenSource(page, open, served, steps[0], 'reset', () =>
+    writeSourceFile(root, sourceFile, code)
+  )
   assert.equal(
     await readFile(`${root}/${sourceFile}`, 'utf8'),
     code,
@@ -494,7 +544,13 @@ export async function runDrag({
     if (text !== initialCode && !writes.includes(text)) writes.push(text)
     const last = index === path.length - 1
     if (withOverrides && last) {
-      await waitForGestureSettled(page, steps[path.length], { key: `${chat}\n${island}` })
+      // The final write is the product's; `text` is what it wrote (the initial text if it wrote nothing).
+      const landed = text !== initialCode
+      await waitForGestureSettled(page, steps[path.length], {
+        key: `${chat}\n${island}`,
+        nudge: landed ? () => writeFile(sourceFile, text, 'utf8') : undefined,
+        note: landed ? 'the final source write landed' : 'no final source write landed'
+      })
       await page(
         `(() => { if (typeof window.__treziFlickerStop === 'function') window.__treziFlickerStop(); })()`
       )
@@ -563,8 +619,12 @@ export async function measureFramework({
 }) {
   const chat = `${label}-${withOverrides ? 'after' : 'before'}-chat`
   const port = withOverrides ? makePreviewPort(page) : null
+  // What the override did, for the failure message of a flicker assertion.
+  const overrideEvents = []
   const overrides = port
-    ? new IslandOverrides(port, { idle: 600, poll: 50, timeout: 8000 })
+    ? new IslandOverrides(port, { idle: 600, poll: 50, timeout: 8000 }, (event) =>
+        overrideEvents.push(event.type)
+      )
     : undefined
   const { islands, island, code } = await setupIsland(
     chat,
@@ -575,12 +635,13 @@ export async function measureFramework({
     label === 'next' ? 'tsx' : 'js'
   )
   try {
-    await openOnSource(
+    await openOnWrittenSource(
       page,
       waitForCard,
       served,
       steps[0],
-      `${label}-${withOverrides ? 'after' : 'before'} start`
+      `${label}-${withOverrides ? 'after' : 'before'} start`,
+      () => writeSourceFile(root, sourceFile, code)
     )
     if (label === 'next') await waitForNextHydration(page)
     const record = islands.sessions.get(chat)?.records.find((r) => r.id === island)
@@ -600,10 +661,20 @@ export async function measureFramework({
       label: `${label}-${withOverrides ? 'after' : 'before'}`
     })
     if (withOverrides) {
-      assert.equal(counts.sourceWrites, 1, `${label} after: one source write per gesture`)
-      assert.equal(counts.gaps, 0, `${label} after: no gap frames`)
-      assert.equal(counts.outOfOrder, 0, `${label} after: no out-of-order values`)
-      assert.equal(counts.foreign, 0, `${label} after: no foreign values`)
+      try {
+        assert.equal(counts.sourceWrites, 1, `${label} after: one source write per gesture`)
+        const events = [...new Set(overrideEvents)].join(',')
+        assert.equal(counts.gaps, 0, `${label} after: no gap frames (override: ${events})`)
+        assert.equal(counts.outOfOrder, 0, `${label} after: no out-of-order values (${events})`)
+        assert.equal(counts.foreign, 0, `${label} after: no foreign values (override: ${events})`)
+      } catch (error) {
+        // The override gave up (its 8 s budget) because the dev server's update for the written
+        // source came later, so the old value showed until it did: a slow host, not an override
+        // that removed itself early. The caller runs the gesture again (three runs at most), and
+        // every run must pass these same assertions.
+        if (overrideEvents.includes('timeout')) error.updateUndelivered = true
+        throw error
+      }
     } else {
       assert.ok(counts.sourceWrites > 1, `${label} before: multiple source writes`)
       // A reload of the preview document mid-drag is itself the flicker; whether a frame

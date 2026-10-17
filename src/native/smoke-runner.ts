@@ -55,6 +55,8 @@ export interface SmokeHooks {
    *  attempt (TREZI_NATIVE_SMOKE_STEAL_FOCUS). */
   loseFocus?(): Promise<void>
   stealFocus?: ReadonlySet<string>
+  /** Absolute launcher deadline; leave room to report collected failures and shut down. */
+  deadline?: number
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -137,7 +139,8 @@ export async function runSmokeChecks(
   }
   // The check's own cleanup first (it knows what it left open), then the shared
   // foreground restore; neither may hide the original failure or stop the run.
-  const recover = async (check: SmokeCheck, after: string) => {
+  const recover = async (check: SmokeCheck, after: string): Promise<boolean> => {
+    let restored = true
     for (const [stage, step] of [
       ['cleanup', check.cleanup],
       ['restore', () => hooks.restore(check.name)]
@@ -147,12 +150,23 @@ export async function runSmokeChecks(
         await step()
       } catch (e) {
         log(`WARN [smoke] ${check.name} ${stage} after ${after}: ${firstAssertionLine(e)}`)
+        if (stage === 'restore') restored = false
       }
     }
+    return restored
   }
+  let failedRestore: string | undefined
   for (const check of checks) {
+    const lastFailure = [...results].reverse().find((result) => result.outcome === 'fail')
+    const budgetExhausted =
+      lastFailure && hooks.deadline && Date.now() + 90_000 >= hooks.deadline
+        ? `suite time budget after ${lastFailure.name} failed`
+        : undefined
     const blocked =
-      hooks.halted?.() ?? (check.dependsOn ?? []).find((dep) => outcome.get(dep) !== 'pass')
+      hooks.halted?.() ??
+      failedRestore ??
+      budgetExhausted ??
+      (check.dependsOn ?? []).find((dep) => outcome.get(dep) !== 'pass')
     if (blocked) {
       results.push({ name: check.name, outcome: 'skip', dependsOn: blocked })
       outcome.set(check.name, 'skip')
@@ -164,6 +178,7 @@ export async function runSmokeChecks(
     let error: unknown
     let failed = false
     let environment: string | undefined
+    let recoveryAttempted = false
     for (let attempt = 1; ; attempt++) {
       failed = false
       const before = await focus(check.name, 'before the check')
@@ -185,7 +200,11 @@ export async function runSmokeChecks(
         log(
           `RETRY [smoke] ${check.name} — focus was lost during the check; retrying once: ${firstAssertionLine(error)}`
         )
-        await recover(check, 'focus loss')
+        if (!(await recover(check, 'focus loss'))) {
+          failedRestore = `${check.name} restore failed`
+          recoveryAttempted = true
+          break
+        }
         continue
       }
       if (failed) environment = environmentCause(check.name, before, after)
@@ -209,7 +228,8 @@ export async function runSmokeChecks(
     } catch (e) {
       capture = `unavailable (${firstAssertionLine(e)})`
     }
-    await recover(check, 'failure')
+    if (!recoveryAttempted && !(await recover(check, 'failure')))
+      failedRestore = `${check.name} restore failed`
     results.push({
       name: check.name,
       outcome: 'fail',

@@ -82,8 +82,6 @@ try {
       },
       restore: async (name) => {
         calls.push(`restore:${name}`)
-        if (name === 'composer')
-          throw new Error('Sidebar restore left the foreground dirty: sheet visible')
       },
       log: (line) => lines.push(line),
       inject: new Set(['injected'])
@@ -135,12 +133,84 @@ assert.equal(
 assert.ok(lines.includes('SKIP [smoke] chat-drafts — skipped: depends on composer'))
 assert.ok(lines.includes('SKIP [smoke] chat-reload — skipped: depends on chat-drafts'))
 assert.ok(lines.some((l) => /^FAIL \[smoke\] composer \d+\.\ds — Composer grows upward$/.test(l)))
-assert.ok(
-  lines.includes(
-    'WARN [smoke] composer restore after failure: Sidebar restore left the foreground dirty: sheet visible'
-  ),
-  'a failed restore is reported and does not stop the run'
+
+// If recovery cannot restore the shared preview/viewport, later checks would be
+// testing that damaged state and their own recovery can consume the launcher budget.
+const afterBadRestore = []
+const badRestoreError = console.error
+console.error = () => {}
+const badRestore = await runSmokeChecks(
+  [
+    pass('startup'),
+    {
+      name: 'states-workbench',
+      run: async () => {
+        throw new Error('reload missed')
+      }
+    },
+    {
+      name: 'three-d',
+      run: async () => {
+        afterBadRestore.push('ran')
+      }
+    },
+    {
+      name: 'final-shell',
+      run: async () => {
+        afterBadRestore.push('final')
+      }
+    }
+  ],
+  {
+    capture: async () => 'failure.png',
+    restore: async () => {
+      throw new Error('Restore timed out: desktop viewport')
+    },
+    log: (line) => afterBadRestore.push(line)
+  }
 )
+console.error = badRestoreError
+assert.deepEqual(
+  badRestore.map((r) => r.outcome),
+  ['pass', 'fail', 'skip', 'skip']
+)
+assert.equal(badRestore[2].dependsOn, 'states-workbench restore failed')
+assert.ok(
+  afterBadRestore.includes(
+    'WARN [smoke] states-workbench restore after failure: Restore timed out: desktop viewport'
+  )
+)
+assert.ok(!afterBadRestore.includes('ran'))
+
+const nearDeadline = []
+const timeBudgetError = console.error
+console.error = () => {}
+const timeBudgetResults = await runSmokeChecks(
+  [
+    {
+      name: 'first',
+      run: async () => {
+        throw new Error('reload missed')
+      }
+    },
+    {
+      name: 'later',
+      run: async () => {
+        nearDeadline.push('ran')
+      }
+    }
+  ],
+  {
+    capture: async () => 'failure.png',
+    restore: async () => {},
+    deadline: Date.now() + 80_000,
+    log: () => {}
+  }
+)
+console.error = timeBudgetError
+assert.equal(timeBudgetResults[1].outcome, 'skip')
+assert.equal(timeBudgetResults[1].dependsOn, 'suite time budget after first failed')
+assert.deepEqual(nearDeadline, [])
 
 assert.deepEqual(formatSmokeSummary(results).split('\n'), [
   'NATIVE SMOKE SUMMARY: 4 passed, 3 failed, 2 skipped (9 checks)',
@@ -251,6 +321,40 @@ const foreground = (host, name, extra = {}) => ({
   },
   ...extra
 })
+
+// A failed focus-loss restore is attempted once and prevents later checks.
+{
+  const host = focusHost()
+  host.hooks.restore = async () => {
+    host.calls.push('restore')
+    throw new Error('desktop viewport unavailable')
+  }
+  const originalError = console.error
+  console.error = () => {}
+  try {
+    const out = await runSmokeChecks(
+      [
+        {
+          name: 'focus-failure',
+          run: async () => {
+            host.focused = false
+            host.lost++
+            throw new Error('check failed')
+          }
+        },
+        foreground(host, 'after-failed-restore')
+      ],
+      { ...host.hooks, log: () => {} }
+    )
+    assert.deepEqual(
+      out.map((r) => r.outcome),
+      ['fail', 'skip']
+    )
+    assert.equal(host.calls.filter((call) => call === 'restore').length, 1)
+  } finally {
+    console.error = originalError
+  }
+}
 
 // Focus lost during a check: restored, retried once, passes; the log says so.
 {

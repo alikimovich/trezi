@@ -3,7 +3,7 @@ import Darwin
 
 /// The HTTP/1.1 socket layer of a `StaticSite`: an IPv4 loopback listener and one
 /// short-lived connection per request (`Connection: close`). An event stream stays
-/// open until its peer leaves or the site closes. `serve(_:site:)` takes any
+/// open until its peer leaves or the site closes, without a thread of its own. `serve(_:site:)` takes any
 /// connected stream socket, so fixtures exercise it over a socketpair.
 final class StaticServer: @unchecked Sendable {
     static let maxHead = 16 * 1024
@@ -83,17 +83,7 @@ final class StaticServer: @unchecked Sendable {
             guard client.send(response(status: reply.status, headers: reply.headers, length: nil) + opening), site.attach(client) else {
                 client.release(); return
             }
-            // Held until the peer leaves (EOF) or the site ends it (shutdown).
-            var noTimeout = timeval(tv_sec: 0, tv_usec: 0)
-            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &noTimeout, socklen_t(MemoryLayout<timeval>.size))
-            var buffer = [UInt8](repeating: 0, count: 512)
-            while true {
-                let count = read(fd, &buffer, buffer.count)
-                if count < 0 && errno == EINTR { continue }
-                if count <= 0 { break }
-            }
-            site.drop(client)
-            client.release()
+            hold(client, fd, site: site)
         case .bytes(let data):
             _ = writeAll(fd, response(status: reply.status, headers: reply.headers, length: data.count) + (reply.headOnly ? Data() : data))
             Darwin.close(fd)
@@ -103,6 +93,25 @@ final class StaticServer: @unchecked Sendable {
             }
             Darwin.close(fd)
         }
+    }
+
+    static let streams = DispatchQueue(label: "dev.trezi.runtime.streams")
+
+    /// Holds an event stream until the peer leaves (EOF) or the site ends it (shutdown),
+    /// watched by a read source rather than a blocking read: a parked worker per stream
+    /// stopped the site, its broadcasts and the rest of the service once the dispatch
+    /// pool's 64 workers were all held (LKM-255).
+    static func hold(_ client: EventClient, _ fd: Int32, site: StaticSite) {
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: streams)
+        source.setEventHandler {
+            var buffer = [UInt8](repeating: 0, count: 512)
+            let count = recv(fd, &buffer, buffer.count, MSG_DONTWAIT)
+            if count > 0 || (count < 0 && (errno == EINTR || errno == EAGAIN)) { return }
+            source.cancel()
+        }
+        // The descriptor is closed only after the source lets it go.
+        source.setCancelHandler { site.drop(client); client.release() }
+        source.resume()
     }
 
     /// The request head (through the blank line), or nil if it exceeds 16 KiB or

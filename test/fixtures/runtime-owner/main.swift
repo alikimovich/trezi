@@ -139,6 +139,31 @@ func handle(_ data: Data) {
         let fd = streams[command["name"]?.text?.string ?? "stream"] ?? -1
         let received = readMore(fd, until: command["until"]?.text?.string ?? "\n\n", timeout: seconds("RUNTIME_READ", 3))
         emit([("received", string(String(decoding: received, as: UTF8.self)))])
+    case "open-streams":
+        // More held streams than the dispatch pool has workers (64); none waits for its reply.
+        var count = 0
+        if case .number(let value)? = command["count"] { count = Int(value) }
+        let current = site(command)
+        for index in 0..<count {
+            var pair: [Int32] = [0, 0]
+            socketpair(AF_UNIX, SOCK_STREAM, 0, &pair)
+            let server = pair[0]
+            DispatchQueue.global().async { StaticServer.serve(server, site: current) }
+            _ = StaticServer.writeAll(pair[1], Data("GET /__trezi_reload?v=0 HTTP/1.1\r\n\r\n".utf8))
+            streams["many-\(index)"] = pair[1]
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while current.clientCount < count && Date() < deadline { usleep(20_000) }
+        emit([("clients", .number(Double(current.clientCount)))])
+    case "close-streams":
+        // Those peers leave: each stream must be dropped on its EOF.
+        var count = 0
+        if case .number(let value)? = command["count"] { count = Int(value) }
+        let current = site(command), target = max(0, current.clientCount - count)
+        for index in 0..<count { if let fd = streams.removeValue(forKey: "many-\(index)") { close(fd) } }
+        let deadline = Date().addingTimeInterval(5)
+        while current.clientCount > target && Date() < deadline { usleep(20_000) }
+        emit([("clients", .number(Double(current.clientCount)))])
     case "changed": site(command).changed(); emit([("version", .number(Double(site(command).currentVersion)))])
     case "watch": site(command).watch(); emit([("watching", .bool(site(command).watching))])
     case "state":
