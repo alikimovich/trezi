@@ -1,27 +1,42 @@
-import { type Stats, unwatchFile, watchFile } from 'node:fs'
+import { statSync } from 'node:fs'
 
 const MAX_WATCHED = 200
 const INTERVAL = 400
 
-/** Watches the files a states bundle was built from. Polled, not `fs.watch`: Bun never again
- * reports a path whose `fs.watch` was closed once, so a component shown a second time would
- * stop updating. */
+function stamp(file: string): string {
+  try {
+    const stats = statSync(file)
+    return `${stats.mtimeMs}:${stats.size}`
+  } catch {
+    return 'missing'
+  }
+}
+
+/** Poll bundle inputs against a synchronous initial snapshot. Bun's watchFile can take its
+ * first stat after an immediate edit and silently adopt that edit as its baseline. fs.watch
+ * also stops reporting a path once its watcher has been closed, so keep explicit polling. */
 export class StatesWatch {
-  private watched: [string, (now: Stats, before: Stats) => void][] = []
+  private timer: ReturnType<typeof setInterval> | undefined
 
   watch(files: string[], changed: (file: string) => void) {
     this.close()
-    for (const file of files.slice(0, MAX_WATCHED)) {
-      const listener = (now: Stats, before: Stats) => {
-        if (now.mtimeMs !== before.mtimeMs || now.size !== before.size) changed(file)
+    const watched = files.slice(0, MAX_WATCHED).map((file) => ({ file, stamp: stamp(file) }))
+    if (!watched.length) return
+    const timer = setInterval(() => {
+      for (const input of watched) {
+        if (this.timer !== timer) return
+        const next = stamp(input.file)
+        if (next === input.stamp) continue
+        input.stamp = next
+        changed(input.file)
       }
-      watchFile(file, { interval: INTERVAL, persistent: false }, listener)
-      this.watched.push([file, listener])
-    }
+    }, INTERVAL)
+    this.timer = timer
+    timer.unref()
   }
 
   close() {
-    for (const [file, listener] of this.watched) unwatchFile(file, listener)
-    this.watched = []
+    clearInterval(this.timer)
+    this.timer = undefined
   }
 }

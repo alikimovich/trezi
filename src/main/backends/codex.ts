@@ -20,7 +20,7 @@ import {
 } from '../../shared/run-stats'
 import { agentFileAccess } from '../agent-file-access'
 import { type RolloutUsageWatch, watchRolloutUsage } from '../codex-usage'
-import { parseCodexModels } from '../model-catalog'
+import { installedVersion, parseCodexModels } from '../model-catalog'
 import { resolveConnection } from '../providers'
 import { scrubSecret } from '../providers-store'
 import { treziRules } from '../rules'
@@ -43,7 +43,11 @@ import {
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
 import { codexItemWarning, createItemTracker } from './codex-stream'
-import { managedBrowserCodexConfig } from './managed-browser-path'
+import {
+  assertCodexHookVersion,
+  managedBrowserCodexConfig,
+  trustedCodexHookOverrides
+} from './managed-browser-path'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
@@ -369,6 +373,18 @@ async function startSession(
         'the `codex` CLI was not found. Install it (`npm i -g @openai/codex` or Homebrew) and run `codex login` (sign in with ChatGPT).'
       )
     }
+    // The inline hook trust identity is pinned to demonstrated CLI contracts.
+    // Never compensate for a changed contract with a blanket trust bypass.
+    if (installedVersion(app.getAppPath(), '@openai/codex-sdk') !== '0.160.1')
+      throw new Error(
+        'Trezi command hooks require the locked Codex SDK 0.160.1. Provider execution is disabled; reinstall the locked Trezi dependencies before retrying.'
+      )
+    if (process.env.TREZI_CODEX_BIN) {
+      const { stdout } = await execFileP(process.env.TREZI_CODEX_BIN, ['--version'], {
+        timeout: 4000
+      })
+      assertCodexHookVersion(stdout)
+    }
     const { Codex } = await loadCodex()
     // Trezi's tools for this chat, each authorized by the provider owner against the
     // session's grant first (a background edit is not granted the editor or islands).
@@ -412,18 +428,21 @@ async function startSession(
       )
       // LKM-269: rebuilt for every turn and resume, so a reused helper keeps the route.
       const browser = managedBrowserCodexConfig(__dirname)
+      const groups = [...(git.hooks?.PreToolUse ?? []), ...(browser.hooks?.PreToolUse ?? [])]
       const codex = new Codex({
         ...codexPathOverride(),
         ...codexOptions,
+        configOverrides: [
+          ...(codexOptions.configOverrides ?? []),
+          ...trustedCodexHookOverrides(groups)
+        ],
         config: isolatedCodexConfig({
           ...codexOptions.config,
           ...mcpConfig,
           ...sandbox.config,
           ...browser,
           ...git,
-          hooks: {
-            PreToolUse: [...(git.hooks?.PreToolUse ?? []), ...(browser.hooks?.PreToolUse ?? [])]
-          }
+          hooks: { PreToolUse: groups }
         })
       })
       return id ? codex.resumeThread(id, threadOptions) : codex.startThread(threadOptions)

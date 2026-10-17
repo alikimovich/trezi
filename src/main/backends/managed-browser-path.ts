@@ -1,8 +1,9 @@
 /**
  * LKM-264: how provider helpers put Trezi's managed `agent-browser` wrapper first on the
- * PATH their agents' shell tools inherit, so a bare `agent-browser` never resolves to
- * the global CLI (which can launch the user's Chrome and take focus).
+ * PATH their agents' shell tools inherit. Login shells may reorder that PATH;
+ * LKM-269 supplies an explicit managed route and refuses direct global launches.
  */
+import { createHash } from 'node:crypto'
 import { accessSync, constants, existsSync, statSync } from 'node:fs'
 import { delimiter, dirname, join } from 'node:path'
 import { browserCommandRefusal } from '../../../bin/trezi-browser-policy.mjs'
@@ -93,6 +94,10 @@ export function managedBrowserCodexConfig(
     join(dir, 'trezi-browser-guard.mjs')
   )
   const guard = guards.find((file) => existsSync(file))
+  if (!guard)
+    throw new Error(
+      "Trezi's managed browser guard is missing from this install; provider execution is disabled. Rebuild Trezi; do not use a global agent-browser."
+    )
   return {
     ...(wrapper
       ? {
@@ -137,4 +142,56 @@ export function managedBrowserRefusal(
   return typeof command === 'string'
     ? browserCommandRefusal(command, managedBrowserWrapper(base), cwd)
     : null
+}
+
+/** Trust only app-constructed command hooks for this CLI invocation. Codex 0.159+
+ * ignores untrusted inline hooks. This mirrors its normalized identity and avoids
+ * the blanket hook-trust bypass, persisted user edits, or trusting project hooks.
+ */
+export function trustedCodexHookOverrides(
+  groups: Array<{ matcher: string; hooks: Array<{ type: string; command: string }> }>
+) {
+  const canonical = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(
+            Object.entries(value)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, child]) => [key, canonical(child)])
+          )
+        : value
+  const state: Record<string, { enabled: boolean; trusted_hash: string }> = {}
+  for (const [groupIndex, group] of groups.entries())
+    for (const [handlerIndex, handler] of group.hooks.entries()) {
+      if (handler.type !== 'command') throw new Error('Only app-owned command hooks may be trusted')
+      const identity = {
+        event_name: 'pre_tool_use',
+        matcher: group.matcher,
+        hooks: [{ type: 'command', command: handler.command, async: false, timeout: 600 }]
+      }
+      const hash = createHash('sha256')
+        .update(JSON.stringify(canonical(identity)))
+        .digest('hex')
+      // The SDK flattens config object keys into TOML dotted paths. Quote this exact
+      // state key, whose synthetic source filename contains a dot, as one TOML key.
+      const key = `/<session-flags>/config.toml:pre_tool_use:${groupIndex}:${handlerIndex}`
+      state[key] = { enabled: true, trusted_hash: `sha256:${hash}` }
+    }
+  // One inline TOML value keeps source keys intact: Codex's CLI override path
+  // parser does not treat quoted dots inside a dotted key as a single segment.
+  const entries = Object.entries(state).map(
+    ([key, value]) =>
+      `${JSON.stringify(key)} = { enabled = true, trusted_hash = ${JSON.stringify(value.trusted_hash)} }`
+  )
+  return [`hooks.state={${entries.join(',')}}`]
+}
+
+/** The hook trust identity is a versioned CLI contract, not a best-effort hint. */
+export function assertCodexHookVersion(version: string | null): void {
+  const parsed = version?.trim().match(/^(?:codex-cli )?(0\.159\.1|0\.160\.1)$/)?.[1]
+  if (!parsed)
+    throw new Error(
+      `Codex ${version?.trim() || 'unknown version'} has not been verified for Trezi's required command hooks. Provider execution is disabled. Reinstall the locked Trezi dependencies (Codex SDK 0.160.1), or select a verified Codex CLI 0.159.1/0.160.1; newer CLI versions need the local dispatch regression before support is added.`
+    )
 }

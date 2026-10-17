@@ -25,6 +25,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
+import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import { formatTiming, measureTiming, TIMING_RUNS } from '../src/native/smoke-timing.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { workspaceService } from './helpers/workspace-fixture.mjs'
@@ -47,7 +48,7 @@ git('commit', '-qm', 'Initial')
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 async function until(condition, label, timeout = 15_000) {
   const start = Date.now()
-  while (!condition()) {
+  while (!(await condition())) {
     if (Date.now() - start > timeout) throw new Error(`Timed out waiting for ${label}`)
     await sleep(10)
   }
@@ -203,14 +204,44 @@ await until(() => providers.length === 1, 'project chat')
 assert.ok(await spareReady(repo), 'opening the project prewarms a spare')
 await releaseSpare(repo)
 delay = 3_000
+// Read through the same repository lane as background creation/removal. Git can fail
+// mid-enumeration if the last .git/worktrees entry is removed underneath a raw list.
 const worktrees = () =>
-  git('worktree', 'list', '--porcelain')
-    .split('\n')
-    .filter((line) => line.startsWith('worktree '))
-const onlyChatWorktrees = () => {
+  enqueueRepoWrite(repo, async () =>
+    git('worktree', 'list', '--porcelain')
+      .split('\n')
+      .filter((line) => line.startsWith('worktree '))
+  )
+const onlyChatWorktrees = async () => {
+  const listed = await worktrees()
   const open = new Set(providers.map((p) => p.cwd))
-  return worktrees().every((line) => open.has(line.slice(9)) || line.slice(9) === repo)
+  return listed.every((line) => open.has(line.slice(9)) || line.slice(9) === repo)
 }
+
+// Regression: the observation must wait for an in-flight repository mutation,
+// rather than inspecting Git's transient worktree administration directory.
+let entered, unblock
+const laneEntered = new Promise((resolve) => {
+  entered = resolve
+})
+const laneBlocked = new Promise((resolve) => {
+  unblock = resolve
+})
+const mutation = enqueueRepoWrite(repo, async () => {
+  entered()
+  await laneBlocked
+})
+await laneEntered
+let listed = false
+const listing = worktrees().then(() => {
+  listed = true
+})
+await sleep(20)
+assert.equal(listed, false, 'worktree observations wait for the repository lane')
+unblock()
+await mutation
+await listing
+assert.equal(listed, true)
 
 // 0. LKM-211: the composer's timing, as the median of five new chats after a warm-up.
 // Each chat's worktree is held until all are measured, and each is closed while pending.
@@ -299,7 +330,7 @@ const unused = await spareReady(repo)
 assert.ok(unused && existsSync(unused.path))
 await workspace.close(key)
 await until(() => !existsSync(unused.path), 'unused spare removed on project close')
-await until(() => worktrees().length === 1, 'every chat worktree removed on close')
+await until(async () => (await worktrees()).length === 1, 'every chat worktree removed on close')
 assert.equal(await spareReady(repo), null)
 
 console.log(

@@ -203,7 +203,7 @@ writeFileSync(
 import { appendFileSync, readFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 const out = (event) => process.stdout.write(JSON.stringify(event) + '\\n')
-if (args[0] === '--version') { console.log('codex-cli 0.0.0-test'); process.exit(0) }
+if (args[0] === '--version') { console.log('codex-cli 0.160.1'); process.exit(0) }
 if (args[0] !== 'exec') process.exit(2)
 const text = readFileSync(0, 'utf8')
 const plan = JSON.parse(readFileSync(${JSON.stringify(PLAN)}, 'utf8'))

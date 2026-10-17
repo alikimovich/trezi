@@ -11,6 +11,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Keep immediate component dependency edits from being missed while the states watcher starts polling.
+- Enforce the exact app-owned Codex session hooks and refuse browser commands hidden behind shell launchers or substitutions (LKM-269).
 - Agents now reach Trezi's managed Vercel agent-browser by its absolute path even when a login shell reorders PATH, so a global CLI no longer wins and no WebKit fallback is used; missing CLI or headless-shell dependencies are reported separately from route errors (LKM-269).
 - Styles now shows active flex and grid gap, direction, wrap and alignment values, with separate row and column gaps and read-only context for uncertain CSS sources (LKM-272).
 - Chat history now shows a pulsing running dot and a green dot for an unseen assistant answer, with Reduce Motion and accessible status labels (LKM-268).

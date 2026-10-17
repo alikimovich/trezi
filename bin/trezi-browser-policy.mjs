@@ -14,12 +14,12 @@ const FORBIDDEN_FLAGS = new Set([
 ])
 // Commands that only look at a path or a name never launch a browser.
 const INSPECTORS = new Set([
-  'command', 'which', 'type', 'whereis', 'hash', 'ls', 'stat', 'file', 'echo', 'printf',
+  'which', 'type', 'whereis', 'hash', 'ls', 'stat', 'file', 'echo', 'printf',
   'readlink', 'realpath', 'test', '[', 'grep', 'rg'
 ])
 // Commands that run their arguments as a program.
 const LAUNCHERS = new Set([
-  'env', 'sudo', 'nohup', 'time', 'xargs', 'exec', 'bash', 'sh', 'zsh', 'timeout', 'nice',
+  'command', 'builtin', 'env', 'sudo', 'nohup', 'time', 'xargs', 'exec', 'bash', 'sh', 'zsh', 'timeout', 'nice',
   'npx', 'bunx', 'pnpm', 'yarn', 'npm', 'bun', 'node'
 ])
 
@@ -38,19 +38,42 @@ const wrapperAdvice = (wrapper) =>
  */
 export function browserCommandRefusal(command, wrapper, cwd = '') {
   if (typeof command !== 'string' || !/agent-browser|TREZI_AGENT_BROWSER/.test(command)) return null
+  // Shell substitutions execute even under echo/printf and other inspectors.
+  // Avoid guessing at nested shell grammar: require a separate explicit invocation.
+  if (command.includes('$(') || command.includes('`'))
+    return `Run managed browser verification as a separate command, outside shell substitution. ${wrapperAdvice(wrapper)}`
   if (/(?:^|[\s;&|(])(?:export\s+|declare\s+(?:-x\s+)?|typeset\s+)?TREZI_AGENT_BROWSER=/.test(command))
     return `The managed agent-browser route is app-owned and cannot be reassigned. ${wrapperAdvice(wrapper)}`
   for (const segment of command.split(/&&|\|\||[;&|\n]/)) {
-    const words = segment.trim().split(/\s+/).map(unquote).filter(Boolean)
+    const tokens = segment.match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s]+/g) ?? []
+    // Keep a quoted absolute wrapper path intact (Application Support is common).
+    // Embedded shell programs remain unsupported rather than hiding a global call.
+    const words = tokens.map(unquote).filter(Boolean)
+    if (words.some((word) => /\s/.test(word) && /agent-browser|TREZI_AGENT_BROWSER/.test(word) && word !== wrapper))
+      return `Run managed browser verification as a separate command, outside nested shell strings. ${wrapperAdvice(wrapper)}`
     let at = 0
     while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[at] ?? '')) at++
     const assignments = words.slice(0, at)
-    const [first = '', ...rest] = words.slice(at)
+    let [first = '', ...rest] = words.slice(at)
+    // Unwrap bounded POSIX command prefixes. -p changes command lookup, while
+    // -v/-V only inspect it; neither nested prefixes nor options may hide execution.
+    let inspecting = false
+    for (let depth = 0; first === 'command' && depth < 32; depth++) {
+      while (rest[0]?.startsWith('-') && rest[0] !== '--') {
+        const option = rest.shift()
+        if (!/^-[pvV]+$/.test(option))
+          return `Unsupported command prefix for managed browser verification. ${wrapperAdvice(wrapper)}`
+        if (/[vV]/.test(option)) inspecting = true
+      }
+      if (rest[0] === '--') rest.shift()
+      if (inspecting) break
+      first = rest.shift() ?? ''
+    }
     const involved = [first, ...rest].some(
       (word) => word === 'agent-browser' || basename(word) === 'agent-browser' || isManagedVariable(word)
     )
     if (!involved) continue
-    if (INSPECTORS.has(first)) continue
+    if (INSPECTORS.has(first) || (first === 'command' && inspecting)) continue
     if (!wrapper)
       return "Trezi's managed agent-browser wrapper (bin/managed/agent-browser) is missing or not executable in this install. That is a Trezi install problem, not a browser or CLI dependency. Do not use a global agent-browser."
     if (assignments.some((word) => /^(?:TREZI_AGENT_BROWSER|PATH)=/.test(word)))

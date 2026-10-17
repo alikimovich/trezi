@@ -1,5 +1,27 @@
 # PROGRESS LOG
 
+## 2026-10-17 — LKM-269 reconciliation after PR #281
+
+- Main `d7ffc0a2` contains the older routing candidate merged by the live Agent OS through PR #281. PR #280 retains additional necessary fixes: exact session-local Codex hook trust/version compatibility, fail-closed missing guard, shell launcher/substitution refusal, actual CLI loopback dispatch, synchronous watcher baseline and serialized chat-fixture observations.
+- Reconciled main into the existing isolated PR branch. Preserved main's island CSS whitespace comparison and its historical progress entry; removed duplicate roadmap state rather than undoing either branch's work. No other candidate worktree, Linear historical Done state or live service was changed.
+- Earlier history's load-only diagnosis is not established as the cause of every failure: the subsequent controlled watcher reproduction and actual-CLI dispatch exposed specific defects, documented above. Full verification and independent review are rerunning on the reconciled candidate before publication; PR review and merge remain separate.
+
+## 2026-10-17 — LKM-269 CI recovery: immediate states dependency edits
+
+- Hosted CI exposed an existing `StatesWatch` race: Bun 1.3.14 can initialize `watchFile` after an immediate edit, adopting the changed file as its baseline and never reporting that edit. The unchanged canvas test reproduced 6/24 failures with eight concurrent processes; the isolated watcher from unchanged main missed 23/96 immediate edits under the same load, without any controller involved.
+- Capture each input stamp synchronously and use one unreferenced 400 ms polling timer, preserving the 200-input bound and mtime/size comparison. Timer identity fencing stops stale callbacks after close/replacement, including a callback that closes its own watcher.
+- A deterministic regression covers the first edit before any poll, duplicate suppression, deletion/recreation, rewatch/close, unref and the input bound. Under the same Bun 1.3.14 stress setup the fix passed 24/24 unchanged canvas tests and 96/96 immediate-edit probes. Native typecheck, lint and independent source review passed. No assertions or deadlines were relaxed. Hosted CI and native core are rerunning for the candidate.
+- The first hosted rerun passed both watcher checks, then exposed a separate fixture race: `chat-new-instant` listed Git worktrees outside the repository lane while a background removal deleted `.git/worktrees`. Its observation now uses the same lane as those mutations; `until` awaits async observations. A held-lane regression proves serialization. The actual-owner fixture passed on Bun 1.3.14 with a 1 ms median composer response; existing timing/cleanup assertions and deadlines remain unchanged. Independent review passed. Native core at the watcher fix passed 32/32 with no skips.
+
+## 2026-10-17 — LKM-269 recovery: managed browser dispatch
+
+- Reapplied only LKM-269 routing, provider hooks, dependency errors, documentation and focused coverage to current main. Preserved the original task worktree and excluded its unrelated fixture timing edits.
+- Provider shells receive the verified absolute `TREZI_AGENT_BROWSER` entrypoint. Codex disables login shells; Claude and Codex refuse unapproved direct/global routes before execution. PATH remains supplementary because login profiles can reorder it.
+- An actual-CLI loopback regression found that Codex silently ignored untrusted inline hooks. The final combined Git/browser groups now receive exact session-local trust hashes via one inline state override; no user configuration or unrelated hook trust is changed. Actual bundled Codex 0.160.1, installed Codex 0.159.1 and Claude 2.1.285 passed source/bundle, first/resumed dispatch against fake APIs, including a source path with spaces, managed shell markers, global-route refusal and Git refusal. No real provider or browser was called.
+- Independent review caught a POSIX `command` bypass; execution now receives the same route checks and regression coverage. A missing Codex guard fails provider setup. Local standalone 0.159.1 and bundled 0.160.1 CLIs parse the hook configuration without model calls; tagged source confirms the canonical Bash hook contract.
+- Verification: typechecks, lint and independent source review passed; the full unit suite passed 229/229. The documented Bun native smoke passed 54/54 with no skips (270.5 s); source-window, chat-scroll acceptance and Next.js HMR checks also passed. The aggregate Node runner cannot parse an existing TypeScript parameter property, so the full smoke used `bun run test:native`. A sandboxed XPC lookup restriction required the same host execution access as the unchanged baseline. No assertions or deadlines were relaxed. Actual CLI dispatch uses fake local APIs; it does not demonstrate live subscription behavior.
+
+
 Newest first. Append a dated entry when you finish a chunk of work.
 
 ## 2026-10-16 — LKM-269: managed agent-browser survives login shells

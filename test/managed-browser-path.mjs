@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const {
+  assertCodexHookVersion,
   managedBrowserCodexConfig,
   managedBrowserDirectory,
   managedBrowserEnv,
@@ -12,6 +13,10 @@ const {
   managedBrowserWrapper
 } = await import('../src/main/backends/managed-browser-path.ts')
 const { browserCommandRefusal } = await import('../bin/trezi-browser-policy.mjs')
+for (const version of ['0.159.1', 'codex-cli 0.160.1\n'])
+  assert.doesNotThrow(() => assertCodexHookVersion(version))
+for (const version of [null, '', 'codex-cli 0.161.0', 'codex-cli 0.146.0', '0.160.1-preview'])
+  assert.throws(() => assertCodexHookVersion(version), /Provider execution is disabled/)
 const repo = join(import.meta.dir, '..')
 
 // A checkout-shaped tree: <root>/bin/managed/agent-browser, bundle in out/native,
@@ -140,6 +145,19 @@ for (const [name, base] of [
   }
   const refused = [
     'agent-browser open http://x --session trezi-a',
+    'echo $(agent-browser open http://x --session trezi-a)',
+    'echo $(/opt/homebrew/bin/agent-browser open http://x --session trezi-a)',
+    'printf "%s" `agent-browser open http://x --session trezi-a`',
+    'echo $("$TREZI_AGENT_BROWSER" snapshot --session trezi-a)',
+
+    'command agent-browser open http://x --session trezi-a',
+    'command command agent-browser open http://x --session trezi-a',
+    'command -p agent-browser open http://x --session trezi-a',
+    'command -p -- command -p -- agent-browser open http://x --session trezi-a',
+    'builtin command agent-browser open http://x --session trezi-a',
+    'env command agent-browser open http://x --session trezi-a',
+    'command /opt/homebrew/bin/agent-browser open http://x --session trezi-a',
+    'command -- /opt/homebrew/bin/agent-browser open http://x --session trezi-a',
     'cd app && agent-browser open http://x',
     '/opt/homebrew/bin/agent-browser open http://x --session trezi-a',
     `${managed}/../../node_modules/.bin/agent-browser open x`,
@@ -155,6 +173,7 @@ for (const [name, base] of [
     'env agent-browser open x'
   ]
   for (const command of refused) {
+    assert.ok(browserCommandRefusal(command, wrapper), `${name}: direct parser refuses ${command}`)
     const decision = hook(command)
     assert.equal(decision?.permissionDecision, 'deny', `${name}: hook refuses ${command}`)
     assert.match(decision.permissionDecisionReason, /TREZI_AGENT_BROWSER|unavailable|system Chrome/)
@@ -170,6 +189,10 @@ for (const [name, base] of [
     `${wrapper} snapshot --session trezi-a`,
     `"${wrapper}" screenshot /tmp/a.png --session trezi-a`,
     'command -v agent-browser',
+    'command -V agent-browser',
+    'command -p -v agent-browser',
+    'command command -V agent-browser',
+    `command -p -- command -- ${wrapper} snapshot --session trezi-a`,
     'which agent-browser',
     'git status',
     'echo agent-browser is managed'
@@ -186,6 +209,10 @@ const bare = mkdtempSync(join(tmpdir(), 'trezi-managed-path-bare-'))
 const bareBase = join(bare, 'out/native')
 mkdirSync(bareBase, { recursive: true })
 assert.deepEqual(managedBrowserEnv(bareBase, '/usr/bin', '/x/bun'), {})
+assert.throws(() => managedBrowserCodexConfig(bareBase), /managed browser guard is missing/)
+mkdirSync(join(bare, 'bin'), { recursive: true })
+for (const file of ['trezi-browser-guard.mjs', 'trezi-browser-policy.mjs'])
+  copyFileSync(join(repo, 'bin', file), join(bare, 'bin', file))
 assert.equal('shell_environment_policy' in managedBrowserCodexConfig(bareBase), false)
 assert.match(
   browserCommandRefusal('agent-browser open x', undefined),
