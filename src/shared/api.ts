@@ -1076,6 +1076,7 @@ export interface StyleReadResult {
       href?: string
       important?: boolean
       conditional?: boolean
+      layer?: string
     }
   >
   parentDisplay?: string

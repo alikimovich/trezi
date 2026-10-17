@@ -399,12 +399,18 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
         if (href !== undefined && (typeof href !== 'string' || href.length > 256)) continue
         if (source.important !== undefined && typeof source.important !== 'boolean') continue
         if (source.conditional !== undefined && typeof source.conditional !== 'boolean') continue
+        if (
+          source.layer !== undefined &&
+          (typeof source.layer !== 'string' || source.layer.length > 256)
+        )
+          continue
         origins[prop] = {
           kind: source.kind,
           selector,
           href,
           important: source.important,
-          conditional: source.conditional
+          conditional: source.conditional,
+          layer: source.layer
         }
       }
       return {

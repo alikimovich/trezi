@@ -1,4 +1,4 @@
-import { matchingUtilityClass } from '../main/tw-styles'
+import { isClassSelector, matchingUtilityClass } from '../main/tw-styles'
 import type {
   PropInspection,
   ResolvedControlPanel,
@@ -438,7 +438,7 @@ export class NativeInspectorController {
           this.classRule &&
           element.classes.some(
             (className) =>
-              origin.selector?.trim() === `.${className}` &&
+              isClassSelector(origin.selector, className) &&
               (className === this.classRule?.className ||
                 className.startsWith(`_${this.classRule?.className}_`))
           ) &&
@@ -450,7 +450,7 @@ export class NativeInspectorController {
           origin?.kind === 'rule' &&
           !!element.source &&
           !!utility &&
-          origin.selector?.trim() === `.${utility}` &&
+          isClassSelector(origin.selector, utility) &&
           !origin.important &&
           !origin.conditional
         const sourceEditable =

@@ -1266,7 +1266,8 @@ function readStyles(id: unknown, props: string[]): void {
         selector: origin.selector?.slice(0, 256),
         href: origin.href?.slice(0, 256),
         important: origin.important,
-        conditional: origin.conditional
+        conditional: origin.conditional,
+        layer: origin.layer?.slice(0, 256)
       }
   }
   ipcRenderer.send(STYLES_READ_REPLY, {

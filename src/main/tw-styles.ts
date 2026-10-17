@@ -355,6 +355,29 @@ function isFamilyMatch(prop: string, cls: string): boolean {
 }
 
 /** A single plain utility whose selector can be traced back to this property. */
+/** `CSS.escape` for an identifier, which Bun has no global for: how a browser serializes
+ * a class such as `gap-[12px]` or `w-1/2` in `CSSStyleRule.selectorText`. */
+function escapeIdentifier(name: string): string {
+  return Array.from(name)
+    .map((ch, index) => {
+      const code = ch.codePointAt(0) as number
+      if (code === 0) return '�'
+      if (code < 0x20 || code === 0x7f || (index === 0 && /\d/.test(ch)))
+        return `\\${code.toString(16)} `
+      if (index === 0 && ch === '-' && name.length === 1) return '\\-'
+      if (code >= 0x80 || /[\w-]/.test(ch)) return ch
+      return `\\${ch}`
+    })
+    .join('')
+}
+
+/** Whether a rule's `selector` is exactly the single class `className`, tolerating the
+ * CSS-escaped serialization of arbitrary-value utilities. */
+export function isClassSelector(selector: string | undefined, className: string): boolean {
+  const text = selector?.trim()
+  return text === `.${className}` || text === `.${escapeIdentifier(className)}`
+}
+
 export function matchingUtilityClass(classes: string[], prop: string): string | null {
   const matches = classes.filter((cls) => !isVariant(cls) && isFamilyMatch(prop, cls))
   return matches.length === 1 ? matches[0] : null

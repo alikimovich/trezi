@@ -139,7 +139,7 @@ export async function runNativeCoreSmoke(
     'export function Layout() { return <div className="flex gap-4">Layout</div> }\n'
   )
   const layoutCss =
-    '.native-layout { display:flex; gap:0; flex-direction:column; flex-wrap:wrap; justify-content:space-between; align-items:end; } #native-layout { align-items:center !important; } @media (min-width: 1px) { .native-layout { row-gap: 1rem; column-gap: calc(2rem + 1px); align-content:normal; } } @media (max-width: 1px) { .native-layout { row-gap: 99px; } }'
+    '@layer utilities { .native-layout { column-gap: 3px; row-gap: 77px; } } .native-layout { display:flex; gap:0; flex-direction:column; flex-wrap:wrap; justify-content:space-between; align-items:end; } #native-layout { align-items:center !important; } @media (min-width: 1px) { .native-layout { row-gap: 1rem; column-gap: calc(2rem + 1px); align-content:normal; } } @media (max-width: 1px) { .native-layout { row-gap: 99px; } }'
   writeFileSync(join(fixture, 'native-layout.css'), layoutCss)
   writeFileSync(join(fixture, 'native-plain.css'), '.plainLayout { display:flex; gap:8px; }\n')
   let firstProject = '',
@@ -839,6 +839,10 @@ export async function runNativeCoreSmoke(
         assert.ok(layoutRead, 'inspector retains the winning layout declarations')
         assert.equal(layoutRead.specified['row-gap'], '1rem')
         assert.equal(layoutRead.origins?.['row-gap'].conditional, true)
+        // An unlayered rule beats a layered one of equal specificity, so the layered
+        // `column-gap: 3px` / `row-gap: 77px` must not be reported as the winner.
+        assert.equal(layoutRead.specified['column-gap'], 'calc(1px + 2rem)')
+        assert.equal(layoutRead.origins?.['column-gap'].layer, undefined)
         assert.equal(layoutRead.specified['align-items'], 'center')
         assert.equal(layoutRead.origins?.['align-items'].important, true)
         const conditionalSource = readFileSync(join(fixture, 'native-layout.css'), 'utf8')
@@ -933,7 +937,8 @@ export async function runNativeCoreSmoke(
           document.querySelector('#native-module-css')?.remove();
           const style = document.createElement('style');
           style.id = 'native-utility-css';
-          style.textContent = '.flex { display:flex } .gap-4 { gap:1rem }';
+          // Tailwind v4 emits every utility inside an @layer utilities block.
+          style.textContent = '@layer utilities { .flex { display:flex } .gap-4 { gap:1rem } }';
           document.head.append(style);
           const card = document.createElement('div');
           card.id = 'native-utility-card';

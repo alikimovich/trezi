@@ -24,15 +24,71 @@ export function varRefName(value: string): string | null {
 /**
  * The SPECIFIED value of each of `props` on `el` — unlike computed style, this
  * preserves `var(--x)` literally. Active media/supports blocks are traversed;
- * conditional and layered rules retain their context so editors cannot mistake
- * them for an unconditional class rule. Cross-origin sheets are skipped.
+ * media-conditional rules retain that context so editors cannot mistake them
+ * for an unconditional class rule. Cascade layers (`@layer`, which Tailwind v4
+ * emits all utilities into) are not conditional: they only change precedence,
+ * and the winner is picked by layer order before specificity. Cross-origin
+ * sheets are skipped.
  */
 export interface StyleDeclarationOrigin {
   kind: 'inline' | 'rule'
   selector?: string
   href?: string
   important?: boolean
+  /** Inside an active @media/@supports/other conditional group rule. */
   conditional?: boolean
+  /** Dotted cascade-layer path of the winning rule; absent when unlayered. */
+  layer?: string
+}
+
+/** Where a declaration sits in the cascade, in order of precedence. */
+export interface CascadeRank {
+  important: boolean
+  inline: boolean
+  /** Per-level layer indices in order of first appearance; null when unlayered. */
+  layer: number[] | null
+  specificity: [number, number, number]
+  /** Document order: the later declaration wins a tie. */
+  order: number
+}
+
+/** Positive when `a` beats `b` among NORMAL declarations: unlayered wins over any layer,
+ * later layers win over earlier ones, a layer's own rules win over its nested layers. */
+function compareLayers(a: number[] | null, b: number[] | null): number {
+  if (!a || !b) return a === b ? 0 : !a ? 1 : -1
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i]
+  return b.length - a.length
+}
+
+/** Whether `a` wins over `b` (CSS Cascade 5): importance, then the style attribute,
+ * then layers (reversed for !important), then specificity, then source order. */
+export function outranks(a: CascadeRank, b: CascadeRank): boolean {
+  if (a.important !== b.important) return a.important
+  if (a.inline !== b.inline) return a.inline
+  const layers = compareLayers(a.layer, b.layer) * (a.important ? -1 : 1)
+  if (layers !== 0) return layers > 0
+  for (let i = 0; i < 3; i++)
+    if (a.specificity[i] !== b.specificity[i]) return a.specificity[i] > b.specificity[i]
+  return a.order > b.order
+}
+
+/** Layer names in order of first appearance per parent, which is the layer order. */
+class LayerOrder {
+  private children = new Map<string, string[]>()
+  index(path: string[]): number[] {
+    return path.map((name, depth) => {
+      const parent = path.slice(0, depth).join('\0')
+      const names = this.children.get(parent) ?? []
+      this.children.set(parent, names)
+      const at = names.indexOf(name)
+      return at >= 0 ? at : names.push(name) - 1
+    })
+  }
+}
+
+interface WalkContext {
+  conditional: boolean
+  layer: string[] | null
 }
 
 /** Active declarations with their source. A selector whose specificity cannot be
@@ -46,28 +102,35 @@ export function activeDeclarations(
 } {
   const specified: Record<string, string> = {}
   const origins: Record<string, StyleDeclarationOrigin> = {}
-  const ranks: Record<string, [number, number, number, number, number]> = {}
+  const ranks: Record<string, CascadeRank> = {}
+  const layers = new LayerOrder()
   let order = 0
+  let anonymous = 0
   const offer = (
     prop: string,
     value: string,
     origin: StyleDeclarationOrigin,
     priority: string,
-    specificity: [number, number, number]
+    specificity: [number, number, number],
+    layer: string[] | null = null,
+    inline = false
   ) => {
-    const rank: [number, number, number, number, number] = [
-      priority === 'important' ? 1 : 0,
-      ...specificity,
-      ++order
-    ]
-    const previous = ranks[prop]
-    if (previous && rank.findIndex((part, index) => part !== previous[index]) >= 0) {
-      const index = rank.findIndex((part, i) => part !== previous[i])
-      if (rank[index] < previous[index]) return
+    const rank: CascadeRank = {
+      important: priority === 'important',
+      inline,
+      layer: layer ? layers.index(layer) : null,
+      specificity,
+      order: ++order
     }
+    const previous = ranks[prop]
+    if (previous && !outranks(rank, previous)) return
     ranks[prop] = rank
     specified[prop] = value.trim()
-    origins[prop] = { ...origin, important: priority === 'important' }
+    origins[prop] = {
+      ...origin,
+      important: rank.important,
+      ...(layer ? { layer: layer.join('.') } : {})
+    }
   }
   const specificity = (selector: string): [number, number, number] => {
     // Conservative CSS specificity for ordinary project selectors. Complex
@@ -81,8 +144,20 @@ export function activeDeclarations(
     ).length
     return [ids, classes, types]
   }
-  const walk = (rules: CSSRuleList | undefined, href?: string, conditional = false): void => {
+  // Not in every lib.dom this project builds against, so looked up at runtime.
+  const LayerBlock = (globalThis as any).CSSLayerBlockRule as (new () => any) | undefined
+  const LayerStatement = (globalThis as any).CSSLayerStatementRule as (new () => any) | undefined
+  const layerPath = (parent: string[] | null, name: string): string[] => [
+    ...(parent ?? []),
+    ...(name ? name.split('.') : [`(anonymous ${++anonymous})`])
+  ]
+  const walk = (
+    rules: CSSRuleList | undefined,
+    href: string | undefined,
+    context: WalkContext = { conditional: false, layer: null }
+  ): void => {
     if (!rules) return
+    const { conditional, layer } = context
     for (const rule of Array.from(rules)) {
       if (rule instanceof CSSStyleRule) {
         let matches = false
@@ -108,7 +183,8 @@ export function activeDeclarations(
               v,
               { kind: 'rule', selector, href, conditional },
               rule.style.getPropertyPriority(p),
-              specificity(selector)
+              specificity(selector),
+              layer
             )
         }
       } else if (rule instanceof CSSImportRule) {
@@ -118,14 +194,27 @@ export function activeDeclarations(
         try {
           if (!rule.styleSheet || (rule.media.length && !matchMedia(rule.media.mediaText).matches))
             continue
-          walk(rule.styleSheet.cssRules, rule.styleSheet.href ?? href, conditional)
+          const importLayer = (rule as any).layerName as string | null | undefined
+          const imported = typeof importLayer === 'string' ? layerPath(layer, importLayer) : layer
+          if (imported && imported !== layer) layers.index(imported)
+          walk(rule.styleSheet.cssRules, rule.styleSheet.href ?? href, {
+            conditional: conditional || rule.media.length > 0,
+            layer: imported
+          })
         } catch {
           /* cross-origin import — not the previewed app's own CSS */
         }
+      } else if (LayerStatement && rule instanceof LayerStatement) {
+        // `@layer a, b;` fixes the layer order without holding any rules.
+        for (const name of (rule as any).nameList as string[]) layers.index(layerPath(layer, name))
+      } else if (LayerBlock && rule instanceof LayerBlock) {
+        const path = layerPath(layer, (rule as any).name as string)
+        layers.index(path)
+        walk((rule as CSSGroupingRule).cssRules, href, { conditional, layer: path })
       } else if ('cssRules' in rule) {
         if (rule instanceof CSSMediaRule && !matchMedia(rule.conditionText).matches) continue
         if (rule instanceof CSSSupportsRule && !CSS.supports(rule.conditionText)) continue
-        walk((rule as CSSGroupingRule).cssRules, href, true)
+        walk((rule as CSSGroupingRule).cssRules, href, { conditional: true, layer })
       }
     }
   }
@@ -144,7 +233,15 @@ export function activeDeclarations(
     for (const p of props) {
       const inline = el.style.getPropertyValue(p)
       if (inline)
-        offer(p, inline, { kind: 'inline' }, el.style.getPropertyPriority(p), [1000000, 0, 0])
+        offer(
+          p,
+          inline,
+          { kind: 'inline' },
+          el.style.getPropertyPriority(p),
+          [1000000, 0, 0],
+          null,
+          true
+        )
     }
   }
   return { specified, origins }

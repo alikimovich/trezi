@@ -335,6 +335,44 @@ assert.equal(
   false
 )
 
+// Tailwind v4 emits every utility inside `@layer utilities`: a layered origin is still the
+// element's own utility rule, so its fields stay editable. Media-conditional and
+// !important origins are not, and an arbitrary-value class matches its CSS-escaped selector.
+const v4Reads = {
+  layered: { kind: 'rule', selector: '.gap-4', layer: 'utilities' },
+  escaped: { kind: 'rule', selector: '.gap-\\[12px\\]', layer: 'utilities' },
+  conditional: { kind: 'rule', selector: '.gap-4', layer: 'utilities', conditional: true },
+  important: { kind: 'rule', selector: '.gap-4', layer: 'utilities', important: true },
+  unlayeredRival: { kind: 'rule', selector: '.card', href: '/src/card.css' }
+}
+for (const [name, origin] of Object.entries(v4Reads)) {
+  const v4 = new NativeInspectorController(
+    async (channel) =>
+      channel === 'styles:read'
+        ? {
+            values: { display: 'flex', gap: '12px' },
+            specified: { gap: name === 'escaped' ? '12px' : '1rem' },
+            origins: { gap: origin },
+            declaredVars: {},
+            parentDisplay: 'block'
+          }
+        : channel === 'controls:list' || channel === 'controls:get'
+          ? []
+          : null,
+    async () => {},
+    () => {},
+    async () => {},
+    async () => {}
+  )
+  await v4.activate('/a')
+  await v4.select({ ...element, classes: [name === 'escaped' ? 'gap-[12px]' : 'gap-4'] })
+  assert.equal(
+    v4.state.fields.find((f) => f.id === 'style:gap').disabled,
+    !['layered', 'escaped'].includes(name),
+    `${name} utility gap editability`
+  )
+}
+
 let previewing = false
 const asymmetric = new NativeInspectorController(
   async (channel) => {
