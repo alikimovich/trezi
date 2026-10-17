@@ -162,6 +162,19 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     })
     send({ type: 'status', text: 'Reading project files…' })
     send({ type: 'delta', text: '\n\nStreaming continued after tool activity.' })
+    const runningHistory = await waitFor(async () => {
+      const shell = await host.request('shellInspect')
+      return (
+        shell.historyRows
+          ?.find((row: any) => row.id === `chat:${state.chat}`)
+          ?.label?.includes('Running') && shell
+      )
+    }, 'native history running indicator')
+    const historyRow = runningHistory.historyRows.find(
+      (row: any) => row.id === `chat:${state.chat}`
+    )
+    if (historyRow.slotLength !== 3 || !historyRow.selected)
+      throw new Error('History running row lost its fixed dot slot or selected checkmark')
     await wait((state) => state.activityKind === 'writing')
     writeFileSync(
       screenshot.replace('.png', '-streaming.png'),
@@ -181,6 +194,20 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     if ((await host.request('composerInspect')).buttonBeam)
       throw new Error('Landing retained thinking beam')
     send({ type: 'landing-finished' })
+    let lastHistoryLabel = ''
+    const completedHistory = await waitFor(async () => {
+      const shell = await host.request('shellInspect')
+      lastHistoryLabel =
+        shell.historyRows?.find((row: any) => row.id === `chat:${state.chat}`)?.label ?? ''
+      return lastHistoryLabel.endsWith(', Read') && shell
+    }, 'native history read indicator').catch((error) => {
+      throw new Error(`${error.message} (last label: ${lastHistoryLabel})`)
+    })
+    if (
+      completedHistory.historyRows.find((row: any) => row.id === `chat:${state.chat}`)
+        .slotLength !== 3
+    )
+      throw new Error('History indicator changed row geometry after completion')
     await wait((state) => !state.activity)
     await wait((state) =>
       state.messages.some((message: any) =>

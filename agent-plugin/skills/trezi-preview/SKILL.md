@@ -48,13 +48,17 @@ call them, and every result is bounded. Prefer them to any external browser.
 ## Required Vercel agent-browser checks
 
 Use Vercel `agent-browser` during UI changes, including scripted interactions,
-responsive checks and screenshots. In a Trezi provider helper, `command -v
-agent-browser` must resolve to Trezi's `bin/managed/agent-browser` wrapper. It
-pins a dedicated headless Chromium executable, private profile and isolated
-daemon environment. Never call a global or absolute CLI path. Read its
-version-matched help, use `--session trezi-<task-id>` on every command, and close
-only that session. For layout checks, capture phone, tablet and desktop views.
-If the managed command reports a missing CLI or headless shell, report that
-blocker; do not replace the Chromium check with WebKit or install a browser.
+responsive checks and screenshots. In a Trezi provider helper, run it as
+`"$TREZI_AGENT_BROWSER"`, the absolute path of Trezi's `bin/managed/agent-browser`
+wrapper (a login shell can reorder PATH, so a bare `agent-browser` may be a global
+CLI). That is the only absolute CLI path allowed; never call a global one. The
+wrapper pins a dedicated headless Chromium executable, private profile and isolated
+daemon environment. Read its version-matched help, use `--session trezi-<task-id>`
+on every command, and close only that session. For layout checks, capture phone,
+tablet and desktop views. A wrapper error starting `dependency: vercel-cli` or
+`dependency: headless-shell` is a missing install: report it with the guidance in the
+message. A refused or unrunnable wrapper is a Trezi route problem, never a reason to
+reinstall a browser. Do not replace the Chromium check with WebKit,
+`preview_evaluate`, a headed browser or the user's Chrome.
 
 Do NOT open Chrome DevTools or a headed browser unless the user explicitly asks.

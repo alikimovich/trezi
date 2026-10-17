@@ -56,6 +56,25 @@ const SPACING_PREFIX: Record<string, string> = {
   'column-gap': 'gap-x',
   'row-gap': 'gap-y'
 }
+const LAYOUT_PREFIX: Record<string, string> = {
+  'justify-content': 'justify',
+  'align-items': 'items',
+  'align-content': 'content',
+  'align-self': 'self'
+}
+const LAYOUT_SUFFIX: Record<string, string> = {
+  'flex-start': 'start',
+  'flex-end': 'end',
+  'space-between': 'between',
+  'space-around': 'around',
+  'space-evenly': 'evenly'
+}
+const LAYOUT_VALUES: Record<string, ReadonlySet<string>> = {
+  'justify-content': new Set(['start', 'end', 'center', 'between', 'around', 'evenly', 'stretch']),
+  'align-items': new Set(['start', 'end', 'center', 'baseline', 'stretch']),
+  'align-content': new Set(['start', 'end', 'center', 'between', 'around', 'evenly', 'stretch']),
+  'align-self': new Set(['auto', 'start', 'end', 'center', 'baseline', 'stretch'])
+}
 const RADIUS_PX = new Map([
   [0, 'none'],
   [2, 'xs'],
@@ -132,6 +151,18 @@ export function tailwindClassFor(prop: string, value: string): string | null {
     if (v && v.n === 0) return `${spacing}-0`
     if (v && v.unit === 'px' && v.n > 0 && v.n % 4 === 0) return `${spacing}-${v.n / 4}`
     return arbitrary(spacing, value)
+  }
+  if (
+    prop === 'flex-direction' &&
+    ['row', 'row-reverse', 'column', 'column-reverse'].includes(value)
+  )
+    return `flex-${value.replace('column', 'col')}`
+  if (prop === 'flex-wrap' && ['nowrap', 'wrap', 'wrap-reverse'].includes(value))
+    return `flex-${value}`
+  const layout = LAYOUT_PREFIX[prop]
+  if (layout) {
+    const suffix = LAYOUT_SUFFIX[value] ?? value
+    return LAYOUT_VALUES[prop].has(suffix) ? `${layout}-${suffix}` : null
   }
   switch (prop) {
     case 'box-shadow':
@@ -271,6 +302,12 @@ function isFamilyMatch(prop: string, cls: string): boolean {
     const suffix = base.slice(spacing.length + 1)
     return SCALE_SUFFIX_RE.test(suffix) || /^\[.+\]$/.test(suffix)
   }
+  if (prop === 'flex-direction') return /^flex-(?:row|row-reverse|col|col-reverse)$/.test(cls)
+  if (prop === 'flex-wrap') return /^flex-(?:nowrap|wrap|wrap-reverse)$/.test(cls)
+  if (LAYOUT_PREFIX[prop]) {
+    const prefix = LAYOUT_PREFIX[prop]
+    return cls.startsWith(`${prefix}-`) && LAYOUT_VALUES[prop].has(cls.slice(prefix.length + 1))
+  }
   switch (prop) {
     case 'box-shadow': {
       const inner = arbitraryInner(cls, 'shadow')
@@ -315,6 +352,35 @@ function isFamilyMatch(prop: string, cls: string): boolean {
       return TRANSITION_CLASS_RE.test(cls) || arbitraryInner(cls, 'transition') != null
   }
   return false
+}
+
+/** A single plain utility whose selector can be traced back to this property. */
+/** `CSS.escape` for an identifier, which Bun has no global for: how a browser serializes
+ * a class such as `gap-[12px]` or `w-1/2` in `CSSStyleRule.selectorText`. */
+function escapeIdentifier(name: string): string {
+  return Array.from(name)
+    .map((ch, index) => {
+      const code = ch.codePointAt(0) as number
+      if (code === 0) return '�'
+      if (code < 0x20 || code === 0x7f || (index === 0 && /\d/.test(ch)))
+        return `\\${code.toString(16)} `
+      if (index === 0 && ch === '-' && name.length === 1) return '\\-'
+      if (code >= 0x80 || /[\w-]/.test(ch)) return ch
+      return `\\${ch}`
+    })
+    .join('')
+}
+
+/** Whether a rule's `selector` is exactly the single class `className`, tolerating the
+ * CSS-escaped serialization of arbitrary-value utilities. */
+export function isClassSelector(selector: string | undefined, className: string): boolean {
+  const text = selector?.trim()
+  return text === `.${className}` || text === `.${escapeIdentifier(className)}`
+}
+
+export function matchingUtilityClass(classes: string[], prop: string): string | null {
+  const matches = classes.filter((cls) => !isVariant(cls) && isFamilyMatch(prop, cls))
+  return matches.length === 1 ? matches[0] : null
 }
 
 /**

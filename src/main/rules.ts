@@ -19,7 +19,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 43
+export const TREZI_RULES_VERSION = 44
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -393,16 +393,29 @@ const agentBrowserVerification = (background: boolean) => [
   ``,
   `## Required browser verification with Vercel agent-browser`,
   `For web UI changes, visual verification, responsive testing, or browser interaction,`,
-  `you MUST use \`agent-browser\` through Trezi's managed PATH when available. This`,
+  `you MUST use \`agent-browser\` through Trezi's managed wrapper when available. This`,
   `is required even when private WebKit preview tools are available. A build,`,
   `typecheck, DOM guess or WebKit capture does not replace Chromium verification.`,
-  `Before the first browser task, run \`command -v agent-browser\`, \`agent-browser`,
-  `--version\` and \`agent-browser --help\`. The resolved path must end in`,
-  `\`bin/managed/agent-browser\`; do not invoke a global or absolute CLI path.`,
+  `Trezi's wrapper is \`bin/managed/agent-browser\`; its verified absolute path is in`,
+  `\`$TREZI_AGENT_BROWSER\`. A login shell rebuilds PATH, so a bare \`agent-browser\``,
+  `can resolve to a global CLI. Run every command as`,
+  `\`"$TREZI_AGENT_BROWSER" <command> --session trezi-<task-id>\`: that path is the`,
+  `only absolute CLI path allowed. Never call a global \`agent-browser\` or any other`,
+  `absolute path to one (for example /opt/homebrew/bin/agent-browser).`,
+  `Before the first browser task, run \`command -v agent-browser\` (informational: if`,
+  `it does not end in \`bin/managed/agent-browser\`, keep using`,
+  `\`"$TREZI_AGENT_BROWSER"\` and mention the route problem), then`,
+  `\`"$TREZI_AGENT_BROWSER" --version\` and \`"$TREZI_AGENT_BROWSER" --help\`.`,
   `The managed command pins a private Chromium headless shell, profile and daemon`,
   `environment. It refuses the user's Chrome, headed mode, external CDP attachment`,
-  `and unsafe overrides. If that executable or the CLI is missing, report the`,
-  `blocker; never substitute WebKit or install a browser automatically.`,
+  `and unsafe overrides. Two different blockers, never confused: a route problem`,
+  `(the call is refused, or \`$TREZI_AGENT_BROWSER\` cannot run) is a Trezi install`,
+  `issue; say so, and never tell the user to reinstall a browser for it. A wrapper`,
+  `error starting \`dependency: vercel-cli\` means the Vercel agent-browser CLI is not`,
+  `installed; \`dependency: headless-shell\` means the Chromium headless shell is not.`,
+  `Report which one with the install guidance in its message; never install either`,
+  `automatically. In every case verification is blocked, not passed: never substitute`,
+  `WebKit, \`preview_evaluate\`, a headed browser or the user's Chrome.`,
   `Use a unique \`--session trezi-<task-id>\` on every command, including close.`,
   `Close only your own session. Never use \`close --all\`. Open the Trezi-managed`,
   `preview URL and relevant route; do not start a dev server or attach to the user's`,

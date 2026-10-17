@@ -85,7 +85,7 @@ import { createOverlayGuides } from './overlay-guides'
 import { sendPageSpeed } from './speed-control'
 import { installStatesCanvas } from './states-canvas'
 import { installStatesSwitch } from './states-switch'
-import { specifiedValues, varRefName } from './style-provenance'
+import { activeDeclarations, varRefName } from './style-provenance'
 import { watchStyles } from './style-watch'
 import { createThreeDInspector } from './three-d'
 import { createViewportReadout } from './viewport-readout'
@@ -1248,18 +1248,36 @@ function readStyles(id: unknown, props: string[]): void {
   // unit only survives here). Same boundary caps as `values`: all of it is
   // page-controlled CSS. An absurd var name just fails the proof match —
   // fails safe to the raw value.
-  const spec = specifiedValues(
+  const { specified: spec, origins } = activeDeclarations(
     el,
     bounded.filter((b) => !b.startsWith('--'))
   )
   const declaredVars: Record<string, string | null> = {}
   const specified: Record<string, string> = {}
+  const boundedOrigins: typeof origins = {}
   for (const [p, text] of Object.entries(spec)) {
     const name = varRefName(text)
     declaredVars[p] = name ? name.slice(0, 128) : null
     specified[p] = text.trim().slice(0, 256)
+    const origin = origins[p]
+    if (origin)
+      boundedOrigins[p] = {
+        kind: origin.kind,
+        selector: origin.selector?.slice(0, 256),
+        href: origin.href?.slice(0, 256),
+        important: origin.important,
+        conditional: origin.conditional,
+        layer: origin.layer?.slice(0, 256)
+      }
   }
-  ipcRenderer.send(STYLES_READ_REPLY, { id, values, declaredVars, specified })
+  ipcRenderer.send(STYLES_READ_REPLY, {
+    id,
+    values,
+    declaredVars,
+    specified,
+    origins: boundedOrigins,
+    parentDisplay: el.parentElement ? getComputedStyle(el.parentElement).display.slice(0, 64) : ''
+  })
 }
 
 // One pending replay at a time (there's only one selection); starting another

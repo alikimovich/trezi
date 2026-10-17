@@ -43,6 +43,7 @@ import {
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
 import { codexItemWarning, createItemTracker } from './codex-stream'
+import { managedBrowserCodexConfig } from './managed-browser-path'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
@@ -403,6 +404,14 @@ async function startSession(
     // Each turn spawns the CLI again, so the user's own MCP servers are re-read and
     // switched off per turn (`isolatedCodexConfig`); only Trezi's server runs.
     openThread = (id) => {
+      const git = gitAccessHook(
+        app.getAppPath(),
+        options.agentGitAccess === 'full' ? 'full' : 'managed',
+        liveRoot,
+        root
+      )
+      // LKM-269: rebuilt for every turn and resume, so a reused helper keeps the route.
+      const browser = managedBrowserCodexConfig(__dirname)
       const codex = new Codex({
         ...codexPathOverride(),
         ...codexOptions,
@@ -410,12 +419,11 @@ async function startSession(
           ...codexOptions.config,
           ...mcpConfig,
           ...sandbox.config,
-          ...gitAccessHook(
-            app.getAppPath(),
-            options.agentGitAccess === 'full' ? 'full' : 'managed',
-            liveRoot,
-            root
-          )
+          ...browser,
+          ...git,
+          hooks: {
+            PreToolUse: [...(git.hooks?.PreToolUse ?? []), ...(browser.hooks?.PreToolUse ?? [])]
+          }
         })
       })
       return id ? codex.resumeThread(id, threadOptions) : codex.startThread(threadOptions)

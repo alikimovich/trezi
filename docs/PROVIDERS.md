@@ -102,11 +102,18 @@ cropped to a `selector`), `preview_inspect`, `preview_evaluate`, `preview_consol
 Vercel agent-browser remains the required browser-testing engine for UI changes
 across providers. Private `preview_*` tools can inspect the Trezi preview but do
 not replace its Chromium results. Provider helpers put Trezi's managed
-`bin/managed/agent-browser` first on PATH. The wrapper requires a unique
+`bin/managed/agent-browser` first on PATH, but a login shell rebuilds PATH, so the
+route is the verified absolute wrapper in `TREZI_AGENT_BROWSER` (LKM-269): Codex gets
+it, `allow_login_shell=false` and a refusing PreToolUse hook in its per-turn config
+(first turn and resume alike); Claude gets it as `env` plus the same refusal in its
+Bash PreToolUse hook. A bare or global `agent-browser`, other absolute CLI paths and
+forbidden flags are refused. The wrapper requires a unique
 `--session trezi-<task-id>`, pins a dedicated headless-shell executable and
 private profile/daemon environment, and refuses headed mode or attachment to
-the user's browser. A missing CLI or dedicated shell is reported without a
-WebKit fallback or automatic download. Close only the task's session.
+the user's browser. A missing CLI or dedicated shell is reported (exit 3,
+`dependency: vercel-cli` / `dependency: headless-shell`), distinct from a route or
+policy refusal (exit 2), without a WebKit fallback or automatic download. Close only
+the task's session. Details: [agent browsers](agent-guide/agent-browser.md).
 
 The tools run as isolated WKContentWorld scripts (`src/preview/agent-inspect.ts`,
 `src/preview/agent-evaluate.ts`, `src/preview/agent-console.ts`), driven by
