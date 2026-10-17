@@ -1067,6 +1067,12 @@ export interface StyleReadResult {
    * panel read back the project's own units instead of the browser's.
    */
   specified: Record<string, string>
+  /** Winning active declaration's origin; absent means a browser default. */
+  origins?: Record<
+    string,
+    { kind: 'inline' | 'rule'; selector?: string; href?: string; important?: boolean }
+  >
+  parentDisplay?: string
 }
 
 /** Result of applying a StyleEdit (mirrors PropEditResult's shape). */

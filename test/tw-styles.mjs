@@ -7,6 +7,7 @@
  */
 import {
   looksTailwind,
+  matchingUtilityClass,
   rewriteClassList,
   rewriteClassListToken,
   tailwindClassFor,
@@ -327,6 +328,22 @@ eq(
 )
 
 // --- looksTailwind heuristic ---
+
+eq(tailwindClassFor('flex-direction', 'column-reverse'), 'flex-col-reverse', 'flex direction class')
+eq(tailwindClassFor('flex-wrap', 'wrap'), 'flex-wrap', 'flex wrap class')
+eq(tailwindClassFor('justify-content', 'space-between'), 'justify-between', 'justify class')
+eq(tailwindClassFor('align-self', 'center'), 'self-center', 'align self class')
+eq(
+  rewriteClassList('flex-row gap-x-4 items-start', 'align-items', 'center'),
+  'flex-row gap-x-4 items-center',
+  'align class rewrites its family'
+)
+eq(matchingUtilityClass(['gap-x-4', 'gap-y-2'], 'column-gap'), 'gap-x-4', 'column gap source')
+eq(
+  matchingUtilityClass(['md:gap-x-4'], 'column-gap'),
+  null,
+  'responsive utility is not blindly rewritten'
+)
 
 ok(looksTailwind(['flex', 'items-center', 'p-4']), 'utility classes → true')
 ok(looksTailwind(['text-gray-500']), 'single palette class → true')

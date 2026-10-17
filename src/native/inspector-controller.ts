@@ -1,3 +1,4 @@
+import { matchingUtilityClass } from '../main/tw-styles'
 import type {
   PropInspection,
   ResolvedControlPanel,
@@ -219,9 +220,7 @@ export class NativeInspectorController {
       element ? this.invoke('styles:read', Object.keys(STYLE_PROP_META)) : Promise.resolve(null),
       this.invoke('tokens:detect', root),
       this.invoke('controls:list', root),
-      element && !element.source
-        ? this.invoke('styles:resolve-class', root, element.classes)
-        : Promise.resolve(null)
+      element ? this.invoke('styles:resolve-class', root, element.classes) : Promise.resolve(null)
     ])
     if (generation !== this.sequence || root !== this.state.root || element !== this.element) return
     this.inspection = results[0].status === 'fulfilled' ? results[0].value : null
@@ -413,17 +412,65 @@ export class NativeInspectorController {
         axis?: NativeInspectorField['axis']
       ) => {
         const meta = STYLE_PROP_META[prop]
-        if (meta.flexGridOnly && !/flex|grid/.test(values.display ?? '')) return
+        const ownLayout = /(?:^|-)flex$/.test(values.display ?? '')
+          ? 'flex'
+          : /(?:^|-)grid$/.test(values.display ?? '')
+            ? 'grid'
+            : ''
+        const parentLayout = /(?:^|-)(?:flex|grid)$/.test(this.styles?.parentDisplay ?? '')
+        const ownDeclaration = Object.hasOwn(this.styles?.specified ?? {}, prop)
+        const gapShorthand =
+          (prop === 'row-gap' || prop === 'column-gap') && !ownDeclaration
+            ? this.styles?.specified.gap
+            : undefined
+        const authored = ownDeclaration || gapShorthand !== undefined
+        if (meta.appliesTo === 'flex' && ownLayout !== 'flex' && !authored) return
+        if (meta.appliesTo === 'flex-grid' && !ownLayout && !authored) return
+        if (meta.appliesTo === 'flex-grid-child' && !parentLayout && !authored) return
+        if (meta.flexGridOnly && !ownLayout && !authored) return
         const tokens = tokensForProp(this.tokens, prop),
           value = values[prop] ?? '',
           id = 'style:' + prop
+        const origin =
+          this.styles?.origins?.[prop] ?? (gapShorthand ? this.styles?.origins?.gap : undefined)
+        const ownsRule =
+          origin?.kind === 'rule' &&
+          this.classRule &&
+          element.classes.some(
+            (className) =>
+              origin.selector?.trim() === `.${className}` &&
+              (className === this.classRule?.className ||
+                className.startsWith(`_${this.classRule?.className}_`))
+          ) &&
+          origin.href?.split('?')[0].endsWith(this.classRule.file) &&
+          !origin.important
+        const utility = matchingUtilityClass(element.classes, prop)
+        const ownsUtility =
+          origin?.kind === 'rule' &&
+          !!element.source &&
+          !!utility &&
+          origin.selector?.trim() === `.${utility}` &&
+          !origin.important
+        const editable =
+          origin?.kind === 'inline'
+            ? !!element.source && !origin.important
+            : origin?.kind === 'rule'
+              ? !!ownsRule || !!ownsUtility
+              : !!element.source || !!this.classRule
+        const detail = authored
+          ? `${origin?.kind === 'inline' ? 'Inline' : origin?.kind === 'rule' ? `CSS rule ${origin.selector ?? ''}` : 'Authored'}: ${this.styles?.specified[prop] ?? `gap: ${gapShorthand}`}${value && value !== this.styles?.specified[prop] ? ` · resolved ${value}` : ''}`
+          : `Computed default: ${value || 'unset'}`
         const cssValue = (input: string) =>
           meta.control === 'number' && /^-?\d+(\.\d+)?$/.test(input.trim())
             ? toCssText(prop, finite(input))
             : input
         const apply = async (input: string, token?: any) => {
           const result = await this.invoke(
-            element.source ? 'styles:apply' : 'styles:apply-class',
+            ownsRule
+              ? 'styles:apply-class'
+              : element.source
+                ? 'styles:apply'
+                : 'styles:apply-class',
             root,
             {
               source: element.source ?? '',
@@ -446,14 +493,16 @@ export class NativeInspectorController {
             kind: meta.control,
             value:
               this.styles?.specified[prop] ??
-              (meta.control === 'number' ? String(numericValue(prop, values) ?? value) : value),
-            disabled: (!element.source && !this.classRule) || meta.control === 'readonly',
+              (meta.control === 'number' && !meta.appliesTo
+                ? String(numericValue(prop, values) ?? value)
+                : value),
+            disabled: !editable || meta.control === 'readonly',
             min: meta.min,
             max: meta.max,
             step: meta.step,
             unit: meta.unit,
             options: meta.options,
-            detail: this.styles?.specified[prop],
+            detail: authored || meta.appliesTo ? detail : undefined,
             layout,
             axis,
             expanded: layout ? this.expanded.has(layout) : undefined,
@@ -485,69 +534,20 @@ export class NativeInspectorController {
           /^(padding|margin)-/.test(prop)
         )
           continue
-        if (meta.flexGridOnly && !/flex|grid/.test(values.display ?? '')) continue
-        const tokens = tokensForProp(this.tokens, prop),
-          value = values[prop] ?? '',
-          id = 'style:' + prop
-        const cssValue = (value: string) =>
-          meta.control === 'number' && /^-?\d+(\.\d+)?$/.test(value.trim())
-            ? toCssText(prop, finite(value))
-            : value
-        const targets = () => [prop]
-        const apply = async (value: string, token?: any) => {
-          const group = crypto.randomUUID(),
-            changed: { prop: string; value: string }[] = []
-          for (const target of targets()) {
-            const result = await this.invoke(
-              element.source ? 'styles:apply' : 'styles:apply-class',
-              root,
-              {
-                source: element.source ?? '',
-                prop: target,
-                value: cssValue(value),
-                classes: element.classes,
-                authored: this.styles?.specified[target],
-                token,
-                group
-              }
-            )
-            if (!result.applied) return result
-            changed.push({ prop: target, value: cssValue(value) })
-          }
-          return { applied: true, nativeStyles: changed }
+        if (prop === 'gap') {
+          // The two computed longhands preserve asymmetric gap values. The
+          // shorthand is shown separately only when it was explicitly authored.
+          if (!Object.hasOwn(this.styles?.specified ?? {}, prop)) continue
         }
-        add(
-          {
-            id,
-            label: prop,
-            group: meta.group,
-            kind: meta.control,
-            value: meta.control === 'number' ? String(numericValue(prop, values) ?? value) : value,
-            disabled: (!element.source && !this.classRule) || meta.control === 'readonly',
-            min: meta.min,
-            max: meta.max,
-            step: meta.step,
-            unit: meta.unit,
-            options: meta.options,
-            detail: this.styles?.specified[prop],
-            tokens: tokens.map((t, i) => ({
-              id: String(i),
-              label: `${t.token.name} · ${t.token.value}`
-            }))
-          },
-          {
-            apply,
-            preview: async (value) => {
-              for (const target of targets())
-                await this.send('styles:preview', { prop: target, value: cssValue(value) })
-            },
-            token: (value) => {
-              const token = tokens[Number(value)]
-              if (!token) throw new Error('This token is no longer available.')
-              return apply(token.token.value, { name: token.token.name, group: token.group })
-            }
-          }
-        )
+        if (prop === 'row-gap' || prop === 'column-gap') {
+          style(prop, 'gap', prop === 'row-gap' ? 'vertical' : 'horizontal')
+          continue
+        }
+        if (meta.appliesTo) {
+          style(prop, 'flow')
+          continue
+        }
+        style(prop)
       }
     } else if (this.state.tab === 'custom') {
       for (const panel of this.controls) {

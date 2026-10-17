@@ -364,7 +364,9 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
       return {
         values,
         declaredVars: (p.declaredVars as Record<string, string | null> | null) ?? {},
-        specified: (p.specified as Record<string, string> | null) ?? {}
+        specified: (p.specified as Record<string, string> | null) ?? {},
+        origins: (p.origins as StyleReadResult['origins']) ?? {},
+        parentDisplay: typeof p.parentDisplay === 'string' ? p.parentDisplay : ''
       }
     }
   })

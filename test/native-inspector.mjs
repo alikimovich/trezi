@@ -207,6 +207,94 @@ assert.equal(
   'Discovering animation controls must not open the inspector'
 )
 
+// Layout fields follow the selected element and the active authored declaration.
+let layoutRead = {
+  values: {
+    display: 'flex',
+    gap: '8px 16px',
+    'row-gap': '8px',
+    'column-gap': '16px',
+    'flex-direction': 'column',
+    'flex-wrap': 'wrap',
+    'justify-content': 'space-between',
+    'align-items': 'center',
+    'align-content': 'normal'
+  },
+  specified: {
+    gap: 'var(--space) calc(1rem + 2px)',
+    'flex-direction': 'column',
+    'align-content': 'normal'
+  },
+  origins: {
+    gap: { kind: 'rule', selector: '.card', href: '/src/card.css' },
+    'flex-direction': { kind: 'inline' },
+    'align-content': { kind: 'rule', selector: '.card', href: '/src/card.css' }
+  },
+  declaredVars: {},
+  parentDisplay: 'block'
+}
+const layout = new NativeInspectorController(
+  async (channel) =>
+    channel === 'styles:read'
+      ? layoutRead
+      : channel === 'controls:list' || channel === 'controls:get'
+        ? []
+        : null,
+  async () => {},
+  () => {},
+  async () => {},
+  async () => {}
+)
+await layout.activate('/a')
+await layout.select(element)
+const field = (prop) => layout.state.fields.find((f) => f.id === `style:${prop}`)
+assert.equal(field('gap').value, 'var(--space) calc(1rem + 2px)')
+assert.equal(field('gap').disabled, true, 'unresolved CSS source remains read-only')
+assert.equal(field('row-gap').value, '8px')
+assert.equal(field('column-gap').value, '16px')
+assert.equal(field('flex-direction').value, 'column')
+assert.equal(field('flex-wrap').value, 'wrap')
+assert.equal(field('align-content').value, 'normal', 'explicit normal stays visible')
+assert.equal(field('align-self'), undefined, 'container does not show child alignment')
+layoutRead = {
+  values: { display: 'block', 'align-self': 'auto', gap: '0px' },
+  specified: { 'align-self': 'auto', gap: '0' },
+  origins: { 'align-self': { kind: 'inline' }, gap: { kind: 'inline' } },
+  declaredVars: {},
+  parentDisplay: 'grid'
+}
+await layout.select({ ...element, id: 'child' })
+assert.equal(field('align-self').value, 'auto')
+assert.equal(field('gap').value, '0', 'explicit zero stays authored')
+assert.equal(field('flex-direction'), undefined, 'selection removes stale flex controls')
+
+const moduleInspector = new NativeInspectorController(
+  async (channel) => {
+    if (channel === 'styles:read')
+      return {
+        values: { display: 'grid', 'row-gap': '12px' },
+        specified: { 'row-gap': '0' },
+        origins: {
+          'row-gap': { kind: 'rule', selector: '._card_a1b2c_1', href: '/src/Card.module.css' }
+        },
+        declaredVars: {},
+        parentDisplay: 'block'
+      }
+    if (channel === 'styles:resolve-class')
+      return { file: 'src/Card.module.css', className: 'card' }
+    if (channel === 'styles:apply-class') return { applied: true }
+    if (channel === 'controls:list' || channel === 'controls:get') return []
+    return null
+  },
+  async () => {},
+  () => {},
+  async () => {},
+  async () => {}
+)
+await moduleInspector.activate('/a')
+await moduleInspector.select({ ...element, classes: ['_card_a1b2c_1'] })
+assert.equal(moduleInspector.state.fields.find((f) => f.id === 'style:row-gap').disabled, false)
+
 let previewing = false
 const asymmetric = new NativeInspectorController(
   async (channel) => {

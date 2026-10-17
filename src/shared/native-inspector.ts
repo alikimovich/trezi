@@ -14,7 +14,7 @@ export interface NativeInspectorField {
   tokens?: { id: string; label: string }[]
   reset?: boolean
   /** Compact Layout row. Paired fields keep the real longhands in the source. */
-  layout?: 'size' | 'padding' | 'margin' | 'finish'
+  layout?: 'size' | 'padding' | 'margin' | 'finish' | 'gap' | 'flow'
   axis?: 'horizontal' | 'vertical' | 'top' | 'right' | 'bottom' | 'left'
   mixed?: boolean
   expanded?: boolean

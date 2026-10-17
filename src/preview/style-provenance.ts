@@ -32,9 +32,60 @@ export function varRefName(value: string): string | null {
  * an unrelated token. A cross-origin sheet throws on `.cssRules` access; it
  * can't be the previewed app's own CSS, so it's simply skipped.
  */
-export function specifiedValues(el: Element, props: string[]): Record<string, string> {
-  const out: Record<string, string> = {}
-  const walk = (rules: CSSRuleList | undefined): void => {
+export interface StyleDeclarationOrigin {
+  kind: 'inline' | 'rule'
+  selector?: string
+  href?: string
+  important?: boolean
+}
+
+/** Active declarations with their source. A selector whose specificity cannot be
+ * compared safely is still displayed, but consumers must treat its source as ambiguous. */
+export function activeDeclarations(
+  el: Element,
+  props: string[]
+): {
+  specified: Record<string, string>
+  origins: Record<string, StyleDeclarationOrigin>
+} {
+  const specified: Record<string, string> = {}
+  const origins: Record<string, StyleDeclarationOrigin> = {}
+  const ranks: Record<string, [number, number, number, number, number]> = {}
+  let order = 0
+  const offer = (
+    prop: string,
+    value: string,
+    origin: StyleDeclarationOrigin,
+    priority: string,
+    specificity: [number, number, number]
+  ) => {
+    const rank: [number, number, number, number, number] = [
+      priority === 'important' ? 1 : 0,
+      ...specificity,
+      ++order
+    ]
+    const previous = ranks[prop]
+    if (previous && rank.findIndex((part, index) => part !== previous[index]) >= 0) {
+      const index = rank.findIndex((part, i) => part !== previous[i])
+      if (rank[index] < previous[index]) return
+    }
+    ranks[prop] = rank
+    specified[prop] = value.trim()
+    origins[prop] = { ...origin, important: priority === 'important' }
+  }
+  const specificity = (selector: string): [number, number, number] => {
+    // Conservative CSS specificity for ordinary project selectors. Complex
+    // functional pseudo classes are left as unknown source by the editor.
+    const ids = (selector.match(/#[\w-]+/g) ?? []).length
+    const classes = (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length
+    const types = (
+      selector
+        .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|:{1,2}[\w-]+(?:\([^)]*\))?/g, ' ')
+        .match(/(^|[\s>+~])(?:[a-z][\w-]*)/gi) ?? []
+    ).length
+    return [ids, classes, types]
+  }
+  const walk = (rules: CSSRuleList | undefined, href?: string): void => {
     if (!rules) return
     for (const rule of Array.from(rules)) {
       if (rule instanceof CSSStyleRule) {
@@ -45,21 +96,40 @@ export function specifiedValues(el: Element, props: string[]): Record<string, st
           continue // an unsupported/invalid selector — not a usage signal
         }
         if (!matches) continue
+        const selector =
+          rule.selectorText.split(',').find((part) => {
+            try {
+              return el.matches(part.trim())
+            } catch {
+              return false
+            }
+          }) ?? rule.selectorText
         for (const p of props) {
           const v = rule.style.getPropertyValue(p)
-          if (v) out[p] = v
+          if (v)
+            offer(
+              p,
+              v,
+              { kind: 'rule', selector, href },
+              rule.style.getPropertyPriority(p),
+              specificity(selector)
+            )
         }
       } else if (rule instanceof CSSImportRule) {
         // An @import's nested sheet hangs off `.styleSheet`, NOT `.cssRules` —
         // the grouping-rule branch below would silently skip it. Same
         // cross-origin caveat as the top-level loop, hence its own try.
         try {
-          walk(rule.styleSheet?.cssRules)
+          if (!rule.styleSheet || (rule.media.length && !matchMedia(rule.media.mediaText).matches))
+            continue
+          walk(rule.styleSheet.cssRules, rule.styleSheet.href ?? href)
         } catch {
           /* cross-origin import — not the previewed app's own CSS */
         }
       } else if ('cssRules' in rule) {
-        walk((rule as CSSGroupingRule).cssRules) // @media / @supports / @layer
+        if (rule instanceof CSSMediaRule && !matchMedia(rule.conditionText).matches) continue
+        if (rule instanceof CSSSupportsRule && !CSS.supports(rule.conditionText)) continue
+        walk((rule as CSSGroupingRule).cssRules, href)
       }
     }
   }
@@ -70,15 +140,22 @@ export function specifiedValues(el: Element, props: string[]): Record<string, st
     } catch {
       continue
     }
-    walk(rules)
+    if (sheet.media.length && !matchMedia(sheet.media.mediaText).matches) continue
+    const owner = sheet.ownerNode instanceof Element ? sheet.ownerNode : null
+    walk(rules, sheet.href ?? owner?.getAttribute('data-vite-dev-id') ?? undefined)
   }
   if (el instanceof HTMLElement || el instanceof SVGElement) {
     for (const p of props) {
       const inline = el.style.getPropertyValue(p)
-      if (inline) out[p] = inline
+      if (inline)
+        offer(p, inline, { kind: 'inline' }, el.style.getPropertyPriority(p), [1000000, 0, 0])
     }
   }
-  return out
+  return { specified, origins }
+}
+
+export function specifiedValues(el: Element, props: string[]): Record<string, string> {
+  return activeDeclarations(el, props).specified
 }
 
 /**

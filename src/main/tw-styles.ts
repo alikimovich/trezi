@@ -56,6 +56,19 @@ const SPACING_PREFIX: Record<string, string> = {
   'column-gap': 'gap-x',
   'row-gap': 'gap-y'
 }
+const LAYOUT_PREFIX: Record<string, string> = {
+  'justify-content': 'justify',
+  'align-items': 'items',
+  'align-content': 'content',
+  'align-self': 'self'
+}
+const LAYOUT_SUFFIX: Record<string, string> = {
+  'flex-start': 'start',
+  'flex-end': 'end',
+  'space-between': 'between',
+  'space-around': 'around',
+  'space-evenly': 'evenly'
+}
 const RADIUS_PX = new Map([
   [0, 'none'],
   [2, 'xs'],
@@ -133,6 +146,15 @@ export function tailwindClassFor(prop: string, value: string): string | null {
     if (v && v.unit === 'px' && v.n > 0 && v.n % 4 === 0) return `${spacing}-${v.n / 4}`
     return arbitrary(spacing, value)
   }
+  if (
+    prop === 'flex-direction' &&
+    ['row', 'row-reverse', 'column', 'column-reverse'].includes(value)
+  )
+    return `flex-${value.replace('column', 'col')}`
+  if (prop === 'flex-wrap' && ['nowrap', 'wrap', 'wrap-reverse'].includes(value))
+    return `flex-${value}`
+  const layout = LAYOUT_PREFIX[prop]
+  if (layout) return `${layout}-${LAYOUT_SUFFIX[value] ?? value}`
   switch (prop) {
     case 'box-shadow':
       return value.trim() === 'none' ? 'shadow-none' : arbitrary('shadow', value)
@@ -271,6 +293,9 @@ function isFamilyMatch(prop: string, cls: string): boolean {
     const suffix = base.slice(spacing.length + 1)
     return SCALE_SUFFIX_RE.test(suffix) || /^\[.+\]$/.test(suffix)
   }
+  if (prop === 'flex-direction') return /^flex-(?:row|row-reverse|col|col-reverse)$/.test(cls)
+  if (prop === 'flex-wrap') return /^flex-(?:nowrap|wrap|wrap-reverse)$/.test(cls)
+  if (LAYOUT_PREFIX[prop]) return anySuffix(cls, LAYOUT_PREFIX[prop])
   switch (prop) {
     case 'box-shadow': {
       const inner = arbitraryInner(cls, 'shadow')
@@ -315,6 +340,12 @@ function isFamilyMatch(prop: string, cls: string): boolean {
       return TRANSITION_CLASS_RE.test(cls) || arbitraryInner(cls, 'transition') != null
   }
   return false
+}
+
+/** A single plain utility whose selector can be traced back to this property. */
+export function matchingUtilityClass(classes: string[], prop: string): string | null {
+  const matches = classes.filter((cls) => !isVariant(cls) && isFamilyMatch(prop, cls))
+  return matches.length === 1 ? matches[0] : null
 }
 
 /**

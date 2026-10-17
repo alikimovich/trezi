@@ -37,6 +37,8 @@ export interface StylePropMeta {
   optionLabels?: Record<string, string>
   /** Only shown when the element computes to display flex/grid (gap). */
   flexGridOnly?: boolean
+  /** Layout role required for contextual rows. Authored values remain visible regardless. */
+  appliesTo?: 'flex' | 'flex-grid' | 'flex-grid-child'
 }
 
 /** Panel rendering order for the four groups. */
@@ -89,6 +91,75 @@ export const STYLE_PROP_META: Record<string, StylePropMeta> = {
   ...sideMeta('padding', 0, 400),
   ...sideMeta('margin', -400, 400),
   gap: pxMeta('layout', 0, 400, 1, { flexGridOnly: true }),
+  'row-gap': pxMeta('layout', 0, 400, 1, { appliesTo: 'flex-grid' }),
+  'column-gap': pxMeta('layout', 0, 400, 1, { appliesTo: 'flex-grid' }),
+  'flex-direction': {
+    group: 'layout',
+    control: 'select',
+    appliesTo: 'flex',
+    options: ['row', 'row-reverse', 'column', 'column-reverse']
+  },
+  'flex-wrap': {
+    group: 'layout',
+    control: 'select',
+    appliesTo: 'flex',
+    options: ['nowrap', 'wrap', 'wrap-reverse']
+  },
+  'justify-content': {
+    group: 'layout',
+    control: 'select',
+    appliesTo: 'flex-grid',
+    options: [
+      'normal',
+      'start',
+      'end',
+      'center',
+      'space-between',
+      'space-around',
+      'space-evenly',
+      'flex-start',
+      'flex-end'
+    ]
+  },
+  'align-items': {
+    group: 'layout',
+    control: 'select',
+    appliesTo: 'flex-grid',
+    options: ['normal', 'stretch', 'start', 'end', 'center', 'baseline', 'flex-start', 'flex-end']
+  },
+  'align-content': {
+    group: 'layout',
+    control: 'select',
+    appliesTo: 'flex-grid',
+    options: [
+      'normal',
+      'stretch',
+      'start',
+      'end',
+      'center',
+      'space-between',
+      'space-around',
+      'space-evenly',
+      'flex-start',
+      'flex-end'
+    ]
+  },
+  'align-self': {
+    group: 'layout',
+    control: 'select',
+    appliesTo: 'flex-grid-child',
+    options: [
+      'auto',
+      'normal',
+      'stretch',
+      'start',
+      'end',
+      'center',
+      'baseline',
+      'flex-start',
+      'flex-end'
+    ]
+  },
 
   // --- appearance ---
   color: { group: 'appearance', control: 'color' },
