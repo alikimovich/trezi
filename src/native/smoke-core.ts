@@ -785,7 +785,9 @@ export async function runNativeCoreSmoke(
           throw error
         }
         // Source writes live-reload the page, possibly after the write returns; a late
-        // reload would wipe the next injected fixture, so let it land first.
+        // reload would wipe the next injected fixture, so let it land first. An apply and its
+        // Undo can each reload, the second one well after the first: after the first reload,
+        // require a quiet window (a fresh sentinel survives 1.2 s) before returning.
         const settleLiveReload = async () => {
           await page('window.reloadSentinel = true')
           for (let i = 0; i < 30; i++) {
@@ -793,6 +795,20 @@ export async function runNativeCoreSmoke(
             const pending = await page('!!window.reloadSentinel').catch(() => false)
             if (!pending) break
           }
+          for (let quiet = 0; quiet < 8; quiet++) {
+            await wait(
+              () =>
+                page(
+                  `document.readyState === 'complete' && !!document.querySelector('#native-title')`
+                ).catch(() => false),
+              'live reload loaded'
+            )
+            await page('window.reloadSentinel = true')
+            await delay(1200)
+            const reloaded = await page('!window.reloadSentinel').catch(() => true)
+            if (!reloaded) break
+          }
+          await page('window.reloadSentinel = false').catch(() => {})
           await wait(
             () =>
               page(
