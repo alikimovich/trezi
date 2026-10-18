@@ -165,6 +165,11 @@ the first turn, independently of authentication. Invoking `/name` supplies the
 selected skill file path in the prompt so the harness can read its instructions.
 Claude keeps its native SDK command discovery.
 
+The app-scoped Trezi Skills registry (LKM-284, `docs/SWIFT-BACKEND-SKILLS.md`)
+is a separate, service-owned store in Trezi's data. No provider reads it yet, and
+the discovery above is unchanged. Trezi Skills 2/4 will offer each session's pinned
+revisions without installing into projects or provider homes.
+
 ## Switching models within a chat
 
 Changing a model or provider in a nonempty chat requires confirmation: replaying

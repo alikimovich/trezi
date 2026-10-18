@@ -592,6 +592,48 @@ assert.throws(
   assert.equal(sent.length, 1, 'other errors are never retried')
 
   sent.length = 0
+  let embedded = 0
+  fake.request = async (method, body) => {
+    sent.push([method, body])
+    if (embedded > 0 && body?.capture) {
+      embedded--
+      throw new Error('Chat lost foreground during capture')
+    }
+    return { method, body }
+  }
+  embedded = 1
+  await host.request('chatAcceptance', { capture: true, width: 320, input: 'wheel', delta: 9 })
+  assert.deepEqual(
+    sent,
+    [
+      ['chatAcceptance', { capture: true, width: 320, input: 'wheel', delta: 9, prepare: true }],
+      ['chatAcceptance', { capture: true, width: 320, prepare: true }]
+    ],
+    'an embedded capture that lost focus is retaken once without replaying the input'
+  )
+  sent.length = 0
+  embedded = 2
+  await assert.rejects(
+    host.request('chatAcceptance', { capture: true }),
+    /Chat lost foreground during capture/
+  )
+  assert.equal(sent.length, 2, 'a second lost capture fails the step: one retry only')
+  sent.length = 0
+  fake.request = async (method, body) => {
+    sent.push([method, body])
+    throw new Error('Chat lost foreground during capture')
+  }
+  await assert.rejects(host.request('chatAcceptance', { width: 320 }), /lost foreground/)
+  assert.equal(sent.length, 1, 'only requests that ask for a capture are retried for one')
+  fake.request = async (method, body) => {
+    sent.push([method, body])
+    if (method === 'captureShell' && captureRefusals > 0) {
+      captureRefusals--
+      throw new Error('Chat window is not in the foreground')
+    }
+    return { method, body }
+  }
+  sent.length = 0
   captureRefusals = 1
   await host.request('captureShell')
   assert.deepEqual(
