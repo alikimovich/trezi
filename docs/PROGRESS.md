@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-285 repair 3: refuse every `openai.yaml`
+
+- **Why.** The repair-2 `agents/openai.yaml` check skipped indented lines and its regex could not decode quoted keys, so `  {"dependencies": {tools: [{type: mcp, value: probe}]}}` (a root `dependencies` mapping in YAML) was accepted. Rather than grow a partial YAML parser, `SkillsScope` now refuses any file named `openai.yaml` or `openai.yml` (any case, any folder) as provider-control metadata; `checkAgentConfig` is removed. Other YAML files are unaffected.
+- **Tests.** The exact probe, an indented quoted block key, a dependency-free `openai.yaml`, `OpenAI.yml` and a root-level `openai.yaml` are refused for GitHub import (`test/skills-github.mjs`) and for create, folder import and edit with the registry unchanged (`test/skills-registry-safety.mjs`). The allowed fixture now carries a different YAML file. Scripts/shebangs, the common vetting path and the `swiftui-view-refactor` recommendation are unchanged.
+
 ## 2026-10-17 — LKM-285 review repair 2: scripts, flow-style Codex dependencies, SwiftUI recommendation
 
 - **Scripts refused.** `SkillsScope.check` now refuses any file with a script extension (`.sh .bash .zsh .fish .ksh .csh .py .rb .pl .php .lua .js .mjs .cjs .ts .mts .cts .ps1 .bat .cmd .command .scpt .applescript`, any case) and any file whose text starts with `#!`, executable or not, with a message naming the file. This covers GitHub import, create, folder import and edit. The test that stored a mode-644 `scripts/check.sh` as allowed now expects a refusal, as does the folder-import fixture (which also checks that nothing runs and nothing is stored).

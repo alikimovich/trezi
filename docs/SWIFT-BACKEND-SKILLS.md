@@ -206,11 +206,11 @@ Nothing is preinstalled, and the curated recommendations are metadata only.
      (`.sh .bash .zsh .fish .ksh .csh .py .rb .pl .php .lua .js .mjs .cjs .ts .mts .cts
      .ps1 .bat .cmd .command .scpt .applescript`, any case) or whose text starts with
      `#!`. The refusal names the file.
-   - a Codex `agents/openai.yaml` that declares `dependencies` (tools, MCP servers) in
-     any form, or is not a plain block mapping: the word `dependencies` as a key
-     (plain, quoted or inside a flow mapping) anywhere in the file, and any top-level
-     line that is not a plain `key:` (flow `{`/`[`, complex `?`, anchor `&`, alias `*`,
-     or a quoted key) is refused.
+   - every Codex `openai.yaml` / `openai.yml` (any case, any folder, usually
+     `agents/openai.yaml`). It is provider-control metadata that can declare tool and MCP
+     `dependencies`, and YAML has too many spellings of that key (indented root, flow
+     mapping, quoted or escaped key, complex key) for a partial parser to vet, so the
+     file is refused whole and never parsed. Other YAML files are not affected.
 
    Nothing from a package is run. Untrusted skill text never becomes policy or a
    permission; normal tool approval still applies.

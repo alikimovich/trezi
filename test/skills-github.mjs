@@ -558,6 +558,26 @@ try {
         'Codex anchored key',
         { 'skills/demo/agents/openai.yaml': '&a interface:\n  display_name: X\n' }
       ],
+      [
+        'Codex indented escaped flow key (the repair-2 probe)',
+        {
+          'skills/demo/agents/openai.yaml':
+            '  {"\\u0064ependencies": {tools: [{type: mcp, value: probe}]}}\n'
+        }
+      ],
+      [
+        'Codex indented quoted block key',
+        { 'skills/demo/agents/openai.yaml': '  "dependencies":\n    tools: []\n' }
+      ],
+      [
+        'Codex openai.yaml with no dependencies at all',
+        { 'skills/demo/agents/openai.yaml': 'interface:\n  display_name: Demo\n' }
+      ],
+      [
+        'Codex openai.yml',
+        { 'skills/demo/agents/OpenAI.yml': 'interface:\n  display_name: Demo\n' }
+      ],
+      ['Codex openai.yaml outside agents', { 'skills/demo/openai.yaml': 'x: 1\n' }],
       ['non-executable shell script', { 'skills/demo/scripts/check.sh': 'echo hi\n' }],
       ['shebang in a text file', { 'skills/demo/references/run.txt': '#!/bin/sh\necho hi\n' }],
       ['python script', { 'skills/demo/scripts/tool.py': 'print(1)\n' }],
@@ -570,18 +590,18 @@ try {
         'demo',
         'license: MIT\ncompatibility: Claude Code\nmetadata:\n  author: acme\n'
       ),
-      'skills/demo/agents/openai.yaml': 'interface:\n  display_name: Demo\n',
+      'skills/demo/agents/notes.yaml': 'interface:\n  display_name: Demo\n',
       'skills/demo/references/shell.md': 'Use `a != b` or ! alone, and run `npm test` yourself.\n'
     })
     assert.ok(allowed.result, JSON.stringify(allowed))
     assert.deepEqual(allowed.result.files, [
       'SKILL.md',
-      'agents/openai.yaml',
+      'agents/notes.yaml',
       'references/guide.md',
       'references/shell.md'
     ])
     console.log(
-      'SKILLS-GITHUB scope: dynamic shell, tool/hook/agent frontmatter, manifests, scripts and Codex dependencies refused PASS'
+      'SKILLS-GITHUB scope: dynamic shell, tool/hook/agent frontmatter, manifests, scripts and Codex openai.yaml metadata refused PASS'
     )
   }
   await fx.close()

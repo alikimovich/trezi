@@ -12,6 +12,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Add tests `skills-github` (offline) and `skills-github-import` (loopback HTTP).
 - [x] Review repair: fix the SwiftUI path and mark the SwiftUI (scripts/images, oversized file) and React (76 files) recommendations not importable with a reason, verify the paths and record the upstream evidence; apply the skills-only scope to create, folder import and edit with registry-unchanged tests.
 - [x] Review repair 2: refuse scripts (extension or `#!`, executable or not) and non-plain or dependency-declaring `agents/openai.yaml` on every write; add the importable SwiftUI recommendation `swiftui-view-refactor` (`steipete/agent-scripts` at `d602e8ad`) and keep AvdLee listed as not importable.
+- [x] Repair 3: refuse every `openai.yaml`/`openai.yml` as provider-control metadata (the indented escaped-key flow probe bypassed the partial YAML check), with the exact probe as a regression for GitHub import, create, folder import and edit.
 - [ ] Maintainer decision: raise `SKILLS_LIMITS.maxFiles` (64) if the React recommendation (76 files) should be importable; the caps were not changed.
 - [ ] Operator: import each recommendation from real GitHub once, and confirm its folder, `SKILL.md` name and license (no GitHub network in the worker sandbox).
 - [ ] Manager: run native verification and an independent review.

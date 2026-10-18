@@ -325,6 +325,23 @@ try {
         { 'agents/openai.yaml': 'interface:\n  display_name: X\n"dependencies":\n  tools: []\n' },
         'dependencies'
       ],
+      [
+        'an indented escaped flow agent key (the repair-2 probe)',
+        {
+          'agents/openai.yaml': '  {"\\u0064ependencies": {tools: [{type: mcp, value: probe}]}}\n'
+        },
+        'dependencies'
+      ],
+      [
+        'an indented quoted block agent key',
+        { 'agents/openai.yaml': '  "dependencies":\n    tools: []\n' },
+        'dependencies'
+      ],
+      [
+        'agent metadata without dependencies',
+        { 'agents/openai.yaml': 'interface:\n  display_name: X\n' },
+        'metadata'
+      ],
       ['a shebang', { 'references/run.txt': '#!/bin/sh\necho hi\n' }, 'shebang'],
       ['a shell script', { 'scripts/check.sh': 'echo hi\n' }, 'script'],
       ['a python script', { 'scripts/tool.py': 'print(1)\n' }, 'script']

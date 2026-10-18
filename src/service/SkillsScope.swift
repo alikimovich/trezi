@@ -11,8 +11,8 @@ import Foundation
 ///   Claude runs as a shell command before the skill is read.
 /// - No hook, MCP, plugin or settings manifest, and no dependency manifest.
 /// - No script, executable or not: a script file extension or a `#!` first line is refused.
-/// - No Codex `agents/openai.yaml` that declares `dependencies` in any form, and none that
-///   is not a plain block mapping (flow, quoted, complex, anchored or aliased keys).
+/// - No Codex `openai.yaml`/`openai.yml` at all: it is provider-control metadata that can
+///   declare tool and MCP dependencies, and it is not parsed, so no spelling can hide one.
 ///
 /// Links, special files and executables never reach this point (`TarReader`).
 enum SkillsScope {
@@ -31,25 +31,19 @@ enum SkillsScope {
         ".ts", ".mts", ".cts", ".ps1", ".bat", ".cmd", ".command", ".scpt", ".applescript"
     ]
 
-    /// `agents/openai.yaml` must be a plain block mapping with plain top-level keys, so no
-    /// flow mapping, quoted, complex, anchored or aliased key can hide `dependencies`
-    /// (tools and MCP servers Codex would connect). The word as a key is refused anywhere.
-    static func checkAgentConfig(_ path: String, _ text: String) throws {
-        let refusal = SkillsPackageError.refused("\(path) declares tool dependencies or is not a plain block mapping; imported skills hold instructions only.")
-        if text.range(of: #"dependencies["']?\s*:"#, options: [.regularExpression, .caseInsensitive]) != nil { throw refusal }
-        for raw in text.components(separatedBy: "\n") {
-            let line = raw.hasSuffix("\r") ? String(raw.dropLast()) : raw
-            guard let first = line.first, first != " ", first != "\t", first != "#" else { continue }
-            if line == "---" || line == "..." { continue }
-            guard line.range(of: #"^[A-Za-z0-9_-]+:(\s|$)"#, options: .regularExpression) != nil else { throw refusal }
-        }
-    }
+    /// Codex's per-skill metadata. It can declare tool and MCP-server `dependencies`, and
+    /// YAML has too many spellings (indented roots, flow, quoted or escaped keys) to vet
+    /// with a partial parser, so any file with this name is refused, wherever it sits.
+    static let providerMetadata: Set<String> = ["openai.yaml", "openai.yml"]
 
     static func check(_ files: [SkillFile]) throws {
         for file in files {
             let name = (file.path.split(separator: "/").last.map(String.init) ?? file.path).lowercased()
             guard !controlFiles.contains(name) else {
                 throw SkillsPackageError.refused("\(file.path) is a hook, tool or dependency manifest; imported skills hold instructions only.")
+            }
+            guard !providerMetadata.contains(name) else {
+                throw SkillsPackageError.refused("\(file.path) is provider-control metadata (it can declare tool dependencies); imported skills hold instructions only.")
             }
             guard !scriptExtensions.contains(where: { name.hasSuffix($0) }) else {
                 throw SkillsPackageError.refused("\(file.path) is a script; imported skills hold instructions only.")
@@ -60,9 +54,6 @@ enum SkillsScope {
             }
             if name.hasSuffix(".md") || name.hasSuffix(".markdown"), let line = lineNumber(of: "!`", in: text) {
                 throw SkillsPackageError.refused("\(file.path) line \(line) uses dynamic preprocessing (!`…`), which would run a command.")
-            }
-            if file.path.lowercased().hasPrefix("agents/"), name == "openai.yaml" || name == "openai.yml" {
-                try checkAgentConfig(file.path, text)
             }
         }
         guard let entry = files.first(where: { $0.path == SkillsPackage.entryFile }) else { return }
