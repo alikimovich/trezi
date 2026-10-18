@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Dependency advisory reachability triage (LKM-282)
+
+- [x] Classify all 16 critical/high advisories by reachability in `docs/SECURITY-DEPENDENCIES.md`.
+- [x] Stop react-docgen's Babel from loading the project's browserslist config; regression `test/docgen-browserslist.mjs`.
+- [x] Lockfile-only updates: proxy-addr 2.0.8, fast-uri 3.1.8.
+- [x] Manager (registry access): re-run `bun scripts/dependency-audit.mjs` and record the after counts in `docs/SECURITY-DEPENDENCIES.md` (39 → 30 advisories; 0 critical, 8 high, 20 moderate, 2 low).
+- [x] Manager: run the socket unit tests (codex-mcp, trezi-agent-tools, provider-helper-tools) and native verification (passed, 54/54 native smoke checks).
+- [ ] Follow-up: update browserslist (with its data packages), `@modelcontextprotocol/sdk`, devalue and ip-address once an online audit names compatible fixed versions.
+
 ## Live Publish attribution check (LKM-255)
 
 - [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a test-branch clone with one throwaway trezi@local commit; `test/live-publish-attribution.mjs` covers the publication commit and the guards offline.

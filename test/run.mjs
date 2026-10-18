@@ -134,6 +134,7 @@ const UNIT = [
   'project-ui',
   'project-ui-svelte',
   'project-ui-jev',
+  'docgen-browserslist',
   'jev-pilot',
   'test-runner',
   'setup-stamps',
