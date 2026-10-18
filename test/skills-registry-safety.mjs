@@ -215,23 +215,37 @@ try {
     assert.equal(code(await fx.raw(surrogate)), 'invalidRequest', 'lone surrogate')
 
     const marker = join(scratch, 'executed-marker')
+    // A folder with a script, executable or not, is refused whole; nothing runs or is stored.
+    for (const mode of [0o755, 0o644]) {
+      const withScript = folder({
+        'SKILL.md': `---\nname: scripted\ndescription: Mentions a script.\n---\nRun scripts/install.sh\n`,
+        'scripts/install.sh': `#!/bin/sh\ntouch ${marker}\n`
+      })
+      chmodSync(join(withScript, 'scripts/install.sh'), mode)
+      const untouched = tree(withScript)
+      assert.equal(
+        code(await fx.mutate('import', { folder: withScript })),
+        'unauthorized',
+        `a script (${mode.toString(8)})`
+      )
+      assert.deepEqual(tree(withScript), untouched, 'the source folder is untouched')
+      assert.equal(ok(await fx.call('list')).skills.length, 0, 'nothing was stored')
+    }
     const good = folder({
-      'SKILL.md': `---\nname: imported\ndescription: Has hooks.\nhooks:\n  postinstall: ./scripts/install.sh\n---\nRun scripts/install.sh\n`,
-      'scripts/install.sh': `#!/bin/sh\ntouch ${marker}\n`,
+      'SKILL.md': `---\nname: imported\ndescription: Plain instructions.\n---\nRead references/r.md\n`,
       'references/r.md': 'ref',
       '.git/config': '[core]',
       '.DS_Store': 'x'
     })
-    chmodSync(join(good, 'scripts/install.sh'), 0o755)
     const before = tree(good)
     const imported = ok(await fx.mutate('import', { folder: good }))
     assert.deepEqual(imported.skipped, ['.DS_Store', '.git'])
     assert.deepEqual(tree(good), before, 'the source folder is untouched')
     const read = ok(await fx.call('read', { skill: imported.skill }))
-    assert.deepEqual(read.references.map((entry) => entry.path).sort(), [
-      'references/r.md',
-      'scripts/install.sh'
-    ])
+    assert.deepEqual(
+      read.references.map((entry) => entry.path),
+      ['references/r.md']
+    )
     for (const name of readdirSync(registry(dir, 'objects')))
       assert.equal(statSync(registry(dir, 'objects', name)).mode & 0o111, 0, 'never executable')
     assert.ok(!existsSync(marker), 'no script ran')
@@ -275,6 +289,107 @@ try {
     await fx.close()
     console.log(
       'SKILLS-SAFETY malicious paths, links, hard links, FIFOs, bytes and sizes refused; scripts never run PASS'
+    )
+  }
+
+  // --- The skills-only scope applies to every write, not just GitHub imports (LKM-285) ---
+  {
+    const dir = profile()
+    const fx = await start(dir)
+    const { skill, skillRevision } = ok(
+      await fx.mutate('create', { files: files('scoped', { 'a.md': 'A' }) })
+    )
+    const bang = `Run it: !${'`'}date${'`'}\n`
+    const hooks = `---\nname: scoped\ndescription: Has hooks.\nhooks:\n  postinstall: ./x.sh\n---\n# scoped\n`
+    const tools = `---\nname: scoped\ndescription: Asks for tools.\nallowed-tools: Bash\n---\n# scoped\n`
+    const flow = `---\nname: scoped\ndescription: Not a key list.\n- tools\n---\n# scoped\n`
+    const dangerous = [
+      ['hooks frontmatter', { 'SKILL.md': hooks }, 'hooks'],
+      ['allowed-tools frontmatter', { 'SKILL.md': tools }, 'allowed-tools'],
+      ['flow frontmatter', { 'SKILL.md': flow }, 'frontmatter'],
+      ['a control manifest', { 'hooks.json': '{}' }, 'hooks.json'],
+      ['a package manifest', { 'tools/package.json': '{}' }, 'package.json'],
+      ['dynamic shell', { 'notes.md': bang }, 'notes.md'],
+      [
+        'an agent dependency',
+        { 'agents/openai.yaml': 'dependencies:\n  tools: []\n' },
+        'dependencies'
+      ],
+      [
+        'a flow-style agent dependency',
+        { 'agents/openai.yaml': '{interface: {display_name: X}, dependencies: {tools: []}}\n' },
+        'dependencies'
+      ],
+      [
+        'a quoted agent dependency key',
+        { 'agents/openai.yaml': 'interface:\n  display_name: X\n"dependencies":\n  tools: []\n' },
+        'dependencies'
+      ],
+      [
+        'an indented escaped flow agent key (the repair-2 probe)',
+        {
+          'agents/openai.yaml': '  {"\\u0064ependencies": {tools: [{type: mcp, value: probe}]}}\n'
+        },
+        'dependencies'
+      ],
+      [
+        'an indented quoted block agent key',
+        { 'agents/openai.yaml': '  "dependencies":\n    tools: []\n' },
+        'dependencies'
+      ],
+      [
+        'agent metadata without dependencies',
+        { 'agents/openai.yaml': 'interface:\n  display_name: X\n' },
+        'metadata'
+      ],
+      ['a shebang', { 'references/run.txt': '#!/bin/sh\necho hi\n' }, 'shebang'],
+      ['a shell script', { 'scripts/check.sh': 'echo hi\n' }, 'script'],
+      ['a python script', { 'scripts/tool.py': 'print(1)\n' }, 'script']
+    ]
+    const snapshot = async () => ({ files: tree(registry(dir)), list: ok(await fx.call('list')) })
+    const before = await snapshot()
+    for (const [label, extra, word] of dangerous) {
+      // Create: SKILL.md replaced or a file added.
+      const list = Object.entries(extra).map(([path, text]) => ({ path, text }))
+      const created = await fx.mutate('create', {
+        files: list.some((item) => item.path === 'SKILL.md') ? list : [...files('scoped2'), ...list]
+      })
+      assert.equal(code(created), 'unauthorized', `create: ${label}`)
+      assert.match(created.reply.result.payload.message ?? '', new RegExp(word, 'i'), label)
+      // Import of a local folder.
+      const source = folder({ 'SKILL.md': skillMd('scoped3'), ...extra })
+      assert.equal(
+        code(await fx.mutate('import', { folder: source })),
+        'unauthorized',
+        `import: ${label}`
+      )
+      // Edit of an existing skill.
+      assert.equal(
+        code(
+          await fx.mutate('edit', {
+            skill,
+            base: skillRevision,
+            changes: Object.entries(extra).map(([path, text]) => ({ path, text }))
+          })
+        ),
+        'unauthorized',
+        `edit: ${label}`
+      )
+      const after = await snapshot()
+      assert.deepEqual(after.files, before.files, `${label}: no object or revision was written`)
+      assert.deepEqual(after.list, before.list, `${label}: the registry is unchanged`)
+    }
+    // In-scope content is still stored: the same edit paths with plain files.
+    ok(
+      await fx.mutate('edit', {
+        skill,
+        base: skillRevision,
+        changes: [{ path: 'b.md', text: 'B' }]
+      })
+    )
+    await fx.close()
+    console.log(
+      'SKILLS-SAFETY create, folder import and edit refuse out-of-scope frontmatter, control manifests and dynamic shell, registry unchanged PASS'
     )
   }
 

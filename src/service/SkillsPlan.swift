@@ -54,16 +54,24 @@ struct SkillsPlan {
         }
     }
 
-    /// Validates, then stores the files and their revision record.
-    private func save(_ files: [SkillFile]) throws -> (id: String, revision: SkillRevision) {
+    /// Package rules, then the skills-only scope: every stored revision is in scope,
+    /// whichever way it arrives (create, folder import, GitHub, edit).
+    static func vetted(_ files: [SkillFile]) throws -> (name: String, description: String) {
         let meta = try SkillsPackage.validate(files)
+        try SkillsScope.check(files)
+        return meta
+    }
+
+    /// Vets, then stores the files and their revision record.
+    private func save(_ files: [SkillFile]) throws -> (id: String, revision: SkillRevision) {
+        let meta = try Self.vetted(files)
         let entries = try files.map { SkillEntry(path: $0.path, digest: try store.writeObject($0.data), size: $0.data.count) }
         let revision = SkillRevision(name: meta.name, description: meta.description, files: entries.sorted { $0.path < $1.path })
         return (try store.writeRevision(revision), revision)
     }
 
     private func add(_ files: [SkillFile], kind: String, source: SkillSource, to manifest: inout SkillsManifest) throws -> [String: ServiceJSON] {
-        let meta = try SkillsPackage.validate(files)
+        let meta = try Self.vetted(files)
         guard manifest.active(named: meta.name) == nil else { throw Refusal.conflict("A skill named \(meta.name) already exists.") }
         guard manifest.skills.count < SkillsLimits.maxSkills else { throw SkillsPackageError.invalid("Trezi keeps at most \(SkillsLimits.maxSkills) skills.") }
         let (id, revision) = try save(files)
@@ -75,12 +83,14 @@ struct SkillsPlan {
     }
 
     /// A new source revision (e.g. a later GitHub commit): it becomes the current and
-    /// the installed revision; earlier ones stay in the history.
+    /// the installed revision; earlier ones (local edits too) stay in the history. Only a
+    /// skill imported from the same repository folder is updated (LKM-285).
     private func update(_ skill: String, _ files: [SkillFile], _ source: SkillSource, _ manifest: inout SkillsManifest) throws -> [String: ServiceJSON] {
         guard let index = manifest.skills.firstIndex(where: { $0.id == skill }) else { throw Refusal.notFound }
         var record = manifest.skills[index]
         guard record.active else { throw Refusal.conflict("Restore the skill before updating it.") }
-        let meta = try SkillsPackage.validate(files)
+        guard record.source.sameFolder(as: source) else { throw Refusal.conflict("This skill was not imported from that GitHub folder.") }
+        let meta = try Self.vetted(files)
         guard manifest.active(named: meta.name, except: skill) == nil else { throw Refusal.conflict("A skill named \(meta.name) already exists.") }
         let (id, revision) = try save(files)
         if record.revision != id { record.history = Self.appending(record.history, SkillHistoryEntry(revision: id, createdAt: now, kind: "update")) }
@@ -115,6 +125,9 @@ struct SkillsPlan {
             }
         }
         try SkillsPackage.check(files.map { ($0.key, $0.value.size) })
+        // The scope applies to the whole final file set, so carried-over files are read back too.
+        let final = try files.map { path, file in SkillFile(path: path, data: try file.data ?? store.readObject(file.entry!)) }
+        try SkillsScope.check(final)
         var meta = (name: previous.name, description: previous.description)
         if let data = files[SkillsPackage.entryFile]?.data { meta = try SkillsPackage.metadata(of: SkillFile(path: SkillsPackage.entryFile, data: data)) }
         guard manifest.active(named: meta.name, except: skill) == nil else { throw Refusal.conflict("A skill named \(meta.name) already exists.") }

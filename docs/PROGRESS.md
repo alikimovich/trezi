@@ -2,6 +2,65 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-285 repair 3: refuse every `openai.yaml`
+
+- **Why.** The repair-2 `agents/openai.yaml` check skipped indented lines and its regex could not decode quoted keys, so `  {"dependencies": {tools: [{type: mcp, value: probe}]}}` (a root `dependencies` mapping in YAML) was accepted. Rather than grow a partial YAML parser, `SkillsScope` now refuses any file named `openai.yaml` or `openai.yml` (any case, any folder) as provider-control metadata; `checkAgentConfig` is removed. Other YAML files are unaffected.
+- **Tests.** The exact probe, an indented quoted block key, a dependency-free `openai.yaml`, `OpenAI.yml` and a root-level `openai.yaml` are refused for GitHub import (`test/skills-github.mjs`) and for create, folder import and edit with the registry unchanged (`test/skills-registry-safety.mjs`). The allowed fixture now carries a different YAML file. Scripts/shebangs, the common vetting path and the `swiftui-view-refactor` recommendation are unchanged.
+
+## 2026-10-17 — LKM-285 review repair 2: scripts, flow-style Codex dependencies, SwiftUI recommendation
+
+- **Scripts refused.** `SkillsScope.check` now refuses any file with a script extension (`.sh .bash .zsh .fish .ksh .csh .py .rb .pl .php .lua .js .mjs .cjs .ts .mts .cts .ps1 .bat .cmd .command .scpt .applescript`, any case) and any file whose text starts with `#!`, executable or not, with a message naming the file. This covers GitHub import, create, folder import and edit. The test that stored a mode-644 `scripts/check.sh` as allowed now expects a refusal, as does the folder-import fixture (which also checks that nothing runs and nothing is stored).
+- **`agents/openai.yaml`.** `checkAgentConfig` refuses the word `dependencies` as a key in any form anywhere (plain, quoted, flow-nested, after `?`), and any top-level line that is not a plain `key:` (flow `{`/`[`, complex `?`, anchor `&`, alias `*`, quoted key). Flow, quoted, complex, escaped and anchored cases are in `test/skills-github.mjs` and `test/skills-registry-safety.mjs`.
+- **SwiftUI.** `swiftui-view-refactor` (`steipete/agent-scripts` `skills/swiftui-view-refactor` at `d602e8ad`, 2 `.md` files, 12 565 B, MIT root `LICENSE`) is added as importable; AvdLee stays listed as not importable. Every category now has an importable entry except React (76 files over the unchanged 64-file cap), which is a documented, tested exception.
+
+## 2026-10-17 — LKM-285 review repair: recommendation catalog and scope on every write
+
+- **Catalog.**
+  - `swiftui-expert-skill` had the wrong path. The folder is `skills/swiftui-expert-skill`, and it is not skills-only: 51 files (13 `.py`, 2 `.png`, 1 `.svg`, 1 `.yaml`, 34 `.md`), 901 559 B, largest file 398 841 B over the 256 KiB cap. It is now `importable: false` with an `unavailableReason`, and `recommendationImport` returns `null` for it.
+  - `vercel-react-best-practices` has 76 files, over the 64-file cap, so it is also `importable: false` rather than offered as an import that always fails. Raising `maxFiles` is a maintainer call; the caps were not weakened.
+  - All four paths are now `pathVerified: true`. The upstream measurements (commit, files, bytes, largest file) are recorded in `SKILL_RECOMMENDATION_IMPORTS`: Composition 14 files / 50 339 B, React 76 / 230 383 B, Frontend Design 2 / 19 564 B.
+  - `test/skills-github.mjs` asserts that `importable` follows the evidence against `SKILLS_LIMITS`, and that every importable entry has a verified path and a permissive license.
+- **Scope on every write.** `SkillsScope.check` ran only in the GitHub fetch. `SkillsPlan.vetted` now runs package validation plus the scope for `create`, folder `import`, `install` and `update`, before the name-conflict checks; `edit` checks the final file set, reading carried-over files back from the store. Refusals use the same `unauthorized` messages and write nothing. `test/skills-registry-safety.mjs` covers create/import/edit with `hooks:`/`allowed-tools:` frontmatter, a non-key frontmatter line, `hooks.json`, `package.json`, dynamic shell and an agent dependency, asserting the registry tree and list are unchanged. The old import fixture stored `hooks:` frontmatter as inert text; it no longer does.
+- Verification note: a stale Swift module cache from the other path of this worktree (`/Users/panda/Documents/Codex/...` vs `/private/tmp/...`) crashed `swiftc`; deleting the ignored `.local/test-cache/swift/module-cache` fixed it.
+
+## 2026-10-17 — LKM-285 Trezi Skills 2/4: safe pinned GitHub import and curated recommendations
+
+- **Service-owned fetch.**
+  - A new `github` method on the `skills` pipe: `{url, ref?, subpath?, replacing?}`.
+  - The service resolves the ref, or the default branch, to a full commit through the GitHub API before downloading. It then fetches the archive by that commit and requires the archive's pax global `comment` to name the same commit.
+  - A tree address with a slash ref is resolved for every split; more than one match is refused as ambiguous.
+  - Redirects are refused, never followed. The HTTP session has no cookies, cache or credential store, and cancels every auth challenge except server trust, so no keychain item is looked up.
+  - Files: `SkillsImport.swift`, `SkillsGitHub.swift`, `SkillsHTTP.swift`.
+- **Why a custom tar reader.**
+  - `SkillsArchive.swift` streams the one gzip member through zlib with bounds: 64 MB compressed, 256 MB expanded, 20 000 entries, 64 KB of extended headers, plus the package limits.
+  - It refuses zip-slip, absolute/NUL/non-UTF-8 names, links, specials, executables, duplicate or case-colliding paths, header tricks, trailing data and truncation.
+  - Nothing is extracted to disk.
+  - zlib is used, not Apple's Compression framework: Compression consumes the input greedily, so it cannot prove that exactly the 8-byte trailer, and no second member, follows.
+- **Skills-only scope.** Extension filtering is not enough (recorded decision), so `SkillsScope.swift` refuses:
+  - `!`-backtick dynamic shell in Markdown
+  - `SKILL.md` frontmatter beyond name/description/license/compatibility/metadata, so `allowed-tools`, `hooks`, `context`, `agent` and `model` are refused, as are YAML flow mappings
+  - hook, MCP, plugin, settings and dependency manifests
+  - Codex `agents/openai.yaml` dependencies
+
+  Scripts stay inert text; nothing runs.
+- **Provenance and license.**
+  - `SkillSource.github` also records the requested `ref` and the `licenseFile` the evidence came from.
+  - The license comes from the folder's own `LICENSE*`, the `SKILL.md` `license:` or the root `LICENSE*`. A root license is copied in as attribution.
+  - An unrecognised license is `NOASSERTION` and a missing one is `null`, with `skillLicenseStatus` for honest display.
+  - `replacing` must name a skill from the same repository folder.
+- **No partial install.** A fetch writes nothing and commits through `install` in one ledger commit after validation. Cancel works only before the commit and only from the same connection.
+  - The import's pipe reply is deferred: `DomainChannel` skips an empty reply and the owner sends it later.
+  - Other bounds: at most 2 imports (`busy`), a 120 s deadline (`deadlineExceeded`), and `close` stops running fetches.
+- **Bun client.** `importGitHub(input, {signal})` runs outside the serial queue, and an abort sends `cancel`.
+- **Recommendations** (`src/shared/skills-recommendations.ts`, metadata only):
+  - The four evidence-backed entries in LKM-288's `skills-catalog.ts`, kept byte-identical to avoid a merge conflict: frontend-design (Apache-2.0), vercel react-best-practices and composition-patterns (MIT frontmatter), and AvdLee SwiftUI (MIT).
+  - `recommendationMismatch` shows a moved folder, renamed skill or changed license instead of hiding it.
+  - `web-design-guidelines` is excluded: it has no license and fetches mutable content at use.
+- **Tests:**
+  - `test/skills-github.mjs` (offline): addresses, archives, bombs, scope, parity.
+  - `test/skills-github-import.mjs`: a loopback GitHub over `node:http` covering pins, ambiguity, redirects, 403/404, hostile content leaving the registry byte-identical, cancel, deadline, close, busy, duplicate, `replacing`, and the Bun client with abort.
+- **Not verified live.** The worker sandbox had no GitHub network, so no recommendation was imported for real. Their current paths and licenses still need an operator import.
+
 ## 2026-10-17 — LKM-284 review repair: pinned revisions survive history trimming
 
 - Review found no test for the recorded "edit/remove/history trimming before resuming the oldest snapshot" case. `test/skills-registry-boundaries.mjs` now runs it against the real owner: pin session `old` on v1 and `mid` on v2, make enough edits that `SkillsPlan.appending` (`maxHistory` = 64) drops v1, v2 and v3 from `list`'s history, then remove, restart (sweep), purge and restart again.

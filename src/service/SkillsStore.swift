@@ -17,18 +17,25 @@ struct SkillProviders: Equatable, Sendable {
     }
 }
 
-/// Where a skill came from. GitHub provenance names the exact commit it was taken at.
+/// Where a skill came from. GitHub provenance names the exact commit it was taken at,
+/// and (GitHub import, LKM-285) the ref that was asked for and the license evidence's
+/// repository path; those two are omitted when absent, so older records keep their bytes.
 enum SkillSource: Equatable, Sendable {
     case manual
-    case github(repository: String, subpath: String, commit: String, license: String?)
+    case github(repository: String, subpath: String, commit: String, license: String?, ref: String? = nil, licenseFile: String? = nil)
+
+    static let githubFields: Set<String> = ["kind", "repository", "subpath", "commit", "license", "ref", "licenseFile"]
 
     var value: JSValue {
         switch self {
         case .manual: return .object([(JSText("kind"), .string(JSText("manual")))])
-        case .github(let repository, let subpath, let commit, let license):
-            return .object([(JSText("kind"), .string(JSText("github"))), (JSText("repository"), .string(JSText(repository))),
+        case .github(let repository, let subpath, let commit, let license, let ref, let licenseFile):
+            var fields: [(JSText, JSValue)] = [(JSText("kind"), .string(JSText("github"))), (JSText("repository"), .string(JSText(repository))),
                 (JSText("subpath"), .string(JSText(subpath))), (JSText("commit"), .string(JSText(commit))),
-                (JSText("license"), license.map { .string(JSText($0)) } ?? .null)])
+                (JSText("license"), license.map { .string(JSText($0)) } ?? .null)]
+            if let ref { fields.append((JSText("ref"), .string(JSText(ref)))) }
+            if let licenseFile { fields.append((JSText("licenseFile"), .string(JSText(licenseFile)))) }
+            return .object(fields)
         }
     }
 
@@ -36,7 +43,7 @@ enum SkillSource: Equatable, Sendable {
         guard case .object(let fields)? = value, let kind = value?["kind"]?.text?.string else { return nil }
         switch kind {
         case "manual" where fields.count == 1: self = .manual
-        case "github" where fields.count == 5:
+        case "github" where (5...7).contains(fields.count) && Set(fields.map { $0.0.string }).isSubset(of: Self.githubFields):
             guard let repository = value?["repository"]?.text?.string, Self.validRepository(repository),
                   let subpath = value?["subpath"]?.text?.string, subpath.isEmpty || SkillsPackage.validPath(subpath),
                   let commit = value?["commit"]?.text?.string, Self.validCommit(commit) else { return nil }
@@ -46,9 +53,23 @@ enum SkillSource: Equatable, Sendable {
             case .string(let text)? where (1...100).contains(text.count): license = text.string
             default: return nil
             }
-            self = .github(repository: repository, subpath: subpath, commit: commit, license: license)
+            var ref: String?, licenseFile: String?
+            if let item = value?["ref"] { guard let text = item.text?.string, SkillsGitHubAddress.validRef(text) else { return nil }; ref = text }
+            if let item = value?["licenseFile"] {
+                guard let text = item.text?.string, text.utf8.count <= SkillsLimits.maxPath * 2 else { return nil }
+                let parts = text.split(separator: "/", omittingEmptySubsequences: false)
+                guard parts.count <= SkillsLimits.maxDepth * 2, parts.allSatisfy({ SkillsPackage.validComponent(String($0)) }) else { return nil }
+                licenseFile = text
+            }
+            self = .github(repository: repository, subpath: subpath, commit: commit, license: license, ref: ref, licenseFile: licenseFile)
         default: return nil
         }
+    }
+
+    /// The same repository folder (GitHub names are case-insensitive).
+    func sameFolder(as other: SkillSource) -> Bool {
+        guard case .github(let a, let folder, _, _, _, _) = self, case .github(let b, let otherFolder, _, _, _, _) = other else { return false }
+        return a.lowercased() == b.lowercased() && folder == otherFolder
     }
 
     /// `owner/name` with GitHub's characters.

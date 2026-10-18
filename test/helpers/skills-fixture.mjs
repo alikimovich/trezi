@@ -39,7 +39,12 @@ export function compileSkills(binary) {
     'SkillsStore',
     'SkillsRequest',
     'SkillsPlan',
-    'SkillsOwner'
+    'SkillsOwner',
+    'SkillsHTTP',
+    'SkillsArchive',
+    'SkillsScope',
+    'SkillsGitHub',
+    'SkillsImport'
   ].map((name) => `src/service/${name}.swift`)
   swiftBuild('skills-owner', [...sources, 'test/fixtures/skills-owner/main.swift'], {
     out: binary
@@ -159,6 +164,20 @@ export async function start(binary, dir, env = {}) {
     },
     send(frame) {
       return this.raw(JSON.stringify(frame))
+    },
+    /** Writes a frame answered later (a GitHub import); read its reply with `next`/`replies`. */
+    post(frame) {
+      child.stdin.write(`${JSON.stringify(frame)}\n`)
+      return frame
+    },
+    /** The next `count` lines, keyed by frame id (deferred replies arrive in any order). */
+    async replies(count) {
+      const out = new Map()
+      for (let index = 0; index < count; index++) {
+        const line = await this.next()
+        out.set(line.id, line)
+      }
+      return out
     },
     call(method, body = {}) {
       return this.send(this.frame(method, body))

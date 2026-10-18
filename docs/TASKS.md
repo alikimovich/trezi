@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Trezi Skills 2/4: safe pinned GitHub import and curated recommendations (LKM-285)
+
+- [x] Add the service `github`/`cancel` methods: strict github.com address parsing, ref → full-commit pin before download, archive fetched by commit and its embedded commit checked, ambiguous tree addresses and redirects refused.
+- [x] Add a bounded streaming `tar.gz` reader (size, expansion, entries, depth, headers) that refuses traversal, links, specials, executables and archive tricks, plus the skills-only scope (dynamic shell, tool/hook/agent frontmatter, manifests, Codex dependencies).
+- [x] Store repo/subpath/ref/commit/license/licenseFile provenance through one ledger commit (no partial install), with cancel, a deadline, 2 concurrent imports and `replacing` from the same folder only; add Bun's `importGitHub`.
+- [x] Add metadata-only recommendations (UI craft, design systems, React, SwiftUI) with source, license evidence and mismatch reporting (`src/shared/skills-recommendations.ts`).
+- [x] Add tests `skills-github` (offline) and `skills-github-import` (loopback HTTP).
+- [x] Review repair: fix the SwiftUI path and mark the SwiftUI (scripts/images, oversized file) and React (76 files) recommendations not importable with a reason, verify the paths and record the upstream evidence; apply the skills-only scope to create, folder import and edit with registry-unchanged tests.
+- [x] Review repair 2: refuse scripts (extension or `#!`, executable or not) and non-plain or dependency-declaring `agents/openai.yaml` on every write; add the importable SwiftUI recommendation `swiftui-view-refactor` (`steipete/agent-scripts` at `d602e8ad`) and keep AvdLee listed as not importable.
+- [x] Repair 3: refuse every `openai.yaml`/`openai.yml` as provider-control metadata (the indented escaped-key flow probe bypassed the partial YAML check), with the exact probe as a regression for GitHub import, create, folder import and edit.
+- [ ] Maintainer decision: raise `SKILLS_LIMITS.maxFiles` (64) if the React recommendation (76 files) should be importable; the caps were not changed.
+- [ ] Operator: import each recommendation from real GitHub once, and confirm its folder, `SKILL.md` name and license (no GitHub network in the worker sandbox).
+- [ ] Manager: run native verification and an independent review.
+
 ## Trezi Skills 1/4: app-scoped registry and service contracts (LKM-284)
 
 - [x] Add versioned shared types (`src/shared/skills-registry.ts`) and the Swift owner (`src/service/SkillsOwner.swift` and its parts): list, lazy read/reference, create, local import, save-as-new-revision edit, enable, providers, remove/restore/purge, snapshot/pins/release.
