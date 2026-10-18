@@ -309,7 +309,10 @@ async function schemaFor(code: string, name: string): Promise<PropField[]> {
     // component still resolves.
     const docs = parse(code, {
       filename: 'component.tsx',
-      resolver: new builtinResolvers.FindAllDefinitionsResolver()
+      resolver: new builtinResolvers.FindAllDefinitionsResolver(),
+      // LKM-282: parsing needs no targets; never load a browserslist config (its
+      // `extends` requires a package) from the process's cwd.
+      babelOptions: { browserslistConfigFile: false }
     }) as Array<{ displayName?: string; props?: Record<string, DocgenProp> }>
     const doc =
       docs.find((d) => d.displayName === name) ??

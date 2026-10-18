@@ -123,7 +123,9 @@ export async function discoverProjectUi(root: string): Promise<ProjectUiCatalog>
           filename: file,
           resolver: new builtinResolvers.FindExportedDefinitionsResolver({ limit: 0 }),
           importer: builtinImporters.ignoreImporter,
-          babelOptions: { babelrc: false, configFile: false }
+          // LKM-282: Babel otherwise reads the cwd's (the worktree's) browserslist config,
+          // whose `extends` requires a package from the project.
+          babelOptions: { babelrc: false, configFile: false, browserslistConfigFile: false }
         })
       } catch {
         continue

@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Project component discovery no longer reads a project's browserslist config, so it never loads a package that config extends, and it still finds components when the query is invalid. The proxy-addr and fast-uri dependencies are updated to patched releases (LKM-282).
 - Agents can no longer merge a pull request on their own say-so: each agent merge now needs your Merge answer in a Trezi card naming the repository, PR number and head commit. The approval works once, expires, and is void if the branch changes. With Agent can merge pull requests off, nothing is merged, and background agents cannot merge (LKM-281).
 - Static-site previews no longer serve dot-files or dot-directories such as `.env` and `.git/` (only `.well-known/`), and refuse requests whose Host or Origin is not the preview's own loopback address (LKM-280).
 - Static-site previews keep live-reloading and serving pages after many reloads; held reload streams no longer exhaust the service's worker threads (LKM-255).
