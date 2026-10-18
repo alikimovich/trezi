@@ -2,6 +2,29 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-18 — LOCAL-PROJECTION: a valid large library loads instead of a false "did not answer"
+
+- **Failure.** CI run 39152378765: `skills-projection` failed on `nothing omitted`. The 128 × 64 library's Codex projection took 15.1 s on the runner (stages at 78.2 s and 93.3 s), and the 15 s race in `src/main/session-skills.ts` fired on a valid library. The service client waited 30 s, so the service went on working after the chat gave up.
+- **Measured locally (M-series).** Before the fix, the 128 × 64 projection took 2.7 s for Codex (including the first snapshot) and 2.2 s for Gemini. The per-file `fsync` was the biggest share: 8,192 flushes per provider. Without it the projection takes 1.5 s and 1.1 s, about 0.5 s of which is the 128 trust-checked revision decodes. With 128 skills of about 1 MB, the layout takes 6.5 s (about 50 ms a skill), mostly the projection-time `SkillsScope` re-check. So the time grows with library size, and no fixed 15 s can hold the 512 × 1 MB limit on a slow runner. The decode and the scope check are trust validation and stay as they are.
+- **Cache durability.** A projection can always be rebuilt from the `F_FULLFSYNC`'d CAS objects and the snapshot, which stay flushed as before (as do the manifest and ledger), so its files are no longer flushed one by one. The layout is still written into a fresh temp folder (exclusive, no-follow, 0400) and published only by its rename or `RENAME_SWAP`; the folder is still synced afterwards. Readers get the path only after the swap and the unified buffer cache serves the bytes, so nothing partial is visible while the system runs. After a power loss, `intact()` compares every file's bytes on the next `project` (every session start and resume calls it), so a torn layout is rebuilt rather than served. Temp leftovers are swept on open as before. Also within one call, a shared object is read and digest-checked once, and the `intact()` folder lookup no longer scans all expected paths for every folder.
+- **Deadlines.** `projectSessionSkills` now asks for `snapshot` first, under the old 15 s bound, which does not depend on library size. A non-responsive service therefore still costs a chat at most 15 s. With no pin offered to the provider, it makes no further request. Otherwise `project` gets 15 s + 250 ms per offered pin (47 s for 128 skills, capped at 143 s for 512): at least 5× the locally measured worst case of 50 ms a skill. The service client's reply wait for both calls equals the chat's bound, so an abandoned request no longer holds the client queue longer than the chat waited. No global timeout and no env flag changed. The only test seam is `scaleSessionSkillsDeadlines`.
+- **Concurrent starts (review fix).** The manager's probe showed a defect: every chat shares one `serviceSkills` client (`src/native/index.ts`), and it sends one request at a time. A healthy start B queued behind A's 300 ms projection got "did not answer" at 172 ms, before its snapshot was even sent at 304 ms, because the chat's race started at the call while the client's wait started at the send. The fix splits the two waits:
+  - Response bounds now start at the send, in the client.
+  - Waiting for a turn gets its own admission budget per start, shared by its two requests: one maximum projection, 143 s. A request still queued when the budget runs out is dropped unsent (`SkillsError` `busy`, note "Trezi Skills were busy with other requests"). It creates no pins, and the jobs behind it keep their order (first come, first served).
+  - An idle queue admits at once, so a nonresponsive idle service still costs 15 s.
+  - The worst case for a start is 143 s of queueing plus its two response bounds. That happens only when other work holds the queue. Mutations and reads keep the client's 30 s default.
+  - The race in `session-skills.ts` remains only as a backstop at admission plus response, for a source that ignores the bounds.
+  - Known limits: a request the client abandoned may still occupy the Swift owner, so the next one can wait on the service side, within its own bound. `importGitHub` stays outside the queue.
+  - Rerunning a copy of the probe, B now loads: snapshot sent at 303 ms, done at 607 ms.
+- **Tests.** `test/session-skills.mjs` scales the deadlines 1:100 and drives the real `serviceSkills` queue over a scripted link. It covers:
+  - Idle no answer: the note comes within the answer bound and no layout is requested.
+  - A large library whose layout outlasts the answer bound: it loads.
+  - A layout that never finishes is bounded by its size; a small library that hangs fails near the answer bound.
+  - Three concurrent starts behind 300 ms layouts all load in queue order, the third sent after 280 ms.
+  - A start queued behind a 250 ms `create` loads.
+  - A start behind a `create` that never answers: busy note at the admission budget, and no frame sent for it.
+  - Pins offered only to another provider, a service error message, and the backstop for a source that ignores bounds. `test/skills-projection.mjs` keeps the real 128 × 64 owner test (locally the projection now takes 1.7 s and 1.3 s). Its empty-library mock gained `snapshot`.
+
 ## 2026-10-18 — LOCAL-INTEGRATE-CI: skills-projection gets a cold-Swift budget, coverage unchanged
 
 - **Failure.** CI run 39150784454 failed on one suite: `skills-projection` hit the 120 s default after printing four sections. The Bun client section, which includes the LKM-287 128 × 64 regression, never finished.

@@ -3,8 +3,10 @@ import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   SKILLS_CATALOG_FORMAT,
+  SKILLS_LIMITS,
   type SkillProjection,
   type SkillProviderName,
+  type SkillSnapshot,
   type SkillsCatalog,
   validSkillSession
 } from '../shared/skills-registry'
@@ -28,8 +30,11 @@ import type { ProviderSession } from './backends/types'
  * claimed to inherit them.
  */
 
+/** `admit`: longest wait for a turn in the source's queue; `wait`: for the answer once sent. */
+type Bounds = { admit?: number; wait?: number }
 export interface SessionSkillsSource {
-  project(session: string, provider: SkillProviderName): Promise<SkillProjection>
+  snapshot(session: string, options?: Bounds): Promise<SkillSnapshot>
+  project(session: string, provider: SkillProviderName, options?: Bounds): Promise<SkillProjection>
   release(session: string): Promise<{ session: string; released: boolean }>
 }
 let source: (() => SessionSkillsSource | null) | null = null
@@ -42,7 +47,71 @@ export function setSessionSkillsSource(get: (() => SessionSkillsSource | null) |
 export const newSkillsSession = (): string => `trezi-${randomUUID()}`
 
 const PROVIDERS = new Set<string>(['claude', 'codex', 'gemini'])
-const PROJECT_TIMEOUT_MS = 15_000
+
+/**
+ * Session-start deadlines. The service must answer `snapshot` (pin, or read the pins)
+ * within `answer` whatever the library's size: a service that does not answer costs a
+ * chat at most that. Laying the pins out then reads, re-checks and writes every file,
+ * which grows with the library (up to 512 skills of 1 MB), so `project` gets `answer`
+ * plus `perPin` for each pin offered to the provider: 47 s for 128 pins, 143 s at the
+ * registry's limit. Measured on an M-series Mac: 128 × 64 small files lay out in about
+ * 1 s, and 128 skills of about 1 MB in 6.5 s (50 ms a skill), so `perPin` leaves at least
+ * 5× for a slower or busier machine.
+ *
+ * These bounds start when a request is sent. Every session start shares one Skills
+ * client whose requests go one at a time, as the Swift owner serves them, so a start
+ * can first queue behind another chat's healthy projection or a library edit. That
+ * wait is not the service failing to answer: it gets its own budget, `admit`, shared by
+ * the start's two requests and sized to one projection at the registry's limit
+ * (143 s). A request still queued when it runs out is dropped unsent (`busy`), so no
+ * pins are created for a chat that has gone on without them. An idle service admits at
+ * once, so a service that does not answer still costs an idle start 15 s. The longest
+ * a start can take is `admit` plus its two response bounds, and only when other work
+ * really holds the queue.
+ */
+const DEADLINES = { answer: 15_000, perPin: 250 }
+let scale = 1
+/** Test seam: scales every deadline (1 restores them), so no test waits for real. */
+export function scaleSessionSkillsDeadlines(factor: number): void {
+  scale = factor
+}
+/** The `project` bound for a snapshot offering `pins` skills to the provider. */
+export const projectDeadline = (pins: number): number =>
+  (DEADLINES.answer + DEADLINES.perPin * Math.min(pins, SKILLS_LIMITS.maxSkills)) * scale
+/** A start's whole budget for waiting its turn: one maximum projection. */
+export const admissionBudget = (): number => projectDeadline(SKILLS_LIMITS.maxSkills)
+
+/**
+ * `job` with `admit` ms to be sent and `wait` ms to be answered after. The source
+ * enforces both (the service client does); this race is the backstop for one that does
+ * not, at their sum.
+ */
+async function bounded<T>(
+  admit: number,
+  wait: number,
+  job: (bounds: Required<Bounds>) => Promise<T>
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      job({ admit, wait }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(UNANSWERED)), admit + wait)
+        timer.unref?.()
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+const UNANSWERED = 'the Trezi service did not answer'
+/** The note's reason: a full queue is not a silent service. */
+const reason = (error: unknown): string => {
+  const code = (error as { code?: string } | null)?.code
+  if (code === 'busy') return 'Trezi Skills were busy with other requests'
+  if (code === 'deadlineExceeded') return UNANSWERED
+  return error instanceof Error ? error.message : String(error)
+}
 
 export interface SessionSkills {
   /** The projection folder handed to the provider, when there is one. */
@@ -58,18 +127,18 @@ export async function projectSessionSkills(
 ): Promise<SessionSkills> {
   const registry = source?.()
   if (!registry || !session || !validSkillSession(session) || !PROVIDERS.has(provider)) return {}
-  let timer: ReturnType<typeof setTimeout> | undefined
+  const name = provider as SkillProviderName
+  const admitBy = Date.now() + admissionBudget()
+  const admit = () => Math.max(0, admitBy - Date.now())
   try {
-    const projection = await Promise.race([
-      registry.project(session, provider as SkillProviderName),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('the Trezi service did not answer')),
-          PROJECT_TIMEOUT_MS
-        )
-        timer.unref?.()
-      })
-    ])
+    const snapshot = await bounded(admit(), DEADLINES.answer * scale, (bounds) =>
+      registry.snapshot(session, bounds)
+    )
+    const offered = snapshot.pins.filter((pin) => pin.providers?.[name]).length
+    if (!offered) return {}
+    const projection = await bounded(admit(), projectDeadline(offered), (bounds) =>
+      registry.project(session, name, bounds)
+    )
     const omitted = projection.omitted.map((o) => o.name)
     return {
       ...(projection.skills.length ? { path: projection.path } : {}),
@@ -80,10 +149,7 @@ export async function projectSessionSkills(
         : {})
     }
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    return { note: `This chat started without Trezi Skills: ${reason}` }
-  } finally {
-    clearTimeout(timer)
+    return { note: `This chat started without Trezi Skills: ${reason(error)}` }
   }
 }
 

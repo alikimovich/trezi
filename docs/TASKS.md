@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Valid large-library projection no longer misses its session deadline (LOCAL-PROJECTION)
+
+- [x] Projection performance: no per-file `fsync` in the rebuildable projection cache, shared objects read and hashed once, and the expected-folder lookup in `intact` is linear. Exclusive no-follow 0400 writes, the atomic swap, byte-exact reuse checks and the scope re-check are unchanged.
+- [x] Session-start deadlines: `snapshot` must answer within 15 s, and `project` gets 15 s + 250 ms per offered pin (capped at 512). The service client waits the same per call.
+- [x] Concurrent starts: response bounds start at the send, and queueing gets its own admission budget per start (143 s, shared by both requests). An expired request is dropped unsent as `busy`. An idle queue admits at once, so the idle nonresponsive bound stays 15 s.
+- [x] Regression in `test/session-skills.mjs` through the real `serviceSkills` queue with the deadlines scaled 1:100 (no real waits). It covers concurrent starts and a queued mutation. The real 128 × 64 Swift test is unchanged.
+- [ ] Manager: push to PR283 and confirm that CI and native pass.
+
 ## Repair the PR283 skills-projection CI timeout (LOCAL-INTEGRATE-CI)
 
 - [x] Measure the suite per stage: a cold fixture compile plus 248 fsync-bound creates through the real owner for the 128 × 64 regression. Add bounded stage lines to `test/skills-projection.mjs`.

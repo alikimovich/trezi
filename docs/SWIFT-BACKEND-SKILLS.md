@@ -367,6 +367,13 @@ sessions, and custom endpoints too: they all go through `startProviderSession`.
   - The layout depends only on the snapshot. An intact projection is reused. A
     changed byte, an extra file or a missing folder rebuilds it in a temp folder,
     which is swapped in whole with `renamex_np(RENAME_SWAP)`.
+  - The layout is a cache that can always be rebuilt from the `F_FULLFSYNC`'d
+    objects and the snapshot, so its files are not flushed one by one. Only the
+    folder is synced after the swap. Files are still created exclusive, with no
+    link followed, at 0400, and the layout is published only by the rename of a
+    fully written folder. Every `project` compares each file's bytes before reuse,
+    so a layout torn by a crash is rebuilt, never served. An object several
+    revisions share is read and hashed once per call.
   - Each revision is checked against `SkillsScope` again. A revision that is
     unreadable, outside the skills-only scope (one stored before LKM-285) or a
     duplicate name is left out. It is named in `omitted`, and the chat shows it
@@ -384,6 +391,26 @@ sessions, and custom endpoints too: they all go through `startProviderSession`.
   its own provider. A custom endpoint (Codex in Bun) projects in
   `startProviderSession`. A failure or a timeout leaves the session without app
   skills and says so once. It never blocks the chat.
+- **Session-start deadlines** (`src/main/session-skills.ts`). Bun first asks for
+  `snapshot`, which must answer within 15 s at any library size, so a service that
+  does not answer costs a chat at most that. If no pin is offered to the provider,
+  Bun asks for nothing more. Otherwise `project` gets 15 s plus 250 ms per offered
+  pin: 47 s for 128 skills, and at most 143 s at the 512-skill limit, because laying
+  out grows with the library. The same bound is the service client's reply wait for
+  that call. Both bounds start when the request is sent.
+- **Queued session starts.** All chats share one Skills client, which sends one
+  request at a time, as the Swift owner serves them. So a start can wait behind another
+  chat's healthy projection or a library edit, and that wait is not the service
+  failing to answer. A start gets one admission budget for both its requests, sized to
+  one projection at the limit (143 s). A request still queued when the budget runs out
+  is dropped unsent, so it creates no pins. The chat then starts with "Trezi Skills
+  were busy with other requests". An idle queue admits at once, so a nonresponsive idle
+  service still costs a start 15 s. The longest wait, admission plus both response
+  bounds, happens only when other work really holds the queue. Limits:
+  - When the client abandons a request at its bound, the Swift owner may still be
+    working on it, and the next request waits on the service side within its own
+    bound.
+  - The GitHub import is not queued, so it does not hold up starts.
 - **Claude: native.** The folder is one more SDK `plugins` entry, placed after the
   bundled `trezi` plugin with `skipMcpDiscovery: true`. Skills appear as
   `trezi-library:<name>`. Everything else is unchanged and is asserted by

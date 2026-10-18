@@ -66,12 +66,23 @@ const {
   releaseSessionSkills,
   projectSessionSkills,
   compatibilityCatalog,
-  newSkillsSession
+  newSkillsSession,
+  projectDeadline,
+  admissionBudget,
+  scaleSessionSkillsDeadlines
 } = await import('../src/main/session-skills.ts')
+const { serviceSkills } = await import('../src/native/skills-service.ts')
 const projected = []
 const released = []
 let omitted = []
-setSessionSkillsSource(() => ({
+const pin = (name, providers = { claude: true, codex: true, gemini: true }) => ({
+  skill: name,
+  name,
+  revision: 'b'.repeat(64),
+  providers
+})
+const fixtureSource = {
+  snapshot: async (session) => ({ session, createdAt: 1, pins: [pin('ui-notes')] }),
   project: async (session, provider) => {
     projected.push([session, provider])
     return {
@@ -87,7 +98,177 @@ setSessionSkillsSource(() => ({
     released.push(session)
     return { session, released: true }
   }
-}))
+}
+setSessionSkillsSource(() => fixtureSource)
+
+// --- Session-start deadlines, through the real Skills client queue: a short answer bound,
+// a projection bound that grows with the pins offered, and a separate budget for waiting
+// behind other chats' starts or library edits. Scaled 1:100, no real waits.
+{
+  assert.equal(projectDeadline(0), 15_000)
+  assert.equal(projectDeadline(128), 47_000, 'the 128-skill library gets 47 s, not 15 s')
+  assert.equal(projectDeadline(512), 143_000)
+  assert.equal(projectDeadline(100_000), projectDeadline(512), 'capped at the registry limit')
+  assert.equal(admissionBudget(), 143_000, 'a start may queue for one maximum projection')
+  scaleSessionSkillsDeadlines(0.01)
+  const UNANSWERED = 'This chat started without Trezi Skills: the Trezi service did not answer'
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  // The real service client over a scripted link: `script(method, body)` returns
+  // `{ after, payload }`, `{ after, failure }` or nothing (that request is never answered).
+  const service = (script) => {
+    let listener
+    const sent = []
+    const began = Date.now()
+    const link = {
+      on: (_event, fn) => {
+        listener = fn
+      },
+      sendService: (frame) => {
+        const { method, body } = frame.request
+        sent.push({ method, session: body.session, at: Date.now() - began })
+        const reply = script(method, body)
+        if (!reply) return
+        const result = reply.failure
+          ? { kind: 'failed', payload: { retryable: false, ...reply.failure } }
+          : { kind: 'succeeded', payload: reply.payload }
+        setTimeout(
+          () => listener({ service: frame.service, id: frame.id, reply: { result } }),
+          reply.after
+        )
+      }
+    }
+    const client = serviceSkills(link, 2_000)
+    setSessionSkillsSource(() => client)
+    return { client, sent, began }
+  }
+  const library =
+    (pins, layoutMs, extra = () => undefined) =>
+    (method, body) =>
+      extra(method, body) ??
+      (method === 'snapshot'
+        ? { after: 0, payload: { session: body.session, createdAt: 1, pins } }
+        : method === 'project' && layoutMs !== null
+          ? {
+              after: layoutMs,
+              payload: {
+                session: body.session,
+                provider: body.provider,
+                path: dirs[body.provider],
+                created: false,
+                skills: pins.slice(0, 1),
+                omitted: []
+              }
+            }
+          : undefined)
+  const timed = async (session) => {
+    const began = Date.now()
+    const result = await projectSessionSkills(session, 'codex')
+    return { result, elapsed: Date.now() - began }
+  }
+  const many = Array.from({ length: 400 }, (_, i) => pin(`skill-${i}`))
+  const methods = (sent) => sent.map((frame) => `${frame.method} ${frame.session ?? ''}`.trim())
+
+  // An idle service that does not answer costs the chat the answer bound (15 s), not more.
+  let fx = service(() => undefined)
+  let run = await timed('trezi-d1')
+  assert.equal(run.result.note, UNANSWERED)
+  assert.ok(run.elapsed >= 140 && run.elapsed < 1_000, `answer bound (${run.elapsed} ms)`)
+  assert.deepEqual(methods(fx.sent), ['snapshot trezi-d1'], 'no layout is requested without pins')
+
+  // A large valid library whose layout outlasts the answer bound still loads.
+  fx = service(library(many, 600))
+  run = await timed('trezi-d2')
+  assert.equal(run.result.note, undefined, 'a slow valid layout is not reported unavailable')
+  assert.equal(run.result.path, dirs.codex)
+  assert.deepEqual(methods(fx.sent), ['snapshot trezi-d2', 'project trezi-d2'])
+  // A layout that never finishes is bounded by its size; a small one near the answer bound.
+  fx = service(library(many, null))
+  run = await timed('trezi-d3')
+  assert.equal(run.result.note, UNANSWERED)
+  assert.ok(run.elapsed >= 1_100 && run.elapsed < 3_000, `size-scaled bound (${run.elapsed} ms)`)
+  fx = service(library([pin('one')], null))
+  run = await timed('trezi-d4')
+  assert.equal(run.result.note, UNANSWERED)
+  assert.ok(run.elapsed < 1_000, `small library bound (${run.elapsed} ms)`)
+
+  // Three chats start together on one client: each queues behind the others' healthy
+  // layouts (300 ms each, inside their 470 ms bound) and still gets its skills, although
+  // the last one waits longer than the 150 ms answer bound before its first request.
+  const pins128 = many.slice(0, 128)
+  fx = service(library(pins128, 300))
+  const first = projectSessionSkills('trezi-a', 'codex')
+  await sleep(20)
+  const second = projectSessionSkills('trezi-b', 'codex')
+  const third = projectSessionSkills('trezi-c', 'codex')
+  for (const result of await Promise.all([first, second, third]))
+    assert.deepEqual(result, { path: dirs.codex }, 'a queued start is not called unanswered')
+  assert.deepEqual(methods(fx.sent), [
+    'snapshot trezi-a',
+    'project trezi-a',
+    'snapshot trezi-b',
+    'snapshot trezi-c',
+    'project trezi-b',
+    'project trezi-c'
+  ])
+  const thirdSent = fx.sent.find((frame) => frame.session === 'trezi-c').at
+  assert.ok(thirdSent >= 280, `the third start queued ${thirdSent} ms and still loaded`)
+
+  // A library edit ahead in the queue (250 ms, longer than the answer bound) delays, not fails.
+  const edit = (after) => (method) =>
+    method === 'list'
+      ? { after: 0, payload: { revision: 'r1', skills: [] } }
+      : method === 'create'
+        ? after === null
+          ? null
+          : { after, payload: { revision: 'r2', skill: 's', skillRevision: 'b'.repeat(64) } }
+        : undefined
+  fx = service(library([pin('one')], 0, edit(250)))
+  const created = fx.client.create([{ path: 'SKILL.md', text: 'x' }])
+  run = await timed('trezi-d5')
+  await created
+  assert.deepEqual(run.result, { path: dirs.codex })
+  assert.ok(run.elapsed >= 240, `queued behind the edit (${run.elapsed} ms)`)
+
+  // A queue held past the start's admission budget (1430 ms here) by an edit the service
+  // never answers (the client's own 2 s wait): the chat goes on as busy, not unanswered,
+  // and its request is dropped unsent, so no pins appear for it later.
+  fx = service(library([pin('one')], 0, edit(null)))
+  const stuck = fx.client.create([{ path: 'SKILL.md', text: 'x' }])
+  run = await timed('trezi-d6')
+  assert.equal(
+    run.result.note,
+    'This chat started without Trezi Skills: Trezi Skills were busy with other requests'
+  )
+  assert.ok(run.elapsed >= 1_400 && run.elapsed < 2_000, `admission budget (${run.elapsed} ms)`)
+  await assert.rejects(stuck, { code: 'deadlineExceeded' })
+  await sleep(20)
+  assert.deepEqual(methods(fx.sent), ['list', 'create'], 'the busy start sent nothing')
+
+  // Pins offered only to another provider: no layout requested, nothing handed over.
+  fx = service(library([pin('only', { claude: true, codex: false, gemini: false })], 0))
+  assert.deepEqual(await projectSessionSkills('trezi-d7', 'codex'), {})
+  assert.deepEqual(methods(fx.sent), ['snapshot trezi-d7'])
+  // A service failure keeps its own message.
+  fx = service(() => ({
+    after: 0,
+    failure: { code: 'recoveryRequired', message: 'the skills registry needs recovery' }
+  }))
+  assert.equal(
+    (await projectSessionSkills('trezi-d8', 'codex')).note,
+    'This chat started without Trezi Skills: the skills registry needs recovery'
+  )
+  // A source that ignores the bounds is still cut off, at admission plus answer.
+  setSessionSkillsSource(() => ({ ...fixtureSource, snapshot: () => new Promise(() => {}) }))
+  run = await timed('trezi-d9')
+  assert.equal(run.result.note, UNANSWERED)
+  assert.ok(run.elapsed >= 1_500 && run.elapsed < 3_000, `backstop (${run.elapsed} ms)`)
+
+  scaleSessionSkillsDeadlines(1)
+  setSessionSkillsSource(() => fixtureSource)
+  console.log(
+    'SESSION-SKILLS deadlines: answer bound, size-scaled projection, queued starts, busy queue PASS'
+  )
+}
 
 // --- Identity and release ----------------------------------------------------------------
 {

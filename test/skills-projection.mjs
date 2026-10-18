@@ -450,6 +450,7 @@ try {
   {
     // An empty library hands the provider nothing.
     setSessionSkillsSource(() => ({
+      snapshot: async (session) => ({ session, createdAt: 1, pins: [] }),
       project: async (session, provider) => ({
         session,
         provider,

@@ -44,11 +44,19 @@ extension SkillsStore {
         guard SkillProviders.names.contains(provider) else { throw SkillsPackageError.invalid("Unknown provider \(provider).") }
         var files: [(String, Data)] = [], included: [SkillPin] = [], omitted: [SkillsProjection.Omission] = []
         var entries: [JSValue] = [], names = Set<String>()
+        // Content-addressed: an object shared by several revisions is read and hashed once.
+        var objects: [String: Data] = [:]
+        func object(_ entry: SkillEntry) throws -> Data {
+            if let data = objects[entry.digest], data.count == entry.size { return data }
+            let data = try readObject(entry)
+            objects[entry.digest] = data
+            return data
+        }
         for pin in snapshot.pins.sorted(by: { ($0.name, $0.skill) < ($1.name, $1.skill) }) where pin.providers.offers(provider) {
             let revision: SkillRevision, data: [SkillFile]
             do {
                 revision = try readRevision(pin.revision)
-                data = try revision.files.map { SkillFile(path: $0.path, data: try readObject($0)) }
+                data = try revision.files.map { SkillFile(path: $0.path, data: try object($0)) }
             } catch { omitted.append(.init(skill: pin.skill, name: pin.name, reason: "unreadable")); continue }
             do { try SkillsScope.check(data) } catch {
                 omitted.append(.init(skill: pin.skill, name: pin.name, reason: "outside the skills-only scope")); continue
@@ -83,13 +91,26 @@ extension SkillsStore {
     /// True when every expected file is there with the expected bytes, and nothing else.
     private func intact(_ target: String, _ files: [(String, Data)]) -> Bool {
         guard plainFolder(target) else { return false }
-        let expected = Set(files.map(\.0))
+        let expected = Set(files.map(\.0)), folders = Self.folders(files)
         guard let found = FileManager.default.enumerator(atPath: target)?.allObjects as? [String] else { return false }
         // Only the expected files, inside real folders (a link in the path is a rebuild).
         guard found.allSatisfy({ path in
-            expected.contains(path) || (expected.contains { $0.hasPrefix(path + "/") } && plainFolder(target + "/" + path))
+            expected.contains(path) || (folders.contains(path) && plainFolder(target + "/" + path))
         }) else { return false }
         return files.allSatisfy { path, data in (try? read(target + "/" + path, limit: data.count)) == data }
+    }
+
+    /// Every folder the layout's files sit in (relative, ancestors included).
+    private static func folders(_ files: [(String, Data)]) -> Set<String> {
+        var folders = Set<String>()
+        for (path, _) in files {
+            var parent = Substring(path)
+            while let slash = parent.lastIndex(of: "/") {
+                parent = parent[..<slash]
+                guard folders.insert(String(parent)).inserted else { break }
+            }
+        }
+        return folders
     }
 
     private func plainFolder(_ path: String) -> Bool {
@@ -141,7 +162,10 @@ extension SkillsStore {
             if written < 0 { if errno == EINTR { continue }; throw SkillsPackageError.io("write") }
             offset += written
         }
-        guard fsync(fd) == 0 else { throw SkillsPackageError.io("flush") }
+        // No per-file flush. A projection is a cache derived from the CAS objects (which
+        // are F_FULLFSYNC'd): it is published only by the rename of a fully written
+        // folder, and every `project` compares each file's bytes before reuse, so a
+        // layout torn by a crash is rebuilt rather than served.
     }
 
     /// Removes a session's projections (on `release`); false when it had none.

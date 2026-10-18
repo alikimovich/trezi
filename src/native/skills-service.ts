@@ -48,6 +48,16 @@ export interface SkillsChange extends SkillMutation {
   list: SkillsList | null
 }
 
+/**
+ * A session start's bounds for one call. `admit`: how long it may wait for its turn in
+ * the queue; when that passes first it is dropped unsent and rejects `busy`. `wait`:
+ * how long the service has to answer once it is sent (the client's default otherwise).
+ */
+export interface SkillsCallOptions {
+  admit?: number
+  wait?: number
+}
+
 /** The registry as Bun sees it: every call is answered by the Swift service. */
 export interface SkillsRegistry {
   list(): Promise<SkillsList>
@@ -62,10 +72,14 @@ export interface SkillsRegistry {
   remove(skill: string): Promise<SkillsChange>
   restore(skill: string): Promise<SkillsChange>
   purge(skill: string): Promise<SkillsChange>
-  snapshot(session: string): Promise<SkillSnapshot>
+  snapshot(session: string, options?: SkillsCallOptions): Promise<SkillSnapshot>
   release(session: string): Promise<{ session: string; released: boolean }>
   /** LKM-287: the session's pins (created once) laid out read-only for `provider`. */
-  project(session: string, provider: SkillProviderName): Promise<SkillProjection>
+  project(
+    session: string,
+    provider: SkillProviderName,
+    options?: SkillsCallOptions
+  ): Promise<SkillProjection>
   /** GitHub import (LKM-285): resolves, downloads and checks in the service, then installs. */
   importGitHub(
     input: SkillGitHubInput,
@@ -139,15 +153,37 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
     if (result.kind === 'succeeded') return result.payload
     throw new SkillsError(result.payload.code, result.payload.message)
   }
-  const serial = <T>(job: () => Promise<T>): Promise<T> => {
-    const run = queue.then(job)
-    queue = run.catch(() => {})
-    return run
+  /**
+   * One request in flight, first come first served (the Swift owner is serial too). A
+   * job given `admit` that is still waiting for its turn after that long rejects `busy`
+   * and is skipped when its turn comes: it is never sent, and the jobs behind it keep
+   * their order. An idle queue admits at once, whatever `admit` is.
+   */
+  const serial = <T>(job: () => Promise<T>, admit?: number): Promise<T> => {
+    let expired = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const turn = queue.then(() => {
+      clearTimeout(timer)
+      return expired ? undefined : job()
+    })
+    queue = turn.catch(() => {})
+    if (admit === undefined) return turn as Promise<T>
+    return new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => {
+        expired = true
+        reject(
+          new SkillsError('busy', 'Skills were busy with earlier requests; this one was not sent.')
+        )
+      }, admit)
+      turn.then((value) => resolve(value as T), reject)
+    })
   }
   const call = <M extends SkillsMethod>(
     method: M,
-    body: SkillsMethods[M]['body']
-  ): Promise<SkillsMethods[M]['result']> => serial(async () => settled(await send(method, body)))
+    body: SkillsMethods[M]['body'],
+    { admit, wait = timeout }: SkillsCallOptions = {}
+  ): Promise<SkillsMethods[M]['result']> =>
+    serial(async () => settled(await send(method, body, undefined, { wait })), admit)
   const list = async (): Promise<SkillsList> => {
     const value = settled(await send('list', {})) as SkillsList
     known = value.revision
@@ -209,9 +245,9 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
     remove: (skill) => mutate('remove', { skill }),
     restore: (skill) => mutate('restore', { skill }),
     purge: (skill) => mutate('purge', { skill }),
-    snapshot: (session) => call('snapshot', { session }),
+    snapshot: (session, options) => call('snapshot', { session }, options),
     release: (session) => call('release', { session }),
-    project: (session, provider) => call('project', { session, provider }),
+    project: (session, provider, options) => call('project', { session, provider }, options),
     importGitHub
   }
 }
