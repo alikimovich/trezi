@@ -373,7 +373,16 @@ public struct ProbeCard: View {
   const warning = (preview) => plan(preview).warnings.find((w) => w.includes('#Preview')) ?? ''
   assert.match(
     warning({ status: 'supported', message: '' }),
-    /^StudioKit: 1 file use #Preview; they compile with the selected Xcode, but #Preview bodies are not shown as previews yet \(Stage 3\): StudioKit\/ProbeCard\.swift$/
+    /^StudioKit: 1 file use #Preview; they compile with the selected Xcode, but with a manifest only its "previews" are shown \(without one, Trezi lists and renders #Preview blocks itself\): StudioKit\/ProbeCard\.swift$/
+  )
+  // Without a manifest (LKM-276) the #Preview blocks are the previews: no warning.
+  assert.equal(
+    planTargetBuild(
+      graph,
+      { target: 'Studio', preview: { status: 'supported', message: '' }, generated: true },
+      (file) => readFileSync(join(project, file), 'utf8')
+    ).warnings.filter((w) => w.includes('#Preview')).length,
+    0
   )
   const unsupported = warning({ status: 'unsupported', message: 'Command Line Tools lack it.' })
   assert.match(

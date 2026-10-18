@@ -72,6 +72,7 @@ import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
 import { checkSwiftBuild, restoreSwiftBuild } from './smoke-swift-build'
 import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
+import { checkSwiftMacros, restoreSwiftMacros } from './smoke-swift-macros'
 import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
@@ -1203,6 +1204,12 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: () => checkSwiftBuild(host, invoke, fixture, root, artifacts, firstProject),
       cleanup: () => restoreSwiftBuild(host, firstProject)
+    },
+    {
+      name: 'swift-macros',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftMacros(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftMacros(host, firstProject)
     },
     {
       name: 'final-shell',

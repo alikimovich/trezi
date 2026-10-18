@@ -245,6 +245,7 @@ const UNIT = [
   'swift-preview-settings',
   'swift-preview-shadow',
   'swift-preview-build',
+  'swift-preview-generate',
   'lint'
 ]
 
@@ -282,6 +283,8 @@ const UNIT_TIMEOUT_MS = {
   // LKM-275: a cold `swift build`, actool and three module compiles for the fixture, then
   // a disposable Scraib copy (its settings, then a 40-file app target).
   'swift-preview-build': 600_000,
+  // LKM-276: the SwiftSyntax scanner's first compile, then two generated module builds.
+  'swift-preview-generate': 300_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,
   'setup-vite-real': 300_000

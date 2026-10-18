@@ -1,5 +1,5 @@
 import { productLog } from '../main/product-log'
-import type { WorkspaceSnapshot } from '../shared/api'
+import type { PreviewChoiceInfo, WorkspaceSnapshot } from '../shared/api'
 import {
   agentOptionsFor,
   chatAgentSettingsFromOptions,
@@ -8,6 +8,7 @@ import {
 } from '../shared/chat-settings'
 import { environmentChanges } from '../shared/environment-changes'
 import type { NativeWorkspaceCommand, NativeWorkspaceSnapshot } from '../shared/native-workspace'
+import { applyPreviewChoice, type PreviewUse } from '../shared/preview-choice'
 import { projectKey } from '../shared/projectKey'
 import type { ProjectEntry } from '../shared/workspace'
 import type { WorkspaceStore } from './workspace'
@@ -85,6 +86,9 @@ export class NativeWorkspaceController {
   private jobs = new Map<string, Promise<void>>()
   private closing = new Set<string>()
   private closes = new Map<string, Promise<void>>()
+  /** Mixed JS + native repos (LKM-276): the preview each runs, and whether it can switch. */
+  readonly previewChoices = new Map<string, PreviewChoiceInfo>()
+  private previewUses = new Map<string, PreviewUse>()
   /** Per project: the metadata last handed to the store (as JSON), so only changes are sent. */
   private sent = new Map<string, Map<string, string>>()
   constructor(readonly services: WorkspaceServices) {
@@ -257,11 +261,13 @@ export class NativeWorkspaceController {
         !entry.launchSpec &&
         !command.command &&
         !command.cleanCache &&
+        !command.preview &&
         this.state.loadedKey === entry.key
       ) {
         await this.services.invoke('preview:load', entry.url)
         return
       }
+      if (command.preview) this.previewUses.set(entry.key, command.preview)
       this.restarted?.(entry.root)
       await this.serialize(entry.key, async () => {
         await this.services.invoke(
@@ -467,7 +473,12 @@ export class NativeWorkspaceController {
           )
         }
         if (this.closing.has(key)) return
-        const detected = await this.services.invoke('project:detect', entry.root)
+        const detected = applyPreviewChoice(
+          await this.services.invoke('project:detect', entry.root),
+          this.previewUses.get(key) ?? entry.launchSpec?.preview
+        )
+        if (detected.previewChoice) this.previewChoices.set(key, detected.previewChoice)
+        else this.previewChoices.delete(key)
         entry.name = detected.name
         entry.previewKind = command ? 'web' : detected.previewKind
         if (detected.setupRequired && !command) {
@@ -481,7 +492,8 @@ export class NativeWorkspaceController {
               (entry.launchSpec?.customCommand ? entry.launchSpec.command : detected.devCommand),
             framework: detected.framework,
             previewKind: entry.previewKind,
-            customCommand: !!command || !!entry.launchSpec?.customCommand
+            customCommand: !!command || !!entry.launchSpec?.customCommand,
+            ...(detected.previewChoice ? { preview: detected.previewChoice.using } : {})
           }
           // The simulator is shared; a stale project must never take it from the active one.
           if (entry.previewKind === 'simulator' && !current()) return

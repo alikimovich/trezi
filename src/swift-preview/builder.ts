@@ -52,6 +52,8 @@ export interface PreparedBuild {
   link: string[]
   /** Module → generated sources compiled into it (asset symbols). */
   generated: Record<string, string[]>
+  /** Original source → the isolated copy compiled in its place (LKM-276, `generate.ts`). */
+  overlays: Record<string, string>
   /** Module → the `Assets.car` of its own catalogs, placed beside its dylib. */
   moduleAssets: Record<string, string>
   /** The host's deployment target (the highest of its modules and packages). */
@@ -123,6 +125,7 @@ export class TargetBuilder {
       compile: [],
       link: [],
       generated: {},
+      overlays: {},
       moduleAssets: {},
       deploymentTarget: '',
       assets: '',
@@ -299,7 +302,7 @@ export function moduleInputs(
     ...(plan?.modules ?? []).map((module) => ({
       module: module.module,
       sources: [
-        ...module.sources.map((file) => join(root, file)),
+        ...module.sources.map((file) => prepared?.overlays[join(root, file)] ?? join(root, file)),
         ...(prepared?.generated[module.module] ?? [])
       ],
       dependencies: module.dependencies,

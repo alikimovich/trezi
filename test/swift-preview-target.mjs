@@ -7,12 +7,21 @@
  * renders a library SwiftUI and AppKit component and the cross-module app component,
  * reports a library compile error with its module, keeps the last good build, recovers,
  * picks up a new file in a synchronized folder, prefers Trezi's own manifest over the
- * repo's, and shows the setup state when neither exists. Then the driver's `/graph` and
+ * repo's, and generates previews of the only previewable target when neither exists
+ * (LKM-276). Then the driver's `/graph` and
  * the backend's `project:native` read. Frames land in `test/artifacts/swift-preview-target/`.
  */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -194,16 +203,26 @@ enum TreziPreviews {
   )
   assert.ok((await texts('trezi-side')).includes('Kept outside the repo: 1 item'))
 
-  // Neither manifest: the project still reports its structure and how to start.
+  // Neither manifest (LKM-276): Studio is the only previewable target (StudioKit is
+  // its dependency), so Trezi generates previews of its components without a choice.
   rmSync(join(manifestDir, 'trezi-previews.json'))
   rmSync(join(project, 'trezi-previews.json'))
-  await until(() => session.state.status === 'setup', 'setup state')
-  assert.equal(session.state.manifest.source, 'none')
-  assert.match(
-    session.state.message,
-    /Found 2 targets \(Studio, StudioKit\)\. No previews are declared yet/
+  await until(
+    () => session.state.status === 'ready' && session.state.generation === 5,
+    `generated (${session.state.message})`
   )
-  assert.ok(session.state.message.includes(manifestDir), 'names the Trezi-side location')
+  assert.equal(session.state.manifest.source, 'none')
+  const { catalog } = session.state
+  assert.deepEqual(
+    [catalog.target, catalog.project, catalog.chosenBy],
+    ['Studio', 'Studio.xcodeproj', 'the only previewable target']
+  )
+  assert.equal(catalog.dir, join(realpathSync(manifestDir), 'generated'))
+  assert.ok(
+    session.state.previews.some((p) => p.id === 'component:StudioKit.StatusBadge'),
+    'a framework component is listed'
+  )
+  assert.ok((await texts('component:Studio.ProjectHeader')).includes('Open tasks: 1 item'))
 } finally {
   await session.stop()
 }

@@ -39,6 +39,27 @@ public struct TreziPreview {
                                       _ make: @escaping @MainActor () -> NSViewController) -> TreziPreview {
         TreziPreview(id: id, title: title, kind: "AppKit view controller", size: size) { .controller(make()) }
     }
+
+    /// What a declaration Trezi generated (LKM-276) makes: a `#Preview` body or a component.
+    public enum Generated { case swiftUI(AnyView), view(NSView), controller(NSViewController) }
+
+    /// A generated entry. A SwiftUI body is measured before its hosting view stops sizing
+    /// itself, so a preview without a fixed size gets its ideal size.
+    public static func generated(_ id: String, _ title: String, kind: String, size: CGSize?,
+                                 _ make: @escaping @MainActor () -> Generated) -> TreziPreview {
+        TreziPreview(id: id, title: title, kind: kind, size: size) {
+            switch make() {
+            case .swiftUI(let body):
+                let hosting = NSHostingView(rootView: body)
+                let fitting = hosting.fittingSize
+                hosting.sizingOptions = []
+                hosting.setFrameSize(fitting)
+                return .view(hosting)
+            case .view(let view): return .view(view)
+            case .controller(let controller): return .controller(controller)
+            }
+        }
+    }
 }
 
 // MARK: Host
@@ -139,9 +160,10 @@ final class MountedPreview {
         window.makeFirstResponder(view.acceptsFirstResponder ? view : nil)
     }
 
-    /// The declared size, else the view's fitting size, else a default card.
+    /// The declared size, else the view's fitting size, else its frame, else a default card.
     static func size(_ declared: CGSize?, _ view: NSView) -> CGSize {
         var size = declared ?? view.fittingSize
+        if declared == nil, size.width < 1 || size.height < 1 { size = view.frame.size }
         if size.width < 1 || size.height < 1 { size = CGSize(width: 360, height: 240) }
         return CGSize(width: min(ceil(size.width), maxSize.width), height: min(ceil(size.height), maxSize.height))
     }

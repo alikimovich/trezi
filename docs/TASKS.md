@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native previews Stage 3: open → target → `#Preview` or component → render (LKM-276, held branch)
+
+Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3), `docs/SWIFT-PREVIEWS.md` (Generated previews).
+
+- [x] Target choice without a manifest: automatic when one macOS Swift target is previewable, "Choose what to preview" when several, saved in Trezi's data (`POST /configure`, `src/swift-preview/targets.ts`).
+- [x] `#Preview` discovery with SwiftSyntax (`src/swift-preview/PreviewScanner.swift`, `scanner.ts`): lexical context, access control, `#if`, `@available`, traits, `@Previewable`, identifiers used.
+- [x] Translation into generated factories (`generate.ts`): verbatim bodies under `#sourceLocation`, `@Previewable` as wrapper state, layout traits, availability kept; private same-file declarations through isolated overlays with diagnostics at the original file and line; originals never rewritten.
+- [x] Unsupported cases with reasons in the catalog (`/state`, `/graph`, `project:native`) and the page; compiler-rejected entries dropped and retried with the compiler's reason.
+- [x] Component picker: SwiftUI views, AppKit `NSView`/`NSViewController`, `PreviewProvider`s, with inferred samples and environment injection (`samples.ts`, `catalog.ts`); grouped apart from `#Preview` on the page.
+- [x] Generated declarations only through the sidecar writer into `<userData>/swift-previews/<hash>/generated` (`sidecar.ts`); in-repo `trezi-previews.json` still supported and wins.
+- [x] Mixed JS + native repos: "Switch JS / Native Preview" (toolbar "…" menu) stored in the launch spec; Expo/React Native keep the simulator with a reason; detection parity unchanged (`src/shared/preview-choice.ts`, `test/runtime-owner.mjs`).
+- [x] Tests: `test/swift-preview-generate.mjs` (unit), fixture `test/fixtures/swift-preview-macros`, native smoke `swift-macros` (group `core`), evidence `docs/evidence/lkm-276/`.
+- [ ] `PreviewModifier` traits, previews inside types, generic components, nib-loaded controllers, StoreKit injection; running JS and native previews side by side (Stage 4).
+
 ## Native previews Stage 2B: native build authority (LKM-275, held branch)
 
 Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (2B), `docs/SWIFT-PREVIEWS.md` (Build authority).
@@ -30,7 +44,7 @@ Stage 2 is partial: only 2A is done. Details: `docs/SWIFT-PREVIEWS-PLAN.md`, `do
 - [x] Docs and `plan.ts` warnings corrected: no "bare swiftc"/strip guidance; the requirement is a full Xcode selected process-locally.
 - [x] Tests: `test/swift-preview-toolchain.mjs` (scripted toolchains plus a real intact `#Preview` through the driver with `xcode-select -p` checked); `swift-graph` smoke asserts the toolchain.
 - [ ] A settings UI to pick the developer directory (today: manifest field and `TREZI_DEVELOPER_DIR`).
-- [ ] Show `#Preview` bodies as previews (Stage 3); Scraib full-target build through 2A recorded as Stage 6 evidence.
+- [ ] Show `#Preview` bodies as previews (Stage 3: done, LKM-276, above); Scraib full-target build through 2A recorded as Stage 6 evidence.
 
 ## Native previews Stage 1: Xcode/SwiftPM discovery and target-graph builds (LKM-273, held branch)
 
@@ -45,7 +59,7 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] Scraib-xcode disposable-copy discovery and target build recorded as progress (blocked by `#Preview`, then resources and StoreKit).
 - [x] Review repair: the plan doc follows the ticket's Stages 1–8 (decision 9a00253c); `project:native` asks only Trezi's own driver, never a JS dev server (unit assertion in `test/swift-preview-graph.mjs`).
 - [ ] Stage 2 (partial): `#Preview` compiling done as 2A (LKM-274, above); compiler settings, SwiftPM dependencies (local, pinned remote, macOS frameworks) and cached per-module builds done as 2B (LKM-275, above); mixed-language targets not started.
-- [ ] Stage 3: component selection and a UI that writes the Trezi-side manifest, sample states, environment injection (StoreKit), resources; the choice of the native preview in a mixed repo with a JS dev script.
+- [ ] Stage 3 (partial): component selection, `#Preview` reuse, generated samples with environment injection and the mixed-repo choice done as LKM-276 (above), with generated declarations instead of a manifest UI; StoreKit and the remaining resources not started.
 - [ ] Stage 4: service-owned host lifecycle (including the second server for mixed repos), driver packaging, OS-level input, glass/material fidelity.
 - [ ] Stages 5–8: agent diagnostics and source feedback, practical Scraib acceptance, full macOS app integration, iOS simulator.
 

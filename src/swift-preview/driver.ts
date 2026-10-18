@@ -17,7 +17,8 @@ import { toolchainInfo } from './toolchain'
  * for the project's manifest (LKM-273), `--cache-root` Trezi's derived data for every
  * preview build (LKM-275, `<userData>/swift-previews/DerivedData`; default
  * `TREZI_SWIFT_PREVIEW_CACHE`, else a temporary folder). `TREZI_DEVELOPER_DIR` is the
- * app's developer directory setting (LKM-274).
+ * app's developer directory setting (LKM-274). Without a manifest, POST `/configure`
+ * saves the target whose previews Trezi generates (LKM-276).
  */
 const args = process.argv.slice(2)
 const option = (name: string) => {
@@ -88,8 +89,8 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/graph') {
       const graph = await session.nativeGraph()
       const toolchain = session.state.toolchain && toolchainInfo(session.state.toolchain)
-      const { plan, build } = session.state
-      return json(res, 200, { graph, plan, build, toolchain })
+      const { plan, build, catalog } = session.state
+      return json(res, 200, { graph, plan, build, toolchain, catalog })
     }
     if (req.method === 'GET' && url.pathname === '/frame') {
       const frame = await session.frame(preview)
@@ -107,6 +108,16 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/rebuild') {
       void session.rebuild('Rebuild requested')
+      return json(res, 202, { ok: true })
+    }
+    // The target to generate previews for (LKM-276), saved in Trezi's folder only.
+    if (req.method === 'POST' && url.pathname === '/configure') {
+      const choice = JSON.parse(await body(req)) as { project?: unknown; target?: unknown }
+      const known = session.state.catalog?.choices.find(
+        (c) => c.target === choice?.target && c.project === choice?.project
+      )
+      if (!known) return json(res, 400, { error: 'Unknown target.' })
+      session.configure({ project: known.project, target: known.target })
       return json(res, 202, { ok: true })
     }
     return reply(res, 404, 'Not found', 'text/plain')

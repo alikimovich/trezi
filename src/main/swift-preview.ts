@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { NativeProjectInfo, NativeToolchainInfo } from '../shared/api'
+import type { NativePreviewCatalog, NativeProjectInfo, NativeToolchainInfo } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
 import { discoverNative } from '../swift-preview/discovery'
 
@@ -83,6 +83,7 @@ export async function nativeProjectInfo(
     plan: null,
     build: null,
     toolchain: null,
+    catalog: null,
     error: ''
   }
   if (!server) {
@@ -103,6 +104,7 @@ export async function nativeProjectInfo(
       plan?: unknown
       build?: unknown
       toolchain?: NativeToolchainInfo | null
+      catalog?: NativePreviewCatalog | null
       error?: string
     }
     if (!response.ok) info.error = body.error ?? `The driver answered ${response.status}.`
@@ -111,6 +113,7 @@ export async function nativeProjectInfo(
       info.plan = body.plan ?? null
       info.build = body.build ?? null
       info.toolchain = body.toolchain ?? null
+      info.catalog = body.catalog ?? null
     }
   } catch (error) {
     info.error = `Could not read the graph from the preview driver: ${(error as Error).message}`

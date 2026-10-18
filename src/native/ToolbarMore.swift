@@ -3,7 +3,9 @@ import AppKit
 /// LKM-197: the preview toolbar's "…" menu. LKM-213: just before Publish, which stays the
 /// last item at the trailing edge. Its actions go to Bun as shell actions (`src/native/preview-refresh.ts`).
 extension NativeShell {
-    static let moreActions = [("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean")]
+    /// LKM-276: a repo with a JS dev server and native roots switches which one it previews.
+    static let moreActions = [("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean"),
+                              ("Switch JS / Native Preview", "switch-preview")]
     func configureMore(_ item: NSMenuToolbarItem) {
         item.showsIndicator = false
         // Secondary to Publish: when the toolbar cannot fit everything (a minimum-width window)
