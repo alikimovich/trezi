@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-284 review repair: pinned revisions survive history trimming
+
+- Review found no test for the recorded "edit/remove/history trimming before resuming the oldest snapshot" case. `test/skills-registry-boundaries.mjs` now runs it against the real owner: pin session `old` on v1 and `mid` on v2, make enough edits that `SkillsPlan.appending` (`maxHistory` = 64) drops v1, v2 and v3 from `list`'s history, then remove, restart (sweep), purge and restart again.
+- At every stage `read {skill, session}` and `reference {skill, revision, path}` return the original body and reference text and `revisions/<pinned>.json` exists; the unpinned trimmed v3 (and the current revision after purge) is collected. `v2` is the strict case: v1 is also the installed revision, which the registry keeps by itself, so only a pin holds v2 once trimmed. No product code changed.
+
 ## 2026-10-17 — LKM-284 repair: chat acceptance capture lost foreground on the shared desktop
 
 - Manager native verification passed all 54 smoke checks and `SEND VISIBILITY PASS`, then the chat-scroll acceptance step died with an uncaught "Chat window is not in the foreground" (the failure artifact `acceptance-failure.json` carried that error). Not a skills defect: another worker's run on the same desktop took focus while `chatAcceptance` with `capture: true` was photographing.
