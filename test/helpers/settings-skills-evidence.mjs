@@ -107,13 +107,15 @@ reject(add, { view: 'add', text: sample }, (e) => (e.editors = []))
 const detailField = bodyField('a1', 'r1')
 const detail = {
   ...add,
-  values: { 'skill-chats': 'Not offered yet' },
+  values: { 'skill-chats': 'Claude: native · Codex: compatibility · Gemini: experimental' },
   fields: ['skill-status', 'skill-source', 'skill-revision', 'skill-chats', detailField],
   actions: ['skill-back', 'skill-toggle', 'skill-remove', 'skill-save']
 }
 const expectDetail = { view: 'detail', field: detailField, text: sample }
 assertSkillsEvidence(detail, 680, expectDetail)
 reject(detail, expectDetail, (e) => (e.values['skill-chats'] = 'On'))
+reject(detail, expectDetail, (e) => (e.values['skill-chats'] = 'Not offered yet'))
+reject(detail, expectDetail, (e) => (e.values['skill-chats'] = 'Codex: native'))
 reject(detail, expectDetail, (e) => e.actions.pop())
 reject(detail, expectDetail, (e) => (e.fields = e.fields.slice(0, 4)))
 reject(detail, expectDetail, (e) => e.fields.push('skill-commit'))

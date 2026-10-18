@@ -130,6 +130,7 @@ actor SkillsOwner: PipeDomainOwner {
         guard case .ready(let state) = await ensure(), let pins = try? store.snapshots() else { return }
         let keep = state.manifest.skills.reduce(into: Set<String>()) { $0.formUnion($1.kept) }.union(pins.flatMap { $0.pins.map(\.revision) })
         store.sweep(keep: keep)
+        store.sweepProjections(sessions: pins)
     }
 
     // MARK: Requests
@@ -205,7 +206,21 @@ actor SkillsOwner: PipeDomainOwner {
                 return .succeeded(snapshot.value)
             case .snapshot(let session): return .succeeded(try snapshot(session, state.manifest))
             case .release(let session):
-                return .succeeded(.object([(JSText("session"), .string(JSText(session))), (JSText("released"), .bool(try store.removeSnapshot(session)))]))
+                let released = try store.removeSnapshot(session)
+                store.removeProjections(session)
+                return .succeeded(.object([(JSText("session"), .string(JSText(session))), (JSText("released"), .bool(released))]))
+            case .project(let session, let provider):
+                var created = false
+                if case .bool(true)? = try snapshot(session, state.manifest)["created"] { created = true }
+                guard let pinned = try store.readSnapshot(session) else { throw Lookup.missing }
+                let built = try store.project(pinned, provider: provider)
+                return .succeeded(.object([
+                    (JSText("session"), .string(JSText(session))), (JSText("provider"), .string(JSText(provider))),
+                    (JSText("path"), .string(JSText(built.path))), (JSText("created"), .bool(created)),
+                    (JSText("skills"), .array(built.skills.map { .object([(JSText("skill"), .string(JSText($0.skill))),
+                        (JSText("name"), .string(JSText($0.name))), (JSText("revision"), .string(JSText($0.revision)))]) })),
+                    (JSText("omitted"), .array(built.omitted.map { .object([(JSText("skill"), .string(JSText($0.skill))),
+                        (JSText("name"), .string(JSText($0.name))), (JSText("reason"), .string(JSText($0.reason)))]) }))]))
             default:
                 guard let request, let ledger else { return .failed(Self.fail(.invalidRequest, "Invalid skills request.")) }
                 return await mutate(request, operation, ledger: ledger)

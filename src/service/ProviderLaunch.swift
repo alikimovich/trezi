@@ -37,6 +37,17 @@ enum Liveness: Int, Comparable {
 extension ProviderOwner {
     static let seatTokenVariable = "CLAUDE_CODE_OAUTH_TOKEN"
 
+    /// LKM-287: the only `skills` a helper's context may name: the Skills owner's read-only
+    /// projection for this helper's own provider, `<profile>/skills/projections/<sha256>/<provider>`
+    /// (`SkillsProjection.swift`). It grants nothing: the helper reads files it could read anyway.
+    static func skillsProjection(_ path: String, provider: String, profile: String) -> Bool {
+        let base = URL(fileURLWithPath: profile).appendingPathComponent("skills").appendingPathComponent("projections").path + "/"
+        guard path.hasPrefix(base) else { return false }
+        let rest = path.dropFirst(base.count).split(separator: "/", omittingEmptySubsequences: false)
+        return rest.count == 2 && rest[1] == provider && rest[0].count == 64
+            && rest[0].utf8.allSatisfy { (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }
+    }
+
     func launchHelper(_ session: Session, _ command: ProviderHelperCommand, open: Data, token: String?) {
         guard let frame = session.opening, sessions[session.id] === session else { return }
         let helper: ProviderHelperProcess

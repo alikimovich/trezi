@@ -682,6 +682,26 @@ try {
       'unauthorized'
     )
     assert.equal((await open({ emitKey: 'chat-1', token: 'x' })).payload.code, 'invalidRequest')
+    // LKM-287: `skills` may name only this provider's projection in the Skills owner's folder.
+    const projections = join(home, 'skills', 'projections')
+    const digest = 'c'.repeat(64)
+    for (const skills of [
+      join(projections, digest, 'claude'),
+      join(projections, digest, 'fake', 'skills'),
+      join(projections, digest.toUpperCase(), 'fake'),
+      join(projections, 'short', 'fake'),
+      `${projections}/${digest}/../${digest}/fake`,
+      join(WT, '.claude', 'skills'),
+      join(home, 'skills', 'objects')
+    ])
+      assert.equal(
+        (await open({ emitKey: 'chat-1', skills })).payload.code,
+        'unauthorized',
+        `refused: ${skills}`
+      )
+    const projected = await open({ emitKey: 'chat-1', skills: join(projections, digest, 'fake') })
+    assert.equal(projected.kind, 'succeeded', JSON.stringify(projected))
+    await owner.close(`s-${count}`)
     // An approval of one session cannot be answered through another.
     const a = await helperChat(),
       b = await helperChat({ emitKey: 'chat-2' })

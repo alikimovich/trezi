@@ -26,6 +26,7 @@ writers from Bun:
 | LKM-111 | the built-in Claude, Codex and Gemini adapters run by default in provider helpers the service supervises (v10 connections stay in Bun); the Bun rollback launch and its twins are gone; the retained JS and a Bun binary ship inside `Trezi.app` | `docs/SWIFT-BACKEND-RETIREMENT.md` |
 | LKM-284 | the app-scoped Trezi Skills registry: immutable content-addressed skill packages, their manifest (enable, providers, remove/restore, revisions) and per-session snapshots; nothing is installed into projects or provider homes yet | `docs/SWIFT-BACKEND-SKILLS.md` |
 | LKM-285 | the Skills GitHub import: commit-pinned, bounded download and archive read, skills-only scope, license provenance, one ledger commit; curated recommendations are metadata only | `docs/SWIFT-BACKEND-SKILLS.md` |
+| LKM-287 | Skills in provider sessions: every Trezi session pins the library once under a durable identity, and the owner lays it out read-only per provider in Trezi's profile (native Claude plugin, Codex/Gemini compatibility catalog); still nothing in projects or provider homes | `docs/SWIFT-BACKEND-SKILLS.md` |
 
 The census in `docs/SWIFT-BACKEND-RETIREMENT.md` has 0 Bun-owned rows: every Bun module
 that writes a file, spawns a process or signals is a helper or a test. There is no
@@ -107,6 +108,10 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
   SkillsScope.swift   the pinned GitHub import (LKM-285): address parsing, ref →
                   commit, credential-free bounded GETs, streaming tar.gz read,
                   skills-only scope and license evidence, then one `install`
+  SkillsProjection.swift   provider sessions (LKM-287): `project` lays a
+                  session's pins out read-only per provider under
+                  skills/projections/ (Claude plugin `trezi-library`, catalog for
+                  Codex/Gemini); ProviderOwner accepts only that path as `skills`
   RuntimeOwner.swift / RuntimeServer.swift / ManagedProcess.swift   the managed
                   project runtime (LKM-94): dev-server + install process groups
                   (descendants stopped with their leader, `--watch-group`

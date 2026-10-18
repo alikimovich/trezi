@@ -281,6 +281,7 @@ try {
         'src/service/SkillsHTTP.swift',
         'src/service/SkillsArchive.swift',
         'src/service/SkillsScope.swift',
+        'src/service/SkillsProjection.swift',
         'src/service/SkillsGitHub.swift',
         'src/service/SkillsImport.swift',
         'src/service/DomainChannel.swift',

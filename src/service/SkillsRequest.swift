@@ -20,6 +20,8 @@ enum SkillsRequest: Sendable {
     case install(files: [SkillFile], source: SkillSource, replacing: String?)
     // Session pins: idempotent per session key, outside the ledger.
     case snapshot(session: String), release(session: String)
+    /// LKM-287: the session's pins (created once) laid out read-only for one provider.
+    case project(session: String, provider: String)
     // GitHub import (LKM-285): a bounded fetch that ends in one `install`, and its
     // cancellation by the import's operation ID. Neither carries `expectedRevision`:
     // the fetch commits at whatever revision is current when it finishes.
@@ -28,7 +30,7 @@ enum SkillsRequest: Sendable {
 
     static let reads: Set<String> = ["list", "read", "reference", "pins"]
     static let ledger: Set<String> = ["create", "import", "edit", "enable", "providers", "remove", "restore", "purge"]
-    static let sessions: Set<String> = ["snapshot", "release"]
+    static let sessions: Set<String> = ["snapshot", "release", "project"]
     static let fetches: Set<String> = ["github", "cancel"]
 
     var mutatesManifest: Bool {
@@ -127,6 +129,11 @@ enum SkillsRequest: Sendable {
         case "purge": try exactly(["skill"]); self = .purge(skill: try skill())
         case "snapshot": try exactly(["session"]); self = .snapshot(session: try session())
         case "release": try exactly(["session"]); self = .release(session: try session())
+        case "project":
+            try exactly(["session", "provider"])
+            let provider = try text("provider")
+            guard SkillProviders.names.contains(provider) else { throw invalid }
+            self = .project(session: try session(), provider: provider)
         case "github":
             try exactly(["url"], optional: ["ref", "subpath", "replacing"])
             guard let url = try optional("url", limit: SkillsGitHubAddress.maxURL) else { throw invalid }

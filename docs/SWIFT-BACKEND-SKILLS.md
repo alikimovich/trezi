@@ -31,6 +31,14 @@ recommendations ([GitHub import](#github-import-lkm-285)):
 - `src/shared/skills-recommendations.ts`: the import side of `SKILL_RECOMMENDATIONS`
   (`src/shared/skills-catalog.ts`, shared with LKM-288).
 
+Trezi Skills 4/4 (LKM-287) offers the pinned library to provider sessions
+([provider sessions](#provider-sessions-lkm-287)):
+
+- `src/service/SkillsProjection.swift`: the `project` method's read-only layout per
+  session and provider, its reuse/rebuild and its collection.
+- `src/main/session-skills.ts`: the durable skills identity, the projection call, the
+  Claude plugin entry and the Codex/Gemini compatibility catalog.
+
 ## Wire contract (v1)
 
 Frames use the pipe envelope shared with memory and workspace:
@@ -58,7 +66,8 @@ Parsing is strict:
 | `remove` / `restore` | ledger | `{skill}` | recoverable; restore refuses if the name is taken again |
 | `purge` | ledger | `{skill}` | only after `remove`; pinned revisions stay readable |
 | `snapshot` | session | `{session}` | creates the session's pins once (`created`), reports unreadable ones in `skipped` |
-| `release` | session | `{session}` | `{session, released}` |
+| `release` | session | `{session}` | `{session, released}`; also removes the session's projections |
+| `project` | session | `{session, provider}` | `SkillProjection`: pins once like `snapshot`, then `{path, created, skills, omitted}` for that provider (LKM-287) |
 | `github` | fetch | `{url, ref?, subpath?, replacing?}` | `SkillGitHubImport`: `SkillMutation` plus `name`, the pinned `source`, `skipped`, `attribution`; answered when the fetch ends |
 | `cancel` | fetch | `{operation}` | `{operation, cancelled}`; only this connection's import, only before it commits |
 
@@ -93,6 +102,7 @@ arrives out of order, matched by frame `id`); aborting the signal sends `cancel`
 <profile>/skills/objects/<sha256>         one file's bytes, 0400
 <profile>/skills/revisions/<sha256>.json  a revision: name, description, file list; 0400
 <profile>/skills/snapshots/<sha256(session)>.json   a session's pins
+<profile>/skills/projections/<sha256(session)>/<provider>/   its read-only layout (LKM-287)
 ```
 
 - **Immutable, content-addressed packages.** An edit or a source update writes a new
@@ -283,8 +293,11 @@ the UI never reads a folder or the network.
   - A GitHub skill also shows its pinned 40-character commit, with the ref that was
     asked for and a note that Trezi never updates it by itself. Its License row
     follows `skillLicenseStatus` and names the file the license was found in.
-  - The Chats row says "Not offered yet" until 4/4. It explains that a chat keeps the
-    revision it started with and a saved edit reaches only chats started later.
+  - The Chats row names each enabled provider's availability (`chatsText`: "Claude:
+    native", "Codex: compatibility", "Gemini: experimental"; "Off: not in new chats"
+    or "No provider" otherwise). Its help states the exclusions (utility calls,
+    provider sub-agents, a resume in an outside CLI) and that a chat keeps the
+    revision it started with, so a saved edit reaches only chats started later.
 - **Add.** A pasted SKILL.md goes to `create` with a single `SKILL.md` file. The
   service's validation message is shown as is.
 - **Import Folder.** The host's open panel (`pick`) only names a folder. The service
@@ -333,17 +346,83 @@ the UI never reads a folder or the network.
   not reach github.com. `test/skills-github-import.mjs` covers the importer's
   refusals, and `test/native-build-cache.mjs` asserts the define is test-only.
 
+## Provider sessions (LKM-287)
+
+Every session Trezi starts pins the library once and keeps those pins for its life.
+That covers foreground, additional, resumed, background, comment and visual-edit
+sessions, and custom endpoints too: they all go through `startProviderSession`.
+
+- **Identity.** The pins hang on `SessionRecord.skillsSession`, not the chat's
+  `emitKey`. It is a new `trezi-<uuid>` for a new session, and the saved one for a
+  restored chat, a resume, a model or backend restart, or a stale-resume fallback.
+  `seedFromRecord` copies it. A record saved before LKM-287 gets an identity on its
+  next start and keeps it from then on. Pins are never swapped while a session runs.
+- **Projection.** `project {session, provider}` creates the pins like `snapshot` and
+  lays out the revisions offered to that provider under
+  `<profile>/skills/projections/<sha256(session)>/<provider>/`. Every file is 0400
+  and every folder 0700. The folder holds `catalog.json`
+  (`trezi-skills-catalog-v1`: metadata only, at most about 6.5 KB a skill, so under 3.4 MB for 512 skills: id, name, description, revision, entry path; a skill's files are its folder, never listed)
+  and `skills/<name>/…`. For Claude it also holds `.claude-plugin/plugin.json`, which
+  names `trezi-library` and nothing else.
+  - The layout depends only on the snapshot. An intact projection is reused. A
+    changed byte, an extra file or a missing folder rebuilds it in a temp folder,
+    which is swapped in whole with `renamex_np(RENAME_SWAP)`.
+  - Each revision is checked against `SkillsScope` again. A revision that is
+    unreadable, outside the skills-only scope (one stored before LKM-285) or a
+    duplicate name is left out. It is named in `omitted`, and the chat shows it
+    once, at the start of its first turn.
+  - `release` removes the session's projections. Collection on open removes the
+    projections of sessions that have no snapshot, and temp leftovers.
+- **Release.** Bun releases an identity only when no saved record and no live
+  session still names it: a background run that landed, or a chat removed from
+  History. A kept conversation keeps its pins, so a later resume reads exactly
+  what it started with.
+- **Handing it to the provider.** A helper-hosted session passes the folder in its
+  open frame as `context.skills`. `ProviderOwner` accepts only
+  `<profile>/skills/projections/<64 hex>/<that provider>`
+  (`ProviderLaunch.skillsProjection`). A fallback helper projects the same pins for
+  its own provider. A custom endpoint (Codex in Bun) projects in
+  `startProviderSession`. A failure or a timeout leaves the session without app
+  skills and says so once. It never blocks the chat.
+- **Claude: native.** The folder is one more SDK `plugins` entry, placed after the
+  bundled `trezi` plugin with `skipMcpDiscovery: true`. Skills appear as
+  `trezi-library:<name>`. Everything else is unchanged and is asserted by
+  `test/session-skills.mjs`: `settingSources` user/project/local (so managed
+  policies and the user's and repo's own skills still load), strict MCP with only
+  the `trezi` server, the personal-plugin preference, `allowedTools`, the original
+  HOME and auth, the managed-browser env and the combined hooks.
+- **Codex and custom endpoints: compatibility.** The first turn carries a labelled
+  "Trezi Skills (compatibility catalog)" section after the Trezi rules. For each
+  skill it gives a one-line name and description (whitespace and backticks
+  flattened) and the read-only `SKILL.md` path, within a 24 KB budget. The rest is
+  counted and pointed to `catalog.json` (the section, trailer included, stays within
+  the budget). If the catalog cannot be read (over the 4 MiB read cap, damaged,
+  off-format), the section is a short labelled fallback naming the projection's
+  `skills/` folder, never empty while skills are pinned. Codex reads a body with its existing file
+  tools only when a task matches.
+  - No Codex config, `skills/extraRoots`, MCP server, tool or sandbox setting
+    changes. The Git and browser guard hooks are kept.
+  - This is not Codex's native skills system. The SDK's Codex 0.160.1 accepts
+    `skills/extraRoots/set` only in a dedicated app-server, which `codex exec` does
+    not expose, and Trezi does not migrate to the app-server.
+- **Gemini: experimental.** Gemini gets the same catalog, labelled experimental.
+  Gemini CLI may limit file reads to the workspace, so the catalog tells it to say
+  so rather than guess.
+- **Not covered.** Utility calls never get skills. That means Claude
+  `generateTitle`, `complete` and `updateProjectMemory` (still `settingSources: []`,
+  no tools, strict MCP, deny-all) and Codex `complete` (an isolated temp cwd/config,
+  read-only, no network). Trezi does not claim that a provider's own sub-agents
+  (Claude's Task agents, Codex's sub-agents) inherit the plugin or the catalog: this
+  is unverified, so the UI says they don't get skills. A conversation resumed
+  outside Trezi in the provider's own CLI keeps whatever its history already says.
+  Trezi never edits that history or the CLI's config and auth.
+- **Isolation.** Nothing is written to a project, `~/.claude`, `~/.codex`,
+  `~/.gemini` or any global skills folder. Projections live only in Trezi's
+  profile, which `ProviderPolicy` already keeps agents from editing.
+
 ## Seams for the follow-up tasks
 
-- **Providers.** When a provider session starts, its owner calls
-  `SkillsOwner.pin(session:)` with the chat's session key, which is idempotent. It
-  offers only pins whose `providers[name]` is true. It reads content with
-  `read {skill, session}` and `reference {skill, revision: pin.revision, path}`. A
-  resumed session calls `pin` again and gets the same pins. The provider owner
-  calls `release` when the chat is deleted. How a pin is offered is that task's
-  decision: a Trezi tool, generated context, or materialising files into a per-session
-  temp folder outside the project and the user's provider homes. It must not install
-  anything into a project or a global skills folder.
+- **Providers (LKM-287, done).** See [provider sessions](#provider-sessions-lkm-287).
 - **2/4, GitHub import (LKM-285, done).** See [GitHub import](#github-import-lkm-285). Bun
   still cannot claim a source: `create` refuses a `source` field, and only the
   service's own fetch reaches `install`.
@@ -356,6 +435,9 @@ the UI never reads a folder or the network.
 
 | Test | Covers |
 | --- | --- |
+| `test/skills-projection.mjs` | `project` over the real owner: layout, plugin manifest, provider filter, modes, strict frames, versions/removal/resume pinned, reuse and swap-in rebuild, release and collection, legacy out-of-scope and unreadable revisions omitted, hostile descriptions, concurrent sessions, two projects and provider homes untouched, Bun's catalog budget and the Claude plugin entry |
+| `test/session-skills.mjs` | the session seams: durable identity (new, resumed, never `emitKey`), release rules, the note inside a turn, `startProviderSession` (Bun and helper paths, `context.skills` per provider), Claude options with the SDK mock (plugins, settingSources, strict MCP, HOME, browser env, hooks), Codex first-turn catalog with its hooks and config untouched, utility calls still isolated |
+| `test/provider-owner.mjs` (LKM-287 part) | the owner refuses a skills path for another provider, outside the projections, traversing or malformed, and accepts a well-formed one |
 | `test/skills-registry.mjs` | contract parity, create/list/read, revisions and the `modified` flag, enable/providers, remove/restore/purge, snapshot stability across edit/remove/purge/restart, GitHub provenance, Bun's client |
 | `test/skills-registry-safety.mjs` | injected write failures, SIGKILL at each commit step, receipts, damaged data, malicious paths and files, create/import/edit refusals for out-of-scope frontmatter, control manifests and dynamic shell with the registry unchanged, strict frames, concurrent writers, isolation from two repositories and two provider homes |
 | `test/skills-registry-boundaries.mjs` | corrupt counters, snapshot capacity, the directory-entry budget |

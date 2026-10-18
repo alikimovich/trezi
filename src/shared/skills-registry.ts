@@ -130,6 +130,39 @@ export interface SkillSnapshot {
   skipped?: string[]
 }
 
+/**
+ * `project` (LKM-287): a session's pins laid out read-only for one provider under
+ * `<profile>/skills/projections/<sha256(session)>/<provider>/`. `catalog.json` there is a
+ * `SkillsCatalog`; Claude's folder is also the `trezi-library` local plugin.
+ */
+export interface SkillProjection {
+  session: string
+  provider: SkillProviderName
+  path: string
+  /** True when this call created the session's snapshot. */
+  created: boolean
+  skills: Array<{ skill: string; name: string; revision: string }>
+  /** Pins left out: `unreadable`, `outside the skills-only scope` or `duplicate name`. */
+  omitted: Array<{ skill: string; name: string; reason: string }>
+}
+export const SKILLS_CATALOG_FORMAT = 'trezi-skills-catalog-v1'
+export const SKILLS_PLUGIN_NAME = 'trezi-library'
+export interface SkillsCatalog {
+  format: typeof SKILLS_CATALOG_FORMAT
+  session: string
+  provider: SkillProviderName
+  plugin: typeof SKILLS_PLUGIN_NAME | null
+  skills: Array<{
+    skill: string
+    name: string
+    description: string
+    revision: string
+    /** Relative to the projection folder, e.g. `skills/pdf/SKILL.md`. */
+    entry: string
+  }>
+  omitted: SkillProjection['omitted']
+}
+
 export interface SkillMutation {
   revision: Revision
   digest: string
@@ -257,6 +290,11 @@ export interface SkillsMethods {
     body: { session: string }
     result: { session: string; released: boolean }
   }
+  project: {
+    mode: 'session'
+    body: { session: string; provider: SkillProviderName }
+    result: SkillProjection
+  }
   github: { mode: 'fetch'; body: SkillGitHubInput; result: SkillGitHubImport }
   /** Cancels a `github` import of this connection by its operation ID, until it commits. */
   cancel: {
@@ -281,6 +319,7 @@ export const SKILLS_METHOD_MODES: { [M in SkillsMethod]: SkillsMethods[M]['mode'
   purge: 'ledger',
   snapshot: 'session',
   release: 'session',
+  project: 'session',
   github: 'fetch',
   cancel: 'fetch'
 }

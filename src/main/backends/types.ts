@@ -85,6 +85,13 @@ export interface SpawnContext {
   /** Durable Trezi-managed project decisions captured when this provider
    * session starts. Backends inject them into their initial instructions. */
   projectMemory?: string
+  /** The session's durable Trezi Skills identity (LKM-287, `session-skills.ts`): kept
+   *  across resume, model switch, helper restart and fallback, so the session keeps the
+   *  skills it was pinned to. Never the `emitKey`, which can be a project key. */
+  skillsSession?: string
+  /** The session's pinned skills laid out read-only for this provider (the Swift Skills
+   *  owner's `project`). Claude loads it as a plugin; Codex and Gemini read its catalog. */
+  skills?: string
   /** The provider owner's session id (S10, set by `provider-sessions.ts`): the adapter
    *  asks the owner with it before answering a permission request or running one of
    *  Trezi's tools. Absent only when an adapter is started outside that wiring. */

@@ -107,6 +107,7 @@ import { enqueueRepoWrite } from './repo-write-queue'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createProject } from './scaffold'
 import { incidents } from './self-heal/incidents'
+import { releaseSessionSkills } from './session-skills'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
@@ -523,6 +524,21 @@ interface Spawn {
   error?: string
 }
 const spawns = new Map<string, Spawn>()
+/** Removes a saved record, then its skills pins once nothing else names them (LKM-287).
+ *  `ending` is the session that record belonged to, when it is ending with it. */
+function removeRecord(id: string, ending?: ProviderSession): void {
+  const skills = ending?.record.skillsSession ?? store().get(id)?.skillsSession
+  store().remove(id)
+  if (!skills) return
+  const live = [...sessions.values(), ...[...spawns.values()].map((spawn) => spawn.session)]
+  releaseSessionSkills(
+    skills,
+    live.some((s) => s !== ending && s.record.skillsSession === skills) ||
+      store()
+        .all()
+        .some((rec) => rec.skillsSession === skills)
+  )
+}
 /** A spawn's live-tree watch is keyed apart from the chats' (LKM-215). */
 const spawnWatchKey = (id: string): string => `spawn:${id}`
 // v8 F1 Phase 3: bound concurrent spawns per project; the rest queue (FIFO) and start
@@ -711,7 +727,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         })
         await removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
         try {
-          store().remove(session.record.id)
+          removeRecord(session.record.id, session)
         } catch {
           /* history is non-critical */
         }
@@ -1020,7 +1036,9 @@ export function registerAgentIpc(
     options: AgentOptions,
     cwd: string,
     resumeSessionId?: string,
-    prior?: Parameters<typeof resumeSummary>[0] & { sdkCwd?: string }
+    // The conversation this session continues: its resume summary and cwd, and its skills
+    // identity, which a restored, restarted or resumed chat keeps (LKM-287).
+    prior?: Parameters<typeof resumeSummary>[0] & { sdkCwd?: string; skillsSession?: string }
   ): Promise<ProviderSession> => {
     // If the resume fails the new session starts from what the chat showed (LKM-165).
     const summary = resumeSessionId ? resumeSummary(prior) : ''
@@ -1036,7 +1054,8 @@ export function registerAgentIpc(
         onEvent: interactiveEvents(sessionKey, tracker),
         ...(resumeSessionId ? { resumeSessionId } : {}),
         ...(summary ? { resumeSummary: summary } : {}),
-        ...(resumeSessionId && prior?.sdkCwd ? { resumeCwd: prior.sdkCwd } : {})
+        ...(resumeSessionId && prior?.sdkCwd ? { resumeCwd: prior.sdkCwd } : {}),
+        ...(prior?.skillsSession ? { skillsSession: prior.skillsSession } : {})
       })
     )
     trackers.set(s, tracker)
@@ -1123,7 +1142,7 @@ export function registerAgentIpc(
         // A stale Claude resume id shouldn't block opening the project — fall
         // back to a fresh provider thread and still paint the saved transcript.
         if (!resumeSessionId) throw err
-        s = await startChat(root, key, options, cwd)
+        s = await startChat(root, key, options, cwd, undefined, priorCurrent ?? undefined)
       }
       adoptSession(key, s.record, root)
       if (priorCurrent) seedFromRecord(s.record, priorCurrent, { reuseId: true })
@@ -1339,7 +1358,7 @@ export function registerAgentIpc(
       // sessionKey) so a model/backend restart keeps its isolation instead of
       // silently dropping to the live root and leaking the worktree.
       const cwd = await isolatedCwd(root, sessionKey)
-      const s = await startChat(root, sessionKey, options, cwd)
+      const s = await startChat(root, sessionKey, options, cwd, undefined, previous)
       adoptSession(sessionKey, s.record, root)
       const sdkSessionId = s.record.sdkSessionId
       seedFromRecord(s.record, previous, { reuseId: true })
@@ -2122,7 +2141,7 @@ export function registerAgentIpc(
     if (result.ok) await store().flush()
     return result
   })
-  ipcMain.handle('sessions:remove', (_e, id: string) => store().remove(id))
+  ipcMain.handle('sessions:remove', (_e, id: string) => removeRecord(id))
 
   // The editor's read and manual save. A failure (damaged file, service unavailable)
   // rejects, so the sheet keeps its draft and reports it; nothing falls back to Bun.

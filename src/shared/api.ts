@@ -642,6 +642,9 @@ export interface SessionRecord {
   sdkSessionId?: string
   /** The resolved directory `sdkSessionId` was started in; a resume uses it (LKM-165). */
   sdkCwd?: string
+  /** The durable Trezi Skills identity this conversation's skills are pinned to
+   *  (LKM-287); absent on records from before it, which get one on their next start. */
+  skillsSession?: string
 }
 
 /** What `agent:open-project` hands back so the renderer can paint the current chat. */

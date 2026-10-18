@@ -48,7 +48,7 @@ export const AUTO_FIX_CI_KEY = 'trezi:auto-fix-ci:v1'
 const PROVIDERS =
   'Claude and Codex use your existing sign-ins. Add another provider to use its models in chats.'
 const SKILLS_DETAIL =
-  'Instructions you keep in Trezi, not in your projects or ~/.claude. Chats do not use them yet.'
+  'Instructions you keep in Trezi, not in your projects or ~/.claude. New chats pin them: native in Claude, a compatibility catalog in Codex, experimental in Gemini.'
 const sections = (): NativeSheetSection[] => [
   { id: 'general', label: 'General', symbol: 'gearshape', detail: 'Changes save automatically.' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles', detail: PROVIDERS },

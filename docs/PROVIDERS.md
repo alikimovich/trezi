@@ -30,6 +30,7 @@ capabilities instead of assuming Claude, Codex, gateways, and Gemini are interch
 | Persistent multi-turn context | Yes | Yes | Yes, through Codex | No guaranteed continuity |
 | Repository instruction discovery | `CLAUDE.md` + Claude skills | Codex-native instructions + Trezi rules | Same as Codex | Limited |
 | Skills menu before the first turn | Yes | Yes | Yes, through Codex | Yes |
+| Trezi library skills (pinned per session) | Native: `trezi-library` plugin | Compatibility catalog (not native skills) | Same as Codex | Experimental catalog; reads may fail |
 | Provider-native coding tools | Yes | Yes | Depends on model through Codex | Limited |
 | Trezi preview location/screenshots | Yes | Yes | Yes, image support depends on endpoint | No |
 | On-demand native chat islands (`chat_island`) | Yes | Yes | Yes, through Codex | No |
@@ -168,9 +169,30 @@ selected skill file path in the prompt so the harness can read its instructions.
 Claude keeps its native SDK command discovery.
 
 The app-scoped Trezi Skills registry (LKM-284, `docs/SWIFT-BACKEND-SKILLS.md`)
-is a separate, service-owned store in Trezi's data. No provider reads it yet, and
-the discovery above is unchanged. Trezi Skills 2/4 will offer each session's pinned
-revisions without installing into projects or provider homes.
+is a separate, service-owned store in Trezi's data, and the discovery above is
+unchanged. Since LKM-287, every session Trezi starts pins the enabled library skills
+once, under a durable identity that its resumes, restarts and fallbacks keep.
+Library edits reach only new sessions. The Skills owner lays the pins out as a
+read-only folder in Trezi's profile, never in a project or a provider home
+([provider sessions](SWIFT-BACKEND-SKILLS.md#provider-sessions-lkm-287)):
+
+- **Claude: native.** One more SDK local plugin, `trezi-library` (skills named
+  `trezi-library:<name>`), with `skipMcpDiscovery`, placed after the bundled
+  plugin. `settingSources`, managed policies, strict MCP, the personal-plugin
+  preference, HOME/auth, the managed-browser env and the hooks are unchanged.
+  Opening a reference file outside the project can still ask for Read permission
+  under the chat's permission mode.
+- **Codex and custom endpoints: compatibility.** A labelled catalog in the first
+  turn gives names, one-line descriptions and read-only `SKILL.md` paths. Codex
+  reads a body only when a task matches. This is not Codex's native skills system:
+  the bundled Codex 0.160.1 offers `skills/extraRoots/set` only in a dedicated
+  app-server, which `codex exec` does not expose. The config, sandbox, MCP servers
+  and the Git and browser hooks are unchanged.
+- **Gemini: experimental.** The same catalog, labelled experimental. Gemini CLI may
+  limit file reads to the workspace.
+- **Not covered.** Titles, completions and memory updates never get skills.
+  Inheritance by a provider's own sub-agents is not verified and not claimed. A
+  chat resumed in the provider's own CLI keeps only what its history already says.
 
 ## Switching models within a chat
 

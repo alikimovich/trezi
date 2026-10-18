@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Trezi Skills 4/4: provider-wide session snapshots and labeled compatibility (LKM-287)
+
+- [x] Durable skills identity per session (`SessionRecord.skillsSession`, never `emitKey`), stamped in `startProviderSession` for every creation path and kept across resume, restart, helper restart and fallback; pins never hot-replaced; release only when no record or live session names it.
+- [x] Service `project {session, provider}` (`SkillsProjection.swift`): read-only per-provider layout in Trezi's profile, reused or rebuilt and swapped whole, legacy out-of-scope/unreadable revisions omitted, removed on `release`, collected on open; `ProviderOwner` accepts only that path as the helper's `skills` context.
+- [x] Claude: skills-only `trezi-library` local plugin after the bundled one, with settingSources, policies, strict MCP, personal-plugin preference, HOME/auth, managed-browser env and hooks unchanged; utility queries stay isolated.
+- [x] Codex and custom endpoints: labelled compatibility catalog in the first turn (bounded, metadata and paths, bodies on demand), no config/MCP/sandbox change, Git and browser hooks kept; Gemini labelled experimental.
+- [x] Settings copy: per-provider availability ("Claude: native", "Codex: compatibility", "Gemini: experimental"), utility and sub-agent exclusions, external-CLI resume caveat; install/discovery runs no package scripts and grants no tool permissions.
+- [x] Tests: `skills-projection`, `session-skills`, and skills-path refusals in `provider-owner`.
+- [ ] Operator: confirm in a real Claude chat that `trezi-library:<name>` skills are listed and a reference file opens, and whether a Task sub-agent sees them (no real model calls in the worker sandbox).
+- [ ] Manager: run native verification and an independent review.
+
 ## Trezi Skills 3/4: native Skills library management UI (LKM-286)
 
 - [x] Settings → Skills: Installed list (bounded metadata, body read on open) and Recommended entries that read "Not installed" until an explicit Install, built on the reviewed LKM-288 pane.

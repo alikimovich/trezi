@@ -98,5 +98,6 @@ export function seedFromRecord(
     live.sdkSessionId = from.sdkSessionId
     if (from.sdkCwd) live.sdkCwd = from.sdkCwd
   }
+  if (from.skillsSession && !live.skillsSession) live.skillsSession = from.skillsSession
   if (opts.reuseId) live.id = from.id
 }

@@ -75,6 +75,9 @@ const day = (ms: number) =>
 export const bodyField = (skill: string, revision: string) => `skill-body:${skill}@${revision}`
 const NEXT_SESSION =
   'A chat keeps the revision it started with; a saved edit reaches only chats started after it.'
+/** LKM-287: what each provider actually gets, stated without a parity claim. */
+const AVAILABILITY =
+  'Claude loads it natively as the trezi-library plugin. Codex (including custom endpoints) gets Trezi’s compatibility catalog, not Codex’s native skills, and reads the instructions only when a task matches. Gemini is experimental and may not reach the file. Titles, completions, memory updates and a provider’s own sub-agents don’t get skills. A conversation resumed in an outside CLI keeps only what its history already says.'
 
 /** The library's skill taken from a recommendation's folder, removed or not. */
 export function installedFrom(list: SkillsList | null, entry: SkillRecommendation) {
@@ -120,6 +123,17 @@ function providersText(skill: SkillSummary) {
   const names = (['claude', 'codex', 'gemini'] as const).filter((p) => skill.providers[p])
   const label = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' }
   return names.length ? names.map((p) => label[p]).join(', ') : 'none'
+}
+/** The Chats row: the providers that offer the skill in new chats, and how. */
+export function chatsText(skill: Pick<SkillSummary, 'enabled' | 'providers'>) {
+  if (!skill.enabled) return 'Off: not in new chats'
+  const label = {
+    claude: 'Claude: native',
+    codex: 'Codex: compatibility',
+    gemini: 'Gemini: experimental'
+  }
+  const names = (['claude', 'codex', 'gemini'] as const).filter((p) => skill.providers[p])
+  return names.length ? names.map((p) => label[p]).join(' · ') : 'No provider'
 }
 function status(skill: SkillSummary) {
   return [
@@ -267,9 +281,9 @@ export function detail(skill: SkillSummary, body: SkillBody | null) {
     {
       id: 'skill-chats',
       label: 'Chats',
-      help: `Chats don’t load Trezi skills yet. Saved for: ${providersText(skill)}. ${NEXT_SESSION}`,
+      help: `Offered to new chats with: ${providersText(skill)}. ${AVAILABILITY} ${NEXT_SESSION}`,
       kind: 'readonly',
-      value: 'Not offered yet'
+      value: chatsText(skill)
     }
   )
   const grouped = fields.map((field) => ({ ...field, group: skill.name }) as NativeSheetField)
@@ -278,7 +292,7 @@ export function detail(skill: SkillSummary, body: SkillBody | null) {
       id: bodyField(skill.id, body.revision),
       group: 'SKILL.md',
       label: 'SKILL.md',
-      help: 'Save Revision keeps the previous revision and marks the skill Edited. Nothing in a skill is ever run.',
+      help: 'Save Revision keeps the previous revision and marks the skill Edited. Saving runs nothing and grants no tool permissions; the instructions still guide what an agent does with its existing tools.',
       kind: 'multiline',
       value: body.body,
       height: 220
@@ -332,7 +346,7 @@ export function add() {
 }
 
 const CHECKS =
-  'Trezi resolves the ref to one commit, downloads only that commit and keeps instructions only: scripts, hooks, tool permissions and manifests are refused. Nothing runs during import.'
+  'Trezi resolves the ref to one commit, downloads only that commit and keeps instructions only: scripts, hooks, tool permissions and manifests are refused. Import and discovery run no package scripts and grant no tool permissions.'
 
 export function github(pane: Pane) {
   const group = 'Import from GitHub'
@@ -414,7 +428,7 @@ export function recommendation(pane: Pane, entry: SkillRecommendation) {
       : entry.importable
         ? {
             value: 'Not installed',
-            help: `Install downloads ${entry.repository}/${entry.path} at the commit “${ref}” points to now, checks every file and adds it to your library. Nothing in it runs.`
+            help: `Install downloads ${entry.repository}/${entry.path} at the commit “${ref}” points to now, checks every file and adds it to your library. Installing runs none of its files and grants no tool permissions.`
           }
         : { value: 'Can’t be installed', help: entry.unavailableReason }
   const fields: NativeSheetField[] = [

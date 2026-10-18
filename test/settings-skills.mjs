@@ -224,8 +224,15 @@ try {
   const editor = bodyField(created.id, created.revision)
   assert.equal(field(editor).value, text)
   assert.equal(field(editor).kind, 'multiline')
-  assert.equal(field('skill-chats').value, 'Not offered yet', 'Provider injection is not claimed')
+  assert.equal(
+    field('skill-chats').value,
+    'Claude: native · Codex: compatibility · Gemini: experimental',
+    'Each provider’s actual support is labelled'
+  )
   assert.match(field('skill-chats').help, /keeps the revision it started with/)
+  assert.match(field('skill-chats').help, /not Codex’s native skills/)
+  assert.match(field('skill-chats').help, /sub-agents don’t get skills/)
+  assert.doesNotMatch(field(editor).help ?? '', /ever run/)
   assert.equal(field('skill-source').value, 'Added manually')
   assert.ok(!ids().includes('skill-commit'), 'A local skill has no pinned commit')
   assert.deepEqual(footer(), ['skill-back', 'skill-toggle', 'skill-remove', 'skill-save'])

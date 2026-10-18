@@ -47,6 +47,7 @@ import { setProviderOwner } from '../main/provider-owner'
 import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-owner'
 import { createProject } from '../main/scaffold'
 import { PROVIDER_FALLBACK_KEY, setProviderFallbackSource } from '../main/self-heal/fallback'
+import { setSessionSkillsSource } from '../main/session-skills'
 import { registerSetupIpc } from '../main/setup'
 import { registerSimulatorIpc } from '../main/simulator'
 import { observedSourceOwner } from '../main/source-changes'
@@ -927,6 +928,8 @@ async function main() {
   // LKM-288, LKM-286: Settings → Skills reads and writes only through the Swift Skills
   // owner; the host's open panel only names the folder the service then imports.
   nativeSkills.current = serviceSkills(host)
+  // LKM-287: every chat session pins and projects the library through the same owner.
+  setSessionSkillsSource(() => nativeSkills.current)
   const settingsController = withProviderFallbackSetting(
     withBuildCheckSetting(
       withDreamerPane(

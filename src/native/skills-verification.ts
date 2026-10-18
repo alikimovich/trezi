@@ -138,9 +138,10 @@ export function assertSkillsEvidence(
     assert.ok(evidence.fields.includes(expect.field), 'The editor of the shown revision')
     for (const id of ['skill-status', 'skill-source', 'skill-revision', 'skill-chats'])
       assert.ok(evidence.fields.includes(id), `Detail row: ${id}`)
-    assert.equal(
-      evidence.values['skill-chats'],
-      'Not offered yet',
+    // LKM-287: the providers that offer it, each with its actual support level.
+    assert.match(
+      evidence.values['skill-chats'] ?? '',
+      /^(?:Off: not in new chats|No provider|(?:Claude: native|Codex: compatibility|Gemini: experimental)(?: · (?:Codex: compatibility|Gemini: experimental))*)$/,
       'Provider availability is honest'
     )
     if (expect.github) {
