@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-18 — LKM-281 repair: native UI evidence of the merge approval card
+
+- The independent review accepted the code and asked for real-UI evidence of the host-authored card. `checkNativeChat` (`src/native/smoke-chat.ts`, group `chat`) now ends by calling `requestMergeApproval` for a fixture target (`github.com/fixture/app`, #7, a 40-hex head) with its notify wired to the chat's event stream, so the card reaches the native chat through the same `question-request` path as production. It asserts the shown request is the host's (header `Merge PR`, text naming #7, the repo and the 12-character head, options exactly `Merge` and `Don't merge`), captures a foreground window at the 440pt and 320pt chat widths, answers `Don't merge` through `chatPerform` `question`, and asserts the card clears (`questionCount` 0), `takeMergeApproval` is `none` (no approval left) and the agent receives the "Do not merge pull request #7 … Leave it open." message as the user's next message.
+- Artifacts (written by the manager's native run under `test/artifacts/native/`): `agent-merge-approval.png`, `agent-merge-approval-320.png`, `agent-merge-approval.json` (card, target, captures, post-decline state). No GitHub call is made. The block runs last in the check because the decline message is sent to the stubbed provider, which the earlier absolute `sent` counts would otherwise have to expect. Not run by the worker (native suites belong to the manager's desktop lock); typecheck and lint pass.
+
 ## 2026-10-17 — LKM-281: agent PR merge needs a host-controlled approval bound to repo/PR/head
 
 - Security review finding: `chat-agent-git.ts` merged when the model passed `confirmed: true`, even with Agent can merge pull requests off, and ProviderPolicy (TS and Swift) auto-allowed `publish_merge` for foreground and background sessions. Regression evidence on the unmodified sources (fake gh and workflow): merge-off + `confirmed: true` → `merged: true`, workflow call `merge`; policy fg allow, bg allow. After: `Agent PR merging is off in Settings…`, no workflow call; fg allow, bg deny `Background agents cannot merge pull requests.`

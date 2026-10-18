@@ -1,5 +1,7 @@
 import { writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { stubAgentSendForSmoke } from '../main/agent'
+import { requestMergeApproval, takeMergeApproval } from '../main/merge-approval'
 import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
@@ -354,6 +356,80 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       !sent[1][0].endsWith(parkedText)
     )
       throw new Error('Queued Resolve message did not send exactly once after the park cleared')
+    send({ type: 'done' })
+    await wait((current) => !current.activity)
+    // LKM-281: the host-authored merge approval card, as the user sees it, and the denial
+    // path. It runs last because answering sends the user's next message to the stubbed
+    // provider, which the counts above would otherwise have to expect.
+    const mergeRoot = '/fixture/merge-approval'
+    const mergeTarget = {
+      repo: 'github.com/fixture/app',
+      number: 7,
+      head: '0123456789abcdef0123456789abcdef01234567'
+    }
+    const mergeId = requestMergeApproval(state.chat, mergeRoot, mergeTarget, (_channel, payload) =>
+      send(payload as object)
+    )
+    await wait((current) => current.questionCount === 1)
+    const shown = nativeChat.get(state.chat).questions.find((item) => item.id === mergeId)
+    const asked = shown?.questions[0]
+    const mergeQuestion = `Merge pull request #7 in github.com/fixture/app at commit ${mergeTarget.head.slice(0, 12)}?`
+    if (
+      shown?.questions.length !== 1 ||
+      asked?.header !== 'Merge PR' ||
+      asked.question !== mergeQuestion ||
+      JSON.stringify(asked.options.map((option) => option.label)) !==
+        JSON.stringify(['Merge', "Don't merge"])
+    )
+      throw new Error(`Merge approval card is not the host's: ${JSON.stringify(shown)}`)
+    const mergeShots: Record<string, string> = {}
+    const captureMerge = async (name: string, width: number) => {
+      const layout = await host.request('layoutInspect')
+      if (Math.abs(layout.width - width) > 1)
+        throw new Error(`Merge approval chat width: ${layout.width}, wanted ${width}`)
+      await wait((current) => current.questionCount === 1)
+      await preparePreviewInput(host, true)
+      const capture = await host.request('captureVisibleShell')
+      const path = join(dirname(screenshot), name)
+      writeFileSync(path, Buffer.from(capture.png, 'base64'))
+      mergeShots[String(width)] = path
+    }
+    await captureMerge('agent-merge-approval.png', 440)
+    await host.request('dividerPerform', { delta: -120 })
+    try {
+      await captureMerge('agent-merge-approval-320.png', 320)
+    } finally {
+      await host.request('dividerPerform', { delta: 120 })
+    }
+    await host.request('chatPerform', {
+      action: 'question',
+      card: mergeId,
+      answers: { [mergeQuestion]: "Don't merge" }
+    })
+    await wait((current) => current.questionCount === 0)
+    const declined = takeMergeApproval(state.chat, mergeRoot, mergeTarget)
+    if (declined !== 'none') throw new Error(`Declining a merge left an approval: ${declined}`)
+    await waitFor(
+      () => sent.slice().length === 3,
+      'declined merge reached the provider as a message'
+    )
+    const declinedText = 'Do not merge pull request #7 in github.com/fixture/app. Leave it open.'
+    if (typeof sent[2][0] !== 'string' || !sent[2][0].endsWith(declinedText))
+      throw new Error('The declined merge was not reported to the agent as a refusal')
+    writeFileSync(
+      join(dirname(screenshot), 'agent-merge-approval.json'),
+      JSON.stringify(
+        {
+          captures: mergeShots,
+          shown: { id: mergeId, ...asked },
+          target: mergeTarget,
+          answered: "Don't merge",
+          afterDecline: { questionCount: 0, approval: declined, agentMessage: declinedText }
+        },
+        null,
+        2
+      )
+    )
     send({ type: 'done' })
     await wait((current) => !current.activity)
   } finally {
