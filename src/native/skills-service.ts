@@ -10,6 +10,8 @@ import {
   type SkillGitHubImport,
   type SkillGitHubInput,
   type SkillMutation,
+  type SkillProjection,
+  type SkillProviderName,
   type SkillProviders,
   type SkillReference,
   type SkillSnapshot,
@@ -62,6 +64,8 @@ export interface SkillsRegistry {
   purge(skill: string): Promise<SkillsChange>
   snapshot(session: string): Promise<SkillSnapshot>
   release(session: string): Promise<{ session: string; released: boolean }>
+  /** LKM-287: the session's pins (created once) laid out read-only for `provider`. */
+  project(session: string, provider: SkillProviderName): Promise<SkillProjection>
   /** GitHub import (LKM-285): resolves, downloads and checks in the service, then installs. */
   importGitHub(
     input: SkillGitHubInput,
@@ -207,6 +211,7 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
     purge: (skill) => mutate('purge', { skill }),
     snapshot: (session) => call('snapshot', { session }),
     release: (session) => call('release', { session }),
+    project: (session, provider) => call('project', { session, provider }),
     importGitHub
   }
 }

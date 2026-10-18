@@ -27,6 +27,7 @@ import { treziRules } from '../rules'
 import { classifyError } from '../self-heal/catalog'
 import { providerReachable, recoveryDelay } from '../self-heal/network'
 import { RECOVERED_STATUS, reconnectingStatus } from '../self-heal/status'
+import { compatibilityCatalog } from '../session-skills'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
 import { codexSeatAuthFailure } from './codex-auth'
@@ -300,6 +301,9 @@ async function startSession(
   let turnAbort: AbortController | null = null // cancels the in-flight turn only
   // trezi rules (v8 R): no system-prompt arg here, so prepend them to the first turn.
   let firstTurn = true
+  // LKM-287: the session's pinned library skills as Trezi's labelled compatibility
+  // catalog (metadata and read-only paths; bodies are read on demand).
+  const skillsCatalog = compatibilityCatalog(ctx?.skills, 'codex')
 
   const emit = (event: AgentEvent): void => {
     if (disposed) return
@@ -742,7 +746,7 @@ async function startSession(
     // Composer image attachments are not wired yet; MCP screenshot results are images.
     send: (text, _images) => {
       const prompt = firstTurn
-        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}\n\n---\n\n${text}`
+        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n${text}`
         : text
       firstTurn = false
       chain = chain.then(() => runTurn(prompt))

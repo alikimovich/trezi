@@ -3,6 +3,7 @@ import type { NativeView } from '../../native/platform'
 import type { AgentEvent, AgentOptions } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
 import { treziRules } from '../rules'
+import { compatibilityCatalog } from '../session-skills'
 import { createRecordCapture } from './record'
 import { describeTool, sendToRenderer } from './tools'
 import type { ModelProvider, PendingPrompt, ProviderSession, SpawnContext } from './types'
@@ -87,6 +88,9 @@ async function startSession(
   let child: ChildProcessWithoutNullStreams | null = null
   // trezi rules (v8 R): no system-prompt arg here, so prepend them to the first turn.
   let firstTurn = true
+  // LKM-287: experimental — the pinned library skills as a compatibility catalog. Gemini
+  // CLI may limit its file tools to the workspace, so a body can be out of its reach.
+  const skillsCatalog = compatibilityCatalog(ctx?.skills, 'gemini')
 
   const emit = (event: AgentEvent): void => {
     if (disposed) return
@@ -176,7 +180,7 @@ async function startSession(
     // Gemini CLI is text-only here; images (paste/drop) are ignored for now.
     send: (text, _images) => {
       const prompt = firstTurn
-        ? `${treziRules({ projectMemory: ctx?.projectMemory })}\n\n---\n\n${text}`
+        ? `${treziRules({ projectMemory: ctx?.projectMemory })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n${text}`
         : text
       firstTurn = false
       chain = chain.then(() => runTurn(prompt))

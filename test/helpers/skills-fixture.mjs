@@ -43,6 +43,7 @@ export function compileSkills(binary) {
     'SkillsHTTP',
     'SkillsArchive',
     'SkillsScope',
+    'SkillsProjection',
     'SkillsGitHub',
     'SkillsImport'
   ].map((name) => `src/service/${name}.swift`)

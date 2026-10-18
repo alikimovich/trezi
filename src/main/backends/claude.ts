@@ -38,6 +38,7 @@ import {
 } from '../provider-policy'
 import { formatAnswers, parseQuestions } from '../question-tool'
 import { treziRules } from '../rules'
+import { claudeSkillsPlugins } from '../session-skills'
 import { runTreziTool, sessionTool } from '../session-tools'
 import { elevationScale, layeredShadow } from '../shadows'
 import { discoverProjectSkills, mergeSlashCommands } from '../skills'
@@ -85,6 +86,16 @@ import type {
 // ../../agent-plugin), the same walk as index.ts's appIcon. Only wired in when
 // present so a stripped build degrades gracefully instead of erroring.
 const PLUGIN_PATH = join(__dirname, '../../agent-plugin')
+/** A chat session's `plugins` option: the bundled plugin and the session's library skills. */
+export function claudePlugins(skills: string | undefined): {
+  plugins?: Array<{ type: 'local'; path: string; skipMcpDiscovery?: boolean }>
+} {
+  const plugins = [
+    ...(existsSync(PLUGIN_PATH) ? [{ type: 'local' as const, path: PLUGIN_PATH }] : []),
+    ...claudeSkillsPlugins(skills)
+  ]
+  return plugins.length ? { plugins } : {}
+}
 
 // The two in-process `trezi` MCP tools, fully-qualified (mcp__<server>__<tool>).
 // Read-only observers of the user's preview — auto-allowed so they never prompt.
@@ -1220,10 +1231,11 @@ async function startSession(
         // LKM-138: none of the user's own plugins or MCP servers unless Settings allows them.
         ...claudeIsolationOptions(root, options.claudeUserPlugins === true),
         allowedTools: [...TREZI_TOOL_NAMES],
-        // The bundled Trezi skill plugin (only when present in this build).
-        ...(existsSync(PLUGIN_PATH)
-          ? { plugins: [{ type: 'local' as const, path: PLUGIN_PATH }] }
-          : {}),
+        // The bundled Trezi skill plugin (only when present in this build), then the
+        // session's pinned library skills as the skills-only `trezi-library` plugin
+        // (LKM-287, `session-skills.ts`): namespaced apart from `trezi:` and from the
+        // user's and the repo's own skills, which still load through settingSources.
+        ...claudePlugins(ctx?.skills),
         includePartialMessages: true,
         permissionMode: options.permissionMode ?? 'default',
         allowDangerouslySkipPermissions: true,

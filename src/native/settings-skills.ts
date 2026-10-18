@@ -34,8 +34,8 @@ export {
  * metadata until Install), a skill's SKILL.md (read only when opened) saved as a new
  * revision, a pasted SKILL.md, a chosen folder, and a GitHub folder pinned to one
  * commit (LKM-285). Every row is a draft: nothing autosaves, and every change is one
- * registry call; the service does every read of a folder and every download. Chats do
- * not load these skills yet (LKM-287).
+ * registry call; the service does every read of a folder and every download. New chats pin
+ * the enabled skills (LKM-287, `src/main/session-skills.ts`).
  */
 
 type Sheet = NonNullable<NativeSheetController['current']>

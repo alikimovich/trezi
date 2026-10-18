@@ -25,6 +25,8 @@ const UNIT = [
   'skills-github',
   'skills-github-import',
   'settings-skills',
+  'skills-projection',
+  'session-skills',
   'runtime-owner',
   'repository-owner',
   'agent-git',
