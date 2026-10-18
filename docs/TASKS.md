@@ -8,8 +8,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Classify all 16 critical/high advisories by reachability in `docs/SECURITY-DEPENDENCIES.md`.
 - [x] Stop react-docgen's Babel from loading the project's browserslist config; regression `test/docgen-browserslist.mjs`.
 - [x] Lockfile-only updates: proxy-addr 2.0.8, fast-uri 3.1.8.
-- [ ] Manager (registry access): re-run `bun scripts/dependency-audit.mjs` and record the after counts in `docs/SECURITY-DEPENDENCIES.md`.
-- [ ] Manager: run the socket unit tests (codex-mcp, trezi-agent-tools, provider-helper-tools) and native verification.
+- [x] Manager (registry access): re-run `bun scripts/dependency-audit.mjs` and record the after counts in `docs/SECURITY-DEPENDENCIES.md` (39 → 30 advisories; 0 critical, 8 high, 20 moderate, 2 low).
+- [x] Manager: run the socket unit tests (codex-mcp, trezi-agent-tools, provider-helper-tools) and native verification (passed, 54/54 native smoke checks).
 - [ ] Follow-up: update browserslist (with its data packages), `@modelcontextprotocol/sdk`, devalue and ip-address once an online audit names compatible fixed versions.
 
 ## Live Publish attribution check (LKM-255)

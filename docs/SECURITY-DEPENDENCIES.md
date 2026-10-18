@@ -62,11 +62,26 @@ except `@modelcontextprotocol/sdk`.
   `package.json` change; no other package moved. Resolved from Bun's registry manifest
   cache (`bun install --lockfile-only --prefer-offline` with a temporary override in a
   scratch copy). `bun install --frozen-lockfile` accepts the result.
-- After counts: **not measured in the worker sandbox**, which cannot reach
-  `registry.npmjs.org` for `bun audit`. Rerun `bun scripts/dependency-audit.mjs` with
-  registry access. The proxy-addr critical is expected to clear, since its HISTORY names
-  the advisory. How many of the eight `fast-uri` advisories (7 high, 1 moderate) 3.1.8
-  clears is for that audit to show.
+- Before and after, measured by the manager with registry access (the worker sandbox
+  could not reach `registry.npmjs.org`, so it could not run `bun audit` itself):
+
+  | | Packages | Advisories | Critical | High | Moderate | Low |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Before (base `1721c95e`) | 320 | 39 | 1 | 15 | 21 | 2 |
+  | After (this change) | 320 | 30 | 0 | 8 | 20 | 2 |
+
+  Command: `TREZI_AUDIT_BASE_SHA=1721c95e… bun scripts/dependency-audit.mjs`, exit 0, zero
+  new advisories. Raw output: `registry-audit.txt` (kept outside the repository, not
+  modified). The two-line update cleared the proxy-addr critical and the seven high plus
+  one moderate `fast-uri` advisories (nine in all).
+- Integrity: the manager fetched the official npm registry metadata for `fast-uri` 3.1.8 and
+  `proxy-addr` 2.0.8 read-only (`registry-integrity.json`, kept outside the repository).
+  Its `dist.integrity` values are identical to the two new `bun.lock` hashes. This replaces
+  the worker's earlier limitation that the hashes came from Bun's manifest cache.
+- The 8 remaining highs are the MCP SDK (1), `browserslist` (2), `devalue` (4) and
+  `ip-address` (1). They stay classified and deferred as in the table above. The tree is
+  not vulnerability-free: 30 advisories remain open, and none of the remaining highs is
+  reachable in Trezi (the `browserslist` one is mitigated in code).
 
 ## Deferred follow-ups
 
