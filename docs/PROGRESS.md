@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-18 — LOCAL-INTEGRATE-CI: skills-projection gets a cold-Swift budget, coverage unchanged
+
+- **Failure.** CI run 39150784454 failed on one suite: `skills-projection` hit the 120 s default after printing four sections. The Bun client section, which includes the LKM-287 128 × 64 regression, never finished.
+- **Measured.** Cold cache alone: the fixture compile (19 service sources) took 25.6 s. The 120-skill library took 10.7 s, the 128 large skills 16.8 s, and the Codex and Gemini projections 4.8 s, for 58.8 s in total. A warm run takes about 33 s. Each create goes through the real `SkillsOwner`: F_FULLFSYNC'd objects and revision, a ledger effect and a synced manifest replace. A small create takes about 88 ms, and a large one rises to about 190 ms as the library grows. In CI the compile also queues behind other tests in the 2-wide swiftc lane, and fsync is slower on the runner, so the suite can exceed 120 s.
+- **Change (test-only).** `skills-projection` now has a 240 s budget in `UNIT_TIMEOUT_MS`. Other suites with cold Swift fixtures (`repository-owner`, `runtime-owner`, `platform-owner`) already use 240 s, and the global default is unchanged. The suite now prints one bounded `stage … at Ns` line per expensive step, so a future timeout shows where it stopped. No assertion, provider, count or real-owner path changed, and no production source changed.
+
 ## 2026-10-18 — LOCAL-INTEGRATE-1: Skills, native previews and security combined for main
 
 - **Inputs.** Main `b764245e`; Skills (LKM-284–288) `de1e51e0`; native previews (LKM-271–277) `c4688504`, based on the older `1ce23c05`; security (LKM-280–282) `4695a58b`. No input deletes or renames a file.
