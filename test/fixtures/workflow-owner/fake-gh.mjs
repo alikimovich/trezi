@@ -65,6 +65,11 @@ if (group === 'pr' && action === 'edit') {
 if (group === 'pr' && action === 'merge') {
   const pr = find(args[2])
   if (!pr || pr.state !== 'OPEN') fail(`Pull request ${args[2]} is not mergeable: it is ${pr?.state ?? 'missing'}`)
+  // Like GitHub: a pinned head that is no longer the PR's head refuses the merge.
+  const pinned = flag('--match-head-commit')
+  if (pinned) state.matchHead = pinned
+  if (pinned && git(pr.remote, 'rev-parse', `refs/heads/${pr.head}`) !== pinned)
+    fail('GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)')
   const tree = git(pr.remote, 'merge-tree', '--write-tree', `refs/heads/${pr.base}`, `refs/heads/${pr.head}`)
   const commit = git(pr.remote, 'commit-tree', tree.split('\n')[0], '-p', `refs/heads/${pr.base}`, '-m', flag('--subject') ?? pr.title)
   git(pr.remote, 'update-ref', `refs/heads/${pr.base}`, commit)

@@ -1020,6 +1020,23 @@ same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.
 
 Settings → General → Agent Git access (`trezi:agent-git-access:v1`) defaults to Managed and is passed to new provider sessions as `AgentOptions.agentGitAccess`. The agent rules describe Trezi's `git_sync_base`, `git_merge_continue`, `git_merge_abort`, `pr_status` and `publish_update` tools. Managed mode refuses raw Git mutations in Claude's PreToolUse hook and Codex's command hook while allowing Git queries; Full permits mutations in the chat worktree and Trezi preserves new raw commit/merge ancestry when landing. Both hooks refuse raw pushes and live-branch rewrites in Full mode. After a PR is created or reused, Publish checks its mergeability; a PR that conflicts with its base offers Resolve with agent in a chat belonging to the published project. A local-vs-remote publish reconcile conflict remains on the manual recovery path.
 
+**Agent PR merge approval (LKM-281).** `publish_merge` never merges on the model's word:
+its arguments carry no confirmation, and a `confirmed: true` is ignored. With Agent can
+merge pull requests off it refuses before reading or pushing anything. Otherwise it
+brings the PR up to the clean live checkout, then shows a host-authored card (the
+ask_user card, LKM-199) naming the repository, PR number and head commit, and returns
+`approvalRequired`. Only the user's Merge answer to that card, delivered by main's
+`agent:respond-question`, records an approval (`src/main/merge-approval.ts`). It is
+bound to chat, live root, repository, PR and head; it is single-use, expires after
+15 minutes, is replaced by a newer card, and is dropped on Don't merge, dismissal,
+merge-off and chat close. The next `publish_merge` takes it, re-checks the target and
+passes the head to the Swift workflow as `expectedHead`. The workflow refuses a dirty
+tree or a different head before committing or pushing, and merges with
+`gh pr merge --match-head-commit`, so GitHub refuses a head that moved after approval.
+ProviderPolicy (TS and Swift) no longer auto-allows `publish_merge` (`HOST_CONFIRMED`):
+it is allowed only in a live foreground session, because the card is the confirmation,
+and it is denied for background agents.
+
 ## Agent file access (LKM-163)
 
 Settings → General → Agent file access (`trezi:agent-file-access:v1`) decides how far

@@ -37,7 +37,7 @@ final class WorkflowOwner: @unchecked Sendable {
     /// method → (required, optional, intent it must carry)
     static let methods: [String: (required: Set<String>, optional: Set<String>, intent: String?)] = [
         "workflows": ([], [], nil), "diagnosis": (["root", "signature"], [], nil),
-        "publish": (["root", "mode", "intent"], ["leases"], "publish"),
+        "publish": (["root", "mode", "intent"], ["leases", "expectedHead"], "publish"),
         "handoff": (["root", "title", "notes", "intent"], ["leases"], "publish"),
         "branchPr": (["root", "branch", "intent"], ["leases"], "publish"),
         "describe": (["workflow"], ["title", "body", "error", "leases"], nil),
@@ -387,7 +387,14 @@ final class WorkflowOwner: @unchecked Sendable {
         case "publish":
             let mode = try body.string("mode")
             guard mode == "merge" || mode == "pr" else { throw ServiceContractFailure.invalidRequest }
-            return object([("mode", .string(JSText(mode)))])
+            // LKM-281: an agent merge the user approved names the exact head they approved.
+            guard body.has("expectedHead") else { return object([("mode", .string(JSText(mode)))]) }
+            let head = try body.string("expectedHead")
+            guard mode == "merge", [40, 64].contains(head.utf8.count),
+                  head.utf8.allSatisfy({ ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x61 && $0 <= 0x66) }) else {
+                throw ServiceContractFailure.invalidRequest
+            }
+            return object([("mode", .string(JSText(mode))), ("expectedHead", .string(JSText(head)))])
         case "handoff":
             guard case .number(let notes)? = body.value("notes"), notes >= 0, notes.rounded() == notes else { throw ServiceContractFailure.invalidRequest }
             let title = try body.string("title")

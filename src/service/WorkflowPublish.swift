@@ -27,6 +27,8 @@ struct WorkflowPublish {
 
     private static func text(_ value: String) -> JSValue { .string(JSText(value)) }
 
+    static let headChanged = "The branch changed after the merge was approved. Nothing was merged; ask for approval again."
+
     private func describe(base: String, head: String, branch: String) -> WorkflowOutcome {
         .describe([("base", Self.text(base)), ("head", Self.text(head)), ("branch", Self.text(branch))])
     }
@@ -66,6 +68,14 @@ struct WorkflowPublish {
                 return .done(Self.published(branch: branch, url: url, notice: notice))
             }
         }
+        // LKM-281: an approved agent merge publishes exactly the head the user approved,
+        // so nothing is committed or pushed when the checkout moved since.
+        if let expected = record.param("expectedHead") {
+            let dirty = (try? context.run(["status", "--porcelain"])) ?? "?"
+            guard dirty.isEmpty, (try? context.run(["rev-parse", "HEAD"])) == expected else {
+                return WorkflowContext.fail(Self.headChanged)
+            }
+        }
         do {
             context.phase("commit")
             try context.begin("commit")
@@ -103,6 +113,8 @@ struct WorkflowPublish {
             try context.done("push", [("action", Self.text(pushed.action)), ("attempts", .number(Double(pushed.attempts))),
                                       ("recoveryRefs", RepositoryOwner.strings(pushed.refs)), ("head", Self.text(sha))])
             try remember([("branch", Self.text(branch)), ("base", Self.text(base)), ("head", Self.text(sha))])
+            // Reconciling a moved remote branch makes a new head nobody approved.
+            if let expected = record.param("expectedHead"), expected != sha { return WorkflowContext.fail(Self.headChanged) }
             // A cancel during the push stops here, before the description is written.
             try context.check()
             return describe(base: base, head: sha, branch: branch)
@@ -144,6 +156,8 @@ struct WorkflowPublish {
                 try context.done("pr", Self.pr(url, number, reused: false))
             }
             if record.param("mode") == "pr" { return .done(Self.published(branch: branch, url: url)) }
+            let expected = record.param("expectedHead")
+            if let expected, expected != head { return WorkflowContext.fail(Self.headChanged) }
             context.phase("merge")
             try context.begin("merge")
             if let number, state(of: String(number)) == "MERGED" {
@@ -151,8 +165,10 @@ struct WorkflowPublish {
             } else {
                 // No --delete-branch: gh would switch the live checkout to the base and
                 // force-delete the work branch with any landing that arrived meanwhile.
+                // An approved agent merge pins GitHub to the approved head (LKM-281).
                 try gh(["pr", "merge", branch, "--squash", "--subject",
-                        number.map { "\(title) (#\($0))" } ?? title, "--body", body])
+                        number.map { "\(title) (#\($0))" } ?? title, "--body", body]
+                       + (expected.map { ["--match-head-commit", $0] } ?? []))
                 context.fault("publish.merge")
                 try context.done("merge", [("adopted", .bool(false))])
             }

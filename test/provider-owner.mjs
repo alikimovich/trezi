@@ -247,6 +247,8 @@ try {
         ['mcp__trezi__open_code', {}],
         ['mcp__trezi__install_skills', {}],
         ['mcp__trezi__workspace_state', {}],
+        // LKM-281: never auto-allowed; only a live foreground chat, whose card asks the user.
+        ['mcp__trezi__publish_merge', {}],
         ['mcp__other__tool', {}],
         ['Edit', { file_path: `${WT}/src/a.ts` }],
         ['Edit', { file_path: '.trezi/notes.json' }],
@@ -283,7 +285,8 @@ try {
         ['chat_island', {}],
         ['preview_screenshot', {}],
         ['rm_rf', {}],
-        ['compose_project_ui', { spec: 'x'.repeat(LIMITS.toolArgs) }]
+        ['compose_project_ui', { spec: 'x'.repeat(LIMITS.toolArgs) }],
+        ['publish_merge', {}]
       ]) {
         await step(`authorize fg ${tool}`, () => o.authorize(fg, tool, args))
         await step(`authorize bg ${tool}`, () => o.authorize(bg, tool, args))
@@ -314,6 +317,7 @@ try {
       await step('question after close', () => o.permission(fg, 'AskUserQuestion', {}))
       await step('read after close', () => o.permission(fg, 'Read', {}))
       await step('authorize after close', () => o.authorize(fg, 'preview_location', {}))
+      await step('merge after close', () => o.permission(fg, 'mcp__trezi__publish_merge', {}))
     }
     const normal = JSON.parse(
       JSON.stringify(log)
