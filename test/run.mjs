@@ -289,6 +289,11 @@ const UNIT_TIMEOUT_MS = {
   'native-settings-layout': 240_000,
   'native-composer-layout': 240_000,
   'native-chat-latest-settle': 240_000,
+  // LKM-287: a cold compile of 19 service sources (26 s alone), then 248 creates through
+  // the real SkillsOwner, each F_FULLFSYNC'd objects plus a ledger-backed manifest
+  // replace (~88-190 ms each, growing with the library), for the 128 × 64 regression.
+  // 59 s cold alone, 33 s warm; it passed four sections and then hit 120 s in CI.
+  'skills-projection': 240_000,
   'keychain-rebuild': 300_000,
   // LKM-271: four compiles of the preview host and a fixture (6 s warm) outside the lane.
   'swift-preview': 240_000,

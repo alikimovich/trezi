@@ -40,9 +40,14 @@ const space = scratchSpace('trezi-skills-projection-')
 const { binary, start, profile, registry, scratch } = space
 const digest = (text) => createHash('sha256').update(text).digest('hex')
 const catalogOf = (path) => JSON.parse(readFileSync(join(path, 'catalog.json'), 'utf8'))
+// One line per expensive stage (never per skill), so a timeout log shows where the time went.
+const began = Date.now()
+const stage = (label) =>
+  console.log(`SKILLS-PROJECTION stage ${label} at ${((Date.now() - began) / 1000).toFixed(1)}s`)
 
 try {
   compileSkills(binary)
+  stage('fixture compiled')
 
   // --- Layout per provider: catalog, read-only files, the Claude plugin manifest only for Claude ---
   {
@@ -351,6 +356,7 @@ try {
     const many = []
     for (let i = 0; i < 120; i++) many.push(`skill-${String(i).padStart(3, '0')}`)
     for (const name of many) await skills.create(files(name, {}, `Does ${name} ${'x'.repeat(300)}`))
+    stage('120 skills created')
     setSessionSkillsSource(() => skills)
     const claude = await projectSessionSkills('trezi-1', 'claude')
     assert.equal(claude.note, undefined)
@@ -388,10 +394,12 @@ try {
       for (let f = 1; f < 64; f++)
         extra[`references/${'r'.repeat(60)}/ref-${String(f).padStart(2, '0')}.md`] = `# ${f}\n`
       await skills.create(files(name, extra, description))
+      if (i % 32 === 31) stage(`${i + 1} large skills created`)
     }
     setSessionSkillsSource(() => skills)
     for (const provider of ['codex', 'gemini']) {
       const projection = await projectSessionSkills('trezi-large', provider)
+      stage(`large library projected for ${provider}`)
       assert.equal(projection.note, undefined, 'nothing omitted')
       assert.ok(projection.path, `${provider}: a projection was handed over`)
       const bytes = statSync(join(projection.path, 'catalog.json')).size

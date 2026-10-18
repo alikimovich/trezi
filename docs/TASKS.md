@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Repair the PR283 skills-projection CI timeout (LOCAL-INTEGRATE-CI)
+
+- [x] Measure the suite per stage: a cold fixture compile plus 248 fsync-bound creates through the real owner for the 128 × 64 regression. Add bounded stage lines to `test/skills-projection.mjs`.
+- [x] Give `skills-projection` the 240 s per-suite budget its peers with cold Swift fixtures use (`UNIT_TIMEOUT_MS`). Every assertion, provider, count and the real owner stay unchanged.
+- [ ] Manager: push to PR283 and confirm the CI unit tier passes.
+
 ## Integrate Trezi Skills, native previews and security for main (LOCAL-INTEGRATE-1)
 
 - [x] Combine main `b764245e` with Skills `de1e51e0`, native previews `c4688504` and security `4695a58b` without dropping any feature or test; resolve `smoke-groups.ts` semantically (main's 600 s full-suite base plus the previews' core budget).
