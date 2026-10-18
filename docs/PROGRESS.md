@@ -2,6 +2,44 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-285 Trezi Skills 2/4: safe pinned GitHub import and curated recommendations
+
+- **Service-owned fetch.**
+  - A new `github` method on the `skills` pipe: `{url, ref?, subpath?, replacing?}`.
+  - The service resolves the ref, or the default branch, to a full commit through the GitHub API before downloading. It then fetches the archive by that commit and requires the archive's pax global `comment` to name the same commit.
+  - A tree address with a slash ref is resolved for every split; more than one match is refused as ambiguous.
+  - Redirects are refused, never followed. The HTTP session has no cookies, cache or credential store, and cancels every auth challenge except server trust, so no keychain item is looked up.
+  - Files: `SkillsImport.swift`, `SkillsGitHub.swift`, `SkillsHTTP.swift`.
+- **Why a custom tar reader.**
+  - `SkillsArchive.swift` streams the one gzip member through zlib with bounds: 64 MB compressed, 256 MB expanded, 20 000 entries, 64 KB of extended headers, plus the package limits.
+  - It refuses zip-slip, absolute/NUL/non-UTF-8 names, links, specials, executables, duplicate or case-colliding paths, header tricks, trailing data and truncation.
+  - Nothing is extracted to disk.
+  - zlib is used, not Apple's Compression framework: Compression consumes the input greedily, so it cannot prove that exactly the 8-byte trailer, and no second member, follows.
+- **Skills-only scope.** Extension filtering is not enough (recorded decision), so `SkillsScope.swift` refuses:
+  - `!`-backtick dynamic shell in Markdown
+  - `SKILL.md` frontmatter beyond name/description/license/compatibility/metadata, so `allowed-tools`, `hooks`, `context`, `agent` and `model` are refused, as are YAML flow mappings
+  - hook, MCP, plugin, settings and dependency manifests
+  - Codex `agents/openai.yaml` dependencies
+
+  Scripts stay inert text; nothing runs.
+- **Provenance and license.**
+  - `SkillSource.github` also records the requested `ref` and the `licenseFile` the evidence came from.
+  - The license comes from the folder's own `LICENSE*`, the `SKILL.md` `license:` or the root `LICENSE*`. A root license is copied in as attribution.
+  - An unrecognised license is `NOASSERTION` and a missing one is `null`, with `skillLicenseStatus` for honest display.
+  - `replacing` must name a skill from the same repository folder.
+- **No partial install.** A fetch writes nothing and commits through `install` in one ledger commit after validation. Cancel works only before the commit and only from the same connection.
+  - The import's pipe reply is deferred: `DomainChannel` skips an empty reply and the owner sends it later.
+  - Other bounds: at most 2 imports (`busy`), a 120 s deadline (`deadlineExceeded`), and `close` stops running fetches.
+- **Bun client.** `importGitHub(input, {signal})` runs outside the serial queue, and an abort sends `cancel`.
+- **Recommendations** (`src/shared/skills-recommendations.ts`, metadata only):
+  - The four evidence-backed entries in LKM-288's `skills-catalog.ts`, kept byte-identical to avoid a merge conflict: frontend-design (Apache-2.0), vercel react-best-practices and composition-patterns (MIT frontmatter), and AvdLee SwiftUI (MIT).
+  - `recommendationMismatch` shows a moved folder, renamed skill or changed license instead of hiding it.
+  - `web-design-guidelines` is excluded: it has no license and fetches mutable content at use.
+- **Tests:**
+  - `test/skills-github.mjs` (offline): addresses, archives, bombs, scope, parity.
+  - `test/skills-github-import.mjs`: a loopback GitHub over `node:http` covering pins, ambiguity, redirects, 403/404, hostile content leaving the registry byte-identical, cancel, deadline, close, busy, duplicate, `replacing`, and the Bun client with abort.
+- **Not verified live.** The worker sandbox had no GitHub network, so no recommendation was imported for real. Their current paths and licenses still need an operator import.
+
 ## 2026-10-17 — LKM-284 review repair: pinned revisions survive history trimming
 
 - Review found no test for the recorded "edit/remove/history trimming before resuming the oldest snapshot" case. `test/skills-registry-boundaries.mjs` now runs it against the real owner: pin session `old` on v1 and `mid` on v2, make enough edits that `SkillsPlan.appending` (`maxHistory` = 64) drops v1, v2 and v3 from `list`'s history, then remove, restart (sweep), purge and restart again.

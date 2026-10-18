@@ -43,8 +43,15 @@ export type SkillSource =
       subpath: string
       /** The resolved full commit ID the files were taken at. */
       commit: string
-      /** SPDX identifier or license name as found, null when none was found. */
+      /**
+       * SPDX identifier, `NOASSERTION` when a license was found but not recognised, null
+       * when none was found (see `skillLicenseStatus`).
+       */
       license: string | null
+      /** GitHub import (LKM-285): the branch, tag or commit that was asked for. */
+      ref?: string
+      /** GitHub import: repository path of the license evidence (a file or `SKILL.md`). */
+      licenseFile?: string
     }
 
 export type SkillHistoryKind = 'create' | 'import' | 'install' | 'update' | 'edit'
@@ -143,7 +150,78 @@ export interface SkillFileChange {
   text: string | null
 }
 
-/** Every pipe method, its mode and body. Ledger mutations need `expectedRevision`. */
+/**
+ * `github` (LKM-285): a public repository folder fetched at the commit its ref resolves
+ * to. `url` is `https://github.com/<owner>/<repo>` (with optional `ref` and `subpath`)
+ * or `https://github.com/<owner>/<repo>/tree/<ref>/<folder>` (without them).
+ * `replacing` names a skill imported from the same folder to update in place.
+ */
+export interface SkillGitHubInput {
+  url: string
+  ref?: string
+  subpath?: string
+  replacing?: string
+}
+export interface SkillGitHubImport extends SkillMutation {
+  skill: string
+  skillRevision: string
+  name: string
+  source: Extract<SkillSource, { kind: 'github' }>
+  /** Hidden entries of the folder that were not read. */
+  skipped: string[]
+  /** The repository license file copied into the package for attribution, if any. */
+  attribution: string | null
+}
+
+/** Mirrors `SkillsArchiveLimits` and `SkillsGitHubFetcher` in `src/service/`. */
+export const SKILLS_GITHUB_LIMITS = {
+  compressedBytes: 64 * 1024 * 1024,
+  expandedBytes: 256 * 1024 * 1024,
+  entries: 20_000,
+  headerBytes: 64 * 1024,
+  deadlineSeconds: 120,
+  maxImports: 2
+} as const
+
+/** Licenses an imported skill may be used and shared under with attribution only. */
+const PERMISSIVE = new Set([
+  '0BSD',
+  'Apache-2.0',
+  'BSD-2-Clause',
+  'BSD-3-Clause',
+  'CC-BY-4.0',
+  'CC0-1.0',
+  'ISC',
+  'MIT',
+  'MIT-0',
+  'Unlicense'
+])
+const COPYLEFT = new Set([
+  'AGPL-3.0',
+  'CC-BY-SA-4.0',
+  'GPL-2.0',
+  'GPL-3.0',
+  'LGPL-2.1',
+  'LGPL-3.0',
+  'MPL-2.0'
+])
+/**
+ * How to present an imported skill's license: `unknown` (none found, or `NOASSERTION`)
+ * and `restricted` (e.g. non-commercial) must be shown as such, never as permissive.
+ */
+export function skillLicenseStatus(
+  license: string | null
+): 'permissive' | 'copyleft' | 'restricted' | 'unknown' {
+  if (!license || license === 'NOASSERTION') return 'unknown'
+  if (PERMISSIVE.has(license)) return 'permissive'
+  if (COPYLEFT.has(license)) return 'copyleft'
+  return 'restricted'
+}
+
+/**
+ * Every pipe method, its mode and body. Ledger mutations need `expectedRevision`;
+ * `fetch` methods are mutations without it, answered when the fetch ends.
+ */
 export interface SkillsMethods {
   list: { mode: 'read'; body: Record<string, never>; result: SkillsList }
   read: {
@@ -179,6 +257,13 @@ export interface SkillsMethods {
     body: { session: string }
     result: { session: string; released: boolean }
   }
+  github: { mode: 'fetch'; body: SkillGitHubInput; result: SkillGitHubImport }
+  /** Cancels a `github` import of this connection by its operation ID, until it commits. */
+  cancel: {
+    mode: 'fetch'
+    body: { operation: string }
+    result: { operation: string; cancelled: boolean }
+  }
 }
 export type SkillsMethod = keyof SkillsMethods
 export const SKILLS_METHOD_MODES: { [M in SkillsMethod]: SkillsMethods[M]['mode'] } = {
@@ -195,7 +280,9 @@ export const SKILLS_METHOD_MODES: { [M in SkillsMethod]: SkillsMethods[M]['mode'
   restore: 'ledger',
   purge: 'ledger',
   snapshot: 'session',
-  release: 'session'
+  release: 'session',
+  github: 'fetch',
+  cancel: 'fetch'
 }
 
 /** Agent Skills names: 1–64 of a-z, 0-9 and '-', not starting or ending with '-'. */

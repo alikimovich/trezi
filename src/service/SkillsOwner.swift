@@ -23,17 +23,33 @@ actor SkillsOwner: PipeDomainOwner {
     let ledger: OperationLedger?
     /// Milliseconds since the epoch.
     let now: @Sendable () -> Double
-    private var failure: ServiceFailure? = fail(.unavailable, "Skills are not open yet.", retryable: true)
-    private var closed = false
+    private(set) var failure: ServiceFailure? = fail(.unavailable, "Skills are not open yet.", retryable: true)
+    private(set) var closed = false
     private var externalChange = false
     private var tail: Task<Void, Never>?
+    // GitHub import (LKM-285, `SkillsImport.swift`): fetches run outside `serial` (only
+    // their final `install` is serialised), are answered later through `deliver`, and
+    // stay cancellable until they start committing.
+    let github: SkillsGitHubEndpoints
+    let archiveLimits: SkillsArchiveLimits
+    let importDeadline: TimeInterval
+    var fetcher: SkillsGitHubFetcher?
+    private(set) var deliver: (@Sendable (Data) -> Void)?
+    struct Import { let connection: String; let task: Task<Data, Never>; var committing = false, expired = false }
+    var imports: [String: Import] = [:]
 
-    init(store: SkillsStore, ledger: OperationLedger?, now: @escaping @Sendable () -> Double = { (Date().timeIntervalSince1970 * 1000).rounded(.down) }) {
+    init(store: SkillsStore, ledger: OperationLedger?, now: @escaping @Sendable () -> Double = { (Date().timeIntervalSince1970 * 1000).rounded(.down) },
+         github: SkillsGitHubEndpoints = .github, archiveLimits: SkillsArchiveLimits = SkillsArchiveLimits(),
+         importDeadline: TimeInterval = SkillsGitHubFetcher.deadline) {
         self.store = store; self.ledger = ledger; self.now = now
+        self.github = github; self.archiveLimits = archiveLimits; self.importDeadline = importDeadline
     }
 
-    func onChange(_ handler: @escaping @Sendable (Data) -> Void) {}
-    func close() { closed = true }
+    func onChange(_ handler: @escaping @Sendable (Data) -> Void) { deliver = handler }
+    func close() {
+        closed = true
+        for job in imports.values where !job.committing { job.task.cancel() }
+    }
 
     /// Settles a write a crash cut off, then removes what no record or pin keeps.
     func open() async {
@@ -129,7 +145,13 @@ actor SkillsOwner: PipeDomainOwner {
                 result: .failed(Self.fail(code, code == .unauthorized ? "Skills are app-scoped; a scoped request is refused." : "Invalid skills request.")), snapshot: nil)
         }
         if closed { return Self.reply(id: frame.id, frame: frame, result: .failed(Self.stopping), snapshot: nil) }
-        return await serial { await self.answer(frame, request) }
+        switch request {
+        case .github(let url, let ref, let subpath, let replacing):
+            return await startImport(frame, SkillsImportRequest(url: url, ref: ref, subpath: subpath, replacing: replacing))
+        case .cancel(let operation):
+            return Self.reply(id: frame.id, frame: frame, result: .succeeded(cancelImport(operation, connection: frame.connection)), snapshot: nil)
+        default: return await serial { await self.answer(frame, request) }
+        }
     }
 
     private func answer(_ frame: PipeFrame, _ request: SkillsRequest) async -> Data {
@@ -283,7 +305,7 @@ actor SkillsOwner: PipeDomainOwner {
     }
 
     /// The manifest as committed, without adopting anything (for reply snapshots).
-    private func committed() async -> State? {
+    func committed() async -> State? {
         guard let ledger, let snapshot = await ledger.snapshot(domain: Self.domain), let data = try? manifestBytes(),
               snapshot.value["digest"]?.string == PreferencesDisk.digest(data), let manifest = try? SkillsManifest.decode(data) else { return nil }
         return State(revision: snapshot.revision, digest: PreferencesDisk.digest(data), manifest: manifest)

@@ -16,18 +16,24 @@ enum SkillsRequest: Sendable {
     case enable(skill: String, enabled: Bool)
     case providers(skill: String, providers: SkillProviders)
     case remove(skill: String), restore(skill: String), purge(skill: String)
-    /// Service-internal only (GitHub import, LKM-284 task 3): never parsed from Bun.
+    /// Service-internal only: the GitHub import's commit, never parsed from Bun.
     case install(files: [SkillFile], source: SkillSource, replacing: String?)
     // Session pins: idempotent per session key, outside the ledger.
     case snapshot(session: String), release(session: String)
+    // GitHub import (LKM-285): a bounded fetch that ends in one `install`, and its
+    // cancellation by the import's operation ID. Neither carries `expectedRevision`:
+    // the fetch commits at whatever revision is current when it finishes.
+    case github(url: String, ref: String?, subpath: String?, replacing: String?)
+    case cancel(operation: String)
 
     static let reads: Set<String> = ["list", "read", "reference", "pins"]
     static let ledger: Set<String> = ["create", "import", "edit", "enable", "providers", "remove", "restore", "purge"]
     static let sessions: Set<String> = ["snapshot", "release"]
+    static let fetches: Set<String> = ["github", "cancel"]
 
     var mutatesManifest: Bool {
         switch self {
-        case .create, .importFolder, .edit, .enable, .providers, .remove, .restore, .purge, .install: return true
+        case .create, .importFolder, .edit, .enable, .providers, .remove, .restore, .purge, .install, .github: return true
         default: return false
         }
     }
@@ -58,8 +64,20 @@ enum SkillsRequest: Sendable {
             guard SkillSnapshot.validSession(value) else { throw invalid }
             return value
         }
-        let read = Self.reads.contains(method), ledger = Self.ledger.contains(method), sessions = Self.sessions.contains(method)
-        guard read || ledger || sessions, mode == (read ? "read" : "mutation"), expectsRevision == ledger else { throw invalid }
+        func uuid(_ key: String) throws -> String {
+            let id = try text(key)
+            guard UUID(uuidString: id) != nil, id == id.lowercased() else { throw invalid }
+            return id
+        }
+        func optional(_ key: String, limit: Int) throws -> String? {
+            guard names.contains(key) else { return nil }
+            let value = try text(key)
+            guard !value.isEmpty, value.utf8.count <= limit else { throw invalid }
+            return value
+        }
+        let read = Self.reads.contains(method), ledger = Self.ledger.contains(method)
+        let sessions = Self.sessions.contains(method), fetch = Self.fetches.contains(method)
+        guard read || ledger || sessions || fetch, mode == (read ? "read" : "mutation"), expectsRevision == ledger else { throw invalid }
         switch method {
         case "list": try exactly([]); self = .list
         case "read":
@@ -109,6 +127,12 @@ enum SkillsRequest: Sendable {
         case "purge": try exactly(["skill"]); self = .purge(skill: try skill())
         case "snapshot": try exactly(["session"]); self = .snapshot(session: try session())
         case "release": try exactly(["session"]); self = .release(session: try session())
+        case "github":
+            try exactly(["url"], optional: ["ref", "subpath", "replacing"])
+            guard let url = try optional("url", limit: SkillsGitHubAddress.maxURL) else { throw invalid }
+            self = .github(url: url, ref: try optional("ref", limit: 255), subpath: try optional("subpath", limit: SkillsLimits.maxPath),
+                           replacing: names.contains("replacing") ? try uuid("replacing") : nil)
+        case "cancel": try exactly(["operation"]); self = .cancel(operation: try uuid("operation"))
         default: throw invalid
         }
     }

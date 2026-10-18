@@ -75,11 +75,13 @@ struct SkillsPlan {
     }
 
     /// A new source revision (e.g. a later GitHub commit): it becomes the current and
-    /// the installed revision; earlier ones stay in the history.
+    /// the installed revision; earlier ones (local edits too) stay in the history. Only a
+    /// skill imported from the same repository folder is updated (LKM-285).
     private func update(_ skill: String, _ files: [SkillFile], _ source: SkillSource, _ manifest: inout SkillsManifest) throws -> [String: ServiceJSON] {
         guard let index = manifest.skills.firstIndex(where: { $0.id == skill }) else { throw Refusal.notFound }
         var record = manifest.skills[index]
         guard record.active else { throw Refusal.conflict("Restore the skill before updating it.") }
+        guard record.source.sameFolder(as: source) else { throw Refusal.conflict("This skill was not imported from that GitHub folder.") }
         let meta = try SkillsPackage.validate(files)
         guard manifest.active(named: meta.name, except: skill) == nil else { throw Refusal.conflict("A skill named \(meta.name) already exists.") }
         let (id, revision) = try save(files)

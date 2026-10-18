@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { Revision, ServiceFailure } from '../shared/service-contract/types'
 import {
+  SKILLS_GITHUB_LIMITS,
   SKILLS_METHOD_MODES,
   SKILLS_SERVICE,
   type SkillBody,
   type SkillFileChange,
   type SkillFileInput,
+  type SkillGitHubImport,
+  type SkillGitHubInput,
   type SkillMutation,
   type SkillProviders,
   type SkillReference,
@@ -59,6 +62,11 @@ export interface SkillsRegistry {
   purge(skill: string): Promise<SkillsChange>
   snapshot(session: string): Promise<SkillSnapshot>
   release(session: string): Promise<{ session: string; released: boolean }>
+  /** GitHub import (LKM-285): resolves, downloads and checks in the service, then installs. */
+  importGitHub(
+    input: SkillGitHubInput,
+    options?: { signal?: AbortSignal }
+  ): Promise<SkillGitHubImport & { list: SkillsList | null }>
 }
 
 /**
@@ -88,7 +96,12 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
     request.resolve(message)
   })
 
-  const send = (method: SkillsMethod, body: object, expectedRevision?: Revision) => {
+  const send = (
+    method: SkillsMethod,
+    body: object,
+    expectedRevision?: Revision,
+    { operationID = randomUUID(), wait = timeout } = {}
+  ) => {
     const id = ++sequence
     return new Promise<ServiceMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -99,7 +112,7 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
             'Skills did not answer: the Trezi service did not reply. Nothing was changed locally.'
           )
         )
-      }, timeout)
+      }, wait)
       pending.set(id, { resolve, timer })
       link.sendService({
         service: SKILLS_SERVICE,
@@ -107,7 +120,7 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
         request: {
           connection,
           requestID: randomUUID(),
-          operationID: randomUUID(),
+          operationID,
           scope: {},
           mode: SKILLS_METHOD_MODES[method] === 'read' ? 'read' : 'mutation',
           ...(expectedRevision ? { expectedRevision } : {}),
@@ -152,6 +165,32 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
         return { ...payload, list: message.snapshot ?? null }
       }
     })
+  // Not queued: a fetch can take minutes and the service answers it out of order, so
+  // reads and edits keep flowing. Aborting sends `cancel`; the import still answers
+  // (`cancelled`, or its result when it was already committing).
+  const importGitHub = async (
+    input: SkillGitHubInput,
+    { signal }: { signal?: AbortSignal } = {}
+  ): Promise<SkillGitHubImport & { list: SkillsList | null }> => {
+    const operation = randomUUID()
+    const abort = () => {
+      send('cancel', { operation }).catch(() => {})
+    }
+    if (signal?.aborted)
+      throw new SkillsError('cancelled', 'The import was cancelled. Nothing was installed.')
+    signal?.addEventListener('abort', abort, { once: true })
+    try {
+      const message = await send('github', input, undefined, {
+        operationID: operation,
+        wait: Math.max(timeout, (SKILLS_GITHUB_LIMITS.deadlineSeconds + 30) * 1000)
+      })
+      const payload = settled(message) as SkillGitHubImport
+      if (message.snapshot) known = message.snapshot.revision
+      return { ...payload, list: message.snapshot ?? null }
+    } finally {
+      signal?.removeEventListener('abort', abort)
+    }
+  }
 
   return {
     list: () => serial(list),
@@ -167,6 +206,7 @@ export function serviceSkills(link: SkillsLink, timeout = 30_000): SkillsRegistr
     restore: (skill) => mutate('restore', { skill }),
     purge: (skill) => mutate('purge', { skill }),
     snapshot: (session) => call('snapshot', { session }),
-    release: (session) => call('release', { session })
+    release: (session) => call('release', { session }),
+    importGitHub
   }
 }

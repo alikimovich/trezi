@@ -20,6 +20,17 @@ installs (`WorkflowTools.swift`) and the managed-browser environment and hooks a
   against Swift), `SKILLS_METHOD_MODES` and the validators.
 - `src/native/skills-service.ts`: Bun's client, `serviceSkills(link)`.
 
+Trezi Skills 2/4 (LKM-285) adds the pinned GitHub import and the curated
+recommendations ([GitHub import](#github-import-lkm-285)):
+
+- `src/service/SkillsImport.swift`: the `github`/`cancel` methods on the owner.
+- `src/service/SkillsGitHub.swift`: the address parser and the fetcher.
+- `src/service/SkillsHTTP.swift`: bounded, credential-free GETs.
+- `src/service/SkillsArchive.swift`: the streaming `tar.gz` reader.
+- `src/service/SkillsScope.swift`: the skills-only content scope and license evidence.
+- `src/shared/skills-recommendations.ts`: the import side of `SKILL_RECOMMENDATIONS`
+  (`src/shared/skills-catalog.ts`, shared with LKM-288).
+
 ## Wire contract (v1)
 
 Frames use the pipe envelope shared with memory and workspace:
@@ -48,25 +59,32 @@ Parsing is strict:
 | `purge` | ledger | `{skill}` | only after `remove`; pinned revisions stay readable |
 | `snapshot` | session | `{session}` | creates the session's pins once (`created`), reports unreadable ones in `skipped` |
 | `release` | session | `{session}` | `{session, released}` |
+| `github` | fetch | `{url, ref?, subpath?, replacing?}` | `SkillGitHubImport`: `SkillMutation` plus `name`, the pinned `source`, `skipped`, `attribution`; answered when the fetch ends |
+| `cancel` | fetch | `{operation}` | `{operation, cancelled}`; only this connection's import, only before it commits |
 
-On the wire, "ledger" and "session" methods both use `mode: "mutation"`, but only
+On the wire, "ledger", "session" and "fetch" methods all use `mode: "mutation"`, but only
 ledger methods carry `expectedRevision`. A stale revision returns `conflict` with
 `currentRevision`. Ledger replies carry the committed list as their `snapshot`.
 Failure codes:
 
-- `invalidRequest`
-- `unauthorized` (a scoped frame, or an import of links, hard links or special files)
-- `conflict` (a stale revision or base, a taken name, purge before remove, snapshot capacity)
+- `invalidRequest` (also a malformed or ambiguous GitHub address, an archive over a bound)
+- `unauthorized` (a scoped frame, or an import of links, hard links or special files; for
+  GitHub also a redirect, a wrong commit pin, a hostile archive or out-of-scope content)
+- `conflict` (a stale revision or base, a taken name, purge before remove, snapshot
+  capacity, a running operation ID, `replacing` a skill from another source)
 - `notFound`
 - `recoveryRequired` (damaged data, a linked registry folder, or a ledger that cannot be reconciled)
 - `ioFailure` (retryable)
-- `busy`
-- `unavailable`
+- `busy` (also two GitHub imports already running; retryable)
+- `unavailable` (also GitHub unreachable, rate-limited or answering nonsense; retryable)
+- `cancelled`, `deadlineExceeded` (GitHub import only; nothing was installed)
 
 `serviceSkills` runs calls one at a time and remembers the last revision. For a
 `conflict` that names `currentRevision`, it retries the same intent up to twice. That
 is safe because every plan re-checks its own preconditions, such as `edit`'s `base`,
 so a real conflict still surfaces. A timeout rejects with `deadlineExceeded`.
+`importGitHub(input, {signal})` is not queued (a fetch can take minutes and its reply
+arrives out of order, matched by frame `id`); aborting the signal sends `cancel`.
 
 ## Storage and invariants
 
@@ -124,9 +142,92 @@ so a real conflict still surfaces. A timeout rejects with `deadlineExceeded`.
   declarations are stored as inert text. Stored objects are not executable. The
   registry never writes a project, a provider's home or a grant, and never runs a command.
 
+## GitHub import (LKM-285)
+
+An explicit `github` request is the only way GitHub content enters the registry.
+Nothing is preinstalled, and the curated recommendations are metadata only.
+
+1. **Address.** `SkillsGitHubAddress.parse` accepts `https://github.com/<owner>/<repo>`
+   (optional `.git`, `ref`, `subpath`) or `…/tree/<ref>/<folder>`. Only `A-Z a-z 0-9 . _ - /`
+   may follow the host. It refuses:
+   - another scheme or host, credentials, a port, a query, a fragment, percent-encoding
+     or a backslash
+   - empty, `.`, `..` or hidden components
+   - `HEAD`, an abbreviated commit, and git-invalid ref components
+
+   A tree address cannot say where a ref containing `/` ends, so every split is
+   resolved. More than one match is refused as ambiguous.
+2. **Pin.** The ref, or the default branch from `GET /repos/<o>/<r>`, is resolved with
+   `GET /repos/<o>/<r>/commits/<ref>` (`Accept: application/vnd.github.sha`) to a full
+   commit. A full-commit ref must resolve to itself. The archive is downloaded by that
+   commit (`codeload …/tar.gz/<commit>`), never by a branch. Its pax global header
+   `comment` (what `git archive` writes) must name the same commit, or the import is
+   refused.
+3. **HTTP** (`SkillsHTTP`):
+   - one ephemeral session: no cookies, cache or credential store
+   - every authentication challenge except server trust is cancelled, so no keychain
+     item or client identity is ever looked up
+   - redirects are not followed, and a 3xx is refused
+   - HTTPS only (plain `127.0.0.1` exists only for the test endpoints)
+   - a byte cap per response, from `Content-Length` and while streaming
+4. **Archive** (`SkillsArchive`). Exactly one gzip member, inflated by the system zlib
+   in 64 KB chunks with its CRC-32 and length checked. Then a ustar/pax/GNU stream with
+   checksummed headers. It refuses:
+   - absolute paths, traversal, NUL, non-UTF-8 or overlong names, and paths outside the
+     single top folder
+   - sparse or unknown entry types
+   - in the imported folder: symlinks, hard links, devices, FIFOs, executable modes,
+     duplicate or case-colliding paths, and a file whose ancestor is a file
+   - base-256 sizes, a second global header, entries after the end marker, trailing
+     data and truncation
+
+   Only the requested folder is kept; hidden entries are skipped. The bounds apply to
+   the whole archive: compressed 64 MB, expanded 256 MB, 20 000 entries and 64 KB of
+   extended headers (`SKILLS_GITHUB_LIMITS`). The package limits then apply to the folder.
+5. **Scope** (`SkillsScope`). Skills-only content; nothing a provider could run,
+   connect or be granted. It refuses:
+   - dynamic preprocessing (`!` followed by a backtick) in any Markdown file
+   - `SKILL.md` frontmatter beyond `name`, `description`, `license`, `compatibility`
+     and `metadata`, which means `allowed-tools`, `hooks`, `context`, `agent`, `model`
+     and similar are refused, as are flow mappings
+   - hook, MCP, plugin, settings and dependency manifests (`package.json`,
+     `requirements.txt`, `Makefile`, …)
+   - a Codex `agents/openai.yaml` that declares `dependencies` (tools, MCP servers)
+
+   Scripts are kept as inert, non-executable text and are never run. Untrusted skill
+   text never becomes policy or a permission; normal tool approval still applies.
+6. **License.** Evidence comes from the folder's own `LICENSE*` file, then the
+   `SKILL.md` `license:` field, then the repository root `LICENSE*`. A root license is
+   copied into the package as `attribution`. An unrecognised license is `NOASSERTION`
+   and a missing one is `null`. `skillLicenseStatus` classes it as permissive,
+   copyleft, restricted or unknown, and is shown honestly, never inferred.
+7. **Commit.** A fetch writes nothing. Once it is validated, the import becomes
+   uncancellable and stores the package through `install(files:source:replacing:)`
+   in one ledger commit. A failure or cancellation at any earlier step leaves the
+   registry byte-identical. `source` records `repository`, `subpath`, `commit`,
+   `license`, the requested `ref` and `licenseFile`. `replacing` must name a skill
+   imported from the same repository folder.
+8. **Bounds.** At most 2 imports run at once (`busy`). A running operation ID is
+   `conflict`. Each import has a 120 s deadline (`deadlineExceeded`). `close` stops
+   running fetches.
+
+Recommendations (`SKILL_RECOMMENDATIONS` with `SKILL_RECOMMENDATION_IMPORTS`):
+
+| ID | Category | Source | License evidence |
+| --- | --- | --- | --- |
+| `frontend-design` | UI craft | `anthropics/skills` `skills/frontend-design` | Apache-2.0 (the folder's `LICENSE.txt`) |
+| `vercel-react-best-practices` | React | `vercel-labs/agent-skills` `skills/react-best-practices` | MIT (`SKILL.md` frontmatter) |
+| `vercel-composition-patterns` | design systems | `vercel-labs/agent-skills` `skills/composition-patterns` | MIT (`SKILL.md` frontmatter) |
+| `swiftui-expert-skill` | SwiftUI | `AvdLee/SwiftUI-Agent-Skill` | MIT (repository `LICENSE`) |
+
+`recommendationImport` builds the `github` request on `main`. The service pins it.
+`recommendationMismatch` then reports a moved folder, a renamed skill or a changed
+license instead of hiding it. `skills/web-design-guidelines` is left out on purpose:
+it declares no license and fetches mutable guidelines on every use.
+
 ## Seams for the follow-up tasks
 
-- **2/4, providers.** When a provider session starts, its owner calls
+- **Providers.** When a provider session starts, its owner calls
   `SkillsOwner.pin(session:)` with the chat's session key, which is idempotent. It
   offers only pins whose `providers[name]` is true. It reads content with
   `read {skill, session}` and `reference {skill, revision: pin.revision, path}`. A
@@ -135,19 +236,17 @@ so a real conflict still surfaces. A timeout rejects with `deadlineExceeded`.
   decision: a Trezi tool, generated context, or materialising files into a per-session
   temp folder outside the project and the user's provider homes. It must not install
   anything into a project or a global skills folder.
-- **3/4, GitHub import.** The service-side fetcher resolves the commit, reads the
-  files and the license, then calls
-  `SkillsOwner.install(files:source:replacing:)`:
-  - `source` is `{kind: github, repository, subpath, commit (40 or 64 hex), license}`.
-  - `replacing` updates an existing skill to the fetched revision and clears `modified`.
-
-  Bun cannot claim a source: `create` refuses a `source` field. The downloaded files
-  are not executed.
-- **4/4, Settings UI.** Use `serviceSkills` from `src/native/skills-service.ts`:
+- **2/4, GitHub import (LKM-285, done).** See [GitHub import](#github-import-lkm-285). Bun
+  still cannot claim a source: `create` refuses a `source` field, and only the
+  service's own fetch reaches `install`.
+- **Settings UI.** Use `serviceSkills` from `src/native/skills-service.ts`:
   `list` for rows (`modified`, `enabled`, `removed`, `providers`, `source`), `read`
   and `reference` for lazy previews, and `edit` with the shown revision as `base`.
   Show `conflict` as "changed elsewhere, reload". `recoveryRequired` needs a recovery
-  affordance; until that is designed, the registry stays read-blocked.
+  affordance; until that is designed, the registry stays read-blocked. Offer
+  recommendations with `importGitHub(recommendationImport(entry))`, show
+  `skillLicenseStatus(source.license)` and any `recommendationMismatch`, and pass an
+  `AbortSignal` for Cancel.
 
 ## Tests
 
@@ -156,6 +255,9 @@ so a real conflict still surfaces. A timeout rejects with `deadlineExceeded`.
 | `test/skills-registry.mjs` | contract parity, create/list/read, revisions and the `modified` flag, enable/providers, remove/restore/purge, snapshot stability across edit/remove/purge/restart, GitHub provenance, Bun's client |
 | `test/skills-registry-safety.mjs` | injected write failures, SIGKILL at each commit step, receipts, damaged data, malicious paths and files, strict frames, concurrent writers, isolation from two repositories and two provider homes |
 | `test/skills-registry-boundaries.mjs` | corrupt counters, snapshot capacity, the directory-entry budget |
+| `test/skills-github.mjs` | GitHub limits/modes/recommendation parity; address parsing; archive reading, license evidence, hostile archives (zip-slip, links, specials, executables, header tricks, truncation, trailing data, bombs) and the skills-only scope (dynamic shell, tool/hook/agent frontmatter, manifests, Codex dependencies), offline |
+| `test/skills-github-import.mjs` | the import over a loopback GitHub (`node:http`, port 0): the commit pin and provenance, ambiguous/missing/short/mismatched refs, bad pins, redirects, 403/404, hostile content with no partial install, size bound, cancel (same and other connection), deadline, close, busy, duplicate operation, `replacing`, Bun's client and abort |
 
-All three drive the real owner and ledger in `test/fixtures/skills-owner/main.swift`
-on disposable profiles.
+All of them drive the real owner and ledger in `test/fixtures/skills-owner/main.swift`
+on disposable profiles. Archives come from `test/helpers/skills-archive.mjs`; no test
+reaches the network.
