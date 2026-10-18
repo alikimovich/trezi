@@ -24,6 +24,7 @@ const UNIT = [
   'skills-registry-safety',
   'skills-github',
   'skills-github-import',
+  'settings-skills',
   'runtime-owner',
   'repository-owner',
   'agent-git',

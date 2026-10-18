@@ -257,6 +257,82 @@ importable.
 license instead of hiding it. `skills/web-design-guidelines` is left out on purpose:
 it declares no license and fetches mutable guidelines on every use.
 
+## Settings → Skills (LKM-286)
+
+This section is 3/4. It builds on the reviewed LKM-288 pane. The state and every
+registry call are in `src/native/settings-skills.ts`. The rows and buttons of each
+view are in `src/native/settings-skills-views.ts`. Both are a section of the Settings
+window, wrapped like the Dreamer and Claude panes. They use only the client above, and
+the UI never reads a folder or the network.
+
+- **Overview.** One `list` gives the Installed, Recommended and Removed rows. The
+  window opens at once with "Loading skills…".
+  - A failed `list` (for example `recoveryRequired` or a timeout) shows "Skills are
+    unavailable" and the service's message instead of an empty library.
+  - The footer has Add Skill…, Import Folder… and Import from GitHub….
+  - While an import runs, a "Importing <repo>…" row is shown.
+- **Detail.** `read` runs only when a skill is opened.
+  - The editor's row ID carries the skill and revision
+    (`skill-body:<id>@<revision>`), so each revision gets a fresh draft.
+  - Save Revision is `edit` with the shown revision as `base`. A `conflict` keeps the
+    draft and shows the service's message.
+  - Turn Off/On is `setEnabled`. Remove and Restore are `remove`/`restore`. Purge is
+    not offered.
+  - Source says "Added manually", "Imported from a folder" (a `manual` source whose
+    first revision is `import`) or `GitHub: <repo>/<folder>`.
+  - A GitHub skill also shows its pinned 40-character commit, with the ref that was
+    asked for and a note that Trezi never updates it by itself. Its License row
+    follows `skillLicenseStatus` and names the file the license was found in.
+  - The Chats row says "Not offered yet" until 4/4. It explains that a chat keeps the
+    revision it started with and a saved edit reaches only chats started later.
+- **Add.** A pasted SKILL.md goes to `create` with a single `SKILL.md` file. The
+  service's validation message is shown as is.
+- **Import Folder.** The host's open panel (`pick`) only names a folder. The service
+  reads and checks it with `importFolder` and keeps its own copy. Skipped hidden
+  entries are named in the message. In the native smoke, `nativeSkills.pickFolder`
+  replaces the panel.
+- **Import from GitHub.** The form has an address, an optional ref and an optional
+  folder. `importGitHub` runs in the background, so the window stays usable.
+  - Cancel Import aborts its `AbortSignal`, and the service ends it with nothing
+    installed.
+  - Success opens the new skill. Its message names the repository, the short commit
+    and the ref.
+  - A failure keeps the form and its values and starts with "Nothing was installed:".
+  - The pane runs one import at a time.
+- **Recommendations.** `src/shared/skills-catalog.ts` is read-only metadata. A row
+  reads Installed or Removed only when a library skill comes from that
+  repository folder. The group starts with "Not installed until you choose Install".
+  - Install appears only when the folder is not in the library. It runs
+    `importGitHub(recommendationImport(entry))`, and any `recommendationMismatch` is
+    named in the message.
+  - Entries that cannot be imported show "Can’t be installed" with
+    `unavailableReason`, and a disabled Install. A disabled action is refused by
+    `NativeSheetController.action` too, and Swift draws it with `.disabled`.
+- **Legacy installer.** The agent tools keep their names, so provider policies and
+  their golden file do not change.
+  - `install_skills` now answers that skills are managed in Settings → Skills and that
+    nothing was installed. It never reaches the workflow owner. Skills already in a
+    project's or the user's `.claude/skills` are neither migrated nor deleted.
+  - `list_recommended_skills` lists this catalog.
+  - The prompt rules tell agents to suggest, not install.
+- **Native evidence.** The native smoke `skills-settings` (`src/native/smoke-skills.ts`
+  and `src/native/smoke-skills-imports.ts`, group `settings`) runs on the disposable
+  profile. It covers add, open, save, on/off and remove/restore, then a folder import,
+  a GitHub import pinned to tag `v1`, a recommendation install and a disabled Install.
+  `src/native/skills-verification.ts` checks every capture against the rendered window.
+- **Loopback GitHub for tests.** `scripts/start-native.mjs --test` starts
+  `src/native/skills-github-fixture.ts` on port 0 and passes the port as
+  `TREZI_SKILLS_GITHUB_FIXTURE_PORT`. `SkillsGitHubEndpoints.fixture` exists only in a
+  binary compiled with `-D TREZI_TEST_PROFILE` (`profileDefines('test')` in
+  `scripts/native-swift.mjs`, i.e. `TREZI_BUILD_PROFILE=test`); a release build has no
+  such code and no environment variable can redirect it. Even a test build uses the
+  fixture only when `TREZI_NATIVE_TEST_DIR` is set and the profile is inside it. Every
+  other launch uses github.com, with the production host and commit-pin checks intact.
+  The native smoke therefore exercises the real service importer (hostname, archive and
+  commit-pin logic, vetting, registry writes) against a loopback HTTP server; it does
+  not reach github.com. `test/skills-github-import.mjs` covers the importer's
+  refusals, and `test/native-build-cache.mjs` asserts the define is test-only.
+
 ## Seams for the follow-up tasks
 
 - **Providers.** When a provider session starts, its owner calls
@@ -271,15 +347,10 @@ it declares no license and fetches mutable guidelines on every use.
 - **2/4, GitHub import (LKM-285, done).** See [GitHub import](#github-import-lkm-285). Bun
   still cannot claim a source: `create` refuses a `source` field, and only the
   service's own fetch reaches `install`.
-- **Settings UI.** Use `serviceSkills` from `src/native/skills-service.ts`:
-  `list` for rows (`modified`, `enabled`, `removed`, `providers`, `source`), `read`
-  and `reference` for lazy previews, and `edit` with the shown revision as `base`.
-  Show `conflict` as "changed elsewhere, reload". `recoveryRequired` needs a recovery
-  affordance; until that is designed, the registry stays read-blocked. Offer
-  importable recommendations with `importGitHub(recommendationImport(entry))` (show
-  `unavailableReason` for the others), show
-  `skillLicenseStatus(source.license)` and any `recommendationMismatch`, and pass an
-  `AbortSignal` for Cancel.
+- **3/4, Settings UI (LKM-286, done).** See
+  [Settings → Skills](#settings--skills-lkm-286). `recoveryRequired` still has no
+  recovery affordance: the pane shows the service's message, and the registry stays
+  read-blocked until one is designed.
 
 ## Tests
 
@@ -290,6 +361,7 @@ it declares no license and fetches mutable guidelines on every use.
 | `test/skills-registry-boundaries.mjs` | corrupt counters, snapshot capacity, the directory-entry budget |
 | `test/skills-github.mjs` | GitHub limits/modes/recommendation parity; address parsing; archive reading, license evidence, hostile archives (zip-slip, links, specials, executables, header tricks, truncation, trailing data, bombs) and the skills-only scope (dynamic shell, tool/hook/agent frontmatter, manifests, Codex dependencies), offline |
 | `test/skills-github-import.mjs` | the import over a loopback GitHub (`node:http`, port 0): the commit pin and provenance, ambiguous/missing/short/mismatched refs, bad pins, redirects, 403/404, hostile content with no partial install, size bound, cancel (same and other connection), deadline, close, busy, duplicate operation, `replacing`, Bun's client and abort |
+| `test/settings-skills.mjs` | the Settings pane through the sheet runtime, over `src/native/skills-github-fixture.ts`: catalog metadata, overview, lazy read, add, save as revision, edit conflict, on/off, remove/restore, folder import (cancelled picker, skipped entries, a file refused), a pinned GitHub import, a failed one keeping the form, cancel, recommendation install and a disabled Install, an unavailable service, and the rendered-evidence checks (`test/helpers/settings-skills-evidence.mjs`) |
 
 All of them drive the real owner and ledger in `test/fixtures/skills-owner/main.swift`
 on disposable profiles. Archives come from `test/helpers/skills-archive.mjs`; no test

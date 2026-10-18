@@ -20,13 +20,14 @@ const control = (id, selected) => ({
 const sections = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
+  { id: 'skills', label: 'Skills', symbol: 'book.closed' },
   { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' },
   { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' }
 ]
 const sidebar = (section) => ({
   section,
   sections: structuredClone(sections),
-  sidebarRows: 4,
+  sidebarRows: 5,
   sidebarSelected: sections.findIndex((s) => s.id === section),
   windowTitle: sections.find((s) => s.id === section).label,
   sourceList: structuredClone(sourceList),
@@ -155,6 +156,7 @@ for (const width of [680, 780]) {
     text: [
       'General',
       'Al Providers',
+      'Skills',
       'Experimental',
       'Dreamer',
       'General',
@@ -171,6 +173,7 @@ for (const width of [680, 780]) {
     text: [
       'General',
       'AI Providers',
+      'Skills',
       'Experimental',
       'Dreamer',
       'Al Providers',
@@ -194,7 +197,8 @@ for (const width of [680, 780]) {
   )
   reject(general, 'general', (e) => e.controls.push(control('projectUi', 'Off')))
   reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Experimental')))
-  reject(general, 'general', (e) => (e.text[6] = 'New chats start with'))
+  reject(general, 'general', (e) => (e.text[7] = 'New chats start with'))
+  reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Skills')))
   reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Dreamer')))
   reject(general, 'general', (e) => (e.sidebarSelected = 1))
   reject(general, 'general', (e) => (e.foreground = false))
@@ -210,9 +214,9 @@ for (const width of [680, 780]) {
   misread.text = misread.text.map((line) => line.replace('Default model', 'Detault model'))
   assert.ok(misread.text.includes('Detault model'))
   assertSectionEvidence(misread, width, 'general')
-  reject(misread, 'general', (e) => (e.text[5] = 'Model'))
-  reject(misread, 'general', (e) => (e.text[5] = 'Detault'))
-  reject(misread, 'general', (e) => (e.text[5] = 'Detault models'))
+  reject(misread, 'general', (e) => (e.text[6] = 'Model'))
+  reject(misread, 'general', (e) => (e.text[6] = 'Detault'))
+  reject(misread, 'general', (e) => (e.text[6] = 'Detault models'))
 }
 // Verbatim OCR lines from the manager's earlier foreground Off capture (the pixels
 // render "UI"/"AI" correctly; Vision returned "Ul"/"Al"). Must still pass.

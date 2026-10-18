@@ -66,6 +66,7 @@
     "test:skills-registry": "bun test/skills-registry.mjs",
     "test:skills-registry-boundaries": "bun test/skills-registry-boundaries.mjs",
     "test:skills-registry-safety": "bun test/skills-registry-safety.mjs",
+    "test:settings-skills": "bun test/settings-skills.mjs",
     "test:runtime-owner": "bun test/runtime-owner.mjs",
     "test:repository-owner": "bun test/repository-owner.mjs",
     "test:git-messages": "bun test/git-messages.mjs",

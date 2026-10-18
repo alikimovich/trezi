@@ -338,13 +338,11 @@ export function treziRules(opts?: {
       `  flat box-shadow reads as cheap/AI-generated; use the layered stack.`,
       `See the fluid-typography, color-scales, and depth-shadows skills.`,
       ``,
-      `## Offering craft skills (list_recommended_skills / install_skills)`,
-      `When a design task would benefit from established craft you don't have (animation/interaction`,
-      `taste, color systems, frontend polish), you may call \`list_recommended_skills\` to see the`,
-      `curated catalog and then OFFER the user a relevant pack via \`install_skills\`. Never install`,
-      `silently — describe the pack, then let the user choose whether to install and whether to put`,
-      `it in project scope (\`<repo>/.claude/skills/\`) or user scope (\`~/.claude/skills/\`). Only`,
-      `catalog packs can be installed; newly installed skills take effect on the next message/session.`
+      `## Suggesting craft skills (list_recommended_skills)`,
+      `When a design task would benefit from established craft you don't have (frontend polish,`,
+      `React or SwiftUI patterns), you may call \`list_recommended_skills\` to see the recommended`,
+      `skills and SUGGEST a relevant one. You cannot install skills: the user adds them to Trezi's`,
+      `library in Settings → Skills.`
     )
   }
 

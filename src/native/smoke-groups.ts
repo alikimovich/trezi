@@ -93,6 +93,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'build-badge': ['sidebar'],
   sheets: ['settings'],
   dreamer: ['settings'],
+  'skills-settings': ['settings'],
   'security-session': ['settings'],
   'native-chat': ['chat'],
   'history-menu': ['chat'],

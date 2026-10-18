@@ -1,0 +1,174 @@
+{
+  "busy": false,
+  "actions": [
+    "skill-add",
+    "skill-folder",
+    "skill-github"
+  ],
+  "width": 680,
+  "sidebarRows": 5,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "sourceList": {
+    "row": {
+      "height": 28,
+      "fontSize": 13,
+      "iconLeading": 2,
+      "labelGap": 7,
+      "iconWidth": 16,
+      "iconHeight": 16
+    },
+    "style": "sourceList",
+    "rowSizeStyle": 0,
+    "indentation": 0,
+    "transparentScroll": true,
+    "behavior": "sidebar",
+    "highlight": 1,
+    "fullHeight": true,
+    "rowHeight": 28
+  },
+  "sidebarMaximum": 260,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "sidebarSelected": 2,
+  "sidebarFocused": false,
+  "section": "skills",
+  "controls": [],
+  "trafficLightsOverSidebar": true,
+  "sidebarFullHeight": true,
+  "height": 760,
+  "sidebarCollapsible": false,
+  "sidebarMinimum": 180,
+  "fullSizeContent": true,
+  "sidebarWidth": 192,
+  "disabledActions": [],
+  "foreground": true,
+  "message": "Added trezi-smoke-notes.",
+  "sections": [
+    {
+      "symbol": "gearshape",
+      "label": "General",
+      "id": "general"
+    },
+    {
+      "id": "providers",
+      "label": "AI Providers",
+      "symbol": "sparkles"
+    },
+    {
+      "symbol": "book.closed",
+      "id": "skills",
+      "label": "Skills"
+    },
+    {
+      "id": "experimental",
+      "label": "Experimental",
+      "symbol": "testtube.2"
+    },
+    {
+      "id": "dreamer",
+      "label": "Dreamer",
+      "symbol": "moon.stars"
+    }
+  ],
+  "editors": [],
+  "fields": [
+    "skill:6cc6d8df-bf94-4def-a461-5872f5574a7c",
+    "recommendations-note",
+    "recommendation:frontend-design",
+    "recommendation:vercel-react-best-practices",
+    "recommendation:vercel-composition-patterns",
+    "recommendation:swiftui-view-refactor",
+    "recommendation:swiftui-expert-skill"
+  ],
+  "windowTitle": "Skills",
+  "minimumHeight": 760,
+  "minimumWidth": 680,
+  "values": {
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "recommendation:vercel-composition-patterns": "Vercel · MIT",
+    "recommendation:frontend-design": "Anthropic · Apache-2.0",
+    "recommendation:swiftui-view-refactor": "Peter Steinberger · MIT",
+    "skill:6cc6d8df-bf94-4def-a461-5872f5574a7c": "On · Manual",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "recommendations-note": "",
+    "projectUi": "false",
+    "claudePlugins": "false",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "providerFallback": "on",
+    "recommendation:swiftui-expert-skill": "Not importable",
+    "agentFileAccess": "full",
+    "dreamerStart": "off",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "recommendation:vercel-react-best-practices": "Not importable",
+    "engine": "agent",
+    "agentMerge": "true",
+    "dreamerToken": ""
+  },
+  "rows": [
+    {
+      "contained": true,
+      "enabled": true,
+      "title": "Edit…",
+      "action": "skill-open:6cc6d8df-bf94-4def-a461-5872f5574a7c",
+      "label": "Edit trezi-smoke-notes",
+      "hitTarget": true,
+      "frame": "{{592, 539}, {58, 24}}"
+    },
+    {
+      "enabled": true,
+      "title": "Details…",
+      "contained": true,
+      "frame": "{{574, 299}, {76, 24}}",
+      "label": "Details Frontend Design",
+      "hitTarget": true,
+      "action": "skill-recommendation:frontend-design"
+    },
+    {
+      "title": "Details…",
+      "action": "skill-recommendation:vercel-react-best-practices",
+      "contained": true,
+      "hitTarget": true,
+      "frame": "{{574, 258}, {76, 24}}",
+      "enabled": true,
+      "label": "Details React Best Practices"
+    },
+    {
+      "contained": true,
+      "action": "skill-recommendation:vercel-composition-patterns",
+      "title": "Details…",
+      "frame": "{{574, 189}, {76, 24}}",
+      "hitTarget": true,
+      "label": "Details Composition Patterns",
+      "enabled": true
+    },
+    {
+      "action": "skill-recommendation:swiftui-view-refactor",
+      "frame": "{{574, 60}, {76, 24}}",
+      "enabled": true,
+      "hitTarget": true,
+      "contained": true,
+      "label": "Details SwiftUI View Refactor",
+      "title": "Details…"
+    },
+    {
+      "enabled": true,
+      "hitTarget": true,
+      "title": "Details…",
+      "action": "skill-recommendation:swiftui-expert-skill",
+      "label": "Details SwiftUI Expert",
+      "frame": "{{574, 19}, {76, 24}}",
+      "contained": true
+    }
+  ],
+  "text": [],
+  "captureWidth": 1360,
+  "captureHeight": 1520
+}

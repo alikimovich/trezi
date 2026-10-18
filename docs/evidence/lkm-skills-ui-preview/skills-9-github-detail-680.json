@@ -1,0 +1,130 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "skill-status",
+    "skill-source",
+    "skill-commit",
+    "skill-license",
+    "skill-revision",
+    "skill-chats",
+    "skill-body:f43bf815-5212-4db5-b2f7-3ee06a982a8c@61616908d3245ee904fc7f67e59460fd9b76dacfbf32de95eb3e81927ca3c698",
+    "skill-files"
+  ],
+  "message": "Added trezi-smoke-github from trezi-fixtures/skills at 5a1e7c0 (“v1”).",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "gearshape"
+    },
+    {
+      "id": "providers",
+      "label": "AI Providers",
+      "symbol": "sparkles"
+    },
+    {
+      "label": "Skills",
+      "id": "skills",
+      "symbol": "book.closed"
+    },
+    {
+      "symbol": "testtube.2",
+      "label": "Experimental",
+      "id": "experimental"
+    },
+    {
+      "symbol": "moon.stars",
+      "id": "dreamer",
+      "label": "Dreamer"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "skill-body:f43bf815-5212-4db5-b2f7-3ee06a982a8c@61616908d3245ee904fc7f67e59460fd9b76dacfbf32de95eb3e81927ca3c698": "---\nname: trezi-smoke-github\ndescription: Fixture skill imported from a pinned GitHub tag by the Trezi native smoke.\nlicense: MIT\n---\n\n# GitHub fixture\n\nRead references/usage.md before changing layout code.\n",
+    "dreamerToken": "",
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "skill-commit": "5a1e7c0ffee5a1e7c0ffee5a1e7c0ffee5a1e7c0",
+    "skill-status": "On",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "skill-files": "2 files",
+    "skill-license": "MIT",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "projectUi": "false",
+    "skill-revision": "61616908",
+    "claudePlugins": "false",
+    "skill-source": "GitHub: trezi-fixtures/skills/skills/trezi-smoke-github",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "providerFallback": "on",
+    "agentFileAccess": "full",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "dreamerStart": "off",
+    "agentMerge": "true",
+    "engine": "agent",
+    "skill-chats": "Not offered yet"
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "rowSizeStyle": 0,
+    "row": {
+      "height": 28,
+      "iconHeight": 16,
+      "iconWidth": 16,
+      "iconLeading": 2,
+      "fontSize": 13,
+      "labelGap": 7
+    },
+    "indentation": 0,
+    "rowHeight": 28,
+    "behavior": "sidebar",
+    "fullHeight": true,
+    "transparentScroll": true,
+    "style": "sourceList",
+    "highlight": 1
+  },
+  "editors": [
+    {
+      "focused": false,
+      "frame": "{{231, 1}, {418, 218}}",
+      "contained": true,
+      "hitTarget": true,
+      "text": "---\nname: trezi-smoke-github\ndescription: Fixture skill imported from a pinned GitHub tag by the Trezi native smoke.\nlicense: MIT\n---\n\n# GitHub fixture\n\nRead references/usage.md before changing layout code.\n"
+    }
+  ],
+  "actions": [
+    "skill-back",
+    "skill-toggle",
+    "skill-remove",
+    "skill-save"
+  ],
+  "width": 680,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1360,
+  "captureHeight": 1520
+}

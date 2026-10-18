@@ -159,7 +159,8 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                         workspace = WorkspaceChannel(owner: WorkspaceOwner(
                             disk: PreferencesDisk(path: profile.appendingPathComponent("workspace.json").path), ledger: ledger), send: send)
                         memory = MemoryChannel(owner: MemoryOwner(store: MemoryStore(profile: profile), ledger: ledger), send: send)
-                        skills = SkillsChannel(owner: SkillsOwner(store: SkillsStore(profile: profile), ledger: ledger), send: send)
+                        let github = SkillsGitHubEndpoints.fixture(environment: requested.environment, profile: requested.profile) ?? .github
+                        skills = SkillsChannel(owner: SkillsOwner(store: SkillsStore(profile: profile), ledger: ledger, github: github), send: send)
                         runtime = RuntimeOwner(options: RuntimeOwner.Options(environment: requested.environment,
                             watchdog: CommandLine.arguments[0], journal: journal), send: send)
                         let bun = child?.pid ?? 0, host = session.connection.processIdentifier

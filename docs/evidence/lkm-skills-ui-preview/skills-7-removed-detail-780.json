@@ -1,0 +1,112 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "skill-status",
+    "skill-source",
+    "skill-revision",
+    "skill-chats"
+  ],
+  "message": "",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "gearshape"
+    },
+    {
+      "symbol": "sparkles",
+      "label": "AI Providers",
+      "id": "providers"
+    },
+    {
+      "symbol": "book.closed",
+      "id": "skills",
+      "label": "Skills"
+    },
+    {
+      "label": "Experimental",
+      "symbol": "testtube.2",
+      "id": "experimental"
+    },
+    {
+      "id": "dreamer",
+      "symbol": "moon.stars",
+      "label": "Dreamer"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "dreamerToken": "",
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "skill-status": "Removed Oct 17, 2026",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "skill-revision": "d208f389",
+    "projectUi": "false",
+    "claudePlugins": "false",
+    "skill-source": "Added manually",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "providerFallback": "on",
+    "agentFileAccess": "full",
+    "dreamerStart": "off",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "engine": "agent",
+    "agentMerge": "true",
+    "skill-chats": "Not offered yet"
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "fullHeight": true,
+    "indentation": 0,
+    "rowHeight": 28,
+    "highlight": 1,
+    "row": {
+      "iconLeading": 2,
+      "fontSize": 13,
+      "labelGap": 7,
+      "iconWidth": 16,
+      "iconHeight": 16,
+      "height": 28
+    },
+    "rowSizeStyle": 0,
+    "style": "sourceList",
+    "transparentScroll": true,
+    "behavior": "sidebar"
+  },
+  "editors": [],
+  "actions": [
+    "skill-back",
+    "skill-restore"
+  ],
+  "width": 780,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1560,
+  "captureHeight": 1520
+}

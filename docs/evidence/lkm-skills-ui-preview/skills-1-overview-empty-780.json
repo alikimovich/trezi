@@ -1,0 +1,165 @@
+{
+  "busy": false,
+  "actions": [
+    "skill-add",
+    "skill-folder",
+    "skill-github"
+  ],
+  "width": 780,
+  "sidebarRows": 5,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "sourceList": {
+    "highlight": 1,
+    "rowHeight": 28,
+    "indentation": 0,
+    "behavior": "sidebar",
+    "transparentScroll": true,
+    "rowSizeStyle": 0,
+    "fullHeight": true,
+    "row": {
+      "labelGap": 7,
+      "fontSize": 13,
+      "height": 28,
+      "iconWidth": 16,
+      "iconLeading": 2,
+      "iconHeight": 16
+    },
+    "style": "sourceList"
+  },
+  "sidebarMaximum": 260,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "sidebarSelected": 2,
+  "sidebarFocused": true,
+  "section": "skills",
+  "controls": [],
+  "trafficLightsOverSidebar": true,
+  "sidebarFullHeight": true,
+  "height": 760,
+  "sidebarCollapsible": false,
+  "sidebarMinimum": 180,
+  "fullSizeContent": true,
+  "sidebarWidth": 192,
+  "disabledActions": [],
+  "foreground": true,
+  "message": "",
+  "sections": [
+    {
+      "label": "General",
+      "symbol": "gearshape",
+      "id": "general"
+    },
+    {
+      "id": "providers",
+      "label": "AI Providers",
+      "symbol": "sparkles"
+    },
+    {
+      "label": "Skills",
+      "symbol": "book.closed",
+      "id": "skills"
+    },
+    {
+      "symbol": "testtube.2",
+      "id": "experimental",
+      "label": "Experimental"
+    },
+    {
+      "id": "dreamer",
+      "symbol": "moon.stars",
+      "label": "Dreamer"
+    }
+  ],
+  "editors": [],
+  "fields": [
+    "skills-status",
+    "recommendations-note",
+    "recommendation:frontend-design",
+    "recommendation:vercel-react-best-practices",
+    "recommendation:vercel-composition-patterns",
+    "recommendation:swiftui-view-refactor",
+    "recommendation:swiftui-expert-skill"
+  ],
+  "windowTitle": "Skills",
+  "minimumHeight": 760,
+  "minimumWidth": 680,
+  "values": {
+    "activityAutoOpen": "problems",
+    "agentGitAccess": "managed",
+    "recommendation:vercel-react-best-practices": "Not importable",
+    "recommendation:vercel-composition-patterns": "Vercel · MIT",
+    "dreamerSchedule": "off",
+    "providerFallback": "on",
+    "recommendation:swiftui-expert-skill": "Not importable",
+    "workspaceIdle": "7",
+    "recommendation:frontend-design": "Anthropic · Apache-2.0",
+    "default": "last-used",
+    "agentFileAccess": "full",
+    "agentMerge": "true",
+    "dreamerStart": "off",
+    "autoFixCI": "ask",
+    "dreamerUrl": "",
+    "dreamerProject": "",
+    "connections": "None",
+    "projectUi": "false",
+    "quitDontAsk": "false",
+    "claudePlugins": "false",
+    "engine": "agent",
+    "recommendations-note": "",
+    "recommendation:swiftui-view-refactor": "Peter Steinberger · MIT",
+    "dreamerToken": "",
+    "skills-status": "",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)"
+  },
+  "rows": [
+    {
+      "contained": true,
+      "enabled": true,
+      "title": "Details…",
+      "action": "skill-recommendation:frontend-design",
+      "label": "Details Frontend Design",
+      "hitTarget": true,
+      "frame": "{{674, 359}, {76, 24}}"
+    },
+    {
+      "enabled": true,
+      "title": "Details…",
+      "action": "skill-recommendation:vercel-react-best-practices",
+      "frame": "{{674, 290}, {76, 24}}",
+      "label": "Details React Best Practices",
+      "hitTarget": true,
+      "contained": true
+    },
+    {
+      "label": "Details Composition Patterns",
+      "enabled": true,
+      "hitTarget": true,
+      "contained": true,
+      "title": "Details…",
+      "frame": "{{674, 221}, {76, 24}}",
+      "action": "skill-recommendation:vercel-composition-patterns"
+    },
+    {
+      "frame": "{{674, 152}, {76, 24}}",
+      "title": "Details…",
+      "contained": true,
+      "hitTarget": true,
+      "enabled": true,
+      "label": "Details SwiftUI View Refactor",
+      "action": "skill-recommendation:swiftui-view-refactor"
+    },
+    {
+      "enabled": true,
+      "title": "Details…",
+      "hitTarget": true,
+      "action": "skill-recommendation:swiftui-expert-skill",
+      "label": "Details SwiftUI Expert",
+      "frame": "{{674, 68}, {76, 24}}",
+      "contained": true
+    }
+  ],
+  "text": [],
+  "captureWidth": 1560,
+  "captureHeight": 1520
+}

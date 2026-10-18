@@ -158,7 +158,9 @@ after pulling a dependency update.
 
 Codex, custom endpoints, and experimental Gemini discover project and user skills
 in `.agents/skills`, their native `.codex/skills` or `.gemini/skills`, and
-`.claude/skills` for compatibility with Trezi-installed packs. Codex honors
+`.claude/skills` for compatibility with packs Trezi installed before LKM-286 (agents
+now only suggest skills; the user adds them to Trezi's library in Settings → Skills,
+and existing folders are left in place). Codex honors
 `CODEX_HOME` for its user skills. Project entries shadow same-named user entries;
 symlinked installs and Codex system skills are included. Menus populate before
 the first turn, independently of authentication. Invoking `/name` supplies the
@@ -985,7 +987,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |
 | `workspace_state`, `prepare_conflict_resolution` | — | routed | chat-isolation state (worktree, parked batch) |
-| `install_skills` | routed | — | the workflow owner |
+| `install_skills` | routed | — | nothing: retired, it answers with the Settings → Skills redirect (LKM-286) |
 | `spring_to_css`, `check_contrast`, `fluid_clamp`, `color_scale`, `layered_shadow`, `line_height`, `list_recommended_skills` | in the helper | — | nothing (pure) |
 
 **Proof.** `test/provider-helper-tools.mjs` (unit) runs the real helper entry under the

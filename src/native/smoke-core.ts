@@ -63,6 +63,7 @@ import {
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
+import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
@@ -535,6 +536,16 @@ export async function runNativeCoreSmoke(
       run: async () => {
         assert.ok(nativeDreamer.current, 'Dreamer controller')
         await checkDreamerReview(host, nativeDreamer.current, artifacts)
+      }
+    },
+    {
+      name: 'skills-settings',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkSkillsSettings(host, artifacts)
+      },
+      cleanup: async () => {
+        await restoreSkillsSettings(host)
       }
     },
     {

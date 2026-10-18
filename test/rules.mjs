@@ -391,8 +391,11 @@ assert(
 assert(!/line_height/.test(r), 'default rendering omits line_height')
 // R8b (skills install) — offer-to-install skill packs rides with previewTools too.
 assert(/list_recommended_skills/.test(withTools), 'previewTools: teaches list_recommended_skills')
-assert(/install_skills/.test(withTools), 'previewTools: teaches install_skills')
-assert(!/install_skills/.test(r), 'default rendering omits install_skills')
+// LKM-286: agents suggest; the user installs in Settings → Skills.
+assert(!/install_skills/.test(withTools), 'previewTools: no longer teaches install_skills')
+assert(/Settings → Skills/.test(withTools), 'previewTools: points at Settings → Skills')
+assert(!/\.claude\/skills/.test(withTools), 'previewTools: no project/user scope install')
+assert(!/list_recommended_skills/.test(r), 'default rendering omits the skill tools')
 
 // R9 (Codex Trezi control) — workspace tools appear only for a backend that
 // actually wires the local MCP server. The generic/Gemini prompt must not claim

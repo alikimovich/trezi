@@ -76,12 +76,13 @@ const action = (name, values = {}) =>
   sheets.action({ id: sheets.current.state.id, action: name, values })
 const field = (id) => sheets.current.state.fields.find((f) => f.id === id)
 await settings.open()
-// One sidebar window: General, AI Providers (inline, no separate sheet) and Experimental.
+// One sidebar window: General, AI Providers (inline, no separate sheet), Skills and Experimental.
 assert.deepEqual(
   sheets.current.state.sections.map((s) => [s.id, s.label, s.symbol]),
   [
     ['general', 'General', 'gearshape'],
     ['providers', 'AI Providers', 'sparkles'],
+    ['skills', 'Skills', 'book.closed'],
     ['experimental', 'Experimental', 'testtube.2'],
     ['dreamer', 'Dreamer', 'moon.stars']
   ]
