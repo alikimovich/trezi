@@ -1,0 +1,892 @@
+{
+  "ran": true,
+  "trezi": {
+    "app": "Trezi 0.1.0 (build 1095, 2ac96f5)",
+    "stamp": {
+      "version": "0.1.0",
+      "build": "1095",
+      "commit": "2ac96f5",
+      "sha": "2ac96f5d6771fa449def0767a8a5f5a03d997d4d",
+      "branch": "agent-os/lkm-277-22588d96",
+      "dirty": true,
+      "tag": ""
+    },
+    "head": "2ac96f5d6771fa449def0767a8a5f5a03d997d4d",
+    "branch": "agent-os/lkm-277-22588d96",
+    "uncommittedFiles": 11
+  },
+  "original": {
+    "path": "/Users/panda/dev/scraib-xcode",
+    "commit": "580051800eb3ec014b8a9e40a200aa5718e75398",
+    "status": "?? DATABASE_MIGRATION_AUDIT.md",
+    "before": {
+      "path": "/Users/panda/dev/scraib-xcode",
+      "files": 487,
+      "entries": 747,
+      "contentSha256": "9ac1c2e37309fcba02c47d3d1b22b64b329b01320d53ed954ca670508752dcdc",
+      "statSha256": "e97d11da5eb5e949ce5e27a49c077d614aa65852dc686c8c1af4495d4bcb77e1",
+      "statOnly": [],
+      "leaveOut": []
+    },
+    "after": {
+      "path": "/Users/panda/dev/scraib-xcode",
+      "files": 487,
+      "entries": 747,
+      "contentSha256": "9ac1c2e37309fcba02c47d3d1b22b64b329b01320d53ed954ca670508752dcdc",
+      "statSha256": "e97d11da5eb5e949ce5e27a49c077d614aa65852dc686c8c1af4495d4bcb77e1",
+      "statOnly": [],
+      "leaveOut": []
+    },
+    "unchanged": true
+  },
+  "captures": [
+    "scraib-xcode-floating-loader.png",
+    "scraib-xcode-component.png",
+    "scraib-xcode-catalog.png",
+    "scraib-xcode-interaction-idle.png",
+    "scraib-xcode-interaction.png",
+    "scraib-xcode-edited.png",
+    "scraib-xcode-error.png",
+    "scraib-xcode-recovered.png"
+  ],
+  "copy": {
+    "path": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/Scraib Xcode Copy",
+    "leftOut": [
+      ".git",
+      ".claude"
+    ],
+    "contentSha256": "c1c8b868c0d1701235029080ea7c1790c75373d95d912c29b583f7d6efa3c2b4",
+    "files": 88,
+    "previewFiles": [
+      "scraib/SetupView.swift",
+      "scraib/SettingsView.swift",
+      "scraib/FloatingLoaderManager.swift",
+      "scraib/CustomInstructionsView.swift",
+      "scraib/WelcomeView.swift",
+      "scraib/ContentView.swift",
+      "scraib/MainNavigationView.swift"
+    ]
+  },
+  "firstBuild": {
+    "status": "ready",
+    "generation": 1,
+    "stale": false,
+    "shown": "",
+    "message": "Built 33 previews from scraib. 1 more listed with the reason they are not shown.",
+    "durationMs": 24236,
+    "problems": [],
+    "previews": [
+      "component:scraib.AppRulesListView",
+      "component:scraib.AppRuleDetailView",
+      "preview:scraib/ContentView.swift#1",
+      "component:scraib.ContentView",
+      "component:scraib.KeyCap",
+      "preview:scraib/CustomInstructionsView.swift#1",
+      "preview:scraib/FloatingLoaderManager.swift#1",
+      "component:scraib.FloatingLoaderView",
+      "component:scraib.GlowEffect",
+      "component:scraib.Effect",
+      "component:scraib.EffectNoBlur",
+      "preview:scraib/MainNavigationView.swift#1",
+      "component:scraib.MainNavigationView",
+      "component:scraib.NotificationView",
+      "component:scraib.ProviderAPIKeyField",
+      "preview:scraib/SettingsView.swift#1",
+      "component:scraib.SettingsView",
+      "component:scraib.TroubleshootingView",
+      "preview:scraib/SetupView.swift#1",
+      "component:scraib.SetupView",
+      "component:scraib.PlanChoiceStepView",
+      "component:scraib.SubscriptionSetupStepView",
+      "component:scraib.AISetupStepView",
+      "component:scraib.PromptSetupStepView",
+      "component:scraib.AutolaunchSetupStepView",
+      "component:scraib.BenefitRow",
+      "component:scraib.AccessibilitySetupStepView",
+      "component:scraib.PermissionReasonRow",
+      "component:scraib.InlineAPIKeyConfig",
+      "component:scraib.ShortcutRecorderView",
+      "preview:scraib/WelcomeView.swift#1",
+      "component:scraib.WelcomeView",
+      "component:scraib.FeatureRow"
+    ],
+    "plan": {
+      "warnings": [
+        "scraib: AppIcon.icon is not bundled into the preview: app icons are not used by previews.",
+        "scraib: Monthly.storekit is not bundled into the preview: StoreKit configuration files are not used by previews."
+      ],
+      "blockers": [],
+      "resources": {
+        "unsupported": [
+          {
+            "module": "scraib",
+            "path": "AppIcon.icon",
+            "reason": "app icons are not used by previews"
+          },
+          {
+            "module": "scraib",
+            "path": "Monthly.storekit",
+            "reason": "StoreKit configuration files are not used by previews"
+          }
+        ],
+        "catalogs": [
+          {
+            "module": "scraib",
+            "path": "scraib/Assets.xcassets"
+          }
+        ],
+        "copied": []
+      },
+      "dependencies": {
+        "unsupported": [],
+        "binaries": [],
+        "resolvedFile": "",
+        "packages": []
+      },
+      "modules": [
+        {
+          "module": "scraib",
+          "entries": [
+            "scraib/scraibApp.swift"
+          ],
+          "sources": 40
+        }
+      ]
+    },
+    "build": {
+      "errors": [],
+      "packages": null,
+      "derivedData": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/cf8c78c4d275/xcode-06c6f87850973181",
+      "resources": {
+        "cached": false,
+        "errors": [],
+        "assets": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/cf8c78c4d275/resources/assets-37a98ed0048cd089/Assets.car",
+        "symbols": [
+          "scraib"
+        ]
+      },
+      "settingsFrom": {
+        "scraib": "xcodebuild (scheme scraib)"
+      },
+      "modules": [
+        {
+          "cached": false,
+          "key": "92e4982f143c829c",
+          "module": "scraib",
+          "durationMs": 20447
+        }
+      ]
+    },
+    "diagnostics": []
+  },
+  "catalog": {
+    "target": "scraib",
+    "choices": [
+      {
+        "project": "scraib.xcodeproj",
+        "kind": "app",
+        "module": "scraib",
+        "target": "scraib",
+        "includes": []
+      }
+    ],
+    "project": "scraib.xcodeproj",
+    "retries": 0,
+    "chosenBy": "the only previewable target",
+    "dir": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/ec9753915465a342/generated",
+    "entries": [
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/ContentView.swift#1",
+        "notes": [],
+        "title": "ContentView",
+        "file": "scraib/ContentView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 586
+      },
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/CustomInstructionsView.swift#1",
+        "notes": [],
+        "title": "CustomInstructionsView",
+        "file": "scraib/CustomInstructionsView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 320
+      },
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/FloatingLoaderManager.swift#1",
+        "notes": [],
+        "title": "FloatingLoaderManager",
+        "file": "scraib/FloatingLoaderManager.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 557
+      },
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/MainNavigationView.swift#1",
+        "notes": [],
+        "title": "MainNavigationView",
+        "file": "scraib/MainNavigationView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 145
+      },
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/SettingsView.swift#1",
+        "notes": [],
+        "title": "SettingsView",
+        "file": "scraib/SettingsView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 836
+      },
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/SetupView.swift#1",
+        "notes": [],
+        "title": "SetupView",
+        "file": "scraib/SetupView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 1727
+      },
+      {
+        "source": "preview",
+        "module": "scraib",
+        "reason": "",
+        "id": "preview:scraib/WelcomeView.swift#1",
+        "notes": [],
+        "title": "WelcomeView",
+        "file": "scraib/WelcomeView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 172
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.AppRulesListView",
+        "notes": [
+          "injects ConfigurationManager into the environment"
+        ],
+        "title": "AppRulesListView",
+        "file": "scraib/AppRulesViews.swift",
+        "sample": "AppRulesListView().environmentObject(ConfigurationManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 4
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.AppRuleDetailView",
+        "notes": [
+          "injects ConfigurationManager into the environment",
+          "injects StoreKitManager into the environment"
+        ],
+        "title": "AppRuleDetailView",
+        "file": "scraib/AppRulesViews.swift",
+        "sample": "AppRuleDetailView(bundleId: \"Bundle id\").environmentObject(ConfigurationManager()).environmentObject(StoreKitManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 112
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.ContentView",
+        "notes": [],
+        "title": "ContentView",
+        "file": "scraib/ContentView.swift",
+        "sample": "ContentView(onSettingsPressed: { }, onCustomInstructionsPressed: { })",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 67
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.KeyCap",
+        "notes": [],
+        "title": "KeyCap",
+        "file": "scraib/ContentView.swift",
+        "sample": "KeyCap(text: \"Text\")",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 566
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "Trezi cannot make one: needs navPath: NavigationPath is not a type Trezi found in the target's sources",
+        "id": "component:scraib.CustomInstructionsView",
+        "notes": [],
+        "title": "CustomInstructionsView",
+        "file": "scraib/CustomInstructionsView.swift",
+        "supported": false,
+        "kind": "SwiftUI view",
+        "line": 3
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.FloatingLoaderView",
+        "notes": [],
+        "title": "FloatingLoaderView",
+        "file": "scraib/FloatingLoaderManager.swift",
+        "sample": "FloatingLoaderView(state: FloatingLoaderManager.LoaderState.error, operationType: FloatingLoaderManager.OperationType.rewriting)",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 397
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.GlowEffect",
+        "notes": [],
+        "title": "GlowEffect",
+        "file": "scraib/GlowEffect.swift",
+        "sample": "GlowEffect()",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 3
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.Effect",
+        "notes": [],
+        "title": "Effect",
+        "file": "scraib/GlowEffect.swift",
+        "sample": "Effect(gradientStops: [], width: 0.5, blur: 0.5, cornerRadius: 0.5)",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 46
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.EffectNoBlur",
+        "notes": [],
+        "title": "EffectNoBlur",
+        "file": "scraib/GlowEffect.swift",
+        "sample": "EffectNoBlur(gradientStops: [], width: 0.5, cornerRadius: 0.5)",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 71
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.MainNavigationView",
+        "notes": [],
+        "title": "MainNavigationView",
+        "file": "scraib/MainNavigationView.swift",
+        "sample": "MainNavigationView()",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 3
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.NotificationView",
+        "notes": [],
+        "title": "NotificationView",
+        "file": "scraib/NotificationManager.swift",
+        "sample": "NotificationView()",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 474
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.ProviderAPIKeyField",
+        "notes": [],
+        "title": "ProviderAPIKeyField",
+        "file": "scraib/ProviderAPIKeyField.swift",
+        "sample": "ProviderAPIKeyField(provider: AIProvider.chatGPT, apiKey: .constant(\"Api key\"), onChange: { })",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 4
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.SettingsView",
+        "notes": [
+          "injects StoreKitManager into the environment",
+          "injects ConfigurationManager into the environment"
+        ],
+        "title": "SettingsView",
+        "file": "scraib/SettingsView.swift",
+        "sample": "SettingsView().environmentObject(StoreKitManager()).environmentObject(ConfigurationManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 5
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.TroubleshootingView",
+        "notes": [],
+        "title": "TroubleshootingView",
+        "file": "scraib/SettingsView.swift",
+        "sample": "TroubleshootingView(configuration: AIProviderConfiguration())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 840
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.SetupView",
+        "notes": [
+          "injects StoreKitManager into the environment"
+        ],
+        "title": "SetupView",
+        "file": "scraib/SetupView.swift",
+        "sample": "SetupView().environmentObject(StoreKitManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 6
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.PlanChoiceStepView",
+        "notes": [
+          "injects StoreKitManager into the environment"
+        ],
+        "title": "PlanChoiceStepView",
+        "file": "scraib/SetupView.swift",
+        "sample": "PlanChoiceStepView(planChoice: .constant(nil), isProcessingCTA: .constant(true), configuration: .constant(AIProviderConfiguration()), onNext: { }).environmentObject(StoreKitManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 179
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.SubscriptionSetupStepView",
+        "notes": [
+          "injects StoreKitManager into the environment"
+        ],
+        "title": "SubscriptionSetupStepView",
+        "file": "scraib/SetupView.swift",
+        "sample": "SubscriptionSetupStepView(configuration: .constant(AIProviderConfiguration()), onNext: { }).environmentObject(StoreKitManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 413
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.AISetupStepView",
+        "notes": [],
+        "title": "AISetupStepView",
+        "file": "scraib/SetupView.swift",
+        "sample": "AISetupStepView(configuration: .constant(AIProviderConfiguration()), onNext: { })",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 560
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.PromptSetupStepView",
+        "notes": [],
+        "title": "PromptSetupStepView",
+        "file": "scraib/SetupView.swift",
+        "sample": "PromptSetupStepView(customPrompt: .constant(\"Custom prompt\"), onNext: { })",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 1105
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.AutolaunchSetupStepView",
+        "notes": [],
+        "title": "AutolaunchSetupStepView",
+        "file": "scraib/SetupView.swift",
+        "sample": "AutolaunchSetupStepView(enableAutolaunch: .constant(true), onComplete: { })",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 1260
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.BenefitRow",
+        "notes": [],
+        "title": "BenefitRow",
+        "file": "scraib/SetupView.swift",
+        "sample": "BenefitRow(icon: \"Icon\", text: \"Text\")",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 1366
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.AccessibilitySetupStepView",
+        "notes": [],
+        "title": "AccessibilitySetupStepView",
+        "file": "scraib/SetupView.swift",
+        "sample": "AccessibilitySetupStepView(onNext: { })",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 1385
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.PermissionReasonRow",
+        "notes": [],
+        "title": "PermissionReasonRow",
+        "file": "scraib/SetupView.swift",
+        "sample": "PermissionReasonRow(icon: \"Icon\", title: \"Title\", description: \"Description\")",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 1628
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.InlineAPIKeyConfig",
+        "notes": [],
+        "title": "InlineAPIKeyConfig",
+        "file": "scraib/SetupView.swift",
+        "sample": "InlineAPIKeyConfig(configuration: .constant(AIProviderConfiguration()))",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 1656
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.ShortcutRecorderView",
+        "notes": [],
+        "title": "ShortcutRecorderView",
+        "file": "scraib/ShortcutRecorderView.swift",
+        "sample": "ShortcutRecorderView(title: \"Title\", keyCode: .constant(1), modifiers: .constant(1))",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 4
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.WelcomeView",
+        "notes": [
+          "injects StoreKitManager into the environment"
+        ],
+        "title": "WelcomeView",
+        "file": "scraib/WelcomeView.swift",
+        "sample": "WelcomeView().environmentObject(StoreKitManager())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 4
+      },
+      {
+        "source": "component",
+        "module": "scraib",
+        "reason": "",
+        "id": "component:scraib.FeatureRow",
+        "notes": [],
+        "title": "FeatureRow",
+        "file": "scraib/WelcomeView.swift",
+        "sample": "FeatureRow(icon: \"Icon\", title: \"Title\", description: \"Description\")",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 145
+      }
+    ]
+  },
+  "previewBlocks": [
+    {
+      "id": "preview:scraib/ContentView.swift#1",
+      "title": "ContentView",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    },
+    {
+      "id": "preview:scraib/CustomInstructionsView.swift#1",
+      "title": "CustomInstructionsView",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    },
+    {
+      "id": "preview:scraib/FloatingLoaderManager.swift#1",
+      "title": "FloatingLoaderManager",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    },
+    {
+      "id": "preview:scraib/MainNavigationView.swift#1",
+      "title": "MainNavigationView",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    },
+    {
+      "id": "preview:scraib/SettingsView.swift#1",
+      "title": "SettingsView",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    },
+    {
+      "id": "preview:scraib/SetupView.swift#1",
+      "title": "SetupView",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    },
+    {
+      "id": "preview:scraib/WelcomeView.swift#1",
+      "title": "WelcomeView",
+      "supported": true,
+      "built": true,
+      "reason": ""
+    }
+  ],
+  "toolchain": {
+    "developerDir": "/Applications/Xcode-26.5.0.app/Contents/Developer",
+    "label": "Xcode 26.5 (17F42)",
+    "xcodeVersion": "26.5",
+    "xcodeBuild": "17F42",
+    "swiftVersion": "6.3.2",
+    "sdkVersion": "26.5",
+    "previewsMacros": "/Applications/Xcode-26.5.0.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib",
+    "reason": "The newest full Xcode with PreviewsMacros that expands #Preview (xcode-select points at /Library/Developer/CommandLineTools).",
+    "preview": "supported",
+    "systemDefault": "/Library/Developer/CommandLineTools"
+  },
+  "preview": {
+    "status": "ready",
+    "generation": 1,
+    "stale": false,
+    "shown": "preview:scraib/FloatingLoaderManager.swift#1@1",
+    "message": "Built 33 previews from scraib. 1 more listed with the reason they are not shown.",
+    "durationMs": 24236,
+    "problems": []
+  },
+  "frames": {
+    "preview:scraib/FloatingLoaderManager.swift#1": {
+      "bytes": 5075,
+      "red": 0,
+      "digest": "bd1e1fa",
+      "width": 248,
+      "height": 80
+    },
+    "component:scraib.FloatingLoaderView": {
+      "bytes": 6618,
+      "red": 1438,
+      "digest": "1b6be5a9",
+      "width": 320,
+      "height": 80
+    },
+    "edited": {
+      "bytes": 7876,
+      "red": 0,
+      "digest": "ed69bc74",
+      "width": 458,
+      "height": 80
+    },
+    "recovered": {
+      "bytes": 7876,
+      "red": 0,
+      "digest": "ed69bc74",
+      "width": 458,
+      "height": 80
+    }
+  },
+  "page": {
+    "targets": "Previewing scraib (the only previewable target); generated in /private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/ec9753915465a342/generated\n",
+    "buttons": 33,
+    "groups": [
+      "#Preview",
+      "Components"
+    ],
+    "notShown": [
+      "CustomInstructionsView SwiftUI view: Trezi cannot make one: needs navPath: NavigationPath is not a type Trezi found in the target's sources scraib/CustomInstructionsView.swift:3"
+    ]
+  },
+  "projectNative": {
+    "error": "",
+    "target": "scraib"
+  },
+  "interaction": {
+    "component": "component:scraib.ShortcutRecorderView",
+    "idle": {
+      "bytes": 2529,
+      "red": 0,
+      "digest": "33c34941",
+      "width": 270,
+      "height": 48
+    },
+    "click": {
+      "y": 12,
+      "x": 95,
+      "width": 135,
+      "height": 24
+    },
+    "recording": {
+      "bytes": 5503,
+      "red": 1376,
+      "digest": "22d8211b",
+      "width": 270,
+      "height": 48
+    },
+    "stopped": {
+      "bytes": 2529,
+      "red": 0,
+      "digest": "33c34941",
+      "width": 270,
+      "height": 48
+    }
+  },
+  "edited": {
+    "status": "ready",
+    "generation": 2,
+    "stale": false,
+    "shown": "preview:scraib/FloatingLoaderManager.swift#1@2",
+    "message": "Built 33 previews from scraib. 1 more listed with the reason they are not shown.",
+    "durationMs": 18766,
+    "problems": []
+  },
+  "failed": {
+    "status": "failed",
+    "generation": 2,
+    "stale": true,
+    "shown": "preview:scraib/FloatingLoaderManager.swift#1@2",
+    "message": "Build failed in scraib: 1 error.",
+    "durationMs": 6041,
+    "problems": [
+      "[scraib] scraib/FloatingLoaderManager.swift:491:23: cannot find 'widthForStates' in scope"
+    ],
+    "loaded": true,
+    "diagnostics": [
+      {
+        "message": "cannot find 'widthForStates' in scope",
+        "line": 491,
+        "module": "scraib",
+        "file": "scraib/FloatingLoaderManager.swift",
+        "column": 23,
+        "severity": "error"
+      }
+    ]
+  },
+  "landingCheck": {
+    "problem": "errors",
+    "line": "1 new console error after landing",
+    "errors": [
+      "Swift preview build failed: scraib/FloatingLoaderManager.swift:491: cannot find 'widthForStates' in scope (module scraib)"
+    ]
+  },
+  "recovered": {
+    "status": "ready",
+    "generation": 3,
+    "stale": false,
+    "shown": "preview:scraib/FloatingLoaderManager.swift#1@3",
+    "message": "Built 33 previews from scraib. 1 more listed with the reason they are not shown.",
+    "durationMs": 19621,
+    "problems": []
+  },
+  "provenance": {
+    "chatLanded": {
+      "edit": {
+        "branch": "trezi/chat-183a9321",
+        "liveUntouchedBeforeLanding": true,
+        "commit": {
+          "subject": "Update FloatingLoaderManager.swift",
+          "files": [
+            "scraib/FloatingLoaderManager.swift"
+          ],
+          "chat": "trezi/chat-183a9321"
+        }
+      },
+      "error": {
+        "branch": "trezi/chat-183a9321",
+        "liveUntouchedBeforeLanding": true,
+        "commit": {
+          "subject": "Update FloatingLoaderManager.swift",
+          "files": [
+            "scraib/FloatingLoaderManager.swift"
+          ],
+          "chat": "trezi/chat-183a9321"
+        }
+      },
+      "fix": {
+        "branch": "trezi/chat-183a9321",
+        "liveUntouchedBeforeLanding": true,
+        "commit": {
+          "subject": "Update FloatingLoaderManager.swift",
+          "files": [
+            "scraib/FloatingLoaderManager.swift"
+          ],
+          "chat": "trezi/chat-183a9321"
+        },
+        "diagnosticInPrompt": true
+      }
+    },
+    "syntheticDirectWrites": [],
+    "fixtures": [
+      "The model is a fixture provider (stubAgentSendForSmoke) that applies a scripted edit to the chat worktree; no provider call is made.",
+      "Previews are chosen with the picker buttons and clicks are DOM events on the preview page, not OS input."
+    ]
+  },
+  "xcodeSelect": {
+    "before": "/Library/Developer/CommandLineTools",
+    "after": "/Library/Developer/CommandLineTools"
+  },
+  "softFailures": []
+}

@@ -48,6 +48,13 @@ export function optimizationFlags(profile, cores = availableParallelism()) {
   return profile === 'test' ? ['-Onone', '-no-whole-module-optimization', `-j${cores}`] : ['-O']
 }
 
+/** Compile-time switches of a profile. Only the test profile defines TREZI_TEST_PROFILE,
+ *  which gates harness-only fixtures (LKM-286: the loopback GitHub of the Skills smoke);
+ *  a release build contains none of them. */
+export function profileDefines(profile) {
+  return profile === 'test' ? ['-D', 'TREZI_TEST_PROFILE'] : []
+}
+
 /** The cache folder, or null when TREZI_BUILD_CACHE turns it off. */
 export function cacheRoot(env = process.env, home = homedir()) {
   const value = env.TREZI_BUILD_CACHE?.trim()
@@ -156,12 +163,20 @@ export function swiftBuilder({
       binaries = join(cache, 'build')
       moduleCache = join(cache, 'module-cache')
     } catch (error) {
-      log(`[build] Swift cache unavailable at ${cache} (${error.code ?? error.message}); compiling without it`)
+      log(
+        `[build] Swift cache unavailable at ${cache} (${error.code ?? error.message}); compiling without it`
+      )
     }
   return async function compile(product, args, options = {}) {
     const started = performance.now()
     const chosen = options.profile ?? profile
-    const flags = [...optimizationFlags(chosen), '-target', target, ...args]
+    const flags = [
+      ...optimizationFlags(chosen),
+      ...profileDefines(chosen),
+      '-target',
+      target,
+      ...args
+    ]
     const output = args[args.indexOf('-o') + 1]
     const key = productKey({ product, args: flags, toolchain, root })
     const dir = binaries && join(binaries, product)
@@ -177,13 +192,16 @@ export function swiftBuilder({
         log(`[build] ${product}: ${seconds(started)} (cache hit ${key.slice(0, 12)}, ${chosen})`)
         return { product, cached: true, seconds: (performance.now() - started) / 1000 }
       } catch (error) {
-        log(`[build] ${product}: cache entry unreadable (${error.code ?? error.message}); compiling`)
+        log(
+          `[build] ${product}: cache entry unreadable (${error.code ?? error.message}); compiling`
+        )
       }
     const result = await run(
       [...flags, '-module-cache-path', moduleCache],
       join(root, 'out/native/swift-tmp', product)
     )
-    if (result.output) process.stderr.write(result.output.endsWith('\n') ? result.output : `${result.output}\n`)
+    if (result.output)
+      process.stderr.write(result.output.endsWith('\n') ? result.output : `${result.output}\n`)
     if (result.code !== 0 || result.signal) {
       log(`[build] ${product}: swiftc failed after ${seconds(started)}`)
       throw Object.assign(new Error(`swiftc ${product} failed`), { code: result.code || 1 })
@@ -198,7 +216,9 @@ export function swiftBuilder({
       } catch (error) {
         log(`[build] ${product}: not cached (${error.code ?? error.message})`)
       }
-    log(`[build] ${product}: ${seconds(started)} (compiled ${chosen} ${optimizationFlags(chosen)[0]})`)
+    log(
+      `[build] ${product}: ${seconds(started)} (compiled ${chosen} ${optimizationFlags(chosen)[0]})`
+    )
     return { product, cached: false, seconds: (performance.now() - started) / 1000 }
   }
 }

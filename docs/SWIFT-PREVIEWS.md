@@ -1,0 +1,455 @@
+# Native Swift component previews (demo, LKM-271)
+
+A vertical slice in which Trezi opens a native macOS Swift project and previews its
+declared SwiftUI and AppKit components. The preview is interactive, rebuilds when the
+source changes (including after a chat turn), and shows compiler errors without losing
+the last good build. This is a demo on an isolated branch; it is not merged to main.
+
+The staged plan toward real multi-module apps (Scraib), with each stage's status and
+what is out of scope, is `docs/SWIFT-PREVIEWS-PLAN.md`. Stage 1 (LKM-273, below:
+[Xcode and SwiftPM projects](#xcode-and-swiftpm-projects-lkm-273)) adds project
+discovery and target-graph builds.
+
+## Try it
+
+1. Build Trezi as usual (`bun run build`) and open it.
+2. Open the folder `test/fixtures/swift-components` (or a copy of it) as a project.
+   Xcode or the command-line tools must provide `xcrun swiftc` for macOS; files that
+   use `#Preview` need full Xcode, which Trezi finds and selects itself
+   ([Toolchain](#toolchain-lkm-274)).
+3. The preview pane shows "Swift previews". The first build compiles the Clang module
+   cache and can take 20–30 s; later builds of the fixture take about 1.5 s.
+4. Pick Profile card (SwiftUI), Rating control (AppKit `NSView`) or Search panel
+   (AppKit `NSViewController` hosting a SwiftUI badge) in the header.
+5. Click and type into the frame. Clicks, drags, scroll and keys are forwarded to the
+   component; Cmd-R/W/Q stay with Trezi.
+6. Ask the chat to change a component, e.g. "rename the search panel title to Find
+   components". The chat edits in its own worktree (`trezi/chat-<id>`); when the turn
+   lands in the live tree the driver rebuilds and swaps in the new host.
+7. A change that does not compile turns the status pill into "Build failed". The page
+   lists each error as `file:line:column: message` and keeps the last good build on
+   screen. The page also logs the first error with `console.error`. After a landing,
+   the landing check (`src/native/landing-check.ts`) waits for a running Swift build
+   to finish, reads the console error and puts it in front of the chat's next prompt,
+   so the next turn can fix it. The next successful build recovers.
+
+## Declaring previews
+
+A project opts in with `trezi-previews.json` at its root (and no `package.json`):
+
+```json
+{
+  "name": "Swift components demo",
+  "sources": ["Sources/DemoComponents"],
+  "previews": ["Previews"],
+  "exclude": [],
+  "libraries": []
+}
+```
+
+- `sources` are the component files; `previews` are the declaration files, which are
+  compiled only into the preview host. Both take folders or files and must stay inside
+  the project. `exclude` removes paths (for example the app's `@main` file).
+- `libraries` (optional) are separately built modules the sources `import`. Each has a
+  `name` (the module name) and its `sources`. The driver builds each one first with
+  `swiftc -emit-module -emit-library -module-name <name>` into a per-build folder, then
+  compiles the host with `-I`, `-L`, `-l<name>` and an rpath to that folder. Editing a
+  library source rebuilds the library and the host. Library sources must not be listed
+  in `sources`. `test/fixtures/swift-library-app` is a minimal example (app module
+  importing `GreetKit`). Library dependencies are not resolved: only system frameworks
+  work, and a SwiftPM package that needs remote packages does not.
+- Hidden folders, `.build`, `DerivedData`, `build`, `Pods`, `Carthage`, `node_modules`
+  and `*.xcodeproj` are skipped. Symlinks are not followed.
+- The declaration files define `enum TreziPreviews { @MainActor static var all: [TreziPreview] }`
+  and build each sample with its own state and dependencies:
+  - `.swiftUI(id, title, size:) { SomeView(...) }`
+  - `.appKit(id, title, size:) { SomeNSView() }`
+  - `.viewController(id, title, size:) { SomeViewController(...) }`
+
+  For example, `test/fixtures/swift-components/Previews/TreziPreviews.swift`.
+
+## Xcode and SwiftPM projects (LKM-273)
+
+- Discovery: a folder with a `.xcworkspace`, `.xcodeproj` or `Package.swift` (up to two
+  folders deep; build output, `Pods` and hidden folders skipped) opens as a Swift
+  project even without `trezi-previews.json`. `src/main/project-detect.ts` and
+  `src/service/RuntimeDetect.swift` agree (`test/runtime-owner.mjs`). With a
+  `package.json`, the JS or Expo detection wins whenever it finds a dev command and the
+  result only gains `native` (the structure); a tooling-only `package.json` beside an
+  Xcode project opens as Swift. Offering the native preview in a repo that also
+  launches as JS is Stage 3 (the choice) and Stage 4 (running both servers) of
+  `docs/SWIFT-PREVIEWS-PLAN.md`.
+- The graph (`src/swift-preview/graph.ts`): targets, kinds, module names, target
+  dependencies, package products, resources and notes per container. Xcode projects are
+  read from `project.pbxproj` with `plutil` (synchronized folders included); schemes
+  from `xcodebuild -list -json`, or from `xcshareddata/xcschemes` when only the
+  command-line tools are installed; `xcodebuild -showBuildSettings -json` for targets
+  configured by `.xcconfig`; packages from `swift package describe --type json` with
+  its scratch folder in Trezi's cache. Each tool run times out (45 s) and failures read
+  as sentences (for example "xcodebuild -list -json needs Xcode, but only the
+  command-line tools are selected").
+- A target build: name the target instead of listing sources.
+
+  ```json
+  { "name": "Studio", "target": "Studio", "project": "Studio.xcodeproj", "previews": ["Previews"] }
+  ```
+
+  `project` is only needed when several containers define the target. The plan
+  (`src/swift-preview/plan.ts`) builds each dependency target into its own module and
+  dylib (dependencies first), then the target, with `@main`, `main.swift`,
+  `@NSApplicationMain` and `@UIApplicationMain` files left out, then the host, which
+  imports libraries normally and the target with `@testable import` (targets build with
+  `-enable-testing`). Package products, Clang or binary targets, test targets and
+  non-macOS SDKs are blockers; `#Preview` files and resources are warnings.
+  `test/fixtures/swift-multi-module` is the Scraib-shaped example (app `Studio` with
+  `@main`, framework `StudioKit` with SwiftUI and AppKit components, one app view using
+  a library component).
+- Errors name the module: the status reads `Build failed in StudioKit: 1 error.` and
+  the list `[StudioKit] StudioKit/StudioFormat.swift:6:…`. The last good build stays.
+- Trezi's own manifest: `<userData>/swift-previews/<hash>/trezi-previews.json` (the hash
+  is of the project root) wins over the repo's file, and its `previews` paths are
+  relative to that folder, so a project can be previewed without writing into it. The
+  driver gets the folder with `--manifest-dir`. Stage 1 only reads it.
+- Without either manifest the page shows "No previews yet", the discovered targets and
+  both places a manifest can go. The page's Project panel shows the manifest in use,
+  the containers, schemes, targets and the build plan; the driver serves the same as
+  `GET /graph`, and the backend reads it with `project:native`
+  (`src/main/swift-preview.ts`).
+- `bun scripts/swift-preview-discover.ts <folder> [--target NAME]` prints the
+  discovery, graph and plan as JSON without writing into the folder.
+
+## Toolchain (LKM-274)
+
+`#Preview` needs the `PreviewsMacros` compiler plugin, which only full Xcode ships.
+Trezi picks a developer directory per project and passes it as `DEVELOPER_DIR` to every
+tool the driver runs (`xcodebuild`, `swift package`, `xcrun swiftc`, the SDK lookup and
+the host build). It never changes the machine's `xcode-select`, which it only reads.
+(`src/swift-preview/toolchain.ts`, `toolchain-picker.ts`.)
+
+- Candidates: every `/Applications/Xcode*.app` (versioned names such as
+  `Xcode-26.5.0.app` included), `xcode-select -p`, `/Library/Developer/CommandLineTools`
+  and `DEVELOPER_DIR`, each with its Xcode and Swift version, macOS SDK and whether
+  `PreviewsMacros` is present.
+- Order: an explicit setting wins, first `"developerDir"` in the manifest (absolute; a
+  `.app` or its `Contents/Developer`), then the app's `TREZI_DEVELOPER_DIR`; then
+  `DEVELOPER_DIR` from the environment; then the newest full Xcode whose probe passes;
+  then `xcode-select -p`. The reason is recorded and shown.
+- The probe compiles a tiny intact `#Preview` with the selected toolchain and the
+  compiler's normal flags. Results are cached beside the project caches
+  (`toolchains.json`) by toolchain path, versions, SDK and plugin file, so an Xcode update
+  or a switch probes again. Module and graph caches are keyed by the selection too.
+- Messages: the command-line tools alone read "Command Line Tools lack PreviewsMacros,
+  so #Preview cannot expand: install or select full Xcode …"; a broken or incompatible
+  plugin names the toolchain and says to reinstall it or select another Xcode. When the
+  compiler's plugin server cannot start because Trezi itself runs inside another sandbox,
+  the result is "unavailable" (not cached) and the newest Xcode is still used; Trezi
+  never disables the compiler's plugin sandbox to get around it.
+- Shown in the page header (for example "Xcode 26.5 (17F42) · #Preview supported"), in
+  the Project panel's Toolchain section, in the driver's `/state` and `/graph`, and in
+  `project:native` (`toolchain`).
+- A requested rebuild selects again (and rereads `xcode-select -p`); otherwise the
+  selection is redone when the setting, `DEVELOPER_DIR` or an installed Xcode changed.
+
+## Build authority (LKM-275)
+
+A target build uses the project's own build settings, dependencies and resources, and
+everything it writes lives in Trezi's derived data. Per-item status:
+`docs/SWIFT-PREVIEWS-PLAN.md` (2B). (`src/swift-preview/builder.ts` and the files it uses.)
+
+- Derived data: `<userData>/swift-previews/DerivedData/<project hash>/` (the app passes
+  it as `--cache-root`; a bare driver uses `TREZI_SWIFT_PREVIEW_CACHE` or the temporary
+  directory). Inside it: xcodebuild's `-derivedDataPath` per toolchain (`xcode-<key>`),
+  the package build (`packages/toolchain-<key>/`), compiled resources (`resources/`) and
+  the modules. The project is only read: Trezi writes nothing into it, not even
+  something it removes again. xcodebuild and SwiftPM create state next to what they read
+  (`project.xcworkspace/xcshareddata/swiftpm/configuration` in an `.xcodeproj`,
+  `.swiftpm/configuration` and `.swiftpm/xcode` in a package folder), so they never run
+  on the project (`shadow.ts`): `xcodebuild -list`/`-showBuildSettings`, `swift package
+  describe`/`dump-package` run in a shadow under `<derived data>/shadow/` (project
+  folders symlinked, the `.xcodeproj` and each package's `Package.swift`/
+  `Package.resolved` copied, no `.git`/`.build`/`.swiftpm`), removed when the run ends;
+  `swift build` builds a wrapper that refers to Trezi's mirror of the local packages
+  (`packages/toolchain-<key>/locals/`). Paths in the tools' output are mapped back to the
+  project's. If a shadow cannot be made, the tool does not run and the error says so.
+  Limitations: packages deeper than 5 folders (or past 4000 scanned folders) that no
+  manifest or project reference names are not seen by the tools; a crashed run can leave
+  a shadow (in Trezi's derived data) until the next run removes it after 6 hours; every
+  run copies the `.xcodeproj` and links the project's top-level entries.
+- Settings (`build-settings.ts`, `settings.ts`): `xcodebuild -showBuildSettings -json`
+  for the scheme that builds the target, Debug, `platform=macOS`; `swift package
+  dump-package` for package targets; the project file's Debug settings (no xcconfig
+  files) when neither runs. SWIFT_VERSION, compilation conditions, preprocessor
+  definitions, strict concurrency, default actor isolation, upcoming features,
+  MACOSX_DEPLOYMENT_TARGET, SDKROOT, search paths and PRODUCT_MODULE_NAME are applied.
+  OTHER_SWIFT_FLAGS pass through an allowlist. Every flag or setting Trezi does not
+  apply is listed with its reason ("Dropped OTHER_SWIFT_FLAGS -Xfrontend …: not on
+  Trezi's allowlist").
+- Dependencies (`dependencies.ts`, `package-build.ts`): local packages inside the
+  project, remote packages at their `Package.resolved` pin and macOS framework slices of
+  `.framework`/`.xcframework` binaries. The packages build as one generated wrapper
+  package with `swift build` and SwiftPM's sandbox on. Trezi never resolves or updates
+  pins, so a remote package needs its pin and the network on its first build. Any other
+  kind is named as unsupported with its reason.
+- The app target compiles minus its entry point (`@main`, `main.swift`,
+  `@NSApplicationMain`) into a module the previews `@testable import`. The app
+  executable is never built or imported.
+- Resources (`resources.ts`): asset catalogs through the toolchain's `actool`, with
+  generated asset symbols when the target turns them on, and a combined `Assets.car`
+  in the host's `Bundle.main`. Each module's own `Assets.car` also sits beside its
+  dylib, with an `Info.plist` naming a bundle identifier (AppKit finds no named asset
+  in a folder without one), where `Bundle(for:)` of its classes (and so the generated
+  `Color(.brand)`) looks. Package resources come from SwiftPM's bundles
+  (`Bundle.module`) and plain files are copied. String Catalogs, storyboards and XIBs,
+  Core Data models, Metal, `.icon` and StoreKit files are named as not bundled.
+- Caching: the package build is keyed by toolchain, wrapper, pins and local package
+  files; catalogs by toolchain, deployment target and their files; each module by
+  toolchain, SDK, resolved flags, the package key, its dependencies and its sources. An
+  edit to one module rebuilds only it and what depends on it.
+- No tool runs with a sandbox turned off. When Trezi itself runs inside another sandbox
+  that stops SwiftPM's or xcodebuild's, the error says so.
+- Shown in the page's Project panel ("Build settings", "Dependencies", "Resources",
+  "Derived data (Trezi-owned)"), in the driver's `/state` (`build`) and in
+  `project:native` (`build`).
+
+## Generated previews (LKM-276)
+
+A native project needs no manifest and no edit: Trezi reads its `#Preview` blocks and
+components and writes the preview declarations into its own data. Per-item status and
+what is not done: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3).
+
+1. Open the folder (for example a copy of `test/fixtures/swift-preview-macros`: an app
+   target `Notes` and a framework `NotesKit`). With one previewable target (a macOS
+   Swift target nothing else depends on) Trezi uses it and says so ("Previewing Notes
+   (the only previewable target)"). With several, the page shows "Choose what to
+   preview" with one button per target; the choice is saved in Trezi's data and can be
+   changed there later.
+2. The picker lists the `#Preview` blocks first, then the components (SwiftUI views,
+   AppKit views and view controllers, `PreviewProvider`s). Hover an entry for its
+   `file:line`, the sample Trezi passes (`TagCounter(count: .constant(1), label:
+   "Label")`) and notes such as "@Previewable state" or "built from an isolated copy".
+3. "N not shown" opens the list of what Trezi cannot preview, each with its reason
+   (e.g. "uses a preview modifier trait", "it is generic", "it loads its view from a nib
+   or storyboard", "compiled out for the preview host (only where #if os(iOS))").
+
+- `#Preview` bodies are copied verbatim under `#sourceLocation`, so a compile error in
+  one points at the project's file and line. `@Previewable` declarations become state
+  of a wrapper view; `.sizeThatFitsLayout` and `.fixedLayout` set the frame;
+  `@available` and `#if` are kept. The original `#Preview` also stays and expands as
+  usual, so a full Xcode is needed ([Toolchain](#toolchain-lkm-274)); reading the files
+  needs that Xcode's SwiftSyntax too.
+- A preview or component that uses `private` declarations of its file is built from an
+  overlay, a copy of that file in Trezi's folder compiled instead of the original.
+- An entry the compiler rejects is dropped and the build retried (at most twice); it is
+  listed with the compiler's message.
+- Generated files live in `<userData>/swift-previews/<hash>/generated`, written only by
+  `src/swift-preview/sidecar.ts`. A `trezi-previews.json` in the repo or in Trezi's
+  data still wins.
+- In a repo that is also a web JS app (a `package.json` dev script) Trezi keeps the JS
+  dev server; "Switch JS / Native Preview" in the toolbar's "…" menu restarts the
+  project with the native preview, and back. Expo and React Native keep the simulator,
+  and the menu item says why. Only one preview runs at a time.
+- Driver: `/state` and `/graph` carry `catalog` (target, choices, entries with
+  `supported`, `reason`, `sample`, `notes`); `POST /configure` (`{project, target}`)
+  saves the target; `project:native` reports the same catalog.
+
+## How it works
+
+- Detection: `src/main/project-detect.ts` and `src/service/RuntimeDetect.swift` (kept
+  in parity by `test/runtime-owner.mjs`) report `framework: 'swift'` with an empty dev
+  command when the manifest is present.
+- Launch: the project never supplies a command. `src/main/devserver-service.ts` passes
+  the runtime owner the bundled Bun and `src/swift-preview/driver.ts` from Trezi's own
+  checkout (`src/main/swift-preview.ts`). The runtime owner's normal lifecycle applies:
+  port, readiness, stop and crash handling.
+- The driver (`src/swift-preview/driver.ts`, `session.ts`) is a small HTTP server on the
+  preview port. It compiles `src/swift-preview/PreviewHost.swift` together with the
+  manifest's files using `xcrun --sdk macosx swiftc -parse-as-library -Onone`, one
+  module and no Xcode project. It also polls file size and mtime for changes, and
+  swaps in a new host only once that host reports ready.
+  - Libraries build into `libs-<pid>-<n>` next to the host binary and are removed with it.
+  - Builds are cached per project under the temporary directory, and the Clang module
+    cache is shared between projects.
+  - A failed build keeps the old host and reports parsed diagnostics.
+- The host (`PreviewHost.swift`) is an accessory app that never activates or shows a
+  window on screen.
+  - Each preview lives in its own offscreen borderless window. Frames are 2x PNGs from
+    `cacheDisplay`.
+  - Input arrives as JSON lines on stdin and is posted as real `NSEvent`s, routed by a
+    per-window tag. Views that refuse the first mouse get their `mouseDown` delivered
+    directly.
+  - `describe` returns accessibility values and text field contents for tests.
+- The page (`src/swift-preview/page.ts`) is what Trezi's WebKit preview shows. It has
+  the picker, the frame, status, error list and input forwarding. Mutating requests
+  need a per-run token embedded in the page, and the driver rejects foreign `Host`
+  headers.
+
+## Evidence
+
+- `test/swift-preview.mjs` (unit tier) runs a real swiftc build and real AppKit hosts
+  against a copy of the fixture. It checks:
+  - rendering, plus SwiftUI and AppKit clicks and typing;
+  - an edit that rebuilds;
+  - a compile error (`SearchPanelController.swift:59`, last good build kept);
+  - recovery;
+  - the driver's token and Host checks;
+  - a library module: manifest and compile-argument parsing, then a real build of
+    `test/fixtures/swift-library-app` (app module importing a separately built
+    `GreetKit`), its render, and a rebuild after a library edit.
+
+  Captures go to `test/artifacts/swift-preview/`.
+- The native smoke check `swift-preview` (group `core`, `src/native/smoke-swift-preview.ts`,
+  with `src/native/smoke-swift-chat.ts`) runs the flow inside Trezi, and every project
+  edit goes through the real chat pipeline: composer, `agent:send`, the chat's own
+  worktree, the landing commit on the live checkout and a rebuild. Only the provider is
+  a fixture (`stubAgentSendForSmoke`; it also skips the title, memory and commit-message
+  provider calls), so no model runs. The suite switches the production post-landing check
+  off, so the smoke starts the real `LandingChecks` itself from the same `merged`
+  isolation event the production hook uses. Three turns are sent:
+  1. "Search components" becomes "Find components": the smoke asserts the live tree stayed
+     clean until landing, then holds the change; the driver rebuilt (`search-panel`
+     generation 2) and `describe` shows the new text.
+  2. A compile error (`index.serch`) lands the same way: the page fails and keeps the
+     old host, and the landing check's `errors` row reaches the chat with the
+     `SearchPanelController.swift:59` diagnostic.
+  3. The fix turn: its prompt must carry that landing-check problem before the fixture
+     provider applies the fix; generation 3 is `ready`.
+
+  It writes `test/artifacts/native/swift-preview-*.png` and `swift-preview.json`, which
+  records the chat-landed steps (branch, commit, files, trailer) under
+  `provenance.chatLanded` and lists synthetic direct writes separately (none).
+- The captures from the branch run are kept in `docs/evidence/lkm-271/`.
+- LKM-273: `test/swift-preview-graph.mjs` (discovery, graph, plan, mixed repos) and
+  `test/swift-preview-target.mjs` (target-graph build, library error and recovery,
+  Trezi-side manifest, setup state, driver `/graph`) in the unit tier, and the native
+  smoke check `swift-graph` (group `core`, `src/native/smoke-swift-graph.ts`). Its
+  library error and fix are direct writes to the opened copy (recorded under
+  `provenance.syntheticDirectWrites`); the chat path is the `swift-preview` check's.
+  Evidence: `docs/evidence/lkm-273/`.
+- LKM-274: `test/swift-preview-toolchain.mjs` (unit tier) covers selection with scripted
+  toolchains and, when a full Xcode is installed, builds a fixture file with an intact
+  `#Preview` through the driver with process-local `DEVELOPER_DIR`, checking
+  `xcode-select -p` before and after. Inside a sandbox that stops the compiler's plugin
+  server it prints `ENVIRONMENT:` and skips only that real build. The `swift-graph`
+  smoke check also asserts the toolchain in the page and in `project:native`.
+- LKM-275: `test/swift-preview-settings.mjs` (unit tier, scripted tools) covers the
+  settings mapping and dropped flags, dependency kinds, pins, cache keys, the package
+  build, actool, the whole build authority and that no new command disables a sandbox.
+  `test/swift-preview-build.mjs` (unit tier, real toolchain) builds and renders
+  `test/fixtures/swift-package-app` (app `Gallery`, framework `GalleryKit`, local
+  package `StudioDesign` with a `Bundle.module` string, an asset catalog color), then a
+  disposable Scraib-xcode copy whose settings must match an independent xcodebuild run
+  (Swift 5, DEBUG, macOS 14), byte-comparing the original afterwards; inside another
+  sandbox it prints `ENVIRONMENT:` instead. The native smoke check `swift-build` (group
+  `core`, `src/native/smoke-swift-build.ts`) opens the fixture in Trezi, checks the
+  settings, package, catalog and panel, and that an app edit reuses the cached module,
+  package and catalog. Its edit is a direct write to the opened copy.
+- LKM-276: `test/swift-preview-generate.mjs` (unit tier) covers target choice and
+  ambiguity, the sidecar writer's refusals, error mapping, the saved selection, the
+  scanner and catalog on `test/fixtures/swift-preview-macros` (plain, `@Previewable`,
+  environment injection, traits, availability, private overlays, unsupported reasons,
+  samples; fixture hash unchanged) and a generated session on a copy of
+  `test/fixtures/swift-multi-module` without its manifest (render, a private overlay's
+  diagnostic at the original file and line, project hash unchanged). Mixed JS/native
+  parity is in `test/runtime-owner.mjs`. The native smoke check `swift-macros` (group
+  `core`, `src/native/smoke-swift-macros.ts`) opens a copy of the macros fixture,
+  renders a chosen `#Preview`, a private-overlay `#Preview`, a component and a view
+  controller, checks the page's catalog and compares the copy's content hash and Git
+  status before and after. Evidence: `docs/evidence/lkm-276/`.
+- LKM-277 (Stage 6, Scraib acceptance): two native smoke checks in group `core`.
+  - `scraib-xcode` (`src/native/smoke-scraib-xcode.ts`) opens a disposable copy of the
+    unchanged Scraib-xcode with no manifest. Trezi chooses the full `scraib` target,
+    checks all seven `#Preview` blocks and renders `FloatingLoaderView` through
+    `FloatingLoaderManager`'s `#Preview`. It clicks `ShortcutRecorderView`, then sends
+    three chat-landed turns: an edit, a compile error (last good build kept,
+    landing-check row) and the fix.
+  - `scraib-open` (`src/native/smoke-scraib-open.ts`) builds Scraib-open with ScraibKit,
+    Sparkle and PostHog. It renders a view from a file that imports ScraibKit and records
+    each view it cannot show, with the reason.
+  - Both checks hash the original before and after and compare `xcode-select -p`. Each
+    does nothing where its original is missing.
+  - Evidence (inspected captures, provenance, toolchain and limits):
+    `docs/evidence/scraib-acceptance/README.md`.
+
+## Limits and follow-ups
+
+- **Generated previews are heuristic** ([Generated previews](#generated-previews-lkm-276)).
+  Component samples come from parameter types, not real data. Not translated:
+  `PreviewModifier` traits, previews inside a type or in the `@main` file, generic
+  components, nib-loaded view controllers. With only the command-line tools `#Preview`
+  does not compile (`plugin for module 'PreviewsMacros' not found`) and the scanner has
+  no SwiftSyntax; the page says to install or select full Xcode. `describe` (used by
+  tests) does not see SwiftUI `Text` in the offscreen windows, so the `swift-macros`
+  check compares SwiftUI frames by their PNG and reads text only from AppKit views.
+- **Full macOS app launch is not done.** The host previews components, not an app
+  with its `@main`, menus, entitlements or bundle resources (`Bundle.main` is the host).
+  Path: `xcodebuild` the app scheme into DerivedData, launch it as a child, and stream
+  its window with ScreenCaptureKit. That needs a Screen Recording grant (a TCC prompt),
+  input injection (Accessibility) and project-specific signing.
+- **iOS is not supported.** It would need an iOS simulator destination
+  (`xcodebuild -sdk iphonesimulator`, `simctl install/launch`) and the existing
+  simulator preview path. Previews would have to target UIKit/SwiftUI on iOS. The
+  host here is macOS-only.
+- **Multi-module projects:** Swift targets of one Xcode project or package build from
+  the target graph (LKM-273, above) with their resolved settings, local and pinned
+  remote packages, macOS frameworks and asset catalogs (LKM-275, [Build
+  authority](#build-authority-lkm-275)). Not yet: Clang and mixed-language targets,
+  static library `.xcframework` slices, pin resolution, String Catalogs and other
+  compiled resources, run-script generated sources. Stages:
+  `docs/SWIFT-PREVIEWS-PLAN.md`.
+- **Scraib (read-only inspection and disposable-copy checks; not "supported").**
+  Stage 6 (LKM-277) supersedes the notes below:
+  - Unchanged Scraib-xcode now previews `FloatingLoaderView` from its full target.
+  - Scraib-open renders through ScraibKit.
+  - The limits that remain are listed in `docs/evidence/scraib-acceptance/README.md`:
+    resources, StoreKit, full-app windows and cursor tracking, offscreen glass and
+    samples for types outside the target.
+
+  Nothing in either Scraib repository was modified. The checks ran on copies under the
+  temporary directory with the same driver (`docs/evidence/lkm-271/scraib-validation/`:
+  `check.mjs` plus the two preview files).
+  - `scraib-xcode` (the Mac App Store app): one Xcode target, no SwiftPM packages,
+    only system frameworks (macOS 14 target, Swift 5), `@main` in
+    `scraib/scraibApp.swift`, resources in `Assets.xcassets`, `Info.plist` and
+    `scraib.entitlements`. With the command-line tools selected, compiling the whole
+    `scraib` folder with `@main` excluded **failed**: seven files carry `#Preview`,
+    and the command-line tools have no `PreviewsMacros` plugin (`plugin for module
+    'PreviewsMacros' not found`); Trezi now selects a full Xcode, which has it (LKM-274,
+    `docs/SWIFT-PREVIEWS-PLAN.md` Stage 6 notes). Listing only the files a
+    component needs (`ShortcutRecorderView`, `ProviderAPIKeyField`, `AIProviderModels`,
+    `GlobalHotKeyManager`) **builds and renders** both views (frames in
+    `docs/evidence/lkm-271/scraib-xcode-*.png`). `WelcomeView` needs the
+    `StoreKitManager` environment object, and the whole-folder attempt (command-line
+    tools) hit the same `#Preview` error, so it was not rendered.
+  - `scraib-open` (XcodeGen `project.yml`, Swift 6, macOS 26): the app target is
+    `Scraib/`; the local SwiftPM package `ScraibKit` (library at
+    `ScraibKit/Sources/ScraibKit`, 29 files, system frameworks only) is imported by the
+    themes, settings and `FloatingLoader`. Remote packages Sparkle (`UpdaterController`)
+    and PostHog (`Analytics/PostHogBackend`) need network resolution and are not
+    reachable from the driver, so those files must stay out of `sources`.
+    The manifest `{"sources": ["Scraib/Theme"], "libraries": [{"name": "ScraibKit",
+    "sources": ["ScraibKit/Sources/ScraibKit"]}]}` with a one-view preview file builds
+    ScraibKit as a library and **renders** `ThemePreviewCard`
+    (`docs/evidence/lkm-271/scraib-open-theme-card.png`).
+  - Still unproven for Scraib: the Settings views, `FloatingLoader` and `MenuPanelView`
+    (they depend on Sparkle, PostHog or the app's environment), the Metal shader
+    resources, fonts and asset catalogs (`Bundle.main` is the host), and the entitlements
+    and hardened runtime (a component preview needs none).
+- **No incremental build:** each rebuild is a whole-module `swiftc` run (about 1.5 s for
+  the fixture; large projects will be slower).
+- **Rendering:** offscreen windows do not paint Liquid Glass or materials, and
+  `.borderedProminent` buttons render flat. Animations are captured once a second or
+  after input, not continuously.
+- **Inspection:** Trezi's element picker, styles and layers work on HTML and do not
+  apply to native frames. `describe` exposes accessibility values and text field
+  contents only.
+- **Verification:** the edit, the compile error and the fix are chat-landed through the
+  real composer, worktree and landing pipeline. The native `swift-preview` check passed
+  in the full native suite (55/55 checks, after all three turns asserted): the landing
+  commit on the live tree, the rebuild to generation 2, the `serch` error with the last
+  good build kept, the landing-check row, the diagnostic in the next prompt and recovery
+  to generation 3. The model is a fixture provider (no live provider ran), so a real model
+  choosing the edit is not covered. Clicks and keys are DOM events on the preview page, not
+  OS input. The unit test `test/swift-preview.mjs` still writes files directly; the
+  native check does not. The committed `docs/evidence/lkm-271/swift-preview.json` and its
+  captures come from that passing run (`provenance.chatLanded`, empty
+  `syntheticDirectWrites`).

@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import '../src/shared/rename-compat.ts'
 import { finishSmokeRun, hostLogTail, SMOKE_EXIT_ENV } from '../src/native/smoke-report.ts'
+import { SKILLS_FIXTURE_PORT_ENV, startSkillsGitHubFixture } from '../src/native/skills-github-fixture.ts'
 import { spawnSync } from 'node:child_process'
 import { requireSupportedPlatform } from './requirements.mjs'
 
@@ -80,14 +81,18 @@ async function main() {
   }
   const root = fileURLToPath(new URL('../', import.meta.url))
   const testDirectory = args.includes('--test') ? mkdtempSync(join(tmpdir(), 'trezi-native-')) : null
+  // LKM-286: the smoke's Skills imports reach this loopback GitHub, never github.com.
+  const github = testDirectory ? await startSkillsGitHubFixture() : null
   try {
-    const spec = nativeServiceLaunchSpec(root, args, process.env, launchBun(join(root, 'out/native')), testDirectory)
+    const env = github ? { ...process.env, [SKILLS_FIXTURE_PORT_ENV]: String(github.port) } : process.env
+    const spec = nativeServiceLaunchSpec(root, args, env, launchBun(join(root, 'out/native')), testDirectory)
     mkdirSync(spec.profile, { recursive: true })
     const child = Bun.spawn([spec.command, ...spec.args], { cwd: root, env: spec.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' })
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal))
     process.exitCode = await child.exited
     if (testDirectory) process.exitCode = reportSmokeExit(root, testDirectory, { code: child.exitCode, signal: child.signalCode })
   } finally {
+    await github?.close()
     if (testDirectory) {
       // A failed host must not remove stores while its XPC service still drains.
       const marker = join(testDirectory, 'service-stopped')

@@ -367,14 +367,16 @@ final class ProviderOwner: @unchecked Sendable {
         guard case .object(let context)? = body.value("context"), case .object? = body.value("options"),
               (body.value("options")?.utf8().count ?? 0) <= 64 * 1024 else { throw ServiceContractFailure.invalidRequest }
         let background = try body.bool("background"), chat = try body.string("chat", max: 4096)
-        let allowed: Set<String> = ["emitKey", "sessionId", "resumeSessionId", "resumeSummary", "resumeCwd", "liveRoot", "projectMemory"]
+        let allowed: Set<String> = ["emitKey", "sessionId", "resumeSessionId", "resumeSummary", "resumeCwd", "liveRoot", "projectMemory", "skills"]
         guard context.allSatisfy({ allowed.contains($0.0.string) }), context.allSatisfy({ $0.1.text != nil }),
               (body.value("context")?.utf8().count ?? 0) <= 128 * 1024 else { throw ServiceContractFailure.invalidRequest }
         let value = body.value("context")!, liveRoot = try body.path("liveRoot")
         // The helper's own context may not name another chat or root than its grant.
         guard value["emitKey"]?.text?.string == chat,
               value["liveRoot"] == nil || value["liveRoot"]?.text?.string == liveRoot,
-              (value["sessionId"] != nil) == background else { throw ProviderRefusal(.unauthorized, "The helper context is outside its grant.") }
+              (value["sessionId"] != nil) == background,
+              value["skills"].map({ Self.skillsProjection($0.text?.string ?? "", provider: provider, profile: options.profile) }) ?? true
+        else { throw ProviderRefusal(.unauthorized, "The helper context is outside its grant.") }
         let session = try opened(body, host: "helper", spawn: value["sessionId"]?.text?.string)
         var fields: [(String, JSValue)] = [("type", .string(JSText("open"))), ("session", .string(JSText(session.id))),
                                            ("provider", .string(JSText(provider))), ("root", .string(JSText(session.root))),

@@ -45,9 +45,14 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
 
 /** Full-suite foreground captures can outlast the focused run's launcher watchdog.
  *  Passing full runs on a loaded host took 381–404 s (LKM-267), so the full suite gets
- *  600 s. Each smoke check keeps its own timeout and assertions. */
-export function smokeLauncherTimeoutMs(groups: ReadonlySet<NativeSmokeGroup>): number {
-  return NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 600_000 : 300_000
+ *  600 s. Each smoke check keeps its own timeout and assertions. `coreExtraMs` is added
+ *  when the core group runs (LKM-277: the Scraib acceptance builds, `scraib-originals.ts`). */
+export function smokeLauncherTimeoutMs(
+  groups: ReadonlySet<NativeSmokeGroup>,
+  coreExtraMs = 0
+): number {
+  const base = NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 600_000 : 300_000
+  return base + (groups.has('core') ? coreExtraMs : 0)
 }
 
 /** Checks that run for every selection: the setup the groups build on, and the
@@ -83,6 +88,12 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'states-canvas': ['core'],
   'three-d': ['core'],
   'publish-progress': ['core'],
+  'swift-preview': ['core'],
+  'swift-graph': ['core'],
+  'swift-build': ['core'],
+  'swift-macros': ['core'],
+  'scraib-xcode': ['core'],
+  'scraib-open': ['core'],
   'git-updates': ['core'],
   'live-provider': ['core'],
   // One fixture scope covers both; smoke-islands reads the selection to run either part.
@@ -93,6 +104,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'build-badge': ['sidebar'],
   sheets: ['settings'],
   dreamer: ['settings'],
+  'skills-settings': ['settings'],
   'security-session': ['settings'],
   'native-chat': ['chat'],
   'history-menu': ['chat'],

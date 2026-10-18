@@ -14,7 +14,10 @@ let trace = directory.deletingLastPathComponent().appendingPathComponent("trace"
 try? FileManager.default.createDirectory(at: effects, withIntermediateDirectories: true)
 let crash = env["LEDGER_CRASH"]
 
-func die(at point: String) { if crash == point { kill(getpid(), SIGKILL) } }
+// SIGKILL to itself is delivered asynchronously in a multithreaded process: under load the
+// calling thread can run on and perform the effect this boundary precedes. Park it until
+// the kill lands, so a crash at a boundary never executes past it.
+func die(at point: String) { if crash == point { kill(getpid(), SIGKILL); while true { sleep(60) } } }
 func json<T: Encodable>(_ value: T) -> ServiceJSON {
     let data = (try? JSONEncoder().encode(value)) ?? Data("null".utf8)
     return (try? JSONDecoder().decode(ServiceJSON.self, from: data)) ?? .null

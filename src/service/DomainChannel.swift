@@ -6,6 +6,7 @@ import Foundation
 protocol PipeDomainOwner: Actor {
     func open() async
     func onChange(_ handler: @escaping @Sendable (Data) -> Void)
+    /// The reply line, or empty when the owner will send it later through `onChange`.
     func handle(_ line: Data) async -> Data
     func close()
     /// The answer to a request refused because the service is stopping.
@@ -38,7 +39,12 @@ final class DomainChannel<Owner: PipeDomainOwner>: @unchecked Sendable {
         Task {
             await owner.open()
             await owner.onChange(send)
-            for await line in stream { send(await owner.handle(line)) }
+            // An empty answer is deferred: the owner replies later through its `onChange`
+            // handler (the skills GitHub import, LKM-285), so a long fetch never blocks the inbox.
+            for await line in stream {
+                let reply = await owner.handle(line)
+                if !reply.isEmpty { send(reply) }
+            }
             finished.signal()
         }
     }

@@ -1,5 +1,6 @@
 import type { SessionRecord } from './api'
 import type { ChatAgentSettings } from './chat-settings'
+import type { PreviewUse } from './preview-choice'
 import type { ProjectEntry } from './workspace'
 
 export type NativeProjectStatus =
@@ -35,7 +36,14 @@ export type NativeWorkspaceCommand =
   | { type: 'resume'; key: string; record: string }
   /** `cleanCache` (LKM-197): drop the dependency caches and reload the preview past WebKit's;
    *  'dependencies' when a dependency change caused it (the preview says so). */
-  | { type: 'restart'; key: string; command?: string; cleanCache?: boolean | 'dependencies' }
+  /** `preview` (LKM-276): a mixed JS + native repo switches which preview it runs. */
+  | {
+      type: 'restart'
+      key: string
+      command?: string
+      cleanCache?: boolean | 'dependencies'
+      preview?: PreviewUse
+    }
 export interface NativeWorkspaceBridge {
   command(command: NativeWorkspaceCommand): Promise<void>
   onProjection(

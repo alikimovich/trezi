@@ -1,0 +1,373 @@
+{
+  "firstBuild": {
+    "preview": "status-badge",
+    "stale": false,
+    "message": "Built 3 previews from StudioKit → Studio.",
+    "generation": 1,
+    "previews": [
+      "status-badge",
+      "level-meter",
+      "project-header"
+    ],
+    "width": 0,
+    "problems": [],
+    "loaded": false,
+    "manifest": {
+      "path": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json",
+      "source": "repo"
+    },
+    "failures": 0,
+    "shown": "",
+    "height": 0,
+    "plan": {
+      "warnings": [
+        "Studio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets"
+      ],
+      "blockers": [],
+      "target": "Studio",
+      "modules": [
+        {
+          "entries": [],
+          "module": "StudioKit",
+          "dependencies": [],
+          "sources": [
+            "StudioKit/LevelMeterView.swift",
+            "StudioKit/StatusBadge.swift",
+            "StudioKit/StudioFormat.swift"
+          ]
+        },
+        {
+          "entries": [
+            "Studio/StudioApp.swift"
+          ],
+          "module": "Studio",
+          "dependencies": [
+            "StudioKit"
+          ],
+          "sources": [
+            "Studio/ProjectHeader.swift"
+          ]
+        }
+      ]
+    },
+    "status": "ready"
+  },
+  "swiftui": {
+    "preview": "status-badge",
+    "stale": false,
+    "message": "Built 3 previews from StudioKit → Studio.",
+    "generation": 1,
+    "previews": [
+      "status-badge",
+      "level-meter",
+      "project-header"
+    ],
+    "width": 260,
+    "problems": [],
+    "loaded": true,
+    "manifest": {
+      "path": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json",
+      "source": "repo"
+    },
+    "failures": 0,
+    "shown": "status-badge@1",
+    "height": 60,
+    "plan": {
+      "warnings": [
+        "Studio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets"
+      ],
+      "blockers": [],
+      "target": "Studio",
+      "modules": [
+        {
+          "entries": [],
+          "module": "StudioKit",
+          "dependencies": [],
+          "sources": [
+            "StudioKit/LevelMeterView.swift",
+            "StudioKit/StatusBadge.swift",
+            "StudioKit/StudioFormat.swift"
+          ]
+        },
+        {
+          "entries": [
+            "Studio/StudioApp.swift"
+          ],
+          "module": "Studio",
+          "dependencies": [
+            "StudioKit"
+          ],
+          "sources": [
+            "Studio/ProjectHeader.swift"
+          ]
+        }
+      ]
+    },
+    "status": "ready"
+  },
+  "appkit": {
+    "preview": "level-meter",
+    "stale": false,
+    "message": "Built 3 previews from StudioKit → Studio.",
+    "generation": 1,
+    "previews": [
+      "status-badge",
+      "level-meter",
+      "project-header"
+    ],
+    "width": 240,
+    "problems": [],
+    "loaded": true,
+    "manifest": {
+      "path": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json",
+      "source": "repo"
+    },
+    "failures": 0,
+    "shown": "level-meter@1",
+    "height": 72,
+    "plan": {
+      "warnings": [
+        "Studio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets"
+      ],
+      "blockers": [],
+      "target": "Studio",
+      "modules": [
+        {
+          "entries": [],
+          "module": "StudioKit",
+          "dependencies": [],
+          "sources": [
+            "StudioKit/LevelMeterView.swift",
+            "StudioKit/StatusBadge.swift",
+            "StudioKit/StudioFormat.swift"
+          ]
+        },
+        {
+          "entries": [
+            "Studio/StudioApp.swift"
+          ],
+          "module": "Studio",
+          "dependencies": [
+            "StudioKit"
+          ],
+          "sources": [
+            "Studio/ProjectHeader.swift"
+          ]
+        }
+      ]
+    },
+    "status": "ready"
+  },
+  "crossModule": {
+    "preview": "project-header",
+    "stale": false,
+    "message": "Built 3 previews from StudioKit → Studio.",
+    "generation": 1,
+    "previews": [
+      "status-badge",
+      "level-meter",
+      "project-header"
+    ],
+    "width": 300,
+    "problems": [],
+    "loaded": true,
+    "manifest": {
+      "path": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json",
+      "source": "repo"
+    },
+    "failures": 0,
+    "shown": "project-header@1",
+    "height": 110,
+    "plan": {
+      "warnings": [
+        "Studio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets"
+      ],
+      "blockers": [],
+      "target": "Studio",
+      "modules": [
+        {
+          "entries": [],
+          "module": "StudioKit",
+          "dependencies": [],
+          "sources": [
+            "StudioKit/LevelMeterView.swift",
+            "StudioKit/StatusBadge.swift",
+            "StudioKit/StudioFormat.swift"
+          ]
+        },
+        {
+          "entries": [
+            "Studio/StudioApp.swift"
+          ],
+          "module": "Studio",
+          "dependencies": [
+            "StudioKit"
+          ],
+          "sources": [
+            "Studio/ProjectHeader.swift"
+          ]
+        }
+      ]
+    },
+    "status": "ready"
+  },
+  "panel": "Manifest\nUsing the repo's: /private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json\nTrezi's copy (wins, the repo stays untouched): /var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json\nproject Studio.xcodeproj\nSchemes (scheme files): Studio\nStudio app, 2 Swift files, depends on StudioKit, 1 resources\nStudioKit framework, 3 Swift files\nxcodebuild -list -json needs Xcode, but only the command-line tools are selected (xcode-select -p).\nBuild plan for Studio (Studio.xcodeproj)\nStudioKit: 3 files\nStudio: 1 files, links StudioKit, leaves out Studio/StudioApp.swift\nStudio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets\n",
+  "projectNative": {
+    "structure": {
+      "workspaces": [],
+      "projects": [
+        "Studio.xcodeproj"
+      ],
+      "packages": []
+    },
+    "manifest": {
+      "repoExists": true,
+      "treziExists": false
+    },
+    "containers": [
+      {
+        "path": "Studio.xcodeproj",
+        "errors": [
+          "xcodebuild -list -json needs Xcode, but only the command-line tools are selected (xcode-select -p)."
+        ],
+        "targets": [
+          {
+            "name": "Studio",
+            "kind": "app",
+            "dependencies": [
+              "StudioKit"
+            ]
+          },
+          {
+            "name": "StudioKit",
+            "kind": "framework",
+            "dependencies": []
+          }
+        ]
+      }
+    ]
+  },
+  "failed": {
+    "preview": "project-header",
+    "stale": true,
+    "message": "Build failed in StudioKit: 1 error.",
+    "generation": 1,
+    "previews": [
+      "status-badge",
+      "level-meter",
+      "project-header"
+    ],
+    "width": 300,
+    "problems": [
+      "[StudioKit] StudioKit/StudioFormat.swift:6:9: cannot find 'valeu' in scope"
+    ],
+    "loaded": true,
+    "manifest": {
+      "path": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json",
+      "source": "repo"
+    },
+    "failures": 1,
+    "shown": "project-header@1",
+    "height": 110,
+    "plan": {
+      "warnings": [
+        "Studio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets"
+      ],
+      "blockers": [],
+      "target": "Studio",
+      "modules": [
+        {
+          "entries": [],
+          "module": "StudioKit",
+          "dependencies": [],
+          "sources": [
+            "StudioKit/LevelMeterView.swift",
+            "StudioKit/StatusBadge.swift",
+            "StudioKit/StudioFormat.swift"
+          ]
+        },
+        {
+          "entries": [
+            "Studio/StudioApp.swift"
+          ],
+          "module": "Studio",
+          "dependencies": [
+            "StudioKit"
+          ],
+          "sources": [
+            "Studio/ProjectHeader.swift"
+          ]
+        }
+      ]
+    },
+    "status": "failed"
+  },
+  "recovered": {
+    "preview": "project-header",
+    "stale": false,
+    "message": "Built 3 previews from StudioKit → Studio.",
+    "generation": 2,
+    "previews": [
+      "status-badge",
+      "level-meter",
+      "project-header"
+    ],
+    "width": 300,
+    "problems": [],
+    "loaded": true,
+    "manifest": {
+      "path": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/Swift Studio/trezi-previews.json",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-yboJ2H/profile/swift-previews/c0a7e49be0eef034/trezi-previews.json",
+      "source": "repo"
+    },
+    "failures": 1,
+    "shown": "project-header@2",
+    "height": 110,
+    "plan": {
+      "warnings": [
+        "Studio: resources are not bundled into the preview (Stage 3): Studio/Assets.xcassets"
+      ],
+      "blockers": [],
+      "target": "Studio",
+      "modules": [
+        {
+          "entries": [],
+          "module": "StudioKit",
+          "dependencies": [],
+          "sources": [
+            "StudioKit/LevelMeterView.swift",
+            "StudioKit/StatusBadge.swift",
+            "StudioKit/StudioFormat.swift"
+          ]
+        },
+        {
+          "entries": [
+            "Studio/StudioApp.swift"
+          ],
+          "module": "Studio",
+          "dependencies": [
+            "StudioKit"
+          ],
+          "sources": [
+            "Studio/ProjectHeader.swift"
+          ]
+        }
+      ]
+    },
+    "status": "ready"
+  },
+  "provenance": {
+    "syntheticDirectWrites": [
+      "StudioKit/StudioFormat.swift: value → valeu (error), then back (fix)"
+    ],
+    "fixtures": [
+      "Edits are direct writes to the opened copy, not chat turns (the chat landing path is covered by the LKM-271 swift-preview check).",
+      "The page panel is opened through the DOM; no OS input."
+    ]
+  }
+}

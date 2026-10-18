@@ -9,6 +9,8 @@ export interface PullRequestStatus {
   mergeable?: string
   baseRefName?: string
   headRefName?: string
+  /** The PR's head commit on GitHub (what a merge would merge). */
+  headRefOid?: string
   statusCheckRollup?: unknown[]
   conflictingFiles: string[]
   error?: string
@@ -28,7 +30,7 @@ export async function pullRequestStatus(
         'view',
         ...(number ? [String(number)] : []),
         '--json',
-        'number,url,mergeable,baseRefName,headRefName,statusCheckRollup'
+        'number,url,mergeable,baseRefName,headRefName,headRefOid,statusCheckRollup'
       ],
       { cwd: liveRoot, timeout: 30_000 }
     )
