@@ -71,6 +71,16 @@ export const SKILL_RECOMMENDATION_IMPORTS: Readonly<
       maxFileBytes: 22627
     }
   },
+  'swiftui-view-refactor': {
+    category: 'swiftui',
+    ref: 'main',
+    evidence: {
+      commit: 'd602e8ada5e8c73fadcb4d9eaff6d16fa17462db',
+      files: 2,
+      bytes: 12565,
+      maxFileBytes: 7961
+    }
+  },
   'swiftui-expert-skill': {
     category: 'swiftui',
     ref: 'main',

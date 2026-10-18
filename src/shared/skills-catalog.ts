@@ -75,6 +75,19 @@ export const SKILL_RECOMMENDATIONS: readonly SkillRecommendation[] = Object.free
     importable: true
   },
   {
+    id: 'swiftui-view-refactor',
+    title: 'SwiftUI View Refactor',
+    publisher: 'Peter Steinberger',
+    summary:
+      'Refactor and review SwiftUI views: layout, dependency injection, Observation and view models.',
+    repository: 'steipete/agent-scripts',
+    path: 'skills/swiftui-view-refactor',
+    pathVerified: true,
+    license: 'MIT',
+    licenseSource: 'LICENSE',
+    importable: true
+  },
+  {
     id: 'swiftui-expert-skill',
     title: 'SwiftUI Expert',
     publisher: 'Antoine van der Lee',

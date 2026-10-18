@@ -142,9 +142,9 @@ arrives out of order, matched by frame `id`); aborting the signal sends `cancel`
   imported from a folder, edited or installed from GitHub, passes the same skills-only
   scope (`SkillsScope`, [step 5](#github-import-lkm-285)) with the same `unauthorized`
   refusal: `hooks:`, `allowed-tools:` and other non-allowed frontmatter, hook/MCP/plugin
-  and dependency manifests and dynamic `!` preprocessing are refused. Plain scripts
-  are kept as inert text. Stored objects are not executable. The registry never writes
-  a project, a provider's home or a grant, and never runs a command.
+  and dependency manifests, dynamic `!` preprocessing and scripts (executable or not) are
+  refused. Stored objects are not executable. The registry never writes a project, a
+  provider's home or a grant, and never runs a command.
 - **Scope on every write.** `create`, `import` and the service's `install` check the
   whole file set; `edit` checks the final set, so files carried over from the previous
   revision are read back and checked too. A refusal writes no object, revision or
@@ -202,10 +202,18 @@ Nothing is preinstalled, and the curated recommendations are metadata only.
      and similar are refused, as are flow mappings
    - hook, MCP, plugin, settings and dependency manifests (`package.json`,
      `requirements.txt`, `Makefile`, …)
-   - a Codex `agents/openai.yaml` that declares `dependencies` (tools, MCP servers)
+   - a script, whether or not it is executable: a file with a script extension
+     (`.sh .bash .zsh .fish .ksh .csh .py .rb .pl .php .lua .js .mjs .cjs .ts .mts .cts
+     .ps1 .bat .cmd .command .scpt .applescript`, any case) or whose text starts with
+     `#!`. The refusal names the file.
+   - a Codex `agents/openai.yaml` that declares `dependencies` (tools, MCP servers) in
+     any form, or is not a plain block mapping: the word `dependencies` as a key
+     (plain, quoted or inside a flow mapping) anywhere in the file, and any top-level
+     line that is not a plain `key:` (flow `{`/`[`, complex `?`, anchor `&`, alias `*`,
+     or a quoted key) is refused.
 
-   Scripts are kept as inert, non-executable text and are never run. Untrusted skill
-   text never becomes policy or a permission; normal tool approval still applies.
+   Nothing from a package is run. Untrusted skill text never becomes policy or a
+   permission; normal tool approval still applies.
 6. **License.** Evidence comes from the folder's own `LICENSE*` file, then the
    `SKILL.md` `license:` field, then the repository root `LICENSE*`. A root license is
    copied into the package as `attribution`. An unrecognised license is `NOASSERTION`
@@ -228,6 +236,7 @@ Recommendations (`SKILL_RECOMMENDATIONS` with `SKILL_RECOMMENDATION_IMPORTS`):
 | `frontend-design` | UI craft | `anthropics/skills` `skills/frontend-design` | Apache-2.0 (the folder's `LICENSE.txt`) | yes | `dbd4588f`: 2 files, 19 564 B, largest 10 174 B |
 | `vercel-react-best-practices` | React | `vercel-labs/agent-skills` `skills/react-best-practices` | MIT (`SKILL.md` frontmatter) | **no**: 76 files, over the 64-file cap | `063bee94`: 76 files (75 `.md`, 1 `.json`), 230 383 B, largest 108 261 B |
 | `vercel-composition-patterns` | design systems | `vercel-labs/agent-skills` `skills/composition-patterns` | MIT (`SKILL.md` frontmatter) | yes | `063bee94`: 14 files, 50 339 B, largest 22 627 B |
+| `swiftui-view-refactor` | SwiftUI | `steipete/agent-scripts` `skills/swiftui-view-refactor` | MIT (repository `LICENSE`) | yes | `d602e8ad`: 2 UTF-8 `.md` files, 12 565 B, largest 7 961 B (`/tmp/trezi-swiftui-compatible-recommendation.json`) |
 | `swiftui-expert-skill` | SwiftUI | `AvdLee/SwiftUI-Agent-Skill` `skills/swiftui-expert-skill` | MIT (repository `LICENSE`) | **no**: scripts, images and a file over 256 KiB | `204dba7c`: 51 files (34 `.md`, 13 `.py`, 2 `.png`, 1 `.svg`, 1 `.yaml`), 901 559 B, largest 398 841 B |
 
 The evidence was measured on the upstream trees at those commits and is recorded in
@@ -237,7 +246,9 @@ folder is instructions only and fits `SKILLS_LIMITS`; the caps are not weakened 
 folder. A non-importable entry carries an `unavailableReason` for the UI and
 `recommendationImport` returns `null` for it, so it is never offered an import.
 `test/skills-github.mjs` asserts that `importable` follows the evidence against the
-caps, and that every importable entry has a verified path and a permissive license. If a
+caps, and that every importable entry has a verified path and a permissive license. Every
+category (UI craft, design systems, SwiftUI) has an importable entry; React is the one
+deliberate exception, because its only curated skill is over the file cap. If a
 maintainer raises `maxFiles` (and the evidence then fits), the React entry can become
 importable.
 

@@ -86,7 +86,7 @@ try {
     assert.equal(skillLicenseStatus('NOASSERTION'), 'unknown')
     assert.equal(skillLicenseStatus(null), 'unknown')
 
-    assert.equal(SKILL_RECOMMENDATIONS.length, 4)
+    assert.equal(SKILL_RECOMMENDATIONS.length, 5)
     assert.deepEqual(
       new Set(Object.values(SKILL_RECOMMENDATION_IMPORTS).map((item) => item.category)),
       new Set(['ui-craft', 'design-systems', 'react', 'swiftui'])
@@ -145,6 +145,19 @@ try {
     assert.deepEqual(
       SKILL_RECOMMENDATIONS.filter((entry) => !entry.importable).map((entry) => entry.id),
       ['vercel-react-best-practices', 'swiftui-expert-skill']
+    )
+    // Every category offers something importable, except React: its only curated skill
+    // has 76 files, over the unchanged 64-file cap (a deliberate, documented exception).
+    const noImport = new Set(['react'])
+    for (const category of ['ui-craft', 'design-systems', 'react', 'swiftui']) {
+      const importable = SKILL_RECOMMENDATIONS.filter(
+        (entry) => entry.importable && SKILL_RECOMMENDATION_IMPORTS[entry.id].category === category
+      )
+      assert.equal(importable.length > 0, !noImport.has(category), `${category} importable`)
+    }
+    assert.equal(
+      SKILL_RECOMMENDATION_IMPORTS['swiftui-view-refactor'].evidence.commit,
+      'd602e8ada5e8c73fadcb4d9eaff6d16fa17462db'
     )
     assert.ok(!SKILL_RECOMMENDATIONS.some((entry) => entry.path.includes('web-design-guidelines')))
     console.log(
@@ -514,7 +527,42 @@ try {
           'skills/demo/agents/openai.yaml':
             'interface:\n  display_name: Demo\ndependencies:\n  tools:\n    - type: mcp\n'
         }
-      ]
+      ],
+      [
+        'Codex flow-style dependencies',
+        {
+          'skills/demo/agents/openai.yaml':
+            '{interface: {display_name: X}, dependencies: {tools: [{type: mcp}]}}\n'
+        }
+      ],
+      [
+        'Codex quoted dependencies key',
+        {
+          'skills/demo/agents/openai.yaml':
+            'interface:\n  display_name: X\n"dependencies":\n  tools: []\n'
+        }
+      ],
+      [
+        'Codex nested flow dependencies',
+        { 'skills/demo/agents/openai.yaml': 'interface: {dependencies: {tools: []}}\n' }
+      ],
+      [
+        'Codex complex dependencies key',
+        { 'skills/demo/agents/openai.yaml': '? dependencies\n: {tools: []}\n' }
+      ],
+      [
+        'Codex escaped quoted key',
+        { 'skills/demo/agents/openai.yaml': '"depend\\u0065ncies":\n  tools: []\n' }
+      ],
+      [
+        'Codex anchored key',
+        { 'skills/demo/agents/openai.yaml': '&a interface:\n  display_name: X\n' }
+      ],
+      ['non-executable shell script', { 'skills/demo/scripts/check.sh': 'echo hi\n' }],
+      ['shebang in a text file', { 'skills/demo/references/run.txt': '#!/bin/sh\necho hi\n' }],
+      ['python script', { 'skills/demo/scripts/tool.py': 'print(1)\n' }],
+      ['javascript script', { 'skills/demo/helper.JS': 'console.log(1)\n' }],
+      ['batch script', { 'skills/demo/install.cmd': 'echo hi\n' }]
     ])
       assert.equal(failure(await scoped(files)), 'refused', name)
     const allowed = await scoped({
@@ -523,19 +571,17 @@ try {
         'license: MIT\ncompatibility: Claude Code\nmetadata:\n  author: acme\n'
       ),
       'skills/demo/agents/openai.yaml': 'interface:\n  display_name: Demo\n',
-      'skills/demo/references/shell.md': 'Use `a != b` or ! alone, and run `npm test` yourself.\n',
-      'skills/demo/scripts/check.sh': '#!/bin/sh\necho stored, never run\n'
+      'skills/demo/references/shell.md': 'Use `a != b` or ! alone, and run `npm test` yourself.\n'
     })
     assert.ok(allowed.result, JSON.stringify(allowed))
     assert.deepEqual(allowed.result.files, [
       'SKILL.md',
       'agents/openai.yaml',
       'references/guide.md',
-      'references/shell.md',
-      'scripts/check.sh'
+      'references/shell.md'
     ])
     console.log(
-      'SKILLS-GITHUB scope: dynamic shell, tool/hook/agent frontmatter, manifests and Codex dependencies refused PASS'
+      'SKILLS-GITHUB scope: dynamic shell, tool/hook/agent frontmatter, manifests, scripts and Codex dependencies refused PASS'
     )
   }
   await fx.close()

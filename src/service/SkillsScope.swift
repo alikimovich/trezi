@@ -10,7 +10,9 @@ import Foundation
 /// - No Markdown file uses dynamic preprocessing (`!` followed by a backtick), which
 ///   Claude runs as a shell command before the skill is read.
 /// - No hook, MCP, plugin or settings manifest, and no dependency manifest.
-/// - No Codex `agents/openai.yaml` that declares `dependencies`.
+/// - No script, executable or not: a script file extension or a `#!` first line is refused.
+/// - No Codex `agents/openai.yaml` that declares `dependencies` in any form, and none that
+///   is not a plain block mapping (flow, quoted, complex, anchored or aliased keys).
 ///
 /// Links, special files and executables never reach this point (`TarReader`).
 enum SkillsScope {
@@ -22,19 +24,45 @@ enum SkillsScope {
         "cargo.toml", "go.mod", "package.swift", "podfile", "makefile"
     ]
 
+    /// Script file extensions, compared case-insensitively. A script is refused whether or
+    /// not it is executable, and a file starting with `#!` is refused whatever its name.
+    static let scriptExtensions: [String] = [
+        ".sh", ".bash", ".zsh", ".fish", ".ksh", ".csh", ".py", ".rb", ".pl", ".php", ".lua", ".js", ".mjs", ".cjs",
+        ".ts", ".mts", ".cts", ".ps1", ".bat", ".cmd", ".command", ".scpt", ".applescript"
+    ]
+
+    /// `agents/openai.yaml` must be a plain block mapping with plain top-level keys, so no
+    /// flow mapping, quoted, complex, anchored or aliased key can hide `dependencies`
+    /// (tools and MCP servers Codex would connect). The word as a key is refused anywhere.
+    static func checkAgentConfig(_ path: String, _ text: String) throws {
+        let refusal = SkillsPackageError.refused("\(path) declares tool dependencies or is not a plain block mapping; imported skills hold instructions only.")
+        if text.range(of: #"dependencies["']?\s*:"#, options: [.regularExpression, .caseInsensitive]) != nil { throw refusal }
+        for raw in text.components(separatedBy: "\n") {
+            let line = raw.hasSuffix("\r") ? String(raw.dropLast()) : raw
+            guard let first = line.first, first != " ", first != "\t", first != "#" else { continue }
+            if line == "---" || line == "..." { continue }
+            guard line.range(of: #"^[A-Za-z0-9_-]+:(\s|$)"#, options: .regularExpression) != nil else { throw refusal }
+        }
+    }
+
     static func check(_ files: [SkillFile]) throws {
         for file in files {
             let name = (file.path.split(separator: "/").last.map(String.init) ?? file.path).lowercased()
             guard !controlFiles.contains(name) else {
                 throw SkillsPackageError.refused("\(file.path) is a hook, tool or dependency manifest; imported skills hold instructions only.")
             }
+            guard !scriptExtensions.contains(where: { name.hasSuffix($0) }) else {
+                throw SkillsPackageError.refused("\(file.path) is a script; imported skills hold instructions only.")
+            }
             let text = try SkillsPackage.text(file)
+            guard !text.hasPrefix("#!") else {
+                throw SkillsPackageError.refused("\(file.path) starts with a shebang and is a script; imported skills hold instructions only.")
+            }
             if name.hasSuffix(".md") || name.hasSuffix(".markdown"), let line = lineNumber(of: "!`", in: text) {
                 throw SkillsPackageError.refused("\(file.path) line \(line) uses dynamic preprocessing (!`…`), which would run a command.")
             }
-            if file.path.lowercased().hasPrefix("agents/"), name == "openai.yaml" || name == "openai.yml",
-               text.components(separatedBy: "\n").contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("dependencies:") }) {
-                throw SkillsPackageError.refused("\(file.path) declares tool dependencies; imported skills hold instructions only.")
+            if file.path.lowercased().hasPrefix("agents/"), name == "openai.yaml" || name == "openai.yml" {
+                try checkAgentConfig(file.path, text)
             }
         }
         guard let entry = files.first(where: { $0.path == SkillsPackage.entryFile }) else { return }

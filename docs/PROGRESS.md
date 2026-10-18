@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-285 review repair 2: scripts, flow-style Codex dependencies, SwiftUI recommendation
+
+- **Scripts refused.** `SkillsScope.check` now refuses any file with a script extension (`.sh .bash .zsh .fish .ksh .csh .py .rb .pl .php .lua .js .mjs .cjs .ts .mts .cts .ps1 .bat .cmd .command .scpt .applescript`, any case) and any file whose text starts with `#!`, executable or not, with a message naming the file. This covers GitHub import, create, folder import and edit. The test that stored a mode-644 `scripts/check.sh` as allowed now expects a refusal, as does the folder-import fixture (which also checks that nothing runs and nothing is stored).
+- **`agents/openai.yaml`.** `checkAgentConfig` refuses the word `dependencies` as a key in any form anywhere (plain, quoted, flow-nested, after `?`), and any top-level line that is not a plain `key:` (flow `{`/`[`, complex `?`, anchor `&`, alias `*`, quoted key). Flow, quoted, complex, escaped and anchored cases are in `test/skills-github.mjs` and `test/skills-registry-safety.mjs`.
+- **SwiftUI.** `swiftui-view-refactor` (`steipete/agent-scripts` `skills/swiftui-view-refactor` at `d602e8ad`, 2 `.md` files, 12 565 B, MIT root `LICENSE`) is added as importable; AvdLee stays listed as not importable. Every category now has an importable entry except React (76 files over the unchanged 64-file cap), which is a documented, tested exception.
+
 ## 2026-10-17 — LKM-285 review repair: recommendation catalog and scope on every write
 
 - **Catalog.**
