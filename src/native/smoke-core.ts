@@ -60,6 +60,8 @@ import {
   runSmokeChecks,
   type SmokeCheck
 } from './smoke-runner'
+import { checkScraibOpen, restoreScraibOpen } from './smoke-scraib-open'
+import { checkScraibXcode, restoreScraibXcode } from './smoke-scraib-xcode'
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
@@ -1210,6 +1212,18 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: () => checkSwiftMacros(host, invoke, fixture, root, artifacts, firstProject),
       cleanup: () => restoreSwiftMacros(host, firstProject)
+    },
+    {
+      name: 'scraib-xcode',
+      dependsOn: ['open-project'],
+      run: () => checkScraibXcode(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreScraibXcode(host, firstProject)
+    },
+    {
+      name: 'scraib-open',
+      dependsOn: ['open-project'],
+      run: () => checkScraibOpen(host, invoke, fixture, root, artifacts),
+      cleanup: () => restoreScraibOpen(host, firstProject)
     },
     {
       name: 'final-shell',

@@ -355,6 +355,20 @@ what is not done: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3).
   renders a chosen `#Preview`, a private-overlay `#Preview`, a component and a view
   controller, checks the page's catalog and compares the copy's content hash and Git
   status before and after. Evidence: `docs/evidence/lkm-276/`.
+- LKM-277 (Stage 6, Scraib acceptance): two native smoke checks in group `core`.
+  - `scraib-xcode` (`src/native/smoke-scraib-xcode.ts`) opens a disposable copy of the
+    unchanged Scraib-xcode with no manifest. Trezi chooses the full `scraib` target,
+    checks all seven `#Preview` blocks and renders `FloatingLoaderView` through
+    `FloatingLoaderManager`'s `#Preview`. It clicks `ShortcutRecorderView`, then sends
+    three chat-landed turns: an edit, a compile error (last good build kept,
+    landing-check row) and the fix.
+  - `scraib-open` (`src/native/smoke-scraib-open.ts`) builds Scraib-open with ScraibKit,
+    Sparkle and PostHog. It renders a view from a file that imports ScraibKit and records
+    each view it cannot show, with the reason.
+  - Both checks hash the original before and after and compare `xcode-select -p`. Each
+    does nothing where its original is missing.
+  - Evidence (inspected captures, provenance, toolchain and limits):
+    `docs/evidence/scraib-acceptance/README.md`.
 
 ## Limits and follow-ups
 
@@ -383,6 +397,13 @@ what is not done: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3).
   compiled resources, run-script generated sources. Stages:
   `docs/SWIFT-PREVIEWS-PLAN.md`.
 - **Scraib (read-only inspection and disposable-copy checks; not "supported").**
+  Stage 6 (LKM-277) supersedes the notes below:
+  - Unchanged Scraib-xcode now previews `FloatingLoaderView` from its full target.
+  - Scraib-open renders through ScraibKit.
+  - The limits that remain are listed in `docs/evidence/scraib-acceptance/README.md`:
+    resources, StoreKit, full-app windows and cursor tracking, offscreen glass and
+    samples for types outside the target.
+
   Nothing in either Scraib repository was modified. The checks ran on copies under the
   temporary directory with the same driver (`docs/evidence/lkm-271/scraib-validation/`:
   `check.mjs` plus the two preview files).

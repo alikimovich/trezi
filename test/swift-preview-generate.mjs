@@ -210,6 +210,56 @@ assert.deepEqual(failedEntries(output, build, generatedDir, factories), {
 })
 pass('error mapping')
 
+// --- The synthesized memberwise initializer (LKM-277, Scraib's ShortcutRecorderView) --
+const { memberwise } = await import('../src/swift-preview/samples.ts')
+const property = (name, type, more = {}) => ({
+  name,
+  type,
+  wrapper: '',
+  wrapperArgs: '',
+  hasDefault: false,
+  isLet: false,
+  isStatic: false,
+  computed: false,
+  access: 'internal',
+  ...more
+})
+const shape = (properties) => {
+  const init = memberwise({ kind: 'struct', properties, line: 1 })
+  return [init.access, init.params.map((p) => `${p.label}${p.hasDefault ? '=' : ''}`)]
+}
+// `let title: String; @Binding var keyCode: Int; @State private var isRecording = false;
+// @State private var monitor: Any?`: swiftc's init is `init(title:keyCode:)`, internal.
+assert.deepEqual(
+  shape([
+    property('title', 'String', { isLet: true }),
+    property('keyCode', 'Int', { wrapper: 'Binding' }),
+    property('isRecording', '', { wrapper: 'State', hasDefault: true, access: 'private' }),
+    property('monitor', 'Any?', { wrapper: 'State', access: 'private' })
+  ]),
+  ['internal', ['title', 'keyCode']]
+)
+// `var note: String?; @State var level: Int?; let id: Int?; var plain: Optional<Int>`.
+assert.deepEqual(
+  shape([
+    property('note', 'String?'),
+    property('level', 'Int?', { wrapper: 'State' }),
+    property('id', 'Int?', { isLet: true }),
+    property('plain', 'Optional<Int>')
+  ]),
+  ['internal', ['note=', 'level=', 'id', 'plain']]
+)
+// A private stored property makes the initializer private, with or without a value.
+assert.deepEqual(shape([property('p', '', { hasDefault: true, access: 'private' })]), [
+  'fileprivate',
+  ['p=']
+])
+assert.deepEqual(shape([property('m', 'Int', { wrapper: 'State', access: 'private' })]), [
+  'fileprivate',
+  ['m']
+])
+pass('memberwise initializer')
+
 // --- The generated folder and the saved choice -----------------------------------
 const generated = new GeneratedPreviews({
   root: repo,

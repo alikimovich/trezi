@@ -44,9 +44,14 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
 }
 
 /** Full-suite foreground captures can outlast the focused run's launcher watchdog.
- *  Each smoke check keeps its own timeout and assertions. */
-export function smokeLauncherTimeoutMs(groups: ReadonlySet<NativeSmokeGroup>): number {
-  return NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 420_000 : 300_000
+ *  Each smoke check keeps its own timeout and assertions. `coreExtraMs` is added when
+ *  the core group runs (LKM-277: the Scraib acceptance builds, `scraib-originals.ts`). */
+export function smokeLauncherTimeoutMs(
+  groups: ReadonlySet<NativeSmokeGroup>,
+  coreExtraMs = 0
+): number {
+  const base = NATIVE_SMOKE_GROUPS.every((group) => groups.has(group)) ? 420_000 : 300_000
+  return base + (groups.has('core') ? coreExtraMs : 0)
 }
 
 /** Checks that run for every selection: the setup the groups build on, and the
@@ -86,6 +91,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'swift-graph': ['core'],
   'swift-build': ['core'],
   'swift-macros': ['core'],
+  'scraib-xcode': ['core'],
+  'scraib-open': ['core'],
   'git-updates': ['core'],
   'live-provider': ['core'],
   // One fixture scope covers both; smoke-islands reads the selection to run either part.

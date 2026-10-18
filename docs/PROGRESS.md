@@ -2,6 +2,36 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-277 native previews Stage 6: Scraib acceptance on disposable copies
+
+- Why: Stages 1–3 were checked on fixtures. Stage 6 shows them on the real apps: an unchanged Scraib-xcode should preview `FloatingLoaderView` just by opening it in Trezi.
+- Checks: two native smoke checks in group `core`.
+  - `scraib-xcode` (`src/native/smoke-scraib-xcode.ts`) copies the original (leaving out `.git`/`.claude`) and checks the copy byte for byte. It opens the copy, with no manifest. Trezi picks `scraib` and builds 33 previews, including all seven `#Preview` blocks. The check renders `FloatingLoaderManager`'s `#Preview`, clicks `ShortcutRecorderView` to record and stop, then sends three chat-landed turns (fixture provider): an edit, a compile error with the last good build and landing-check row, and the fix with the diagnostic in its prompt.
+  - `scraib-open` (`src/native/smoke-scraib-open.ts`): Sparkle and posthog-ios at their pins plus ScraibKit build. It renders the largest built view from a file that imports ScraibKit and records the page's "not shown" reasons.
+  - Both hash the original before and after (content and stat digests) and compare `xcode-select -p`. Shared helpers are in `src/native/smoke-scraib.ts`.
+  - The launcher watchdog adds the checks' budget when `core` runs and the originals exist (`src/native/scraib-originals.ts`, `smokeLauncherTimeoutMs(groups, coreExtraMs)`).
+- Found and fixed: the first native run failed on Scraib-xcode with "extra argument 'monitor'". `memberwise()` in `src/swift-preview/samples.ts` made `@State private var monitor: Any?` a required parameter. Probes against swiftc 6.3.2 give the real rules:
+  - an optional `var` defaults to nil, plain or `@State`;
+  - a private wrapped property with a default is not a parameter;
+  - any other private stored property makes the initializer private.
+
+  The unit cases are in `test/swift-preview-generate.mjs`.
+- Also fixed in the check: the edit anchor now names the `#Preview` call (the first match was another line), and the Scraib-open pick prefers the largest view that imports ScraibKit.
+- Evidence: `docs/evidence/scraib-acceptance/` (inspected captures, both JSON files, README).
+  - Toolchain: DEVELOPER_DIR `/Applications/Xcode-26.5.0.app/Contents/Developer`, Xcode 26.5 (17F42), Swift 6.3.2, SDK 26.5.
+  - Trezi `0.1.0 (build 1095, 2ac96f5)` plus this change.
+  - Scraib commits: Scraib-xcode `580051800e`, Scraib-open `dfc42b1e02`.
+  - Originals unchanged; `xcode-select` `/Library/Developer/CommandLineTools` before and after.
+  - Native group `core` passed 38/38, including the LKM-273–276 checks.
+- Decisions kept: no sandbox-disabling flags. Originals read-only; only disposable copies.
+- Limits:
+  - Samples only for the target's own types. Scraib-open's 12 unshown views need ScraibKit types, `ButtonStyleConfiguration`, `any Theme` or generics.
+  - No StoreKit, app icon or other unbundled resources.
+  - No full-app windows or cursor tracking.
+  - Offscreen glass and material fidelity.
+  - `LiquidGlassPanelBackground` draws at its 20×44 pt intrinsic size.
+  - In the worker sandbox the plugin server, actool, SwiftPM and ports are unavailable, so real runs come only from Agent OS native verification.
+
 ## 2026-10-17 — LKM-276 native previews Stage 3: open → target → `#Preview` or component → render
 
 - Why: a native project still needed a hand-written `trezi-previews.json` and preview declarations, although its `#Preview` blocks already say what to show and LKM-274 made them compile intact. Now opening the folder is enough, and nothing in the repo is written.
