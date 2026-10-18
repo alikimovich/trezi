@@ -109,9 +109,11 @@ import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
 import { withDreamerPane } from './settings-dreamer'
 import { withProviderFallbackSetting } from './settings-provider-fallback'
+import { nativeSkills, withSkillsPane } from './settings-skills'
 import { NativeSheetController } from './sheets-runtime'
 import { NativeShellController } from './shell-controller'
 import { installShutdown } from './shutdown'
+import { serviceSkills } from './skills-service'
 import { runNativeCoreSmoke } from './smoke-core'
 import {
   removeSmokeDirectory,
@@ -922,11 +924,18 @@ async function main() {
     shell.openExternal(url)
   )
   setProviderFallbackSource(() => preferences.get(PROVIDER_FALLBACK_KEY))
+  // LKM-288, LKM-286: Settings → Skills reads and writes only through the Swift Skills
+  // owner; the host's open panel only names the folder the service then imports.
+  nativeSkills.current = serviceSkills(host)
   const settingsController = withProviderFallbackSetting(
     withBuildCheckSetting(
       withDreamerPane(
-        withClaudePane(
-          new NativeSettingsController(sheetController, preferences, refreshPreferences)
+        withSkillsPane(
+          withClaudePane(
+            new NativeSettingsController(sheetController, preferences, refreshPreferences)
+          ),
+          nativeSkills.current,
+          () => host!.request('pick', {}, 0x7fffffff)
         ),
         preferences
       ),

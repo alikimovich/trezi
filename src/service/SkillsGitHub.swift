@@ -10,6 +10,22 @@ struct SkillsGitHubEndpoints: Sendable {
     static func loopback(port: Int) -> SkillsGitHubEndpoints {
         SkillsGitHubEndpoints(api: "http://127.0.0.1:\(port)/api", archive: "http://127.0.0.1:\(port)/codeload", loopback: true)
     }
+    /// The native smoke's loopback GitHub (LKM-286, `src/native/skills-github-fixture.ts`,
+    /// started by `scripts/start-native.mjs --test`). Compiled only into the `test` build
+    /// profile (`-D TREZI_TEST_PROFILE`, `scripts/native-swift.mjs`); a release build has no
+    /// such switch and always keeps `.github`. Even there it needs a disposable launch:
+    /// `TREZI_NATIVE_TEST_DIR` is set, the profile lives inside it, and the endpoint is
+    /// 127.0.0.1 on the fixture's port, never another host.
+    static func fixture(environment: [String: String], profile: String) -> SkillsGitHubEndpoints? {
+        #if TREZI_TEST_PROFILE
+        guard let directory = environment["TREZI_NATIVE_TEST_DIR"], !directory.isEmpty,
+              URL(fileURLWithPath: profile).standardizedFileURL.path.hasPrefix(URL(fileURLWithPath: directory).standardizedFileURL.path + "/"),
+              let port = environment["TREZI_SKILLS_GITHUB_FIXTURE_PORT"].flatMap(Int.init), (1024...65535).contains(port) else { return nil }
+        return loopback(port: port)
+        #else
+        return nil
+        #endif
+    }
 }
 
 /// An import address, parsed strictly from `https://github.com/<owner>/<repo>` (with an

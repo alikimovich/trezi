@@ -40,6 +40,7 @@ export const SETTINGS_DEFAULT_SIZE = { width: 780, height: 760 }
 export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', symbol: 'gearshape' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
+  { id: 'skills', label: 'Skills', symbol: 'book.closed' },
   { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' },
   { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' }
 ] as const
@@ -57,7 +58,7 @@ export function settingsVerificationWidths(minimumWidth: number): number[] {
 }
 
 /** The source list shows every section, with the requested one selected, shown and titled. */
-function assertSidebar(evidence: SettingsEvidence, section: SettingsSection) {
+export function assertSidebar(evidence: SettingsEvidence, section: SettingsSection) {
   assert.deepEqual(
     evidence.sections,
     SETTINGS_SECTIONS.map((s) => ({ ...s })),
@@ -94,7 +95,7 @@ export function assertSidebarParity(settings: SourceListEvidence, projects: Sour
   )
 }
 
-function assertUsable(evidence: SettingsEvidence, width: number) {
+export function assertUsable(evidence: SettingsEvidence, width: number) {
   assert.equal(evidence.foreground, true, 'Settings must own foreground focus')
   assert.ok(Math.abs(evidence.width - width) <= 1, 'Requested Settings content width')
   assert.ok(evidence.width >= evidence.minimumWidth)

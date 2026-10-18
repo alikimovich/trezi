@@ -134,7 +134,8 @@ Vision OCR, with no cacheDisplay fallback or background-mode skip. Test-only
 host hooks require an ephemeral profile. Picker interactions dispatch the real
 SwiftUI AppKit menu-item actions; the fixture never injects settings values.
 
-Settings is one sidebar window (General, AI Providers, Experimental; LKM-121).
+Settings is one sidebar window (General, AI Providers, Skills, Experimental; LKM-121,
+Skills LKM-288 with its own captures in `docs/evidence/lkm-skills-ui-preview/`).
 General and AI Providers are captured at the **live minimum (currently 680×420)**
 and the **780×540 default size** as
 `test/artifacts/native/settings-visible-{width}-{general|providers}.png`. The

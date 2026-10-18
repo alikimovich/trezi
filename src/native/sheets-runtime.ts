@@ -133,7 +133,7 @@ export class NativeSheetController {
       return
     }
     if (sheet.state.busy) return
-    if (!sheet.state.actions.some((a) => a.id === action.action)) return
+    if (!sheet.state.actions.some((a) => a.id === action.action && !a.disabled)) return
     sheet.state.busy = true
     sheet.state.message = undefined
     this.host.send('sheetState', { state: sheet.state })

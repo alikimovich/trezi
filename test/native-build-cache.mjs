@@ -29,6 +29,7 @@ import {
   cacheRoot,
   optimizationFlags,
   productKey,
+  profileDefines,
   prune,
   swiftBuilder
 } from '../scripts/native-swift.mjs'
@@ -41,6 +42,8 @@ try {
   assert.throws(() => buildProfile({ TREZI_BUILD_PROFILE: 'debug' }), /release or test/)
   assert.deepEqual(optimizationFlags('release', 8), ['-O'], 'the release build is unchanged')
   assert.deepEqual(optimizationFlags('test', 8), ['-Onone', '-no-whole-module-optimization', '-j8'])
+  assert.deepEqual(profileDefines('release'), [], 'a release build has no harness-only switches')
+  assert.deepEqual(profileDefines('test'), ['-D', 'TREZI_TEST_PROFILE'])
   assert.equal(cacheRoot({}, '/Users/someone'), '/Users/someone/Library/Caches/Trezi')
   assert.equal(cacheRoot({ TREZI_BUILD_CACHE: '/elsewhere' }), '/elsewhere')
   assert.equal(cacheRoot({ TREZI_BUILD_CACHE: 'off' }), null)

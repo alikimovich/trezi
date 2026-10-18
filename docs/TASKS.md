@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Trezi Skills 3/4: native Skills library management UI (LKM-286)
+
+- [x] Settings → Skills: Installed list (bounded metadata, body read on open) and Recommended entries that read "Not installed" until an explicit Install, built on the reviewed LKM-288 pane.
+- [x] Add a pasted SKILL.md, Import Folder (host open panel → service `import`) and Import from GitHub (address, ref, subpath; service pin, background with Cancel), with clear validation and "Nothing was installed" errors.
+- [x] Detail: source, pinned commit, license, revision, provider availability; Save Revision explains next-chat activation; Turn Off/On, Remove/Restore.
+- [x] Disabled footer actions (`NativeSheetAction.disabled`) for unimportable recommendations, refused by the runtime as well as drawn disabled.
+- [x] Retire the agent `install_skills` installer to a Settings → Skills redirect (no write, no migration, existing `.claude/skills` untouched); `list_recommended_skills` lists the shared catalog.
+- [x] Tests: `test/settings-skills.mjs` (loopback GitHub fixture) and the native `skills-settings` smoke with folder, pinned GitHub and recommendation imports from a launcher-started loopback fixture (gated to the disposable test profile).
+- [ ] Manager: run native verification, inspect the captures and do an independent review.
+
 ## Trezi Skills 2/4: safe pinned GitHub import and curated recommendations (LKM-285)
 
 - [x] Add the service `github`/`cancel` methods: strict github.com address parsing, ref → full-commit pin before download, archive fetched by commit and its embedded commit checked, ambiguous tree addresses and redirects refused.

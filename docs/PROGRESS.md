@@ -2,6 +2,31 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-286 recovery 2: test-only fixture gate, overlay diagnostics
+
+- **Fixture gate is compile-time.** The loopback GitHub redirect no longer depends on an environment variable in any build. `SkillsGitHubEndpoints.fixture` is wrapped in `#if TREZI_TEST_PROFILE`; `scripts/native-swift.mjs` adds `-D TREZI_TEST_PROFILE` only for the `test` build profile (`profileDefines`, asserted in `test/native-build-cache.mjs`). A release service cannot be pointed at another endpoint; the production github.com/codeload origin and commit-pin checks are untouched. The native evidence is the real service importer against a loopback HTTP fixture, not github.com.
+- **`core/preview-overlay` root cause.** With the `until` diagnostics on, the timeout showed `page.width` 876, `viewportWidth` 876, `scale` = `previewScale` = 0.7222, frame = previewFrame = 440,0 650×776, `scrollY` 400. So the zoom was applied correctly (650 / 900); what failed was the width predicate `|page.width − 900| ≤ 20`. The fixture's 1800 px spacer makes the page scrollable, and WebKit then reserves a ~24 CSS px classic scrollbar gutter, so `documentElement.clientWidth` is 876. Whether that gutter is an overlay or a classic scrollbar depends on the Mac's scroll-bar setting (an attached mouse), which is why it is environmental. The branch changes no preview code, and why the accepted base and LKM-284 runs had no gutter is not established.
+- **Overlay assertion, not weakened.** The check now measures the gutter (`innerWidth − clientWidth`, bounded to 0–40 CSS px) and requires `page.width + gutter` within 20 of 900. It also requires `scale` to equal frame width / 900 within 0.01, which is tighter than before. The non-unit zoom, scroll, DOM, input and clip assertions are unchanged.
+
+## 2026-10-17 — LKM-286 Trezi Skills 3/4: native Skills library management UI
+
+- **Base.** The reviewed LKM-288 pane patch (`settings-skills.ts`, `settings-skills-views.ts`, `skills-verification.ts`, `smoke-skills.ts`) on top of the LKM-285 service, registry and catalog. The patch's "Not available yet" placeholders are now wired to the service: Import Folder (the host's `pick` open panel, then `importFolder`), Import from GitHub (`importGitHub`) and Install on importable recommendations (`recommendationImport`). The UI writes nothing itself.
+- **Why imports run in the background.** A GitHub import can take up to the service's 120 s deadline. Holding the sheet busy would block Cancel, so the import runs outside `NativeSheetController.action`, with an "Importing …" row and a Cancel button that aborts through the client's `cancel`. Only one import runs per pane. The result message names the repository, the 7-character commit and the asked ref. A recommendation whose import differs from the catalog (moved folder, renamed, other license) says so.
+- **Disabled actions.** `NativeSheetAction.disabled` is new. Swift draws it `.disabled`, and the runtime refuses it like an unregistered action, so a scripted `sheetPerform` cannot install an unimportable recommendation either. `settingsVerification` reports `disabledActions`.
+- **Legacy installer.** `install_skills` keeps its name and schema, so provider policy and its golden stay unchanged, but it now writes nothing. It answers that skills live in Trezi's library in Settings → Skills, and that existing `.claude/skills` folders are left as they are. `list_recommended_skills` lists `src/shared/skills-catalog.ts`. The rules say agents only suggest. Existing project/user skill discovery and the b764245e managed-browser env/hooks are untouched. The workflow owner's `npx skills` runner still exists, but nothing reaches it.
+- **Native fixture GitHub.** `scripts/start-native.mjs` starts a loopback GitHub (`src/native/skills-github-fixture.ts`) only for test profiles and passes its port. The service uses it only when `TREZI_NATIVE_TEST_DIR` is set and the profile lies inside it. The smoke covers create, edit, toggle, remove/restore, folder import (the source folder is deleted afterwards and the copy survives), a pinned `v1` import, installing `frontend-design`, and the refused disabled Install. It checks captures and registry state.
+- **Tests.** `test/settings-skills.mjs` (unit; binds 127.0.0.1 for the fixture) and `test/helpers/settings-skills-evidence.mjs`. `test/rules.mjs` and `test/provider-helper-tools.mjs` were updated for the redirect.
+- **Native runs.**
+  - Run 1 found that a pinned GitHub skill's two extra rows push SKILL.md fully below the fold at 680×760. That broke the "unclipped, hittable editor" evidence. `settingsVerification {revealEditor}` (test-only, `SheetVerification.swift`) now scrolls the pane the minimum needed, as a user would, before each detail or add capture.
+  - Run 2 was cut short when the desktop was in use.
+  - Run 3: 54 of 55 checks passed, including the whole `skills-settings` journey. Its captures are in `docs/evidence/lkm-skills-ui-preview/`.
+  - `core/preview-overlay` timed out on "overlay page zoom" in all three runs. The branch changes no preview code, but `skills-settings` runs earlier in the same core list, so an interaction was not ruled out.
+- **Limitations.**
+  - The pane state is per Settings window: closing it during an import loses the row, although the service still finishes the import.
+  - `install_skills` still shows a permission card before answering.
+  - There is no recovery UI for `recoveryRequired`.
+  - Chats do not load skills yet (LKM-287).
+
 ## 2026-10-17 — LKM-285 repair 3: refuse every `openai.yaml`
 
 - **Why.** The repair-2 `agents/openai.yaml` check skipped indented lines and its regex could not decode quoted keys, so `  {"dependencies": {tools: [{type: mcp, value: probe}]}}` (a root `dependencies` mapping in YAML) was accepted. Rather than grow a partial YAML parser, `SkillsScope` now refuses any file named `openai.yaml` or `openai.yml` (any case, any folder) as provider-control metadata; `checkAgentConfig` is removed. Other YAML files are unaffected.

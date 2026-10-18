@@ -1,0 +1,112 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "skill-github-url",
+    "skill-github-ref",
+    "skill-github-subpath",
+    "skill-github-checks"
+  ],
+  "message": "",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "symbol": "gearshape",
+      "id": "general",
+      "label": "General"
+    },
+    {
+      "id": "providers",
+      "label": "AI Providers",
+      "symbol": "sparkles"
+    },
+    {
+      "id": "skills",
+      "label": "Skills",
+      "symbol": "book.closed"
+    },
+    {
+      "id": "experimental",
+      "label": "Experimental",
+      "symbol": "testtube.2"
+    },
+    {
+      "id": "dreamer",
+      "label": "Dreamer",
+      "symbol": "moon.stars"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "skill-github-url": "",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "projectUi": "false",
+    "claudePlugins": "false",
+    "skill-github-ref": "",
+    "skill-github-checks": "",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "providerFallback": "on",
+    "agentFileAccess": "full",
+    "dreamerStart": "off",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "skill-github-subpath": "",
+    "engine": "agent",
+    "agentMerge": "true",
+    "dreamerToken": ""
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "indentation": 0,
+    "rowHeight": 28,
+    "style": "sourceList",
+    "transparentScroll": true,
+    "row": {
+      "height": 28,
+      "iconWidth": 16,
+      "iconHeight": 16,
+      "fontSize": 13,
+      "labelGap": 7,
+      "iconLeading": 2
+    },
+    "fullHeight": true,
+    "rowSizeStyle": 0,
+    "behavior": "sidebar",
+    "highlight": 1
+  },
+  "editors": [],
+  "actions": [
+    "skill-back",
+    "skill-github-import"
+  ],
+  "width": 780,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1560,
+  "captureHeight": 1520
+}

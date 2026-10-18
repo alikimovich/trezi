@@ -152,7 +152,9 @@ export async function checkVisibleSettings(
   record({ action: 'opened', sidebarFocused: initial.sidebarFocused })
   for (const [key, section] of [
     ['down', 'providers'],
+    ['down', 'skills'],
     ['down', 'experimental'],
+    ['up', 'skills'],
     ['up', 'providers'],
     ['up', 'general']
   ] as const) {
