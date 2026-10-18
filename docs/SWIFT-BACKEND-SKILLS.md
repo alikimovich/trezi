@@ -138,9 +138,18 @@ arrives out of order, matched by frame `id`); aborting the signal sends `cancel`
 - **Import.** It walks the folder with `O_NOFOLLOW` and refuses symlinks, hard links,
   FIFOs and devices. It copies text only: hidden entries (`.git`, `.DS_Store`) are
   skipped, and the source folder is never written.
-- **Nothing executes and nothing is granted.** Scripts, `hooks:` frontmatter and MCP
-  declarations are stored as inert text. Stored objects are not executable. The
-  registry never writes a project, a provider's home or a grant, and never runs a command.
+- **Nothing executes and nothing is granted.** Every stored revision, whether created,
+  imported from a folder, edited or installed from GitHub, passes the same skills-only
+  scope (`SkillsScope`, [step 5](#github-import-lkm-285)) with the same `unauthorized`
+  refusal: `hooks:`, `allowed-tools:` and other non-allowed frontmatter, hook/MCP/plugin
+  and dependency manifests and dynamic `!` preprocessing are refused. Plain scripts
+  are kept as inert text. Stored objects are not executable. The registry never writes
+  a project, a provider's home or a grant, and never runs a command.
+- **Scope on every write.** `create`, `import` and the service's `install` check the
+  whole file set; `edit` checks the final set, so files carried over from the previous
+  revision are read back and checked too. A refusal writes no object, revision or
+  manifest change. A revision stored before LKM-285 that is out of scope is still
+  readable, but an edit has to remove the offending content.
 
 ## GitHub import (LKM-285)
 
@@ -185,7 +194,8 @@ Nothing is preinstalled, and the curated recommendations are metadata only.
    the whole archive: compressed 64 MB, expanded 256 MB, 20 000 entries and 64 KB of
    extended headers (`SKILLS_GITHUB_LIMITS`). The package limits then apply to the folder.
 5. **Scope** (`SkillsScope`). Skills-only content; nothing a provider could run,
-   connect or be granted. It refuses:
+   connect or be granted. It applies to every write (`create`, folder `import`, `edit`
+   and this import), not only to GitHub. It refuses:
    - dynamic preprocessing (`!` followed by a backtick) in any Markdown file
    - `SKILL.md` frontmatter beyond `name`, `description`, `license`, `compatibility`
      and `metadata`, which means `allowed-tools`, `hooks`, `context`, `agent`, `model`
@@ -213,12 +223,23 @@ Nothing is preinstalled, and the curated recommendations are metadata only.
 
 Recommendations (`SKILL_RECOMMENDATIONS` with `SKILL_RECOMMENDATION_IMPORTS`):
 
-| ID | Category | Source | License evidence |
-| --- | --- | --- | --- |
-| `frontend-design` | UI craft | `anthropics/skills` `skills/frontend-design` | Apache-2.0 (the folder's `LICENSE.txt`) |
-| `vercel-react-best-practices` | React | `vercel-labs/agent-skills` `skills/react-best-practices` | MIT (`SKILL.md` frontmatter) |
-| `vercel-composition-patterns` | design systems | `vercel-labs/agent-skills` `skills/composition-patterns` | MIT (`SKILL.md` frontmatter) |
-| `swiftui-expert-skill` | SwiftUI | `AvdLee/SwiftUI-Agent-Skill` | MIT (repository `LICENSE`) |
+| ID | Category | Source (path verified) | License evidence | Importable | Upstream evidence |
+| --- | --- | --- | --- | --- | --- |
+| `frontend-design` | UI craft | `anthropics/skills` `skills/frontend-design` | Apache-2.0 (the folder's `LICENSE.txt`) | yes | `dbd4588f`: 2 files, 19 564 B, largest 10 174 B |
+| `vercel-react-best-practices` | React | `vercel-labs/agent-skills` `skills/react-best-practices` | MIT (`SKILL.md` frontmatter) | **no**: 76 files, over the 64-file cap | `063bee94`: 76 files (75 `.md`, 1 `.json`), 230 383 B, largest 108 261 B |
+| `vercel-composition-patterns` | design systems | `vercel-labs/agent-skills` `skills/composition-patterns` | MIT (`SKILL.md` frontmatter) | yes | `063bee94`: 14 files, 50 339 B, largest 22 627 B |
+| `swiftui-expert-skill` | SwiftUI | `AvdLee/SwiftUI-Agent-Skill` `skills/swiftui-expert-skill` | MIT (repository `LICENSE`) | **no**: scripts, images and a file over 256 KiB | `204dba7c`: 51 files (34 `.md`, 13 `.py`, 2 `.png`, 1 `.svg`, 1 `.yaml`), 901 559 B, largest 398 841 B |
+
+The evidence was measured on the upstream trees at those commits and is recorded in
+`SKILL_RECOMMENDATION_IMPORTS`. The earlier catalog path `swiftui-expert-skill` was wrong;
+the folder is `skills/swiftui-expert-skill`. A recommendation is `importable` only when its
+folder is instructions only and fits `SKILLS_LIMITS`; the caps are not weakened to fit a
+folder. A non-importable entry carries an `unavailableReason` for the UI and
+`recommendationImport` returns `null` for it, so it is never offered an import.
+`test/skills-github.mjs` asserts that `importable` follows the evidence against the
+caps, and that every importable entry has a verified path and a permissive license. If a
+maintainer raises `maxFiles` (and the evidence then fits), the React entry can become
+importable.
 
 `recommendationImport` builds the `github` request on `main`. The service pins it.
 `recommendationMismatch` then reports a moved folder, a renamed skill or a changed
@@ -244,7 +265,8 @@ it declares no license and fetches mutable guidelines on every use.
   and `reference` for lazy previews, and `edit` with the shown revision as `base`.
   Show `conflict` as "changed elsewhere, reload". `recoveryRequired` needs a recovery
   affordance; until that is designed, the registry stays read-blocked. Offer
-  recommendations with `importGitHub(recommendationImport(entry))`, show
+  importable recommendations with `importGitHub(recommendationImport(entry))` (show
+  `unavailableReason` for the others), show
   `skillLicenseStatus(source.license)` and any `recommendationMismatch`, and pass an
   `AbortSignal` for Cancel.
 
@@ -253,7 +275,7 @@ it declares no license and fetches mutable guidelines on every use.
 | Test | Covers |
 | --- | --- |
 | `test/skills-registry.mjs` | contract parity, create/list/read, revisions and the `modified` flag, enable/providers, remove/restore/purge, snapshot stability across edit/remove/purge/restart, GitHub provenance, Bun's client |
-| `test/skills-registry-safety.mjs` | injected write failures, SIGKILL at each commit step, receipts, damaged data, malicious paths and files, strict frames, concurrent writers, isolation from two repositories and two provider homes |
+| `test/skills-registry-safety.mjs` | injected write failures, SIGKILL at each commit step, receipts, damaged data, malicious paths and files, create/import/edit refusals for out-of-scope frontmatter, control manifests and dynamic shell with the registry unchanged, strict frames, concurrent writers, isolation from two repositories and two provider homes |
 | `test/skills-registry-boundaries.mjs` | corrupt counters, snapshot capacity, the directory-entry budget |
 | `test/skills-github.mjs` | GitHub limits/modes/recommendation parity; address parsing; archive reading, license evidence, hostile archives (zip-slip, links, specials, executables, header tricks, truncation, trailing data, bombs) and the skills-only scope (dynamic shell, tool/hook/agent frontmatter, manifests, Codex dependencies), offline |
 | `test/skills-github-import.mjs` | the import over a loopback GitHub (`node:http`, port 0): the commit pin and provenance, ambiguous/missing/short/mismatched refs, bad pins, redirects, 403/404, hostile content with no partial install, size bound, cancel (same and other connection), deadline, close, busy, duplicate operation, `replacing`, Bun's client and abort |

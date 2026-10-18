@@ -1,12 +1,13 @@
 /**
  * Recommended skills shown in Settings → Skills (LKM-288): read-only metadata about
  * public skill packages, never their files. Nothing here is downloaded, installed or
- * run. GitHub import (Trezi Skills 3/4, LKM-285) reuses these entries as its starting
- * points; until then a recommendation only names its source and license.
+ * run. GitHub import (Trezi Skills 2/4, LKM-285) reuses the importable entries as its
+ * starting points (`skills-recommendations.ts`); an entry that is not importable only
+ * names its source and license, and says why.
  *
- * Repositories and licenses are the ones confirmed upstream in the LKM-288 brief. A
- * folder inside the repository is shown only when `pathVerified` is true; the others
- * keep their expected folder for the importer (or a reviewer) to confirm first.
+ * Repositories and licenses are the ones confirmed upstream in the LKM-288 brief. Every
+ * `path` was checked against the upstream tree at the commit recorded in
+ * `skills-recommendations.ts`; a folder is linked only when `pathVerified` is true.
  */
 
 export interface SkillRecommendation {
@@ -25,6 +26,13 @@ export interface SkillRecommendation {
   license: 'Apache-2.0' | 'MIT'
   /** Where the license was found: a file in the repository, or the SKILL.md front matter. */
   licenseSource: string
+  /**
+   * Whether Trezi can import this folder: it must be instructions only and fit the
+   * skill size limits. False entries are shown with `unavailableReason`, never imported.
+   */
+  importable: boolean
+  /** Why the folder cannot be imported; set exactly when `importable` is false. */
+  unavailableReason?: string
 }
 
 export const SKILL_RECOMMENDATIONS: readonly SkillRecommendation[] = Object.freeze([
@@ -37,7 +45,8 @@ export const SKILL_RECOMMENDATIONS: readonly SkillRecommendation[] = Object.free
     path: 'skills/frontend-design',
     pathVerified: true,
     license: 'Apache-2.0',
-    licenseSource: 'skills/frontend-design/LICENSE.txt'
+    licenseSource: 'skills/frontend-design/LICENSE.txt',
+    importable: true
   },
   {
     id: 'vercel-react-best-practices',
@@ -46,9 +55,12 @@ export const SKILL_RECOMMENDATIONS: readonly SkillRecommendation[] = Object.free
     summary: 'React and Next.js performance guidance from Vercel Engineering.',
     repository: 'vercel-labs/agent-skills',
     path: 'skills/react-best-practices',
-    pathVerified: false,
+    pathVerified: true,
     license: 'MIT',
-    licenseSource: 'SKILL.md front matter'
+    licenseSource: 'SKILL.md front matter',
+    importable: false,
+    unavailableReason:
+      'The folder has 76 files; Trezi imports at most 64 files per skill, so it cannot be imported yet.'
   },
   {
     id: 'vercel-composition-patterns',
@@ -57,9 +69,10 @@ export const SKILL_RECOMMENDATIONS: readonly SkillRecommendation[] = Object.free
     summary: 'Composition patterns for React components that stay flexible as they grow.',
     repository: 'vercel-labs/agent-skills',
     path: 'skills/composition-patterns',
-    pathVerified: false,
+    pathVerified: true,
     license: 'MIT',
-    licenseSource: 'SKILL.md front matter'
+    licenseSource: 'SKILL.md front matter',
+    importable: true
   },
   {
     id: 'swiftui-expert-skill',
@@ -67,10 +80,13 @@ export const SKILL_RECOMMENDATIONS: readonly SkillRecommendation[] = Object.free
     publisher: 'Antoine van der Lee',
     summary: 'SwiftUI guidance for state management, view composition and performance.',
     repository: 'AvdLee/SwiftUI-Agent-Skill',
-    path: 'swiftui-expert-skill',
-    pathVerified: false,
+    path: 'skills/swiftui-expert-skill',
+    pathVerified: true,
     license: 'MIT',
-    licenseSource: 'LICENSE'
+    licenseSource: 'LICENSE',
+    importable: false,
+    unavailableReason:
+      'The folder has 51 files including scripts and images, and one file over 256 KiB; Trezi imports instructions only, within its size limits.'
   }
 ] satisfies SkillRecommendation[])
 

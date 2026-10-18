@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-285 review repair: recommendation catalog and scope on every write
+
+- **Catalog.**
+  - `swiftui-expert-skill` had the wrong path. The folder is `skills/swiftui-expert-skill`, and it is not skills-only: 51 files (13 `.py`, 2 `.png`, 1 `.svg`, 1 `.yaml`, 34 `.md`), 901 559 B, largest file 398 841 B over the 256 KiB cap. It is now `importable: false` with an `unavailableReason`, and `recommendationImport` returns `null` for it.
+  - `vercel-react-best-practices` has 76 files, over the 64-file cap, so it is also `importable: false` rather than offered as an import that always fails. Raising `maxFiles` is a maintainer call; the caps were not weakened.
+  - All four paths are now `pathVerified: true`. The upstream measurements (commit, files, bytes, largest file) are recorded in `SKILL_RECOMMENDATION_IMPORTS`: Composition 14 files / 50 339 B, React 76 / 230 383 B, Frontend Design 2 / 19 564 B.
+  - `test/skills-github.mjs` asserts that `importable` follows the evidence against `SKILLS_LIMITS`, and that every importable entry has a verified path and a permissive license.
+- **Scope on every write.** `SkillsScope.check` ran only in the GitHub fetch. `SkillsPlan.vetted` now runs package validation plus the scope for `create`, folder `import`, `install` and `update`, before the name-conflict checks; `edit` checks the final file set, reading carried-over files back from the store. Refusals use the same `unauthorized` messages and write nothing. `test/skills-registry-safety.mjs` covers create/import/edit with `hooks:`/`allowed-tools:` frontmatter, a non-key frontmatter line, `hooks.json`, `package.json`, dynamic shell and an agent dependency, asserting the registry tree and list are unchanged. The old import fixture stored `hooks:` frontmatter as inert text; it no longer does.
+- Verification note: a stale Swift module cache from the other path of this worktree (`/Users/panda/Documents/Codex/...` vs `/private/tmp/...`) crashed `swiftc`; deleting the ignored `.local/test-cache/swift/module-cache` fixed it.
+
 ## 2026-10-17 — LKM-285 Trezi Skills 2/4: safe pinned GitHub import and curated recommendations
 
 - **Service-owned fetch.**

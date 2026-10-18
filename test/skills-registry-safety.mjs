@@ -216,7 +216,7 @@ try {
 
     const marker = join(scratch, 'executed-marker')
     const good = folder({
-      'SKILL.md': `---\nname: imported\ndescription: Has hooks.\nhooks:\n  postinstall: ./scripts/install.sh\n---\nRun scripts/install.sh\n`,
+      'SKILL.md': `---\nname: imported\ndescription: Mentions a script.\n---\nRun scripts/install.sh\n`,
       'scripts/install.sh': `#!/bin/sh\ntouch ${marker}\n`,
       'references/r.md': 'ref',
       '.git/config': '[core]',
@@ -275,6 +275,77 @@ try {
     await fx.close()
     console.log(
       'SKILLS-SAFETY malicious paths, links, hard links, FIFOs, bytes and sizes refused; scripts never run PASS'
+    )
+  }
+
+  // --- The skills-only scope applies to every write, not just GitHub imports (LKM-285) ---
+  {
+    const dir = profile()
+    const fx = await start(dir)
+    const { skill, skillRevision } = ok(
+      await fx.mutate('create', { files: files('scoped', { 'a.md': 'A' }) })
+    )
+    const bang = `Run it: !${'`'}date${'`'}\n`
+    const hooks = `---\nname: scoped\ndescription: Has hooks.\nhooks:\n  postinstall: ./x.sh\n---\n# scoped\n`
+    const tools = `---\nname: scoped\ndescription: Asks for tools.\nallowed-tools: Bash\n---\n# scoped\n`
+    const flow = `---\nname: scoped\ndescription: Not a key list.\n- tools\n---\n# scoped\n`
+    const dangerous = [
+      ['hooks frontmatter', { 'SKILL.md': hooks }, 'hooks'],
+      ['allowed-tools frontmatter', { 'SKILL.md': tools }, 'allowed-tools'],
+      ['flow frontmatter', { 'SKILL.md': flow }, 'frontmatter'],
+      ['a control manifest', { 'hooks.json': '{}' }, 'hooks.json'],
+      ['a package manifest', { 'tools/package.json': '{}' }, 'package.json'],
+      ['dynamic shell', { 'notes.md': bang }, 'notes.md'],
+      [
+        'an agent dependency',
+        { 'agents/openai.yaml': 'dependencies:\n  tools: []\n' },
+        'dependencies'
+      ]
+    ]
+    const snapshot = async () => ({ files: tree(registry(dir)), list: ok(await fx.call('list')) })
+    const before = await snapshot()
+    for (const [label, extra, word] of dangerous) {
+      // Create: SKILL.md replaced or a file added.
+      const list = Object.entries(extra).map(([path, text]) => ({ path, text }))
+      const created = await fx.mutate('create', {
+        files: list.some((item) => item.path === 'SKILL.md') ? list : [...files('scoped2'), ...list]
+      })
+      assert.equal(code(created), 'unauthorized', `create: ${label}`)
+      assert.match(created.reply.result.payload.message ?? '', new RegExp(word, 'i'), label)
+      // Import of a local folder.
+      const source = folder({ 'SKILL.md': skillMd('scoped3'), ...extra })
+      assert.equal(
+        code(await fx.mutate('import', { folder: source })),
+        'unauthorized',
+        `import: ${label}`
+      )
+      // Edit of an existing skill.
+      assert.equal(
+        code(
+          await fx.mutate('edit', {
+            skill,
+            base: skillRevision,
+            changes: Object.entries(extra).map(([path, text]) => ({ path, text }))
+          })
+        ),
+        'unauthorized',
+        `edit: ${label}`
+      )
+      const after = await snapshot()
+      assert.deepEqual(after.files, before.files, `${label}: no object or revision was written`)
+      assert.deepEqual(after.list, before.list, `${label}: the registry is unchanged`)
+    }
+    // In-scope content is still stored: the same edit paths with plain files.
+    ok(
+      await fx.mutate('edit', {
+        skill,
+        base: skillRevision,
+        changes: [{ path: 'b.md', text: 'B' }]
+      })
+    )
+    await fx.close()
+    console.log(
+      'SKILLS-SAFETY create, folder import and edit refuse out-of-scope frontmatter, control manifests and dynamic shell, registry unchanged PASS'
     )
   }
 

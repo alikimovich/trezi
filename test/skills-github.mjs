@@ -15,6 +15,7 @@ import {
 } from '../src/shared/skills-recommendations.ts'
 import {
   SKILLS_GITHUB_LIMITS,
+  SKILLS_LIMITS,
   SKILLS_METHOD_MODES,
   skillLicenseStatus
 } from '../src/shared/skills-registry.ts'
@@ -90,9 +91,35 @@ try {
       new Set(Object.values(SKILL_RECOMMENDATION_IMPORTS).map((item) => item.category)),
       new Set(['ui-craft', 'design-systems', 'react', 'swiftui'])
     )
+    const limits = SKILLS_LIMITS
     for (const entry of SKILL_RECOMMENDATIONS) {
       assert.ok(SKILL_RECOMMENDATION_IMPORTS[entry.id], entry.id)
       assert.ok(!entry.repository.includes('web-interface-guidelines'))
+      const { evidence } = SKILL_RECOMMENDATION_IMPORTS[entry.id]
+      assert.match(evidence.commit, /^[0-9a-f]{40}$/, entry.id)
+      // Every folder was measured upstream, so its path is verified whatever it can do.
+      assert.equal(entry.pathVerified, true, `${entry.id} has a verified path`)
+      assert.ok(entry.path.startsWith('skills/'), `${entry.id} path is ${entry.path}`)
+      const fits =
+        evidence.files <= limits.maxFiles &&
+        evidence.maxFileBytes <= limits.maxFileBytes &&
+        evidence.bytes <= limits.maxPackageBytes &&
+        !evidence.other?.match(/\.(py|png|svg|yaml|sh|js|ts)\b/)
+      // Importability follows the evidence against the unchanged caps and scope.
+      assert.equal(entry.importable, fits, `${entry.id} importable matches its evidence`)
+      if (entry.importable) {
+        assert.equal(entry.pathVerified, true, `${entry.id} importable needs a verified path`)
+        assert.equal(
+          skillLicenseStatus(entry.license),
+          'permissive',
+          `${entry.id} importable needs a supported license`
+        )
+        assert.equal(entry.unavailableReason, undefined)
+      } else {
+        assert.ok(entry.unavailableReason?.length > 20, `${entry.id} says why it is unavailable`)
+        assert.equal(recommendationImport(entry), null, `${entry.id} is never offered an import`)
+        continue
+      }
       const input = recommendationImport(entry)
       assert.deepEqual(input, {
         url: `https://github.com/${entry.repository}`,
@@ -115,6 +142,10 @@ try {
         3
       )
     }
+    assert.deepEqual(
+      SKILL_RECOMMENDATIONS.filter((entry) => !entry.importable).map((entry) => entry.id),
+      ['vercel-react-best-practices', 'swiftui-expert-skill']
+    )
     assert.ok(!SKILL_RECOMMENDATIONS.some((entry) => entry.path.includes('web-design-guidelines')))
     console.log(
       'SKILLS-GITHUB limits, fetch methods, license classes and recommendations mirror Swift PASS'
