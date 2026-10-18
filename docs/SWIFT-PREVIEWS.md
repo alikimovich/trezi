@@ -211,6 +211,47 @@ everything it writes lives in Trezi's derived data. Per-item status:
   "Derived data (Trezi-owned)"), in the driver's `/state` (`build`) and in
   `project:native` (`build`).
 
+## Generated previews (LKM-276)
+
+A native project needs no manifest and no edit: Trezi reads its `#Preview` blocks and
+components and writes the preview declarations into its own data. Per-item status and
+what is not done: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3).
+
+1. Open the folder (for example a copy of `test/fixtures/swift-preview-macros`: an app
+   target `Notes` and a framework `NotesKit`). With one previewable target (a macOS
+   Swift target nothing else depends on) Trezi uses it and says so ("Previewing Notes
+   (the only previewable target)"). With several, the page shows "Choose what to
+   preview" with one button per target; the choice is saved in Trezi's data and can be
+   changed there later.
+2. The picker lists the `#Preview` blocks first, then the components (SwiftUI views,
+   AppKit views and view controllers, `PreviewProvider`s). Hover an entry for its
+   `file:line`, the sample Trezi passes (`TagCounter(count: .constant(1), label:
+   "Label")`) and notes such as "@Previewable state" or "built from an isolated copy".
+3. "N not shown" opens the list of what Trezi cannot preview, each with its reason
+   (e.g. "uses a preview modifier trait", "it is generic", "it loads its view from a nib
+   or storyboard", "compiled out for the preview host (only where #if os(iOS))").
+
+- `#Preview` bodies are copied verbatim under `#sourceLocation`, so a compile error in
+  one points at the project's file and line. `@Previewable` declarations become state
+  of a wrapper view; `.sizeThatFitsLayout` and `.fixedLayout` set the frame;
+  `@available` and `#if` are kept. The original `#Preview` also stays and expands as
+  usual, so a full Xcode is needed ([Toolchain](#toolchain-lkm-274)); reading the files
+  needs that Xcode's SwiftSyntax too.
+- A preview or component that uses `private` declarations of its file is built from an
+  overlay, a copy of that file in Trezi's folder compiled instead of the original.
+- An entry the compiler rejects is dropped and the build retried (at most twice); it is
+  listed with the compiler's message.
+- Generated files live in `<userData>/swift-previews/<hash>/generated`, written only by
+  `src/swift-preview/sidecar.ts`. A `trezi-previews.json` in the repo or in Trezi's
+  data still wins.
+- In a repo that is also a web JS app (a `package.json` dev script) Trezi keeps the JS
+  dev server; "Switch JS / Native Preview" in the toolbar's "…" menu restarts the
+  project with the native preview, and back. Expo and React Native keep the simulator,
+  and the menu item says why. Only one preview runs at a time.
+- Driver: `/state` and `/graph` carry `catalog` (target, choices, entries with
+  `supported`, `reason`, `sample`, `notes`); `POST /configure` (`{project, target}`)
+  saves the target; `project:native` reports the same catalog.
+
 ## How it works
 
 - Detection: `src/main/project-detect.ts` and `src/service/RuntimeDetect.swift` (kept
@@ -302,17 +343,29 @@ everything it writes lives in Trezi's derived data. Per-item status:
   `core`, `src/native/smoke-swift-build.ts`) opens the fixture in Trezi, checks the
   settings, package, catalog and panel, and that an app edit reuses the cached module,
   package and catalog. Its edit is a direct write to the opened copy.
+- LKM-276: `test/swift-preview-generate.mjs` (unit tier) covers target choice and
+  ambiguity, the sidecar writer's refusals, error mapping, the saved selection, the
+  scanner and catalog on `test/fixtures/swift-preview-macros` (plain, `@Previewable`,
+  environment injection, traits, availability, private overlays, unsupported reasons,
+  samples; fixture hash unchanged) and a generated session on a copy of
+  `test/fixtures/swift-multi-module` without its manifest (render, a private overlay's
+  diagnostic at the original file and line, project hash unchanged). Mixed JS/native
+  parity is in `test/runtime-owner.mjs`. The native smoke check `swift-macros` (group
+  `core`, `src/native/smoke-swift-macros.ts`) opens a copy of the macros fixture,
+  renders a chosen `#Preview`, a private-overlay `#Preview`, a component and a view
+  controller, checks the page's catalog and compares the copy's content hash and Git
+  status before and after. Evidence: `docs/evidence/lkm-276/`.
 
 ## Limits and follow-ups
 
-- **`#Preview` bodies are not shown as previews.** Files that use `#Preview` compile
-  unmodified once a full Xcode is selected for Trezi's processes (see
-  [Toolchain](#toolchain-lkm-274)); with only the command-line tools they fail with
-  `plugin for module 'PreviewsMacros' not found`, and the page says to install or
-  select full Xcode. The macro expands into registry types that only Xcode's preview
-  agent reads, so Trezi still asks for explicit `TreziPreviews` declarations.
-  Follow-up (Stage 3): generate them from `#Preview` bodies, or load the expanded
-  `DeveloperToolsSupport` registry.
+- **Generated previews are heuristic** ([Generated previews](#generated-previews-lkm-276)).
+  Component samples come from parameter types, not real data. Not translated:
+  `PreviewModifier` traits, previews inside a type or in the `@main` file, generic
+  components, nib-loaded view controllers. With only the command-line tools `#Preview`
+  does not compile (`plugin for module 'PreviewsMacros' not found`) and the scanner has
+  no SwiftSyntax; the page says to install or select full Xcode. `describe` (used by
+  tests) does not see SwiftUI `Text` in the offscreen windows, so the `swift-macros`
+  check compares SwiftUI frames by their PNG and reads text only from AppKit views.
 - **Full macOS app launch is not done.** The host previews components, not an app
   with its `@main`, menus, entitlements or bundle resources (`Bundle.main` is the host).
   Path: `xcodebuild` the app scheme into DerivedData, launch it as a child, and stream

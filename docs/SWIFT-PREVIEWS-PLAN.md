@@ -13,8 +13,8 @@ means no code yet.
 | Stage | Scope | Status |
 | --- | --- | --- |
 | 1 | Discovery, opening, multi-module builds | done (demo), LKM-273 |
-| 2 | Toolchain selection and `#Preview` (2A), compiler settings, SwiftPM dependencies, incremental builds | partial: 2A done (demo), LKM-274; the rest not started |
-| 3 | Component selection, sample states, environment/dependency injection, resources | not started |
+| 2 | Toolchain selection and `#Preview` (2A), compiler settings, SwiftPM dependencies, incremental builds | partial: 2A (LKM-274) and 2B (LKM-275) done (demo); mixed-language targets not started |
+| 3 | Component selection, sample states, environment/dependency injection, resources | partial: selection, `#Preview` reuse, generated samples, mixed-repo choice done (demo), LKM-276; StoreKit and the remaining resources not started |
 | 4 | Service-owned host lifecycle, driver packaging in the distributed app, OS-level input, glass/material render fidelity | not started |
 | 5 | Agent diagnostics and source feedback | partial |
 | 6 | Practical Scraib acceptance on disposable copies | not started (Stage 1 progress recorded) |
@@ -206,20 +206,69 @@ Per item:
 
 - Clang, Objective-C and mixed-language targets.
 
-## Stage 3: component selection, sample states, environment injection, resources: not started
+## Stage 3: component selection, sample states, environment injection, resources: partial
 
-- Component selection: choosing which views to preview from the project's own types,
-  and a UI that writes the Trezi-side manifest. Also the choice, in a mixed repo whose
-  `package.json` has a dev script, to open the native preview (today the structure is
-  only reported and the JS dev server wins; the second server it needs is Stage 4).
-- Sample states, including reuse of `#Preview` bodies as Trezi previews.
-- Environment and dependency injection: environment objects and stores a view needs
-  (Scraib's `WelcomeView` needs `StoreKitManager`), StoreKit configuration files and
-  `StoreKitTest`.
+LKM-276 is the flow open → target → `#Preview` or component → render, with no manifest
+and no edit to the project. User-facing description: `docs/SWIFT-PREVIEWS.md`
+([Generated previews](SWIFT-PREVIEWS.md#generated-previews-lkm-276)).
+
+- Target choice: done (demo). Without a manifest, the macOS Swift targets that nothing
+  else in their project depends on are the choices (`src/swift-preview/targets.ts`).
+  One choice is used without asking; several show "Choose what to preview" on the page
+  and in `project:native`; the choice (`POST /configure`) is saved in Trezi's data
+  (`selection.json`), and a saved target that disappeared asks again.
+- `#Preview` discovery and translation: done (demo). `src/swift-preview/PreviewScanner.swift`
+  (compiled against the selected Xcode's own SwiftSyntax by `scanner.ts`, cached in
+  Trezi's derived data) reports each file's `#Preview` blocks with their lexical
+  context, `#if` conditions, `@available` attributes, traits, `@Previewable`
+  declarations and the identifiers they use, plus every type's access level,
+  inheritance, initializers and environment properties (`scanner.ts`). `catalog.ts`
+  turns them into entries; `generate.ts` writes one factory per entry with the body
+  copied verbatim under `#sourceLocation`, `@Previewable` declarations as the stored
+  properties of a wrapper view, layout traits as the frame size, availability and
+  `#if` conditions kept.
+- Private same-file declarations: done (demo). An entry that uses a `private` or
+  `fileprivate` declaration of its file is built from an overlay: the original text
+  under `#sourceLocation` plus the factories, compiled in place of the original in
+  Trezi's folder. `#sourceLocation` makes diagnostics name the original file and line
+  (unit-tested with a real compile error in an overlaid file); errors in generated
+  code are mapped to their entry (`failedEntries` in `generate.ts`). The original is
+  never rewritten.
+- Unsupported cases with reasons: done (demo). Listed in the catalog (`/state`,
+  `/graph`, `project:native`) and on the page: preview modifier traits, unknown traits,
+  previews inside a type, previews in the `@main` file, `@Previewable` after other
+  statements, unavailable on macOS, generic components, private nested types, view
+  controllers loaded from a nib or storyboard, parameters or environment values Trezi
+  cannot make, and entries the compiler ruled out (the build retries without them, at
+  most twice, and names the compiler's reason, e.g. compiled out by `#if os(iOS)`).
+- Component picker: done (demo). SwiftUI `View`s, AppKit `NSView` and
+  `NSViewController` subclasses (with `loadView`) and `PreviewProvider`s of the target
+  and its modules, grouped apart from the `#Preview` blocks, each with an inferred
+  sample (`samples.ts`: names for strings, small numbers, constant bindings, first enum
+  cases, simplest initializers two levels deep) shown as a tooltip.
+- Environment injection: partial. A component's `@Environment(Type.self)` and
+  `@EnvironmentObject` properties get a sample of their type (an initializer Trezi can
+  call) through `.environment(_:)` / `.environmentObject(_:)`; a `#Preview` body keeps
+  its own modifiers. StoreKit configuration files and `StoreKitTest` are not started.
+- Generated declarations in Trezi's data: done (demo). `sidecar.ts` is the only writer:
+  `<userData>/swift-previews/<hash>/generated` (the build cache folder when the driver
+  runs without one); it refuses a folder inside the project, paths that leave its folder and
+  symlinks, and writes only changed files. The in-repo and Trezi-side manifests still
+  win when present.
+- Mixed JS + native repos: done (demo) for the choice. Detection is unchanged (TS/Swift
+  parity); `src/shared/preview-choice.ts` adds a `previewChoice` on top. A web JS app
+  with native roots keeps its JS launch until the user picks "Switch JS / Native
+  Preview" (toolbar "…" menu); the choice is stored in the project's launch spec by the
+  workspace owner. React Native and Expo keep the simulator and say why. Running both
+  at once (a second server) is Stage 4.
 - Resources: asset catalogs (`actool`), package `Bundle.module`, a host `Bundle.main`
   and copied plain files are done in 2B (LKM-275). Still open: String Catalogs,
   storyboards and XIBs, Core Data models, Metal libraries and the `Info.plist` values
   the code reads.
+- Not done in Stage 3: `PreviewModifier` traits (their async shared context), previews
+  nested in types, generic components, nib-loaded controllers, StoreKit; samples are
+  heuristics from types, not real data; generated previews need a full Xcode with
+  SwiftSyntax (the scanner is built from it).
 
 ## Stage 4: host lifecycle, packaging, OS-level input, render fidelity: not started
 
@@ -266,11 +315,11 @@ picked up by the stage named:
 | Binary or remote SwiftPM dependencies (Sparkle, PostHog) | 2B (pinned remote packages and macOS framework slices: done, LKM-275) |
 | StoreKit | 3 (environment and dependency injection) |
 | Resources and asset catalogs | 2B (catalogs and `Bundle.module`: done, LKM-275), 3 (the rest) |
-| `#Preview` | 2A (compiling the files intact with a selected full Xcode: done, LKM-274), 3 (as sample states) |
+| `#Preview` | 2A (compiling the files intact with a selected full Xcode: done, LKM-274), 3 (as previews from generated declarations: done, LKM-276) |
 | OS-level input | 4 |
 | Render fidelity | 4 |
 | Driver packaging | 4 |
-| Native preview in a mixed repo with a JS dev script | 3 (the choice), 4 (the second server) |
+| Native preview in a mixed repo with a JS dev script | 3 (the choice: done, LKM-276), 4 (the second server) |
 | Full app launch | 7 |
 | iOS | 8 |
 

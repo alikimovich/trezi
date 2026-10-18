@@ -718,8 +718,11 @@ async function main() {
     }
   )
   installPreviewLoads(host, workspaceController, shellController)
-  installPreviewRefresh(host, workspaceController, (error) =>
-    activityController.append(String(error), 'error')
+  installPreviewRefresh(
+    host,
+    workspaceController,
+    (error) => activityController.append(String(error), 'error'),
+    (message) => sheetController.toast(message)
   )
   installEditorFreshness(
     host,

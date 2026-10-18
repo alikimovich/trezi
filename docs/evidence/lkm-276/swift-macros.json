@@ -1,0 +1,412 @@
+{
+  "firstBuild": {
+    "status": "ready",
+    "loaded": true,
+    "shown": "preview:NotesKit/NoteCard.swift#1@1",
+    "generation": 1,
+    "manifest": {
+      "path": "",
+      "treziPath": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-8fmXI1/profile/swift-previews/59d76491101f2c37/trezi-previews.json",
+      "source": "none"
+    },
+    "message": "Built 17 previews from NotesKit → Notes. 5 more listed with the reason they are not shown.",
+    "toolchain": {
+      "dir": "/Applications/Xcode-26.5.0.app/Contents/Developer",
+      "preview": "supported"
+    },
+    "previews": [
+      "preview:NotesKit/NoteCard.swift#1",
+      "preview:NotesKit/NoteCard.swift#2",
+      "component:NotesKit.NoteCard",
+      "preview:NotesKit/TagCounter.swift#1",
+      "component:NotesKit.TagCounter",
+      "preview:NotesKit/WordMeterView.swift#1",
+      "component:NotesKit.WordMeterView",
+      "preview:Notes/Conditional.swift#1",
+      "preview:Notes/Conditional.swift#2",
+      "component:Notes.NewBadge",
+      "component:Notes.DebugPanel",
+      "preview:Notes/NoteList.swift#1",
+      "component:Notes.NoteList",
+      "preview:Notes/Sidebar.swift#1",
+      "component:Notes.FolderRow",
+      "component:Notes.Sidebar",
+      "component:Notes.SummaryViewController"
+    ]
+  },
+  "catalog": {
+    "target": "Notes",
+    "choices": [
+      {
+        "project": "Notes.xcodeproj",
+        "kind": "app",
+        "module": "Notes",
+        "target": "Notes",
+        "includes": [
+          "NotesKit"
+        ]
+      }
+    ],
+    "project": "Notes.xcodeproj",
+    "retries": 0,
+    "chosenBy": "the only previewable target",
+    "dir": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-8fmXI1/profile/swift-previews/59d76491101f2c37/generated",
+    "entries": [
+      {
+        "source": "preview",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "preview:NotesKit/NoteCard.swift#1",
+        "notes": [],
+        "title": "NoteCard",
+        "file": "NotesKit/NoteCard.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 39
+      },
+      {
+        "source": "preview",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "preview:NotesKit/NoteCard.swift#2",
+        "notes": [
+          "fixed size 280×80"
+        ],
+        "title": "Pinned card",
+        "file": "NotesKit/NoteCard.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 43
+      },
+      {
+        "source": "preview",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "preview:NotesKit/TagCounter.swift#1",
+        "notes": [
+          "sized to fit",
+          "@Previewable state"
+        ],
+        "title": "Counter with state",
+        "file": "NotesKit/TagCounter.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 23
+      },
+      {
+        "source": "preview",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "preview:NotesKit/WordMeterView.swift#1",
+        "notes": [
+          "fixed size 240×60"
+        ],
+        "title": "Word meter",
+        "file": "NotesKit/WordMeterView.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 32
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "",
+        "id": "preview:Notes/Conditional.swift#1",
+        "notes": [
+          "needs macOS 15.0"
+        ],
+        "title": "New badge (macOS 15)",
+        "file": "Notes/Conditional.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 14
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "",
+        "id": "preview:Notes/Conditional.swift#2",
+        "notes": [
+          "only where #if (DEBUG)"
+        ],
+        "title": "Debug panel",
+        "file": "Notes/Conditional.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 27
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "it is compiled out for the preview host (only where #if (os(iOS)))",
+        "id": "preview:Notes/Conditional.swift#3",
+        "notes": [
+          "only where #if (os(iOS))"
+        ],
+        "title": "iOS only",
+        "file": "Notes/Conditional.swift",
+        "supported": false,
+        "kind": "#Preview",
+        "line": 33
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "",
+        "id": "preview:Notes/NoteList.swift#1",
+        "notes": [],
+        "title": "List with store",
+        "file": "Notes/NoteList.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 34
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "",
+        "id": "preview:Notes/Sidebar.swift#1",
+        "notes": [
+          "uses private declarations of Notes/Sidebar.swift: built from an isolated copy"
+        ],
+        "title": "Sidebar folders",
+        "file": "Notes/Sidebar.swift",
+        "supported": true,
+        "kind": "#Preview",
+        "line": 29
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "uses a preview modifier trait (.modifier(SampleStore())); its async shared context is not created by Trezi yet",
+        "id": "preview:Notes/Unsupported.swift#1",
+        "notes": [
+          "needs macOS 15.0"
+        ],
+        "title": "Shared store",
+        "file": "Notes/Unsupported.swift",
+        "supported": false,
+        "kind": "#Preview",
+        "line": 17
+      },
+      {
+        "source": "preview",
+        "module": "Notes",
+        "reason": "it is in the app entry file (@main), which the preview build leaves out",
+        "id": "preview:Notes/NotesApp.swift#1",
+        "notes": [],
+        "title": "App window",
+        "file": "Notes/NotesApp.swift",
+        "supported": false,
+        "kind": "#Preview",
+        "line": 19
+      },
+      {
+        "source": "component",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "component:NotesKit.NoteCard",
+        "notes": [],
+        "title": "NoteCard",
+        "file": "NotesKit/NoteCard.swift",
+        "sample": "NoteCard(note: Note(id: 1, title: \"Title\"))",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 18
+      },
+      {
+        "source": "component",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "component:NotesKit.TagCounter",
+        "notes": [],
+        "title": "TagCounter",
+        "file": "NotesKit/TagCounter.swift",
+        "sample": "TagCounter(count: .constant(1), label: \"Label\")",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 5
+      },
+      {
+        "source": "component",
+        "module": "NotesKit",
+        "reason": "",
+        "id": "component:NotesKit.WordMeterView",
+        "notes": [],
+        "title": "WordMeterView",
+        "file": "NotesKit/WordMeterView.swift",
+        "sample": "WordMeterView()",
+        "supported": true,
+        "kind": "AppKit view",
+        "line": 5
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "",
+        "id": "component:Notes.NewBadge",
+        "notes": [
+          "needs macOS 15.0"
+        ],
+        "title": "NewBadge",
+        "file": "Notes/Conditional.swift",
+        "sample": "NewBadge()",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 5
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "",
+        "id": "component:Notes.DebugPanel",
+        "notes": [
+          "only where #if (DEBUG)"
+        ],
+        "title": "DebugPanel",
+        "file": "Notes/Conditional.swift",
+        "sample": "DebugPanel()",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 20
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "",
+        "id": "component:Notes.NoteList",
+        "notes": [
+          "injects NoteStore into the environment",
+          "injects ListSettings into the environment"
+        ],
+        "title": "NoteList",
+        "file": "Notes/NoteList.swift",
+        "sample": "NoteList().environment(NoteStore()).environmentObject(ListSettings())",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 20
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "",
+        "id": "component:Notes.FolderRow",
+        "notes": [
+          "uses private declarations of Notes/Sidebar.swift: built from an isolated copy"
+        ],
+        "title": "FolderRow",
+        "file": "Notes/Sidebar.swift",
+        "sample": "FolderRow(name: \"Name\")",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 9
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "",
+        "id": "component:Notes.Sidebar",
+        "notes": [],
+        "title": "Sidebar",
+        "file": "Notes/Sidebar.swift",
+        "sample": "Sidebar(folders: [\"Folder\"])",
+        "supported": true,
+        "kind": "SwiftUI view",
+        "line": 18
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "it is generic; Trezi cannot choose its type parameters",
+        "id": "component:Notes.Tagged",
+        "notes": [],
+        "title": "Tagged",
+        "file": "Notes/Unsupported.swift",
+        "supported": false,
+        "kind": "SwiftUI view",
+        "line": 23
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "it loads its view from a nib or storyboard (no loadView), which Trezi does not compile",
+        "id": "component:Notes.NibController",
+        "notes": [],
+        "title": "NibController",
+        "file": "Notes/Unsupported.swift",
+        "supported": false,
+        "kind": "AppKit view controller",
+        "line": 31
+      },
+      {
+        "source": "component",
+        "module": "Notes",
+        "reason": "",
+        "id": "component:Notes.SummaryViewController",
+        "notes": [],
+        "title": "SummaryViewController",
+        "file": "Notes/Unsupported.swift",
+        "sample": "SummaryViewController()",
+        "supported": true,
+        "kind": "AppKit view controller",
+        "line": 33
+      }
+    ]
+  },
+  "frames": {
+    "preview:NotesKit/TagCounter.swift#1": {
+      "bytes": 5383,
+      "digest": "9b110070",
+      "width": 312,
+      "height": 112
+    },
+    "preview:Notes/Sidebar.swift#1": {
+      "bytes": 7288,
+      "digest": "6182227",
+      "width": 184,
+      "height": 216
+    },
+    "component:NotesKit.TagCounter": {
+      "bytes": 4944,
+      "digest": "a4983137",
+      "width": 318,
+      "height": 112
+    }
+  },
+  "preview": {
+    "shown": "preview:NotesKit/TagCounter.swift#1@1"
+  },
+  "overlay": {
+    "shown": "preview:Notes/Sidebar.swift#1@1"
+  },
+  "component": {
+    "shown": "component:NotesKit.TagCounter@1"
+  },
+  "controller": {
+    "shown": "component:Notes.SummaryViewController@1"
+  },
+  "page": {
+    "items": [
+      "iOS only #Preview: it is compiled out for the preview host (only where #if (os(iOS))) Notes/Conditional.swift:33",
+      "Shared store #Preview: uses a preview modifier trait (.modifier(SampleStore())); its async shared context is not created by Trezi yet Notes/Unsupported.swift:17",
+      "App window #Preview: it is in the app entry file (@main), which the preview build leaves out Notes/NotesApp.swift:19",
+      "Tagged SwiftUI view: it is generic; Trezi cannot choose its type parameters Notes/Unsupported.swift:23",
+      "NibController AppKit view controller: it loads its view from a nib or storyboard (no loadView), which Trezi does not compile Notes/Unsupported.swift:31"
+    ],
+    "groups": [
+      "#Preview",
+      "Components"
+    ],
+    "targets": "Previewing Notes (the only previewable target); generated in /private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-8fmXI1/profile/swift-previews/59d76491101f2c37/generated\n"
+  },
+  "hash": {
+    "before": "39dad8d99aab511636345de51e2ee45789dccd8ce123dffb9ec68acde14cb085",
+    "after": "39dad8d99aab511636345de51e2ee45789dccd8ce123dffb9ec68acde14cb085"
+  },
+  "provenance": {
+    "fixtures": [
+      "A committed copy of test/fixtures/swift-preview-macros; nothing in it is edited.",
+      "Previews are chosen through the page API and the panel is opened through the DOM; no OS input."
+    ]
+  }
+}

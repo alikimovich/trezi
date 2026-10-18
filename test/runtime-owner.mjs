@@ -31,6 +31,7 @@ import {
 } from '../src/main/project-dependencies.ts'
 import { detectProject, interpretFailure, withPort } from '../src/main/project-detect.ts'
 import { serviceRuntime } from '../src/native/runtime-service.ts'
+import { applyPreviewChoice } from '../src/shared/preview-choice.ts'
 import { swiftBuild } from './helpers/swift-build.mjs'
 
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-runtime-owner-'))
@@ -370,6 +371,33 @@ try {
       packages: []
     })
     assert.equal((await byFiles({ 'index.html': '' })).native, undefined)
+    // A mixed repo's preview choice (LKM-276) sits on top of detection, which is unchanged.
+    assert.deepEqual(
+      applyPreviewChoice(vite, undefined).previewChoice,
+      {
+        using: 'js',
+        switchable: true,
+        reason:
+          'Previewing the vite dev server (npm run dev); the native roots (Package.swift) can be previewed instead.'
+      },
+      'a JS app with native roots offers the native preview'
+    )
+    const switched = applyPreviewChoice(vite, 'native')
+    assert.deepEqual(
+      [switched.framework, switched.devCommand, switched.scriptName, switched.previewKind],
+      ['swift', '', '', 'web'],
+      'the native choice launches the Swift preview driver'
+    )
+    assert.equal(switched.previewChoice?.using, 'native')
+    assert.equal(switched.native, vite.native)
+    assert.deepEqual(applyPreviewChoice(vite, 'js'), applyPreviewChoice(vite, undefined))
+    const expoChoice = applyPreviewChoice(expo, 'native')
+    assert.equal(expoChoice.framework, 'expo', 'Expo keeps the simulator')
+    assert.equal(expoChoice.previewKind, 'simulator')
+    assert.equal(expoChoice.previewChoice?.switchable, false)
+    assert.match(expoChoice.previewChoice?.reason ?? '', /iOS Simulator.*ios\/App\.xcworkspace/)
+    for (const plain of [nested, tooling, await byFiles({ 'index.html': '' })])
+      assert.equal(applyPreviewChoice(plain, 'native'), plain, 'one preview: nothing to choose')
     const commandCases = [
       ['npm run dev', 'vite'],
       ['bun run dev', 'sveltekit'],

@@ -85,6 +85,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'swift-preview': ['core'],
   'swift-graph': ['core'],
   'swift-build': ['core'],
+  'swift-macros': ['core'],
   'git-updates': ['core'],
   'live-provider': ['core'],
   // One fixture scope covers both; smoke-islands reads the selection to run either part.

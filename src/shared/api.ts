@@ -112,6 +112,61 @@ export interface DetectedProject {
   previewKind: PreviewKind
   /** Native roots found in the folder (LKM-273), also for a JS project that has them. */
   native?: NativeStructure
+  /**
+   * A repo with both a JS dev server and native roots (LKM-276): which one the preview
+   * runs (`src/main/preview-choice.ts`), and whether the other can be chosen.
+   */
+  previewChoice?: PreviewChoiceInfo
+}
+
+export interface PreviewChoiceInfo {
+  using: 'js' | 'native'
+  /** Whether switching is offered; false for React Native/Expo, which keep the simulator. */
+  switchable: boolean
+  reason: string
+}
+
+/** One previewable (or listed but unsupported) entry of a native project (LKM-276). */
+export interface NativePreviewEntry {
+  id: string
+  title: string
+  source: 'preview' | 'provider' | 'component'
+  /** `#Preview`, `PreviewProvider`, `SwiftUI view`, `AppKit view`, `AppKit view controller`. */
+  kind: string
+  module: string
+  /** Project-relative. */
+  file: string
+  line: number
+  supported: boolean
+  /** Why it cannot be previewed ('' when it can). */
+  reason: string
+  notes: string[]
+  /** A component's inferred sample: the expression its preview makes it with. */
+  sample?: string
+}
+
+export interface NativeTargetChoice {
+  /** The container's project-relative path. */
+  project: string
+  target: string
+  kind: string
+  module: string
+  /** The candidates it builds with it, dependencies first. */
+  includes: string[]
+}
+
+/** What Trezi generated for a native project without a manifest (`src/swift-preview/generated.ts`). */
+export interface NativePreviewCatalog {
+  target: string
+  project: string
+  /** Why this target: "your choice", "the only previewable target"; '' while none is chosen. */
+  chosenBy: string
+  choices: NativeTargetChoice[]
+  entries: NativePreviewEntry[]
+  /** Trezi's folder holding the generated declarations (never in the repo). */
+  dir: string
+  /** Builds retried without entries a compile error ruled out. */
+  retries: number
 }
 
 /** Xcode and SwiftPM roots in a project, project-relative (`src/swift-preview/discovery.ts`). */
@@ -155,6 +210,8 @@ export interface NativeProjectInfo {
    * `#Preview`, and an actionable message. Null when the driver was not asked.
    */
   toolchain: NativeToolchainInfo | null
+  /** The generated previews and components, and the target choices (LKM-276); null with a manifest. */
+  catalog: NativePreviewCatalog | null
   /** Why the graph is missing, empty when it is there. */
   error: string
 }

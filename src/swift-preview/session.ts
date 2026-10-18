@@ -1,37 +1,30 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import {
-  ARCH,
-  type BuildReport,
-  compileModules,
-  describeFailure,
-  moduleInputs,
-  pruneModules,
-  run,
-  stamp,
-  TargetBuilder
-} from './builder'
+import type { NativePreviewCatalog } from '../shared/api'
+import { type BuildReport, describeFailure, pruneModules, stamp, TargetBuilder } from './builder'
 import { discoverNative } from './discovery'
+import { GeneratedPreviews } from './generated'
 import { type GraphOptions, graphInputs, type NativeGraph, nativeGraph } from './graph'
+import { compileHost } from './host-build'
 import { type PreviewEntry, PreviewHostProcess, type PreviewInputEvent } from './host-client'
 import {
   collectSources,
   type Diagnostic,
-  hostCompileArgs,
   type PreviewManifest,
   parseDiagnostics,
   parseManifest
 } from './manifest'
 import { treeStamps } from './package-build'
 import { type BuildPlan, planTargetBuild } from './plan'
-import { hostBundle } from './resources'
+import type { TargetSelection } from './targets'
 import type { ToolchainOptions, ToolchainSelection } from './toolchain'
 import { ToolchainPicker } from './toolchain-picker'
 
 export interface SessionState {
   /** building: compiling; ready: the host runs the latest sources; failed: the
    *  latest build failed (an older host may still run); error: nothing to show;
-   *  setup: no previews are declared yet (the native structure is still reported). */
+   *  setup: nothing to build yet: no manifest and no target chosen (the native
+   *  structure and the choices are still reported). */
   status: 'building' | 'ready' | 'failed' | 'error' | 'setup'
   name: string
   /** Successful builds so far; a new host appears with each one. */
@@ -45,8 +38,10 @@ export interface SessionState {
   durationMs: number
   /** An older host still shows the last good build while the latest one failed. */
   stale: boolean
-  /** Which manifest declared the previews: Trezi's app data, the repo, or none yet. */
+  /** Which manifest declared the previews: Trezi's app data, the repo, or none (generated, LKM-276). */
   manifest: { source: 'trezi' | 'repo' | 'none'; path: string; treziPath: string }
+  /** Without a manifest: the target choices and the generated previews and components (LKM-276). */
+  catalog: NativePreviewCatalog | null
   /** The project's schemes and target graph (LKM-273), once read. */
   native: NativeGraph | null
   /** The latest target-graph build plan, for a manifest with `target`. */
@@ -84,6 +79,7 @@ export class PreviewSession {
   private graphStamp = ''
   private readonly picker: ToolchainPicker
   private readonly builder: TargetBuilder
+  private readonly generated: GeneratedPreviews
 
   constructor(
     private readonly options: {
@@ -112,6 +108,14 @@ export class PreviewSession {
       xcrun: options.graph?.xcrun,
       log: options.log
     })
+    const shared = join(options.cacheDir, '..')
+    this.generated = new GeneratedPreviews({
+      root: options.root,
+      dir: options.manifestDir ?? options.cacheDir,
+      toolsDir: join(shared, 'tools'),
+      moduleCache: join(options.moduleCache ?? join(shared, 'ModuleCache'), 'scanner'),
+      log: options.log
+    })
     this.state = {
       status: 'building',
       name: '',
@@ -124,6 +128,7 @@ export class PreviewSession {
       durationMs: 0,
       stale: false,
       manifest: { source: 'none', path: '', treziPath },
+      catalog: null,
       native: null,
       plan: null,
       toolchain: null,
@@ -248,6 +253,8 @@ export class PreviewSession {
     try {
       const loaded = this.loadManifest()
       if (!loaded || loaded.manifest.target) parts.push(this.nativeStamp())
+      // Without a manifest the saved target choice and the plan's files (LKM-276).
+      if (!loaded) parts.push(stamp(this.generated.selectionPath))
       if (loaded) {
         const { manifest, previewRoot } = loaded
         for (const file of collectSources(this.options.root, manifest, manifest.sources))
@@ -257,15 +264,15 @@ export class PreviewSession {
         for (const library of manifest.libraries)
           for (const file of collectSources(this.options.root, manifest, library.sources))
             parts.push(stamp(file))
-        for (const module of this.state.plan?.modules ?? [])
-          for (const file of [...module.sources, ...module.entries])
-            parts.push(stamp(join(this.options.root, file)))
-        // Asset catalogs and local packages rebuild too (LKM-275).
-        for (const { path } of this.state.plan?.resources.catalogs ?? [])
-          parts.push(...treeStamps(join(this.options.root, path)))
-        for (const pkg of this.state.plan?.dependencies.packages ?? [])
-          if (pkg.kind === 'local') parts.push(...treeStamps(pkg.location))
       }
+      for (const module of this.state.plan?.modules ?? [])
+        for (const file of [...module.sources, ...module.entries])
+          parts.push(stamp(join(this.options.root, file)))
+      // Asset catalogs and local packages rebuild too (LKM-275).
+      for (const { path } of this.state.plan?.resources.catalogs ?? [])
+        parts.push(...treeStamps(join(this.options.root, path)))
+      for (const pkg of this.state.plan?.dependencies.packages ?? [])
+        if (pkg.kind === 'local') parts.push(...treeStamps(pkg.location))
     } catch {}
     return parts.join('\n')
   }
@@ -299,10 +306,16 @@ export class PreviewSession {
     try {
       loaded = this.loadManifest()
       toolchain = await this.toolchain(loaded?.manifest ?? null, reason === 'Rebuild requested')
-      if (!loaded) {
-        await this.nativeGraph()
-        this.built = this.fingerprint()
-        return this.setup(started)
+      if (loaded) this.state.catalog = null
+      else {
+        // No manifest: Trezi generates the previews of the chosen target (LKM-276).
+        const found = this.generated.manifest(await this.nativeGraph())
+        this.state.catalog = this.generated.catalog
+        if (!found) {
+          this.built = this.fingerprint()
+          return this.setup(started)
+        }
+        loaded = { manifest: found.manifest, previewRoot: this.generated.generatedDir }
       }
       if (!toolchain.toolchain || toolchain.toolchain.errors.length)
         throw new Error(toolchain.message)
@@ -316,7 +329,8 @@ export class PreviewSession {
               target: manifest.target,
               project: manifest.project,
               exclude: manifest.exclude,
-              preview: toolchain.capability ?? undefined
+              preview: toolchain.capability ?? undefined,
+              generated: !!this.state.catalog
             },
             (file) => readFileSync(join(this.options.root, file), 'utf8'),
             { root: this.options.root, exists: existsSync, list: listDir }
@@ -326,7 +340,7 @@ export class PreviewSession {
       if (this.state.plan?.blockers.length)
         throw new Error(`Cannot build ${manifest.target}: ${this.state.plan.blockers.join(' ')}`)
       sources = sources.filter((file) => !previews.includes(file))
-      if (sources.length + previews.length === 0)
+      if (!this.state.catalog && sources.length + previews.length === 0)
         throw new Error('trezi-previews.json lists no .swift files.')
     } catch (error) {
       this.built = this.fingerprint()
@@ -334,9 +348,9 @@ export class PreviewSession {
     }
     const { manifest } = loaded
     const plan = this.state.plan
+    const generated = this.state.catalog ? this.generated : null
     this.state.name = manifest.name || plan?.target || ''
-    const count = sources.length + previews.length
-    this.options.log(`Swift previews: ${reason.toLowerCase()}, compiling ${count} files…`)
+    this.options.log(`Swift previews: ${reason.toLowerCase()}, compiling…`)
     // Settings, packages and resources first (LKM-275); then modules into their cached folders.
     if (reason === 'Rebuild requested') this.builder.invalidate()
     const prepared = plan
@@ -346,50 +360,35 @@ export class PreviewSession {
     if (prepared?.error) return this.fail(started, prepared.error, '', [])
     const app = join(this.options.cacheDir, `host-${process.pid}-${builds}.app`)
     const cleanup = () => rmSync(app, { recursive: true, force: true })
-    const moduleCache = this.moduleCache()
-    const shared = { compile: prepared?.compile ?? [], link: prepared?.link ?? [] }
-    let compiled = await compileModules(moduleInputs(this.options.root, manifest, plan, prepared), {
-      root: this.options.root,
-      cacheDir: this.options.cacheDir,
-      toolchainKey: toolchain.key,
-      moduleCache,
-      env: toolchain.env,
-      ...shared,
-      salt: prepared?.salt ?? '',
-      log: this.options.log
-    })
-    if (this.state.build) this.state.build.modules = compiled.report
-    const failedModule = compiled.failed
-    const output = hostBundle(app, {
-      root: this.options.root,
-      assets: prepared?.assets ?? '',
-      copied: plan?.resources.copied ?? [],
-      accentColor: prepared?.accentColor
-    })
-    const target = prepared ? ['-target', `${ARCH}-apple-macosx${prepared.deploymentTarget}`] : []
-    if (compiled.code === 0)
-      compiled = {
-        ...compiled,
-        ...(await run(
-          '/usr/bin/xcrun',
-          hostCompileArgs({
-            host: this.options.hostSource,
-            sources: [...sources, ...previews],
-            moduleCache,
-            output,
-            libraries: compiled.built,
-            flags: [...target, ...shared.compile, ...shared.link]
-          }),
-          this.options.root,
-          toolchain.env
-        ))
+    let compiled: Awaited<ReturnType<typeof compileHost>>
+    // A generated entry that does not compile is left out and the build retried (LKM-276).
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if (generated && plan && prepared)
+          previews = await generated.prepare(plan, prepared, toolchain)
+      } catch (error) {
+        return this.fail(started, (error as Error).message, '', [])
       }
+      compiled = await compileHost({
+        ...this.options,
+        app,
+        manifest,
+        plan,
+        prepared,
+        toolchain,
+        moduleCache: this.moduleCache(),
+        sources: [...sources, ...previews]
+      })
+      if (compiled.code === 0 || !generated || attempt >= 2 || !generated.reject(compiled.output))
+        break
+    }
+    if (this.state.build) this.state.build.modules = compiled.report
     if (this.closed) return cleanup()
     if (compiled.code !== 0) {
       cleanup()
       const failure = describeFailure(compiled, {
         root: this.options.root,
-        module: failedModule,
+        module: compiled.failed,
         targetBuild: !!plan,
         toolchain
       })
@@ -397,7 +396,7 @@ export class PreviewSession {
         this.options.log(`${d.file}:${d.line}:${d.column}: error: ${d.message}`)
       return this.fail(started, failure.message, compiled.output, failure.diagnostics)
     }
-    const host = new PreviewHostProcess(output, {
+    const host = new PreviewHostProcess(compiled.executable, {
       cwd: this.options.root,
       onLog: (line) => this.options.log(`[component] ${line}`),
       onExit: (code, signal) => {
@@ -420,6 +419,7 @@ export class PreviewSession {
       await host.stop()
       return this.fail(started, (error as Error).message, '', [])
     }
+    generated?.hosted(entries)
     const previous = this.host
     this.host = host
     void previous?.stop()
@@ -428,6 +428,10 @@ export class PreviewSession {
       compiled.built.map((b) => b.dir)
     )
     const built = plan ? ` from ${plan.modules.map((m) => m.module).join(' → ')}` : ''
+    const unsupported = this.state.catalog?.entries.filter((e) => !e.supported).length ?? 0
+    const listed = unsupported
+      ? ` ${unsupported} more listed with the reason they are not shown.`
+      : ''
     const warnings = parseDiagnostics(compiled.output, this.options.root)
     this.state = {
       ...this.state,
@@ -436,7 +440,7 @@ export class PreviewSession {
       previews: entries,
       // Target-graph builds name the module of each diagnostic; the host is "previews".
       diagnostics: plan ? warnings.map((d) => ({ ...d, module: 'previews' })) : warnings,
-      message: `Built ${entries.length} preview${entries.length === 1 ? '' : 's'}${built}.`,
+      message: `Built ${entries.length} preview${entries.length === 1 ? '' : 's'}${built}.${listed}`,
       output: '',
       durationMs: Date.now() - started,
       stale: false
@@ -444,19 +448,23 @@ export class PreviewSession {
     this.options.log(`Swift previews: ${this.state.message} (${this.state.durationMs} ms)`)
   }
 
-  /** No manifest: report what was found and where previews can be declared. */
+  /**
+   * No manifest and no target to generate previews for: report what was found, the
+   * choice to make (LKM-276) and where previews can be declared instead.
+   */
   private setup(started: number) {
     const native = this.state.native
     const targets = native?.containers.flatMap((c) => c.targets.map((t) => t.name)) ?? []
     const found = native?.structure
       ? `Found ${targets.length} target${targets.length === 1 ? '' : 's'}${targets.length ? ` (${targets.join(', ')})` : ''}. `
       : ''
+    const choose = this.generated.reason ? `${this.generated.reason} ` : ''
     this.state = {
       ...this.state,
       status: 'setup',
       plan: null,
       build: null,
-      message: `${found}No previews are declared yet: add ${MANIFEST} with a "target" and "previews"${this.state.manifest.treziPath ? ` at ${this.state.manifest.treziPath} (Trezi's copy; the repo stays untouched) or` : ''} in the project root.`,
+      message: `${found}${choose}No previews are declared yet: choose a target, or add ${MANIFEST} with a "target" and "previews"${this.state.manifest.treziPath ? ` at ${this.state.manifest.treziPath} (Trezi's copy; the repo stays untouched) or` : ''} in the project root.`,
       durationMs: Date.now() - started
     }
     this.options.log(`Swift previews: ${this.state.message}`)
@@ -473,6 +481,12 @@ export class PreviewSession {
       stale: !!this.host
     }
     this.options.log(`Swift previews: ${message}`)
+  }
+
+  /** Saves the target to generate previews for (Trezi's folder only) and rebuilds. */
+  configure(selection: TargetSelection) {
+    this.generated.select(selection)
+    void this.rebuild('Target chosen')
   }
 
   private running(): PreviewHostProcess {

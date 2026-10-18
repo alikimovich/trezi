@@ -7,7 +7,11 @@ import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
 type Page = (code: string) => Promise<unknown>
-const TITLES = ['Reload Without Cache', 'Restart Dev Server (clean cache)']
+const TITLES = [
+  'Reload Without Cache',
+  'Restart Dev Server (clean cache)',
+  'Switch JS / Native Preview'
+]
 
 /**
  * LKM-197: the preview toolbar's "…" menu. Its entries are picked through the shell's
@@ -18,7 +22,7 @@ const TITLES = ['Reload Without Cache', 'Restart Dev Server (clean cache)']
  */
 export async function checkToolbarMore(host: NativeBridge, page: Page) {
   const state = await host.request('shellInspect')
-  assert.deepEqual(state.moreMenu, TITLES, 'the … menu lists both entries')
+  assert.deepEqual(state.moreMenu, TITLES, 'the … menu lists its entries')
   assert.equal(state.moreEnabled, true, 'the … menu is enabled with a running preview')
   assert.equal(
     await host.request('shellPerform', { action: 'preview-more', row: 'nothing' }),

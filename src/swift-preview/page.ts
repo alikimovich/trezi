@@ -48,6 +48,15 @@ export function previewPage(token: string): string {
   #project code, #project .muted { font: 11px ui-monospace, Menlo, monospace; }
   #project .muted { opacity: .65; }
   #project .blocker { color: #d0342c; }
+  nav .group { font-size: 11px; opacity: .6; align-self: center; margin: 0 2px 0 6px; }
+  #catalog { margin: 0 14px 10px; font-size: 12px; display: none; }
+  body[data-catalog="true"] #catalog { display: block; }
+  #targets { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  #targets button { font: inherit; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); background: transparent; color: inherit; border-radius: 6px; padding: 3px 9px; }
+  #targets button[aria-current="true"] { border-color: AccentColor; background: color-mix(in srgb, AccentColor 18%, transparent); }
+  #unsupported summary { cursor: default; }
+  #unsupported li { margin: 3px 0; }
+  #unsupported .muted { opacity: .65; font: 11px ui-monospace, Menlo, monospace; }
 </style>
 </head>
 <body data-status="building" data-generation="0">
@@ -56,6 +65,7 @@ export function previewPage(token: string): string {
   <div id="stage" tabindex="0" aria-label="Component preview"><img id="frame" alt=""></div>
   <section id="problems" aria-live="polite"><h2 id="problem-title">Build failed</h2><ol id="problem-list"></ol><pre id="problem-output"></pre></section>
 </main>
+<section id="catalog" aria-label="Generated previews"><div id="targets"></div><details id="unsupported"><summary id="unsupported-summary"></summary><ul id="unsupported-list"></ul></details></section>
 <details id="project"><summary id="project-summary">Project</summary><div id="project-body"></div></details>
 <footer id="footer">Click the component to interact; keys go to it while it has focus.</footer>
 <script>
@@ -119,21 +129,34 @@ export function previewPage(token: string): string {
     const labels = { building: 'Building…', ready: 'Ready', failed: 'Build failed', error: 'Not running', setup: 'No previews yet' }
     $('status').textContent = labels[state.status] || state.status
     $('status').title = state.message
-    const ids = state.previews.map((p) => p.id).join()
+    const catalog = state.catalog
+    const ids = state.previews.map((p) => p.id).join() + (catalog ? '|' + catalog.entries.length : '')
     if (ids !== shown) {
       shown = ids
-      $('picker').replaceChildren(...state.previews.map((p) => {
-        const button = document.createElement('button')
-        button.dataset.preview = p.id
-        button.append(p.title)
+      const entries = new Map((catalog ? catalog.entries : []).map((e) => [e.id, e]))
+      const button = (p) => {
+        const node = document.createElement('button')
+        node.dataset.preview = p.id
+        node.append(p.title)
         const kind = document.createElement('small')
         kind.textContent = p.kind
-        button.append(kind)
-        button.onclick = () => select(p.id)
-        return button
-      }))
+        node.append(kind)
+        const entry = entries.get(p.id)
+        if (entry) node.title = [entry.file + ':' + entry.line, entry.sample ? 'Sample: ' + entry.sample : '', ...entry.notes].filter(Boolean).join('\\n')
+        node.onclick = () => select(p.id)
+        return node
+      }
+      // Generated (LKM-276): the #Preview blocks first, then the components.
+      const groups = catalog
+        ? [['#Preview', state.previews.filter((p) => !p.id.startsWith('component:'))], ['Components', state.previews.filter((p) => p.id.startsWith('component:'))]]
+        : [['', state.previews]]
+      $('picker').replaceChildren(...groups.filter(([, items]) => items.length).flatMap(([label, items]) => [
+        ...(label ? [Object.assign(document.createElement('span'), { className: 'group', textContent: label })] : []),
+        ...items.map(button)
+      ]))
     }
-    for (const button of $('picker').children) button.setAttribute('aria-current', String(button.dataset.preview === api.preview))
+    for (const button of $('picker').querySelectorAll('button')) button.setAttribute('aria-current', String(button.dataset.preview === api.preview))
+    renderCatalog(state)
     const errors = state.diagnostics.filter((d) => d.severity === 'error')
     $('problem-title').textContent = state.message + (state.stale ? ' Showing the last good build.' : '')
     $('problem-list').replaceChildren(...errors.map((d) => {
@@ -166,6 +189,45 @@ export function previewPage(token: string): string {
     ul.append(...items.map((item) => (typeof item === 'string' ? el('li', item) : item)))
     return ul
   }
+  // Without a manifest (LKM-276): the target choice and what cannot be previewed, and why.
+  const configure = (choice) =>
+    fetch('/configure', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-trezi-token': token },
+      body: JSON.stringify({ project: choice.project, target: choice.target })
+    }).then((r) => r.ok)
+  api.configure = configure
+  let catalogShown = ''
+  const renderCatalog = (state) => {
+    const catalog = state.catalog
+    document.body.dataset.catalog = String(!!catalog)
+    const key = JSON.stringify(catalog)
+    if (key === catalogShown) return
+    catalogShown = key
+    if (!catalog) return
+    const targets = []
+    if (catalog.choices.length > 1 || !catalog.target) {
+      targets.push(el('span', catalog.target ? 'Previewing' : 'Choose what to preview:'))
+      for (const choice of catalog.choices) {
+        const node = el('button', choice.target + ' (' + choice.kind + ', ' + choice.project + ')')
+        node.dataset.target = choice.target
+        node.setAttribute('aria-current', String(choice.target === catalog.target && choice.project === catalog.project))
+        node.onclick = () => configure(choice)
+        targets.push(node)
+      }
+    } else if (catalog.target) targets.push(el('span', 'Previewing ' + catalog.target + ' (' + catalog.chosenBy + '); generated in ' + catalog.dir, 'muted'))
+    if (!catalog.choices.length && !catalog.target) targets.push(el('span', state.message, 'muted'))
+    $('targets').replaceChildren(...targets)
+    const unsupported = catalog.entries.filter((e) => !e.supported)
+    $('unsupported').hidden = !unsupported.length
+    $('unsupported-summary').textContent = unsupported.length + ' not shown' + (catalog.retries ? ' (' + catalog.retries + ' rebuilt without entries that did not compile)' : '')
+    $('unsupported-list').replaceChildren(...unsupported.map((e) => {
+      const item = el('li')
+      item.dataset.entry = e.id
+      item.append(el('strong', e.title), ' ' + e.kind + ': ' + e.reason + ' ', el('span', e.file + ':' + e.line, 'muted'))
+      return item
+    }))
+  }
+
   let projectShown = ''
   const renderProject = (state) => {
     const native = state.native

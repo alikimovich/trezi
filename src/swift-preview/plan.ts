@@ -85,6 +85,8 @@ export function planTargetBuild(
     exclude?: string[]
     /** The selected toolchain's `#Preview` capability (LKM-274, `toolchain.ts`). */
     preview?: { status: string; message: string }
+    /** Trezi generates the previews from the `#Preview` blocks (LKM-276, no manifest). */
+    generated?: boolean
   },
   read: (path: string) => string,
   /** The project root and file checks for local packages and binary frameworks. */
@@ -146,12 +148,12 @@ export function planTargetBuild(
       if (PREVIEW_MACRO.test(text)) previews.push(file)
     }
     if (!sources.length) blockers.push(`${t.name} has no Swift sources left to build.`)
-    if (previews.length) {
+    if (previews.length && !(select.generated && select.preview?.status === 'supported')) {
       const files = `${previews.length} file${previews.length === 1 ? '' : 's'} use #Preview`
       const preview = select.preview
       warnings.push(
         preview?.status === 'supported'
-          ? `${t.name}: ${files}; they compile with the selected Xcode, but #Preview bodies are not shown as previews yet (Stage 3): ${previews.join(', ')}`
+          ? `${t.name}: ${files}; they compile with the selected Xcode, but with a manifest only its "previews" are shown (without one, Trezi lists and renders #Preview blocks itself): ${previews.join(', ')}`
           : `${t.name}: ${files}, which needs PreviewsMacros from a full Xcode selected for Trezi's processes (${preview?.message ?? 'no toolchain was checked'}): ${previews.join(', ')}`
       )
     }
