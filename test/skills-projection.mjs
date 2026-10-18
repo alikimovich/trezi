@@ -96,10 +96,12 @@ try {
     const catalog = catalogOf(claude.path)
     assert.equal(catalog.format, SKILLS_CATALOG_FORMAT)
     assert.equal(catalog.plugin, SKILLS_PLUGIN_NAME)
-    assert.deepEqual(catalog.skills[0].files, [
-      { path: 'skills/alpha/SKILL.md', size: skillMd('alpha', 'Alpha things.').length },
-      { path: 'skills/alpha/references/guide.md', size: 17 }
-    ])
+    assert.deepEqual(
+      Object.keys(catalog.skills[0]).sort(),
+      ['description', 'entry', 'name', 'revision', 'skill'],
+      'the index is metadata only: a skill’s files are its folder, never listed here'
+    )
+    assert.ok(existsSync(join(claude.path, 'skills/alpha/references/guide.md')))
 
     const codex = ok(await fx.call('project', { session: 'chat-1', provider: 'codex' }))
     assert.equal(codex.created, false, 'one pin per session, every provider')
@@ -370,6 +372,74 @@ try {
     )
     const gemini = await projectSessionSkills('trezi-1', 'gemini')
     assert.match(compatibilityCatalog(gemini.path, 'gemini'), /experimental compatibility catalog/)
+    await pipe.close()
+  }
+
+  // --- A large but valid library (128 skills × 64 files, long paths and descriptions) ---
+  {
+    const dir = profile()
+    const pipe = link(binary, dir)
+    await pipe.started
+    const skills = serviceSkills(pipe)
+    const description = `Large ${'d'.repeat(1000)}`
+    for (let i = 0; i < 128; i++) {
+      const name = `big-${String(i).padStart(3, '0')}`
+      const extra = {}
+      for (let f = 1; f < 64; f++)
+        extra[`references/${'r'.repeat(60)}/ref-${String(f).padStart(2, '0')}.md`] = `# ${f}\n`
+      await skills.create(files(name, extra, description))
+    }
+    setSessionSkillsSource(() => skills)
+    for (const provider of ['codex', 'gemini']) {
+      const projection = await projectSessionSkills('trezi-large', provider)
+      assert.equal(projection.note, undefined, 'nothing omitted')
+      assert.ok(projection.path, `${provider}: a projection was handed over`)
+      const bytes = statSync(join(projection.path, 'catalog.json')).size
+      assert.ok(bytes < 1024 * 1024, `${provider}: the index stays metadata-only (${bytes} B)`)
+      const section = compatibilityCatalog(projection.path, provider)
+      assert.notEqual(section, '', `${provider}: pinned skills are never dropped silently`)
+      assert.match(section, /## Trezi Skills \(compatibility catalog\)/)
+      assert.match(section, /big-000/)
+      assert.match(section, /more skills did not fit here; .*catalog\.json/)
+      assert.ok(section.length <= 24 * 1024, 'bounded')
+      assert.ok(catalogOf(projection.path).skills.length === 128, 'every skill is in the index')
+    }
+    setSessionSkillsSource(null)
+    await pipe.close()
+  }
+
+  // --- A catalog Bun cannot read (over the cap, damaged, off-format) is a labelled fallback ---
+  {
+    const dir = join(scratch, 'unreadable-catalog')
+    mkdirSync(join(dir, 'skills', 'alpha'), { recursive: true })
+    const read = () => compatibilityCatalog(dir, 'codex')
+    const expectFallback = (why) => {
+      const section = read()
+      assert.notEqual(section, '', `${why}: never empty while skills are pinned`)
+      assert.match(section, /could not be read/, why)
+      assert.match(section, /not Codex’s native skills system/, why)
+      assert.ok(section.includes(join(dir, 'skills')), `${why}: names the folder`)
+    }
+    writeFileSync(
+      join(dir, 'catalog.json'),
+      `{"format":"${SKILLS_CATALOG_FORMAT}","skills":[],"pad":"${'x'.repeat(4 * 1024 * 1024)}"}`
+    )
+    expectFallback('over the read cap')
+    writeFileSync(join(dir, 'catalog.json'), '{ not json')
+    expectFallback('damaged')
+    writeFileSync(join(dir, 'catalog.json'), JSON.stringify({ format: 'other', skills: [] }))
+    expectFallback('off-format')
+    writeFileSync(
+      join(dir, 'catalog.json'),
+      JSON.stringify({ format: SKILLS_CATALOG_FORMAT, skills: [null] })
+    )
+    expectFallback('a malformed entry')
+    rmSync(join(dir, 'catalog.json'))
+    expectFallback('missing')
+    assert.equal(compatibilityCatalog(undefined, 'codex'), '', 'no projection, no section')
+  }
+
+  {
     // An empty library hands the provider nothing.
     setSessionSkillsSource(() => ({
       project: async (session, provider) => ({
@@ -384,8 +454,9 @@ try {
     }))
     assert.deepEqual(await projectSessionSkills('trezi-2', 'claude'), {})
     setSessionSkillsSource(null)
-    await pipe.close()
-    console.log('SKILLS-PROJECTION Bun client: Claude plugin entry, bounded labelled catalogs PASS')
+    console.log(
+      'SKILLS-PROJECTION Bun client: Claude plugin entry, bounded labelled catalogs, a large library, unreadable catalogs PASS'
+    )
   }
 } finally {
   setSessionSkillsSource(null)

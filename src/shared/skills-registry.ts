@@ -159,7 +159,6 @@ export interface SkillsCatalog {
     revision: string
     /** Relative to the projection folder, e.g. `skills/pdf/SKILL.md`. */
     entry: string
-    files: Array<{ path: string; size: number }>
   }>
   omitted: SkillProjection['omitted']
 }

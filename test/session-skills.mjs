@@ -48,8 +48,7 @@ const projection = (provider, names) => {
         name,
         description: `Use for ${name}.`,
         revision: 'b'.repeat(64),
-        entry: `skills/${name}/SKILL.md`,
-        files: []
+        entry: `skills/${name}/SKILL.md`
       })),
       omitted: []
     })

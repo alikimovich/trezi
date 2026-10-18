@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-18 — LKM-287 repair: a large valid library no longer drops compatibility skills silently
+
+- **Defect.** `catalog.json` listed every file of every revision. A valid library (the review's probe: 128 skills × 64 files) wrote 4.8 MB, over the Bun reader's 4 MiB cap, so `compatibilityCatalog` returned '' while `projectSessionSkills` still handed over a path and no note: Codex, custom-endpoint and Gemini sessions got no skills and no warning.
+- **Fix.** The index is metadata only (id, name, description, revision, entry): at most about 6.5 KB a skill (a 1024-unit description escaped to 6 bytes a unit dominates), under 3.4 MB for the registry's 512 skills, so the unchanged 4 MiB cap provably holds every valid catalog. A skill's files are its folder. A catalog that still cannot be read (over the cap, damaged, off-format, a malformed entry or missing) yields a short labelled fallback naming the projection's `skills/` folder, never ''. The explicit empty cases stay '' (no path, no skills, another provider's catalog). While adding the regression I found the "N more skills" trailer could push the section past its 24 KB budget; the loop now reserves room for it.
+- **Tests.** `test/skills-projection.mjs`: the index keys, a 128 × 64 library through the real owner for Codex and Gemini (index well under the cap, non-empty labelled section with the "more skills" line, every skill in the index, within the budget), and five unreadable-catalog fallbacks.
+
 ## 2026-10-18 — LKM-287 Trezi Skills 4/4: provider-wide session snapshots and labeled compatibility
 
 - **Identity, not the chat key.** Pins hang on a durable `SessionRecord.skillsSession` (`trezi-<uuid>`), stamped in `startProviderSession`. Every `agent.ts` path goes through it: foreground, additional, background, comment and visual-edit sessions, and custom endpoints. A restore, resume, model/backend restart or stale-resume fallback passes the prior identity on. The helper's fallback provider projects the same pins. `emitKey` was rejected because a model restart and a background spawn reuse it. A legacy record is captured once, on its next start, and never hot-replaced. Release happens only when no saved record or live session names the identity (a landed background run, a History removal), so a kept chat's resume still reads its own revision.

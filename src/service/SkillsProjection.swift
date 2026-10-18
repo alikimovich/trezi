@@ -3,7 +3,10 @@ import Foundation
 /// A session's pinned skills laid out as read-only files for one provider (LKM-287):
 ///
 ///     <profile>/skills/projections/<sha256(session)>/<provider>/
-///         catalog.json                       names, descriptions, revisions, entry paths
+///         catalog.json                       metadata only: id, name, description, revision, entry path
+///                                            (at most about 6.5 KB a skill, so under 3.4 MB for the
+///                                            512 skills the registry allows; a skill's files are
+///                                            listed by its own folder, never here)
 ///         .claude-plugin/plugin.json         Claude only: the `trezi-library` plugin
 ///         skills/<name>/SKILL.md, …          each pinned revision's files, 0400
 ///
@@ -59,9 +62,7 @@ extension SkillsStore {
             entries.append(.object([
                 (JSText("skill"), .string(JSText(pin.skill))), (JSText("name"), .string(JSText(revision.name))),
                 (JSText("description"), .string(JSText(revision.description))), (JSText("revision"), .string(JSText(pin.revision))),
-                (JSText("entry"), .string(JSText(folder + "/" + SkillsPackage.entryFile))),
-                (JSText("files"), .array(revision.files.map { .object([(JSText("path"), .string(JSText(folder + "/" + $0.path))),
-                                                                        (JSText("size"), .number(Double($0.size)))]) }))
+                (JSText("entry"), .string(JSText(folder + "/" + SkillsPackage.entryFile)))
             ]))
         }
         if provider == "claude" { files.append((".claude-plugin/plugin.json", SkillsProjection.manifest())) }

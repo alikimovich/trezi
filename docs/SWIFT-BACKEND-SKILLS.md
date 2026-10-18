@@ -361,7 +361,7 @@ sessions, and custom endpoints too: they all go through `startProviderSession`.
   lays out the revisions offered to that provider under
   `<profile>/skills/projections/<sha256(session)>/<provider>/`. Every file is 0400
   and every folder 0700. The folder holds `catalog.json`
-  (`trezi-skills-catalog-v1`: names, descriptions, revisions, entry paths and sizes)
+  (`trezi-skills-catalog-v1`: metadata only, at most about 6.5 KB a skill, so under 3.4 MB for 512 skills: id, name, description, revision, entry path; a skill's files are its folder, never listed)
   and `skills/<name>/…`. For Claude it also holds `.claude-plugin/plugin.json`, which
   names `trezi-library` and nothing else.
   - The layout depends only on the snapshot. An intact projection is reused. A
@@ -395,7 +395,10 @@ sessions, and custom endpoints too: they all go through `startProviderSession`.
   "Trezi Skills (compatibility catalog)" section after the Trezi rules. For each
   skill it gives a one-line name and description (whitespace and backticks
   flattened) and the read-only `SKILL.md` path, within a 24 KB budget. The rest is
-  counted and pointed to `catalog.json`. Codex reads a body with its existing file
+  counted and pointed to `catalog.json` (the section, trailer included, stays within
+  the budget). If the catalog cannot be read (over the 4 MiB read cap, damaged,
+  off-format), the section is a short labelled fallback naming the projection's
+  `skills/` folder, never empty while skills are pinned. Codex reads a body with its existing file
   tools only when a task matches.
   - No Codex config, `skills/extraRoots`, MCP server, tool or sandbox setting
     changes. The Git and browser guard hooks are kept.
