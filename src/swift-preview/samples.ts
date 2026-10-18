@@ -210,7 +210,12 @@ const NO_PARAM_WRAPPERS = new Set([
   'ScaledMetric'
 ])
 
-/** The memberwise initializer of a struct, as Swift synthesizes it. */
+/**
+ * The memberwise initializer of a struct, as Swift synthesizes it (checked against
+ * swiftc 6.3, LKM-277): a `var` of sugared optional type starts as nil, plain or
+ * `@State`; a private wrapped property with a value is not a parameter at all; any
+ * other private property makes the initializer private.
+ */
 export function memberwise(decl: ScannedType): ScannedInit | null {
   if (decl.kind !== 'struct') return null
   const params: ScannedParam[] = []
@@ -218,10 +223,14 @@ export function memberwise(decl: ScannedType): ScannedInit | null {
   for (const p of decl.properties) {
     if (p.isStatic || p.computed || (p.isLet && p.hasDefault)) continue
     if (p.wrapper && (NO_PARAM_WRAPPERS.has(p.wrapper) || p.wrapperArgs)) continue
-    if (!p.hasDefault && (p.access === 'private' || p.access === 'fileprivate'))
-      access = 'fileprivate'
+    const hasDefault =
+      p.hasDefault ||
+      (!p.isLet && (!p.wrapper || p.wrapper === 'State') && /[?!]$/.test(p.type.trim()))
+    const hidden = p.access === 'private' || p.access === 'fileprivate'
+    if (hidden && p.wrapper && hasDefault) continue
+    if (hidden) access = 'fileprivate'
     const type = p.wrapper === 'Binding' ? `Binding<${p.type}>` : p.type
-    params.push({ label: p.name, name: p.name, type, hasDefault: p.hasDefault })
+    params.push({ label: p.name, name: p.name, type, hasDefault })
   }
   return { access, failable: false, effects: '', params, line: decl.line }
 }

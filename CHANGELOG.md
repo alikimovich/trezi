@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Demo: generated Swift component previews no longer fail to compile for views with private optional or `@State` properties, such as Scraib's `ShortcutRecorderView` (LKM-277).
 - Chat history now shows a pulsing running dot and a green dot for an unseen assistant answer, with Reduce Motion and accessible status labels (LKM-268).
 - Chat form answers now show when they are queued, survive relaunch without an extra send, and proceed when Codex reports a completed turn even if its CLI stream stays open (LKM-265).
 - Opening a committed project now shows a centered Opening indicator beside the sidebar until it is ready, then restores docked chat (LKM-270, superseding LKM-266).

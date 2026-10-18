@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native previews Stage 6: Scraib acceptance on disposable copies (LKM-277, held branch)
+
+Status and limits: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 6), evidence `docs/evidence/scraib-acceptance/README.md`.
+
+- [x] Unchanged Scraib-xcode copy opened through Trezi with no manifest or harness; full `scraib` target, all seven `#Preview` blocks built, `FloatingLoaderView` rendered (native smoke `scraib-xcode`, group `core`).
+- [x] Interaction (`ShortcutRecorderView` click to record and stop), and three chat-landed turns with the fixture provider: an edit that rebuilds, a compile error that keeps the last good build, recovery. No synthetic direct writes.
+- [x] Scraib-open via ScraibKit, Sparkle and PostHog: `LiquidGlassPanelBackground` rendered; each unrendered view named with its reason (native smoke `scraib-open`, group `core`).
+- [x] Originals hashed before and after (unchanged); `xcode-select -p` unchanged; DEVELOPER_DIR, Xcode, Swift, Trezi build and Scraib commits recorded.
+- [x] Fix: generated memberwise initializers follow swiftc for an optional `var` and private wrapped properties (`src/swift-preview/samples.ts`, `test/swift-preview-generate.mjs`).
+- [ ] Samples for types from dependencies (ScraibKit), `ButtonStyleConfiguration`, existentials and generics; StoreKit; app icon and other unbundled resources; full-app windows and cursor tracking (Stage 7); onscreen glass and material fidelity (Stage 4).
+
 ## Native previews Stage 3: open → target → `#Preview` or component → render (LKM-276, held branch)
 
 Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3), `docs/SWIFT-PREVIEWS.md` (Generated previews).
@@ -44,7 +55,7 @@ Stage 2 is partial: only 2A is done. Details: `docs/SWIFT-PREVIEWS-PLAN.md`, `do
 - [x] Docs and `plan.ts` warnings corrected: no "bare swiftc"/strip guidance; the requirement is a full Xcode selected process-locally.
 - [x] Tests: `test/swift-preview-toolchain.mjs` (scripted toolchains plus a real intact `#Preview` through the driver with `xcode-select -p` checked); `swift-graph` smoke asserts the toolchain.
 - [ ] A settings UI to pick the developer directory (today: manifest field and `TREZI_DEVELOPER_DIR`).
-- [ ] Show `#Preview` bodies as previews (Stage 3: done, LKM-276, above); Scraib full-target build through 2A recorded as Stage 6 evidence.
+- [x] Show `#Preview` bodies as previews (Stage 3: done, LKM-276, above); Scraib full-target build through 2A recorded as Stage 6 evidence (LKM-277, `docs/evidence/scraib-acceptance/`).
 
 ## Native previews Stage 1: Xcode/SwiftPM discovery and target-graph builds (LKM-273, held branch)
 

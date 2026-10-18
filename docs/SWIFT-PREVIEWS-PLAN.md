@@ -17,7 +17,7 @@ means no code yet.
 | 3 | Component selection, sample states, environment/dependency injection, resources | partial: selection, `#Preview` reuse, generated samples, mixed-repo choice done (demo), LKM-276; StoreKit and the remaining resources not started |
 | 4 | Service-owned host lifecycle, driver packaging in the distributed app, OS-level input, glass/material render fidelity | not started |
 | 5 | Agent diagnostics and source feedback | partial |
-| 6 | Practical Scraib acceptance on disposable copies | not started (Stage 1 progress recorded) |
+| 6 | Practical Scraib acceptance on disposable copies | done (demo) for the scope below, LKM-277: unchanged Scraib-xcode previews `FloatingLoaderView` in Trezi; Scraib-open renders through ScraibKit with the rest named |
 | 7 | Full macOS app integration | not started |
 | 8 | iOS simulator | not started |
 
@@ -288,10 +288,42 @@ and no edit to the project. User-facing description: `docs/SWIFT-PREVIEWS.md`
 - Open: structured diagnostics for the agent, mapping a rendered component back to its
   source file and line, and warnings (not only errors) in the feedback.
 
-## Stage 6: practical Scraib acceptance on disposable copies: not started
+## Stage 6: practical Scraib acceptance on disposable copies: done (demo), LKM-277
 
-Previews of real Scraib components built on disposable copies, with evidence. Progress
-so far is below; nothing here is "Scraib supported".
+Previews of real Scraib components built on disposable copies, with evidence. Earlier
+progress is below. Nothing here means "Scraib supported" or "any macOS app works".
+
+LKM-277 adds two native smoke checks, both in group `core`:
+`src/native/smoke-scraib-xcode.ts` and `src/native/smoke-scraib-open.ts`. Each runs only
+when its original is on the machine, and otherwise writes `ran: false`. The launcher
+watchdog gets extra time for them (`src/native/scraib-originals.ts`). Evidence and an
+inspected description of each capture: `docs/evidence/scraib-acceptance/README.md`.
+
+- Scraib-xcode (`580051800e`), unchanged, with no manifest or harness:
+  - Opening the copy picks `scraib` and builds the whole target with Xcode 26.5 selected
+    process-locally. That gives all seven `#Preview` blocks plus 26 components.
+  - `FloatingLoaderManager`'s `#Preview` renders `FloatingLoaderView`.
+  - `ShortcutRecorderView` responds to clicks.
+  - Three chat-landed turns (fixture provider, no synthetic writes) cover an edit that
+    rebuilds, a compile error that keeps the last good build with the landing-check row,
+    and the fix with the diagnostic in its prompt.
+- Scraib-open (`dfc42b1e02`): Sparkle and posthog-ios at their pins and the local
+  ScraibKit package build. `LiquidGlassPanelBackground` from a file that imports
+  ScraibKit renders. The 12 views not shown each carry a reason:
+  - they need ScraibKit types (`RewriteCoordinator`, `LicenseValidator`,
+    `RewriteProgress` from the environment);
+  - they take `ButtonStyleConfiguration` or `any Theme`;
+  - or they are generic.
+- The originals' content and stat digests are identical before and after.
+  `xcode-select -p` stays `/Library/Developer/CommandLineTools`.
+- Fixed on the way: generated memberwise initializers now follow swiftc for an
+  optional `var` (nil default) and for private wrapped properties (no parameter).
+  `ShortcutRecorderView`'s `@State private var monitor: Any?` broke the first run.
+- Limits: unbundled resources (app icon, StoreKit configuration). Samples only for types
+  from the target's own sources. No full-app windows, menu-bar panel or cursor tracking
+  (Stage 7). No StoreKit. Offscreen glass and material fidelity (Stage 4). Samples are
+  heuristics: `FloatingLoaderView` shows its `.error` state, and
+  `LiquidGlassPanelBackground` draws at a 20×44 pt intrinsic size.
 
 ## Stage 7: full macOS app integration: not started
 
