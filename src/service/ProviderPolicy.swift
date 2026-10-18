@@ -36,7 +36,11 @@ enum ProviderPolicy {
         "ask_user": "Background agents cannot ask with ask_user. Make the reasonable default choice and name it in your final message.",
         "chat_ui": "Background agents cannot show answer components. Make the reasonable default choice and name it in your final message.",
     ]
+    /// `HOST_CONFIRMED` (LKM-281): never auto-allowed; a live foreground session may call
+    /// one because the tool asks the user in a card bound to what it would do.
+    static let hostConfirmed = ["publish_merge": "Background agents cannot merge pull requests."]
     static let autoTrezi = Set(treziTools).subtracting(["install_skills", "workspace_state", "prepare_conflict_resolution"])
+        .subtracting(hostConfirmed.keys)
     static let autoAllow: Set<String> = ["Read", "Glob", "Grep", "LS", "NotebookRead"]
     static let edit: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
     static let mcpPrefix = "mcp__trezi__"
@@ -110,6 +114,10 @@ enum ProviderPolicy {
                 if scope.background, let message = foregroundOnly[name] { return .deny(message) }
                 return .allow
             }
+            if let message = hostConfirmed[name] {
+                if scope.background { return .deny(message) }
+                return scope.live ? .allow : .deny(Message.inactive)
+            }
         }
         if let target, edit.contains(tool) || tool == "Bash", touchesSidecar(target) { return .deny(Message.sidecar) }
         if touchesProfile(tool: tool, target: target, scope: scope) { return .deny(Message.profile) }
@@ -123,6 +131,7 @@ enum ProviderPolicy {
         if !live { return PreferencesOwner.fail(.unauthorized, Message.closed) }
         if !treziTools.contains(tool) { return PreferencesOwner.fail(.unauthorized, Message.ungranted(tool)) }
         if background, let message = foregroundOnly[tool] { return PreferencesOwner.fail(.unauthorized, message) }
+        if background, let message = hostConfirmed[tool] { return PreferencesOwner.fail(.unauthorized, message) }
         if bytes > Limits.toolArgs { return PreferencesOwner.fail(.invalidRequest, Message.tooLarge) }
         return nil
     }

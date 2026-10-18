@@ -145,10 +145,19 @@ export function serviceWorkflows(
 
   return {
     kind: 'swift',
-    async publish(root, mode, describe) {
+    async publish(root, mode, describe, expectedHead) {
       const healed = await healPublishBranch(root)
       if (healed && 'error' in healed) return { ok: false, error: healed.error }
-      return finish(await call('publish', { root, mode, intent: 'publish', ...leases() }), describe)
+      return finish(
+        await call('publish', {
+          root,
+          mode,
+          intent: 'publish',
+          ...(expectedHead ? { expectedHead } : {}),
+          ...leases()
+        }),
+        describe
+      )
     },
     async ciRerun(root, commit) {
       return (await call('ciRerun', { root, commit, intent: 'rerun', ...leases() })).result

@@ -22,6 +22,7 @@ const UNIT = [
   'runtime-owner',
   'repository-owner',
   'agent-git',
+  'agent-merge-approval',
   'git-messages',
   'repository-recovery',
   'source-owner',

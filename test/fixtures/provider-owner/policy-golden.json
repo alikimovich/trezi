@@ -191,6 +191,23 @@
   }
  ],
  [
+  "fg mcp__trezi__publish_merge {}",
+  {
+   "ok": {
+    "decision": "allow"
+   }
+  }
+ ],
+ [
+  "bg mcp__trezi__publish_merge {}",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Background agents cannot merge pull requests."
+   }
+  }
+ ],
+ [
   "fg mcp__other__tool {}",
   {
    "ok": {
@@ -520,6 +537,18 @@
   }
  ],
  [
+  "authorize fg publish_merge",
+  {
+   "ok": null
+  }
+ ],
+ [
+  "authorize bg publish_merge",
+  {
+   "error": "unauthorized"
+  }
+ ],
+ [
   "turn",
   {
    "ok": null
@@ -737,6 +766,15 @@
   "authorize after close",
   {
    "error": "unauthorized"
+  }
+ ],
+ [
+  "merge after close",
+  {
+   "ok": {
+    "decision": "deny",
+    "message": "Session no longer active."
+   }
   }
  ]
 ]

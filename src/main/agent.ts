@@ -84,6 +84,7 @@ import {
   noteAgentStep
 } from './live-change-watch'
 import { commitLiveTurn } from './live-commit'
+import { answerMergeApproval, revokeMergeApprovals } from './merge-approval'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
 import {
@@ -613,6 +614,7 @@ async function closeChat(sessionKey: string, s: ProviderSession, persist: Persis
   checkpointTimers.delete(sessionKey)
   handoffHistory.delete(sessionKey)
   forgetChatUi(sessionKey)
+  revokeMergeApprovals(sessionKey)
   try {
     s.finalize()
     if (persist !== 'none' && s.record.transcript.some((t) => t.role === 'user'))
@@ -1620,7 +1622,7 @@ export function registerAgentIpc(
       answers: QuestionAnswers | null
     ): Promise<{ message?: string } | void> => {
       // An ask_user question (LKM-199): the chat sends the answer as the user's next message.
-      const asked = answerAsked(id, answers)
+      const asked = answerMergeApproval(id, answers) ?? answerAsked(id, answers)
       if (asked) return asked
       const background = findSpawnWithQuestion(id)
       if (background) return resolveQuestion(background, id, answers)

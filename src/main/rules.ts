@@ -19,7 +19,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 44
+export const TREZI_RULES_VERSION = 45
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -78,8 +78,9 @@ export function treziRules(opts?: {
     `then git_merge_continue. Call git_merge_abort to abandon a merge. Call`,
     `land_now to land edits during the turn, then publish_update to push the existing`,
     `PR or publish_merge to merge it when the setting allows. Wait for each result.`,
-    `If Agent can merge pull requests is off, ask the user in chat; pass confirmed: true`,
-    `only after their explicit answer permits this PR merge.`,
+    `publish_merge first shows the user a card to approve that exact PR head; end your`,
+    `turn and call it once more only after they approve. If Agent can merge pull`,
+    `requests is off, do not merge: tell the user to merge it themselves.`,
     ...(opts?.agentGitAccess === 'full'
       ? [
           `Agent Git access is Full: you may commit, merge, rebase, cherry-pick or`,

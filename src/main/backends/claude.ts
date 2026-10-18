@@ -665,8 +665,8 @@ async function startSession(
       ),
       tool(
         'publish_merge',
-        'Publish and merge the existing PR now when the agent merge setting allows it.',
-        { number: z.number().int().positive().optional(), confirmed: z.boolean().optional() },
+        'Squash merge the existing PR after the user approves it in the card Trezi shows. Needs Agent can merge pull requests on.',
+        { number: z.number().int().positive().optional() },
         async (args) => asText(treziTool('publish_merge', args))
       ),
       tool(

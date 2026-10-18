@@ -407,7 +407,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
           landing: landed
         }
     }
-    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args, startedAt)
+    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args, startedAt, s.notify)
   }
   const before = agentWorkspaceState(s.emitKey)
   if (before.state === 'live' || before.state === 'isolated') {

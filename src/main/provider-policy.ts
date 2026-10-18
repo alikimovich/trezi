@@ -92,10 +92,24 @@ export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
     'Background agents cannot show answer components. Make the reasonable default choice and name it in your final message.'
 }
 
+/**
+ * Trezi tools whose effect only a person may approve (LKM-281), and what a session that
+ * cannot ask is told. They are never auto-allowed: a live foreground session may call
+ * one because the tool itself asks the user in a card bound to exactly what it would
+ * do (a merge: repository, PR and head), and does nothing until they approve.
+ */
+export const HOST_CONFIRMED: Readonly<Record<string, string>> = {
+  publish_merge: 'Background agents cannot merge pull requests.'
+}
+
 /** Trezi tools that never prompt (side-effect-free or validated by their own service). */
 const AUTO_TREZI = new Set<string>(
   TREZI_TOOLS.filter(
-    (t) => t !== 'install_skills' && t !== 'workspace_state' && t !== 'prepare_conflict_resolution'
+    (t) =>
+      t !== 'install_skills' &&
+      t !== 'workspace_state' &&
+      t !== 'prepare_conflict_resolution' &&
+      !(t in HOST_CONFIRMED)
   )
 )
 const AUTO_ALLOW = AUTO_ALLOW_TOOLS
@@ -182,6 +196,10 @@ export function decidePermission(
         ? { decision: 'deny', message: FOREGROUND_ONLY[name] }
         : { decision: 'allow' }
     }
+    if (name in HOST_CONFIRMED) {
+      if (scope.background) return { decision: 'deny', message: HOST_CONFIRMED[name] }
+      return scope.live ? { decision: 'allow' } : { decision: 'deny', message: MESSAGES.inactive }
+    }
   }
   if (target !== undefined && (EDIT.has(tool) || tool === 'Bash') && SIDECAR.test(target))
     return { decision: 'deny', message: MESSAGES.sidecar }
@@ -204,6 +222,8 @@ export function authorizeTool(
     return { code: 'unauthorized', message: MESSAGES.ungranted(tool) }
   if (scope.background && tool in FOREGROUND_ONLY)
     return { code: 'unauthorized', message: FOREGROUND_ONLY[tool] }
+  if (scope.background && tool in HOST_CONFIRMED)
+    return { code: 'unauthorized', message: HOST_CONFIRMED[tool] }
   if (bytes > LIMITS.toolArgs) return { code: 'invalidRequest', message: MESSAGES.tooLarge }
   return null
 }
