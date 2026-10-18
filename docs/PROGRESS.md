@@ -2,6 +2,47 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-17 — LKM-284 review repair: pinned revisions survive history trimming
+
+- Review found no test for the recorded "edit/remove/history trimming before resuming the oldest snapshot" case. `test/skills-registry-boundaries.mjs` now runs it against the real owner: pin session `old` on v1 and `mid` on v2, make enough edits that `SkillsPlan.appending` (`maxHistory` = 64) drops v1, v2 and v3 from `list`'s history, then remove, restart (sweep), purge and restart again.
+- At every stage `read {skill, session}` and `reference {skill, revision, path}` return the original body and reference text and `revisions/<pinned>.json` exists; the unpinned trimmed v3 (and the current revision after purge) is collected. `v2` is the strict case: v1 is also the installed revision, which the registry keeps by itself, so only a pin holds v2 once trimmed. No product code changed.
+
+## 2026-10-17 — LKM-284 repair: chat acceptance capture lost foreground on the shared desktop
+
+- Manager native verification passed all 54 smoke checks and `SEND VISIBILITY PASS`, then the chat-scroll acceptance step died with an uncaught "Chat window is not in the foreground" (the failure artifact `acceptance-failure.json` carried that error). Not a skills defect: another worker's run on the same desktop took focus while `chatAcceptance` with `capture: true` was photographing.
+- `foregroundChatHost` already retried a refused `chatAcceptance` ("Chat must be foreground") and a refused `captureShell`, but a refusal raised by the capture embedded in `chatAcceptance` itself ("Chat window is not in the foreground" / "Chat lost foreground during capture") passed straight through. It is now reactivated and sent once more. The photograph is the last thing the host does, so the retry sends the same absolute state without any `input`/`delta`; a wheel, drag or click is never replayed. A second refusal, other errors and requests without `capture` propagate unchanged, and no assertion was touched.
+- `test/native-smoke-runner.mjs` covers the retry, the dropped input, the single-retry limit and the non-capture case.
+
+## 2026-10-17 — LKM-284 repair: native build refused to sign under a File Provider folder
+
+- Manager native verification failed in `scripts/build-native.mjs`, not in the skills code: `codesign` rejected `dev.trezi.service.xpc` and then `Trezi.app` with "resource fork, Finder information, or similar detritus not allowed". The worktree lives under `~/Documents`, where File Provider puts `com.apple.FinderInfo` and `com.apple.fileprovider.fpfs#P` on freshly made folders, and re-adds them at any time, even between the clear and the signature.
+- `signClean` now runs `xattr -cr` on each path right before signing it and retries the signature (up to 8 times) only when `codesign` reports "detritus". Any other signing error is thrown as before, and bundle contents are unchanged.
+- Native `core` then passed: 32 of 32 smoke checks and the chat-scroll check. Quick verification passed with 232 unit checks.
+
+## 2026-10-17 — LKM-284 Trezi Skills 1/4: immutable app-scoped registry in the service
+
+- **Owner.** The Swift service now owns the Skills registry at `<profile>/skills/`. Packages are content-addressed and read-only (objects and revisions, 0400). `manifest.json` is the one mutable file and is committed through a new ledger domain, `skills`, using the memory owner's protocol: re-read and adopt, temp file plus `F_FULLFSYNC`, `beginEffect`, rename, directory sync, receipt.
+- **Why per-session snapshots.** A per-session snapshot pins revisions, so an edit, remove or purge never changes what a running or resumed session reads. Collection runs only on open, inside the serial queue, after every pin has been read; unreadable data blocks it.
+- **Snapshot capacity.** At capacity a new session is refused, and existing pins are never evicted. This and the bounded counter decoding are manager review fixes, covered by `test/skills-registry-boundaries.mjs`.
+- **Contract.**
+  - Bun reaches the registry only through `serviceSkills` (`src/native/skills-service.ts`) on the `{"service":"skills"` pipe.
+  - The contract types live in `src/shared/skills-registry.ts`, with limits parity-tested against Swift.
+  - Scoped frames are refused, because skills are app-scoped.
+  - GitHub provenance can only come from the service-internal `install` seam; `create` refuses a `source`.
+- **Safety.** Import walks a local folder without following links. It refuses links, hard links, FIFOs, deep or oversized trees and non-UTF-8 text, and copies text only. Scripts, hooks and MCP declarations are inert data. Nothing is written to projects or provider homes, and the existing project/user skill discovery and skill-pack installs are untouched.
+- **Follow-up seams.** These are in `docs/SWIFT-BACKEND-SKILLS.md`: `pin(session:)` with `read`/`reference` for providers (2/4), `install(files:source:replacing:)` for GitHub import (3/4) and `serviceSkills` for Settings (4/4).
+- **Tests.**
+  - `test/skills-registry.mjs`: contract, revisions, snapshots, provenance and the client.
+  - `test/skills-registry-safety.mjs`:
+    - injected write failures
+    - SIGKILL at intent, effect, after-rename and receipt
+    - damaged data
+    - malicious paths and files
+    - concurrent writers
+    - isolation from two repositories and two provider homes
+  - Both run the real owner and ledger in a fixture process on disposable profiles.
+- **Internal only.** There is no CHANGELOG line.
+
 ## 2026-10-17 — LKM-255 repair: merged main 0e20deeb (LKM-267 reload settle) into the branch
 
 - Merged main. The only conflict was `test/states-canvas.mjs`: main's `settle(file, count)` (edit, wait, re-touch every 3 s, 30 s deadline) replaces this branch's `polling()` pre-wait, so the file is now identical to main. Everything else this branch keeps (`StaticServer.hold` dispatch read source and its 82-stream `runtime-owner` test, the smoke-runner restore/time-budget guards, whose deadline comes from the launcher timeout that is now 600 s, `probeTimeout`, the `platform-owner` waits, the LKM-255 script, offline test and runbook) merged without edits. No `waitForReload` harness is present. Quick verification passed after the merge (229 unit checks). The live-evidence items in TASKS stay unticked.

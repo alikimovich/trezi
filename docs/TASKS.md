@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Trezi Skills 1/4: app-scoped registry and service contracts (LKM-284)
+
+- [x] Add versioned shared types (`src/shared/skills-registry.ts`) and the Swift owner (`src/service/SkillsOwner.swift` and its parts): list, lazy read/reference, create, local import, save-as-new-revision edit, enable, providers, remove/restore/purge, snapshot/pins/release.
+- [x] Add immutable content-addressed packages with provenance (manual/GitHub with repository, subpath, commit, license), a `modified` flag and provider availability.
+- [x] Add a ledger-backed atomic manifest with crash reconcile; refuse traversal, links, hard links, special files and oversized input; never execute or grant anything.
+- [x] Route the `skills` pipe domain in `ServiceRuntime` and add Bun's client (`src/native/skills-service.ts`); there is no other writer.
+- [x] Write contract notes for tasks 2–4 (`docs/SWIFT-BACKEND-SKILLS.md`) and add tests (`skills-registry`, `-safety`, `-boundaries`).
+- [ ] Manager: run native verification and an independent review.
+
 ## Live Publish attribution check (LKM-255)
 
 - [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a test-branch clone with one throwaway trezi@local commit; `test/live-publish-attribution.mjs` covers the publication commit and the guards offline.

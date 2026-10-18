@@ -24,6 +24,7 @@ writers from Bun:
 | LKM-101 | the iOS Simulator preview (bounded, cancellable xcrun/idb runs, the launch command as a journaled group, the loopback bridge), scoped media grants to the source editor, pasted attachments and the running-servers recovery | `docs/SWIFT-BACKEND-PLATFORM.md` |
 | LKM-102 | the last census rows: provider data (connections store, model catalog cache, Codex model discovery: `ProviderData.swift`), opening links, files and the editor (`PlatformOpen.swift`), the profile and session-store aliases (`ProfilePaths.swift`), the profile lock (Bun no longer takes one), the `annotations.json` and `tokens.json` sidecars (`EditingProject.swift`), the feedback issue and skill-pack installs (`WorkflowTools.swift`, `WorkflowContext.swift`) | `docs/SWIFT-BACKEND-RETIREMENT.md` |
 | LKM-111 | the built-in Claude, Codex and Gemini adapters run by default in provider helpers the service supervises (v10 connections stay in Bun); the Bun rollback launch and its twins are gone; the retained JS and a Bun binary ship inside `Trezi.app` | `docs/SWIFT-BACKEND-RETIREMENT.md` |
+| LKM-284 | the app-scoped Trezi Skills registry: immutable content-addressed skill packages, their manifest (enable, providers, remove/restore, revisions) and per-session snapshots; nothing is installed into projects or provider homes yet | `docs/SWIFT-BACKEND-SKILLS.md` |
 
 The census in `docs/SWIFT-BACKEND-RETIREMENT.md` has 0 Bun-owned rows: every Bun module
 that writes a file, spawns a process or signals is a helper or a test. There is no
@@ -95,6 +96,12 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
                   commits only on the revision it was evaluated against. Bun's
                   client is native/project-memory-service.ts; main/project-memory.ts
                   holds the shared rules, the evaluation queue and injection (docs/SWIFT-BACKEND-MEMORY.md)
+  SkillsOwner.swift / SkillsStore.swift / SkillsPackage.swift / SkillsPlan.swift /
+  SkillsRequest.swift   the app-scoped Trezi Skills registry (LKM-284): immutable
+                  content-addressed packages, one ledger domain `skills` for
+                  manifest.json, per-session snapshots that pin revisions. Bun's
+                  client is native/skills-service.ts; shared types in
+                  shared/skills-registry.ts (docs/SWIFT-BACKEND-SKILLS.md)
   RuntimeOwner.swift / RuntimeServer.swift / ManagedProcess.swift   the managed
                   project runtime (LKM-94): dev-server + install process groups
                   (descendants stopped with their leader, `--watch-group`
