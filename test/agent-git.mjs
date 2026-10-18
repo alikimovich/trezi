@@ -16,6 +16,7 @@ import { setAgentMergeSource } from '../src/main/agent-merge-setting.ts'
 import { gitAccessHook } from '../src/main/backends/codex-mcp.ts'
 import { agentGitTool, PUBLISH_WORKFLOW_BUDGET_MS } from '../src/main/chat-agent-git.ts'
 import { states } from '../src/main/chat-state.ts'
+import { answerMergeApproval } from '../src/main/merge-approval.ts'
 import { runTreziTool } from '../src/main/session-tools.ts'
 import { setWorkflowOwner } from '../src/main/workflow-owner.ts'
 import { compileRepositoryFixture, startRepositoryFixture } from './helpers/repository-fixture.mjs'
@@ -91,7 +92,7 @@ try {
     const fakeGh = join(fakeBin, 'gh')
     writeFileSync(
       fakeGh,
-      '#!/bin/sh\nif [ "$1 $2 $3 $4" = "pr view 6 --json" ] && [ "$5" = "state,mergeCommit" ]; then printf \'%s\\n\' \'{"state":"MERGED","mergeCommit":{"oid":"abcdef1234"}}\'; elif [ "$1 $2" = "run list" ]; then printf \'%s\\n\' \'[{"name":"Publish release","status":"completed","conclusion":"success","url":"https://example.test/run/1"}]\'; else printf \'%s\\n\' \'{"number":6,"url":"https://example.test/pr/6","mergeable":"CONFLICTING","baseRefName":"main","headRefName":"trezi/main","statusCheckRollup":[]}\'; fi\n'
+      '#!/bin/sh\nif [ "$1 $2 $3 $4" = "pr view 6 --json" ] && [ "$5" = "state,mergeCommit" ]; then printf \'%s\\n\' \'{"state":"MERGED","mergeCommit":{"oid":"abcdef1234"}}\'; elif [ "$1 $2" = "run list" ]; then printf \'%s\\n\' \'[{"name":"Publish release","status":"completed","conclusion":"success","url":"https://example.test/run/1"}]\'; else printf \'{"number":6,"url":"https://example.test/o/r/pull/6","mergeable":"CONFLICTING","baseRefName":"main","headRefName":"trezi/main","headRefOid":"%s","statusCheckRollup":[]}\\n\' "$(git rev-parse HEAD)"; fi\n'
     )
     chmodSync(fakeGh, 0o755)
     const originalPath = process.env.PATH
@@ -138,13 +139,27 @@ try {
       )
       assert.equal(published.pushed, true)
       assert.deepEqual(pushes, [[managed.live, 'pr', ['origin', 'trezi/main']]])
-      const merged = await agentGitTool(
-        scope.emitKey,
-        scope.root,
-        scope.liveRoot,
-        'publish_merge',
-        {}
-      )
+      // LKM-281: each merge waits for the user's card (test/agent-merge-approval.mjs).
+      const cards = []
+      const approvedMerge = async (startedAt) => {
+        const notify = (_channel, event) => event.type === 'question-request' && cards.push(event)
+        const call = () =>
+          agentGitTool(
+            scope.emitKey,
+            scope.root,
+            scope.liveRoot,
+            'publish_merge',
+            {},
+            startedAt ?? Date.now(),
+            notify
+          )
+        const asked = await call()
+        assert.equal(asked.approvalRequired, true)
+        const { id, questions } = cards.at(-1).request
+        answerMergeApproval(id, { [questions[0].question]: 'Merge' })
+        return call()
+      }
+      const merged = await approvedMerge()
       assert.equal(merged.merged, true)
       assert.equal(merged.mergeCommit, 'abcdef1234')
       assert.equal(merged.workflow.conclusion, 'success')
@@ -163,14 +178,7 @@ try {
       chmodSync(runningGh, 0o755)
       process.env.PATH = `${runningBin}:${fakeBin}:${originalPath}`
       const started = Date.now()
-      const pending = await agentGitTool(
-        scope.emitKey,
-        scope.root,
-        scope.liveRoot,
-        'publish_merge',
-        {},
-        Date.now() - PUBLISH_WORKFLOW_BUDGET_MS - 1
-      )
+      const pending = await approvedMerge(Date.now() - PUBLISH_WORKFLOW_BUDGET_MS - 1)
       assert.equal(pending.merged, true)
       assert.equal(pending.workflow.state, 'in_progress')
       assert.equal(pending.workflow.url, 'https://example.test/run/1')

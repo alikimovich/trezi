@@ -1,0 +1,6 @@
+{
+  "name": "Gallery (app + GalleryKit + local StudioDesign package)",
+  "target": "Gallery",
+  "project": "Gallery.xcodeproj",
+  "previews": ["Previews"]
+}

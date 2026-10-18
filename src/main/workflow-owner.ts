@@ -94,7 +94,13 @@ export class WorkflowError extends Error {
 
 export interface WorkflowOwner {
   readonly kind: 'swift'
-  publish(root: string, mode: 'merge' | 'pr', describe: Describe): Promise<PublishResult>
+  /** `expectedHead` (merge only, LKM-281): the head the user approved; any other is refused. */
+  publish(
+    root: string,
+    mode: 'merge' | 'pr',
+    describe: Describe,
+    expectedHead?: string
+  ): Promise<PublishResult>
   handoff(root: string, title: string, notes: number, describe: Describe): Promise<PublishResult>
   branchPr(
     root: string,

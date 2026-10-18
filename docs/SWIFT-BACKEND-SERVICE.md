@@ -40,6 +40,9 @@ open -a Trezi / trezi ── TreziHost (AppKit) ──XPC── TreziService ─
 - `src/service/MemoryOwner.swift` (S05, LKM-93): the project memory writer, on
   the same pipe (`{"service":"memory"`) and the same `DomainChannel`, drained at
   stop like the other two. See [memory](SWIFT-BACKEND-MEMORY.md).
+- `src/service/SkillsOwner.swift` (LKM-284): the app-scoped Skills registry, on
+  the same pipe (`{"service":"skills"`) and `DomainChannel`, drained at stop. See
+  [skills](SWIFT-BACKEND-SKILLS.md).
 - `src/service/RuntimeOwner.swift` (S06, LKM-94): the managed project runtime,
   on the same pipe (`{"service":"runtime"`, plus `runtime-helper` stamping answers).
   It launches project groups itself, each with a `--watch-group` watchdog and a

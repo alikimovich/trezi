@@ -1,0 +1,6 @@
+{
+  "name": "Studio (app + StudioKit framework)",
+  "target": "Studio",
+  "project": "Studio.xcodeproj",
+  "previews": ["Previews"]
+}

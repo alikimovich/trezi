@@ -30,6 +30,7 @@ capabilities instead of assuming Claude, Codex, gateways, and Gemini are interch
 | Persistent multi-turn context | Yes | Yes | Yes, through Codex | No guaranteed continuity |
 | Repository instruction discovery | `CLAUDE.md` + Claude skills | Codex-native instructions + Trezi rules | Same as Codex | Limited |
 | Skills menu before the first turn | Yes | Yes | Yes, through Codex | Yes |
+| Trezi library skills (pinned per session) | Native: `trezi-library` plugin | Compatibility catalog (not native skills) | Same as Codex | Experimental catalog; reads may fail |
 | Provider-native coding tools | Yes | Yes | Depends on model through Codex | Limited |
 | Trezi preview location/screenshots | Yes | Yes | Yes, image support depends on endpoint | No |
 | On-demand native chat islands (`chat_island`) | Yes | Yes | Yes, through Codex | No |
@@ -158,12 +159,40 @@ after pulling a dependency update.
 
 Codex, custom endpoints, and experimental Gemini discover project and user skills
 in `.agents/skills`, their native `.codex/skills` or `.gemini/skills`, and
-`.claude/skills` for compatibility with Trezi-installed packs. Codex honors
+`.claude/skills` for compatibility with packs Trezi installed before LKM-286 (agents
+now only suggest skills; the user adds them to Trezi's library in Settings → Skills,
+and existing folders are left in place). Codex honors
 `CODEX_HOME` for its user skills. Project entries shadow same-named user entries;
 symlinked installs and Codex system skills are included. Menus populate before
 the first turn, independently of authentication. Invoking `/name` supplies the
 selected skill file path in the prompt so the harness can read its instructions.
 Claude keeps its native SDK command discovery.
+
+The app-scoped Trezi Skills registry (LKM-284, `docs/SWIFT-BACKEND-SKILLS.md`)
+is a separate, service-owned store in Trezi's data, and the discovery above is
+unchanged. Since LKM-287, every session Trezi starts pins the enabled library skills
+once, under a durable identity that its resumes, restarts and fallbacks keep.
+Library edits reach only new sessions. The Skills owner lays the pins out as a
+read-only folder in Trezi's profile, never in a project or a provider home
+([provider sessions](SWIFT-BACKEND-SKILLS.md#provider-sessions-lkm-287)):
+
+- **Claude: native.** One more SDK local plugin, `trezi-library` (skills named
+  `trezi-library:<name>`), with `skipMcpDiscovery`, placed after the bundled
+  plugin. `settingSources`, managed policies, strict MCP, the personal-plugin
+  preference, HOME/auth, the managed-browser env and the hooks are unchanged.
+  Opening a reference file outside the project can still ask for Read permission
+  under the chat's permission mode.
+- **Codex and custom endpoints: compatibility.** A labelled catalog in the first
+  turn gives names, one-line descriptions and read-only `SKILL.md` paths. Codex
+  reads a body only when a task matches. This is not Codex's native skills system:
+  the bundled Codex 0.160.1 offers `skills/extraRoots/set` only in a dedicated
+  app-server, which `codex exec` does not expose. The config, sandbox, MCP servers
+  and the Git and browser hooks are unchanged.
+- **Gemini: experimental.** The same catalog, labelled experimental. Gemini CLI may
+  limit file reads to the workspace.
+- **Not covered.** Titles, completions and memory updates never get skills.
+  Inheritance by a provider's own sub-agents is not verified and not claimed. A
+  chat resumed in the provider's own CLI keeps only what its history already says.
 
 ## Switching models within a chat
 
@@ -980,7 +1009,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |
 | `workspace_state`, `prepare_conflict_resolution` | — | routed | chat-isolation state (worktree, parked batch) |
-| `install_skills` | routed | — | the workflow owner |
+| `install_skills` | routed | — | nothing: retired, it answers with the Settings → Skills redirect (LKM-286) |
 | `spring_to_css`, `check_contrast`, `fluid_clamp`, `color_scale`, `layered_shadow`, `line_height`, `list_recommended_skills` | in the helper | — | nothing (pure) |
 
 **Proof.** `test/provider-helper-tools.mjs` (unit) runs the real helper entry under the
@@ -1019,6 +1048,23 @@ same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.
 ## Agent Git access (LKM-188)
 
 Settings → General → Agent Git access (`trezi:agent-git-access:v1`) defaults to Managed and is passed to new provider sessions as `AgentOptions.agentGitAccess`. The agent rules describe Trezi's `git_sync_base`, `git_merge_continue`, `git_merge_abort`, `pr_status` and `publish_update` tools. Managed mode refuses raw Git mutations in Claude's PreToolUse hook and Codex's command hook while allowing Git queries; Full permits mutations in the chat worktree and Trezi preserves new raw commit/merge ancestry when landing. Both hooks refuse raw pushes and live-branch rewrites in Full mode. After a PR is created or reused, Publish checks its mergeability; a PR that conflicts with its base offers Resolve with agent in a chat belonging to the published project. A local-vs-remote publish reconcile conflict remains on the manual recovery path.
+
+**Agent PR merge approval (LKM-281).** `publish_merge` never merges on the model's word:
+its arguments carry no confirmation, and a `confirmed: true` is ignored. With Agent can
+merge pull requests off it refuses before reading or pushing anything. Otherwise it
+brings the PR up to the clean live checkout, then shows a host-authored card (the
+ask_user card, LKM-199) naming the repository, PR number and head commit, and returns
+`approvalRequired`. Only the user's Merge answer to that card, delivered by main's
+`agent:respond-question`, records an approval (`src/main/merge-approval.ts`). It is
+bound to chat, live root, repository, PR and head; it is single-use, expires after
+15 minutes, is replaced by a newer card, and is dropped on Don't merge, dismissal,
+merge-off and chat close. The next `publish_merge` takes it, re-checks the target and
+passes the head to the Swift workflow as `expectedHead`. The workflow refuses a dirty
+tree or a different head before committing or pushing, and merges with
+`gh pr merge --match-head-commit`, so GitHub refuses a head that moved after approval.
+ProviderPolicy (TS and Swift) no longer auto-allows `publish_merge` (`HOST_CONFIRMED`):
+it is allowed only in a live foreground session, because the card is the confirmation,
+and it is denied for background agents.
 
 ## Agent file access (LKM-163)
 

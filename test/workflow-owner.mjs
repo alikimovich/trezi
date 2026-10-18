@@ -234,6 +234,62 @@ try {
     assert.equal(merged.state.mainLog[0], 'Update the greeting (#1)')
     assert.equal(merged.state.branch, 'trezi/main')
 
+    // LKM-281: an approved agent merge is pinned to the approved head, here and on GitHub.
+    const pinned = await owned('publish-merge-pinned', async (owner, w) => {
+      commit(w.local, 'a.txt', 'two\n')
+      const head = git(w.local, 'rev-parse', 'HEAD')
+      const result = await owner.publish(w.local, 'merge', describe, head)
+      return { result, head, matchHead: w.gh().matchHead, state: snapshot(w) }
+    })
+    assert.equal(pinned.result.ok, true, JSON.stringify(pinned.result))
+    assert.equal(pinned.matchHead, pinned.head, 'gh pr merge --match-head-commit <approved head>')
+    assert.equal(pinned.state.mainLog[0], 'Update the greeting (#1)')
+    const headChanged = /The branch changed after the merge was approved/
+    const refusedPin = await owned('publish-merge-pin-refused', async (owner, w) => {
+      commit(w.local, 'a.txt', 'two\n')
+      const head = git(w.local, 'rev-parse', 'HEAD')
+      const other = await owner.publish(
+        w.local,
+        'merge',
+        describe,
+        git(w.local, 'rev-parse', 'HEAD~1')
+      )
+      write(w.local, 'b.txt', 'unapproved\n')
+      const dirty = await owner.publish(w.local, 'merge', describe, head)
+      return { other, dirty, state: snapshot(w) }
+    })
+    for (const result of [refusedPin.other, refusedPin.dirty]) {
+      assert.equal(result.ok, false)
+      assert.match(String(result.error), headChanged)
+    }
+    assert.deepEqual(refusedPin.state.remote, ['main'], 'nothing pushed for an unapproved head')
+    assert.deepEqual(refusedPin.state.gh.prs, [])
+    // GitHub's head moves after the push (a collaborator): GitHub refuses the pinned merge.
+    const movedPin = await owned('publish-merge-pin-moved', async (owner, w) => {
+      commit(w.local, 'a.txt', 'two\n')
+      const head = git(w.local, 'rev-parse', 'HEAD')
+      const moving = async (base) => {
+        const peer = w.peer()
+        git(peer, 'checkout', '-q', 'trezi/main')
+        commit(peer, 'peer.txt', 'peer\n')
+        git(peer, 'push', '-q', 'origin', 'trezi/main')
+        return describe(base)
+      }
+      const result = await owner.publish(w.local, 'merge', moving, head)
+      return { result, head, matchHead: w.gh().matchHead, state: snapshot(w) }
+    })
+    assert.equal(movedPin.result.ok, false)
+    assert.equal(movedPin.matchHead, movedPin.head, 'refused by GitHub on the pinned head')
+    assert.deepEqual(movedPin.state.mainLog, ['change a.txt'], 'main untouched')
+    assert.equal(movedPin.state.gh.prs[0]?.state, 'OPEN', 'the moved PR stays open')
+    const prPin = await owned('publish-pr-pin', async (owner, w) =>
+      owner.publish(w.local, 'pr', describe, 'a'.repeat(40)).then(
+        () => 'accepted',
+        (error) => String(error)
+      )
+    )
+    assert.notEqual(prPin, 'accepted', 'expectedHead belongs to merge mode only')
+
     const reused = await owned('publish-pr-reuse', async (owner, w) => {
       write(w.local, 'a.txt', 'two\n')
       const first = await owner.publish(w.local, 'pr', describe)

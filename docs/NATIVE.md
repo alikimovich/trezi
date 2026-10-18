@@ -255,8 +255,8 @@ Settings is a standard macOS settings window, opened from Trezi → Settings…
 Xcode's, it is a full-size-content window whose `NSSplitViewController`
 (`src/native/SheetSidebar.swift`) starts with a non-collapsible
 `NSSplitViewItem(sidebarWithViewController:)` (180–260 points) under the traffic
-lights. Its `.sourceList` outline selects General, AI Providers or Experimental
-with SF Symbols, by click or arrow keys, and the window title names the selected
+lights. Its `.sourceList` outline selects General, AI Providers, Skills or
+Experimental with SF Symbols, by click or arrow keys, and the window title names the selected
 section. It shares the projects sidebar's source-list setup, row cells and scroll
 view (`src/native/SourceList.swift`). The detail pane shows a large title and
 grouped rows (label and description on the left, control on the right). AI

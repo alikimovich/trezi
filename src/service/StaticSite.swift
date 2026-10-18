@@ -18,6 +18,7 @@ struct StaticResponse {
 /// SSE stream at `/__trezi_reload`, and an FSEvents watcher that bumps the version.
 /// Paths are contained lexically (as before) and, new in S06, by real path: a
 /// symlink inside the project that leads outside it is refused, never served.
+/// Dot-files and dot-directories are refused by requested and by real path (LKM-280).
 final class StaticSite: @unchecked Sendable {
     static let reloadPath = "/__trezi_reload"
     static let mime: [String: String] = [
@@ -142,7 +143,7 @@ final class StaticSite: @unchecked Sendable {
             return text(405, "Method Not Allowed", headers: [("Allow", "GET, HEAD")])
         }
         let headOnly = method == "HEAD"
-        guard let absolute = within(target) else { return text(403, "Forbidden") }
+        guard let absolute = within(target), !Self.hidden(Self.relative(absolute, to: root)) else { return text(403, "Forbidden") }
         var file = absolute
         var info = stat()
         var found = stat(file, &info) == 0
@@ -154,8 +155,11 @@ final class StaticSite: @unchecked Sendable {
             let body = "<!doctype html><meta charset=utf-8><title>404</title><body style=\"font:14px system-ui;padding:2rem\">Not found: \(target.replacingOccurrences(of: "<", with: "&lt;"))</body>"
             return StaticResponse(status: 404, headers: [("Content-Type", "text/html; charset=utf-8")], body: .bytes(Data(body.utf8)), headOnly: headOnly)
         }
-        // New in S06: a symlink that leads out of the project is never followed.
-        guard let real = Self.realPath(file), real == canonicalRoot || real.hasPrefix(canonicalRoot == "/" ? "/" : canonicalRoot + "/") else {
+        // New in S06: a symlink that leads out of the project is never followed; nor
+        // (LKM-280) a directory index or symlink that lands on a hidden file.
+        guard !Self.hidden(Self.relative(file, to: root)), let real = Self.realPath(file),
+              real == canonicalRoot || real.hasPrefix(canonicalRoot == "/" ? "/" : canonicalRoot + "/"),
+              !Self.hidden(Self.relative(real, to: canonicalRoot)) else {
             return text(403, "Forbidden")
         }
         let type = Self.mime[Self.extensionName(file).lowercased()] ?? "application/octet-stream"
@@ -166,8 +170,7 @@ final class StaticSite: @unchecked Sendable {
         // Capture the version before reading: a racing change costs one extra reload, never a stale page.
         let served = currentVersion
         guard let data = FileManager.default.contents(atPath: file) else { return text(500, "Internal error") }
-        let relative = String(file.dropFirst(root == "/" ? 1 : root.count + 1))
-        var html = stamp(String(decoding: data, as: UTF8.self), relative)
+        var html = stamp(String(decoding: data, as: UTF8.self), Self.relative(file, to: root))
         let script = Self.snippet(served)
         if let range = html.range(of: "</body>") { html.replaceSubrange(range, with: script + "</body>") } else { html += script }
         return StaticResponse(status: 200, headers: [("Content-Type", type), ("Cache-Control", "no-cache")],
@@ -193,6 +196,19 @@ final class StaticSite: @unchecked Sendable {
     }
 
     // MARK: Helpers
+
+    /// Dot-files and dot-directories (`.env`, `.git/`, `.DS_Store`…) are never public;
+    /// only a top-level `.well-known/` is (LKM-280). Takes a decoded, normalized path.
+    static func hidden(_ relative: String) -> Bool {
+        relative.split(separator: "/").enumerated().contains { index, segment in
+            segment.hasPrefix(".") && !(index == 0 && segment == ".well-known")
+        }
+    }
+
+    /// `path` below `root` (both normalized, `path` inside `root`).
+    static func relative(_ path: String, to root: String) -> String {
+        String(path.dropFirst(root == "/" ? 1 : root.count + 1))
+    }
 
     /// Node's `path.posix.normalize` (without the trailing-slash nuance callers drop).
     static func normalize(_ path: String) -> String {

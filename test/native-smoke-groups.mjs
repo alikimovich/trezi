@@ -43,6 +43,10 @@ assert.throws(() => parseSmokeGroups(['--live', '--only=chat']), /--live needs t
 assert.deepEqual([...parseSmokeGroups(['--live', '--only=core,chat'])], ['core', 'chat'])
 assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups([])), 600_000)
 assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups(['--only=core'])), 300_000)
+// LKM-277: the Scraib acceptance budget only extends a run that includes core.
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups(['--only=core']), 60_000), 360_000)
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups([]), 60_000), 660_000)
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups(['--only=chat']), 60_000), 300_000)
 console.log(
   'Native smoke group selection: default, subset, unknown/empty/repeated and --live guards passed.'
 )

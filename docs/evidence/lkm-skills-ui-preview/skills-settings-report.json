@@ -1,0 +1,365 @@
+[
+  {
+    "action": "arrow-key",
+    "key": "down",
+    "section": "skills",
+    "focused": true
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-1-overview-empty-780.png",
+    "view": "overview",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-2-add-680.png",
+    "view": "add",
+    "width": 680,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-2-add-780.png",
+    "view": "add",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "action": "create",
+    "message": "Added trezi-smoke-notes.",
+    "skill": {
+      "id": "6cc6d8df-bf94-4def-a461-5872f5574a7c",
+      "name": "trezi-smoke-notes",
+      "description": "Sample manual skill from the Trezi native smoke. Use for UI work in this project.",
+      "revision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+      "installedRevision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+      "modified": false,
+      "enabled": true,
+      "removed": false,
+      "removedAt": null,
+      "providers": {
+        "claude": true,
+        "codex": true,
+        "gemini": true
+      },
+      "source": {
+        "kind": "manual"
+      },
+      "files": 1,
+      "bytes": 204,
+      "history": [
+        {
+          "revision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+          "createdAt": 1792302886379,
+          "kind": "create"
+        }
+      ],
+      "createdAt": 1792302886379,
+      "updatedAt": 1792302886379
+    }
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-3-library-680.png",
+    "view": "overview",
+    "width": 680,
+    "message": "Added trezi-smoke-notes."
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-3-library-780.png",
+    "view": "overview",
+    "width": 780,
+    "message": "Added trezi-smoke-notes."
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-4-detail-680.png",
+    "view": "detail",
+    "width": 680,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-4-detail-780.png",
+    "view": "detail",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "action": "save",
+    "message": "Saved revision d208f389 of trezi-smoke-notes. Chats started from now on use it.",
+    "skill": {
+      "id": "6cc6d8df-bf94-4def-a461-5872f5574a7c",
+      "name": "trezi-smoke-notes",
+      "description": "Sample manual skill from the Trezi native smoke. Use for UI work in this project.",
+      "revision": "d208f389e1fe0f1ccd5be782c60d159b3e2453b6127a8f92101bdc6d2d9751f4",
+      "installedRevision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+      "modified": true,
+      "enabled": true,
+      "removed": false,
+      "removedAt": null,
+      "providers": {
+        "claude": true,
+        "codex": true,
+        "gemini": true
+      },
+      "source": {
+        "kind": "manual"
+      },
+      "files": 1,
+      "bytes": 239,
+      "history": [
+        {
+          "revision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+          "createdAt": 1792302886379,
+          "kind": "create"
+        },
+        {
+          "revision": "d208f389e1fe0f1ccd5be782c60d159b3e2453b6127a8f92101bdc6d2d9751f4",
+          "createdAt": 1792302888816,
+          "kind": "edit"
+        }
+      ],
+      "createdAt": 1792302886379,
+      "updatedAt": 1792302888816
+    }
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-5-detail-edited-780.png",
+    "view": "detail",
+    "width": 780,
+    "message": "Saved revision d208f389 of trezi-smoke-notes. Chats started from now on use it."
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-6-removed-780.png",
+    "view": "overview",
+    "width": 780,
+    "message": "Removed trezi-smoke-notes. Restore it from Removed."
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-7-removed-detail-780.png",
+    "view": "removed",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "action": "remove-restore",
+    "skill": {
+      "id": "6cc6d8df-bf94-4def-a461-5872f5574a7c",
+      "name": "trezi-smoke-notes",
+      "description": "Sample manual skill from the Trezi native smoke. Use for UI work in this project.",
+      "revision": "d208f389e1fe0f1ccd5be782c60d159b3e2453b6127a8f92101bdc6d2d9751f4",
+      "installedRevision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+      "modified": true,
+      "enabled": true,
+      "removed": false,
+      "removedAt": null,
+      "providers": {
+        "claude": true,
+        "codex": true,
+        "gemini": true
+      },
+      "source": {
+        "kind": "manual"
+      },
+      "files": 1,
+      "bytes": 239,
+      "history": [
+        {
+          "revision": "8f9a503c753167ea4ab7f5463bf27c2aaffb2c4d6945012f2caacb3b24285fe1",
+          "createdAt": 1792302886379,
+          "kind": "create"
+        },
+        {
+          "revision": "d208f389e1fe0f1ccd5be782c60d159b3e2453b6127a8f92101bdc6d2d9751f4",
+          "createdAt": 1792302888816,
+          "kind": "edit"
+        }
+      ],
+      "createdAt": 1792302886379,
+      "updatedAt": 1792302891756
+    }
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-8-github-680.png",
+    "view": "github",
+    "width": 680,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-8-github-780.png",
+    "view": "github",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-9-github-detail-680.png",
+    "view": "detail",
+    "width": 680,
+    "message": "Added trezi-smoke-github from trezi-fixtures/skills at 5a1e7c0 (“v1”)."
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-9-github-detail-780.png",
+    "view": "detail",
+    "width": 780,
+    "message": "Added trezi-smoke-github from trezi-fixtures/skills at 5a1e7c0 (“v1”)."
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-10-library-780.png",
+    "view": "overview",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-11-recommendation-680.png",
+    "view": "recommendation",
+    "width": 680,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-11-recommendation-780.png",
+    "view": "recommendation",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-12-recommendation-installed-780.png",
+    "view": "recommendation",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-13-recommendation-unavailable-780.png",
+    "view": "recommendation",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-14-library-imported-680.png",
+    "view": "overview",
+    "width": 680,
+    "message": ""
+  },
+  {
+    "capture": "/private/tmp/trezi-skills-agent-os-20261018/state/worktrees/trezi-skills/cf193345-ed9b-4206-a518-f023dfde5fbf/test/artifacts/native/skills-14-library-imported-780.png",
+    "view": "overview",
+    "width": 780,
+    "message": ""
+  },
+  {
+    "action": "import-folder",
+    "skill": {
+      "id": "5b1899ab-eb7d-4afa-ac21-a848be820599",
+      "name": "trezi-smoke-folder",
+      "description": "Sample folder skill from the Trezi native smoke.",
+      "revision": "936f12c34099943734db3e6f6639cbecf4ef1d3d53259fe46b32903fe0d250ec",
+      "installedRevision": "936f12c34099943734db3e6f6639cbecf4ef1d3d53259fe46b32903fe0d250ec",
+      "modified": false,
+      "enabled": true,
+      "removed": false,
+      "removedAt": null,
+      "providers": {
+        "claude": true,
+        "codex": true,
+        "gemini": true
+      },
+      "source": {
+        "kind": "manual"
+      },
+      "files": 2,
+      "bytes": 181,
+      "history": [
+        {
+          "revision": "936f12c34099943734db3e6f6639cbecf4ef1d3d53259fe46b32903fe0d250ec",
+          "createdAt": 1792302892431,
+          "kind": "import"
+        }
+      ],
+      "createdAt": 1792302892431,
+      "updatedAt": 1792302892431
+    }
+  },
+  {
+    "action": "import-github",
+    "message": "Added trezi-smoke-github from trezi-fixtures/skills at 5a1e7c0 (“v1”).",
+    "skill": {
+      "id": "f43bf815-5212-4db5-b2f7-3ee06a982a8c",
+      "name": "trezi-smoke-github",
+      "description": "Fixture skill imported from a pinned GitHub tag by the Trezi native smoke.",
+      "revision": "61616908d3245ee904fc7f67e59460fd9b76dacfbf32de95eb3e81927ca3c698",
+      "installedRevision": "61616908d3245ee904fc7f67e59460fd9b76dacfbf32de95eb3e81927ca3c698",
+      "modified": false,
+      "enabled": true,
+      "removed": false,
+      "removedAt": null,
+      "providers": {
+        "claude": true,
+        "codex": true,
+        "gemini": true
+      },
+      "source": {
+        "kind": "github",
+        "repository": "trezi-fixtures/skills",
+        "subpath": "skills/trezi-smoke-github",
+        "commit": "5a1e7c0ffee5a1e7c0ffee5a1e7c0ffee5a1e7c0",
+        "license": "MIT",
+        "ref": "v1",
+        "licenseFile": "skills/trezi-smoke-github/LICENSE"
+      },
+      "files": 3,
+      "bytes": 858,
+      "history": [
+        {
+          "revision": "61616908d3245ee904fc7f67e59460fd9b76dacfbf32de95eb3e81927ca3c698",
+          "createdAt": 1792302893994,
+          "kind": "install"
+        }
+      ],
+      "createdAt": 1792302893994,
+      "updatedAt": 1792302893994
+    }
+  },
+  {
+    "action": "install-recommendation",
+    "message": "Added frontend-design from anthropics/skills at f0e1d2c (“main”).",
+    "skill": {
+      "id": "f75bb7f0-e94f-4b03-a68f-d439d2e40a01",
+      "name": "frontend-design",
+      "description": "Fixture copy of the frontend-design recommendation for the Trezi native smoke.",
+      "revision": "e390266fc4407d5947329606dde6b9a958b101ffa2447482a4b131228ecfc940",
+      "installedRevision": "e390266fc4407d5947329606dde6b9a958b101ffa2447482a4b131228ecfc940",
+      "modified": false,
+      "enabled": true,
+      "removed": false,
+      "removedAt": null,
+      "providers": {
+        "claude": true,
+        "codex": true,
+        "gemini": true
+      },
+      "source": {
+        "kind": "github",
+        "repository": "anthropics/skills",
+        "subpath": "skills/frontend-design",
+        "commit": "f0e1d2c3b4a5968778695a4b3c2d1e0f0e1d2c3b",
+        "license": "Apache-2.0",
+        "ref": "main",
+        "licenseFile": "skills/frontend-design/LICENSE.txt"
+      },
+      "files": 2,
+      "bytes": 434,
+      "history": [
+        {
+          "revision": "e390266fc4407d5947329606dde6b9a958b101ffa2447482a4b131228ecfc940",
+          "createdAt": 1792302897183,
+          "kind": "install"
+        }
+      ],
+      "createdAt": 1792302897183,
+      "updatedAt": 1792302897183
+    }
+  },
+  {
+    "action": "refuse-unimportable",
+    "id": "vercel-react-best-practices"
+  },
+  {
+    "action": "done"
+  }
+]

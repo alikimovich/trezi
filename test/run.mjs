@@ -19,9 +19,18 @@ const UNIT = [
   'preferences-owner',
   'workspace-owner',
   'memory-owner',
+  'skills-registry',
+  'skills-registry-boundaries',
+  'skills-registry-safety',
+  'skills-github',
+  'skills-github-import',
+  'settings-skills',
+  'skills-projection',
+  'session-skills',
   'runtime-owner',
   'repository-owner',
   'agent-git',
+  'agent-merge-approval',
   'git-messages',
   'repository-recovery',
   'source-owner',
@@ -133,6 +142,7 @@ const UNIT = [
   'project-ui',
   'project-ui-svelte',
   'project-ui-jev',
+  'docgen-browserslist',
   'jev-pilot',
   'test-runner',
   'setup-stamps',
@@ -241,6 +251,14 @@ const UNIT = [
   'native-smoke-groups',
   'docs-merge-union',
   'versioning',
+  'swift-preview',
+  'swift-preview-graph',
+  'swift-preview-target',
+  'swift-preview-toolchain',
+  'swift-preview-settings',
+  'swift-preview-shadow',
+  'swift-preview-build',
+  'swift-preview-generate',
   'lint'
 ]
 
@@ -272,6 +290,18 @@ const UNIT_TIMEOUT_MS = {
   'native-composer-layout': 240_000,
   'native-chat-latest-settle': 240_000,
   'keychain-rebuild': 300_000,
+  // LKM-271: four compiles of the preview host and a fixture (6 s warm) outside the lane.
+  'swift-preview': 240_000,
+  // LKM-273: three module compiles per build, six builds, then the driver's own build.
+  'swift-preview-target': 300_000,
+  // LKM-274: scripted toolchains are instant; the real check probes Xcode and then the
+  // driver builds the fixture with a cold module cache for that toolchain.
+  'swift-preview-toolchain': 300_000,
+  // LKM-275: a cold `swift build`, actool and three module compiles for the fixture, then
+  // a disposable Scraib copy (its settings, then a 40-file app target).
+  'swift-preview-build': 600_000,
+  // LKM-276: the SwiftSyntax scanner's first compile, then two generated module builds.
+  'swift-preview-generate': 300_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,
   'setup-vite-real': 300_000

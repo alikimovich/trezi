@@ -11,11 +11,17 @@ enum RuntimeDetect {
 
     static let setupOnlyEntries: Set<String> = [".git", ".gitignore", ".DS_Store", ".trezi", ".praxis"]
     static let managers = ["bun", "pnpm", "yarn", "npm"]
+    static let swiftPreviewManifest = "trezi-previews.json"
 
     /// `DetectedProject` as a JS object, in the TS key order.
     static func detect(root: String) throws -> JSValue {
         let manifest = root + "/package.json"
+        // Xcode workspaces/projects and Swift packages (LKM-273). A folder with them, or with
+        // `trezi-previews.json`, previews natively unless its package.json launches a JS app.
+        let native = nativeStructure(root)
+        let swift = native != nil || exists(root + "/" + swiftPreviewManifest)
         guard exists(manifest) else {
+            if swift { return swiftProject(root: root, name: nil, native: native) }
             // No package.json: a vanilla site if there is an HTML entry to serve.
             if staticEntry(root) != nil { return staticProject(root: root, name: nil) }
             let entries: [String]
@@ -41,19 +47,67 @@ enum RuntimeDetect {
         let scriptName = truthy(scripts?["dev"]) ? "dev" : truthy(scripts?["start"]) ? "start" : ""
         if scriptName.isEmpty && !simulator {
             // An unrecognized framework with an HTML entry is a bundler-less site; a
-            // recognized one has a build-template index.html that will not serve raw.
+            // recognized one has a build-template index.html that will not serve raw. A
+            // native project whose package.json only carries tooling previews natively.
+            if swift { return swiftProject(root: root, name: pkg["name"], native: native) }
             if framework == "unknown" && staticEntry(root) != nil { return staticProject(root: root, name: pkg["name"]) }
             throw Failure(message: "No \"dev\" or \"start\" script in package.json. Enter a command to launch this project.")
         }
         // RN/Expo: prefer the start script, else `expo start` so the simulator still launches.
         let devCommand = !scriptName.isEmpty ? "\(manager) run \(scriptName)" : "\(manager == "npm" ? "npx" : manager) expo start"
-        return .object([
+        let project = JSValue.object([
             (JSText("root"), .string(JSText(root))), (JSText("name"), name(pkg["name"], root: root)),
             (JSText("framework"), .string(JSText(framework))), (JSText("packageManager"), .string(JSText(manager))),
             (JSText("scriptName"), .string(JSText(scriptName))), (JSText("devCommand"), .string(JSText(devCommand))),
             (JSText("previewKind"), .string(JSText(simulator ? "simulator" : "web")))
         ])
+        // A JS app that also holds native roots keeps its JS launch; they are reported alongside.
+        return native.map { set(project, "native", $0) } ?? project
     }
+
+    /// The backend runs Trezi's own preview driver, never a command from the project.
+    static func swiftProject(root: String, name: JSValue?, native: JSValue?) -> JSValue {
+        let project = set(staticProject(root: root, name: name), "framework", .string(JSText("swift")))
+        return native.map { set(project, "native", $0) } ?? project
+    }
+
+    static let nativeScanDepth = 2
+    static let nativeSkipped: Set<String> = ["node_modules", "Pods", "Carthage", "DerivedData", "build"]
+    static let nativeBundles = [".xcassets", ".app", ".framework", ".xcframework", ".bundle", ".playground"]
+
+    /// `discoverNative` (`src/swift-preview/discovery.ts`): `.xcworkspace`, `.xcodeproj` and
+    /// `Package.swift` up to two levels down, never through hidden, dependency or build
+    /// folders or symlinks, as project-relative paths in UTF-16 order; nil when none.
+    static func nativeStructure(_ root: String) -> JSValue? {
+        var workspaces: [String] = [], projects: [String] = [], packages: [String] = []
+        func visit(_ directory: String, _ prefix: String, _ depth: Int) {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory) else { return }
+            for name in names where !JSText(name).hasPrefix(".") {
+                let path = directory + "/" + name
+                let relative = prefix.isEmpty ? name : prefix + "/" + name
+                var info = stat()
+                guard lstat(path, &info) == 0 else { continue }
+                let type = info.st_mode & S_IFMT
+                if type == S_IFREG && JSText(name) == JSText("Package.swift") { packages.append(relative) }
+                guard type == S_IFDIR else { continue }
+                if hasSuffix(name, ".xcworkspace") { workspaces.append(relative) }
+                else if hasSuffix(name, ".xcodeproj") { projects.append(relative) }
+                else if depth < nativeScanDepth && !nativeSkipped.contains(where: { JSText($0) == JSText(name) })
+                    && !nativeBundles.contains(where: { hasSuffix(name, $0) }) {
+                    visit(path, relative, depth + 1)
+                }
+            }
+        }
+        visit(root, "", 0)
+        if workspaces.isEmpty && projects.isEmpty && packages.isEmpty { return nil }
+        let list = { (paths: [String]) -> JSValue in
+            .array(paths.sorted { Array($0.utf16).lexicographicallyPrecedes(Array($1.utf16)) }.map { .string(JSText($0)) })
+        }
+        return .object([(JSText("workspaces"), list(workspaces)), (JSText("projects"), list(projects)), (JSText("packages"), list(packages))])
+    }
+
+    /// `String.prototype.endsWith`: UTF-16 code units, no Unicode equivalence.
+    static func hasSuffix(_ text: String, _ suffix: String) -> Bool { Array(text.utf16).reversed().starts(with: Array(suffix.utf16).reversed()) }
 
     /// An explicit `packageManager` wins even while an old lockfile remains; then lockfiles.
     static func packageManager(root: String) -> String {

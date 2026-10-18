@@ -1,5 +1,6 @@
 import type { Framework, PreviewKind, SourceSetupState } from './api'
 import type { ChatAgentSettings } from './chat-settings'
+import type { PreviewUse } from './preview-choice'
 
 type Viewport = 'desktop' | 'mobile'
 
@@ -10,6 +11,8 @@ export interface LaunchSpec {
   command: string
   framework?: Framework
   previewKind: PreviewKind
+  /** A repo with a JS dev server and native roots: the preview the user chose (LKM-276). */
+  preview?: PreviewUse
 }
 
 export interface ProjectEntry {

@@ -7,6 +7,7 @@ import { currentAgentGitAccess } from '../agent-git-access'
 import { type HelperHandlers, providerOwner } from '../provider-owner'
 import { fallbackCandidate, fallbackOptions, fallbackProvider } from '../self-heal/fallback'
 import { fallbackNote } from '../self-heal/status'
+import { projectSessionSkills } from '../session-skills'
 import { runTreziTool, type SessionTool } from '../session-tools'
 import { claudeProvider } from './claude'
 import { claudeUserPluginsAllowed } from './claude-isolation'
@@ -144,8 +145,16 @@ async function startHelperSession(
     }
   }
 
-  const open = (resume: string | undefined, summary = ctx?.resumeSummary): Promise<unknown> =>
-    owner.openHelper(
+  // LKM-287: the session's pinned skills, laid out for whichever provider this helper
+  // runs (a fallback gets the same pins for its own provider). Shown once, in a turn.
+  let skillsNote: string | undefined
+  const open = async (
+    resume: string | undefined,
+    summary = ctx?.resumeSummary
+  ): Promise<unknown> => {
+    const skills = await projectSessionSkills(ctx?.skillsSession, active)
+    skillsNote ??= skills.note
+    return owner.openHelper(
       {
         session,
         chat: emitKey,
@@ -170,11 +179,13 @@ async function startHelperSession(
             ? { resumeCwd: record.sdkCwd ?? ctx?.resumeCwd }
             : {}),
           ...(ctx?.liveRoot ? { liveRoot: ctx.liveRoot } : {}),
-          ...(ctx?.projectMemory ? { projectMemory: ctx.projectMemory } : {})
+          ...(ctx?.projectMemory ? { projectMemory: ctx.projectMemory } : {}),
+          ...(skills.path ? { skills: skills.path } : {})
         }
       },
       handlers
     )
+  }
   await open(ctx?.resumeSessionId)
 
   /** A turn the helper can no longer take still ends: one `error`, one `done`. */
@@ -256,6 +267,8 @@ async function startHelperSession(
         return refuse(`The provider helper is not running (${gone}). Start a new chat to continue.`)
       }
       recovery?.begin(text, images)
+      if (skillsNote) emit({ type: 'status', text: skillsNote })
+      skillsNote = undefined
       // After a fallback turn the chat goes back to its own provider, which has not seen that
       // turn: it gets the recorded conversation once, like after a model switch.
       const back = onFallback()

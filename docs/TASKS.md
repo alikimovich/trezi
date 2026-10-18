@@ -3,6 +3,64 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Integrate Trezi Skills, native previews and security for main (LOCAL-INTEGRATE-1)
+
+- [x] Combine main `b764245e` with Skills `de1e51e0`, native previews `c4688504` and security `4695a58b` without dropping any feature or test; resolve `smoke-groups.ts` semantically (main's 600 s full-suite base plus the previews' core budget).
+- [x] Unit registration in `test/run.mjs` and the `package.json` test aliases keep every source suite.
+- [ ] Manager: record all three source heads as parents of the combined commit, run full native verification and an independent review.
+
+## Trezi Skills 4/4: provider-wide session snapshots and labeled compatibility (LKM-287)
+
+- [x] Durable skills identity per session (`SessionRecord.skillsSession`, never `emitKey`), stamped in `startProviderSession` for every creation path and kept across resume, restart, helper restart and fallback; pins never hot-replaced; release only when no record or live session names it.
+- [x] Service `project {session, provider}` (`SkillsProjection.swift`): read-only per-provider layout in Trezi's profile, reused or rebuilt and swapped whole, legacy out-of-scope/unreadable revisions omitted, removed on `release`, collected on open; `ProviderOwner` accepts only that path as the helper's `skills` context.
+- [x] Claude: skills-only `trezi-library` local plugin after the bundled one, with settingSources, policies, strict MCP, personal-plugin preference, HOME/auth, managed-browser env and hooks unchanged; utility queries stay isolated.
+- [x] Codex and custom endpoints: labelled compatibility catalog in the first turn (bounded, metadata and paths, bodies on demand), no config/MCP/sandbox change, Git and browser hooks kept; Gemini labelled experimental.
+- [x] Settings copy: per-provider availability ("Claude: native", "Codex: compatibility", "Gemini: experimental"), utility and sub-agent exclusions, external-CLI resume caveat; install/discovery runs no package scripts and grants no tool permissions.
+- [x] Tests: `skills-projection`, `session-skills`, and skills-path refusals in `provider-owner`.
+- [ ] Operator: confirm in a real Claude chat that `trezi-library:<name>` skills are listed and a reference file opens, and whether a Task sub-agent sees them (no real model calls in the worker sandbox).
+- [ ] Manager: run native verification and an independent review.
+
+## Trezi Skills 3/4: native Skills library management UI (LKM-286)
+
+- [x] Settings → Skills: Installed list (bounded metadata, body read on open) and Recommended entries that read "Not installed" until an explicit Install, built on the reviewed LKM-288 pane.
+- [x] Add a pasted SKILL.md, Import Folder (host open panel → service `import`) and Import from GitHub (address, ref, subpath; service pin, background with Cancel), with clear validation and "Nothing was installed" errors.
+- [x] Detail: source, pinned commit, license, revision, provider availability; Save Revision explains next-chat activation; Turn Off/On, Remove/Restore.
+- [x] Disabled footer actions (`NativeSheetAction.disabled`) for unimportable recommendations, refused by the runtime as well as drawn disabled.
+- [x] Retire the agent `install_skills` installer to a Settings → Skills redirect (no write, no migration, existing `.claude/skills` untouched); `list_recommended_skills` lists the shared catalog.
+- [x] Tests: `test/settings-skills.mjs` (loopback GitHub fixture) and the native `skills-settings` smoke with folder, pinned GitHub and recommendation imports from a launcher-started loopback fixture (gated to the disposable test profile).
+- [ ] Manager: run native verification, inspect the captures and do an independent review.
+
+## Trezi Skills 2/4: safe pinned GitHub import and curated recommendations (LKM-285)
+
+- [x] Add the service `github`/`cancel` methods: strict github.com address parsing, ref → full-commit pin before download, archive fetched by commit and its embedded commit checked, ambiguous tree addresses and redirects refused.
+- [x] Add a bounded streaming `tar.gz` reader (size, expansion, entries, depth, headers) that refuses traversal, links, specials, executables and archive tricks, plus the skills-only scope (dynamic shell, tool/hook/agent frontmatter, manifests, Codex dependencies).
+- [x] Store repo/subpath/ref/commit/license/licenseFile provenance through one ledger commit (no partial install), with cancel, a deadline, 2 concurrent imports and `replacing` from the same folder only; add Bun's `importGitHub`.
+- [x] Add metadata-only recommendations (UI craft, design systems, React, SwiftUI) with source, license evidence and mismatch reporting (`src/shared/skills-recommendations.ts`).
+- [x] Add tests `skills-github` (offline) and `skills-github-import` (loopback HTTP).
+- [x] Review repair: fix the SwiftUI path and mark the SwiftUI (scripts/images, oversized file) and React (76 files) recommendations not importable with a reason, verify the paths and record the upstream evidence; apply the skills-only scope to create, folder import and edit with registry-unchanged tests.
+- [x] Review repair 2: refuse scripts (extension or `#!`, executable or not) and non-plain or dependency-declaring `agents/openai.yaml` on every write; add the importable SwiftUI recommendation `swiftui-view-refactor` (`steipete/agent-scripts` at `d602e8ad`) and keep AvdLee listed as not importable.
+- [x] Repair 3: refuse every `openai.yaml`/`openai.yml` as provider-control metadata (the indented escaped-key flow probe bypassed the partial YAML check), with the exact probe as a regression for GitHub import, create, folder import and edit.
+- [ ] Maintainer decision: raise `SKILLS_LIMITS.maxFiles` (64) if the React recommendation (76 files) should be importable; the caps were not changed.
+- [ ] Operator: import each recommendation from real GitHub once, and confirm its folder, `SKILL.md` name and license (no GitHub network in the worker sandbox).
+- [ ] Manager: run native verification and an independent review.
+
+## Trezi Skills 1/4: app-scoped registry and service contracts (LKM-284)
+
+- [x] Add versioned shared types (`src/shared/skills-registry.ts`) and the Swift owner (`src/service/SkillsOwner.swift` and its parts): list, lazy read/reference, create, local import, save-as-new-revision edit, enable, providers, remove/restore/purge, snapshot/pins/release.
+- [x] Add immutable content-addressed packages with provenance (manual/GitHub with repository, subpath, commit, license), a `modified` flag and provider availability.
+- [x] Add a ledger-backed atomic manifest with crash reconcile; refuse traversal, links, hard links, special files and oversized input; never execute or grant anything.
+- [x] Route the `skills` pipe domain in `ServiceRuntime` and add Bun's client (`src/native/skills-service.ts`); there is no other writer.
+- [x] Write contract notes for tasks 2–4 (`docs/SWIFT-BACKEND-SKILLS.md`) and add tests (`skills-registry`, `-safety`, `-boundaries`).
+- [ ] Manager: run native verification and an independent review.
+## Dependency advisory reachability triage (LKM-282)
+
+- [x] Classify all 16 critical/high advisories by reachability in `docs/SECURITY-DEPENDENCIES.md`.
+- [x] Stop react-docgen's Babel from loading the project's browserslist config; regression `test/docgen-browserslist.mjs`.
+- [x] Lockfile-only updates: proxy-addr 2.0.8, fast-uri 3.1.8.
+- [x] Manager (registry access): re-run `bun scripts/dependency-audit.mjs` and record the after counts in `docs/SECURITY-DEPENDENCIES.md` (39 → 30 advisories; 0 critical, 8 high, 20 moderate, 2 low).
+- [x] Manager: run the socket unit tests (codex-mcp, trezi-agent-tools, provider-helper-tools) and native verification (passed, 54/54 native smoke checks).
+- [ ] Follow-up: update browserslist (with its data packages), `@modelcontextprotocol/sdk`, devalue and ip-address once an online audit names compatible fixed versions.
+
 ## Live Publish attribution check (LKM-255)
 
 - [x] Add `scripts/live-publish-attribution.mjs`, which runs the real service Publish in PR-only mode on a test-branch clone with one throwaway trezi@local commit; `test/live-publish-attribution.mjs` covers the publication commit and the guards offline.
@@ -15,6 +73,85 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Read active media declarations and guard edits when the winning source is uncertain.
 - [ ] Verify the native fixture for CSS, CSS Module and utility edits, responsive read-only behavior, capture and Undo.
 - [ ] Manager: inspect native captures, run full verification and independent review.
+## Native previews Stage 6: Scraib acceptance on disposable copies (LKM-277, held branch)
+
+Status and limits: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 6), evidence `docs/evidence/scraib-acceptance/README.md`.
+
+- [x] Unchanged Scraib-xcode copy opened through Trezi with no manifest or harness; full `scraib` target, all seven `#Preview` blocks built, `FloatingLoaderView` rendered (native smoke `scraib-xcode`, group `core`).
+- [x] Interaction (`ShortcutRecorderView` click to record and stop), and three chat-landed turns with the fixture provider: an edit that rebuilds, a compile error that keeps the last good build, recovery. No synthetic direct writes.
+- [x] Scraib-open via ScraibKit, Sparkle and PostHog: `LiquidGlassPanelBackground` rendered; each unrendered view named with its reason (native smoke `scraib-open`, group `core`).
+- [x] Originals hashed before and after (unchanged); `xcode-select -p` unchanged; DEVELOPER_DIR, Xcode, Swift, Trezi build and Scraib commits recorded.
+- [x] Fix: generated memberwise initializers follow swiftc for an optional `var` and private wrapped properties (`src/swift-preview/samples.ts`, `test/swift-preview-generate.mjs`).
+- [ ] Samples for types from dependencies (ScraibKit), `ButtonStyleConfiguration`, existentials and generics; StoreKit; app icon and other unbundled resources; full-app windows and cursor tracking (Stage 7); onscreen glass and material fidelity (Stage 4).
+
+## Native previews Stage 3: open → target → `#Preview` or component → render (LKM-276, held branch)
+
+Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (Stage 3), `docs/SWIFT-PREVIEWS.md` (Generated previews).
+
+- [x] Target choice without a manifest: automatic when one macOS Swift target is previewable, "Choose what to preview" when several, saved in Trezi's data (`POST /configure`, `src/swift-preview/targets.ts`).
+- [x] `#Preview` discovery with SwiftSyntax (`src/swift-preview/PreviewScanner.swift`, `scanner.ts`): lexical context, access control, `#if`, `@available`, traits, `@Previewable`, identifiers used.
+- [x] Translation into generated factories (`generate.ts`): verbatim bodies under `#sourceLocation`, `@Previewable` as wrapper state, layout traits, availability kept; private same-file declarations through isolated overlays with diagnostics at the original file and line; originals never rewritten.
+- [x] Unsupported cases with reasons in the catalog (`/state`, `/graph`, `project:native`) and the page; compiler-rejected entries dropped and retried with the compiler's reason.
+- [x] Component picker: SwiftUI views, AppKit `NSView`/`NSViewController`, `PreviewProvider`s, with inferred samples and environment injection (`samples.ts`, `catalog.ts`); grouped apart from `#Preview` on the page.
+- [x] Generated declarations only through the sidecar writer into `<userData>/swift-previews/<hash>/generated` (`sidecar.ts`); in-repo `trezi-previews.json` still supported and wins.
+- [x] Mixed JS + native repos: "Switch JS / Native Preview" (toolbar "…" menu) stored in the launch spec; Expo/React Native keep the simulator with a reason; detection parity unchanged (`src/shared/preview-choice.ts`, `test/runtime-owner.mjs`).
+- [x] Tests: `test/swift-preview-generate.mjs` (unit), fixture `test/fixtures/swift-preview-macros`, native smoke `swift-macros` (group `core`), evidence `docs/evidence/lkm-276/`.
+- [ ] `PreviewModifier` traits, previews inside types, generic components, nib-loaded controllers, StoreKit injection; running JS and native previews side by side (Stage 4).
+
+## Native previews Stage 2B: native build authority (LKM-275, held branch)
+
+Per-item status: `docs/SWIFT-PREVIEWS-PLAN.md` (2B), `docs/SWIFT-PREVIEWS.md` (Build authority).
+
+- [x] Resolved settings from `xcodebuild -showBuildSettings -json` (scheme, Debug, `platform=macOS`, Trezi's derived data) or `swift package dump-package`, with the project file as the fallback; the source is reported per module.
+- [x] SWIFT_VERSION, compilation conditions, preprocessor definitions, strict concurrency, upcoming features, deployment target, SDKROOT, search paths and module names applied; OTHER_SWIFT_FLAGS through an allowlist; every dropped flag or setting recorded with its reason and shown.
+- [x] Dependencies: local packages, remote packages at their `Package.resolved` pin, macOS `.framework`/`.xcframework` slices, built as one wrapper package in Trezi's derived data; unsupported kinds named in the plan, the page and the API.
+- [x] App target compiled minus its entry point into an importable module; the app executable is never imported.
+- [x] Asset catalogs via actool (with asset symbols) into the module and the host's `Bundle.main`; package `Bundle.module` from SwiftPM's bundles; plain files copied; other resource kinds named as not bundled.
+- [x] Caches keyed by toolchain, SDK, settings, pins and local package files; derived data under app data.
+- [x] The project is only read: `xcodebuild`, `swift package describe`/`dump-package` run in a Trezi-owned shadow and `swift build` on a mirror of the local packages (`src/swift-preview/shadow.ts`), so nothing is created in the project, not even something removed again; tests compare the whole tree (empty folders, mtimes) before and after (`test/swift-preview-shadow.mjs`).
+- [x] No new sandbox-disabling flag for `swift build`, `dump-package`, `xcodebuild` or `actool`; environment failures are classified (asserted in `test/swift-preview-settings.mjs`).
+- [x] Tests: `test/swift-preview-settings.mjs` (scripted tools), `test/swift-preview-build.mjs` (real toolchain: `test/fixtures/swift-package-app` and a disposable Scraib-xcode copy matched against xcodebuild, original byte-compared), native smoke `swift-build` (group `core`).
+- [ ] Clang, Objective-C and mixed-language targets; static library `.xcframework` slices; String Catalogs, storyboards, Core Data, Metal; run-script generated sources; xcconfig files without xcodebuild.
+
+## Native previews Stage 2A: Xcode toolchain selection and intact `#Preview` (LKM-274, held branch)
+
+Stage 2 is partial: only 2A is done. Details: `docs/SWIFT-PREVIEWS-PLAN.md`, `docs/SWIFT-PREVIEWS.md` (Toolchain).
+
+- [x] Discover `/Applications/Xcode*.app`, `xcode-select -p`, the command-line tools and `DEVELOPER_DIR`, each with Xcode/Swift version, macOS SDK and `PreviewsMacros` (`src/swift-preview/toolchain.ts`).
+- [x] Precedence: manifest `developerDir` / `TREZI_DEVELOPER_DIR`, then env `DEVELOPER_DIR`, then the newest Xcode whose probe passes, then `xcode-select`; the reason is recorded.
+- [x] Intact `#Preview` probe with normal compiler flags, cached by toolchain path, versions, SDK and plugin; supported / unsupported / broken / unavailable (environment, not cached) with actionable messages. No sandbox-disabling flags.
+- [x] Process-local `DEVELOPER_DIR` for every spawned tool (graph `xcodebuild`/`plutil`/`swift package`, module and host `xcrun swiftc`); module and graph caches keyed by the selection; `xcode-select` only read.
+- [x] Driver `/state` and `/graph`, backend `project:native` `toolchain`, page header chip and Project panel section.
+- [x] Docs and `plan.ts` warnings corrected: no "bare swiftc"/strip guidance; the requirement is a full Xcode selected process-locally.
+- [x] Tests: `test/swift-preview-toolchain.mjs` (scripted toolchains plus a real intact `#Preview` through the driver with `xcode-select -p` checked); `swift-graph` smoke asserts the toolchain.
+- [ ] A settings UI to pick the developer directory (today: manifest field and `TREZI_DEVELOPER_DIR`).
+- [x] Show `#Preview` bodies as previews (Stage 3: done, LKM-276, above); Scraib full-target build through 2A recorded as Stage 6 evidence (LKM-277, `docs/evidence/scraib-acceptance/`).
+
+## Native previews Stage 1: Xcode/SwiftPM discovery and target-graph builds (LKM-273, held branch)
+
+Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
+
+- [x] Plan doc for Stages 1–8 with honest statuses and the out-of-scope list, linked from `docs/SWIFT-PREVIEWS.md`.
+- [x] Discovery of `.xcworkspace`, `.xcodeproj` and `Package.swift` with TS/Swift detector parity; mixed `package.json` repos keep their JS/Expo launch; a project without a manifest opens and reports its structure.
+- [x] Scheme and target graph from `project.pbxproj`, `xcodebuild -list -json` / `-showBuildSettings -json` and `swift package describe --type json`, with timeouts and clear missing-tool errors; driver `/graph`, backend `project:native`, page Project panel.
+- [x] Target-graph build: dependency modules first (own module and dylib), host with `-I/-L/-l` and `@testable import`, `@main` files left out, rebuild on change with the last good build kept, module-attributed diagnostics.
+- [x] Trezi-side manifest in app data (read; wins over the repo's `trezi-previews.json`, which stays supported).
+- [x] Scraib-shaped fixture `test/fixtures/swift-multi-module`; unit tests `swift-preview-graph`, `swift-preview-target`; native smoke `swift-graph` (group `core`); evidence in `docs/evidence/lkm-273/`.
+- [x] Scraib-xcode disposable-copy discovery and target build recorded as progress (blocked by `#Preview`, then resources and StoreKit).
+- [x] Review repair: the plan doc follows the ticket's Stages 1–8 (decision 9a00253c); `project:native` asks only Trezi's own driver, never a JS dev server (unit assertion in `test/swift-preview-graph.mjs`).
+- [ ] Stage 2 (partial): `#Preview` compiling done as 2A (LKM-274, above); compiler settings, SwiftPM dependencies (local, pinned remote, macOS frameworks) and cached per-module builds done as 2B (LKM-275, above); mixed-language targets not started.
+- [ ] Stage 3 (partial): component selection, `#Preview` reuse, generated samples with environment injection and the mixed-repo choice done as LKM-276 (above), with generated declarations instead of a manifest UI; StoreKit and the remaining resources not started.
+- [ ] Stage 4: service-owned host lifecycle (including the second server for mixed repos), driver packaging, OS-level input, glass/material fidelity.
+- [ ] Stages 5–8: agent diagnostics and source feedback, practical Scraib acceptance, full macOS app integration, iOS simulator.
+
+## Native Swift component previews demo (LKM-271, held branch)
+
+- [x] Detect a Swift project by `trezi-previews.json` (TS/Swift parity) and run Trezi's own preview driver for it through the runtime owner.
+- [x] AppKit preview host: SwiftUI, `NSView` and `NSViewController` samples with their own state and dependencies; frames, clicks, typing, rebuild on change, compiler errors with the last good build kept, recovery.
+- [x] Unit test (`test/swift-preview.mjs`) and native smoke (`swift-preview`, group `core`); demo steps, limits and evidence in `docs/SWIFT-PREVIEWS.md`.
+- [x] Repair: edits land through the real chat pipeline with a fixture provider (worktree, landing commit, rebuild, compiler diagnostic to the next prompt, recovery); library modules and Scraib disposable-copy checks; evidence refreshed from the passing native run.
+- [ ] Follow-ups: `#Preview` reuse, full Scraib components (StoreKit, Sparkle/PostHog, resources), full macOS app launch, iOS simulator.
+- [ ] Manager: review; keep the merge held.
 
 ## Chat history status (LKM-268)
 

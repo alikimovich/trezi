@@ -1,0 +1,176 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "skills-status",
+    "recommendations-note",
+    "recommendation:frontend-design",
+    "recommendation:vercel-react-best-practices",
+    "recommendation:vercel-composition-patterns",
+    "recommendation:swiftui-view-refactor",
+    "recommendation:swiftui-expert-skill",
+    "removed:6cc6d8df-bf94-4def-a461-5872f5574a7c"
+  ],
+  "message": "Removed trezi-smoke-notes. Restore it from Removed.",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [
+    {
+      "hitTarget": true,
+      "title": "Details…",
+      "enabled": true,
+      "label": "Details Frontend Design",
+      "action": "skill-recommendation:frontend-design",
+      "frame": "{{674, 359}, {76, 24}}",
+      "contained": true
+    },
+    {
+      "enabled": true,
+      "label": "Details React Best Practices",
+      "action": "skill-recommendation:vercel-react-best-practices",
+      "title": "Details…",
+      "contained": true,
+      "frame": "{{674, 290}, {76, 24}}",
+      "hitTarget": true
+    },
+    {
+      "enabled": true,
+      "frame": "{{674, 221}, {76, 24}}",
+      "action": "skill-recommendation:vercel-composition-patterns",
+      "title": "Details…",
+      "hitTarget": true,
+      "label": "Details Composition Patterns",
+      "contained": true
+    },
+    {
+      "hitTarget": true,
+      "title": "Details…",
+      "contained": true,
+      "frame": "{{674, 152}, {76, 24}}",
+      "action": "skill-recommendation:swiftui-view-refactor",
+      "enabled": true,
+      "label": "Details SwiftUI View Refactor"
+    },
+    {
+      "contained": true,
+      "label": "Details SwiftUI Expert",
+      "hitTarget": true,
+      "enabled": true,
+      "title": "Details…",
+      "frame": "{{674, 68}, {76, 24}}",
+      "action": "skill-recommendation:swiftui-expert-skill"
+    },
+    {
+      "hitTarget": false,
+      "contained": false,
+      "frame": "{{669, -58}, {81, 24}}",
+      "enabled": true,
+      "action": "skill-open:6cc6d8df-bf94-4def-a461-5872f5574a7c",
+      "title": "Restore…",
+      "label": "Restore trezi-smoke-notes"
+    }
+  ],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "gearshape"
+    },
+    {
+      "label": "AI Providers",
+      "symbol": "sparkles",
+      "id": "providers"
+    },
+    {
+      "id": "skills",
+      "label": "Skills",
+      "symbol": "book.closed"
+    },
+    {
+      "id": "experimental",
+      "label": "Experimental",
+      "symbol": "testtube.2"
+    },
+    {
+      "id": "dreamer",
+      "label": "Dreamer",
+      "symbol": "moon.stars"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "engine": "agent",
+    "agentFileAccess": "full",
+    "autoFixCI": "ask",
+    "skills-status": "",
+    "claudePlugins": "false",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "recommendations-note": "",
+    "providerFallback": "on",
+    "recommendation:swiftui-view-refactor": "Peter Steinberger · MIT",
+    "dreamerStart": "off",
+    "recommendation:vercel-composition-patterns": "Vercel · MIT",
+    "dreamerSchedule": "off",
+    "recommendation:vercel-react-best-practices": "Not importable",
+    "workspaceIdle": "7",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "removed:6cc6d8df-bf94-4def-a461-5872f5574a7c": "",
+    "projectUi": "false",
+    "connections": "None",
+    "workspaceUsage": "Calculating…",
+    "buildCheck": "on",
+    "quitDontAsk": "false",
+    "dreamerUrl": "",
+    "agentMerge": "true",
+    "recommendation:frontend-design": "Anthropic · Apache-2.0",
+    "dreamerToken": "",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "recommendation:swiftui-expert-skill": "Not importable"
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "rowSizeStyle": 0,
+    "row": {
+      "height": 28,
+      "iconWidth": 16,
+      "fontSize": 13,
+      "labelGap": 7,
+      "iconLeading": 2,
+      "iconHeight": 16
+    },
+    "indentation": 0,
+    "rowHeight": 28,
+    "behavior": "sidebar",
+    "fullHeight": true,
+    "transparentScroll": true,
+    "style": "sourceList",
+    "highlight": 1
+  },
+  "editors": [],
+  "actions": [
+    "skill-add",
+    "skill-folder",
+    "skill-github"
+  ],
+  "width": 780,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1560,
+  "captureHeight": 1520
+}

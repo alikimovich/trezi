@@ -46,6 +46,8 @@ export interface LandingPage {
   /** When the document started (epoch ms), and the live revision it was served at. */
   startedAt: number | null
   servedRevision: string | null
+  /** The preview compiles the landed files itself (Swift components) and is still building. */
+  building?: boolean
 }
 
 export const LANDING_CHECK = {
@@ -54,6 +56,8 @@ export const LANDING_CHECK = {
   /** How long the preview may take to show the project; longer after an environment restart. */
   readyMs: 10_000,
   restartReadyMs: 120_000,
+  /** How long a preview that compiles the landed files may keep building before the look. */
+  buildMs: 120_000,
   pollMs: 500,
   /** Errors listed in the row; the line still counts all of them. */
   shownErrors: 3,
@@ -112,6 +116,18 @@ export async function checkAfterLanding(
     return missing === 'skipped'
       ? 'skipped'
       : { problem: 'not-loaded', line: 'The page did not load after landing', errors: [] }
+  // A preview that compiles the landed files (Swift components) reports a compile error
+  // only when its build ends, usually after the hot-reload settle time: wait for it.
+  let page = await host.page(root).catch(() => null)
+  if (page?.building) {
+    const built = host.now() + (timing.buildMs ?? 0)
+    while (page?.building && !cancelled() && host.now() < built) {
+      await host.wait(timing.pollMs)
+      page = await host.page(root).catch(() => null)
+    }
+    if (cancelled()) return null
+    entries = (await host.errors().catch(() => null)) ?? entries
+  }
   const errors = entries
     .filter((entry) => entry.at >= landedAt)
     .map((entry) => oneLine(entry.text, timing.errorChars))
@@ -124,7 +140,6 @@ export async function checkAfterLanding(
       line: `The dev server answered HTTP ${status} after landing`,
       errors: shownErrors
     }
-  const page = await host.page(root).catch(() => null)
   if (cancelled()) return null
   if (page?.overlay)
     return {
@@ -143,7 +158,7 @@ export async function checkAfterLanding(
     served &&
     revision &&
     served !== revision &&
-    (options.restart || (page.startedAt ?? 0) >= landedAt) &&
+    (options.restart || (page?.startedAt ?? 0) >= landedAt) &&
     (await host.head(root).catch(() => null)) === revision
   )
     return {
@@ -272,7 +287,8 @@ const PAGE_CHECK = `(() => {
     ? [...body.querySelectorAll('img,svg,canvas,video,iframe,input,button,textarea,select')].some(visible)
     : false
   const text = (body?.innerText ?? '').trim().length > 0
-  return { blank: document.readyState === 'complete' && !text && !media, overlay: message, startedAt: performance.timeOrigin }
+  return { blank: document.readyState === 'complete' && !text && !media, overlay: message, startedAt: performance.timeOrigin,
+    building: !!body?.querySelector('#problems') && body.dataset.status === 'building' }
 })()`
 
 /** The live preview through the agent tools' registry (`src/main/preview-state.ts`). */
@@ -297,6 +313,7 @@ export function previewLandingHost(
         blank?: unknown
         overlay?: unknown
         startedAt?: unknown
+        building?: unknown
       } | null
       if (!read) return null
       const startedAt = typeof read.startedAt === 'number' ? Math.round(read.startedAt) : null
@@ -305,7 +322,8 @@ export function previewLandingHost(
         blank: read.blank === true,
         overlay: typeof read.overlay === 'string' ? read.overlay : null,
         startedAt,
-        servedRevision: identity.servedRevision
+        servedRevision: identity.servedRevision,
+        building: read.building === true
       }
     },
     head: (root) => liveHead(root, true),

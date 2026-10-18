@@ -42,7 +42,7 @@ final class StaticServer: @unchecked Sendable {
                 if connection < 0 { break }
                 _ = fcntl(connection, F_SETFL, fcntl(connection, F_GETFL) & ~O_NONBLOCK)
                 _ = fcntl(connection, F_SETFD, FD_CLOEXEC)
-                DispatchQueue.global(qos: .userInitiated).async { serve(connection, site: site) }
+                DispatchQueue.global(qos: .userInitiated).async { serve(connection, site: site, port: port) }
             }
         }
         source.setCancelHandler { Darwin.close(fd) }
@@ -61,7 +61,8 @@ final class StaticServer: @unchecked Sendable {
 
     // MARK: One connection
 
-    static func serve(_ fd: Int32, site: StaticSite) {
+    /// `port` is the listener's: only a request addressed to it by a loopback name is answered.
+    static func serve(_ fd: Int32, site: StaticSite, port: Int) {
         var one: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
         var timeout = timeval(tv_sec: 10, tv_usec: 0)
@@ -72,9 +73,12 @@ final class StaticServer: @unchecked Sendable {
         }
         let line = head.split(separator: "\r\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
         let parts = line.split(separator: " ", omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[2].hasPrefix("HTTP/1."), !parts[0].isEmpty, parts[1].hasPrefix("/") || parts[1].contains("://") else {
+        guard parts.count == 3, parts[2].hasPrefix("HTTP/1."), !parts[0].isEmpty, parts[1].hasPrefix("/") else {
             if !head.isEmpty { _ = writeAll(fd, response(status: 400, headers: [], length: 0)) }
             Darwin.close(fd); return
+        }
+        guard loopback(head, port: port) else {
+            _ = writeAll(fd, response(status: 403, headers: [], length: 0)); Darwin.close(fd); return
         }
         let reply = site.respond(method: String(parts[0]), target: String(parts[1]))
         switch reply.body {
@@ -112,6 +116,25 @@ final class StaticServer: @unchecked Sendable {
         // The descriptor is closed only after the source lets it go.
         source.setCancelHandler { site.drop(client); client.release() }
         source.resume()
+    }
+
+    /// SimulatorBridge's rule: exactly one Host, `127.0.0.1:<port>` or `localhost:<port>`,
+    /// and any Origin that same loopback address. A foreign Host is a DNS-rebinding page,
+    /// a foreign (or `null`) Origin another site's page (LKM-280).
+    static func loopback(_ head: String, port: Int) -> Bool {
+        let allowed = ["127.0.0.1:\(port)", "localhost:\(port)"]
+        var hosts: [String] = [], origins: [String] = []
+        for line in head.components(separatedBy: "\r\n").dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces).lowercased()
+            switch line[..<colon].lowercased() {
+            case "host": hosts.append(value)
+            case "origin": origins.append(value)
+            default: break
+            }
+        }
+        guard hosts.count == 1, allowed.contains(hosts[0]) else { return false }
+        return origins.allSatisfy { origin in allowed.contains { "http://" + $0 == origin } }
     }
 
     /// The request head (through the blank line), or nil if it exceeds 16 KiB or

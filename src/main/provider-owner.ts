@@ -101,6 +101,8 @@ export interface HelperStart {
     resumeCwd?: string
     liveRoot?: string
     projectMemory?: string
+    /** LKM-287: this provider's read-only skills projection, checked by the owner. */
+    skills?: string
   }
 }
 
