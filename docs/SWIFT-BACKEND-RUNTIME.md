@@ -105,7 +105,15 @@ Both are recorded in `docs/TASKS.md`.
   project (a symlink out of it) is refused (403). Before, only the lexical path was
   checked, so a repository could serve any file on the machine to its own preview
   page. Stamping asks Bun's JS helper and falls back to unstamped HTML after 5 s,
-  on a helper error, or for pages over 4 MiB.
+  on a helper error, or for pages over 4 MiB. Since LKM-280 every request, the
+  reload stream included, must carry exactly one Host naming the listener
+  (`127.0.0.1:<port>` or `localhost:<port>`) and any Origin must be that same
+  `http://` address, as for the Simulator bridge (DNS rebinding, other sites'
+  pages); otherwise 403. Absolute-form targets get 400. Dot-files and
+  dot-directories (`.env`, `.git/`, `.DS_Store`…) are refused (403) by the decoded,
+  normalized request path, by the chosen directory index and by the real path, so
+  encoded, case, traversal and in-project symlink spellings all fail; only a
+  top-level `.well-known/` is public.
 - **Watcher and live reload.** FSEvents on the project's real path, ignoring
   `.git` and `node_modules`, bumps the version at once and broadcasts after 80 ms.
   Pages carry the version they were served at, so a change made while no stream

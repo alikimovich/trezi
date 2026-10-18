@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Fixed
+- Static-site previews no longer serve dot-files or dot-directories such as `.env` and `.git/` (only `.well-known/`), and refuse requests whose Host or Origin is not the preview's own loopback address (LKM-280).
 - Static-site previews keep live-reloading and serving pages after many reloads; held reload streams no longer exhaust the service's worker threads (LKM-255).
 - Chat composers now show only "Ask Trezi" as the placeholder; typing / still opens skills (LKM-267).
 - Agents now reach Trezi's managed Vercel agent-browser by its absolute path even when a login shell reorders PATH, so a global CLI no longer wins and no WebKit fallback is used; missing CLI or headless-shell dependencies are reported separately from route errors (LKM-269).
