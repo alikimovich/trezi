@@ -20,6 +20,8 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
     var workspace: WorkspaceChannel?
     /// S05 project memory writer (one ledger domain per project), on the same pipe.
     var memory: MemoryChannel?
+    /// LKM-284 app-scoped Skills registry (immutable packages, session pins), on the same pipe.
+    var skills: SkillsChannel?
     /// S06 managed project runtimes (servers, installs, static site), on the same pipe.
     var runtime: RuntimeOwner?
     /// S07 repository coordinator (Git, worktrees, landings, recovery), on the same pipe.
@@ -157,6 +159,8 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                         workspace = WorkspaceChannel(owner: WorkspaceOwner(
                             disk: PreferencesDisk(path: profile.appendingPathComponent("workspace.json").path), ledger: ledger), send: send)
                         memory = MemoryChannel(owner: MemoryOwner(store: MemoryStore(profile: profile), ledger: ledger), send: send)
+                        let github = SkillsGitHubEndpoints.fixture(environment: requested.environment, profile: requested.profile) ?? .github
+                        skills = SkillsChannel(owner: SkillsOwner(store: SkillsStore(profile: profile), ledger: ledger, github: github), send: send)
                         runtime = RuntimeOwner(options: RuntimeOwner.Options(environment: requested.environment,
                             watchdog: CommandLine.arguments[0], journal: journal), send: send)
                         let bun = child?.pid ?? 0, host = session.connection.processIdentifier
@@ -258,12 +262,13 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
     func readBackend() {
         guard let output = child?.output else { return }
         // Handed to the reader directly (not via `queue`), so Bun's preference,
-        // workspace, memory, runtime, repository, source, conversation, provider, editing, workflow and platform requests are still served while `stop` waits for Bun to exit.
-        let preferences = preferences, workspace = workspace, memory = memory, runtime = runtime, repository = repository, source = source
+        // workspace, memory, skills, runtime, repository, source, conversation, provider, editing, workflow and platform requests are still served while `stop` waits for Bun to exit.
+        let preferences = preferences, workspace = workspace, memory = memory, skills = skills, runtime = runtime, repository = repository, source = source
         let conversation = conversation, provider = provider, editing = editing, workflow = workflow, platform = platform
         let preferencesPrefix = Data("{\"service\":\"preferences\"".utf8)
         let workspacePrefix = Data("{\"service\":\"workspace\"".utf8)
         let memoryPrefix = Data("{\"service\":\"memory\"".utf8)
+        let skillsPrefix = Data("{\"service\":\"skills\"".utf8)
         let runtimePrefix = Data("{\"service\":\"runtime\"".utf8)
         let repositoryPrefix = Data("{\"service\":\"repository\"".utf8)
         let sourcePrefix = Data("{\"service\":\"source\"".utf8)
@@ -285,6 +290,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                         if line.starts(with: preferencesPrefix) { preferences?.submit(line); continue }
                         if line.starts(with: workspacePrefix) { workspace?.submit(line); continue }
                         if line.starts(with: memoryPrefix) { memory?.submit(line); continue }
+                        if line.starts(with: skillsPrefix) { skills?.submit(line); continue }
                         if line.starts(with: runtimePrefix) || line.starts(with: RuntimeOwner.helperPrefix) { runtime?.submit(line); continue }
                         if line.starts(with: repositoryPrefix) { repository?.submit(line); continue }
                         if line.starts(with: sourcePrefix) { source?.submit(line); continue }
@@ -368,11 +374,12 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         // Bun has exited: its provider sessions are over. Helpers are stopped (bounded);
         // sessions still listed are reported by the next launch.
         provider?.close(timeout: 2); provider = nil
-        // Bun has exited: refuse new preference/workspace/memory requests and let accepted
-        // ones finish (bounded). One still running at exit is recovered from the ledger.
+        // Bun has exited: refuse new preference/workspace/memory/skills requests and let
+        // accepted ones finish (bounded). One still running at exit is recovered from the ledger.
         preferences?.close(timeout: 2); preferences = nil
         workspace?.close(timeout: 2); workspace = nil
         memory?.close(timeout: 2); memory = nil
+        skills?.close(timeout: 2); skills = nil
         // The ledger needs no drain: each transition is synced before it is acknowledged.
         ledger = nil
         exclusion?.release(); exclusion = nil

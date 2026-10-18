@@ -1,0 +1,114 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "recommendation-publisher",
+    "recommendation-source",
+    "recommendation-license",
+    "recommendation-link",
+    "recommendation-status"
+  ],
+  "message": "",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "gearshape"
+    },
+    {
+      "id": "providers",
+      "label": "AI Providers",
+      "symbol": "sparkles"
+    },
+    {
+      "symbol": "book.closed",
+      "label": "Skills",
+      "id": "skills"
+    },
+    {
+      "symbol": "testtube.2",
+      "id": "experimental",
+      "label": "Experimental"
+    },
+    {
+      "id": "dreamer",
+      "label": "Dreamer",
+      "symbol": "moon.stars"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "dreamerToken": "",
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "recommendation-publisher": "Anthropic",
+    "recommendation-source": "anthropics/skills/skills/frontend-design",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "projectUi": "false",
+    "claudePlugins": "false",
+    "recommendation-status": "Not installed",
+    "recommendation-link": "https://github.com/anthropics/skills/tree/main/skills/frontend-design",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "providerFallback": "on",
+    "agentFileAccess": "full",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "dreamerStart": "off",
+    "agentMerge": "true",
+    "engine": "agent",
+    "recommendation-license": "Apache-2.0"
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "fullHeight": true,
+    "transparentScroll": true,
+    "rowHeight": 28,
+    "row": {
+      "iconLeading": 2,
+      "fontSize": 13,
+      "iconHeight": 16,
+      "iconWidth": 16,
+      "labelGap": 7,
+      "height": 28
+    },
+    "behavior": "sidebar",
+    "highlight": 1,
+    "indentation": 0,
+    "rowSizeStyle": 0,
+    "style": "sourceList"
+  },
+  "editors": [],
+  "actions": [
+    "skill-back",
+    "skill-install"
+  ],
+  "width": 680,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1360,
+  "captureHeight": 1520
+}

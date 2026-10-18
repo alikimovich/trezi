@@ -1,4 +1,4 @@
-import type { NativeView } from '../native/platform'
+import { app, type NativeView } from '../native/platform'
 import type { ProjectRuntime } from '../native/runtime-service'
 import { outputLogger } from './devserver-log'
 import { registerServiceDevServer } from './devserver-service'
@@ -39,14 +39,19 @@ export function registerDevServerIpc(
   // The window can outlive its webContents (display sleep / GPU loss), so guard
   // isDestroyed() or `.send()` throws for a late log line.
   const output = outputLogger()
-  registerServiceDevServer(router, runtime, (line) => {
-    // A target can print source excerpts, prompts or secrets in build errors. Only
-    // persist a fixed category and length; the Activity view still gets the line.
-    const fields = output(line)
-    if (fields) productLog.info('output', 'Dev server output', { ...fields }, 'devserver')
-    const wc = getWindow()?.webContents
-    if (wc && !wc.isDestroyed()) wc.send('devserver:log', line)
-  })
+  registerServiceDevServer(
+    router,
+    runtime,
+    (line) => {
+      // A target can print source excerpts, prompts or secrets in build errors. Only
+      // persist a fixed category and length; the Activity view still gets the line.
+      const fields = output(line)
+      if (fields) productLog.info('output', 'Dev server output', { ...fields }, 'devserver')
+      const wc = getWindow()?.webContents
+      if (wc && !wc.isDestroyed()) wc.send('devserver:log', line)
+    },
+    () => app.getPath('userData')
+  )
   // A ready server that ended by itself: the preview restarts it (LKM-146).
   runtime.onExit((root, url, reason) => {
     productLog.warn('lifecycle', 'Dev server exited', { root }, 'devserver')

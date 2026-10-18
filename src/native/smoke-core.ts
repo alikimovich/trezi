@@ -60,9 +60,12 @@ import {
   runSmokeChecks,
   type SmokeCheck
 } from './smoke-runner'
+import { checkScraibOpen, restoreScraibOpen } from './smoke-scraib-open'
+import { checkScraibXcode, restoreScraibXcode } from './smoke-scraib-xcode'
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
+import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
@@ -70,6 +73,10 @@ import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStartComposer, restoreStartComposer } from './smoke-start'
 import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
 import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
+import { checkSwiftBuild, restoreSwiftBuild } from './smoke-swift-build'
+import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
+import { checkSwiftMacros, restoreSwiftMacros } from './smoke-swift-macros'
+import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { checkToolbarMore } from './smoke-toolbar-more'
@@ -535,6 +542,16 @@ export async function runNativeCoreSmoke(
       run: async () => {
         assert.ok(nativeDreamer.current, 'Dreamer controller')
         await checkDreamerReview(host, nativeDreamer.current, artifacts)
+      }
+    },
+    {
+      name: 'skills-settings',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkSkillsSettings(host, artifacts)
+      },
+      cleanup: async () => {
+        await restoreSkillsSettings(host)
       }
     },
     {
@@ -1494,6 +1511,42 @@ export async function runNativeCoreSmoke(
         if ((await host.request('sheetInspect')).visible)
           await host.request('sheetPerform', { action: 'cancel' })
       }
+    },
+    {
+      name: 'swift-preview',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftPreview(host, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftPreview(host, firstProject)
+    },
+    {
+      name: 'swift-graph',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftGraph(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftGraph(host, firstProject)
+    },
+    {
+      name: 'swift-build',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftBuild(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftBuild(host, firstProject)
+    },
+    {
+      name: 'swift-macros',
+      dependsOn: ['open-project'],
+      run: () => checkSwiftMacros(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreSwiftMacros(host, firstProject)
+    },
+    {
+      name: 'scraib-xcode',
+      dependsOn: ['open-project'],
+      run: () => checkScraibXcode(host, invoke, fixture, root, artifacts, firstProject),
+      cleanup: () => restoreScraibXcode(host, firstProject)
+    },
+    {
+      name: 'scraib-open',
+      dependsOn: ['open-project'],
+      run: () => checkScraibOpen(host, invoke, fixture, root, artifacts),
+      cleanup: () => restoreScraibOpen(host, firstProject)
     },
     {
       name: 'final-shell',

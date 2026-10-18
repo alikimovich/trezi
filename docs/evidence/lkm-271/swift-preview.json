@@ -1,0 +1,169 @@
+{
+  "firstBuild": {
+    "preview": "profile-card",
+    "stale": false,
+    "message": "Built 3 previews.",
+    "generation": 1,
+    "previews": [
+      "profile-card",
+      "rating-control",
+      "search-panel"
+    ],
+    "width": 0,
+    "problems": [],
+    "loaded": false,
+    "failures": 0,
+    "shown": "",
+    "height": 0,
+    "status": "ready"
+  },
+  "swiftui": {
+    "preview": "profile-card",
+    "stale": false,
+    "message": "Built 3 previews.",
+    "generation": 1,
+    "previews": [
+      "profile-card",
+      "rating-control",
+      "search-panel"
+    ],
+    "width": 320,
+    "problems": [],
+    "loaded": true,
+    "failures": 0,
+    "shown": "profile-card@1",
+    "height": 330,
+    "status": "ready"
+  },
+  "appkit": {
+    "preview": "rating-control",
+    "stale": false,
+    "message": "Built 3 previews.",
+    "generation": 1,
+    "previews": [
+      "profile-card",
+      "rating-control",
+      "search-panel"
+    ],
+    "width": 240,
+    "problems": [],
+    "loaded": true,
+    "failures": 0,
+    "shown": "rating-control@1",
+    "height": 90,
+    "status": "ready"
+  },
+  "interaction": [
+    "Search components",
+    "sl",
+    "Query",
+    "Search",
+    "Results for sl: Slider"
+  ],
+  "edited": {
+    "preview": "search-panel",
+    "stale": false,
+    "message": "Built 3 previews.",
+    "generation": 2,
+    "previews": [
+      "profile-card",
+      "rating-control",
+      "search-panel"
+    ],
+    "width": 340,
+    "problems": [],
+    "loaded": true,
+    "failures": 0,
+    "shown": "search-panel@2",
+    "height": 170,
+    "status": "ready"
+  },
+  "failed": {
+    "preview": "search-panel",
+    "stale": true,
+    "message": "Build failed: 1 error.",
+    "generation": 2,
+    "previews": [
+      "profile-card",
+      "rating-control",
+      "search-panel"
+    ],
+    "width": 340,
+    "problems": [
+      "Sources/DemoComponents/SearchPanelController.swift:59:27: value of type 'any SearchIndex' has no member 'serch'"
+    ],
+    "loaded": true,
+    "failures": 1,
+    "shown": "search-panel@2",
+    "height": 170,
+    "status": "failed"
+  },
+  "landingCheck": {
+    "problem": "errors",
+    "line": "1 new console error after landing",
+    "errors": [
+      "Swift preview build failed: Sources/DemoComponents/SearchPanelController.swift:59: value of type 'any SearchIndex' has no member 'serch'"
+    ]
+  },
+  "recovered": {
+    "preview": "search-panel",
+    "stale": false,
+    "message": "Built 3 previews.",
+    "generation": 3,
+    "previews": [
+      "profile-card",
+      "rating-control",
+      "search-panel"
+    ],
+    "width": 340,
+    "problems": [],
+    "loaded": true,
+    "failures": 1,
+    "shown": "search-panel@3",
+    "height": 170,
+    "status": "ready"
+  },
+  "provenance": {
+    "chatLanded": {
+      "edit": {
+        "branch": "trezi/chat-9fd0625a",
+        "liveUntouchedBeforeLanding": true,
+        "commit": {
+          "subject": "Update SearchPanelController.swift",
+          "files": [
+            "Sources/DemoComponents/SearchPanelController.swift"
+          ],
+          "chat": "trezi/chat-9fd0625a"
+        }
+      },
+      "error": {
+        "branch": "trezi/chat-9fd0625a",
+        "liveUntouchedBeforeLanding": true,
+        "commit": {
+          "subject": "Update SearchPanelController.swift",
+          "files": [
+            "Sources/DemoComponents/SearchPanelController.swift"
+          ],
+          "chat": "trezi/chat-9fd0625a"
+        }
+      },
+      "fix": {
+        "branch": "trezi/chat-9fd0625a",
+        "liveUntouchedBeforeLanding": true,
+        "commit": {
+          "subject": "Update SearchPanelController.swift",
+          "files": [
+            "Sources/DemoComponents/SearchPanelController.swift"
+          ],
+          "chat": "trezi/chat-9fd0625a"
+        },
+        "diagnosticInPrompt": true
+      }
+    },
+    "syntheticDirectWrites": [],
+    "fixtures": [
+      "The model is a fixture provider (stubAgentSendForSmoke): it applies a scripted edit to the chat worktree. No provider call is made.",
+      "Clicks and keys are DOM events on the preview page, not OS input."
+    ]
+  }
+}

@@ -144,10 +144,9 @@ server.registerTool(
   'publish_merge',
   {
     description:
-      'Publish and squash merge the existing PR now when Agent can merge pull requests is on.',
+      'Squash merge the existing PR after the user approves it in the card Trezi shows. Needs Agent can merge pull requests on.',
     inputSchema: {
-      number: z.number().int().positive().optional(),
-      confirmed: z.boolean().optional()
+      number: z.number().int().positive().optional()
     }
   },
   async (args) => result(await invoke('publish_merge', args))

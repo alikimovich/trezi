@@ -21,6 +21,10 @@ export type Framework =
   // A plain static site (vanilla HTML/CSS/JS, no package.json or build step) —
   // served by trezi's own built-in static file server, not a spawned dev command.
   | 'static'
+  // A native Swift project (an Xcode project/workspace, `Package.swift` or
+  // `trezi-previews.json`), previewed through Trezi's Swift preview driver
+  // (`docs/SWIFT-PREVIEWS.md`).
+  | 'swift'
   | 'unknown'
 
 /**
@@ -106,6 +110,110 @@ export interface DetectedProject {
   devCommand: string
   /** Web dev server vs iOS Simulator (React Native / Expo → 'simulator'). */
   previewKind: PreviewKind
+  /** Native roots found in the folder (LKM-273), also for a JS project that has them. */
+  native?: NativeStructure
+  /**
+   * A repo with both a JS dev server and native roots (LKM-276): which one the preview
+   * runs (`src/main/preview-choice.ts`), and whether the other can be chosen.
+   */
+  previewChoice?: PreviewChoiceInfo
+}
+
+export interface PreviewChoiceInfo {
+  using: 'js' | 'native'
+  /** Whether switching is offered; false for React Native/Expo, which keep the simulator. */
+  switchable: boolean
+  reason: string
+}
+
+/** One previewable (or listed but unsupported) entry of a native project (LKM-276). */
+export interface NativePreviewEntry {
+  id: string
+  title: string
+  source: 'preview' | 'provider' | 'component'
+  /** `#Preview`, `PreviewProvider`, `SwiftUI view`, `AppKit view`, `AppKit view controller`. */
+  kind: string
+  module: string
+  /** Project-relative. */
+  file: string
+  line: number
+  supported: boolean
+  /** Why it cannot be previewed ('' when it can). */
+  reason: string
+  notes: string[]
+  /** A component's inferred sample: the expression its preview makes it with. */
+  sample?: string
+}
+
+export interface NativeTargetChoice {
+  /** The container's project-relative path. */
+  project: string
+  target: string
+  kind: string
+  module: string
+  /** The candidates it builds with it, dependencies first. */
+  includes: string[]
+}
+
+/** What Trezi generated for a native project without a manifest (`src/swift-preview/generated.ts`). */
+export interface NativePreviewCatalog {
+  target: string
+  project: string
+  /** Why this target: "your choice", "the only previewable target"; '' while none is chosen. */
+  chosenBy: string
+  choices: NativeTargetChoice[]
+  entries: NativePreviewEntry[]
+  /** Trezi's folder holding the generated declarations (never in the repo). */
+  dir: string
+  /** Builds retried without entries a compile error ruled out. */
+  retries: number
+}
+
+/** Xcode and SwiftPM roots in a project, project-relative (`src/swift-preview/discovery.ts`). */
+export interface NativeStructure {
+  workspaces: string[]
+  projects: string[]
+  packages: string[]
+}
+
+/** Result of `project:native` (LKM-273, `src/main/swift-preview.ts`). */
+/** The part of a `ToolchainSelection` the backend API exposes. */
+export interface NativeToolchainInfo {
+  developerDir: string
+  label: string
+  swiftVersion: string
+  sdkVersion: string
+  reason: string
+  preview: 'supported' | 'unsupported' | 'broken' | 'unavailable' | 'none'
+  message: string
+  /** `xcode-select -p`, read only: Trezi never changes it. */
+  systemDefault: string
+}
+
+export interface NativeProjectInfo {
+  structure: NativeStructure | null
+  /** Where `trezi-previews.json` may live: Trezi's app data (wins) or the repo root. */
+  manifest: { trezi: string; treziExists: boolean; repo: string; repoExists: boolean }
+  /** The running driver's `NativeGraph` (`src/swift-preview/graph.ts`): schemes and targets. */
+  graph: unknown
+  /**
+   * The latest `BuildPlan` (`src/swift-preview/plan.ts`, LKM-275): modules with their
+   * resolved settings and dropped flags, the dependency plan with every unsupported
+   * dependency named, and the resource plan. Null before a target build.
+   */
+  plan: unknown
+  /** The latest build's `BuildReport` (`src/swift-preview/builder.ts`): derived data, cache use. */
+  build: unknown
+  /**
+   * The driver's `ToolchainSelection` (`src/swift-preview/toolchain.ts`, LKM-274): the
+   * developer directory its tools run with, why it was chosen, whether it expands
+   * `#Preview`, and an actionable message. Null when the driver was not asked.
+   */
+  toolchain: NativeToolchainInfo | null
+  /** The generated previews and components, and the target choices (LKM-276); null with a manifest. */
+  catalog: NativePreviewCatalog | null
+  /** Why the graph is missing, empty when it is there. */
+  error: string
 }
 
 /**
@@ -642,6 +750,9 @@ export interface SessionRecord {
   sdkSessionId?: string
   /** The resolved directory `sdkSessionId` was started in; a resume uses it (LKM-165). */
   sdkCwd?: string
+  /** The durable Trezi Skills identity this conversation's skills are pinned to
+   *  (LKM-287); absent on records from before it, which get one on their next start. */
+  skillsSession?: string
 }
 
 /** What `agent:open-project` hands back so the renderer can paint the current chat. */

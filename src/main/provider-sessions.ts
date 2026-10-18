@@ -6,6 +6,7 @@ import type { ModelProvider, ProviderSession, SpawnContext } from './backends/ty
 import { noteCodexFallback, supportedSeatOptions } from './codex-seat'
 import { providerOwner } from './provider-owner'
 import { INTERRUPT_GRACE_MS } from './provider-policy'
+import { newSkillsSession, projectSessionSkills, withSkillsNote } from './session-skills'
 
 const ignore = (): void => {}
 
@@ -24,6 +25,11 @@ const ignore = (): void => {}
  *
  * A helper-hosted provider (`host: 'helper'`) is already under the owner: the helper
  * was opened through `openHelper` inside `helper-session.ts`.
+ *
+ * Every session gets its durable skills identity here (LKM-287): the caller's (a restored,
+ * resumed or restarted chat's) or a new one, stamped on the record so it persists. A
+ * session in Bun (a custom endpoint) gets its projection here; a helper gets its own
+ * for whichever provider it opens (`helper-session.ts`).
  */
 export async function startProviderSession(
   provider: ModelProvider,
@@ -37,21 +43,26 @@ export async function startProviderSession(
   // reporting the options the chat asked for, so its picker stays as chosen.
   const codexSeat = provider.id === 'codex' && !requested.connectionId
   const options = codexSeat ? supportedSeatOptions(requested) : requested
+  const skillsSession = seatCtx.skillsSession ?? newSkillsSession()
   const ctx: SpawnContext = codexSeat
     ? {
         ...seatCtx,
+        skillsSession,
         onEvent: (event) => {
           noteCodexFallback(requested, event)
           seatCtx.onEvent?.(event)
         }
       }
-    : seatCtx
+    : { ...seatCtx, skillsSession }
   const asked = (s: ProviderSession): ProviderSession => {
     if (s.options === options && options !== requested) s.options = requested
+    s.record.skillsSession = skillsSession
     return s
   }
   if (provider.host === 'helper')
     return asked(await provider.startSession(root, options, getWindow, ctx))
+  const skills = await projectSessionSkills(skillsSession, provider.id)
+  if (skills.path) ctx.skills = skills.path
   const owner = providerOwner()
   const grant = randomUUID()
   await owner.open({
@@ -84,7 +95,7 @@ export async function startProviderSession(
     void owner.close(grant).catch(ignore)
     throw error
   }
-  const s = asked(session)
+  const s = withSkillsNote(asked(session), skills.note)
   const send = s.send
   s.send = (text, images) => {
     void owner.turn(grant).catch(ignore)

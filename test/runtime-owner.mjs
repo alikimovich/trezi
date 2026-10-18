@@ -20,6 +20,7 @@ import {
   symlinkSync,
   writeFileSync
 } from 'node:fs'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -31,6 +32,7 @@ import {
 } from '../src/main/project-dependencies.ts'
 import { detectProject, interpretFailure, withPort } from '../src/main/project-detect.ts'
 import { serviceRuntime } from '../src/native/runtime-service.ts'
+import { applyPreviewChoice } from '../src/shared/preview-choice.ts'
 import { swiftBuild } from './helpers/swift-build.mjs'
 
 const scratch = mkdtempSync(join(tmpdir(), 'trezi-runtime-owner-'))
@@ -40,6 +42,8 @@ const strays = new Set()
 const skipped = []
 let cases = 0
 const PORT = 47000 + (process.pid % 900)
+// The listener port the fixture serves socketpair requests as (`sitePort` in main.swift).
+const SITE_HOST = '127.0.0.1:4173'
 
 /**
  * Compiles the fixture, or reuses a binary built from byte-identical sources
@@ -198,6 +202,52 @@ try {
     project({})
     project({ '.gitignore': '', '.trezi/x': '' })
     project({ 'readme.md': '' })
+    project({ 'trezi-previews.json': '{}', 'Package.swift': '', 'index.html': '' })
+    project({
+      'package.json': JSON.stringify({ scripts: { dev: 'x' } }),
+      'trezi-previews.json': ''
+    })
+    // Native discovery (LKM-273): workspaces, projects and packages up to two levels
+    // down, never through hidden, dependency or build folders, bundles or symlinks.
+    project({
+      'App.xcworkspace/contents.xcworkspacedata': '',
+      'App.xcodeproj/project.pbxproj': '',
+      'App.xcodeproj/project.xcworkspace/contents.xcworkspacedata': '',
+      'Kit/Package.swift': '',
+      'Packages/Deep/Package.swift': '',
+      'a/b/c/Package.swift': '',
+      'node_modules/x/Package.swift': '',
+      '.hidden/Package.swift': '',
+      'Pods/Pods.xcodeproj/project.pbxproj': '',
+      'Assets.xcassets/Package.swift': '',
+      'Package.swift/notes': '',
+      'Zed.xcodeproj/x': '',
+      'index.html': ''
+    })
+    project({ 'Package.swift': '', 'Sources/A/a.swift': '' })
+    project({ 'nested/Only.xcodeproj/project.pbxproj': '' })
+    project({ 'node_modules/Package.swift': '', 'readme.md': '' })
+    project({
+      'package.json': JSON.stringify({ name: 'tools', devDependencies: { prettier: '3' } }),
+      'Studio.xcodeproj/project.pbxproj': ''
+    })
+    project({
+      'package.json': JSON.stringify({ name: 'mixed', scripts: { dev: 'vite' } }),
+      'Package.swift': ''
+    })
+    project({
+      'package.json': JSON.stringify({ dependencies: { expo: '50', 'react-native': '0.7' } }),
+      'ios/App.xcworkspace/contents.xcworkspacedata': '',
+      'ios/App.xcodeproj/project.pbxproj': '',
+      'ios/Pods/Pods.xcodeproj/project.pbxproj': ''
+    })
+    {
+      const linked = project({ 'readme.md': '' })
+      const target = dir()
+      write(join(target, 'Package.swift'), '')
+      symlinkSync(target, join(linked, 'linked'))
+      symlinkSync(join(target, 'Package.swift'), join(linked, 'Package.swift'))
+    }
     project({
       'package.json': JSON.stringify({
         name: 'vite-app',
@@ -277,6 +327,80 @@ try {
         if (/Enter a command/.test(expected.error)) assert.equal(actual.error, expected.error)
       } else assert.deepEqual(actual, JSON.parse(JSON.stringify(expected)), path)
     }
+    // What the native cases detect (both detectors agree above).
+    const byFiles = async (files) => {
+      const path = dir()
+      for (const [name, content] of Object.entries(files)) write(join(path, name), content)
+      return detectProject(path)
+    }
+    const nested = await byFiles({
+      'App.xcworkspace/contents.xcworkspacedata': '',
+      'App.xcodeproj/project.xcworkspace/contents.xcworkspacedata': '',
+      'Kit/Package.swift': '',
+      'a/b/c/Package.swift': '',
+      'node_modules/x/Package.swift': '',
+      'index.html': ''
+    })
+    assert.equal(nested.framework, 'swift', 'native roots win over a static entry')
+    assert.equal(nested.devCommand, '')
+    assert.deepEqual(nested.native, {
+      workspaces: ['App.xcworkspace'],
+      projects: ['App.xcodeproj'],
+      packages: ['Kit/Package.swift']
+    })
+    const tooling = await byFiles({
+      'package.json': JSON.stringify({ name: 'tools', devDependencies: { prettier: '3' } }),
+      'Studio.xcodeproj/project.pbxproj': ''
+    })
+    assert.equal(tooling.framework, 'swift', 'a tooling-only package.json previews natively')
+    assert.equal(tooling.name, 'tools')
+    const vite = await byFiles({
+      'package.json': JSON.stringify({ scripts: { dev: 'vite' }, devDependencies: { vite: '5' } }),
+      'Package.swift': ''
+    })
+    assert.equal(vite.framework, 'vite', 'a JS app keeps its launch')
+    assert.equal(vite.devCommand, 'npm run dev')
+    assert.deepEqual(vite.native?.packages, ['Package.swift'])
+    const expo = await byFiles({
+      'package.json': JSON.stringify({ dependencies: { expo: '50', 'react-native': '0.7' } }),
+      'ios/App.xcworkspace/contents.xcworkspacedata': '',
+      'ios/Pods/Pods.xcodeproj/project.pbxproj': ''
+    })
+    assert.equal(expo.framework, 'expo')
+    assert.equal(expo.previewKind, 'simulator')
+    assert.deepEqual(expo.native, {
+      workspaces: ['ios/App.xcworkspace'],
+      projects: [],
+      packages: []
+    })
+    assert.equal((await byFiles({ 'index.html': '' })).native, undefined)
+    // A mixed repo's preview choice (LKM-276) sits on top of detection, which is unchanged.
+    assert.deepEqual(
+      applyPreviewChoice(vite, undefined).previewChoice,
+      {
+        using: 'js',
+        switchable: true,
+        reason:
+          'Previewing the vite dev server (npm run dev); the native roots (Package.swift) can be previewed instead.'
+      },
+      'a JS app with native roots offers the native preview'
+    )
+    const switched = applyPreviewChoice(vite, 'native')
+    assert.deepEqual(
+      [switched.framework, switched.devCommand, switched.scriptName, switched.previewKind],
+      ['swift', '', '', 'web'],
+      'the native choice launches the Swift preview driver'
+    )
+    assert.equal(switched.previewChoice?.using, 'native')
+    assert.equal(switched.native, vite.native)
+    assert.deepEqual(applyPreviewChoice(vite, 'js'), applyPreviewChoice(vite, undefined))
+    const expoChoice = applyPreviewChoice(expo, 'native')
+    assert.equal(expoChoice.framework, 'expo', 'Expo keeps the simulator')
+    assert.equal(expoChoice.previewKind, 'simulator')
+    assert.equal(expoChoice.previewChoice?.switchable, false)
+    assert.match(expoChoice.previewChoice?.reason ?? '', /iOS Simulator.*ios\/App\.xcworkspace/)
+    for (const plain of [nested, tooling, await byFiles({ 'index.html': '' })])
+      assert.equal(applyPreviewChoice(plain, 'native'), plain, 'one preview: nothing to choose')
     const commandCases = [
       ['npm run dev', 'vite'],
       ['bun run dev', 'sveltekit'],
@@ -747,6 +871,18 @@ exit 0
     symlinkSync(join(outside, 'secret.txt'), join(site, 'leak.txt'))
     symlinkSync(outside, join(site, 'leakdir'))
     symlinkSync(join(site, 'style.css'), join(site, 'alias.css'))
+    // LKM-280: dummy metadata only (no real secrets); none of it may leave the server.
+    const DUMMY = 'TREZI_TEST_DUMMY=not-a-secret'
+    write(join(site, '.env'), `${DUMMY}\n`)
+    write(join(site, '.git/config'), `[core]\n# ${DUMMY}\n`)
+    write(join(site, '.git/HEAD'), `ref: ${DUMMY}\n`)
+    write(join(site, '.DS_Store'), DUMMY)
+    write(join(site, 'sub/.hidden.css'), DUMMY)
+    write(join(site, 'drafts/.only.html'), `<h1>${DUMMY}</h1>`)
+    write(join(site, '.well-known/security.txt'), 'Contact: mailto:security@example.invalid\n')
+    symlinkSync(join(site, '.env'), join(site, 'env.txt'))
+    symlinkSync(join(site, '.git'), join(site, 'meta'))
+    symlinkSync(join(site, '.git'), join(site, '.well-known/git'))
     const fixture = await start(dir())
     const http = async (request, target = site) => {
       const { response } = await fixture.cmd({ cmd: 'http', root: target, request })
@@ -763,7 +899,8 @@ exit 0
       )
       return { status: Number(head[0].split(' ')[1]), headers, body: bytes.subarray(split + 4) }
     }
-    const get = (path, method = 'GET') => http(`${method} ${path} HTTP/1.1\r\nHost: x\r\n\r\n`)
+    const get = (path, method = 'GET', extra = '') =>
+      http(`${method} ${path} HTTP/1.1\r\nHost: ${SITE_HOST}\r\n${extra}\r\n`)
     const home = await get('/')
     assert.equal(home.status, 200)
     assert.equal(home.headers['content-type'], 'text/html; charset=utf-8')
@@ -802,12 +939,12 @@ exit 0
       '/../../etc/passwd',
       '/%2e%2e/%2e%2e/secret.txt',
       '/..%2f..%2fsecret.txt',
-      '/sub/../../secret.txt',
-      '/..\\secret.txt'
+      '/sub/../../secret.txt'
     ]) {
       assert.equal((await get(path)).status, 404, path)
     }
     for (const path of [
+      '/..\\secret.txt',
       '/%zz',
       '/%C0%AF',
       '/a%00b',
@@ -819,6 +956,91 @@ exit 0
       assert.equal((await get(path)).status, 403, path)
     assert.equal((await get('/alias.css')).status, 200, 'a symlink inside the project is served')
     assert.equal((await get('/%2e%2e')).status, 200, '/.. clamps to the root')
+    // LKM-280: dot-files and dot-directories are refused by every spelling, by a directory
+    // index and through a symlink inside the project; only a top-level .well-known/ is public.
+    for (const path of [
+      '/.env',
+      '/.env?x=1',
+      '/.git/config',
+      '/.git/HEAD',
+      '/.git',
+      '/.git/',
+      '/.DS_Store',
+      '/%2eenv',
+      '/%2Eenv',
+      '/%2egit%2fconfig',
+      '/.ENV',
+      '/.Git/Config',
+      '//.env',
+      '/./.env',
+      '/sub/../.env',
+      '/sub/..%2f.env',
+      '/%2e%2e/.env',
+      '/../.git/config',
+      '/.well-known/../.env',
+      '/.well-known/.env',
+      '/.well-known/git/config',
+      '/sub/.hidden.css',
+      '/drafts/',
+      '/env.txt',
+      '/meta/config',
+      '/meta/HEAD'
+    ]) {
+      const refused = await get(path)
+      assert.equal(refused.status, 403, path)
+      assert.ok(!refused.body.toString().includes('not-a-secret'), `${path} leaks nothing`)
+    }
+    const known = await get('/.well-known/security.txt')
+    assert.equal(known.status, 200, '.well-known stays public')
+    assert.match(known.body.toString(), /^Contact: /)
+    // LKM-280: only a request addressed to this loopback listener is answered (DNS rebinding,
+    // another site's page); the same rule as SimulatorBridge.
+    for (const [label, request] of [
+      ['foreign Host', 'GET / HTTP/1.1\r\nHost: rebind.example.invalid\r\n\r\n'],
+      ['foreign Host, .env', 'GET /.env HTTP/1.1\r\nHost: rebind.example.invalid:4173\r\n\r\n'],
+      [
+        'foreign Host and Origin, .git',
+        `GET /.git/config HTTP/1.1\r\nHost: audit.invalid\r\nOrigin: http://audit.invalid\r\n\r\n`
+      ],
+      ['other port', 'GET / HTTP/1.1\r\nHost: 127.0.0.1:4174\r\n\r\n'],
+      ['portless Host', 'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n'],
+      ['missing Host', 'GET / HTTP/1.1\r\n\r\n'],
+      ['two Hosts', `GET / HTTP/1.1\r\nHost: ${SITE_HOST}\r\nHost: rebind.example.invalid\r\n\r\n`],
+      [
+        'foreign Origin',
+        `GET / HTTP/1.1\r\nHost: ${SITE_HOST}\r\nOrigin: https://evil.example.invalid\r\n\r\n`
+      ],
+      ['null Origin', `GET / HTTP/1.1\r\nHost: ${SITE_HOST}\r\nOrigin: null\r\n\r\n`],
+      [
+        'https Origin',
+        `GET / HTTP/1.1\r\nHost: ${SITE_HOST}\r\nOrigin: https://${SITE_HOST}\r\n\r\n`
+      ],
+      [
+        'foreign Host, reload',
+        'GET /__trezi_reload?v=0 HTTP/1.1\r\nHost: rebind.example.invalid\r\n\r\n'
+      ]
+    ]) {
+      const refused = await http(request)
+      assert.equal(refused.status, 403, label)
+      assert.equal(refused.body.length, 0, `${label}: empty body`)
+    }
+    assert.equal(
+      (await fixture.cmd({ cmd: 'state', root: site })).clients,
+      0,
+      'no foreign stream attached'
+    )
+    assert.equal(
+      (await http(`GET http://${SITE_HOST}/ HTTP/1.1\r\nHost: ${SITE_HOST}\r\n\r\n`)).status,
+      400,
+      'absolute-form targets are refused'
+    )
+    assert.equal((await http('GET / HTTP/1.1\r\nhost: LOCALHOST:4173\r\n\r\n')).status, 200)
+    assert.equal(
+      (await get('/style.css', 'GET', `Origin: http://${SITE_HOST}\r\n`)).body.toString(),
+      'body{color:red}',
+      'a same-origin request is served'
+    )
+    assert.equal((await get('/', 'GET', 'Origin: http://localhost:4173\r\n')).status, 200)
     const post = await get('/', 'POST')
     assert.equal(post.status, 405)
     assert.equal(post.headers.allow, 'GET, HEAD')
@@ -829,7 +1051,7 @@ exit 0
       cmd: 'open-stream',
       root: site,
       name: 'a',
-      request: 'GET /__trezi_reload?v=0 HTTP/1.1\r\n\r\n'
+      request: `GET /__trezi_reload?v=0 HTTP/1.1\r\nHost: ${SITE_HOST}\r\n\r\n`
     })
     const first = Buffer.from(opened.response, 'base64').toString()
     assert.match(
@@ -846,7 +1068,8 @@ exit 0
       cmd: 'open-stream',
       root: site,
       name: 'b',
-      request: 'GET /__trezi_reload?v=0 HTTP/1.1\r\n\r\n'
+      // WebKit may send the page's own Origin on its EventSource.
+      request: `GET /__trezi_reload?v=0 HTTP/1.1\r\nHost: ${SITE_HOST}\r\nOrigin: http://${SITE_HOST}\r\n\r\n`
     })
     assert.ok(
       Buffer.from(stale.response, 'base64').toString().endsWith('retry: 1000\n\ndata: 1\n\n'),
@@ -894,8 +1117,18 @@ exit 0
       watched = await fixture.next()
       assert.equal(watched.watching, false)
       assert.equal(
-        (await fixture.cmd({ cmd: 'http', root: site, request: 'GET / HTTP/1.1\r\n\r\n' })).response
-          .length > 0,
+        Buffer.from(
+          (
+            await fixture.cmd({
+              cmd: 'http',
+              root: site,
+              request: `GET / HTTP/1.1\r\nHost: ${SITE_HOST}\r\n\r\n`
+            })
+          ).response,
+          'base64'
+        )
+          .toString()
+          .startsWith('HTTP/1.1 200 '),
         true,
         'still serves'
       )
@@ -962,7 +1195,11 @@ exit 0
     const site = dir()
     write(join(site, 'index.html'), '<body><h1>Stamp</h1></body>')
     const fixture = await start(dir(), { RUNTIME_STAMP: 'owner', RUNTIME_STAMP_TIMEOUT: '0.5' })
-    const request = { cmd: 'http', root: site, request: 'GET / HTTP/1.1\r\n\r\n' }
+    const request = {
+      cmd: 'http',
+      root: site,
+      request: `GET / HTTP/1.1\r\nHost: ${SITE_HOST}\r\n\r\n`
+    }
     const body = async () => Buffer.from((await fixture.cmd(request)).response, 'base64').toString()
     let mode = 'stamp'
     fixture.runtime({
@@ -1002,6 +1239,32 @@ exit 0
       assert.equal(served.attached, false)
       const page = await (await fetch(served.url)).text()
       assert.match(page, /EventSource/)
+      // LKM-280: the real listener checks Host against its own port.
+      const raw = (request) =>
+        new Promise((resolve, reject) => {
+          const { hostname, port } = new URL(served.url)
+          let reply = ''
+          // No half-close: the server answers with `Connection: close` and ends the stream.
+          const socket = connect(Number(port), hostname, () => socket.write(request))
+          const timer = setTimeout(() => socket.destroy(new Error('no reply within 10 s')), 10_000)
+          socket.on('data', (chunk) => {
+            reply += chunk
+          })
+          socket.on('close', () => {
+            clearTimeout(timer)
+            resolve(reply)
+          })
+          socket.on('error', (error) => {
+            clearTimeout(timer)
+            reject(error)
+          })
+        })
+      const { host } = new URL(served.url)
+      assert.match(await raw(`GET / HTTP/1.1\r\nHost: ${host}\r\n\r\n`), /^HTTP\/1\.1 200 /)
+      assert.match(
+        await raw('GET / HTTP/1.1\r\nHost: rebind.example.invalid\r\n\r\n'),
+        /^HTTP\/1\.1 403 /
+      )
       assert.deepEqual((await runtime.info(site)).server, served)
       await runtime.stop(site)
       await assert.rejects(fetch(served.url), 'the site stops listening')

@@ -24,6 +24,12 @@ src/main/
                   once, shared by styles:read and layers:read
   devserver.ts    registers the devserver:* routes, served by the runtime owner
                   through devserver-service.ts
+  swift-preview.ts the command for a `framework: 'swift'` project (demo, LKM-271):
+                  bundled Bun + src/swift-preview/driver.ts, never a project
+                  command. Driver, AppKit host and limits: docs/SWIFT-PREVIEWS.md.
+                  LKM-273: the Trezi-side manifest folder (--manifest-dir) and
+                  project:native (structure + the driver's /graph); staged plan:
+                  docs/SWIFT-PREVIEWS-PLAN.md
   provider-sign-in.ts  starts user-initiated Claude Code or Codex app-server browser
                   login; provider CLIs own credential storage and the resulting
                   readiness is refreshed through providers:check-login
@@ -126,9 +132,10 @@ src/main/
                   + gamut map) and layered_shadow (multi-layer box-shadow) agent tools
   type-metrics.ts pure line-height + letter-spacing recommender (size-aware,
                   WCAG-floored leading; Material-3 tracking); powers the line_height agent tool
-  skill-packs.ts / skills-install.ts   curated allowlist catalog of external "taste"
-                  skills + the `npx skills add --copy` runner; power the
-                  list_recommended_skills (pure) and install_skills (side-effecting) agent tools
+  skill-packs.ts / skills-install.ts   the retired pack allowlist + `npx skills add --copy`
+                  contract of the workflow owner; no agent tool reaches it since LKM-286
+                  (list_recommended_skills lists src/shared/skills-catalog.ts and
+                  install_skills answers with the Settings → Skills redirect)
   git.ts, worktrees.ts, chat-worktrees.ts, chat-isolation.ts
                   git/worktree primitives; worktrees: per-chat isolation + sync/merge/recovery;
                   chat-worktrees: turn-scoped ops (sync, commit, apply); chat-isolation: lifecycle,

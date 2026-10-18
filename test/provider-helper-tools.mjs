@@ -440,11 +440,12 @@ try {
     'agent',
     'Gen UI is on in main'
   )
-  assert.deepEqual(
-    installs.map((i) => [i.packId, i.scope, i.liveRoot]),
-    [[SKILL_PACKS[0].id, 'project', WT]]
-  )
-  assert.match(textOf(all.results.install_skills), /\(main\)/)
+  // LKM-286: the retired installer answers with the Settings → Skills redirect and
+  // never reaches the workflow owner; the list is Trezi's recommendation catalog.
+  assert.deepEqual(installs, [], 'install_skills installs nothing')
+  assert.match(textOf(all.results.install_skills), /Settings → Skills/)
+  assert.match(textOf(all.results.install_skills), /Nothing was installed/)
+  assert.match(textOf(all.results.list_recommended_skills), /frontend-design/)
 
   // The island lives in main's service, renders from there and its controls round-trip.
   const shown = () =>

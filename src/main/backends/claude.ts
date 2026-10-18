@@ -20,6 +20,7 @@ import type {
   SlashCommandItem
 } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
+import { recommendationUrl, SKILL_RECOMMENDATIONS } from '../../shared/skills-catalog'
 import { agentGitAccess, rawGitWrite } from '../agent-git-access'
 import { checkContrast, suggestAccessible } from '../apca'
 import { bundledSkillFolder, discoverPortableSkills } from '../bundled-skills'
@@ -37,9 +38,9 @@ import {
 } from '../provider-policy'
 import { formatAnswers, parseQuestions } from '../question-tool'
 import { treziRules } from '../rules'
+import { claudeSkillsPlugins } from '../session-skills'
 import { runTreziTool, sessionTool } from '../session-tools'
 import { elevationScale, layeredShadow } from '../shadows'
-import { SKILL_PACKS } from '../skill-packs'
 import { discoverProjectSkills, mergeSlashCommands } from '../skills'
 import {
   analyze,
@@ -85,6 +86,16 @@ import type {
 // ../../agent-plugin), the same walk as index.ts's appIcon. Only wired in when
 // present so a stripped build degrades gracefully instead of erroring.
 const PLUGIN_PATH = join(__dirname, '../../agent-plugin')
+/** A chat session's `plugins` option: the bundled plugin and the session's library skills. */
+export function claudePlugins(skills: string | undefined): {
+  plugins?: Array<{ type: 'local'; path: string; skipMcpDiscovery?: boolean }>
+} {
+  const plugins = [
+    ...(existsSync(PLUGIN_PATH) ? [{ type: 'local' as const, path: PLUGIN_PATH }] : []),
+    ...claudeSkillsPlugins(skills)
+  ]
+  return plugins.length ? { plugins } : {}
+}
 
 // The two in-process `trezi` MCP tools, fully-qualified (mcp__<server>__<tool>).
 // Read-only observers of the user's preview — auto-allowed so they never prompt.
@@ -130,9 +141,9 @@ const TREZI_TOOL_NAMES = new Set([
   'mcp__trezi__color_scale',
   'mcp__trezi__layered_shadow',
   'mcp__trezi__line_height',
-  // Lists the curated skill-pack catalog — pure/read-only (no install, no
-  // network), so auto-allowed. Its sibling `install_skills` is deliberately NOT
-  // here: it writes files + hits the network, so it must surface a permission card.
+  // Lists the recommended skills — pure/read-only (no install, no network), so
+  // auto-allowed. Its retired sibling `install_skills` keeps its permission card
+  // (the provider policy is unchanged); it only answers with a redirect now.
   'mcp__trezi__list_recommended_skills'
 ])
 
@@ -528,12 +539,12 @@ async function startSession(
   // (agent-browser is the agent's own headless copy for interaction),
   // chat_island, a family of pure design-system
   // calculators — spring_to_css, check_contrast, fluid_clamp, color_scale,
-  // layered_shadow, line_height — and the skill-pack tools (list_recommended_skills
-  // pure; install_skills side-effecting). The observers, calculators and
+  // layered_shadow, line_height — and the skill tools (list_recommended_skills
+  // pure; install_skills retired to a redirect, LKM-286). The observers, calculators and
   // list_recommended_skills are auto-allowed (see allowedTools + canUseTool) so they
   // never prompt — all are side-effect-free, and chat_island persists only
-  // through the validated chat-island service. install_skills is NOT auto-allowed:
-  // it writes files + hits the network, so it surfaces a normal permission card.
+  // through the validated chat-island service. install_skills is NOT auto-allowed
+  // (the provider policy is unchanged), so it still surfaces a permission card.
   // Every Trezi tool call is authorized by the provider owner against this session's
   // grant before it runs (S10): a background edit is not granted the editor or islands,
   // a closed session nothing, and oversized arguments are refused.
@@ -665,8 +676,8 @@ async function startSession(
       ),
       tool(
         'publish_merge',
-        'Publish and merge the existing PR now when the agent merge setting allows it.',
-        { number: z.number().int().positive().optional(), confirmed: z.boolean().optional() },
+        'Squash merge the existing PR after the user approves it in the card Trezi shows. Needs Agent can merge pull requests on.',
+        { number: z.number().int().positive().optional() },
         async (args) => asText(treziTool('publish_merge', args))
       ),
       tool(
@@ -1106,43 +1117,39 @@ async function startSession(
           }
         }
       ),
-      // Curated catalog of external "taste" skill packs Trezi can OFFER to install.
-      // Pure/read-only — just formats SKILL_PACKS for the model; no network, no disk,
-      // so it's auto-allowed. Its sibling install_skills is NOT (it writes + fetches).
+      // The recommended skills of Trezi's library catalog (skills-catalog.ts). Pure and
+      // read-only — it formats metadata for the model; no network, no disk, so it's
+      // auto-allowed. Installing is the user's, in Settings → Skills (LKM-286).
       tool(
         'list_recommended_skills',
-        'List the curated catalog of external design/craft skill packs Trezi can offer to install into ' +
-          "the user's project or user scope. Call this when a design task would benefit from established " +
-          'craft you lack (animation/interaction taste, color systems, frontend polish), then OFFER the ' +
-          'user a relevant pack — never install silently. Use the returned id with install_skills.',
+        'List the skills Trezi recommends for design and UI craft. Call this when a design task would ' +
+          'benefit from established craft you lack (frontend polish, React or SwiftUI patterns), then ' +
+          'SUGGEST a relevant one to the user: they add it to Trezi themselves in Settings → Skills. ' +
+          'You cannot install skills.',
         {},
         async () => {
-          const text = SKILL_PACKS.map(
-            (p) =>
-              `• ${p.id} — ${p.title}\n  ${p.description}\n  ${p.url} (recommended scope: ${p.recommendedScope})`
+          const text = SKILL_RECOMMENDATIONS.map(
+            (r) =>
+              `• ${r.id} — ${r.title} (${r.publisher}, ${r.license})\n  ${r.summary}\n  ${recommendationUrl(r)}`
           ).join('\n\n')
           return {
             content: [
               {
                 type: 'text' as const,
-                text: `Curated skill packs (install with install_skills using the id):\n\n${text}`
+                text: `Recommended skills (the user installs them from Settings → Skills; nothing here is installed):\n\n${text}`
               }
             ]
           }
         }
       ),
-      // Install a curated skill pack (`npx skills add … --copy`) into the project or
-      // user scope. SIDE-EFFECTING: writes files + hits the network, so it is NOT in
-      // TREZI_TOOL_NAMES — it surfaces a normal permission card. packId is validated
-      // against the curated allowlist (skill-packs.ts) BEFORE anything spawns, so an
-      // arbitrary repo string can never reach `npx skills add`. Persists to the LIVE
-      // root (ctx.liveRoot), not the per-chat worktree, so installs aren't stranded.
+      // Retired installer (LKM-286): the name and arguments stay so existing policies
+      // and sessions resolve, but main only answers that skills are now managed in
+      // Settings → Skills (`session-tools.ts`). Nothing is fetched or written.
       tool(
         'install_skills',
-        "Install a curated skill pack into the user's project (<repo>/.claude/skills/) or user scope " +
-          '(~/.claude/skills/), after the user agrees. Only packs from list_recommended_skills are allowed. ' +
-          'OFFER first and let the user pick the scope — never install silently. Newly installed skills are ' +
-          'discovered on the next message/session, so they take effect then.',
+        'Retired: Trezi no longer lets agents install skills. Calling it installs nothing and explains ' +
+          'that the user manages skills in Settings → Skills. Suggest a skill from ' +
+          'list_recommended_skills instead.',
         {
           packId: z
             .string()
@@ -1155,20 +1162,15 @@ async function startSession(
             )
         },
         async (args) => {
-          // Main checks the allowlist, then the workflow owner installs (`session-tools.ts`).
+          // Main answers with the Settings → Skills redirect (`session-tools.ts`).
           const result = (await treziTool('install_skills', args)) as {
             ok?: boolean
             message?: string
             error?: string
           }
           const message = result.message ?? `install_skills failed: ${result.error ?? 'no result'}`
-          const restart =
-            'Newly installed skills are discovered when the agent starts its next turn — they take ' +
-            'effect on your next message (or a fresh session), not mid-turn.'
           return {
-            content: [
-              { type: 'text' as const, text: result.ok ? `${message}\n\n${restart}` : message }
-            ],
+            content: [{ type: 'text' as const, text: message }],
             ...(result.ok ? {} : { isError: true })
           }
         }
@@ -1224,15 +1226,16 @@ async function startSession(
         // line_height / list_recommended_skills / install_skills). All but install_skills
         // are auto-allowed here so they never surface a permission card (canUseTool also
         // short-circuits them, belt-and-suspenders) — main validates everything
-        // chat_island persists, and install_skills prompts (writes files + network).
+        // chat_island persists, and install_skills prompts (now a redirect, LKM-286).
         mcpServers: { trezi: previewServer },
         // LKM-138: none of the user's own plugins or MCP servers unless Settings allows them.
         ...claudeIsolationOptions(root, options.claudeUserPlugins === true),
         allowedTools: [...TREZI_TOOL_NAMES],
-        // The bundled Trezi skill plugin (only when present in this build).
-        ...(existsSync(PLUGIN_PATH)
-          ? { plugins: [{ type: 'local' as const, path: PLUGIN_PATH }] }
-          : {}),
+        // The bundled Trezi skill plugin (only when present in this build), then the
+        // session's pinned library skills as the skills-only `trezi-library` plugin
+        // (LKM-287, `session-skills.ts`): namespaced apart from `trezi:` and from the
+        // user's and the repo's own skills, which still load through settingSources.
+        ...claudePlugins(ctx?.skills),
         includePartialMessages: true,
         permissionMode: options.permissionMode ?? 'default',
         allowDangerouslySkipPermissions: true,

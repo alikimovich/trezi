@@ -1,0 +1,116 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "recommendation-publisher",
+    "recommendation-source",
+    "recommendation-license",
+    "recommendation-link",
+    "recommendation-status"
+  ],
+  "message": "",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "gearshape"
+    },
+    {
+      "label": "AI Providers",
+      "id": "providers",
+      "symbol": "sparkles"
+    },
+    {
+      "label": "Skills",
+      "symbol": "book.closed",
+      "id": "skills"
+    },
+    {
+      "symbol": "testtube.2",
+      "label": "Experimental",
+      "id": "experimental"
+    },
+    {
+      "symbol": "moon.stars",
+      "label": "Dreamer",
+      "id": "dreamer"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "recommendation-license": "MIT",
+    "engine": "agent",
+    "agentFileAccess": "full",
+    "autoFixCI": "ask",
+    "recommendation-link": "https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices",
+    "claudePlugins": "false",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "providerFallback": "on",
+    "dreamerStart": "off",
+    "dreamerSchedule": "off",
+    "workspaceIdle": "7",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "projectUi": "false",
+    "connections": "None",
+    "recommendation-source": "vercel-labs/agent-skills/skills/react-best-practices",
+    "recommendation-status": "Can’t be installed",
+    "workspaceUsage": "Calculating…",
+    "buildCheck": "on",
+    "quitDontAsk": "false",
+    "dreamerUrl": "",
+    "agentMerge": "true",
+    "dreamerToken": "",
+    "activityAutoOpen": "problems",
+    "recommendation-publisher": "Vercel",
+    "default": "last-used"
+  },
+  "minimumWidth": 680,
+  "disabledActions": [
+    "skill-install"
+  ],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "highlight": 1,
+    "rowHeight": 28,
+    "indentation": 0,
+    "behavior": "sidebar",
+    "transparentScroll": true,
+    "rowSizeStyle": 0,
+    "fullHeight": true,
+    "row": {
+      "height": 28,
+      "fontSize": 13,
+      "iconWidth": 16,
+      "iconHeight": 16,
+      "iconLeading": 2,
+      "labelGap": 7
+    },
+    "style": "sourceList"
+  },
+  "editors": [],
+  "actions": [
+    "skill-back",
+    "skill-install"
+  ],
+  "width": 780,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1560,
+  "captureHeight": 1520
+}

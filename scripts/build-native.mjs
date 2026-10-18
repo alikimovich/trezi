@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -113,7 +114,7 @@ writeFileSync(join(out, 'main.swift'), readFileSync(join(root, 'src/native/Host.
 // sources, flags and toolchain are unchanged (LKM-175).
 const compile = swiftBuilder({ root, target, profile })
 const service = compile('TreziService', [
-  ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryAgentGit', 'RepositoryBranches', 'RepositoryCleanup', 'RepositoryLock', 'RepositoryMerge', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
+  ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'SkillsPackage', 'SkillsStore', 'SkillsRequest', 'SkillsPlan', 'SkillsOwner', 'SkillsHTTP', 'SkillsArchive', 'SkillsScope', 'SkillsProjection', 'SkillsGitHub', 'SkillsImport', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryAgentGit', 'RepositoryBranches', 'RepositoryCleanup', 'RepositoryLock', 'RepositoryMerge', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
   '-o', join(serviceContents, 'MacOS/TreziService'), '-framework', 'Foundation', '-framework', 'Security', '-framework', 'CoreServices'
 ]).then(built => {
   copyFileSync(join(serviceContents, 'MacOS/TreziService'), join(out, 'TreziService'))
@@ -273,6 +274,20 @@ if (failed) {
 // deleted certificate) re-signs every piece ad hoc with the one warning: a build that
 // worked before identities still works.
 const signStarted = performance.now()
+// A checkout inside a File Provider folder (e.g. ~/Documents) gets Finder/File Provider
+// attributes on freshly made folders, which codesign refuses ("detritus not allowed").
+// The provider re-tags a folder at any moment, so the clear runs right before every signing
+// call and a "detritus" refusal clears and retries. Best effort; bundle contents are unchanged.
+const signClean = (signer, path, identifier) => {
+  for (let attempt = 1; ; attempt++) {
+    spawnSync('/usr/bin/xattr', ['-cr', path], { stdio: 'ignore' })
+    try {
+      return sign(signer, path, identifier)
+    } catch (error) {
+      if (attempt >= 8 || !/detritus/.test(String(error?.message))) throw error
+    }
+  }
+}
 let signer
 try {
   signer = signWithFallback(signingIdentity({ create: process.env.TREZI_SIGN_CREATE !== '0' }), current => {
@@ -282,7 +297,7 @@ try {
       [join(out, 'TreziService'), 'dev.trezi.service'],
       [join(contents, 'XPCServices/dev.trezi.service.xpc'), 'dev.trezi.service'],
       [join(out, 'Trezi.app'), 'dev.praxis.native']
-    ]) sign(current, path, identifier)
+    ]) signClean(current, path, identifier)
   })
 } catch (error) {
   console.error(error.message)

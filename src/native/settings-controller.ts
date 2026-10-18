@@ -47,9 +47,13 @@ export const SETTINGS_SECTION_KEY = 'trezi:settings-section:v1'
 export const AUTO_FIX_CI_KEY = 'trezi:auto-fix-ci:v1'
 const PROVIDERS =
   'Claude and Codex use your existing sign-ins. Add another provider to use its models in chats.'
+const SKILLS_DETAIL =
+  'Instructions you keep in Trezi, not in your projects or ~/.claude. New chats pin them: native in Claude, a compatibility catalog in Codex, experimental in Gemini.'
 const sections = (): NativeSheetSection[] => [
   { id: 'general', label: 'General', symbol: 'gearshape', detail: 'Changes save automatically.' },
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles', detail: PROVIDERS },
+  // LKM-288: its rows come from `settings-skills.ts`.
+  { id: 'skills', label: 'Skills', symbol: 'book.closed', detail: SKILLS_DETAIL },
   {
     id: 'experimental',
     label: 'Experimental',
@@ -105,7 +109,7 @@ export class NativeSettingsController {
   private get invoke() {
     return this.sheets.invoke
   }
-  /** One Settings window: General, AI Providers and Experimental in a sidebar. Autosaved. */
+  /** One Settings window: General, AI Providers, Skills and Experimental in a sidebar. Autosaved. */
   async open() {
     const generation = this.sheets.generation
     const [choices, connections]: [ModelChoice[], ProviderConnection[]] = await Promise.all([
@@ -404,7 +408,11 @@ export class NativeSettingsController {
       ...sheet.state.fields.filter((f) => f.section !== 'providers'),
       ...pane.fields.map((field) => ({ ...field, section: 'providers', draft: true }))
     ]
-    sheet.state.actions = [CLEAN_UP, ...pane.actions]
+    // Keep the other panes' actions (Dreamer, Skills): they are not rebuilt here.
+    sheet.state.actions = [
+      ...sheet.state.actions.filter((a) => a.section !== 'providers'),
+      ...pane.actions
+    ]
     const section = sheet.state.sections?.find((s) => s.id === 'providers')
     if (section) section.detail = pane.detail
     sheet.state.message = undefined

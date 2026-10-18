@@ -1,0 +1,373 @@
+{
+  "ran": true,
+  "trezi": {
+    "app": "Trezi 0.1.0 (build 1095, 2ac96f5)",
+    "stamp": {
+      "version": "0.1.0",
+      "build": "1095",
+      "commit": "2ac96f5",
+      "sha": "2ac96f5d6771fa449def0767a8a5f5a03d997d4d",
+      "branch": "agent-os/lkm-277-22588d96",
+      "dirty": true,
+      "tag": ""
+    },
+    "head": "2ac96f5d6771fa449def0767a8a5f5a03d997d4d",
+    "branch": "agent-os/lkm-277-22588d96",
+    "uncommittedFiles": 11
+  },
+  "original": {
+    "path": "/Users/panda/dev/Scraib-open",
+    "commit": "dfc42b1e0231e05b2f88bc4cd8cc88f88bdb6ef1",
+    "before": {
+      "path": "/Users/panda/dev/Scraib-open",
+      "files": 716,
+      "entries": 22919,
+      "contentSha256": "fcff4629a158c3b72f96fee433ada4db63afad85a406402e155ad1de21aed7de",
+      "statSha256": "7e8e871531d484a068b911328427b7175ebada9165e2f72b36859ac8388562a7",
+      "statOnly": [
+        "build",
+        ".build",
+        "DerivedData"
+      ],
+      "leaveOut": []
+    },
+    "after": {
+      "path": "/Users/panda/dev/Scraib-open",
+      "files": 716,
+      "entries": 22919,
+      "contentSha256": "fcff4629a158c3b72f96fee433ada4db63afad85a406402e155ad1de21aed7de",
+      "statSha256": "7e8e871531d484a068b911328427b7175ebada9165e2f72b36859ac8388562a7",
+      "statOnly": [
+        "build",
+        ".build",
+        "DerivedData"
+      ],
+      "leaveOut": []
+    },
+    "unchanged": true
+  },
+  "captures": [
+    "scraib-open-component.png",
+    "scraib-open-catalog.png"
+  ],
+  "copy": {
+    "path": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/Scraib Open Copy",
+    "leftOut": [
+      ".git",
+      ".claude",
+      "build",
+      ".build",
+      ".swiftpm",
+      "DerivedData"
+    ],
+    "contentSha256": "d425b5658566180ba63607c362479e610d37b5e4c9370cb17ef7938c87aed102",
+    "files": 89,
+    "unchanged": true
+  },
+  "durationMs": 36029,
+  "toolchain": {
+    "developerDir": "/Applications/Xcode-26.5.0.app/Contents/Developer",
+    "label": "Xcode 26.5 (17F42)",
+    "xcodeVersion": "26.5",
+    "xcodeBuild": "17F42",
+    "swiftVersion": "6.3.2",
+    "sdkVersion": "26.5",
+    "previewsMacros": "/Applications/Xcode-26.5.0.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib",
+    "reason": "The newest full Xcode with PreviewsMacros that expands #Preview (xcode-select points at /Library/Developer/CommandLineTools).",
+    "preview": "supported",
+    "systemDefault": "/Library/Developer/CommandLineTools"
+  },
+  "state": {
+    "status": "ready",
+    "message": "Built 4 previews from Scraib. 12 more listed with the reason they are not shown.",
+    "generation": 1,
+    "manifest": "none",
+    "previews": [
+      "component:Scraib.ShortcutRecorderView",
+      "component:Scraib.EightBitScanlines",
+      "component:Scraib.LiquidGlassPanelBackground",
+      "component:Scraib.RamsDial"
+    ],
+    "plan": {
+      "warnings": [],
+      "blockers": [],
+      "resources": {
+        "unsupported": [],
+        "catalogs": [
+          {
+            "module": "Scraib",
+            "path": "Scraib/Assets.xcassets"
+          }
+        ],
+        "copied": [
+          {
+            "module": "Scraib",
+            "path": "Scraib/Resources/Fonts"
+          }
+        ]
+      },
+      "dependencies": {
+        "unsupported": [],
+        "binaries": [],
+        "resolvedFile": "Scraib.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+        "packages": [
+          {
+            "targets": [
+              "Scraib"
+            ],
+            "identity": "sparkle",
+            "kind": "remote",
+            "pin": {
+              "revision": "6276ba2b404829d139c45ff98427cf90e2efc59b",
+              "identity": "sparkle",
+              "location": "https://github.com/sparkle-project/Sparkle",
+              "version": "2.9.2"
+            },
+            "location": "https://github.com/sparkle-project/Sparkle",
+            "products": [
+              "Sparkle"
+            ]
+          },
+          {
+            "targets": [
+              "Scraib"
+            ],
+            "identity": "posthog-ios",
+            "kind": "remote",
+            "pin": {
+              "revision": "cf6155963a6532c7b88e0cfa2b1d07595d6b6db6",
+              "identity": "posthog-ios",
+              "location": "https://github.com/PostHog/posthog-ios",
+              "version": "3.58.3"
+            },
+            "location": "https://github.com/PostHog/posthog-ios",
+            "products": [
+              "PostHog"
+            ]
+          },
+          {
+            "targets": [
+              "Scraib"
+            ],
+            "identity": "scraibkit",
+            "kind": "local",
+            "location": "/private/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/Scraib Open Copy/ScraibKit",
+            "products": [
+              "ScraibKit"
+            ]
+          }
+        ]
+      },
+      "modules": [
+        {
+          "module": "Scraib",
+          "entries": [
+            "Scraib/ScraibApp.swift"
+          ],
+          "sources": 22
+        }
+      ]
+    },
+    "build": {
+      "errors": [],
+      "packages": {
+        "cached": false,
+        "key": "9141d4eb4c62a634",
+        "bin": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/43df0564613f/packages/toolchain-06c6f87850973181/scratch/arm64-apple-macosx/debug",
+        "durationMs": 14468,
+        "bundles": [
+          "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/43df0564613f/packages/toolchain-06c6f87850973181/scratch/arm64-apple-macosx/debug/PostHog_PHPLCrashReporter.bundle",
+          "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/43df0564613f/packages/toolchain-06c6f87850973181/scratch/arm64-apple-macosx/debug/PostHog_PostHog.bundle"
+        ]
+      },
+      "derivedData": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/43df0564613f/xcode-06c6f87850973181",
+      "resources": {
+        "cached": false,
+        "errors": [],
+        "assets": "/var/folders/9s/fjchhy_d1c5d3tzr9km0989h0000gn/T/trezi-native-rOFI2h/profile/swift-previews/DerivedData/43df0564613f/resources/assets-fc505119f23e96f7/Assets.car",
+        "symbols": [
+          "Scraib"
+        ]
+      },
+      "settingsFrom": {
+        "Scraib": "xcodebuild (scheme Scraib)"
+      },
+      "modules": [
+        {
+          "cached": false,
+          "key": "de2d5e4d1f9980a1",
+          "module": "Scraib",
+          "durationMs": 9386
+        }
+      ]
+    },
+    "diagnostics": [],
+    "problems": []
+  },
+  "catalog": {
+    "target": "Scraib",
+    "chosenBy": "the only previewable target",
+    "entries": [
+      {
+        "id": "component:Scraib.MenuPanelView",
+        "file": "Scraib/MenuPanelView.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs coordinator: RewriteCoordinator is not a type Trezi found in the target's sources"
+      },
+      {
+        "id": "component:Scraib.SettingsView",
+        "file": "Scraib/Settings/SettingsView.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs validator: LicenseValidator is not a type Trezi found in the target's sources"
+      },
+      {
+        "id": "component:Scraib.SettingsWindowChrome",
+        "file": "Scraib/Settings/SettingsWindowChrome.swift",
+        "supported": false,
+        "reason": "it is generic; Trezi cannot choose its type parameters"
+      },
+      {
+        "id": "component:Scraib.ShortcutRecorderView",
+        "file": "Scraib/ShortcutRecorderView.swift",
+        "supported": true,
+        "reason": "",
+        "sample": "ShortcutRecorderView(title: \"Title\", keyCode: .constant(1), modifiers: .constant(1))"
+      },
+      {
+        "id": "component:Scraib.EightBitScanlines",
+        "file": "Scraib/Theme/EightBitTheme.swift",
+        "supported": true,
+        "reason": "",
+        "sample": "EightBitScanlines()"
+      },
+      {
+        "id": "component:Scraib.EightBitBlock",
+        "file": "Scraib/Theme/EightBitTheme.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources"
+      },
+      {
+        "id": "component:Scraib.EightBitLoaderView",
+        "file": "Scraib/Theme/EightBitTheme.swift",
+        "supported": false,
+        "reason": "it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources",
+        "sample": "EightBitLoaderView(startedAt: Date(timeIntervalSince1970: 0))"
+      },
+      {
+        "id": "component:Scraib.LiquidGlassPanelBackground",
+        "file": "Scraib/Theme/LiquidGlassTheme.swift",
+        "supported": true,
+        "reason": "",
+        "sample": "LiquidGlassPanelBackground(cornerRadius: 0.5)"
+      },
+      {
+        "id": "component:Scraib.LiquidGlassButtonRow",
+        "file": "Scraib/Theme/LiquidGlassTheme.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources"
+      },
+      {
+        "id": "component:Scraib.LiquidGlassLoaderView",
+        "file": "Scraib/Theme/LiquidGlassTheme.swift",
+        "supported": false,
+        "reason": "it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources",
+        "sample": "LiquidGlassLoaderView(startedAt: Date(timeIntervalSince1970: 0), size: CGSize(width: 120, height: 80))"
+      },
+      {
+        "id": "component:Scraib.RamsKey",
+        "file": "Scraib/Theme/RamsTheme.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources"
+      },
+      {
+        "id": "component:Scraib.RamsLoaderView",
+        "file": "Scraib/Theme/RamsTheme.swift",
+        "supported": false,
+        "reason": "it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources",
+        "sample": "RamsLoaderView(startedAt: Date(timeIntervalSince1970: 0))"
+      },
+      {
+        "id": "component:Scraib.RamsDial",
+        "file": "Scraib/Theme/RamsTheme.swift",
+        "supported": true,
+        "reason": "",
+        "sample": "RamsDial(elapsed: 1)"
+      },
+      {
+        "id": "component:Scraib.SystemMenuRow",
+        "file": "Scraib/Theme/SystemTheme.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources"
+      },
+      {
+        "id": "component:Scraib.SystemLoaderView",
+        "file": "Scraib/Theme/SystemTheme.swift",
+        "supported": false,
+        "reason": "it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources",
+        "sample": "SystemLoaderView(startedAt: Date(timeIntervalSince1970: 0))"
+      },
+      {
+        "id": "component:Scraib.ThemePreviewCard",
+        "file": "Scraib/Theme/ThemePreview.swift",
+        "supported": false,
+        "reason": "Trezi cannot make one: needs theme: any Theme is an existential or opaque type"
+      }
+    ]
+  },
+  "frames": {
+    "component:Scraib.EightBitScanlines": {
+      "bytes": 267,
+      "red": 0,
+      "digest": "8a2b36f8",
+      "width": 20,
+      "height": 20
+    },
+    "component:Scraib.LiquidGlassPanelBackground": {
+      "bytes": 1539,
+      "red": 0,
+      "digest": "d474bf8c",
+      "width": 20,
+      "height": 44
+    },
+    "component:Scraib.RamsDial": {
+      "bytes": 802,
+      "red": 0,
+      "digest": "3ef1d7b7",
+      "width": 20,
+      "height": 20
+    }
+  },
+  "preview": {
+    "id": "component:Scraib.LiquidGlassPanelBackground",
+    "importsScraibKit": true
+  },
+  "frame": {
+    "bytes": 1539,
+    "red": 0,
+    "digest": "d474bf8c",
+    "width": 20,
+    "height": 44
+  },
+  "notShown": [
+    "MenuPanelView SwiftUI view: Trezi cannot make one: needs coordinator: RewriteCoordinator is not a type Trezi found in the target's sources Scraib/MenuPanelView.swift:6",
+    "SettingsView SwiftUI view: Trezi cannot make one: needs validator: LicenseValidator is not a type Trezi found in the target's sources Scraib/Settings/SettingsView.swift:10",
+    "SettingsWindowChrome SwiftUI view: it is generic; Trezi cannot choose its type parameters Scraib/Settings/SettingsWindowChrome.swift:8",
+    "EightBitBlock SwiftUI view: Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources Scraib/Theme/EightBitTheme.swift:207",
+    "EightBitLoaderView SwiftUI view: it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources Scraib/Theme/EightBitTheme.swift:250",
+    "LiquidGlassButtonRow SwiftUI view: Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources Scraib/Theme/LiquidGlassTheme.swift:214",
+    "LiquidGlassLoaderView SwiftUI view: it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources Scraib/Theme/LiquidGlassTheme.swift:283",
+    "RamsKey SwiftUI view: Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources Scraib/Theme/RamsTheme.swift:146",
+    "RamsLoaderView SwiftUI view: it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources Scraib/Theme/RamsTheme.swift:184",
+    "SystemMenuRow SwiftUI view: Trezi cannot make one: needs configuration: ButtonStyleConfiguration is not a type Trezi found in the target's sources Scraib/Theme/SystemTheme.swift:117",
+    "SystemLoaderView SwiftUI view: it reads RewriteProgress from the environment and Trezi cannot make one: progress: RewriteProgress is not a type Trezi found in the target's sources Scraib/Theme/SystemTheme.swift:146",
+    "ThemePreviewCard SwiftUI view: Trezi cannot make one: needs theme: any Theme is an existential or opaque type Scraib/Theme/ThemePreview.swift:6"
+  ],
+  "projectNative": {
+    "error": "",
+    "target": "Scraib"
+  },
+  "xcodeSelect": {
+    "before": "/Library/Developer/CommandLineTools",
+    "after": "/Library/Developer/CommandLineTools"
+  }
+}

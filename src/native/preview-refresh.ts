@@ -12,12 +12,14 @@ import type { NativeWorkspaceController } from './workspace-controller'
 /**
  * The preview's clean-refresh paths (LKM-197): the toolbar "…" menu's Reload Without
  * Cache and Restart Dev Server (clean cache), the agent's `reload_preview` /
- * `restart_dev_server`, and the dependency watch.
+ * `restart_dev_server`, and the dependency watch. Switch JS / Native Preview (LKM-276)
+ * restarts a mixed repo with its other preview.
  */
 export function installPreviewRefresh(
   host: NativeBridge,
   workspace: NativeWorkspaceController,
-  report: (error: unknown) => void
+  report: (error: unknown) => void,
+  notify: (message: string) => void = () => {}
 ): DependencyWatch {
   const running = () => {
     const entry = workspace.active
@@ -35,6 +37,16 @@ export function installPreviewRefresh(
     if (action === 'reload-hard' && running()) reload(true)
     else if (action === 'restart-clean' && entry && workspace.state.status.kind !== 'busy')
       void restart(entry.key, true).catch(report)
+    else if (action === 'switch-preview' && entry && workspace.state.status.kind !== 'busy') {
+      // A repo with a JS dev server and native roots (LKM-276); React Native/Expo keep theirs.
+      const choice = workspace.previewChoices.get(entry.key)
+      if (!choice?.switchable) {
+        notify(choice?.reason ?? 'This project has one preview: there is nothing to switch to.')
+        return
+      }
+      const preview = choice.using === 'js' ? 'native' : 'js'
+      void workspace.command({ type: 'restart', key: entry.key, preview }).catch(report)
+    }
   })
 
   const refresh = async (

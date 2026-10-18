@@ -42,7 +42,20 @@ export async function checkPreviewOverlay(
         return check(state) && state
       },
       label,
-      timeout
+      timeout,
+      // A timeout names what the page and the preview reported, not just `false`.
+      async () => {
+        const s = await inspect()
+        return {
+          page: s.page,
+          scale: s.scale,
+          previewScale: s.previewScale,
+          viewportWidth: s.viewportWidth,
+          frame: s.frame,
+          previewFrame: s.previewFrame,
+          viewport: s.viewport
+        }
+      }
     )
   // Screen frames (y up): the opening's top edge sits at the button's bottom edge.
   const under = (open: State, button: State, label: string, centred: boolean) => {
@@ -261,9 +274,22 @@ export async function checkPreviewOverlay(
           assert.ok(scrolled.page.scrollY >= 300, 'WebKit scrolled toward 400 CSS px')
           clipEvidence['normal-scrolled'] = await captureBounded('normal-scrolled', false, false)
           await host.request('previewViewport', { width: 900 })
+          await until((s) => s.scale < 0.9, 'overlay page zoom scale')
+          // The scrolled fixture page shows a classic scrollbar on some Macs (an attached
+          // mouse); its gutter is part of the 900 CSS px viewport but not of the page width.
+          const gutter = Number(
+            await page('Math.max(0, innerWidth - document.documentElement.clientWidth)')
+          )
+          assert.ok(gutter >= 0 && gutter <= 40, `scrollbar gutter ${gutter} CSS px`)
           const zoomed = await until(
-            (s) => Math.abs(s.page.width - 900) <= 20 && s.scale < 0.9,
+            (s) => Math.abs(s.page.width + gutter - 900) <= 20 && s.scale < 0.9,
             'overlay page zoom'
+          )
+          near(
+            zoomed.scale,
+            zoomed.frame.width / 900,
+            'page zoom is the frame over 900 CSS px',
+            0.01
           )
           assert.ok(zoomed.scale < 1, 'The preview applies a non-unit page zoom')
           clipEvidence['normal-zoomed'] = await captureBounded('normal-zoomed', false, false)

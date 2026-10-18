@@ -1,0 +1,207 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "skill:6cc6d8df-bf94-4def-a461-5872f5574a7c",
+    "skill:5b1899ab-eb7d-4afa-ac21-a848be820599",
+    "skill:f43bf815-5212-4db5-b2f7-3ee06a982a8c",
+    "skill:f75bb7f0-e94f-4b03-a68f-d439d2e40a01",
+    "recommendations-note",
+    "recommendation:frontend-design",
+    "recommendation:vercel-react-best-practices",
+    "recommendation:vercel-composition-patterns",
+    "recommendation:swiftui-view-refactor",
+    "recommendation:swiftui-expert-skill"
+  ],
+  "message": "",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [
+    {
+      "hitTarget": true,
+      "title": "Edit…",
+      "contained": true,
+      "frame": "{{592, 539}, {58, 24}}",
+      "action": "skill-open:6cc6d8df-bf94-4def-a461-5872f5574a7c",
+      "enabled": true,
+      "label": "Edit trezi-smoke-notes"
+    },
+    {
+      "enabled": true,
+      "label": "Edit trezi-smoke-folder",
+      "action": "skill-open:5b1899ab-eb7d-4afa-ac21-a848be820599",
+      "frame": "{{592, 455}, {58, 24}}",
+      "title": "Edit…",
+      "contained": true,
+      "hitTarget": true
+    },
+    {
+      "hitTarget": true,
+      "title": "Edit…",
+      "enabled": true,
+      "label": "Edit trezi-smoke-github",
+      "action": "skill-open:f43bf815-5212-4db5-b2f7-3ee06a982a8c",
+      "frame": "{{592, 401}, {58, 24}}",
+      "contained": true
+    },
+    {
+      "hitTarget": true,
+      "contained": true,
+      "frame": "{{592, 332}, {58, 24}}",
+      "enabled": true,
+      "action": "skill-open:f75bb7f0-e94f-4b03-a68f-d439d2e40a01",
+      "title": "Edit…",
+      "label": "Edit frontend-design"
+    },
+    {
+      "enabled": true,
+      "frame": "{{574, 137}, {76, 24}}",
+      "action": "skill-recommendation:frontend-design",
+      "hitTarget": true,
+      "title": "Details…",
+      "label": "Details Frontend Design",
+      "contained": true
+    },
+    {
+      "hitTarget": true,
+      "label": "Details React Best Practices",
+      "contained": true,
+      "enabled": true,
+      "frame": "{{574, 68}, {76, 24}}",
+      "title": "Details…",
+      "action": "skill-recommendation:vercel-react-best-practices"
+    },
+    {
+      "contained": false,
+      "title": "Details…",
+      "frame": "{{574, -1}, {76, 24}}",
+      "hitTarget": true,
+      "action": "skill-recommendation:vercel-composition-patterns",
+      "enabled": true,
+      "label": "Details Composition Patterns"
+    },
+    {
+      "title": "Details…",
+      "frame": "{{574, -130}, {76, 24}}",
+      "contained": false,
+      "enabled": true,
+      "action": "skill-recommendation:swiftui-view-refactor",
+      "hitTarget": false,
+      "label": "Details SwiftUI View Refactor"
+    },
+    {
+      "contained": false,
+      "action": "skill-recommendation:swiftui-expert-skill",
+      "frame": "{{574, -171}, {76, 24}}",
+      "title": "Details…",
+      "hitTarget": false,
+      "enabled": true,
+      "label": "Details SwiftUI Expert"
+    }
+  ],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "gearshape"
+    },
+    {
+      "label": "AI Providers",
+      "id": "providers",
+      "symbol": "sparkles"
+    },
+    {
+      "id": "skills",
+      "symbol": "book.closed",
+      "label": "Skills"
+    },
+    {
+      "id": "experimental",
+      "label": "Experimental",
+      "symbol": "testtube.2"
+    },
+    {
+      "symbol": "moon.stars",
+      "id": "dreamer",
+      "label": "Dreamer"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "skill:f43bf815-5212-4db5-b2f7-3ee06a982a8c": "On · GitHub",
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "recommendation:vercel-composition-patterns": "Vercel · MIT",
+    "recommendation:frontend-design": "Installed",
+    "recommendation:swiftui-view-refactor": "Peter Steinberger · MIT",
+    "skill:6cc6d8df-bf94-4def-a461-5872f5574a7c": "On · Manual · Edited",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "skill:5b1899ab-eb7d-4afa-ac21-a848be820599": "On · Manual",
+    "recommendations-note": "",
+    "projectUi": "false",
+    "claudePlugins": "false",
+    "activityAutoOpen": "problems",
+    "skill:f75bb7f0-e94f-4b03-a68f-d439d2e40a01": "On · GitHub",
+    "default": "last-used",
+    "providerFallback": "on",
+    "recommendation:swiftui-expert-skill": "Not importable",
+    "agentFileAccess": "full",
+    "dreamerStart": "off",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "recommendation:vercel-react-best-practices": "Not importable",
+    "engine": "agent",
+    "agentMerge": "true",
+    "dreamerToken": ""
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "transparentScroll": true,
+    "row": {
+      "fontSize": 13,
+      "iconWidth": 16,
+      "iconLeading": 2,
+      "iconHeight": 16,
+      "labelGap": 7,
+      "height": 28
+    },
+    "style": "sourceList",
+    "rowHeight": 28,
+    "rowSizeStyle": 0,
+    "behavior": "sidebar",
+    "fullHeight": true,
+    "indentation": 0,
+    "highlight": 1
+  },
+  "editors": [],
+  "actions": [
+    "skill-add",
+    "skill-folder",
+    "skill-github"
+  ],
+  "width": 680,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1360,
+  "captureHeight": 1520
+}

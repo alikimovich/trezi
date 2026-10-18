@@ -4,6 +4,12 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { currentAgentMergeAllowed } from './agent-merge-setting'
 import { states } from './chat-state'
+import {
+  mergeTarget,
+  requestMergeApproval,
+  revokeMergeApprovals,
+  takeMergeApproval
+} from './merge-approval'
 import { generatePublishDescription } from './publish-description'
 import { defaultBase } from './publish-scope'
 import { pullRequestStatus } from './pull-request-status'
@@ -83,6 +89,24 @@ async function releaseState(root: string): Promise<unknown> {
   }
 }
 
+/** The live checkout's head commit, and whether Publish would commit anything first. */
+async function checkout(liveRoot: string): Promise<{ head: string; clean: boolean }> {
+  const [head, status] = await Promise.all([
+    exec('git', ['rev-parse', 'HEAD'], { cwd: liveRoot }),
+    exec('git', ['status', '--porcelain'], { cwd: liveRoot })
+  ])
+  return { head: head.stdout.trim(), clean: !status.stdout.trim() }
+}
+
+const MERGE_OFF =
+  'Agent PR merging is off in Settings, so Trezi will not merge this pull request. Tell the user: they can merge it themselves or turn on Agent can merge pull requests.'
+
+const APPROVAL_REASON = {
+  changed:
+    'The repository, pull request or head changed after the user approved, so that approval was dropped.',
+  expired: 'The earlier approval expired.'
+} as const
+
 /** Only the active chat's linked worktree may receive an agent Git effect. */
 export async function agentGitTool(
   key: string,
@@ -90,12 +114,14 @@ export async function agentGitTool(
   liveRoot: string,
   action: string,
   args: unknown,
-  startedAt = Date.now()
+  startedAt = Date.now(),
+  notify: (channel: string, payload: unknown) => void = () => {}
 ): Promise<unknown> {
   const st = states.get(key)
   if (!st || st.wt.path !== root || st.liveRoot !== liveRoot || st.reclaimed)
     return { error: 'This chat has no active Git worktree.' }
-  const input = (args ?? {}) as { ref?: unknown; number?: unknown; confirmed?: unknown }
+  // A model-supplied `confirmed` (or any other flag) is ignored: only the host's card approves.
+  const input = (args ?? {}) as { ref?: unknown; number?: unknown }
   if (action === 'git_sync_base') {
     const ref = input.ref === undefined ? `origin/${await defaultBase(liveRoot)}` : input.ref
     if (typeof ref !== 'string') return { error: 'ref must name an origin branch.' }
@@ -111,8 +137,14 @@ export async function agentGitTool(
       (!Number.isSafeInteger(input.number) || Number(input.number) < 1)
     )
       return { error: 'number must be a positive PR number.' }
+    // Merge-off refuses before anything is read or pushed, whatever the arguments say,
+    // and drops any approval the chat holds.
+    if (action === 'publish_merge' && !currentAgentMergeAllowed()) {
+      revokeMergeApprovals(key, notify)
+      return { error: MERGE_OFF }
+    }
     const number = input.number === undefined ? undefined : String(input.number)
-    const status = await pullRequestStatus(liveRoot, root, number ? Number(number) : undefined)
+    let status = await pullRequestStatus(liveRoot, root, number ? Number(number) : undefined)
     if (status.error) return { error: status.error }
     if (action === 'pr_status') return status
     const { stdout: branch } = await exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -122,15 +154,50 @@ export async function agentGitTool(
       return {
         error: `This PR belongs to ${String(status.headRefName)}, but Publish would push ${branch.trim()}.`
       }
-    if (action === 'publish_merge' && !currentAgentMergeAllowed() && input.confirmed !== true)
-      return {
-        error:
-          'Agent PR merging is off. Ask the user for confirmation in chat, then call publish_merge with confirmed: true only after they agree.'
+    const describe = (base: string, head: string) =>
+      generatePublishDescription(liveRoot, base, head)
+    let expectedHead: string | undefined
+    if (action === 'publish_merge') {
+      // The user approves what GitHub shows: bring the PR up to this checkout first,
+      // the same push publish_update makes (never a merge).
+      let local = await checkout(liveRoot)
+      if (!local.clean || local.head !== status.headRefOid) {
+        const pushed = await workflowOwner().publish(liveRoot, 'pr', describe)
+        if (!pushed.ok) return { ...pushed, pr: status.number }
+        status = await pullRequestStatus(liveRoot, root, Number(status.number))
+        if (status.error) return { error: status.error }
+        local = await checkout(liveRoot)
       }
+      const target = mergeTarget(status.url, status.number, status.headRefOid)
+      if (!target)
+        return { error: "Trezi could not identify the pull request's repository and head." }
+      if (!local.clean || local.head !== target.head)
+        return {
+          error: `The pull request's head ${target.head.slice(0, 12)} is not this checkout's ${local.head.slice(0, 12)}. Call publish_update, then publish_merge.`
+        }
+      const approval = takeMergeApproval(key, liveRoot, target)
+      if (approval !== 'approved') {
+        requestMergeApproval(key, liveRoot, target, notify)
+        return {
+          merged: false,
+          approvalRequired: true,
+          pr: target.number,
+          repo: target.repo,
+          head: target.head,
+          ...(approval === 'none' ? {} : { reason: APPROVAL_REASON[approval] }),
+          guidance:
+            'Trezi asked the user to approve this merge in a card on their screen. End your turn now with one short line saying you are waiting for their approval. Do not merge another way. If they approve, call publish_merge once; if they decline, leave the pull request open.'
+        }
+      }
+      // The setting may have been turned off while the card was open (the approval is spent).
+      if (!currentAgentMergeAllowed()) return { error: MERGE_OFF }
+      expectedHead = target.head
+    }
     const result = await workflowOwner().publish(
       liveRoot,
       action === 'publish_merge' ? 'merge' : 'pr',
-      (base, head) => generatePublishDescription(liveRoot, base, head)
+      describe,
+      expectedHead
     )
     if (!result.ok) return { ...result, pr: status.number }
     const updated = await pullRequestStatus(liveRoot, root, Number(status.number))

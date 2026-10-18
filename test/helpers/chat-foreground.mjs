@@ -14,13 +14,28 @@ const CAPTURE_LOST_FOREGROUND = 'Chat lost foreground during capture'
  * second refusal, propagate unchanged: the host's precondition and every assertion stay as they are.
  */
 export function foregroundChatHost(host, warn = console.warn) {
+  const captureLost = (error) =>
+    error instanceof Error &&
+    (error.message === CAPTURE_NOT_FOREGROUND || error.message === CAPTURE_LOST_FOREGROUND)
   const acceptance = async (body = {}) => {
     try {
       return await host.request('chatAcceptance', { ...body, prepare: true })
     } catch (error) {
-      if (!(error instanceof Error) || error.message !== CHAT_NOT_FOREGROUND) throw error
-      warn('Chat acceptance lost foreground; reactivating and retrying once')
-      return host.request('chatAcceptance', { ...body, prepare: true })
+      if (error instanceof Error && error.message === CHAT_NOT_FOREGROUND) {
+        warn('Chat acceptance lost foreground; reactivating and retrying once')
+        return host.request('chatAcceptance', { ...body, prepare: true })
+      }
+      // `capture: true` photographs after the state is applied and any input has run, so the
+      // refusal means only the pixels were lost. Reactivate and send the absolute state again;
+      // an input (a wheel delta, a drag, a click) already happened and is never replayed.
+      if (body.capture === true && captureLost(error)) {
+        warn('Chat acceptance capture lost foreground; reactivating and retrying once')
+        const state = { ...body, prepare: true }
+        delete state.input
+        delete state.delta
+        return host.request('chatAcceptance', state)
+      }
+      throw error
     }
   }
   const capture = async (body) => {
@@ -28,11 +43,7 @@ export function foregroundChatHost(host, warn = console.warn) {
     try {
       return await host.request('captureShell', body)
     } catch (error) {
-      if (
-        !(error instanceof Error) ||
-        (error.message !== CAPTURE_NOT_FOREGROUND && error.message !== CAPTURE_LOST_FOREGROUND)
-      )
-        throw error
+      if (!captureLost(error)) throw error
       warn('Chat capture lost foreground; reactivating and retrying once')
       await acceptance()
       return host.request('captureShell', body)

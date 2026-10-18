@@ -1,0 +1,126 @@
+{
+  "controls": [],
+  "section": "skills",
+  "fields": [
+    "skill-status",
+    "skill-source",
+    "skill-revision",
+    "skill-chats",
+    "skill-body:6cc6d8df-bf94-4def-a461-5872f5574a7c@d208f389e1fe0f1ccd5be782c60d159b3e2453b6127a8f92101bdc6d2d9751f4",
+    "skill-files"
+  ],
+  "message": "Saved revision d208f389 of trezi-smoke-notes. Chats started from now on use it.",
+  "fullSizeContent": true,
+  "sidebarFrame": "{{8, 8}, {192, 700}}",
+  "busy": false,
+  "height": 760,
+  "sidebarMaximum": 260,
+  "sidebarRows": 5,
+  "rows": [],
+  "minimumHeight": 760,
+  "sections": [
+    {
+      "id": "general",
+      "symbol": "gearshape",
+      "label": "General"
+    },
+    {
+      "id": "providers",
+      "symbol": "sparkles",
+      "label": "AI Providers"
+    },
+    {
+      "id": "skills",
+      "label": "Skills",
+      "symbol": "book.closed"
+    },
+    {
+      "symbol": "testtube.2",
+      "id": "experimental",
+      "label": "Experimental"
+    },
+    {
+      "id": "dreamer",
+      "label": "Dreamer",
+      "symbol": "moon.stars"
+    }
+  ],
+  "sidebarCollapsible": false,
+  "sidebarWidth": 192,
+  "sidebarFullHeight": true,
+  "values": {
+    "dreamerToken": "",
+    "autoFixCI": "ask",
+    "buildCheck": "on",
+    "workspaceUsage": "Calculating…",
+    "connections": "None",
+    "workspaceIdle": "7",
+    "skill-status": "On",
+    "agentGitAccess": "managed",
+    "dreamerProject": "",
+    "skill-files": "None",
+    "skill-body:6cc6d8df-bf94-4def-a461-5872f5574a7c@d208f389e1fe0f1ccd5be782c60d159b3e2453b6127a8f92101bdc6d2d9751f4": "---\nname: trezi-smoke-notes\ndescription: Sample manual skill from the Trezi native smoke. Use for UI work in this project.\n---\n\n# Smoke notes\n\n- Use semantic HTML elements.\n- Keep keyboard focus visible.\n- Prefer CSS variables for colors.\n",
+    "version": "Trezi 0.1.0 (build 1093, 2644076)",
+    "quitDontAsk": "false",
+    "skill-revision": "8f9a503c",
+    "projectUi": "false",
+    "claudePlugins": "false",
+    "skill-source": "Added manually",
+    "activityAutoOpen": "problems",
+    "default": "last-used",
+    "providerFallback": "on",
+    "agentFileAccess": "full",
+    "dreamerStart": "off",
+    "dreamerSchedule": "off",
+    "dreamerUrl": "",
+    "engine": "agent",
+    "agentMerge": "true",
+    "skill-chats": "Not offered yet"
+  },
+  "minimumWidth": 680,
+  "disabledActions": [],
+  "sidebarMinimum": 180,
+  "sourceList": {
+    "transparentScroll": true,
+    "row": {
+      "fontSize": 13,
+      "iconLeading": 2,
+      "iconHeight": 16,
+      "height": 28,
+      "iconWidth": 16,
+      "labelGap": 7
+    },
+    "style": "sourceList",
+    "rowHeight": 28,
+    "rowSizeStyle": 0,
+    "behavior": "sidebar",
+    "fullHeight": true,
+    "indentation": 0,
+    "highlight": 1
+  },
+  "editors": [
+    {
+      "contained": true,
+      "focused": false,
+      "hitTarget": true,
+      "text": "---\nname: trezi-smoke-notes\ndescription: Sample manual skill from the Trezi native smoke. Use for UI work in this project.\n---\n\n# Smoke notes\n\n- Use semantic HTML elements.\n- Keep keyboard focus visible.\n- Prefer CSS variables for colors.\n",
+      "frame": "{{231, 15}, {518, 218}}"
+    }
+  ],
+  "actions": [
+    "skill-back",
+    "skill-toggle",
+    "skill-remove",
+    "skill-save"
+  ],
+  "width": 780,
+  "foreground": true,
+  "id": "70dd4381-1481-46c4-80a9-64c108b9f515",
+  "trafficLightsOverSidebar": true,
+  "sidebarFocused": false,
+  "sidebarSelected": 2,
+  "windowTitle": "Skills",
+  "text": [],
+  "captureWidth": 1560,
+  "captureHeight": 1520
+}

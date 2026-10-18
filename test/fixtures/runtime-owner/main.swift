@@ -44,12 +44,15 @@ options.stampTimeout = seconds("RUNTIME_STAMP_TIMEOUT", 5)
 let owner = RuntimeOwner(options: options, send: { emit($0) })
 emit([("ready", .bool(true)), ("swept", .array(swept.map { .number(Double($0)) }))])
 
+/// The listener port socketpair requests are served as: their Host must name it.
+let sitePort = 4173
+
 /// A socketpair connection served by the real HTTP layer; returns the raw response.
 func exchange(_ site: StaticSite, _ request: String, hold: TimeInterval = 0) -> (Data, Int32) {
     var pair: [Int32] = [0, 0]
     socketpair(AF_UNIX, SOCK_STREAM, 0, &pair)
     let server = pair[0], client = pair[1]
-    DispatchQueue.global().async { StaticServer.serve(server, site: site) }
+    DispatchQueue.global().async { StaticServer.serve(server, site: site, port: sitePort) }
     _ = StaticServer.writeAll(client, Data(request.utf8))
     var timeout = timeval(tv_sec: 5, tv_usec: 0)
     setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
@@ -144,16 +147,18 @@ func handle(_ data: Data) {
         var count = 0
         if case .number(let value)? = command["count"] { count = Int(value) }
         let current = site(command)
+        // Streams opened earlier already count: wait for the new ones on top of them.
+        let target = current.clientCount + count
         for index in 0..<count {
             var pair: [Int32] = [0, 0]
             socketpair(AF_UNIX, SOCK_STREAM, 0, &pair)
             let server = pair[0]
-            DispatchQueue.global().async { StaticServer.serve(server, site: current) }
-            _ = StaticServer.writeAll(pair[1], Data("GET /__trezi_reload?v=0 HTTP/1.1\r\n\r\n".utf8))
+            DispatchQueue.global().async { StaticServer.serve(server, site: current, port: sitePort) }
+            _ = StaticServer.writeAll(pair[1], Data("GET /__trezi_reload?v=0 HTTP/1.1\r\nHost: 127.0.0.1:\(sitePort)\r\n\r\n".utf8))
             streams["many-\(index)"] = pair[1]
         }
         let deadline = Date().addingTimeInterval(5)
-        while current.clientCount < count && Date() < deadline { usleep(20_000) }
+        while current.clientCount < target && Date() < deadline { usleep(20_000) }
         emit([("clients", .number(Double(current.clientCount)))])
     case "close-streams":
         // Those peers leave: each stream must be dropped on its EOF.

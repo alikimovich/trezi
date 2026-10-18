@@ -20,7 +20,10 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 44, 'version bumped to 44')
+assert(TREZI_RULES_VERSION === 45, 'version bumped to 45')
+// LKM-281: a merge waits for the user's card; no model-supplied flag approves it.
+assert(!/confirmed: true/.test(r), 'no model-supplied merge confirmation')
+assert(/publish_merge first shows the user a card/.test(r), 'merge waits for the host card')
 // LKM-225: agents are pointed at the bundled doctor skill instead of telling the user to debug.
 assert(r.includes(JSON.stringify(DOCTOR_SKILL)), 'rules mention the trezi-doctor skill path')
 assert(/Never end with[\s\S]*"when this turn lands"/.test(r), 'forbids deferred landing reply')
@@ -391,8 +394,11 @@ assert(
 assert(!/line_height/.test(r), 'default rendering omits line_height')
 // R8b (skills install) — offer-to-install skill packs rides with previewTools too.
 assert(/list_recommended_skills/.test(withTools), 'previewTools: teaches list_recommended_skills')
-assert(/install_skills/.test(withTools), 'previewTools: teaches install_skills')
-assert(!/install_skills/.test(r), 'default rendering omits install_skills')
+// LKM-286: agents suggest; the user installs in Settings → Skills.
+assert(!/install_skills/.test(withTools), 'previewTools: no longer teaches install_skills')
+assert(/Settings → Skills/.test(withTools), 'previewTools: points at Settings → Skills')
+assert(!/\.claude\/skills/.test(withTools), 'previewTools: no project/user scope install')
+assert(!/list_recommended_skills/.test(r), 'default rendering omits the skill tools')
 
 // R9 (Codex Trezi control) — workspace tools appear only for a backend that
 // actually wires the local MCP server. The generic/Gemini prompt must not claim

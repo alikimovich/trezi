@@ -47,6 +47,7 @@ import { setProviderOwner } from '../main/provider-owner'
 import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-owner'
 import { createProject } from '../main/scaffold'
 import { PROVIDER_FALLBACK_KEY, setProviderFallbackSource } from '../main/self-heal/fallback'
+import { setSessionSkillsSource } from '../main/session-skills'
 import { registerSetupIpc } from '../main/setup'
 import { registerSimulatorIpc } from '../main/simulator'
 import { observedSourceOwner } from '../main/source-changes'
@@ -109,9 +110,11 @@ import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
 import { withDreamerPane } from './settings-dreamer'
 import { withProviderFallbackSetting } from './settings-provider-fallback'
+import { nativeSkills, withSkillsPane } from './settings-skills'
 import { NativeSheetController } from './sheets-runtime'
 import { NativeShellController } from './shell-controller'
 import { installShutdown } from './shutdown'
+import { serviceSkills } from './skills-service'
 import { runNativeCoreSmoke } from './smoke-core'
 import {
   removeSmokeDirectory,
@@ -718,8 +721,11 @@ async function main() {
     }
   )
   installPreviewLoads(host, workspaceController, shellController)
-  installPreviewRefresh(host, workspaceController, (error) =>
-    activityController.append(String(error), 'error')
+  installPreviewRefresh(
+    host,
+    workspaceController,
+    (error) => activityController.append(String(error), 'error'),
+    (message) => sheetController.toast(message)
   )
   installEditorFreshness(
     host,
@@ -922,11 +928,20 @@ async function main() {
     shell.openExternal(url)
   )
   setProviderFallbackSource(() => preferences.get(PROVIDER_FALLBACK_KEY))
+  // LKM-288, LKM-286: Settings → Skills reads and writes only through the Swift Skills
+  // owner; the host's open panel only names the folder the service then imports.
+  nativeSkills.current = serviceSkills(host)
+  // LKM-287: every chat session pins and projects the library through the same owner.
+  setSessionSkillsSource(() => nativeSkills.current)
   const settingsController = withProviderFallbackSetting(
     withBuildCheckSetting(
       withDreamerPane(
-        withClaudePane(
-          new NativeSettingsController(sheetController, preferences, refreshPreferences)
+        withSkillsPane(
+          withClaudePane(
+            new NativeSettingsController(sheetController, preferences, refreshPreferences)
+          ),
+          nativeSkills.current,
+          () => host!.request('pick', {}, 0x7fffffff)
         ),
         preferences
       ),

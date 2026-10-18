@@ -12,6 +12,18 @@ export interface NativeSheetField {
   draft?: boolean
   /** Sectioned windows: the prompt an empty text or secure row shows. */
   placeholder?: string
+  /**
+   * Sectioned windows: a `readonly` row becomes a navigation row (label, help, value
+   * and a button) that sends this action when pressed. Register the action without a
+   * `section` so it gets no footer button.
+   */
+  action?: string
+  /** The navigation row's button title, "Open…" by default. */
+  actionLabel?: string
+  /** Sectioned windows: the titled group of rows below the pane's first group. */
+  group?: string
+  /** A `multiline` editor's minimum height in points, 120 by default. */
+  height?: number
 }
 /** A sidebar entry of a sectioned window (Settings); `symbol` is an SF Symbol name. */
 export interface NativeSheetSection {
@@ -35,6 +47,8 @@ export interface NativeSheetState {
     cancel?: boolean
     /** The host copies this text to the clipboard before sending the action. */
     copy?: string
+    /** Shown but not pressable (an unsupported choice); the runtime refuses it too. */
+    disabled?: boolean
   }[]
   /**
    * An NSAlert-style sheet attached to the main window (app icon, bold title,

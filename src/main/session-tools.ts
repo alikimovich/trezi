@@ -32,11 +32,9 @@ import { openAgentPreview } from './preview-tools'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
 import { askUser } from './question-tool'
-import { findPack } from './skill-packs'
 import { timedToolCall } from './tool-timing'
 import type { TreziAgentToolAction } from './trezi-agent-tools'
 import { turnTimings } from './turn-timing'
-import { workflowOwner } from './workflow-owner'
 
 /**
  * Trezi's session-scoped agent tools that act on app state (the preview, islands,
@@ -356,7 +354,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
     return s.background
       ? { error: 'Background edits cannot navigate the user editor.' }
       : openAgentCode(s.root, s.liveRoot, s.emitKey, args as never, s.notify)
-  if (action === 'install_skills') return installSkills(args, s)
+  if (action === 'install_skills') return installSkills()
   if (action === 'ask_user') return askUser(args, s)
   if (action === 'chat_ui') return chatUiTool(args, s)
   if (s.background)
@@ -407,7 +405,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
           landing: landed
         }
     }
-    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args, startedAt)
+    return agentGitTool(s.emitKey, s.root, s.liveRoot, action, args, startedAt, s.notify)
   }
   const before = agentWorkspaceState(s.emitKey)
   if (before.state === 'live' || before.state === 'isolated') {
@@ -427,31 +425,16 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
 }
 
 /**
- * A curated skill pack into the project or user scope, through the workflow owner. The
- * pack id is checked against the allowlist before anything runs, and skills land in the
- * live root, not the chat worktree.
+ * LKM-286: agents no longer install skills. Skills live in Trezi's own library, which
+ * only the user changes (Settings → Skills); nothing is written to the project's or the
+ * user's `.claude/skills`, and skills already there are left as they are. The tool name
+ * stays so existing policies and sessions keep resolving; it now only explains this.
  */
-async function installSkills(
-  raw: unknown,
-  s: ToolScope
-): Promise<{ ok: boolean; message: string }> {
-  const args = (raw ?? {}) as { packId?: unknown; scope?: unknown }
-  const pack = typeof args.packId === 'string' ? findPack(args.packId) : undefined
-  if (!pack) {
-    return {
-      ok: false,
-      message: `install_skills failed: '${String(args.packId)}' is not in the curated skill-pack allowlist. Call list_recommended_skills and use one of its ids.`
-    }
-  }
-  if (args.scope !== undefined && args.scope !== 'project' && args.scope !== 'user')
-    return { ok: false, message: "install_skills failed: scope must be 'project' or 'user'." }
-  const result = await workflowOwner().installSkills({
-    packId: pack.id,
-    scope: args.scope ?? pack.recommendedScope,
-    liveRoot: s.liveRoot
-  })
-  return { ok: result.ok, message: result.message }
+async function installSkills(): Promise<{ ok: boolean; message: string }> {
+  return { ok: false, message: SKILLS_REDIRECT }
 }
+export const SKILLS_REDIRECT =
+  'install_skills no longer installs anything: Trezi keeps skills in its own library, which the user manages in Settings → Skills (add, import from a folder or GitHub, or install a recommendation). Nothing was installed, and skills already in .claude/skills are left as they are. Suggest a skill to the user instead.'
 
 /**
  * How an adapter runs a session tool. Inside a provider helper (`ctx.tools` set) the call
