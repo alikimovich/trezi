@@ -14,7 +14,15 @@ interface ServiceMessage {
   reason?: string
   path?: string
   html?: string
+  agent?: string
+  generation?: number
   reply?: { result: Result }
+}
+
+/** A private agent runtime's server (LOCAL-WEBKIT-1): its agent and the owner's generation. */
+export interface AgentRunningServer extends RunningDevServer {
+  agent: string
+  generation: number
 }
 /** Bun's end of the supervised private pipe (see `NativeBridge.sendService`). */
 export interface RuntimeLink {
@@ -49,6 +57,24 @@ export interface ProjectRuntime {
   onLog(listener: (root: string, line: string) => void): void
   /** A ready server ended without a stop or restart; `reason` says how (exit or unresponsive). */
   onExit(listener: (root: string, url: string, reason: string) => void): void
+  /**
+   * Private agent runtimes (LOCAL-WEBKIT-1), keyed apart from the visible servers: a
+   * start, stop or exit here never reaches `onExit`/`onLog` or the visible preview.
+   */
+  startAgent(opts: {
+    agent: string
+    root: string
+    command: string
+    framework?: Framework
+  }): Promise<AgentRunningServer>
+  stopAgent(agent: string, root: string): Promise<void>
+  agentInfo(agent: string, root: string): Promise<{ running: boolean; server?: AgentRunningServer }>
+  /** Stops one agent's private runtimes, or every agent's; visible servers are untouched. */
+  stopAgents(agent?: string): Promise<number>
+  onAgentLog(listener: (agent: string, root: string, line: string) => void): void
+  onAgentExit(
+    listener: (agent: string, root: string, url: string, reason: string, generation: number) => void
+  ): void
 }
 
 /** A stamped page larger than this is served unstamped rather than risk the pipe's line limit. */
@@ -59,7 +85,8 @@ const TIMEOUTS = {
   start: 150_000,
   stop: 15_000,
   install: 330_000,
-  stopAll: 6_000
+  stopAll: 6_000,
+  stopAgents: 15_000
 }
 
 /**
@@ -90,6 +117,10 @@ export function serviceRuntime(
   >()
   const logs = new Set<(root: string, line: string) => void>()
   const exits = new Set<(root: string, url: string, reason: string) => void>()
+  const agentLogs = new Set<(agent: string, root: string, line: string) => void>()
+  const agentExits = new Set<
+    (agent: string, root: string, url: string, reason: string, generation: number) => void
+  >()
   let sequence = 0
 
   link.on('service-reply', (message) => {
@@ -102,6 +133,29 @@ export function serviceRuntime(
   })
   link.on('service-event', (message) => {
     if (message.service !== 'runtime') return
+    // A private runtime's events name their agent and never reach the visible listeners.
+    if (typeof message.agent === 'string') {
+      if (
+        message.kind === 'log' &&
+        typeof message.root === 'string' &&
+        typeof message.line === 'string'
+      )
+        for (const listener of agentLogs) listener(message.agent, message.root, message.line)
+      else if (
+        message.kind === 'exit' &&
+        typeof message.root === 'string' &&
+        typeof message.url === 'string'
+      )
+        for (const listener of agentExits)
+          listener(
+            message.agent,
+            message.root,
+            message.url,
+            typeof message.reason === 'string' ? message.reason : 'The dev server stopped.',
+            typeof message.generation === 'number' ? message.generation : 0
+          )
+      return
+    }
     if (
       message.kind === 'log' &&
       typeof message.root === 'string' &&
@@ -188,6 +242,20 @@ export function serviceRuntime(
     },
     onExit: (listener) => {
       exits.add(listener)
+    },
+    startAgent: ({ agent, root, command, framework }) =>
+      request('start', { root, command, agent, ...(framework ? { framework } : {}) }),
+    stopAgent: async (agent, root) => {
+      await request('stop', { root, agent })
+    },
+    agentInfo: (agent, root) => request('info', { root, agent }),
+    stopAgents: async (agent) =>
+      Number((await request('stopAgents', agent ? { agent } : {})).stopped ?? 0),
+    onAgentLog: (listener) => {
+      agentLogs.add(listener)
+    },
+    onAgentExit: (listener) => {
+      agentExits.add(listener)
     }
   }
 }

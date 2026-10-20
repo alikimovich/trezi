@@ -16,7 +16,9 @@ import { overlay } from './agent-inspect'
  * nothing by themselves, so the defaults a user relies on are emulated: characters go into
  * the focused field, Enter submits its form or activates a button or link, Space toggles,
  * Tab moves focus, Backspace/Delete edit and the arrow keys step a select. Every emulated
- * activation passes the same safety checks as a click.
+ * activation passes the same safety checks as a click. A press whose real default is not
+ * emulated (a new line, caret moves, scrolling, shortcuts, Escape closing a dialog) is
+ * reported as an error, never as done (LOCAL-WEBKIT-2).
  */
 
 export const MAX_TEXT = 1000
@@ -282,6 +284,38 @@ function defaultAction(el: Element, key: Key): Refusal | string | null {
   return null
 }
 
+const CARET = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'])
+const SCROLL = new Set([...CARET, 'PageUp', 'PageDown', ' '])
+
+/**
+ * LOCAL-WEBKIT-2: the browser default a real key press would have had here that none of
+ * the emulation above performs, or null. A synthetic press must not look like it worked.
+ */
+export function unemulatedDefault(el: Element, key: Key): string | null {
+  const field = textField(el)
+  if (key.metaKey || key.ctrlKey)
+    return `the ${key.metaKey ? 'Meta' : 'Ctrl'} shortcut (select all, copy, paste, undo, menu or app commands)`
+  if (field && key.altKey) return 'Option-key text entry and word editing'
+  if (key.key === 'Enter' && field && !(el instanceof HTMLInputElement))
+    return 'inserting a new line'
+  if (field && (key.key === 'Backspace' || key.key === 'Delete'))
+    return 'modified deletion (word or line)'
+  if (field && (CARET.has(key.key) || key.key === 'PageUp' || key.key === 'PageDown'))
+    return 'caret movement and selection'
+  if (!field && SCROLL.has(key.key) && !(el instanceof HTMLSelectElement))
+    return 'page or element scrolling'
+  if (key.key === 'Escape' && openDialog()) return 'closing the open dialog or popover'
+  return null
+}
+
+function openDialog(): boolean {
+  try {
+    return !!document.querySelector('dialog[open], [popover]:popover-open')
+  } catch {
+    return !!document.querySelector('dialog[open]')
+  }
+}
+
 /** Presses one key (with modifiers) on `el` or the focused element. */
 export function pressKey(el: Element | null, spec: string) {
   const key = parseKey(spec)
@@ -305,6 +339,13 @@ export function pressKey(el: Element | null, spec: string) {
   } else effect = 'prevented by the page'
   fire(target, 'keyup', keyInit(key), KeyboardEvent)
   if (effect && typeof effect === 'object') return effect
+  const missing = effect === null ? unemulatedDefault(target, key) : null
+  if (missing)
+    return {
+      error: `Pressed ${spec.slice(0, 40)} on ${describe(target)}: the page's key handlers ran (untrusted synthetic events), but WebKit's default action, ${missing}, is not emulated for synthetic keys, so it did not happen. Check this with preview_verify engine "chromium" (trusted input), or assert what the page's own handlers did.`,
+      unemulated: missing,
+      handlersRan: true
+    }
   return {
     element: describe(target),
     key: spec,

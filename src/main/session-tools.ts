@@ -9,6 +9,7 @@ import {
   parseInteraction,
   runAgentInteraction
 } from './agent-interact'
+import { agentViewportTool } from './agent-viewport'
 import type { SessionToolHost } from './backends/types'
 import { agentGitTool } from './chat-agent-git'
 import { runChatIslandTool } from './chat-islands'
@@ -21,6 +22,8 @@ import {
 } from './chat-isolation'
 import { chatUiTool } from './chat-ui'
 import { openAgentCode } from './code-tools'
+import { runChecksTool, runCommandCheck } from './command-checks'
+import { landingChecks, setCheckReplayer } from './integration-gate'
 import { noteServedRevision } from './landing-context'
 import { treziLiveEffect } from './live-change-watch'
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
@@ -29,6 +32,7 @@ import { agentPreviewOverlay } from './preview-overlay'
 import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-tools'
 import { parseSpeed } from './preview-speed'
 import { openAgentPreview } from './preview-tools'
+import { runPreviewVerify } from './preview-verify'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
 import { askUser } from './question-tool'
@@ -78,6 +82,8 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'preview_viewport',
   'preview_speed',
   'preview_interact',
+  'preview_verify',
+  'run_checks',
   'project_ui_catalog',
   'compose_project_ui',
   'ask_user',
@@ -87,6 +93,12 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'inspect_states_canvas',
   'install_skills'
 ]
+
+// A landing Retry runs the session's passing checks again through the same tools.
+setCheckReplayer(async (recipe, scope) => {
+  if (recipe.kind === 'command') return !('error' in (await runCommandCheck(recipe.check, scope)))
+  return !(await runPreviewVerify(recipe.args, scope)).isError
+})
 
 /** Native host is the gate; tests may supply a deterministic clock/result. */
 let revealGate = () => bridge().request('previewRevealAllowed') as Promise<boolean>
@@ -169,6 +181,10 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
           : null
     }
   }
+  // LOCAL-WEBKIT-2: host-observed checks with a receipt; it validates its own target/engine.
+  if (action === 'preview_verify') return runPreviewVerify(args, s)
+  // LOCAL-WEBKIT-3: host-run project checks with a receipt (builds, tests, non-web projects).
+  if (action === 'run_checks') return runChecksTool(args, s)
   const target = (args as { target?: unknown } | null)?.target
   const engine = (args as { engine?: unknown } | null)?.engine
   const browserTool =
@@ -196,6 +212,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       }
   }
   // LKM-210: a landed revision the chat's agent looked at needs no automatic check.
+  // A private page (LOCAL-WEBKIT-1) shows the worktree, not a landed revision: never counted.
   const saw = (revision: string | null | undefined) => {
     if (!s.background) noteServedRevision(s.emitKey, revision)
   }
@@ -208,7 +225,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
     if (request && 'error' in request)
       return { content: [{ type: 'text', text: request.error }], isError: true }
     try {
-      const browser = await agentBrowser(s.emitKey, s.liveRoot, browserEngine)
+      const browser = await agentBrowser(s.emitKey, s.root, browserEngine, s.liveRoot)
       const stopped = await ensureAgentPage(browser, s.liveRoot)
       if (stopped) return { content: [{ type: 'text', text: stopped }], isError: true }
       const identity = await browser.identity()
@@ -250,6 +267,9 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
             }
           ]
         }
+      } else if (action === 'preview_viewport' && browserEngine === 'webkit') {
+        // The agent page keeps its own size and scheme; the user's preview never changes.
+        result = await agentViewportTool(browser, args)
       } else if (
         action === 'preview_screenshot' &&
         !(args as { selector?: unknown; x?: unknown })?.selector &&
@@ -279,7 +299,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       }
       // An interaction can navigate, so its identity is read after it.
       const seen = request ? await browser.identity() : identity
-      if (!result.isError) saw(seen.servedRevision)
+      if (!result.isError && !seen.runtime) saw(seen.servedRevision)
       if (!result.isError || request)
         result.content.push({ type: 'text', text: identityText(seen) })
       return result
@@ -304,7 +324,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   if (action === 'open_preview' || action === 'reload_preview') {
     if (target !== 'user') {
       try {
-        const browser = await agentBrowser(s.emitKey, s.liveRoot, browserEngine)
+        const browser = await agentBrowser(s.emitKey, s.root, browserEngine, s.liveRoot)
         const path =
           action === 'open_preview'
             ? previewPath((args as { path?: unknown } | null)?.path)
@@ -320,7 +340,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
             ? { reload: true, hard: (args as { hard?: unknown } | null)?.hard === true }
             : undefined
         )
-        saw(opened.identity.servedRevision)
+        if (!opened.identity.runtime) saw(opened.identity.servedRevision)
         return {
           requested: true,
           path,
@@ -369,6 +389,8 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   if (action === 'workspace_state')
     return {
       ...(await agentWorkspaceEvidence(s.emitKey, s.liveRoot)),
+      // LOCAL-WEBKIT-3: what this work needs before it may land, judged as the gate would.
+      landingChecks: await landingChecks(s),
       timing: turnTimings.report(s.emitKey),
       // LKM-205: the user's rulers, guides and grids, read-only.
       previewOverlay: agentPreviewOverlay(s.liveRoot)

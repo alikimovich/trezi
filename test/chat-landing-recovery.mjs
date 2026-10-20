@@ -24,6 +24,9 @@ import {
   sendRefusal
 } from '../src/main/chat-isolation.ts'
 import { repositoryOwner, setRepositoryOwner } from '../src/main/repository-owner.ts'
+import { passCheck, replayFixtureChecks } from './helpers/gate-checks.mjs'
+
+const replays = replayFixtureChecks()
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-landing-recovery-'))
 const git = (cwd, ...args) =>
@@ -82,7 +85,11 @@ try {
   assert.equal(await isolatedCwd(sw.root, sw.key), sw.cwd)
   await beforeTurn(sw.key, 'claude')
   writeFileSync(join(sw.cwd, FILE), 'export const bar = 2\n')
-  await afterTurn(sw.key, 'Claude turn', [], 'success')
+  await passCheck(sw.key, sw.cwd)
+  // The user's README edit moved live: the finished turn (reconciling, as the turn end
+  // does) brings the chat up to date and runs its check again before it lands.
+  await afterTurn(sw.key, 'Claude turn', [], 'success', true)
+  assert.equal(replays.length, 1, 'the reconciled source was checked again')
   assert.equal(events.at(-1).state, 'merged')
   assert.deepEqual(events.at(-1).files.toSorted(), [FILE, OTHER])
   assert.equal(read(sw.root), 'export const bar = 2\n')
@@ -103,6 +110,7 @@ try {
   writeFileSync(join(stuck.root, FILE), 'export const bar = 9\n')
   await beforeTurn(stuck.key, 'claude')
   writeFileSync(join(stuck.cwd, FILE), 'export const bar = 2\n')
+  await passCheck(stuck.key, stuck.cwd)
   await afterTurn(stuck.key, 'Claude turn', [], 'success')
   assert.equal(events.at(-1).state, 'parked')
   assert.equal(events.at(-1).reason, undefined, 'a drift park is a conflict, not a hold')
@@ -114,6 +122,7 @@ try {
   assert.equal(agentWorkspaceState(stuck.key).state, 'resolving')
   await beforeTurn(stuck.key, 'resolve')
   writeFileSync(join(stuck.cwd, FILE), 'export const bar = 29\n')
+  await passCheck(stuck.key, stuck.cwd)
   await afterTurn(stuck.key, 'Resolve conflicts', [], 'success')
   assert.equal(events.at(-1).state, 'merged')
   assert.equal(read(stuck.root), 'export const bar = 29\n')
@@ -125,6 +134,7 @@ try {
   const stale = await fixture()
   writeFileSync(join(stale.root, FILE), 'export const bar = 9\n')
   writeFileSync(join(stale.cwd, FILE), 'export const bar = 1\n')
+  await passCheck(stale.key, stale.cwd)
   await afterTurn(stale.key, 'Set bar', [], 'success')
   assert.equal(isolationSnapshot(stale.key).state, 'parked')
   writeFileSync(join(stale.root, FILE), 'export const bar = 0\n')
@@ -138,6 +148,7 @@ try {
   const lock = join(git(failed.cwd, 'rev-parse', '--absolute-git-dir'), 'index.lock')
   writeFileSync(lock, '')
   writeFileSync(join(failed.cwd, FILE), 'export const bar = 5\n')
+  await passCheck(failed.key, failed.cwd)
   assert.equal(await afterTurn(failed.key, 'Set bar to five', [], 'success'), null)
   const held = events.at(-1)
   assert.equal(held.state, 'parked')
@@ -202,6 +213,7 @@ try {
     const drain = await fixture()
     const hold = await slow()
     writeFileSync(join(drain.cwd, FILE), 'export const bar = 7\n')
+    await passCheck(drain.key, drain.cwd)
     const landing = afterTurn(drain.key, 'Set bar to seven', [], 'success')
     await hold.reached
     assert.equal(landingInFlight(drain.key), true)
@@ -231,6 +243,7 @@ try {
     const late = await fixture()
     const broke = await slow(new Error('git blew up'))
     writeFileSync(join(late.cwd, FILE), 'export const bar = 8\n')
+    await passCheck(late.key, late.cwd)
     const ending = afterTurn(late.key, 'Set bar to eight', [], 'success')
     await broke.reached
     abandonLanding(late.key, 'Stopped before the landing finished.')

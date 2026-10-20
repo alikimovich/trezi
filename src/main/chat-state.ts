@@ -48,6 +48,8 @@ export interface ChatState {
   /** LKM-165: the last landing threw. The work is held (parked) with this reason until
    *  Retry, Resolve, Discard or a later turn lands it; `clearPark` clears it. */
   landingError?: string
+  /** LOCAL-WEBKIT-3: the landing gate held the work for this reason (with `landingError`). */
+  landingHold?: string
   /** LKM-165: what the last landing attempt did, for the agent's `workspace_state`. */
   lastLanding?: LandingResult
 }

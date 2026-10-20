@@ -5,7 +5,7 @@ import { promisify } from 'util'
 import { editingOwner } from './editing-owner'
 import { normalizeBranchName } from './git'
 import { productLog } from './product-log'
-import { type RemoveIntent, repositoryOwner } from './repository-owner'
+import { type LandingHold, type RemoveIntent, repositoryOwner } from './repository-owner'
 import { provisionDependencies } from './worktree-dependencies'
 
 /**
@@ -235,14 +235,22 @@ export async function branchExists(repoRoot: string, branch: string): Promise<bo
 /**
  * Explicitly apply a spawn branch's own change (`branch^..branch`) onto the live
  * checkout: a plain apply, else a 3-way apply that may leave conflict markers for the
- * user to resolve. `empty` when the branch holds no change.
+ * user to resolve. `empty` when the branch holds no change. Only the checked
+ * `candidate` tree lands (LOCAL-WEBKIT-3); otherwise `hold` and nothing is written.
  */
 export async function applyBranchToWorkingTree(
   repoRoot: string,
-  branch: string
-): Promise<{ ok: boolean; conflict: boolean; empty?: boolean; error?: string }> {
+  branch: string,
+  candidate: string | null
+): Promise<{
+  ok: boolean
+  conflict: boolean
+  empty?: boolean
+  error?: string
+  hold?: LandingHold
+}> {
   try {
-    return await repositoryOwner().applyBranch(repoRoot, branch)
+    return await repositoryOwner().applyBranch(repoRoot, branch, candidate)
   } catch (e) {
     return { ok: false, conflict: false, error: msg(e) }
   }
@@ -255,14 +263,20 @@ export async function applyBranchToWorkingTree(
  * file must be unchanged since the spawn forked or already at the target; otherwise
  * the WHOLE batch is refused so nothing is clobbered, and the caller keeps the branch
  * for the manual review fallback. Text only. Returns the before/after pairs for the
- * undo history.
+ * undo history. The bytes are the commit's, and only the checked `candidate` tree
+ * lands (LOCAL-WEBKIT-3); otherwise `hold`.
  */
 export function autoApplyWorktree(
   parentRoot: string,
   wt: Worktree,
-  files: string[]
-): Promise<{ applied: boolean; edits: { file: string; before: string; after: string }[] }> {
-  return repositoryOwner().autoApply({ ...wt, repoRoot: parentRoot }, files)
+  files: string[],
+  candidate: string | null
+): Promise<{
+  applied: boolean
+  edits: { file: string; before: string; after: string }[]
+  hold?: LandingHold
+}> {
+  return repositoryOwner().autoApply({ ...wt, repoRoot: parentRoot }, files, candidate)
 }
 
 /**

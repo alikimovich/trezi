@@ -8,9 +8,11 @@
  * node_modules and .env symlinked; a chat install/remove never touches the live
  * node_modules (LKM-146); turn-1 completeTurn merges onto the live tree and advances the base;
  * turn-2's diff is INCREMENTAL (only the new file, base advanced past turn-1); syncFromLive
- * mirrors a between-turn live edit and no-ops when identical; mid-turn drift on a touched
- * file PARKS and does NOT clobber the live file; a parked second turn re-squashes into ONE
- * cumulative commit; applyParked 3-way-applies onto a DIRTY live tree; discardParked resets
+ * mirrors a between-turn live edit and no-ops when identical; a turn without its checked
+ * candidate tree, or after an edit since its check, is HELD (LOCAL-WEBKIT-3); mid-turn
+ * live drift is HELD and does NOT clobber the live file; a held second turn re-squashes
+ * into ONE cumulative commit; after a reconcile applyParked 3-way-applies onto a DIRTY
+ * live tree; discardParked resets
  * the worktree (keeping the branch); `clean -fd` spares the node_modules/.env symlinks.
  * Uses real temp git repos.
  *
@@ -32,14 +34,23 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  applyParked,
-  completeTurn,
+  applyParked as applyParkedRaw,
+  completeTurn as completeTurnRaw,
   createChatWorktree,
   discardParked,
   stageResolve,
   syncFromLive
 } from '../src/main/chat-worktrees.ts'
 import { provisionDependencies } from '../src/main/worktree-dependencies.ts'
+import { candidateOf } from './helpers/gate-checks.mjs'
+
+// LOCAL-WEBKIT-3: every landing names the candidate tree its checks passed on; here the
+// worktree's source as it is, so a held landing below is about live drift alone.
+const completeTurn = async (live, wt, message, opts = {}) =>
+  completeTurnRaw(live, wt, message, { candidate: await candidateOf(wt.path), ...opts })
+const applyParked = async (live, wt) => applyParkedRaw(live, wt, await candidateOf(wt.path))
+const heldBy = (turn, file) =>
+  turn.outcome === 'held' && turn.hold?.reason === 'live-changed' && turn.hold.files.includes(file)
 
 const base = mkdtempSync(join(tmpdir(), 'trezi-cwt-'))
 const worktreesDir = join(base, 'worktrees')
@@ -93,6 +104,21 @@ try {
   ok(existsSync(join(wt.path, '.env')), '.env symlinked into the fork')
 
   // --- turn 1: agent creates FileA in the worktree → completeTurn merges onto live ---
+  writeFileSync(join(wt.path, 'FileA.tsx'), 'a\n')
+  // LOCAL-WEBKIT-3: no candidate, or a candidate from before the last edit, holds the
+  // committed turn and writes nothing live.
+  const unchecked = await completeTurnRaw(repo1, wt, 'turn 1')
+  ok(unchecked.outcome === 'held' && unchecked.hold?.reason === 'unchecked', 'no check holds')
+  const checkedEarlier = await candidateOf(wt.path)
+  writeFileSync(join(wt.path, 'FileA.tsx'), 'a2\n')
+  const stale = await completeTurnRaw(repo1, wt, 'turn 1', { candidate: checkedEarlier })
+  ok(
+    stale.outcome === 'held' &&
+      stale.hold?.reason === 'source-changed' &&
+      stale.hold.files.join() === 'FileA.tsx',
+    `an edit after the check holds: ${JSON.stringify(stale)}`
+  )
+  ok(!existsSync(join(repo1, 'FileA.tsx')), 'a held turn writes nothing live')
   writeFileSync(join(wt.path, 'FileA.tsx'), 'a\n')
   const t1 = await completeTurn(repo1, wt, 'turn 1')
   ok(t1.outcome === 'merged', `turn 1 merges: ${JSON.stringify(t1.outcome)}`)
@@ -183,14 +209,12 @@ try {
   const wt2 = await createChatWorktree(repo2, 'chattwo', worktreesDir)
 
   // Turn 1: the agent edits README in the worktree, but the USER edits the same file live
-  // (mid-turn drift) — the merge must refuse and PARK, leaving the user's edit intact.
+  // (mid-turn drift) — the owner holds the landing (LOCAL-WEBKIT-3: live moved since the
+  // fork point), leaving the user's edit intact.
   writeFileSync(join(wt2.path, 'README.md'), 'from chat\n')
   writeFileSync(join(repo2, 'README.md'), 'user typed this\n')
   const p1 = await completeTurn(repo2, wt2, 'parked turn 1')
-  ok(
-    p1.outcome === 'parked',
-    `mid-turn drift on a touched file parks: ${JSON.stringify(p1.outcome)}`
-  )
+  ok(heldBy(p1, 'README.md'), `mid-turn drift on a touched file holds: ${JSON.stringify(p1)}`)
   ok(
     readFileSync(join(repo2, 'README.md'), 'utf8') === 'user typed this\n',
     'a parked turn must NOT clobber the concurrent live edit'
@@ -201,8 +225,8 @@ try {
   writeFileSync(join(wt2.path, 'Extra.tsx'), 'chat extra\n')
   const p2 = await completeTurn(repo2, wt2, 'parked turn 2')
   ok(
-    p2.outcome === 'parked',
-    `parked chat re-attempts and stays parked while drifted: ${JSON.stringify(p2.outcome)}`
+    heldBy(p2, 'README.md'),
+    `parked chat re-attempts and stays held while drifted: ${JSON.stringify(p2.outcome)}`
   )
   const p2revs = g(wt2.path, 'rev-list', `${wt2.baseSha}..HEAD`).trim().split('\n').filter(Boolean)
   ok(
@@ -221,13 +245,24 @@ try {
   const repo3 = makeRepo('repo3', { 'README.md': 'base\n', 'Other.tsx': 'o\n' })
   const wt3 = await createChatWorktree(repo3, 'chatthree', worktreesDir)
   writeFileSync(join(wt3.path, 'README.md'), 'chat readme\n')
-  writeFileSync(join(repo3, 'README.md'), 'user drift\n') // drift → the turn parks
+  writeFileSync(join(repo3, 'README.md'), 'user drift\n') // drift → the turn is held
   const p3 = await completeTurn(repo3, wt3, 'to be parked')
-  ok(p3.outcome === 'parked', `repo3 turn parked as expected: ${JSON.stringify(p3.outcome)}`)
+  ok(heldBy(p3, 'README.md'), `repo3 turn held as expected: ${JSON.stringify(p3.outcome)}`)
 
   // User resolves the drift (README back to base) but leaves UNRELATED WIP → dirty tree.
   writeFileSync(join(repo3, 'README.md'), 'base\n')
   writeFileSync(join(repo3, 'Other.tsx'), 'o\n// unrelated WIP\n')
+  // LOCAL-WEBKIT-3: the chat's checks never ran with that WIP, so Apply holds until the
+  // chat is reconciled onto the live state (and, in the product, checked again).
+  const held3 = await applyParked(repo3, wt3)
+  ok(
+    !held3.ok && held3.hold?.reason === 'live-changed' && held3.hold.files.join() === 'Other.tsx',
+    `applyParked holds onto unchecked live WIP: ${JSON.stringify(held3)}`
+  )
+  ok(readFileSync(join(repo3, 'README.md'), 'utf8') === 'base\n', 'a held apply writes nothing')
+  ok((await stageResolve(repo3, wt3)).clean, 'the unrelated WIP reconciles cleanly')
+  // The reconciled result is committed on the branch (not landed), then applied.
+  await completeTurn(repo3, wt3, 'reconciled', { land: false })
   const ap = await applyParked(repo3, wt3)
   ok(ap.ok, `applyParked applies the parked diff onto a dirty tree: ${JSON.stringify(ap)}`)
   ok(!!ap.newBase, 'a clean applyParked returns a newBase to advance')
@@ -273,7 +308,7 @@ try {
   writeFileSync(join(wt5.path, 'README.md'), 'line1\nline2\nline3\nCHAT\n')
   writeFileSync(join(repo5, 'README.md'), 'USER\nline1\nline2\nline3\n')
   const r5park = await completeTurn(repo5, wt5, 'to be parked')
-  ok(r5park.outcome === 'parked', `repo5 file-level drift parks: ${JSON.stringify(r5park.outcome)}`)
+  ok(heldBy(r5park, 'README.md'), `repo5 file-level drift holds: ${JSON.stringify(r5park)}`)
   const prep5 = await stageResolve(repo5, wt5)
   ok(
     prep5.clean && prep5.conflicted.length === 0,
@@ -304,10 +339,7 @@ try {
   writeFileSync(join(wt6.path, 'README.md'), 'line1\nCHAT-EDIT\nline3\n')
   writeFileSync(join(repo6, 'README.md'), 'line1\nUSER-EDIT\nline3\n')
   const r6park = await completeTurn(repo6, wt6, 'to be parked')
-  ok(
-    r6park.outcome === 'parked',
-    `repo6 overlapping drift parks: ${JSON.stringify(r6park.outcome)}`
-  )
+  ok(heldBy(r6park, 'README.md'), `repo6 overlapping drift holds: ${JSON.stringify(r6park)}`)
   const prep6 = await stageResolve(repo6, wt6)
   ok(
     !prep6.clean && prep6.conflicted.includes('README.md'),
@@ -349,7 +381,7 @@ try {
   writeFileSync(join(wt7.path, 'README.md'), 'chat version\n')
   writeFileSync(join(repo7, 'README.md'), 'user version\n')
   const p7 = await completeTurn(repo7, wt7, 'park with deletion')
-  ok(p7.outcome === 'parked', `deletion + drift parks: ${p7.outcome}`)
+  ok(heldBy(p7, 'README.md'), `deletion + drift holds: ${p7.outcome}`)
   const prep7 = await stageResolve(repo7, wt7)
   ok(
     prep7.conflicted.includes('README.md'),
@@ -387,7 +419,7 @@ try {
   const userImg = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 5, 5, 5]) // user ALSO replaces it live (drift)
   writeFileSync(join(repo8, 'plugin.png'), userImg)
   const p8 = await completeTurn(repo8, wt8, 'replace image')
-  ok(p8.outcome === 'parked', `repo8 binary drift parks: ${JSON.stringify(p8.outcome)}`)
+  ok(heldBy(p8, 'plugin.png'), `repo8 binary drift holds: ${JSON.stringify(p8.outcome)}`)
 
   const prep8 = await stageResolve(repo8, wt8)
   ok(
@@ -510,7 +542,10 @@ try {
   g(repo12, 'add', 'README.md')
   writeFileSync(join(repo12, 'README.md'), 'WORKING\nline2\nline3\n')
   const p12 = await completeTurn(repo12, wt12, 'park against staged drift')
-  ok(p12.outcome === 'parked', 'working-tree drift parks before explicit apply')
+  ok(heldBy(p12, 'README.md'), 'working-tree drift holds before explicit apply')
+  ok(!(await applyParked(repo12, wt12)).ok, 'Apply holds until the drift is reconciled')
+  ok((await stageResolve(repo12, wt12)).clean, 'repo12 non-overlapping drift reconciles')
+  await completeTurn(repo12, wt12, 'reconciled', { land: false })
   const ap12 = await applyParked(repo12, wt12)
   ok(ap12.ok, `temporary-index 3-way apply succeeds: ${JSON.stringify(ap12)}`)
   ok(
@@ -545,7 +580,7 @@ try {
   writeFileSync(join(wt14.path, 'README.md'), 'chat version\n')
   writeFileSync(join(repo14, 'README.md'), 'user version\n')
   const p14 = await completeTurn(repo14, wt14, 'park before late preparation')
-  ok(p14.outcome === 'parked', 'repo14 overlapping turn parks')
+  ok(heldBy(p14, 'README.md'), 'repo14 overlapping turn holds')
   writeFileSync(join(wt14.path, 'README.md'), 'new current-turn edit\n')
   let rejected14 = ''
   try {
@@ -580,7 +615,7 @@ try {
   writeFileSync(join(wt15.path, 'README.md'), 'chat version\n')
   writeFileSync(join(repo15, 'README.md'), 'user version\n')
   const p15 = await completeTurn(repo15, wt15, 'park with runtime symlink')
-  ok(p15.outcome === 'parked', 'repo15 overlapping turn parks')
+  ok(heldBy(p15, 'README.md'), 'repo15 overlapping turn holds')
   ok(
     g(wt15.path, 'status', '--porcelain').includes('node_modules'),
     'fixture proves the runtime symlink appears dirty to raw git status'

@@ -37,11 +37,16 @@ simulator.bridgePortBase = Int(number("PLATFORM_BRIDGE_BASE", 7800))
 // Opening: PLATFORM_OPEN stands in for /usr/bin/open; the editor CLIs are the real list,
 // looked up on this process's PATH (the test puts scripted ones there).
 let opening = PlatformOpen.Tools(open: env["PLATFORM_OPEN"] ?? "/nonexistent/open", environment: env, timeout: number("PLATFORM_EDITOR_TIMEOUT", 5))
-let options = PlatformOwner.Options(profile: profile, environment: env, watchdog: nil, journal: journal,
+var options = PlatformOwner.Options(profile: profile, environment: env, watchdog: nil, journal: journal,
     mediaTTL: number("PLATFORM_MEDIA_TTL", 900), maxMediaTokens: Int(number("PLATFORM_MEDIA_TOKENS", 500)),
     maxMediaBytes: Int64(number("PLATFORM_MEDIA_MAX", 256 * 1024 * 1024)),
     maxAttachmentBytes: Int(number("PLATFORM_ATTACH_MAX", 25 * 1024 * 1024)), attachmentIdle: number("PLATFORM_ATTACH_IDLE", 60),
     open: opening, simulator: simulator)
+// Browser tool installs: a fake HOME and only the scripted npm/npx/node folders (never the real ones).
+var browser = BrowserToolsInstaller.Tools(home: env["PLATFORM_BROWSER_HOME"] ?? profile + "/browser-home",
+    search: (env["PLATFORM_BROWSER_SEARCH"] ?? "").split(separator: ":").map(String.init), environment: env)
+browser.timeout = number("PLATFORM_BROWSER_TIMEOUT", 60)
+options.browserTools = browser
 let owner = PlatformOwner(options: options, send: { emit($0) })
 emit([("ready", .bool(true))])
 

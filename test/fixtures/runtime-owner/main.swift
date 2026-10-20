@@ -7,7 +7,8 @@ import Darwin
 // RUNTIME_PORT=<n> fixes the allocated port (no bind probe: the sandbox may forbid it).
 // RUNTIME_PORT_BASE=<n> keeps the real bind probe but starts it at <n> instead of 7777.
 // RUNTIME_READY_TIMEOUT / RUNTIME_INSTALL_TIMEOUT / RUNTIME_STAMP_TIMEOUT /
-// RUNTIME_HEALTH_INTERVAL (seconds), RUNTIME_HEALTH_FAILURES.
+// RUNTIME_HEALTH_INTERVAL / RUNTIME_STOP_GRACE (seconds), RUNTIME_HEALTH_FAILURES.
+// RUNTIME_PROBE_FILE / RUNTIME_PROBE_ONLY: a probe that answers from a file (below).
 // RUNTIME_NO_WATCHDOG=1 leaves crash recovery to the journal alone.
 
 signal(SIGPIPE, SIG_IGN)
@@ -32,8 +33,11 @@ if let fixed = env["RUNTIME_PORT"].flatMap(Int.init) {
     options.allocatePort = { RuntimeNet.freePort(from: base, reserved: $0) }
 }
 // RUNTIME_PROBE_FILE: every probe answers 200 while that file exists (no socket needed).
+// RUNTIME_PROBE_ONLY=<prefix> narrows that to URLs starting with it: the one reachable
+// server is "foreign", and no allocated port ever answers.
 if let file = env["RUNTIME_PROBE_FILE"] {
-    options.probe = { _ in access(file, F_OK) == 0 ? 200 : nil }
+    let only = env["RUNTIME_PROBE_ONLY"]
+    options.probe = { url in access(file, F_OK) == 0 && (only.map { url.hasPrefix($0) } ?? true) ? 200 : nil }
     options.healthProbe = options.probe
 }
 options.healthInterval = seconds("RUNTIME_HEALTH_INTERVAL", 10)
@@ -41,6 +45,7 @@ options.healthFailures = Int(seconds("RUNTIME_HEALTH_FAILURES", 3))
 options.readyTimeout = seconds("RUNTIME_READY_TIMEOUT", 90)
 options.installTimeout = seconds("RUNTIME_INSTALL_TIMEOUT", 300)
 options.stampTimeout = seconds("RUNTIME_STAMP_TIMEOUT", 5)
+options.stopGrace = seconds("RUNTIME_STOP_GRACE", 1)
 let owner = RuntimeOwner(options: options, send: { emit($0) })
 emit([("ready", .bool(true)), ("swept", .array(swept.map { .number(Double($0)) }))])
 

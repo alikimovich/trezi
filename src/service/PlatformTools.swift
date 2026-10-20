@@ -60,8 +60,10 @@ enum PlatformTool {
 
     /// `input`, when given, is the tool's whole stdin (written from another thread, then
     /// closed); otherwise stdin is /dev/null. Secrets travel this way, never in argv.
+    /// `output`, when given, hears each chunk as it is read (0 stdout, 1 stderr) for progress.
     static func run(_ executable: String, _ arguments: [String], environment: [String: String], directory: String? = nil,
-                    timeout: TimeInterval, scope: ToolScope? = nil, input: Data? = nil) throws -> ToolResult {
+                    timeout: TimeInterval, scope: ToolScope? = nil, input: Data? = nil,
+                    output: ((Int, Data) -> Void)? = nil) throws -> ToolResult {
         guard let path = ManagedProcess.resolve(executable, path: environment["PATH"]) else {
             throw PlatformRefusal(.unavailable, "spawn \(executable) ENOENT")
         }
@@ -153,6 +155,7 @@ enum PlatformTool {
                 let count = read(entry.fd, &buffer, buffer.count)
                 if count < 0 && (errno == EINTR || errno == EAGAIN) { continue }
                 if count <= 0 { open[index] = false; continue }
+                output?(index, Data(buffer[..<count]))
                 if captured[index].count < maxOutput { captured[index].append(contentsOf: buffer[..<min(count, maxOutput - captured[index].count)]) }
             }
         }

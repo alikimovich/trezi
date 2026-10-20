@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { closeAgentBrowser, registerChromiumBrowser } from '../src/main/agent-browser.ts'
 import {
   INTERACT_ACTIONS,
+  INTERACT_FIDELITY,
   INTERACT_USER_REFUSAL,
   parseInteraction,
   runAgentInteraction
@@ -22,10 +23,23 @@ const refused = (args, pattern) => {
   assert.ok('error' in parsed, `${JSON.stringify(args)} must be refused`)
   assert.match(parsed.error, pattern)
 }
-assert.deepEqual(INTERACT_ACTIONS, ['click', 'type', 'press', 'hover', 'scroll', 'select', 'wait'])
+assert.deepEqual(INTERACT_ACTIONS, [
+  'click',
+  'type',
+  'press',
+  'hover',
+  'scroll',
+  'select',
+  'wait',
+  'refs'
+])
 refused({}, /action must be one of/)
 refused({ action: 'drag' }, /action must be one of/)
-refused({ action: 'click' }, /needs a selector, source or x\/y/)
+refused({ action: 'click' }, /needs a selector, ref, source or x\/y/)
+refused({ action: 'refs', ref: 'abcd1234:e1' }, /optional selector and limit/)
+refused({ action: 'refs', limit: 151 }, /limit must be/)
+refused({ action: 'wait', ref: 'abcd1234:e1' }, /a ref names an element/)
+refused({ action: 'click', ref: 'x'.repeat(41) }, /at most 40/)
 refused({ action: 'hover' }, /needs a selector/)
 refused({ action: 'select', selector: '#s' }, /needs an option/)
 refused({ action: 'type', selector: '#q' }, /needs text/)
@@ -149,6 +163,70 @@ const reportOf = (result) => JSON.parse(result.content[0].text)
   assert.deepEqual(result.content[1], { type: 'image', data: 'SlBFRw==', mimeType: 'image/jpeg' })
   assert.deepEqual(browser.thumb, [null, 480])
   assert.ok(!browser.calls[0].includes('screenshot'), 'the page never sees Bun-only options')
+  // LOCAL-WEBKIT-2: every action states its fidelity; nothing claims trusted input or :hover.
+  assert.deepEqual(report.fidelity, INTERACT_FIDELITY)
+  assert.equal(report.fidelity.trusted, false)
+  assert.equal(report.fidelity.cssHover, false)
+}
+
+// LOCAL-WEBKIT-2: refs are scoped to one browser, navigation and document.
+{
+  const browser = stubBrowser({
+    run: (_b, request) => ({ element: 'button', got: request, consoleSeq: 0, navigating: false }),
+    after: (b) => ({ url: b.url, consoleErrors: [] })
+  })
+  const evaluate = browser.host.evaluate
+  browser.host.evaluate = async (code) =>
+    code.includes('.refs(')
+      ? {
+          document: 'doc-1',
+          url: browser.url,
+          title: 'T',
+          total: 1,
+          truncated: false,
+          refs: [{ ref: 'e1', element: 'button#go', role: 'button', text: 'Go' }]
+        }
+      : evaluate(code)
+  const listed = await runAgentInteraction(browser, parse({ action: 'refs' }))
+  assert.equal(listed.content.length, 1, 'refs attach no screenshot')
+  const refs = reportOf(listed)
+  assert.equal(refs.ok, true)
+  assert.ok(!('document' in refs), 'the page document id stays in the host')
+  const token = refs.refs[0].ref
+  assert.match(token, /^[0-9a-f]{8}:e1$/, 'the agent sees a host-scoped token')
+  const used = reportOf(
+    await runAgentInteraction(browser, parse({ action: 'click', ref: token, screenshot: false }))
+  )
+  assert.equal(used.ok, true)
+  assert.deepEqual(
+    [used.got.ref, used.got.document, used.got.selector],
+    ['e1', 'doc-1', undefined],
+    'the page resolves the ref in the document it was issued in'
+  )
+  const other = stubBrowser({ run: () => ({}), after: () => ({}) })
+  other.id = 'another-session'
+  const foreign = reportOf(
+    await runAgentInteraction(other, parse({ action: 'click', ref: token, screenshot: false }))
+  )
+  assert.equal(foreign.ok, false)
+  assert.match(foreign.error, /not issued by this session's agent browser/)
+  browser.navigation++
+  const calls = browser.calls.length
+  const stale = await runAgentInteraction(
+    browser,
+    parse({ action: 'click', ref: token, screenshot: false })
+  )
+  assert.equal(stale.isError, true)
+  assert.equal(reportOf(stale).stale, true)
+  assert.match(reportOf(stale).error, /is stale: the agent page navigated/)
+  assert.equal(browser.calls.length, calls, 'a stale ref never reaches the page')
+  const forged = reportOf(
+    await runAgentInteraction(
+      browser,
+      parse({ action: 'click', ref: 'deadbeef:e1', screenshot: false })
+    )
+  )
+  assert.match(forged.error, /not issued by this session's agent browser/)
 }
 
 // A page refusal (upload/download/off-origin/external form) is an error with its kind.

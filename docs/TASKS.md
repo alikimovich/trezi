@@ -3,6 +3,42 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Ship dependency onboarding and packaged managed browser launcher (LOCAL-WEBKIT-4)
+
+- [x] Settings → Browser Checks: WebKit always Available; Chromium missing / partial / unchecked / ready / failed / unsupported with versions, paths, prerequisites, commands, verified links, Install, Cancel and Check Again (`src/native/settings-browser.ts`, `src/main/browser-setup.ts`).
+- [x] Swift-owned installs only on the user's press: fixed npm/npx argv, Trezi's own tools folder, allowlisted env, redacted bounded progress, process-group Cancel, typed refusals (`src/service/BrowserTools.swift`).
+- [x] Ready only from a real check through the packaged wrapper with a fresh headless shell; no false Ready after failure; stale daemons fail.
+- [x] Launcher, detection, guard and policy packaged in `Trezi.app/Contents/Resources/browser/bin`; bundles resolve the packaged copy first; outside-app dependencies documented (`docs/NATIVE.md`).
+- [x] Tests: `browser-setup`, `browser-tools-install`, `managed-browser-path`, `browser-setup-packaged` (relocated app) and native smoke `browser-setup` with screenshots.
+- [x] Repair: installs refuse linked or foreign-owned destinations; version probes are SIGKILLed at a limit; Ready is bound to executable identity; `get url`/`close` failures are not Ready and are cleaned up; a broken shell gets Repair Headless Shell (`test/browser-setup-recovery.mjs`, `test/browser-tools-install.mjs`).
+- [ ] Ship the backend's external packages inside the app so a relocated copy can start without the checkout.
+- [ ] Launch real WebKit from the relocated app copy (private HOME/PATH, no tools). Today `browser-setup-packaged` proves only `otool` WebKit linkage, the packaged wrapper/guard/detection and a scripted owned-tools route; this needs the item above or a backend-less host launch.
+- [ ] Re-verify the Playwright 1.64.1 → headless-shell revision pin online before bumping either version.
+
+## Gate code integration on successful exact-source checks (LOCAL-WEBKIT-3)
+
+- [x] Candidate = the worktree source's Git tree (`src/main/source-tree.ts`); `integrationGate` names it only from passing session receipts on that tree (browser for web, `run_checks` otherwise); failed, cancelled, timed-out, running, stale-server and other-session receipts block (`src/main/integration-gate.ts`).
+- [x] `run_checks` (`src/main/command-checks.ts`): the live checkout's own scripts or `swift build`/`test`, process group, deadline, minimal env, source-unchanged requirement; routed for Claude and Codex, golden policy updated.
+- [x] Swift owner hold (`src/service/RepositoryGate.swift`): `unchecked`, `source-changed`, `live-changed` under the lease before any live write; candidate passed by turn end, `land_now`, Keep, Retry, Resolve, release salvage, parked Apply and fallback, spawn finish and branch apply.
+- [x] Drift: reconcile, then replay the session's passing checks on the new source inside the lease; Retry does the same; holds show the failed-landing card with the reason.
+- [x] Honest capability: non-repo-root projects report `landingChecks.isolation: "unavailable"`; isolation limits (`.env`, databases, fetch/XHR) documented.
+- [x] Tests: `test/integration-gate.mjs`, landing suites updated with `test/helpers/gate-checks.mjs`; native `agent-integration` smoke (two worktrees, markers, stale/failed holds, WebKit + Chromium on one tree, landing exactness, preview reload, focus metrics, conflict, cleanup).
+- [ ] Manager: review the strict live-drift policy (unrelated WIP holds until reconciled and rechecked) and the held background-branch apply.
+
+## Truthful isolated browser assertions and revision-bound evidence (LOCAL-WEBKIT-2)
+
+- [x] Host-scoped refs (`<document>:e<n>`): one page and one document only. A ref from another session, an earlier document or a navigation is refused as stale, and refs never cross sessions (`src/main/agent-refs.ts`).
+- [x] Agent viewport `width`/`height`/`theme` per agent page. The user's preview, its viewport and its appearance stay unchanged (`src/main/agent-viewport.ts`).
+- [x] `preview_verify`: steps (as `preview_interact`) plus bounded declarative checks with condition waits. Isolated-world observations feed host-judged verdicts (`src/main/browser-checks.ts`), and no page code is accepted as a check. Synthetic hover refuses `:hover` selectors on WebKit.
+- [x] Receipts are bound to the source snapshot, runtime generation, document, engine, checks and the screenshot's sha256. Source edits, runtime restarts or stops, navigation, document replacement and page close invalidate them. Live-checkout receipts are never verified (`src/main/verification-receipts.ts`).
+- [x] `engine: "chromium"` goes through the existing managed wrapper only, on the same private runtime and snapshot, with an isolated session and profile. It runs no eval, download, cookie or storage commands. A missing CLI or shell is reported as a precise dependency error, and CLI warnings are kept separate from page console errors (`src/main/verify-chromium.ts`).
+- [x] Grants: routed for Claude and Codex through the existing policy, with utility calls still excluded. Policy golden and rules updated.
+- [x] Tests: `test/browser-verify.mjs` (real wrapper plus a fake CLI) and the native `agent-verify` smoke check (real WebKit receipts, ref staleness across sessions and reloads, edit invalidation, and a managed Chromium receipt through the installed CLI).
+
+- [x] Repair (manager review): snapshot fails closed for directory/special entries; per-name close serialization before a reopen; `runManagedCli` deadline with SIGTERM→SIGKILL of its own group and one run/round/step deadline through every call; Chromium document pinned to the full URL; receipts and artifact folders released with the session; current ref scopes never evicted. `test/browser-verify-bounds.mjs` plus additions to `test/agent-runtime-isolation.mjs`; boundary review recorded in the census row.
+- [x] Repair (manager review 2): receipt release keyed by the closing session (`releaseSessionReceipts(emitKey, projectKey(root))`), so chats sharing a no-worktree live root keep each other's evidence; bounds test covers two sessions on one root.
+- [ ] Manager: final native run and decision on moving the managed-CLI spawn behind a service grant.
+
 ## Valid large-library projection no longer misses its session deadline (LOCAL-PROJECTION)
 
 - [x] Projection performance: no per-file `fsync` in the rebuildable projection cache, shared objects read and hashed once, and the expected-folder lookup in `intact` is linear. Exclusive no-follow 0400 writes, the atomic swap, byte-exact reuse checks and the scope re-check are unchanged.

@@ -133,11 +133,12 @@ Bun uses the private pipe. Requests are S01 frames without a revision:
 | Method | Mode | Body | Result |
 | --- | --- | --- | --- |
 | `detect` | read | `{root}` | `DetectedProject` |
-| `info` | read | `{root}` | `{running, server?}` (`server` once ready) |
-| `start` | mutation | `{root, command, framework?}` | `RunningDevServer` `{url, pid, attached:false}` |
-| `stop` | mutation | `{root}` | `{stopped}` after the group ended |
+| `info` | read | `{root, agent?}` | `{running, server?}` (`server` once ready) |
+| `start` | mutation | `{root, command, framework?, cleanCache?, agent?}` | `RunningDevServer` `{url, pid, attached:false}`, plus `agent` and `generation` for a private runtime |
+| `stop` | mutation | `{root, agent?}` | `{stopped}` after the group ended |
+| `stopAgents` | mutation | `{agent?}` | `{stopped: n}` after that agent's (or every agent's) private runtimes ended |
 | `install` | mutation | `{root}` | `{installed}` (false without `package.json`) |
-| `stopAll` | mutation | `{}` | `{}` after every group and site ended |
+| `stopAll` | mutation | `{}` | `{}` after every group and site ended, private ones included |
 
 Unknown or missing fields, non-string values, a scope, a revision, a relative or
 oversized root, NUL or lone surrogates are refused (`invalidRequest`) before
@@ -153,6 +154,28 @@ health check stopped it (`reason`: the exit code and output tail, or "The dev
 server stopped responding."), and
 `kind:"stamp"` with `{id, path, html}`, answered by Bun with
 `{"service":"runtime-helper","id":n,"html":string|null}`.
+
+### Private agent runtimes (LOCAL-WEBKIT-1)
+
+A request with `agent` (1–64 ASCII letters, digits, `-` or `_`; anything else is
+`invalidRequest`) addresses that agent's private runtime for `root`, keyed
+`agent:<id>:<projectKey>` in `src/service/RuntimeServer.swift`. A visible key is an
+absolute path, so the two never collide: a visible `stop` leaves every private
+runtime running, and a private `stop` or `stopAgents` never touches a visible
+server or an install. Private runtimes use the same launch, port reservation,
+readiness, health check, journal and watchdog as visible servers. At most three
+exist at once, starting ones included; a fourth start is `busy` (retryable). A
+starting slot belongs to the generation that took it: an older launch that is
+superseded never frees a newer start's slot, and `stop`, `stopAgents` and `stopAll`
+invalidate pending private starts, so none launches late or escapes the cap.
+Readiness of a private runtime needs only its own allocated loopback origin: the
+legacy fallback that adopts a URL the framework printed is for the visible server
+alone, so a private runtime never reports a foreign or live server as its own.
+`generation` is the owner's count of starts and stops for that key, so a page can
+tell a restarted server from the one it loaded. Their `log` and `exit` events add
+`agent` (and `exit` adds `generation`). Bun's client routes those only to
+`onAgentLog`/`onAgentExit`, never to the visible preview's listeners. How the agent
+browser uses them: [private agent runtimes](agent-guide/agent-browser.md#private-agent-runtimes).
 
 ## Process groups, crash recovery and no adoption
 
@@ -201,6 +224,19 @@ that is also its own watchdog, and drives it through Bun's real client:
   shell, failed readiness (group gone before the answer), three concurrent stops
   of a TERM-ignoring group (KILL after the grace), restart without overlap, strict
   frames that run nothing.
+- **Private agent runtimes.** A visible server, a same-root agent runtime and a
+  worktree agent runtime on three origins; logs kept apart; a visible stop and a
+  private stop each leave the other running; a restart raises `generation` and its
+  crash reaches only the agent listener with that generation; the cap of three is
+  `busy`; invalid agent ids are refused; `stopAgents` for one agent and for all.
+  Also: a private runtime never adopts a printed foreign URL (a reachable foreign
+  server on the printed port; the visible server keeps the fallback), the cap holds
+  while starts are pending, a superseded start keeps the newer one's slot, and
+  `stop`, `stopAgents` and `stopAll` cancel pending private starts (no late server,
+  no cap bypass). Three generations of one agent, ordered by gate files (the fixture's
+  `RUNTIME_STOP_GRACE` holds a TERM-trapped group open), prove that the oldest launch,
+  returning while the newest start still waits for its predecessor, leaves that start's
+  slot in place: a fourth runtime stays `busy`.
 - **Installs.** npm, a Bun lockfile running `bun install`, a missing manager, a
   failing install with its output, descendants cleaned, no manifest, `busy`, the
   300 s bound (shortened in the fixture) and Bun's queue wrapper.

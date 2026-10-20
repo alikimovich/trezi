@@ -77,6 +77,10 @@ const CALLS = {
   preview_speed: { speed: 1, target: 'user' },
   // LKM-230: main refuses to drive the user's preview.
   preview_interact: { action: 'click', selector: 'h1', target: 'user' },
+  // LOCAL-WEBKIT-2: main refuses to verify (or drive) the user's preview.
+  preview_verify: { list: true },
+  // LOCAL-WEBKIT-3: only lists the project's checks; nothing runs.
+  run_checks: { list: true },
   open_preview: { path: '/helper-route', target: 'user' },
   reload_preview: { hard: true, target: 'user' },
   restart_dev_server: { cleanCache: true },

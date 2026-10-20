@@ -18,6 +18,7 @@ import {
 } from '../src/main/chat-isolation.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from '../src/main/stopped-turn.ts'
+import { passCheck } from './helpers/gate-checks.mjs'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-stop-recovery-'))
 const git = (cwd, ...args) =>
@@ -119,6 +120,7 @@ try {
   writeFileSync(join(keep.cwd, FILE), HALF)
   await afterTurn(keep.key, 'Wrap the bar in a fragment', [], 'failed')
   assert.ok(keep.live().equals(ORIGINAL))
+  await passCheck(keep.key, keep.cwd)
   const kept = await keepStoppedTurn(keep.key)
   assert.equal(kept.ok, true)
   assert.deepEqual(kept.files, [FILE])
@@ -142,6 +144,7 @@ try {
   await beforeTurn(finish.key, 'Finish it')
   assert.ok(finish.copy().equals(HALF), 'a held turn is not reset by the next turn start')
   writeFileSync(join(finish.cwd, FILE), DONE)
+  await passCheck(finish.key, finish.cwd)
   await afterTurn(finish.key, 'Finish it', [], 'success')
   assert.ok(finish.live().equals(DONE))
   assert.equal(last().state, 'merged')
@@ -153,6 +156,7 @@ try {
   const drift = await fixture()
   writeFileSync(join(drift.cwd, FILE), HALF)
   writeFileSync(join(drift.root, FILE), DONE)
+  await passCheck(drift.key, drift.cwd)
   await afterTurn(drift.key, 'edit', [], 'success')
   assert.equal(last().state, 'parked')
   assert.equal(last().reason, undefined)

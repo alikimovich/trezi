@@ -75,7 +75,8 @@ final class OutputLines: @unchecked Sendable {
 }
 
 /// One project's managed server: a process group or a static site on a reserved
-/// port. `info` is set once it is ready (`RunningDevServer`).
+/// port. `info` is set once it is ready (`RunningDevServer`). A private agent runtime
+/// (LOCAL-WEBKIT-1) carries its agent id and the generation it was started under.
 final class RuntimeServer: @unchecked Sendable {
     enum Kind { case process(ManagedProcess), site(StaticServer) }
     let root: String
@@ -83,11 +84,20 @@ final class RuntimeServer: @unchecked Sendable {
     let port: Int
     let kind: Kind
     let readiness: Readiness?
+    let agent: String?
+    let generation: Int
     private let lock = NSLock()
     private var ready: JSValue?
 
-    init(root: String, key: String, port: Int, kind: Kind, readiness: Readiness?) {
+    init(root: String, key: String, port: Int, kind: Kind, readiness: Readiness?, agent: String? = nil, generation: Int = 0) {
         self.root = root; self.key = key; self.port = port; self.kind = kind; self.readiness = readiness
+        self.agent = agent; self.generation = generation
+    }
+
+    /// The ready answer: `RunningDevServer`, plus `agent` and `generation` for a private runtime.
+    func running(url: String, pid: Int32) -> JSValue {
+        guard let agent, case .object(let fields) = Self.running(url: url, pid: pid) else { return Self.running(url: url, pid: pid) }
+        return .object(fields + [(JSText("agent"), .string(JSText(agent))), (JSText("generation"), .number(Double(generation)))])
     }
 
     var info: JSValue? { get { lock.lock(); defer { lock.unlock() }; return ready } set { lock.lock(); ready = newValue; lock.unlock() } }
@@ -104,5 +114,33 @@ final class RuntimeServer: @unchecked Sendable {
 
     static func running(url: String, pid: Int32) -> JSValue {
         .object([(JSText("url"), .string(JSText(url))), (JSText("pid"), .number(Double(pid))), (JSText("attached"), .bool(false))])
+    }
+}
+
+/// Private agent runtimes (LOCAL-WEBKIT-1): a request with an `agent` id runs the
+/// server for that agent's worktree under its own key (`agent:<id>:<root>`), apart
+/// from the project's visible server. Its start, stop, exit and logs never touch the
+/// visible one, and its events carry the `agent` field. At most `maxAgentRuntimes`
+/// exist at once; `stopAgents` stops them (one agent's or all) and leaves every
+/// visible server alone.
+extension RuntimeOwner {
+    static let agentPrefix = "agent:"
+    static let maxAgentRuntimes = 3
+
+    /// A private runtime's key; a visible key is an absolute path, so the two never meet.
+    static func key(_ root: String, agent: String?) -> String { (agent.map { agentPrefix + $0 + ":" } ?? "") + key(root) }
+
+    /// The optional `agent` id: 1–64 ASCII letters, digits, `-` or `_`.
+    static func agent(_ fields: [String: JSValue]) throws -> String? {
+        guard let value = fields["agent"] else { return nil }
+        guard let text = value.text?.string, (1...64).contains(text.count),
+              text.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else { throw ServiceContractFailure.invalidRequest }
+        return text
+    }
+
+    /// A private runtime's events name its agent and generation; a visible server's carry neither.
+    static func scope(_ server: RuntimeServer) -> [(String, JSValue)] {
+        guard let agent = server.agent else { return [] }
+        return [("agent", .string(JSText(agent))), ("generation", .number(Double(server.generation)))]
     }
 }

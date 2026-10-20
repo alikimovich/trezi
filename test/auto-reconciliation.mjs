@@ -12,6 +12,7 @@ import {
   releaseChat
 } from '../src/main/chat-isolation.ts'
 import { ReconciliationCoordinator } from '../src/main/conflict-resolution.ts'
+import { passCheck, replayFixtureChecks } from './helpers/gate-checks.mjs'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-auto-reconcile-'))
 const git = (cwd, ...args) =>
@@ -47,14 +48,19 @@ async function fixture() {
   events.length = 0
   return { key, root, cwd }
 }
+let replayPasses = true
+const replays = replayFixtureChecks(() => replayPasses)
 try {
-  // Same-file edits in separate regions land without a card or a provider turn.
+  // Same-file edits in separate regions land without a card or a provider turn. The
+  // reconciled source is new: the host runs the chat's passing check on it again first.
   const clean = await fixture()
   writeFileSync(join(clean.cwd, 'a.txt'), 'CHAT\ntwo\nthree\nfour\nfive\n')
+  await passCheck(clean.key, clean.cwd)
   writeFileSync(join(clean.root, 'a.txt'), 'one\ntwo\nthree\nfour\nLIVE\n')
   writeFileSync(join(clean.root, 'other.txt'), 'staged user work\n')
   git(clean.root, 'add', 'other.txt')
   assert.equal(await afterTurn(clean.key, 'edit', [], 'success', true), null)
+  assert.equal(replays.length, 1, 'the clean reconcile replayed the check')
   assert.equal(readFileSync(join(clean.root, 'a.txt'), 'utf8'), 'CHAT\ntwo\nthree\nfour\nLIVE\n')
   assert.equal(git(clean.root, 'diff', '--cached', '--name-only'), 'other.txt')
   assert.equal(git(clean.root, 'log', '-1', '--format=%s'), 'Update a.txt')
@@ -67,9 +73,23 @@ try {
   )
   await releaseChat(clean.key)
 
+  // LOCAL-WEBKIT-3: a reconciled result whose replayed check fails never lands.
+  const failing = await fixture()
+  writeFileSync(join(failing.cwd, 'a.txt'), 'CHAT\ntwo\nthree\nfour\nfive\n')
+  await passCheck(failing.key, failing.cwd)
+  writeFileSync(join(failing.root, 'a.txt'), 'one\ntwo\nthree\nfour\nLIVE\n')
+  replayPasses = false
+  assert.equal(await afterTurn(failing.key, 'edit', [], 'success', true), null)
+  replayPasses = true
+  assert.equal(readFileSync(join(failing.root, 'a.txt'), 'utf8'), 'one\ntwo\nthree\nfour\nLIVE\n')
+  assert.equal(isolationSnapshot(failing.key).state, 'parked')
+  assert.match(isolationSnapshot(failing.key).error, /did not pass on this exact source/)
+  await releaseChat(failing.key, 'failed')
+
   // Real overlap is staged privately, returns exact files for one automatic turn.
   const overlap = await fixture()
   writeFileSync(join(overlap.cwd, 'a.txt'), 'CHAT\ntwo\nthree\nfour\nfive\n')
+  await passCheck(overlap.key, overlap.cwd)
   writeFileSync(join(overlap.root, 'a.txt'), 'LIVE\ntwo\nthree\nfour\nfive\n')
   assert.deepEqual(await afterTurn(overlap.key, 'edit', [], 'success', true), ['a.txt'])
   assert(readFileSync(join(overlap.cwd, 'a.txt'), 'utf8').includes('<<<<<<<'))
@@ -82,8 +102,12 @@ try {
   assert.equal(await afterTurn(overlap.key, 'edit', [], 'success', false), null)
   assert(events.some((e) => e.state === 'parked'))
   assert.equal(isolationSnapshot(overlap.key).state, 'parked')
-  // Explicit retry can finish and clear the durable park.
+  // Explicit retry can finish and clear the durable park, once the resolution is checked.
   writeFileSync(join(overlap.cwd, 'a.txt'), 'LIVE + CHAT\ntwo\nthree\nfour\nfive\n')
+  await afterTurn(overlap.key, 'edit', [], 'success', false)
+  assert.equal(isolationSnapshot(overlap.key).reason, 'failed', 'an unchecked resolution holds')
+  assert(!readFileSync(join(overlap.root, 'a.txt'), 'utf8').startsWith('LIVE + CHAT'))
+  await passCheck(overlap.key, overlap.cwd)
   await afterTurn(overlap.key, 'edit', [], 'success', false)
   assert.equal(isolationSnapshot(overlap.key).state, 'isolated')
   assert(readFileSync(join(overlap.root, 'a.txt'), 'utf8').startsWith('LIVE + CHAT'))
@@ -93,6 +117,7 @@ try {
   for (const binary of [false, true]) {
     const f = await fixture()
     writeFileSync(join(f.cwd, 'a.txt'), binary ? Buffer.from([0, 1, 2]) : 'CHAT\n')
+    await passCheck(f.key, f.cwd)
     writeFileSync(join(f.root, 'a.txt'), binary ? Buffer.from([0, 3, 4]) : 'LIVE\n')
     const before = readFileSync(join(f.root, 'a.txt'))
     assert.equal(await afterTurn(f.key, 'edit', [], binary ? 'success' : 'failed', true), null)
