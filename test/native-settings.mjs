@@ -84,7 +84,8 @@ assert.deepEqual(
     ['providers', 'AI Providers', 'sparkles'],
     ['skills', 'Skills', 'book.closed'],
     ['experimental', 'Experimental', 'testtube.2'],
-    ['dreamer', 'Dreamer', 'moon.stars']
+    ['dreamer', 'Dreamer', 'moon.stars'],
+    ['browser', 'Browser Checks', 'safari']
   ]
 )
 assert.equal(sheets.current.state.section, 'general', 'first open shows General')

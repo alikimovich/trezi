@@ -11,6 +11,7 @@ import { build as bundle } from 'esbuild'
 import { MIN_MACOS, requireSupportedPlatform } from './requirements.mjs'
 import { describeSigner, designatedRequirement, sign, signingIdentity, signWithFallback } from './signing.mjs'
 import { buildProfile, swiftBuilder } from './native-swift.mjs'
+import { packageManagedBrowser } from './package-managed-browser.mjs'
 
 requireSupportedPlatform({ sdk: true })
 // LKM-175: `release` (-O) unless TREZI_BUILD_PROFILE=test; see scripts/native-swift.mjs.
@@ -31,9 +32,11 @@ const backendDir = join(contents, 'Resources/backend')
 // whole stamp (branch, dirty, tag, full sha) as `TREZI_BUILD` for the build badge.
 const info = buildInfo(root)
 const label = versionLabel(info)
+// LOCAL-WEBKIT-4: `__treziResources` is the app's own Resources folder, where the managed
+// browser launcher ships (`managedBrowserRoots` in src/main/backends/managed-browser-path.ts).
 const outDirname = {
   define: { __dirname: '__treziOutDir', TREZI_VERSION: JSON.stringify(label), TREZI_BUILD: JSON.stringify(JSON.stringify(info)) },
-  banner: { js: `// ${label}\nvar __treziOutDir = require("node:path").resolve(__dirname, "../../../..");` }
+  banner: { js: `// ${label}\nvar __treziOutDir = require("node:path").resolve(__dirname, "../../../..");\nvar __treziResources = require("node:path").resolve(__dirname, "..");` }
 }
 // LKM-183: Shiki is the one package the backend does not resolve from the checkout; it
 // ships as its own lazily split bundle under backend/syntax/ (scripts/syntax-bundle.mjs).
@@ -46,6 +49,7 @@ mkdirSync(join(contents, 'Resources'), { recursive: true })
 mkdirSync(join(contents, 'Helpers'), { recursive: true })
 copyFileSync(join(root, 'build/icon.icns'), join(contents, 'Resources/Trezi.icns'))
 writeFileSync(join(contents, 'Resources/cat.json'), JSON.stringify(nativeCatAssets(root)))
+packageManagedBrowser(root, join(contents, 'Resources'))
 const device = readFileSync(join(root, 'src/shared/iphone-frame.ts'), 'utf8').match(/FRAME_DATA_URI =\s*'([^']+)'/)[1]
 writeFileSync(join(out, 'device.png'), Buffer.from(device.split(',')[1], 'base64'))
 // The esbuild bundles run next to the Swift compiles below (LKM-175).
@@ -114,7 +118,7 @@ writeFileSync(join(out, 'main.swift'), readFileSync(join(root, 'src/native/Host.
 // sources, flags and toolchain are unchanged (LKM-175).
 const compile = swiftBuilder({ root, target, profile })
 const service = compile('TreziService', [
-  ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'SkillsPackage', 'SkillsStore', 'SkillsRequest', 'SkillsPlan', 'SkillsOwner', 'SkillsHTTP', 'SkillsArchive', 'SkillsScope', 'SkillsProjection', 'SkillsGitHub', 'SkillsImport', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryAgentGit', 'RepositoryBranches', 'RepositoryCleanup', 'RepositoryLock', 'RepositoryMerge', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
+  ...['ServiceContract', 'ServiceXPC', 'ProductLog', 'LedgerStore', 'OperationLedger', 'PreferencesFile', 'PreferencesOwner', 'WorkspaceFile', 'WorkspaceOwner', 'MemoryFile', 'MemoryOwner', 'SkillsPackage', 'SkillsStore', 'SkillsRequest', 'SkillsPlan', 'SkillsOwner', 'SkillsHTTP', 'SkillsArchive', 'SkillsScope', 'SkillsProjection', 'SkillsGitHub', 'SkillsImport', 'DomainChannel', 'BackendSupervisor', 'ProcessGuardian', 'ManagedProcess', 'RuntimeNet', 'RuntimeDetect', 'StaticSite', 'StaticServer', 'RuntimeServer', 'RuntimeOwner', 'RepositoryGit', 'GitMessages','RepositoryJournal', 'RepositoryEffects', 'RepositoryLanding', 'RepositoryAgentGit', 'RepositoryBranches', 'RepositoryCleanup', 'RepositoryLock', 'RepositoryMerge', 'RepositoryGate', 'RepositoryOwner', 'SourcePaths', 'SourceJournal', 'SourceHistory', 'SourceStore', 'SourceDrafts', 'SourceOwner', 'ConversationState', 'ConversationStore', 'ConversationOwner', 'ProviderPolicy', 'ProviderStore', 'ProviderHelper', 'ProviderFrames', 'ProviderData', 'ProviderLaunch', 'ProviderOwner', 'EditingIslands', 'EditingStores', 'EditingProject', 'EditingLegacyNames', 'EditingOwner', 'WorkflowJournal', 'WorkflowContext', 'WorkflowOwner', 'WorkflowPublish', 'WorkflowRemote', 'WorkflowSetup', 'WorkflowTools', 'PlatformTools', 'PlatformOpen', 'PlatformMedia', 'SimulatorTools', 'SimulatorBridge', 'SimulatorOwner', 'BrowserTools', 'PlatformOwner', 'ProfilePaths', 'ServiceRuntime', 'ServiceMain'].map(name => join(root, `src/service/${name}.swift`)),
   '-o', join(serviceContents, 'MacOS/TreziService'), '-framework', 'Foundation', '-framework', 'Security', '-framework', 'CoreServices'
 ]).then(built => {
   copyFileSync(join(serviceContents, 'MacOS/TreziService'), join(out, 'TreziService'))
@@ -225,6 +229,7 @@ const host = compile(
     join(root, 'src/native/DeviceFrameVerification.swift'),
     join(root, 'src/native/PreviewStatus.swift'),
     join(root, 'src/native/PreviewLoad.swift'),
+    join(root, 'src/native/AgentLoadRouting.swift'),
     join(root, 'src/native/PreviewSpeed.swift'),
     join(root, 'src/native/StatesSwitcher.swift'),
     join(root, 'src/native/ThreeDChrome.swift'),

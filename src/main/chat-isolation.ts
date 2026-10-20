@@ -5,7 +5,7 @@ import type { DependencyIssue } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { currentAgentGitAccess } from './agent-git-access'
 import { finalReply, turnMessage } from './chat-commit'
-import { landTurn } from './chat-landing'
+import { chatGateScope, gatedTurn, holdTurn, landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
 import { spareWorktreeIds, takeSpare } from './chat-spare'
 import {
@@ -20,7 +20,6 @@ import { agentWorkspaceState } from './chat-status'
 import { LandingEnded, LandingGuard } from './chat-watchdog'
 import {
   canReconcileText,
-  completeTurn,
   conflictMarkerFiles,
   createChatWorktree,
   discardParked,
@@ -30,6 +29,7 @@ import {
 import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
+import { dropGateEvidence, integrationGate, replayChecks } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
 import { reconcileParkOnChain } from './park-reconcile'
 import { previewEvidence } from './preview-evidence'
@@ -343,25 +343,28 @@ async function landBatch(
     prompt: message,
     reply: finalReply(turn)
   })
-  let outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-    land: terminal === 'success',
-    keepHistory: st.gitAccess === 'full'
-  })
+  // LOCAL-WEBKIT-3: only the tree its checks passed on lands (`gatedTurn`).
+  let { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, terminal === 'success')
   let reconcileFiles: string[] | null = null
+  // Live drift: reconcile onto the live tree. A clean result is new source, so it lands
+  // only once checks pass on it: the host runs the session's passing checks again on it
+  // here, still inside the lease, and the owner lands it only if live has not moved since.
+  const drift =
+    outcome.outcome === 'parked' ||
+    (outcome.outcome === 'held' && outcome.hold?.reason === 'live-changed')
   if (
     reconcile &&
     terminal === 'success' &&
-    outcome.outcome === 'parked' &&
+    drift &&
     !(await conflictMarkerFiles(st.wt, outcome.files)).length &&
     (await canReconcileText(st.liveRoot, st.wt, outcome.files))
   ) {
     try {
       const prep = await stageResolve(st.liveRoot, st.wt)
-      if (prep.clean)
-        outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-          keepHistory: st.gitAccess === 'full'
-        })
-      else reconcileFiles = prep.conflicted
+      if (prep.clean) {
+        await replayChecks(chatGateScope(sessionKey, st))
+        ;({ outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true))
+      } else reconcileFiles = prep.conflicted
     } catch {
       /* preserve the recovery branch and surface the fallback */
     }
@@ -371,14 +374,17 @@ async function landBatch(
   if (outcome.outcome === 'merged') {
     await landTurn(sessionKey, st, outcome, turnNo, described)
     st.lastLanding = { outcome: 'merged', files: outcome.files, at }
-  } else if (outcome.outcome === 'parked') {
-    // A stopped or failed turn holds its work (LKM-151); a drift park stays a
-    // conflict even when a later turn on top of it is stopped.
+  } else if (outcome.outcome === 'held' && outcome.hold?.reason !== 'live-changed') {
+    holdTurn(sessionKey, st, outcome, verdict, turn)
+  } else if (outcome.outcome === 'parked' || outcome.outcome === 'held') {
+    // A stopped or failed turn holds its work (LKM-151); a drift park (live moved since
+    // the fork point) stays a conflict even when a later turn on top of it is stopped.
     st.interrupted = terminal !== 'success' && (!st.parked || st.interrupted)
     st.parked = true
     st.parkedFiles = outcome.files
     // This attempt reached the repository: an earlier landing error is history.
     st.landingError = undefined
+    st.landingHold = undefined
     const markers = await conflictMarkerFiles(st.wt, outcome.files)
     st.resolvingFiles = markers.length ? markers : null
     upsertParkRecord(st, outcome.files, turn)
@@ -460,6 +466,27 @@ export async function retryLanding(
     }
   if (!st.parked || st.reverted || (st.interrupted && !st.landingError))
     return { ok: true, state: st.parked && !st.reverted ? 'parked' : 'isolated' }
+  // LOCAL-WEBKIT-3: held because the project moved on. Bring the chat up to date with
+  // the live tree first; overlapping edits become the usual conflict card (Resolve).
+  if (st.landingHold === 'live-changed') {
+    const prep = await onChain(st, () => stageResolve(st.liveRoot, st.wt)).catch(
+      (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) })
+    )
+    if ('error' in prep) return { ok: false, state: 'parked', error: prep.error }
+    if (!prep.clean) {
+      st.landingError = undefined
+      st.landingHold = undefined
+      st.resolvingFiles = prep.conflicted
+      emitIsolation(sessionKey, 'parked', st.wt.branch, prep.conflicted)
+      return { ok: true, state: 'parked' }
+    }
+  }
+  // The source to land has no passing checks (new after reconciling, or never checked
+  // since its last edit): the host runs the session's checks that passed before again.
+  const scope = chatGateScope(sessionKey, st)
+  const verdict = await integrationGate(scope)
+  if (!verdict.ok && (verdict.reason === 'unchecked' || verdict.reason === 'runtime-changed'))
+    await replayChecks(scope)
   // Its outcome reaches the chat as the usual isolation event (merged, or the card again).
   await afterTurn(sessionKey, 'Land held chat changes', [], 'success')
   return {
@@ -535,10 +562,13 @@ export async function releaseChat(
       if (!st.parked) {
         const turnNo = ++st.turnNo
         const described = await turnMessage(sessionKey, st, turnNo)
-        const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-          land: pendingTerminal === 'success',
-          keepHistory: st.gitAccess === 'full'
-        })
+        // The session's receipts were released with it; the gate reads the copy it kept.
+        const { outcome } = await gatedTurn(
+          sessionKey,
+          st,
+          described.text,
+          pendingTerminal === 'success'
+        )
         // Not `landTurn`: the chat is gone, so there is no park to leave, no branch
         // to retire (the checkout is removed below) and nobody to tell.
         if (outcome.outcome === 'merged') {
@@ -561,7 +591,8 @@ export async function releaseChat(
             },
             outcome.newBase
           )
-        } else if (outcome.outcome === 'parked') {
+        } else if (outcome.outcome === 'parked' || outcome.outcome === 'held') {
+          // Unchecked work is kept on its branch for review, never landed on close.
           st.parked = true
           upsertParkRecord(st, outcome.files)
         }
@@ -576,6 +607,7 @@ export async function releaseChat(
   } catch {
     /* teardown never throws */
   } finally {
+    dropGateEvidence(sessionKey, st.wt.path)
   }
 }
 

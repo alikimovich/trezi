@@ -33,6 +33,9 @@ import {
 } from '../src/main/chat-isolation.ts'
 import { commitLiveTurn, commitTitle, committableFiles } from '../src/main/live-commit.ts'
 import { aheadOfBase, changedSince, defaultBase } from '../src/main/publish-scope.ts'
+import { passCheck, replayFixtureChecks } from './helpers/gate-checks.mjs'
+
+replayFixtureChecks()
 
 const base = mkdtempSync(join(tmpdir(), 'trezi-lc-'))
 let failed = 0
@@ -229,6 +232,7 @@ try {
     await beforeTurn(key, 'first')
     ok(branchExists(repo, branch), 'the branch is attached before the turn can edit')
     writeFileSync(join(cwd, 'a.txt'), 'turn one\n')
+    await passCheck(key, cwd)
     afterTurn(key, 'make the header blue', [])
     ok(await waitForCommits(2), 'turn 1 committed on the live checkout')
     ok(
@@ -240,6 +244,7 @@ try {
     await beforeTurn(key, 'next')
     ok(branchExists(repo, branch), 'the next turn recreates the recovery branch')
     writeFileSync(join(cwd, 'b.txt'), 'turn two\n')
+    await passCheck(key, cwd)
     afterTurn(key, 'add a footer', [])
     ok(await waitForCommits(3), 'turn 2 committed too (it merged, i.e. did not park)')
     ok(log(repo)[0] === 'Add b.txt', `turn 2 subject describes the change (got ${log(repo)[0]})`)
@@ -270,8 +275,11 @@ try {
     await Promise.all([beforeTurn(one, 'edit a'), beforeTurn(two, 'edit b')])
     writeFileSync(join(cwdOne, 'a.txt'), 'one\n')
     writeFileSync(join(cwdTwo, 'b.txt'), 'two\n')
-    afterTurn(one, 'concurrent one', [])
-    afterTurn(two, 'concurrent two', [])
+    await Promise.all([passCheck(one, cwdOne), passCheck(two, cwdTwo)])
+    // The second to land finds live moved: it is reconciled and its check runs again on
+    // the reconciled source before it lands (LOCAL-WEBKIT-3), as a finished turn does.
+    afterTurn(one, 'concurrent one', [], 'success', true)
+    afterTurn(two, 'concurrent two', [], 'success', true)
     for (let i = 0; i < 200 && log(repo).length < 3; i++) {
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
@@ -347,6 +355,7 @@ try {
     )
     await beforeTurn(key, 'second')
     writeFileSync(join(cwd, 'b.txt'), 'new\n')
+    await passCheck(key, cwd)
     await afterTurn(key, 'PRIVATE PROMPT two', [
       { role: 'user', text: 'PRIVATE PROMPT two' },
       { role: 'assistant', text: 'Reworked both fixture files.' }

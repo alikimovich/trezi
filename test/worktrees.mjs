@@ -31,6 +31,7 @@ import {
   pruneOrphans,
   removeWorktree
 } from '../src/main/worktrees.ts'
+import { candidateOf } from './helpers/gate-checks.mjs'
 
 const base = mkdtempSync(join(tmpdir(), 'trezi-wt-'))
 const repo = join(base, 'repo')
@@ -138,7 +139,14 @@ try {
   // --- the branch's change → apply onto the DIRTY live tree (tolerates WIP) ---
   const patch = await branchPatch(repo, wtA.branch)
   ok(/accent/.test(patch) && /New\.tsx/.test(patch), 'the branch carries both changes')
-  const applied = await applyBranchToWorkingTree(repo, wtA.branch)
+  // LOCAL-WEBKIT-3: no candidate tree (no check), or another one, holds and writes nothing.
+  const unchecked = await applyBranchToWorkingTree(repo, wtA.branch, null)
+  ok(!unchecked.ok && unchecked.hold?.reason === 'unchecked', 'an unchecked branch holds')
+  const wrongTree = g(repo, 'rev-parse', 'HEAD^{tree}').trim()
+  const other = await applyBranchToWorkingTree(repo, wtA.branch, wrongTree)
+  ok(!other.ok && other.hold?.reason === 'source-changed', 'another tree holds')
+  ok(!readFileSync(appFile, 'utf8').includes('accent'), 'a held apply writes nothing')
+  const applied = await applyBranchToWorkingTree(repo, wtA.branch, await candidateOf(wtA.path))
   ok(applied.ok && !applied.conflict, `apply onto dirty tree: ${JSON.stringify(applied)}`)
   const liveApp = readFileSync(appFile, 'utf8')
   ok(liveApp.includes('accent'), 'live App.tsx got the spawn edit')
@@ -392,7 +400,7 @@ try {
   const wt2 = await createWorktree(repo2, worktreesDir, { label: 'edit readme' })
   writeFileSync(join(wt2.path, 'README.md'), 'hello TREZI\n') // the "agent" edits in the worktree
   const c2 = await commitWorktree(wt2, 'edit readme')
-  const auto = await autoApplyWorktree(repo2, wt2, c2.files)
+  const auto = await autoApplyWorktree(repo2, wt2, c2.files, await candidateOf(wt2.path))
   ok(auto.applied, `autoApply should apply onto an unchanged live tree: ${JSON.stringify(auto)}`)
   ok(
     readFileSync(join(repo2, 'README.md'), 'utf8') === 'hello TREZI\n',
@@ -410,8 +418,11 @@ try {
   writeFileSync(join(wt3.path, 'README.md'), 'from spawn\n')
   const c3 = await commitWorktree(wt3, 'edit again')
   writeFileSync(join(repo2, 'README.md'), 'user typed this themselves\n') // drift under us
-  const refused = await autoApplyWorktree(repo2, wt3, c3.files)
-  ok(!refused.applied, 'autoApply must refuse when the live file changed concurrently')
+  const refused = await autoApplyWorktree(repo2, wt3, c3.files, await candidateOf(wt3.path))
+  ok(
+    !refused.applied && refused.hold?.reason === 'live-changed',
+    'autoApply must refuse when the live file changed concurrently'
+  )
   ok(
     readFileSync(join(repo2, 'README.md'), 'utf8') === 'user typed this themselves\n',
     'refused autoApply must NOT clobber the user edit'

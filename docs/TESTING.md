@@ -25,9 +25,16 @@ turns; those require explicit authorization and credentials. The native-runtime 
 builds the app; focused native checks reuse that build and skip when unavailable.
 `bun run test:native` runs native-runtime and then native-chat-scroll with
 `--require-build`, so a missing host there fails instead of skipping. Chat-scroll
-never builds; it runs the host native-runtime just built. Native test builds use the
+never builds; it runs the host native-runtime just built. Then
+`test/browser-setup-packaged.mjs --require-build` (LOCAL-WEBKIT-4) copies that app
+elsewhere and checks its WebKit linkage, packaged browser launcher and detection with
+a private HOME, no CLI and scripted tools only. Native test builds use the
 fast test profile and a shared Swift binary cache, see
 [Native build speed](#native-build-speed-lkm-175).
+The packaged-app check proves `otool` WebKit linkage, not a real WebKit launch from
+the copy (the backend cannot start away from its checkout). The unit test
+`browser-setup-recovery` covers hung tools, executable-identity Ready, failing
+`get url`/`close` and the broken-shell Repair with scripted tools.
 Electron/Playwright application tests were removed when the runtime was retired.
 Their historical coverage is not claimed as native parity.
 
@@ -450,6 +457,7 @@ check to its group, and a check with no group there is an error:
 | `settings` | sheets and forms: running servers, New project, project memory, Settings (General, inline AI Providers, Skills (`smoke-skills.ts`), Experimental), feedback, diagnose, activity; attached alert sheets, the feedback error sheet and toast (`smoke-alerts.ts`) |
 | `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`); sent-bubble attachment thumbnails, wrapping and preview (`smoke-sent-attachments.ts`); comment result rows collapsed/expanded in light and dark (`smoke-comment-rows.ts`); post-landing check: a pass adds no row, problem warning rows (not loaded, dev-server error, blank, console errors) with their actions in light and dark (`smoke-landing-check.ts`); a background agent's question card in light and dark, expanded and answered (`smoke-agent-question.ts`); whole-message selection, Copy and Select All in light and dark (`smoke-chat-text.ts`); answer components (options mid-turn with skeletons, form) in light and dark, with the pick and submit reaching a stubbed provider with their summaries (`smoke-chat-ui.ts`); the chat history menu opened through AppKit's real tracking loop: a background chat's Running then Unread answer rows updating in place, Reduce Motion steady (a test override of the menu, no system setting), light/dark/highlighted menu captures (`history-menu-*.png`), and the dot clearing when the chat is opened (`smoke-history-menu.ts`, `HistoryVerification.swift`) |
 | `composer` | composer growth/paste/attachments, per-chat drafts, slash commands, visible composer |
+| `agent-browser` | `agent-navigation` only (also in `core`): the private agent page's open against navigations it did not start, for a focused run |
 
 An unknown or empty group name fails before the build. `--live` requires `core`
 (the live turn edits the heading the core group writes). `native-runtime` only

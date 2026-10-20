@@ -146,7 +146,10 @@ export class NativeView {
       width: number
       height: number
     }) => Promise<NativeImage>
-    setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
+    setViewport: (
+      width: number | null,
+      options?: { height?: number | null; theme?: 'light' | 'dark' | 'system' }
+    ) => Promise<{ width: number | null; zoom: number; height?: number | null; theme?: string }>
     /** A small JPEG (base64, at most 160 px wide unless `width`, up to 480) of the current
      *  frame or of `rect` (CSS px), for chat rows and answer-component previews (LKM-208). */
     captureThumbnail: (options?: {
@@ -211,7 +214,8 @@ export class NativeView {
           view: id,
           agent: { maxPixels: AGENT_CAPTURE.maxPixels, quality: AGENT_CAPTURE.quality, ...options }
         }),
-      setViewport: (width) => bridge().request('previewViewport', { view: id, width })
+      setViewport: (width, options) =>
+        bridge().request('previewViewport', { view: id, width, ...options })
     }
   }
   setBounds(bounds: object) {

@@ -144,6 +144,7 @@ try {
     'preview_location',
     'preview_screenshot',
     'preview_speed',
+    'preview_verify',
     'preview_viewport',
     'project_ui_catalog',
     'publish_merge',
@@ -151,6 +152,7 @@ try {
     'register_states_canvas',
     'reload_preview',
     'restart_dev_server',
+    'run_checks',
     'workspace_state'
   ])
 

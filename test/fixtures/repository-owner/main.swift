@@ -17,7 +17,23 @@ func emit(_ fields: [(String, JSValue)]) { emit(JSValue.object(fields.map { (JST
 
 let crash = env["REPOSITORY_FAULT"]
 /// SIGKILL may land on another thread after kill() returns: never run past it.
-let fault: @Sendable (String) -> Void = { point in if point == crash { kill(getpid(), SIGKILL); while true { pause() } } }
+/// REPOSITORY_RUN_AT=<point> REPOSITORY_RUN=<script> runs the script (sh) synchronously at that
+/// point, once, and carries on: a concurrent writer acting inside an effect (a provider commit in
+/// a worktree between the landing's validation and its reads).
+let runAt = env["REPOSITORY_RUN_AT"], script = env["REPOSITORY_RUN"]
+let ran = NSLock()
+nonisolated(unsafe) var didRun = false
+let fault: @Sendable (String) -> Void = { point in
+    if point == crash { kill(getpid(), SIGKILL); while true { pause() } }
+    guard point == runAt, let script else { return }
+    ran.lock(); let first = !didRun; didRun = true; ran.unlock()
+    guard first else { return }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = [script]
+    try? process.run()
+    process.waitUntilExit()
+}
 // REPOSITORY_WORKTREES_ROOT widens where worktrees may live (the chat and Git suites use the temp dir).
 let owner = RepositoryOwner(options: RepositoryOwner.Options(profile: profile, environment: env, fault: fault,
                                                              worktreesRoot: env["REPOSITORY_WORKTREES_ROOT"]), send: { emit($0) })

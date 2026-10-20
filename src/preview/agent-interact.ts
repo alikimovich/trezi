@@ -10,15 +10,17 @@ import {
   refusal,
   visible
 } from './agent-events'
-import { find, overlay } from './agent-inspect'
+import { overlay } from './agent-inspect'
 import { MAX_TEXT, pressKey, typeText } from './agent-keys'
-import { sourceSelector, sourceStamp } from './source-stamp'
+import { resolveTarget } from './agent-observe'
+import { sourceStamp } from './source-stamp'
 
 /**
  * Agent browser interactions (LKM-230), installed in the isolated TreziPreview world.
  * Bun calls `run` only on a session's private agent page (`src/main/agent-interact.ts`),
  * never on the user's visible preview. A target is a CSS selector (with index), a source
- * stamp (`file:line[:col]`) or a viewport point. Results are plain bounded JSON.
+ * stamp (`file:line[:col]`), an element ref (LOCAL-WEBKIT-2, `./agent-observe`) or a
+ * viewport point. Results are plain bounded JSON.
  */
 
 export type InteractAction = 'click' | 'type' | 'press' | 'hover' | 'scroll' | 'select' | 'wait'
@@ -27,6 +29,9 @@ export interface InteractRequest {
   selector?: string
   index?: number
   source?: string
+  /** A ref's element id and the document it was issued in (Bun resolves the agent's token). */
+  ref?: string
+  document?: string
   x?: number
   y?: number
   text?: string
@@ -67,23 +72,11 @@ function networkIdle(): boolean {
   )
 }
 
-/** The element a request names, or why there is none. */
-function resolve(request: InteractRequest): { el: Element; matches: number } | { error: string } {
-  if (typeof request.source === 'string' && request.source.trim()) {
-    const wanted = request.source.trim()
-    const all = [...document.querySelectorAll(sourceSelector())].filter((e) => {
-      const stamp = sourceStamp(e) ?? ''
-      return !overlay(e) && (stamp === wanted || stamp.startsWith(`${wanted}:`))
-    })
-    const index = Math.max(0, Math.min(all.length - 1, Math.floor(Number(request.index) || 0)))
-    return all[index]
-      ? { el: all[index], matches: all.length }
-      : { error: `No element is stamped with source ${wanted.slice(0, 200)}` }
-  }
-  return find(request)
-}
 const hasTarget = (r: InteractRequest) =>
-  !!r.selector?.trim() || !!r.source?.trim() || (Number.isFinite(r.x) && Number.isFinite(r.y))
+  !!r.ref ||
+  !!r.selector?.trim() ||
+  !!r.source?.trim() ||
+  (Number.isFinite(r.x) && Number.isFinite(r.y))
 
 /** Where a pointer action lands: the element's center, or the requested point. */
 function aim(request: InteractRequest, el: Element) {
@@ -240,7 +233,7 @@ let listening = false
 
 async function act(request: InteractRequest): Promise<Answer> {
   if (request.action === 'wait') return wait(request)
-  const found = hasTarget(request) ? resolve(request) : null
+  const found = hasTarget(request) ? resolveTarget(request) : null
   if (found && 'error' in found) return found
   const el = found?.el ?? null
   const base = el ? { element: describe(el), source: sourceStamp(el), matches: found?.matches } : {}

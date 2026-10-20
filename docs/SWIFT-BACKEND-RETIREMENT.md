@@ -215,7 +215,8 @@ commit nothing themselves:
 ## Census
 
 Classes: `helper` (retained JS whose effects are reads, a provider's own authentication
-or SDK process, or a scratch directory it removes); `test` (native smoke
+or SDK process, a scratch directory it removes, or the one bounded process below that only
+writes a scratch directory it removes); `test` (native smoke
 fixtures, never in the product path); `bun` (a Bun-owned effect, which blocks
 retirement). LKM-111 removed the `rollback` class with the writers it listed.
 
@@ -251,13 +252,27 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/publish-scope.ts` | helper | WorkflowOwner | Git reads |
 | `src/main/publish.ts` | helper | WorkflowOwner | Git reads (work tree, branch) |
 | `src/main/scaffold.ts` | helper | WorkflowOwner | `bun --version` probe |
+| `src/main/source-snapshot.ts` | helper | RepositoryOwner | `git rev-parse` and `git status` reads (no optional locks) of an agent's worktree: the exact source its private preview serves (LOCAL-WEBKIT-1) |
+| `src/main/source-tree.ts` | helper | RepositoryOwner | `git rev-parse` and `git cat-file --batch` reads of a chat worktree (no object, index or ref is written; hashes are computed in process): the Git tree of the exact source a check saw, which the owner's landing gate compares (LOCAL-WEBKIT-3) |
+| `src/main/command-checks.ts` | helper | RuntimeOwner | `run_checks`: runs the project's own `package.json` script as the live checkout defines it (`bun run <name>`) or `/usr/bin/swift build` / `test` in a chat worktree, in its own process group with a deadline, SIGTERM then SIGKILL of the group, a minimal environment and a bounded output tail (LOCAL-WEBKIT-3). The script's own effects (build output, caches) are the project's; a run that changes the exact source fails. Moving the spawn behind a runtime-owner grant is the retirement path for this row |
 | `src/main/trezi-agent-tools.ts` | helper | ProviderOwner (provider helper) | Codex tool bridge socket |
+| `src/main/verification-receipts.ts` | helper | PlatformOwner | `preview_verify` screenshot artifacts: 0600 files in a per-session 0700 folder in the system temp folder (scratch, never the target or the profile), deleted when a receipt is evicted or the session's receipts and folder are released (`closeChat`/`closeSession`, LOCAL-WEBKIT-2) |
+| `src/main/managed-browser-cli.ts` | helper | PlatformOwner | runs only Trezi's managed `bin/managed/agent-browser` wrapper (isolated session, private HOME and profile in a removed scratch folder, headless; never a target write) for `preview_verify` engine "chromium", in its own process group with a deadline, SIGTERM then SIGKILL of that group and a bounded output (LOCAL-WEBKIT-2). It is not a provider or SDK process and not one of the service's fixed tool runs (`PlatformTools.swift` is the simulator's `xcrun`/`idb` seam): the agent already runs this identical wrapper from its own supervised provider helper, and the host's run is the same call made for a verdict it judges itself, so no new capability or target effect is added. Moving the spawn behind a service grant stays open and is the retirement path for this row |
+| `src/main/browser-setup.ts` | helper | PlatformOwner | Settings → Browser Checks: `--version` reads of the found agent-browser, headless shell and Node, a `/bin/ps` read of the fresh headless-shell process, and Check Again's run of the packaged managed wrapper (`open about:blank`, `get url`, `close`) through `runManagedCli` from a removed scratch folder (LOCAL-WEBKIT-4). Installs are not here: they are the platform owner's (`BrowserTools.swift`). Moving the check behind the same service grant as `managed-browser-cli.ts` is the retirement path for this row |
+| `src/main/browser-setup-cleanup.ts` | helper | PlatformOwner | After a Check Again whose `close` failed: SIGKILL of only the headless-shell processes whose command line names that check's own `tzab-` private folder (matched from the `/bin/ps` read), and removal of that folder only when none is left; the agent-browser daemon is never signalled (LOCAL-WEBKIT-4). Retires with `browser-setup.ts` |
 | `src/main/worktrees.ts` | helper | RepositoryOwner | Git reads (a branch's diff, chat refs) |
 | `src/native/log-support.ts` | helper | PlatformOwner | Export Logs… zip (`ditto`) of a temporary folder and a `sw_vers` read (LKM-168) |
 | `src/native/dreamer-export.ts` | helper | PlatformOwner | Export Dreamer Report… zip (`ditto`) of a temporary folder (LKM-202) |
 | `src/native/smoke-agent-interact.ts` | test | — | smoke fixture |
 | `src/native/smoke-managed-agent-browser.ts` | test | — | managed Chromium focus fixture |
+| `src/native/smoke-browser-setup.ts` | test | — | Browser Checks smoke: evidence files in the artifacts folder (LOCAL-WEBKIT-4) |
+| `src/native/smoke-browser-fixture.ts` | test | — | scripted npm/npx/agent-browser/headless shell in the disposable test folder (LOCAL-WEBKIT-4) |
 | `src/native/smoke-agent-preview.ts` | test | — | smoke fixture |
+| `src/native/smoke-agent-runtime.ts` | test | — | private agent runtime fixture (temporary repo and worktrees) |
+| `src/native/smoke-agent-verify.ts` | test | — | verification receipts fixture (temporary repo, worktree and receipt folder) |
+| `src/native/smoke-agent-navigation.ts` | test | — | agent open versus page-reload race fixture (temporary repo, worktree and receipt folder) |
+| `src/native/smoke-agent-navigation-gate.ts` | test | — | provisional-cancel fixture of the navigation smoke (temporary repo, worktree and loopback dev server) |
+| `src/native/smoke-agent-integration.ts` | test | — | integration gate fixture (temporary repo, two worktrees, receipt folder) |
 | `src/native/smoke-alerts.ts` | test | — | smoke fixture |
 | `src/native/smoke-branch-dot.ts` | test | — | smoke fixture |
 | `src/native/smoke-git-updates.ts` | test | — | smoke fixture |

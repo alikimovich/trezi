@@ -3,6 +3,7 @@ import {
   agentBrowser,
   agentBrowserCount,
   closeAgentBrowser,
+  navigationEndsLoad,
   registerChromiumBrowser
 } from '../src/main/agent-browser.ts'
 
@@ -76,3 +77,14 @@ assert.deepEqual(made.slice(3).sort(), ['closed:a', 'closed:b', 'closed:c'])
 registerChromiumBrowser(null)
 await assert.rejects(agentBrowser('a', '/repo', 'chromium'), /unavailable/)
 console.log('AGENT-BROWSER OK — session isolation, cap, reuse, cleanup and Chromium adapter stub')
+
+// LOCAL-WEBKIT-PUBLISH: which host notices end the load in flight.
+assert.equal(navigationEndsLoad({ phase: 'failed', message: 'Could not connect' }), true)
+assert.equal(navigationEndsLoad({ phase: 'failed', message: 'cancelled' }), false, 'a cancel')
+assert.equal(
+  navigationEndsLoad({ phase: 'failed', message: 'The network connection was lost.', stale: true }),
+  false,
+  'a stale navigation failing for real cannot end the newer load'
+)
+assert.equal(navigationEndsLoad({ phase: 'blocked', reason: 'navigation' }), false)
+assert.equal(navigationEndsLoad({ phase: 'start' }), false)

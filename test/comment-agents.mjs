@@ -7,6 +7,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
+import { projectKey } from '../src/shared/projectKey.ts'
+import { passCheck } from './helpers/gate-checks.mjs'
 
 const temp = mkdtempSync(join(tmpdir(), 'trezi-comments-'))
 process.env.TREZI_USER_DATA = join(temp, 'profile')
@@ -49,6 +51,8 @@ registerAgentIpc(
   () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } }),
   { handle: (name, fn) => handlers.set(name, fn) }
 )
+// 'parent' is no open chat, so a spawn's tools (and its checks) run under the project key.
+const parent = projectKey(repo)
 const invoke = (name, ...args) => handlers.get(name)({}, ...args)
 const start = () =>
   invoke('agent:spawn-comment', repo, 'Change color and border', 'parent', { provider: 'codex' })
@@ -66,6 +70,7 @@ try {
   assert.equal(first.ok, true)
   assert.equal(a.options.model, 'gpt-6-sol')
   writeFileSync(join(a.root, 'color.txt'), 'blue\n')
+  await passCheck(parent, a.root)
   a.context.onEvent({ type: 'done' })
   a.context.onEvent({ type: 'done' })
   assert.equal(projectHasRunningAgents(repo), true, 'Landing must remain busy')
@@ -76,6 +81,27 @@ try {
     events.filter((e) => e.type === 'spawn-finished' && e.sessionId === first.spawnId).length,
     1
   )
+  // LOCAL-WEBKIT-3: no passing check on its exact source, so nothing lands: the branch is
+  // kept for review with the reason, and live is unchanged.
+  const unchecked = await start(),
+    u = providers.at(-1)
+  writeFileSync(join(u.root, 'color.txt'), 'orange\n')
+  u.context.onEvent({ type: 'done' })
+  await wait(() => finished(unchecked.spawnId))
+  assert.equal(finished(unchecked.spawnId).outcome, 'review')
+  assert.ok(finished(unchecked.spawnId).branch)
+  assert.match(finished(unchecked.spawnId).summary, /^Not applied: no check passed/)
+  assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'blue\n')
+  // A check that passed, then an edit after it: the edit was never checked.
+  const stale = await start(),
+    v = providers.at(-1)
+  writeFileSync(join(v.root, 'color.txt'), 'cyan\n')
+  await passCheck(parent, v.root)
+  writeFileSync(join(v.root, 'color.txt'), 'magenta\n')
+  v.context.onEvent({ type: 'done' })
+  await wait(() => finished(stale.spawnId))
+  assert.equal(finished(stale.spawnId).outcome, 'review')
+  assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'blue\n')
   const empty = await start()
   providers.at(-1).context.onEvent({ type: 'done' })
   await wait(() => finished(empty.spawnId))
@@ -102,10 +128,16 @@ try {
   const active = providers.slice(-3)
   writeFileSync(join(active[0].root, 'color.txt'), 'purple\n')
   writeFileSync(join(active[1].root, 'border.txt'), 'none\n')
+  for (const p of active.slice(0, 2)) await passCheck(parent, p.root)
   for (const p of active) p.context.onEvent({ type: 'done' })
   await wait(() => parallel.every((r) => finished(r.spawnId)))
+  // LOCAL-WEBKIT-3: the first lands. The second was checked on a base live no longer
+  // has, so the merged result was never checked: it is kept for review, not applied.
+  assert.equal(finished(active[0].context.sessionId).outcome, 'applied')
+  assert.equal(finished(active[1].context.sessionId).outcome, 'review')
+  assert.match(finished(active[1].context.sessionId).summary, /project changed since/)
   assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'purple\n')
-  assert.equal(readFileSync(join(repo, 'border.txt'), 'utf8'), 'none\n')
+  assert.equal(readFileSync(join(repo, 'border.txt'), 'utf8'), 'solid\n')
   // LKM-193: a background agent's question settles through the chat's answer path, and
   // Cancel dismisses one still waiting.
   const asking = await start(),

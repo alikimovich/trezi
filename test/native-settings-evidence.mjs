@@ -22,12 +22,13 @@ const sections = [
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
   { id: 'skills', label: 'Skills', symbol: 'book.closed' },
   { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' },
-  { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' }
+  { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' },
+  { id: 'browser', label: 'Browser Checks', symbol: 'safari' }
 ]
 const sidebar = (section) => ({
   section,
   sections: structuredClone(sections),
-  sidebarRows: 5,
+  sidebarRows: 6,
   sidebarSelected: sections.findIndex((s) => s.id === section),
   windowTitle: sections.find((s) => s.id === section).label,
   sourceList: structuredClone(sourceList),
@@ -162,7 +163,8 @@ for (const width of [680, 780]) {
       'General',
       'Default model',
       'New chats start with this model.',
-      'Use last selected model'
+      'Use last selected model',
+      'Browser Checks'
     ]
   }
   assertSectionEvidence(general, width, 'general')
@@ -180,7 +182,8 @@ for (const width of [680, 780]) {
       'Claude and Codex use your existing sign-ins. Add another provider to',
       'use its models in chats.',
       'Added providers',
-      'None'
+      'None',
+      'Browser Checks'
     ]
   }
   assertSectionEvidence(providers, width, 'providers')
@@ -200,6 +203,7 @@ for (const width of [680, 780]) {
   reject(general, 'general', (e) => (e.text[7] = 'New chats start with'))
   reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Skills')))
   reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Dreamer')))
+  reject(general, 'general', (e) => (e.text = e.text.filter((line) => line !== 'Browser Checks')))
   reject(general, 'general', (e) => (e.sidebarSelected = 1))
   reject(general, 'general', (e) => (e.foreground = false))
   reject(providers, 'providers', (e) => (e.text = e.text.slice(0, 4)))

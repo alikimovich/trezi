@@ -12,6 +12,8 @@ extension RepositoryEffects {
     struct Applied {
         var ok: Bool; var conflict: Bool; var error: String?; var empty = false; var conflicted: [String] = []
         var problems: [GitMessages.ApplyProblem] = []
+        /// LOCAL-WEBKIT-3: refused by the integration gate; nothing was written.
+        var hold: Hold? = nil
     }
 
     /// Plain `git apply` (tolerates dirty work, atomic), else a three-way apply
@@ -75,11 +77,15 @@ extension RepositoryEffects {
 
     /// The explicit "Apply" of a parked chat: its cumulative diff, three-way onto the
     /// live checkout. The chat's tip and the live pre-image are kept until it is clean.
-    func applyParked(_ c: RepositoryContext, _ wt: RepositoryWorktree) throws -> (applied: Applied, files: [String], newBase: String?) {
+    /// Gated: the tip must be the checked candidate and live still its fork point.
+    func applyParked(_ c: RepositoryContext, _ wt: RepositoryWorktree, candidate: String?) throws -> (applied: Applied, files: [String], newBase: String?) {
         try linked(c, wt)
-        let patch = try git.data(wt.path, ["diff", "--full-index", "--binary", "\(wt.baseSha)..HEAD"])
-        let files = try git.paths(wt.path, ["diff", "--name-only", "--no-renames", "-z", "\(wt.baseSha)..HEAD"])
         let chatHead = try head(wt.path)
+        let files = try git.paths(wt.path, ["diff", "--name-only", "--no-renames", "-z", "\(wt.baseSha)..\(chatHead)"])
+        if let hold = try hold(c, directory: wt.path, tip: chatHead, base: wt.baseSha, candidate: candidate) {
+            return (Applied(ok: false, conflict: false, error: nil, hold: hold), files, nil)
+        }
+        let patch = try git.data(wt.path, ["diff", "--full-index", "--binary", "\(wt.baseSha)..\(chatHead)"])
         let tip = try c.preserve(chatHead, label: "target")
         var before: String?
         let result = try applyToWorkingTree(c, c.root, patch: patch, merge: (wt.baseSha, chatHead)) { before = try c.preserve($0, label: "live") }
@@ -89,18 +95,24 @@ extension RepositoryEffects {
     }
 
     /// A spawn branch's own change (`branch^..branch`) onto the live checkout.
-    func applyBranch(_ c: RepositoryContext, branch: String) throws -> Applied {
-        guard git.revision(c.root, "refs/heads/\(branch)") != nil else {
+    /// Gated like every landing: the branch must hold the checked candidate and live
+    /// must still be its parent's tree.
+    func applyBranch(_ c: RepositoryContext, branch: String, candidate: String?) throws -> Applied {
+        guard let tipSha = git.revision(c.root, "refs/heads/\(branch)") else {
             throw RepositoryRefusal(.notFound, "That branch no longer exists.")
         }
-        let patch = (try? git.data(c.root, ["diff", "--full-index", "--binary", "\(branch)^..\(branch)"])) ?? Data()
+        guard let parent = git.revision(c.root, "\(tipSha)^") else {
+            return Applied(ok: false, conflict: false, error: nil, empty: true)
+        }
+        if let hold = try hold(c, directory: c.root, tip: tipSha, base: parent, candidate: candidate) {
+            return Applied(ok: false, conflict: false, error: nil, hold: hold)
+        }
+        let patch = (try? git.data(c.root, ["diff", "--full-index", "--binary", "\(parent)..\(tipSha)"])) ?? Data()
         if String(decoding: patch, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return Applied(ok: false, conflict: false, error: nil, empty: true)
         }
         var before: String?
-        let merge: (base: String, tip: String)? = git.revision(c.root, "refs/heads/\(branch)^")
-            .flatMap { base in git.revision(c.root, "refs/heads/\(branch)").map { (base, $0) } }
-        let result = try applyToWorkingTree(c, c.root, patch: patch, merge: merge) { before = try c.preserve($0, label: "live") }
+        let result = try applyToWorkingTree(c, c.root, patch: patch, merge: (parent, tipSha)) { before = try c.preserve($0, label: "live") }
         if result.ok { before.map(c.release) }
         return result
     }
