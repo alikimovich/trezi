@@ -1,7 +1,8 @@
 // S06 managed project runtime: the real Swift RuntimeOwner (compiled into a fixture
 // process, which is also its own group watchdog) driven through Bun's client.
 // Detection/command/URL parity with the TS runner; process groups, descendants,
-// repeated stops, failed readiness, restart, installs and their failures; crash
+// repeated stops, failed readiness, restart, private agent runtimes (LOCAL-WEBKIT-1)
+// kept apart from the visible server, installs and their failures; crash
 // recovery by watchdog and journal without touching unrelated processes; drain on
 // close; the static site's HTTP layer, traversal, SSE and watcher over a socketpair;
 // stamping through the JS helper. Sections that need a listening socket run only
@@ -622,6 +623,269 @@ try {
     await sleep(300)
     assert.equal(exits.length, 2, 'a stop emits no exit event')
     await stop(fixture)
+  })
+
+  // LOCAL-WEBKIT-1: an agent's private runtime is keyed apart from the visible server.
+  await section('private agent runtimes', async () => {
+    const up = join(dir(), 'up')
+    write(up, '')
+    const fixture = await start(dir(), { RUNTIME_PROBE_FILE: up, RUNTIME_READY_TIMEOUT: '5' })
+    const runtime = fixture.runtime()
+    const exits = []
+    const agentExits = []
+    const visibleLogs = []
+    const agentLogs = []
+    runtime.onExit((root, url, reason) => exits.push({ root, url, reason }))
+    runtime.onLog((_root, line) => visibleLogs.push(line))
+    runtime.onAgentExit((agent, root, url, reason, generation) =>
+      agentExits.push({ agent, root, url, reason, generation })
+    )
+    runtime.onAgentLog((agent, root, line) => agentLogs.push({ agent, root, line }))
+    const live = dir()
+    const worktree = dir()
+    const serve = (name) =>
+      `echo ${name}; echo $$ > "$PWD/${name}.pid"; while true; do sleep 0.05; done`
+    const visible = await runtime.start({ root: live, command: serve('visible') })
+    // The same checkout under an agent id is a second server, on another port.
+    const same = await runtime.startAgent({ agent: 'a1', root: live, command: serve('same') })
+    const own = await runtime.startAgent({ agent: 'b2', root: worktree, command: serve('own') })
+    assert.equal(same.agent, 'a1')
+    assert.equal(own.agent, 'b2')
+    assert.ok(Number.isInteger(same.generation) && same.generation >= 1)
+    assert.equal(new Set([visible.url, same.url, own.url]).size, 3, 'three distinct origins')
+    for (const { url } of [visible, same, own]) assert.match(url, /^http:\/\/127\.0\.0\.1:\d+$/)
+    assert.equal(visible.agent, undefined, 'the visible server names no agent')
+    assert.equal((await runtime.info(live)).server.url, visible.url)
+    assert.equal((await runtime.agentInfo('a1', live)).server.url, same.url)
+    assert.deepEqual(await runtime.info(worktree), { running: false }, 'no visible server there')
+    // Private output and lifecycle lines reach only the agent listeners.
+    await until(() => agentLogs.some((entry) => entry.agent === 'b2' && entry.line === 'own'))
+    assert.ok(!visibleLogs.includes('own') && !visibleLogs.includes('same'))
+    assert.ok(visibleLogs.includes('visible'))
+    assert.ok(agentLogs.every(({ line }) => line !== 'visible'))
+    // Stopping the visible server leaves the private ones; stopping a private one the visible.
+    const samePID = await pidIn(join(live, 'same.pid'))
+    await runtime.stop(live)
+    assert.equal((await runtime.agentInfo('a1', live)).server.url, same.url)
+    assert.ok(alive(samePID))
+    const again = await runtime.start({ root: live, command: serve('visible') })
+    await runtime.stopAgent('a1', live)
+    await dead(samePID)
+    assert.equal((await runtime.info(live)).server.url, again.url)
+    assert.equal(exits.length + agentExits.length, 0, 'stops emit no exit events')
+    // A restart of one agent's runtime (same agent and root) is a new generation, and a
+    // private crash is reported to the agent with it, never as the preview's exit.
+    const crashing = await runtime.startAgent({
+      agent: 'b2',
+      root: worktree,
+      command: `echo up; while [ ! -f "$PWD/crash" ]; do sleep 0.05; done; echo "Error: boom"; exit 2`
+    })
+    assert.ok(crashing.generation > own.generation, 'a restart is a new generation')
+    write(join(worktree, 'crash'), '')
+    const crashed = await until(() => agentExits[0], 5000, 'the private exit event')
+    assert.equal(crashed.agent, 'b2')
+    assert.equal(crashed.root, worktree)
+    assert.equal(crashed.url, crashing.url)
+    assert.equal(crashed.generation, crashing.generation)
+    assert.match(crashed.reason, /^The dev server exited \(code 2\)\.\n[\s\S]*Error: boom/)
+    rmSync(join(worktree, 'crash'))
+    assert.equal(exits.length, 0, 'the visible preview heard nothing')
+    assert.equal((await runtime.info(live)).server.url, again.url)
+    // At most three private runtimes; a fourth is refused as busy, then admitted after a stop.
+    await runtime.startAgent({ agent: 'a1', root: worktree, command: serve('a1') })
+    await runtime.startAgent({ agent: 'b2', root: worktree, command: serve('b2') })
+    await runtime.startAgent({ agent: 'c3', root: dir(), command: serve('c3') })
+    const fourth = { agent: 'd4', root: dir(), command: serve('d4') }
+    await assert.rejects(runtime.startAgent(fourth), (error) => {
+      assert.equal(error.code, 'busy')
+      assert.match(error.message, /limit \(3\)/)
+      return true
+    })
+    // Agent ids are strict; a bad one runs nothing.
+    for (const agent of ['', 'has space', 'x'.repeat(65), '../etc'])
+      await assert.rejects(
+        runtime.startAgent({ agent, root: worktree, command: 'touch "$PWD/ran"' }),
+        (error) => error.code === 'invalidRequest'
+      )
+    assert.ok(!existsSync(join(worktree, 'ran')))
+    // stopAgents: one agent's, then every agent's; the visible server keeps running.
+    const a1PID = await pidIn(join(worktree, 'a1.pid'))
+    assert.equal(await runtime.stopAgents('a1'), 1)
+    await dead(a1PID)
+    await runtime.startAgent(fourth)
+    assert.equal(await runtime.stopAgents(), 3)
+    assert.deepEqual(await runtime.agentInfo('b2', worktree), { running: false })
+    assert.equal((await runtime.info(live)).server.url, again.url)
+    assert.equal(await runtime.stopAgents(), 0)
+    assert.equal(exits.length, 0)
+    await runtime.stop(live)
+    await stop(fixture)
+  })
+
+  // A private page must load only the origin allocated to it. Only the "foreign" server
+  // (say the live preview) answers probes here, and the command prints its URL.
+  await section('private runtime never adopts a printed foreign URL', async () => {
+    const up = join(dir(), 'up')
+    write(up, '')
+    const foreign = 'http://127.0.0.1:59999'
+    const fixture = await start(dir(), {
+      RUNTIME_PROBE_FILE: up,
+      RUNTIME_PROBE_ONLY: foreign,
+      RUNTIME_READY_TIMEOUT: '2'
+    })
+    const runtime = fixture.runtime()
+    const printing = `echo "Local: ${foreign}/"; while true; do sleep 0.05; done`
+    const root = dir()
+    // Legacy behaviour of the visible server: a printed, reachable URL is adopted.
+    const visible = await runtime.start({ root, command: printing })
+    assert.ok(visible.url.startsWith(foreign), 'the visible server keeps the printed-URL fallback')
+    await runtime.stop(root)
+    // The private start does not answer with it: its own origin never became reachable.
+    const started = Date.now()
+    await assert.rejects(runtime.startAgent({ agent: 'p1', root, command: printing }), (error) => {
+      assert.match(error.message, /Timed out waiting for a localhost URL/)
+      return true
+    })
+    assert.ok(Date.now() - started < 8000, 'it fails at the readiness deadline, bounded')
+    assert.deepEqual(await runtime.agentInfo('p1', root), { running: false })
+    await stop(fixture)
+  })
+
+  // A start superseded or stopped while it still waits for its predecessor's group must
+  // neither free the newer start's cap slot nor launch later.
+  await section('private pending starts: cap, supersession, stop', async () => {
+    const up = join(dir(), 'up')
+    write(up, '')
+    const fixture = await start(dir(), { RUNTIME_PROBE_FILE: up, RUNTIME_READY_TIMEOUT: '5' })
+    const runtime = fixture.runtime()
+    // TERM is ignored, so replacing this group waits out the one-second grace.
+    const slow = (name) =>
+      `trap "" TERM; echo $$ > "$PWD/${name}.pid"; while true; do sleep 0.05; done`
+    const fast = (name) => `echo $$ > "$PWD/${name}.pid"; while true; do sleep 0.05; done`
+    const rootA = dir()
+    const rootB = dir()
+    const rootC = dir()
+    const rootD = dir()
+    await runtime.startAgent({ agent: 'a1', root: rootA, command: slow('a') })
+    await runtime.startAgent({ agent: 'b2', root: rootB, command: fast('b') })
+    await runtime.startAgent({ agent: 'c3', root: rootC, command: fast('c') })
+    const fourth = { agent: 'd4', root: rootD, command: fast('d') }
+    // Restart a1 twice: the first is superseded while it waits to retire the old group.
+    const first = runtime.startAgent({ agent: 'a1', root: rootA, command: fast('a-first') })
+    const second = runtime.startAgent({ agent: 'a1', root: rootA, command: fast('a-second') })
+    first.catch(() => {})
+    // The cap holds while those starts are pending, and after the superseded one ended.
+    await assert.rejects(runtime.startAgent(fourth), (error) => error.code === 'busy')
+    await assert.rejects(first, (error) => error.code === 'cancelled')
+    await assert.rejects(runtime.startAgent(fourth), (error) => error.code === 'busy')
+    const settled = await second
+    assert.equal(settled.agent, 'a1')
+    assert.ok(existsSync(join(rootA, 'a-second.pid')) && !existsSync(join(rootA, 'a-first.pid')))
+    await assert.rejects(runtime.startAgent(fourth), (error) => error.code === 'busy')
+    assert.equal(await runtime.stopAgents(), 3)
+    // stopAgents during a pending start: nothing launches afterwards and the slot is free.
+    await runtime.startAgent({ agent: 'a1', root: rootA, command: slow('a') })
+    const pendingAgents = runtime.startAgent({
+      agent: 'a1',
+      root: rootA,
+      command: fast('late-agents')
+    })
+    pendingAgents.catch(() => {})
+    await runtime.stopAgents('a1')
+    await assert.rejects(pendingAgents, (error) => error.code === 'cancelled')
+    // stopAll during a pending start: the same.
+    await runtime.startAgent({ agent: 'a1', root: rootA, command: slow('a') })
+    const pendingAll = runtime.startAgent({ agent: 'a1', root: rootA, command: fast('late-all') })
+    pendingAll.catch(() => {})
+    await runtime.stopAll()
+    await assert.rejects(pendingAll, (error) => error.code === 'cancelled')
+    await sleep(1500)
+    assert.ok(!existsSync(join(rootA, 'late-agents.pid')), 'a stopped start never launched')
+    assert.ok(!existsSync(join(rootA, 'late-all.pid')), 'a start pending at stopAll never launched')
+    assert.deepEqual(await runtime.agentInfo('a1', rootA), { running: false })
+    // A single stop of a pending start frees its slot at once and launches nothing.
+    await runtime.startAgent({ agent: 'a1', root: rootA, command: slow('a') })
+    await runtime.startAgent({ agent: 'b2', root: rootB, command: fast('b') })
+    await runtime.startAgent({ agent: 'c3', root: rootC, command: fast('c') })
+    const pendingStop = runtime.startAgent({ agent: 'a1', root: rootA, command: fast('late-stop') })
+    pendingStop.catch(() => {})
+    await runtime.stopAgent('a1', rootA)
+    await assert.rejects(pendingStop, (error) => error.code === 'cancelled')
+    await runtime.startAgent(fourth)
+    await sleep(1500)
+    assert.ok(!existsSync(join(rootA, 'late-stop.pid')))
+    assert.equal(await runtime.stopAgents(), 3)
+    await stop(fixture)
+  })
+
+  // Three generations of one agent, ordered by gate files instead of timing: the oldest
+  // (superseded) launch returns while the newest start still waits for its predecessor.
+  // That callback must not free the newest start's slot, so a fourth runtime stays busy.
+  await section('private pending starts: an older launch keeps the newest slot', async () => {
+    const up = join(dir(), 'up')
+    write(up, '')
+    const fixture = await start(dir(), {
+      RUNTIME_PROBE_FILE: up,
+      RUNTIME_READY_TIMEOUT: '10',
+      RUNTIME_STOP_GRACE: '30' // the gates, not the KILL after the grace, end a retirement
+    })
+    const runtime = fixture.runtime()
+    // On TERM the group waits for its gate file to go; only then does it exit and retire.
+    // The trap comes first: once the pid file exists, a TERM can no longer end the group.
+    const gated = (name, gate) =>
+      `trap 'while [ -e "${gate}" ]; do sleep 0.05; done; exit 0' TERM; echo $ > "$PWD/${name}.pid"; while true; do sleep 0.05; done`
+    const fast = (name) => `echo $$ > "$PWD/${name}.pid"; while true; do sleep 0.05; done`
+    const gates = join(dir(), 'gates')
+    const gate0 = `${gates}-0`
+    const gate2 = `${gates}-2`
+    write(gate0, '')
+    write(gate2, '')
+    const rootA = dir()
+    const fourth = { agent: 'd4', root: dir(), command: fast('d') }
+    try {
+      await runtime.startAgent({ agent: 'a1', root: rootA, command: gated('a0', gate0) })
+      await pidIn(join(rootA, 'a0.pid'))
+      await runtime.startAgent({ agent: 'b2', root: dir(), command: fast('b') })
+      await runtime.startAgent({ agent: 'c3', root: dir(), command: fast('c') })
+      // Generation 1 retires the running A and waits for gate 0.
+      const first = runtime.startAgent({ agent: 'a1', root: rootA, command: fast('a-first') })
+      first.catch(() => {})
+      // Generation 2 has no predecessor left to wait for: it launches and registers at once.
+      const second = await runtime.startAgent({
+        agent: 'a1',
+        root: rootA,
+        command: gated('a-second', gate2)
+      })
+      assert.equal(second.agent, 'a1')
+      await pidIn(join(rootA, 'a-second.pid'))
+      // Generation 3 retires generation 2 and waits for gate 2: the newest pending start.
+      const third = runtime.startAgent({ agent: 'a1', root: rootA, command: fast('a-third') })
+      third.catch(() => {})
+      await assert.rejects(runtime.startAgent(fourth), (error) => error.code === 'busy')
+      // Release the oldest callback while generation 3 is still pending. Its answer is the
+      // proof that it ran; it was superseded twice, so it launches nothing.
+      rmSync(gate0)
+      await assert.rejects(first, (error) => error.code === 'cancelled')
+      assert.ok(!existsSync(join(rootA, 'a-first.pid')), 'the superseded launch never started')
+      await assert.rejects(
+        runtime.startAgent(fourth),
+        (error) => {
+          assert.equal(error.code, 'busy')
+          return true
+        },
+        'the newest pending start still holds its slot'
+      )
+      assert.ok(!existsSync(join(fourth.root, 'd.pid')))
+      // The newest start completes once its predecessor is gone, and is the one that runs.
+      rmSync(gate2)
+      assert.equal((await third).agent, 'a1')
+      await pidIn(join(rootA, 'a-third.pid'))
+      await assert.rejects(runtime.startAgent(fourth), (error) => error.code === 'busy')
+      assert.equal(await runtime.stopAgents(), 3)
+    } finally {
+      for (const gate of [gate0, gate2]) rmSync(gate, { force: true })
+      await stop(fixture)
+    }
   })
 
   await section('installs', async () => {

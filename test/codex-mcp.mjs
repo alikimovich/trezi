@@ -180,6 +180,8 @@ try {
     'preview_viewport',
     'preview_speed',
     'preview_interact',
+    'preview_verify',
+    'run_checks',
     'workspace_state'
   ]) {
     assert.ok(server.tools[tool], `Codex exposes ${tool}`)

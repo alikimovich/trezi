@@ -9,6 +9,7 @@ const {
   managedBrowserEnv,
   managedBrowserPath,
   managedBrowserRefusal,
+  managedBrowserRoots,
   managedBrowserWrapper
 } = await import('../src/main/backends/managed-browser-path.ts')
 const { browserCommandRefusal } = await import('../bin/trezi-browser-policy.mjs')
@@ -38,6 +39,27 @@ assert.equal(
   managedBrowserDirectory(join(root, 'out/native'), () => false),
   undefined,
   'an absent wrapper is never advertised'
+)
+
+// LOCAL-WEBKIT-4: a bundle resolves only the copy packaged into Trezi.app/Contents/Resources,
+// never the checkout's bin (a moved app has none).
+const resources = join(root, 'Trezi.app/Contents/Resources')
+const packaged = join(resources, 'browser/bin/managed')
+mkdirSync(packaged, { recursive: true })
+copyFileSync(join(managed, 'agent-browser'), join(packaged, 'agent-browser'))
+chmodSync(join(packaged, 'agent-browser'), 0o755)
+assert.deepEqual(managedBrowserRoots(join(resources, 'backend'), resources), [
+  join(resources, 'browser/bin')
+])
+assert.equal(managedBrowserDirectory(bundle, undefined, resources), packaged)
+assert.equal(
+  managedBrowserWrapper(bundle, undefined, undefined, resources),
+  join(packaged, 'agent-browser')
+)
+assert.equal(
+  managedBrowserDirectory(bundle, undefined, join(empty, 'Trezi.app/Contents/Resources')),
+  undefined,
+  'a bundle without its packaged wrapper never falls back to a checkout'
 )
 
 // The managed directory wins over a global agent-browser; the helper's own Bun is reachable.

@@ -25,9 +25,16 @@ turns; those require explicit authorization and credentials. The native-runtime 
 builds the app; focused native checks reuse that build and skip when unavailable.
 `bun run test:native` runs native-runtime and then native-chat-scroll with
 `--require-build`, so a missing host there fails instead of skipping. Chat-scroll
-never builds; it runs the host native-runtime just built. Native test builds use the
+never builds; it runs the host native-runtime just built. Then
+`test/browser-setup-packaged.mjs --require-build` (LOCAL-WEBKIT-4) copies that app
+elsewhere and checks its WebKit linkage, packaged browser launcher and detection with
+a private HOME, no CLI and scripted tools only. Native test builds use the
 fast test profile and a shared Swift binary cache, see
 [Native build speed](#native-build-speed-lkm-175).
+The packaged-app check proves `otool` WebKit linkage, not a real WebKit launch from
+the copy (the backend cannot start away from its checkout). The unit test
+`browser-setup-recovery` covers hung tools, executable-identity Ready, failing
+`get url`/`close` and the broken-shell Repair with scripted tools.
 Electron/Playwright application tests were removed when the runtime was retired.
 Their historical coverage is not claimed as native parity.
 

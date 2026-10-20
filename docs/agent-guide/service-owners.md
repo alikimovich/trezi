@@ -126,6 +126,7 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
                   (docs/SWIFT-BACKEND-RUNTIME.md)
   RepositoryOwner.swift / RepositoryEffects.swift / RepositoryLanding.swift /
   RepositoryBranches.swift / RepositoryCleanup.swift / RepositoryMerge.swift / RepositoryJournal.swift / RepositoryGit.swift /
+  RepositoryGate.swift (the checked-candidate hold, LOCAL-WEBKIT-3) /
   GitMessages.swift   the repository coordinator
                   (LKM-95): one FIFO lane per repository common directory (Bun's
                   `enqueueRepoWrite` becomes a lease on it), every Trezi Git effect
@@ -201,7 +202,8 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
                   native/workflow-service.ts behind main/workflow-owner.ts
                   (docs/SWIFT-BACKEND-WORKFLOWS.md)
   PlatformOwner.swift / SimulatorOwner.swift / SimulatorBridge.swift /
-  SimulatorTools.swift / PlatformMedia.swift / PlatformTools.swift / PlatformOpen.swift
+  SimulatorTools.swift / PlatformMedia.swift / PlatformTools.swift / PlatformOpen.swift /
+  BrowserTools.swift
                   the platform
                   owner (LKM-101): the iOS Simulator preview (bounded, cancellable
                   xcrun/idb runs in a ToolScope, the app's launch command as a journaled
@@ -209,7 +211,9 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
                   grants for the source editor (view, identity, size, SHA-256, expiry),
                   pasted attachments from hash-checked chunks, the running-servers
                   recovery, and (PlatformOpen, LKM-102) opening links, files and "Open
-                  in editor". Bun's client is native/platform-service.ts behind
+                  in editor", plus (BrowserTools, LOCAL-WEBKIT-4) the two pinned
+                  agent-browser / headless-shell installs the user presses in
+                  Settings → Browser Checks. Bun's client is native/platform-service.ts behind
                   main/platform-owner.ts (main/simulator.ts wires the Simulator views)
                   (docs/SWIFT-BACKEND-PLATFORM.md)
   ProfilePaths.swift   the profile and session-store rename aliases (LKM-102): the

@@ -1,15 +1,10 @@
 import { projectKey } from '../shared/projectKey'
 import { turnMessage } from './chat-commit'
-import { landTurn } from './chat-landing'
+import { chatGateScope, gatedTurn, holdTurn, landTurn } from './chat-landing'
 import { clearPark, dropParkRecord, upsertParkRecord } from './chat-park'
 import { type ChatState, emitIsolation, onChain, states } from './chat-state'
-import {
-  applyParked,
-  completeTurn,
-  discardParked,
-  type ResolvePrep,
-  stageResolve
-} from './chat-worktrees'
+import { applyParked, discardParked, type ResolvePrep, stageResolve } from './chat-worktrees'
+import { holdMessage, integrationGate, replayChecks } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
 import { retireWorktreeBranch } from './worktrees'
 
@@ -62,11 +57,19 @@ export async function applyParkedBranch(
   if (!found) return { handled: false }
   const [key, st] = found
   try {
-    // Described before the apply advances the fork point (LKM-189).
-    const { res, described } = await onChain(st, async () => {
+    // Described before the apply advances the fork point (LKM-189). Only the checked
+    // tree onto an unchanged live checkout (LOCAL-WEBKIT-3); otherwise nothing is written.
+    const { res, described, verdict } = await onChain(st, async () => {
       const described = await turnMessage(key, st, 'apply')
-      return { res: await applyParked(st.liveRoot, st.wt), described }
+      const verdict = await integrationGate(chatGateScope(key, st))
+      return { res: await applyParked(st.liveRoot, st.wt, verdict.candidate), described, verdict }
     })
+    if (res.hold) {
+      const error = holdMessage(res.hold, verdict)
+      st.landingError = error
+      st.landingHold = verdict.ok ? res.hold.reason : (verdict.reason ?? undefined)
+      return { handled: true, ok: false, conflict: false, error }
+    }
     if (res.ok) {
       if (res.newBase) st.wt.baseSha = res.newBase
       // A 3-way apply onto a dirty tree can leave conflict markers, so unlike the
@@ -143,15 +146,20 @@ export async function resolveParkedChat(
     st.resolvingFiles = prep.conflicted
     return { ok: true, conflicted: prep.conflicted }
   }
-  // No overlap — the sides merged automatically. Commit + merge onto live and unpark now.
-  // completeTurn's autoApplyWorktree still refuses a binary file (even one stageResolve
-  // just resolved by policy) — the applyParked fallback below is what actually lands it.
+  // No overlap — the sides merged automatically. That merge is new source (LOCAL-WEBKIT-3):
+  // the session's checks that passed before run again on it, and it lands only if they
+  // pass. completeTurn's autoApplyWorktree still refuses a binary file (even one
+  // stageResolve just resolved by policy) — the gated applyParked fallback lands it.
+  await replayChecks(chatGateScope(sessionKey, st))
+  let held: string | undefined
   try {
     await onChain(st, async () => {
       const described = await turnMessage(sessionKey, st, 'resolve')
-      const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-        keepHistory: st.gitAccess === 'full'
-      })
+      const { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true)
+      if (outcome.outcome === 'held') {
+        held = holdTurn(sessionKey, st, outcome, verdict)
+        return
+      }
       if (outcome.outcome === 'merged') {
         await landTurn(sessionKey, st, outcome, 'resolve', described)
         return
@@ -174,7 +182,11 @@ export async function resolveParkedChat(
       // machinery (the review modal's Apply): a 3-way `git apply` handles
       // deletions/binary/modes. No per-file undo entries for this path — same
       // trade-off as the modal's Apply.
-      const res = await applyParked(st.liveRoot, st.wt)
+      const res = await applyParked(st.liveRoot, st.wt, verdict?.candidate ?? null)
+      if (res.hold) {
+        held = holdTurn(sessionKey, st, { ...outcome, hold: res.hold }, verdict)
+        return
+      }
       if (res.ok) {
         if (res.newBase) st.wt.baseSha = res.newBase
         clearPark(st)
@@ -190,7 +202,7 @@ export async function resolveParkedChat(
   } catch (e) {
     return { ok: false, conflicted: [], error: e instanceof Error ? e.message : String(e) }
   }
-  return { ok: true, conflicted: [] }
+  return held ? { ok: false, conflicted: [], error: held } : { ok: true, conflicted: [] }
 }
 
 /** "Discard changes" backend for a live PARKED chat: drop the chat's unmerged work
@@ -255,17 +267,16 @@ export function markStoppedReverted(sessionKey: string, reverted: boolean): void
  */
 export function landStoppedTurn(
   sessionKey: string
-): Promise<{ files: string[]; group?: string; conflict?: boolean } | null> {
+): Promise<{ files: string[]; group?: string; conflict?: boolean; error?: string } | null> {
   const st = states.get(sessionKey)
   if (!holding(st) || st.reverted) return Promise.resolve(null)
   return onChain(st, async () => {
     if (!holding(st) || st.reverted) return null
     const turnNo = ++st.turnNo
     const described = await turnMessage(sessionKey, st, turnNo)
-    const outcome = await completeTurn(st.liveRoot, st.wt, described.text, {
-      land: true,
-      keepHistory: st.gitAccess === 'full'
-    })
+    const { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true)
+    if (outcome.outcome === 'held')
+      return { files: outcome.files, error: holdTurn(sessionKey, st, outcome, verdict) }
     if (outcome.outcome === 'parked') {
       st.interrupted = false
       st.parkedFiles = outcome.files

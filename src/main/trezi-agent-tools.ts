@@ -27,6 +27,8 @@ export const TREZI_AGENT_ACTIONS = [
   'preview_viewport',
   'preview_speed',
   'preview_interact',
+  'preview_verify',
+  'run_checks',
   'project_ui_catalog',
   'compose_project_ui',
   'ask_user',

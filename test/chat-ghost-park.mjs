@@ -26,6 +26,7 @@ import {
 import { states } from '../src/main/chat-state.ts'
 import { runTreziTool } from '../src/main/session-tools.ts'
 import { turnTimings } from '../src/main/turn-timing.ts'
+import { passCheck } from './helpers/gate-checks.mjs'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-ghost-park-'))
 const git = (cwd, ...args) =>
@@ -66,11 +67,12 @@ async function fixture() {
   events.length = 0
   return { key, root, cwd, branch: isolationSnapshot(key).branch }
 }
-/** A drift park: live changed FILE under the chat, so the chat's turn is refused. */
+/** A drift park: live changed FILE under the chat, so the chat's checked turn is refused. */
 async function driftPark() {
   const f = await fixture()
   writeFileSync(join(f.root, FILE), 'export const bar = 9\n')
   writeFileSync(join(f.cwd, FILE), 'export const bar = 1\n')
+  await passCheck(f.key, f.cwd)
   await afterTurn(f.key, 'Set bar', [], 'success')
   assert.equal(isolationSnapshot(f.key).state, 'parked')
   assert.ok(sendRefusal(f.key), 'the conflict refuses sends')
@@ -102,6 +104,7 @@ try {
   await beforeTurn(turn.key, 'next')
   assertCleared(turn)
   writeFileSync(join(turn.cwd, OTHER), 'export const baz = 2\n')
+  await passCheck(turn.key, turn.cwd)
   await afterTurn(turn.key, 'Set baz', [], 'success')
   assert.equal(events.at(-1).state, 'merged')
   assert.equal(read(turn.root, OTHER), 'export const baz = 2\n')
@@ -166,6 +169,7 @@ try {
   assert.deepEqual(await resolveParkedChat(lost.key), { ok: true, conflicted: [FILE] })
   await beforeTurn(lost.key, 'resolve')
   writeFileSync(join(lost.cwd, FILE), 'export const bar = 19\n')
+  await passCheck(lost.key, lost.cwd)
   await afterTurn(lost.key, 'Resolve conflicts', [], 'success')
   assert.equal(events.at(-1).state, 'merged')
   assert.equal(read(lost.root), 'export const bar = 19\n')
@@ -182,6 +186,12 @@ try {
   assert.equal(events.at(-1).state, 'parked')
   assert.equal(events.at(-1).reason, 'failed')
   assert.deepEqual(events.at(-1).files, [OTHER])
+  // LOCAL-WEBKIT-3: Retry lands it only once a check passed on that exact batch.
+  const unchecked = await retryLanding(bare.key)
+  assert.equal(unchecked.state, 'parked')
+  assert.match(unchecked.error, /no check passed on this exact source/)
+  assert.equal(read(bare.root, OTHER), 'export const baz = 0\n')
+  await passCheck(bare.key, bare.cwd)
   assert.deepEqual(await retryLanding(bare.key), { ok: true, state: 'isolated' })
   assert.equal(read(bare.root, OTHER), 'export const baz = 4\n')
   await releaseChat(bare.key)

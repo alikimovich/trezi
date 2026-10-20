@@ -42,7 +42,8 @@ export const SETTINGS_SECTIONS = [
   { id: 'providers', label: 'AI Providers', symbol: 'sparkles' },
   { id: 'skills', label: 'Skills', symbol: 'book.closed' },
   { id: 'experimental', label: 'Experimental', symbol: 'testtube.2' },
-  { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' }
+  { id: 'dreamer', label: 'Dreamer', symbol: 'moon.stars' },
+  { id: 'browser', label: 'Browser Checks', symbol: 'safari' }
 ] as const
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id']
 

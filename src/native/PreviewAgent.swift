@@ -116,6 +116,24 @@ enum PreviewAgent {
         return result
     }
 
+    /// `previewViewport` for an offscreen agent page: its own CSS size (1280×800 when
+    /// nil) and, with `theme`, its own appearance, so `prefers-color-scheme` follows it
+    /// (LOCAL-WEBKIT-2). Only this view changes; the visible preview and the app do not.
+    static func setAgentViewport(_ command: [String: Any], view: WKWebView) -> [String: Any] {
+        func size(_ key: String, _ low: Double, _ high: Double) -> Double? {
+            guard let value = command[key] as? Double, value.isFinite else { return nil }
+            return min(high, max(low, value))
+        }
+        let width = size("width", 240, 3840), height = size("height", 240, 2160)
+        view.frame = NSRect(x: -10000, y: -10000, width: width ?? 1280, height: height ?? 800)
+        if let theme = command["theme"] as? String {
+            view.appearance = theme == "dark" ? NSAppearance(named: .darkAqua) : theme == "light" ? NSAppearance(named: .aqua) : nil
+        }
+        let dark = view.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return ["width": width.map { $0 as Any } ?? NSNull(), "height": height.map { $0 as Any } ?? NSNull(),
+                "zoom": 1, "theme": view.appearance == nil ? "system" : dark ? "dark" : "light"]
+    }
+
     /// The page frame for a requested CSS width: centered, never wider than the area,
     /// zoomed out so the page's `innerWidth` is exactly `width`.
     static func frame(width: CGFloat, in area: NSRect) -> (page: NSRect, zoom: CGFloat) {
