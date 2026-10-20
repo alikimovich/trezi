@@ -10,6 +10,7 @@ import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentIntegration, restoreAgentIntegration } from './smoke-agent-integration'
 import { checkAgentInteract } from './smoke-agent-interact'
+import { checkAgentNavigation } from './smoke-agent-navigation'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkAgentQuestion } from './smoke-agent-question'
 import { checkAgentRuntime } from './smoke-agent-runtime'
@@ -1429,6 +1430,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: async () => {
         await checkAgentRuntime(host, page, artifacts)
+      }
+    },
+    {
+      name: 'agent-navigation',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkAgentNavigation(artifacts)
       }
     },
     {

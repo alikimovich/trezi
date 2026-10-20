@@ -157,7 +157,9 @@ async function webkitBrowser(key: string, root: string, isolated = false): Promi
       return
     }
     if (event.phase !== 'blocked' && event.phase !== 'failed') return
-    if (event.phase === 'failed') {
+    // A cancel means another navigation took over (the page's own reload); that one's start
+    // and `loaded` settle the state. Only a real failure ends the load here.
+    if (event.phase === 'failed' && event.message !== 'cancelled') {
       browser.loading = false
       pending = null
     }
@@ -244,6 +246,8 @@ async function webkitBrowser(key: string, root: string, isolated = false): Promi
         )) as typeof loaded
       } catch (error) {
         pending = null
+        // No navigation is left to settle the flag once the host gave up on the open.
+        browser.loading = false
         throw error
       }
       browser.url = loaded.url

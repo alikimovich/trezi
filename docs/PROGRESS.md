@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: an agent open answered by the wrong navigation (-999)
+
+- **Evidence.** Native run 08bbedaf failed `agent-integration` at its first `preview_verify` with `preview_verify failed: … (NSURLErrorDomain error -999.)` (the raw `error.localizedDescription` the host sends); the failed log is kept at `state/artifacts/08bbedaf-…/verification.log`. A later full run passed, so it is timing-dependent.
+- **Cause.** The static server's live reload (FSEvents, then an SSE message, then `location.reload()` in the page) navigates the agent's private page a few tens of ms after every file write, while the agent's `open` loads the same page. WebKit cancels whichever navigation was in flight (-999). The host kept one pending load per view and answered or rejected it from *any* callback of that view (`didFinish`, `didFail`, `didFailProvisionalNavigation`), so a cancel of either navigation rejected the open; `onNavigation` in `agent-browser.ts` also dropped the pending record on any `failed` event, cancels included.
+- **Fix.** `AgentLoadRouting` (`src/native/AgentLoadRouting.swift`) records the `WKNavigation` the open started; only that navigation's finish or real failure answers the open. A stale callback changes nothing. When the open's own navigation is cancelled, the open follows the navigation that took over (the latest started one, or the next to start) and is answered by that one's `loaded`; if none arrives the 10 s limit says "Agent browser page navigated during open", not a raw -999. A hard reload records its navigation once the caches are cleared. In `agent-browser.ts` a `cancelled` notice no longer clears `pending`/`loading` (the successor's start and `loaded` do), and a failed open clears `loading`.
+- **Regression.** Native smoke `agent-navigation` (`src/native/smoke-agent-navigation.ts`, core group): 20 opens raced against `location.reload()` run in the page (staggered so either navigation starts first), then 20 file writes each followed at once by an open; every open must resolve loaded, and a final `preview_verify` on the settled source must verify. `agent-integration` is unchanged and remains the end-to-end proof.
+- **Not covered.** A live-reload navigation that lands *after* an open has finished and during a receipt's checks still aborts that receipt honestly (document changed); the receipt is never accepted. The routing is not unit-tested outside the native run (it needs real `WKNavigation` objects).
+
 ## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: `repository-owner` budget after a CI timeout
 
 - **What happened.** GitHub CI run 39363163815 (3 workers, cold Swift cache, tree 3c5f9844) ended `repository-owner` with `TIMEOUT 240.0s`; its log showed the sections up to `crash` passed. That failed attempt stays on record.

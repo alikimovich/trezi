@@ -66,6 +66,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     /// Session-owned pages live outside the window and never become responders.
     var agentBrowsers: [String: Date] = [:]
     var agentBrowserLoads: [String: Int] = [:]
+    /// Which navigation answers each pending agent open (`AgentLoadRouting.swift`).
+    var agentRoutes: [String: AgentLoadRouting] = [:]
     var agentBrowserStatuses: [String: Int] = [:]
     var lastUserInteraction = Date()
     var menuTracking = false
@@ -216,6 +218,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             let key = "agent:" + session
             views.removeValue(forKey: key)?.removeFromSuperview()
             urlObservers.removeValue(forKey: key); targets.removeValue(forKey: key); agentBrowsers.removeValue(forKey: key); agentBrowserStatuses.removeValue(forKey: key)
+            agentRoutes.removeValue(forKey: key)
             if let pending = agentBrowserLoads.removeValue(forKey: key) { reply(pending, error: "Agent browser closed") }
             reply(id)
         case "agentBrowserOpen":
@@ -226,14 +229,22 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
             if let pending = agentBrowserLoads.removeValue(forKey: name) { reply(pending, error: "Agent browser navigation superseded") }
             targets[name] = url; agentBrowserLoads[name] = id; agentBrowsers[name] = Date(); agentBrowserStatuses.removeValue(forKey: name)
+            // Only the navigation this open starts answers it; the page's own reload may cancel it (see AgentLoadRouting).
             // A reload of the page already shown goes back to the origin; hard also drops WebKit's caches.
-            if c["hard"] as? Bool == true { PreviewCache.reload(view, url: url) }
-            else if c["reload"] as? Bool == true { view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)) }
-            else { view.load(URLRequest(url: url)) }
+            if c["hard"] as? Bool == true {
+                agentRoutes[name] = AgentLoadRouting(nil)
+                PreviewCache.reload(view, url: url) { [weak self] navigation in
+                    guard let self, self.agentBrowserLoads[name] == id else { return }
+                    self.agentRoutes[name]?.record(navigation)
+                }
+            } else if c["reload"] as? Bool == true {
+                agentRoutes[name] = AgentLoadRouting(view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)))
+            } else { agentRoutes[name] = AgentLoadRouting(view.load(URLRequest(url: url))) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 guard let self, self.agentBrowserLoads[name] == id else { return }
                 self.agentBrowserLoads.removeValue(forKey: name)
-                self.reply(id, error: "Agent browser load timed out")
+                let navigated = self.agentRoutes.removeValue(forKey: name)?.superseded == true
+                self.reply(id, error: navigated ? "Agent browser page navigated during open" : "Agent browser load timed out")
             }
         case "agentBrowserSpeed":
             guard name.hasPrefix("agent:"), let view,
@@ -447,7 +458,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard let name = views.first(where: { $0.value === webView })?.key else { return }
-        if let pending = agentBrowserLoads.removeValue(forKey: name) {
+        if agentRoutes[name]?.finished(navigation) == true, let pending = agentBrowserLoads.removeValue(forKey: name) {
+            agentRoutes.removeValue(forKey: name)
             reply(pending, ["url": webView.url?.absoluteString ?? "", "loaded": true, "status": agentBrowserStatuses[name] as Any? ?? NSNull()])
         }
         ProductLog.info("preview", "Preview loaded \(Host.logURL(webView.url))")
@@ -461,7 +473,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     var recentCrashes: [TimeInterval] = []
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        previewNavigationFailed(webView, error, committed: false)
+        previewNavigationFailed(webView, error, committed: false, navigation: navigation)
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         if webView !== views["preview"] { webView.reload(); return }

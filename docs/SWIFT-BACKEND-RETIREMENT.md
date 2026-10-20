@@ -270,6 +270,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-agent-preview.ts` | test | — | smoke fixture |
 | `src/native/smoke-agent-runtime.ts` | test | — | private agent runtime fixture (temporary repo and worktrees) |
 | `src/native/smoke-agent-verify.ts` | test | — | verification receipts fixture (temporary repo, worktree and receipt folder) |
+| `src/native/smoke-agent-navigation.ts` | test | — | agent open versus page-reload race fixture (temporary repo, worktree and receipt folder) |
 | `src/native/smoke-agent-integration.ts` | test | — | integration gate fixture (temporary repo, two worktrees, receipt folder) |
 | `src/native/smoke-alerts.ts` | test | — | smoke fixture |
 | `src/native/smoke-branch-dot.ts` | test | — | smoke fixture |
