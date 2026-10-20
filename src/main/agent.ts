@@ -24,6 +24,7 @@ import type { ChatUiAnswer } from '../shared/chat-ui'
 import { dependencyNotice } from '../shared/dependency-issue'
 import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
+import { releaseAgentBrowsersFor } from './agent-browser'
 import { type ProviderSession, pickProvider } from './backends'
 import { resumeSummary } from './backends/claude-resume'
 import { handoffPrompt } from './backends/conversation-handoff'
@@ -65,6 +66,7 @@ import {
   legacyWorkspaceDirs,
   workspaceUsage
 } from './chat-workspaces'
+import { cancelChecks } from './command-checks'
 import type { DescribeChange } from './commit-message'
 import { conflictResolutionPrompt, ReconciliationCoordinator } from './conflict-resolution'
 import {
@@ -75,6 +77,13 @@ import {
 } from './conversation-owner'
 import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
+import {
+  dropGateEvidence,
+  type GateVerdict,
+  holdMessage,
+  integrationGate,
+  retainGateEvidence
+} from './integration-gate'
 import { landingCheckContext } from './landing-context'
 import {
   beginLiveWatch,
@@ -105,6 +114,7 @@ import { registerProviderIpc } from './providers'
 import { generatePublishDescription } from './publish-description'
 import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
+import type { LandingHold } from './repository-owner'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createProject } from './scaffold'
 import { incidents } from './self-heal/incidents'
@@ -113,6 +123,7 @@ import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
 import { turnTimings } from './turn-timing'
+import { receiptSession, releaseSessionReceipts } from './verification-receipts'
 import { workflowOwner } from './workflow-owner'
 import { dependenciesInstalling } from './worktree-dependencies'
 import {
@@ -623,12 +634,32 @@ function stopProvider(s: ProviderSession): void {
   s.shutdown()
 }
 
+/**
+ * A closed session's private agent pages and their dev servers (LOCAL-WEBKIT-1) go with
+ * it, and so do its `preview_verify` receipts and screenshot artifacts (LOCAL-WEBKIT-2).
+ * `emitKey` is the key its tools ran under (a chat's `sessionKey`, a spawn's parent key):
+ * the receipts go by that session, never by the root, which chats without a worktree share.
+ */
+function releaseRuntimes(s: ProviderSession, emitKey: string): void {
+  // LOCAL-WEBKIT-3: the final landing (release salvage, a spawn's finish) still needs
+  // what the receipts proved while the session's servers ran.
+  void releaseAgentBrowsersFor(s.root).catch(() => 0)
+  try {
+    retainGateEvidence(emitKey, s.root)
+    cancelChecks(receiptSession(emitKey, projectKey(s.root)))
+    releaseSessionReceipts(emitKey, projectKey(s.root))
+  } catch {
+    // temporary evidence; never let its cleanup interfere with teardown
+  }
+}
+
 /** Close an interactive chat: provider teardown, then the owner persists its record.
  * `current` keeps it as the project's last-active chat (restored in place on the next
  * open); `history` archives it as a previous agent; `none` forgets it. Only chats the
  * user engaged (≥1 prompt) are kept. Never throws — History is non-critical. */
 async function closeChat(sessionKey: string, s: ProviderSession, persist: Persist): Promise<void> {
   stopProvider(s)
+  releaseRuntimes(s, sessionKey)
   clearTimeout(checkpointTimers.get(sessionKey))
   checkpointTimers.delete(sessionKey)
   handoffHistory.delete(sessionKey)
@@ -649,8 +680,9 @@ async function closeChat(sessionKey: string, s: ProviderSession, persist: Persis
 
 /** Tear down a detached spawn's session, then persist its record in History (through
  * the store, whose writer is the conversation owner under the Swift launch). */
-function closeSession(s: ProviderSession): void {
+function closeSession(s: ProviderSession, parentSessionKey: string): void {
   stopProvider(s)
+  releaseRuntimes(s, parentSessionKey)
   // Only persist sessions the user actually engaged (≥1 prompt) — skip opened-then
   // -closed empties. Best-effort: a disk hiccup must not break teardown.
   try {
@@ -701,23 +733,35 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
     .catch(() => {})
   await enqueueRepoWrite(parentRoot, async () => {
     try {
-      closeSession(session) // finalize + persist the record (removed below if we auto-apply)
+      closeSession(session, parentSessionKey) // finalize + persist the record (removed below if we auto-apply)
       // The agent's closing message → a chat notification the user can reply to.
-      const summary =
+      let summary =
         spawn.error ??
         [...session.record.transcript].reverse().find((t) => t.role === 'assistant')?.text
       const { committed, files } = await commitWorktree(wt, firstLine(text))
-      let auto: { applied: boolean; edits: { file: string; before: string; after: string }[] } = {
-        applied: false,
-        edits: []
-      }
+      let auto: {
+        applied: boolean
+        edits: { file: string; before: string; after: string }[]
+        hold?: LandingHold
+      } = { applied: false, edits: [] }
+      let verdict: GateVerdict | null = null
       if (status === 'done' && !spawn.cancelled && committed && files.length) {
         try {
-          auto = await autoApplyWorktree(parentRoot, wt, files)
+          // LOCAL-WEBKIT-3: only what the spawn's checks passed on, onto an unchanged tree.
+          verdict = await integrationGate({
+            emitKey: parentSessionKey,
+            root: wt.path,
+            liveRoot: parentRoot
+          })
+          auto = await autoApplyWorktree(parentRoot, wt, files, verdict.candidate)
         } catch {
           auto = { applied: false, edits: [] }
+        } finally {
+          dropGateEvidence(parentSessionKey, wt.path)
         }
       }
+      // Kept on its branch for review, with the reason, instead of landing unchecked.
+      if (auto.hold) summary = `Not applied: ${holdMessage(auto.hold, verdict)}`
       if (auto.applied) {
         // Land it on the working branch + make the whole task ONE Cmd+Z (shared
         // group). Then drop the branch and un-persist the record so the rail clears.
@@ -2051,8 +2095,18 @@ export function registerAgentIpc(
     if (!(await isRepoRoot(root))) return { ok: false, error: 'Not a git repository.' }
     if (!(await branchExists(root, branch)))
       return { ok: false, error: 'That branch no longer exists.' }
-    const res = await applyBranchToWorkingTree(root, branch)
+    // LOCAL-WEBKIT-3: a finished background or crash-recovered branch has no live
+    // session, so no checks on its exact source: the owner holds it (nothing written).
+    const res = await applyBranchToWorkingTree(root, branch, null)
     if (res.empty) return { ok: false, error: 'That run made no changes to apply.' }
+    if (res.hold)
+      return {
+        ok: false,
+        error:
+          res.hold.reason === 'unchecked'
+            ? 'Trezi applies only work whose checks passed on its exact source, and this branch has none (its agent has ended). Ask a chat to bring the branch into its work and check it, or merge it yourself with Git.'
+            : holdMessage(res.hold, null)
+      }
     if (res.ok) return { ok: true }
     return {
       ok: false,
@@ -2379,7 +2433,8 @@ export function registerAgentIpc(
     // disk — committing/removing here would race the process exit (work lost, or a
     // half-removed worktree). The next launch's pruneOrphans commits each dirty
     // leftover to its branch (recovering the work) and reclaims the checkout.
-    for (const { session } of spawns.values()) closeSession(session)
+    for (const { session, parentSessionKey } of spawns.values())
+      closeSession(session, parentSessionKey)
     spawns.clear()
     queuedSpawns.clear()
     closing.push(store().flush())

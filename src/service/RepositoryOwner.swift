@@ -37,10 +37,11 @@ final class RepositoryOwner: @unchecked Sendable {
         "attachBranch": (["root", "worktree"], ["leases"], nil),
         "retireBranch": (["root", "worktree"], ["leases"], nil),
         "commitWorktree": (["root", "worktree", "message"], ["leases"], nil),
-        "autoApply": (["root", "worktree", "files", "intent"], ["leases"], ["land"]),
-        "completeTurn": (["root", "worktree", "message", "intent"], ["keepHistory", "leases"], ["land", "park"]),
-        "applyParked": (["root", "worktree", "intent"], ["leases"], ["land"]),
-        "applyBranch": (["root", "branch", "intent"], ["leases"], ["land"]),
+        // `candidate` (LOCAL-WEBKIT-3): the checked tree; a land without it is held.
+        "autoApply": (["root", "worktree", "files", "intent"], ["candidate", "leases"], ["land"]),
+        "completeTurn": (["root", "worktree", "message", "intent"], ["keepHistory", "candidate", "leases"], ["land", "park"]),
+        "applyParked": (["root", "worktree", "intent"], ["candidate", "leases"], ["land"]),
+        "applyBranch": (["root", "branch", "intent"], ["candidate", "leases"], ["land"]),
         "stageResolve": (["root", "worktree", "intent"], ["leases"], ["reconcile"]),
         "gitSyncBase": (["root", "worktree", "ref", "intent"], ["leases"], ["sync"]),
         "gitMergeContinue": (["root", "worktree", "intent"], ["leases"], ["continue"]),
@@ -285,23 +286,25 @@ final class RepositoryOwner: @unchecked Sendable {
             let (committed, files) = try e.commitWorktree(c, try worktree(body, c), message: try body.string("message"))
             return Self.object([("committed", .bool(committed)), ("files", Self.strings(files))])
         case "autoApply":
-            let (applied, edits) = try e.autoApply(c, try worktree(body, c), files: try body.strings("files"))
-            return Self.object([("applied", .bool(applied)), ("edits", Self.edits(edits))])
+            let (applied, edits, hold) = try e.autoApply(c, try worktree(body, c), files: try body.strings("files"), candidate: try candidate(body))
+            return Self.object([("applied", .bool(applied)), ("edits", Self.edits(edits))] + Self.hold(hold))
         case "completeTurn":
             let turn = try e.completeTurn(c, try worktree(body, c), message: try body.string("message"), land: intent == "land",
-                                          keepHistory: body.has("keepHistory") ? try body.bool("keepHistory") : false)
+                                          keepHistory: body.has("keepHistory") ? try body.bool("keepHistory") : false,
+                                          candidate: try candidate(body))
             var fields: [(String, JSValue)] = [("outcome", .string(JSText("\(turn.outcome)"))), ("files", Self.strings(turn.files)), ("edits", Self.edits(turn.edits))]
             if let base = turn.newBase { fields.append(("newBase", .string(JSText(base)))) }
-            return Self.object(fields)
+            if let tree = turn.liveTree { fields.append(("liveTree", .string(JSText(tree)))) }
+            return Self.object(fields + Self.hold(turn.hold))
         case "applyParked":
-            let (applied, files, base) = try e.applyParked(c, try worktree(body, c))
+            let (applied, files, base) = try e.applyParked(c, try worktree(body, c), candidate: try candidate(body))
             var fields = Self.applied(applied) + [("files", Self.strings(files))]
             if let base { fields.append(("newBase", .string(JSText(base)))) }
             return Self.object(fields)
         case "applyBranch":
             let branch = try body.string("branch")
             guard RepositoryPaths.isWorkBranch(branch), try validBranch(c.root, branch) else { throw ServiceContractFailure.invalidRequest }
-            return Self.object(Self.applied(try e.applyBranch(c, branch: branch)))
+            return Self.object(Self.applied(try e.applyBranch(c, branch: branch, candidate: try candidate(body))))
         case "stageResolve":
             let (conflicted, files, base) = try e.stageResolve(c, try worktree(body, c))
             return Self.object([("conflicted", Self.strings(conflicted)), ("files", Self.strings(files)), ("clean", .bool(conflicted.isEmpty)),
@@ -415,8 +418,14 @@ final class RepositoryOwner: @unchecked Sendable {
         var fields: [(String, JSValue)] = [("ok", .bool(a.ok)), ("conflict", .bool(a.conflict))]
         if a.empty { fields.append(("empty", .bool(true))) }
         if let error = a.error { fields.append(("error", .string(JSText(error)))) }
-        return fields
+        return fields + hold(a.hold)
     }
+    static func hold(_ hold: RepositoryEffects.Hold?) -> [(String, JSValue)] {
+        guard let hold else { return [] }
+        return [("hold", object([("reason", .string(JSText(hold.reason))), ("files", strings(hold.files))]))]
+    }
+    /// An optional candidate tree; anything but text is malformed, text the gate judges.
+    private func candidate(_ body: Body) throws -> String? { body.has("candidate") ? try body.string("candidate") : nil }
     static func edits(_ edits: [RepositoryEffects.Edit]) -> JSValue {
         .array(edits.map { edit in object([("file", .string(JSText(edit.file))),
             ("before", .string(JSText(String(decoding: edit.before, as: UTF8.self)))),

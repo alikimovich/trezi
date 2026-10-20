@@ -51,6 +51,8 @@ export const TREZI_TOOLS = [
   'preview_viewport',
   'preview_speed',
   'preview_interact',
+  'preview_verify',
+  'run_checks',
   'open_preview',
   'reload_preview',
   'restart_dev_server',

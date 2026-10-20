@@ -46,8 +46,12 @@ export interface PreviewAgentHost {
   evaluate: (code: string, world: 'preview' | 'agent', timeoutMs: number) => Promise<unknown>
   /** Snapshot of `rect` (CSS px), clipped to the visible viewport. */
   captureRect: (rect: PreviewRect) => Promise<NativeImage | null>
-  /** Lay the page out at `width` CSS px (null restores the normal layout). */
-  setViewport: (width: number | null) => Promise<{ width: number | null; zoom: number }>
+  /** Lay the page out at `width` CSS px (null restores the normal layout). Agent pages
+   *  only (LOCAL-WEBKIT-2): their own `height` and color-scheme `theme`. */
+  setViewport: (
+    width: number | null,
+    options?: { height?: number | null; theme?: 'light' | 'dark' | 'system' }
+  ) => Promise<{ width: number | null; zoom: number; height?: number | null; theme?: string }>
   /** LKM-208: a base64 JPEG at most `width` px wide of the visible page or of `rect`. */
   thumbnail?: (rect: PreviewRect | null, width: number) => Promise<string | null>
 }

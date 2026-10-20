@@ -6,10 +6,11 @@
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { basename, delimiter, dirname, join, resolve } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+// LOCAL-WEBKIT-4: the same detection Settings → Browser Checks shows (packaged beside this file).
+import { BROWSER_TOOL_COMMANDS, findCli, findShell } from '../trezi-browser-tools.mjs'
 
 const ownDir = dirname(fileURLToPath(import.meta.url))
 const test = process.env.TREZI_BROWSER_TEST === '1'
@@ -27,61 +28,31 @@ const dependency = (kind, message) => {
 const missingCli = () =>
   dependency(
     'vercel-cli',
-    'the Vercel agent-browser CLI is not installed (npm install -g agent-browser). Trezi\'s managed wrapper is running correctly; do not reinstall a browser. No browser was launched.'
+    `the Vercel agent-browser CLI is not installed (install it in Trezi Settings → Browser Checks, or run: ${BROWSER_TOOL_COMMANDS.cli}). Trezi's managed wrapper is running correctly; do not reinstall a browser. No browser was launched.`
   )
 const missingShell = () =>
   dependency(
     'headless-shell',
-    'the dedicated Chromium headless shell is not installed (for example: npx playwright install chromium-headless-shell). The CLI was found and the managed route is working. No system Chrome fallback is allowed.'
+    `the dedicated Chromium headless shell is not installed (install it in Trezi Settings → Browser Checks, or run: ${BROWSER_TOOL_COMMANDS.shell}). The CLI was found and the managed route is working. No system Chrome fallback is allowed.`
   )
 
-// The CLI is the real Vercel one found outside this wrapper's own directory. A global
-// `agent-browser` on PATH is only ever the engine behind this wrapper, never a way around it.
-function installedCli() {
-  if (test && process.env.TREZI_BROWSER_TEST_CLI) {
-    const path = process.env.TREZI_BROWSER_TEST_CLI
-    if (!existsSync(path) || !(statSync(path).mode & 0o111)) missingCli()
-    return path
-  }
-  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
-    if (!dir || resolve(dir) === resolve(ownDir) || dir.includes('/node_modules/')) continue
-    const path = join(dir, 'agent-browser')
-    if (existsSync(path) && statSync(path).isFile() && (statSync(path).mode & 0o111))
-      return realpathSync(path)
-  }
-  missingCli()
-}
-
-function headlessShell() {
-  if (test && process.env.TREZI_BROWSER_TEST_SHELL) {
-    const path = process.env.TREZI_BROWSER_TEST_SHELL
-    if (!existsSync(path) || basename(path) !== 'chrome-headless-shell' || !(statSync(path).mode & 0o111))
-      missingShell()
-    return path
-  }
-  const cache = join(homedir(), 'Library/Caches/ms-playwright')
-  if (!existsSync(cache)) missingShell()
-  const candidates = readdirSync(cache)
-    .filter((name) => /^chromium_headless_shell-\d+$/.test(name))
-    .sort((a, b) => Number(b.split('-').at(-1)) - Number(a.split('-').at(-1)))
-  for (const name of candidates) {
-    const platform = process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64'
-    const path = join(cache, name, `chrome-headless-shell-${platform}/chrome-headless-shell`)
-    if (!existsSync(path)) continue
-    const real = realpathSync(path)
-    if (basename(real) === 'chrome-headless-shell' && !real.includes('.app/') && (statSync(real).mode & 0o111))
-      return real
-  }
-  missingShell()
-}
+// The CLI is Trezi's own copy or the real Vercel one found outside this wrapper's own
+// directory; the shell is the dedicated headless shell only (`trezi-browser-tools.mjs`).
+const installedCli = () => findCli({ skip: [ownDir] })?.path ?? missingCli()
+const headlessShell = () => findShell()?.path ?? missingShell()
 
 const raw = process.argv.slice(2)
+// A broken CLI that ignores TERM is killed outright at the limit (exit 1).
+const passthroughMs = test && Number(process.env.TREZI_BROWSER_TEST_PASSTHROUGH_MS) > 0
+  ? Number(process.env.TREZI_BROWSER_TEST_PASSTHROUGH_MS)
+  : 10_000
+const passthrough = { stdio: 'inherit', timeout: passthroughMs, killSignal: 'SIGKILL' }
 if (raw.length === 1 && ['--help', '-h', '--version', '-V'].includes(raw[0])) {
-  const result = spawnSync(installedCli(), raw, { stdio: 'inherit', timeout: 10_000 })
+  const result = spawnSync(installedCli(), raw, passthrough)
   process.exit(result.status ?? 1)
 }
 if (raw[0] === 'skills' && raw[1] === 'get') {
-  const result = spawnSync(installedCli(), raw, { stdio: 'inherit', timeout: 10_000 })
+  const result = spawnSync(installedCli(), raw, passthrough)
   process.exit(result.status ?? 1)
 }
 
@@ -133,6 +104,10 @@ const profile = join(base, 'p')
 for (const dir of [privateHome, privateTemp, profile]) mkdirSync(dir, { recursive: true, mode: 0o700 })
 const config = join(base, 'c.json')
 if (!existsSync(config)) writeFileSync(config, '{}\n', { mode: 0o600 })
+// Settings → Check Again: which CLI and shell this launch used and its private base, so
+// the check confirms the fresh browser process itself (`src/main/browser-setup.ts`).
+if (process.env.TREZI_BROWSER_SETUP_REPORT === '1' && command === 'open')
+  console.error(`Trezi agent-browser: setup: ${JSON.stringify({ cli, shell, base })}`)
 const env = { ...process.env }
 for (const key of Object.keys(env)) {
   if (key.startsWith('AGENT_BROWSER_') && ![
@@ -155,7 +130,7 @@ const child = spawn(cli, [
   '--session', managedSession,
   '--config', config, '--executable-path', shell, '--profile', profile,
   '--headed', 'false', ...args
-], { cwd: process.cwd(), env, stdio: 'inherit', timeout: 90_000 })
+], { cwd: process.cwd(), env, stdio: 'inherit', timeout: 90_000, killSignal: 'SIGKILL' })
 for (const signal of ['SIGINT', 'SIGTERM'])
   process.on(signal, () => child.kill(signal))
 const result = await new Promise((resolve) => {

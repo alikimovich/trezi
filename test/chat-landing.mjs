@@ -22,6 +22,7 @@ import {
 import { states } from '../src/main/chat-state.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
 import { keepStoppedTurn } from '../src/main/stopped-turn.ts'
+import { passCheck } from './helpers/gate-checks.mjs'
 
 // No unpark outside `clearPark` (src/main/chat-park.ts).
 const mainDir = new URL('../src/main/', import.meta.url)
@@ -104,11 +105,18 @@ try {
   // the ordinary turn-end hook.
   const mid = await fixture()
   writeFileSync(join(mid.cwd, FILE), 'export const bar = 1\n')
+  // LOCAL-WEBKIT-3: nothing lands without a check that passed on this exact source.
+  const unchecked = await landNow(mid.key, 'Set bar to one')
+  assert.equal(unchecked.outcome, 'failed')
+  assert.match(unchecked.error, /no check passed on this exact source/)
+  assert.equal(readFileSync(join(mid.root, FILE), 'utf8'), 'export const bar = 0\n')
+  await passCheck(mid.key, mid.cwd)
   const first = await landNow(mid.key, 'Set bar to one')
   assert.equal(first.outcome, 'merged')
   assert.equal(first.commit, git(mid.root, 'rev-parse', 'HEAD'))
   assert.equal(readFileSync(join(mid.root, FILE), 'utf8'), 'export const bar = 1\n')
   writeFileSync(join(mid.cwd, FILE), 'export const bar = 2\n')
+  await passCheck(mid.key, mid.cwd)
   await afterTurn(mid.key, 'Set bar to two', [], 'success')
   assert.equal(readFileSync(join(mid.root, FILE), 'utf8'), 'export const bar = 2\n')
   assert.notEqual(git(mid.root, 'rev-parse', 'HEAD'), first.commit)
@@ -117,6 +125,7 @@ try {
 
   const conflict = await fixture()
   writeFileSync(join(conflict.cwd, FILE), 'export const bar = 3\n')
+  await passCheck(conflict.key, conflict.cwd)
   writeFileSync(join(conflict.root, FILE), 'export const bar = 4\n')
   const parked = await landNow(conflict.key, 'Set bar to three')
   assert.equal(parked.outcome, 'parked')
@@ -125,6 +134,7 @@ try {
   const prepared = await resolveParkedChat(conflict.key)
   assert.deepEqual(prepared.conflicted, [FILE])
   writeFileSync(join(conflict.cwd, FILE), 'export const bar = 5\n')
+  await passCheck(conflict.key, conflict.cwd)
   const resolved = await landNow(conflict.key, 'Resolve both bar edits')
   assert.equal(resolved.outcome, 'merged')
   assert.equal(readFileSync(join(conflict.root, FILE), 'utf8'), 'export const bar = 5\n')
@@ -133,6 +143,7 @@ try {
   // A finished turn lands through landTurn.
   const done = await fixture()
   writeFileSync(join(done.cwd, FILE), 'export const bar = 1\n')
+  await passCheck(done.key, done.cwd)
   assert.equal(await afterTurn(done.key, 'Set bar to one', [], 'success'), null)
   const doneGroup = assertLanded(done, {
     turn: 1,
@@ -154,6 +165,7 @@ try {
   await afterTurn(kept.key, 'Set bar to two', [], 'failed')
   assert.equal(events.at(-1).state, 'parked')
   assert.equal(records.size, 1)
+  await passCheck(kept.key, kept.cwd)
   const result = await keepStoppedTurn(kept.key)
   const keptGroup = assertLanded(kept, {
     turn: 2,
@@ -173,6 +185,7 @@ try {
   // Work merged through a PR is not revertable, on either path.
   const pr = await fixture('https://github.com/example/app/pull/1')
   writeFileSync(join(pr.cwd, FILE), 'export const bar = 3\n')
+  await passCheck(pr.key, pr.cwd)
   await afterTurn(pr.key, 'Set bar to three', [], 'success')
   assertLanded(pr, {
     turn: 1,
@@ -183,6 +196,7 @@ try {
   await beforeTurn(pr.key, 'more')
   writeFileSync(join(pr.cwd, FILE), 'export const bar = 4\n')
   await afterTurn(pr.key, 'Set bar to four', [], 'failed')
+  await passCheck(pr.key, pr.cwd)
   await keepStoppedTurn(pr.key)
   assertLanded(pr, {
     turn: 3,
@@ -201,6 +215,7 @@ try {
   git(full.cwd, 'merge', '--no-ff', '--no-edit', 'base-updated')
   const rawMerge = git(full.cwd, 'rev-parse', 'HEAD')
   states.get(full.key).gitAccess = 'full'
+  await passCheck(full.key, full.cwd)
   await afterTurn(full.key, 'Land the base update', [], 'success')
   assert.equal(readFileSync(join(full.root, 'base-note.txt'), 'utf8'), 'new base content\n')
   git(full.root, 'merge-base', '--is-ancestor', rawMerge, 'HEAD')

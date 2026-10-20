@@ -8,9 +8,14 @@ import { nativeDreamer } from './dreamer-controller'
 import type { NativeGitController } from './git-controller'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
+import { checkAgentIntegration, restoreAgentIntegration } from './smoke-agent-integration'
 import { checkAgentInteract } from './smoke-agent-interact'
+import { checkAgentNavigation } from './smoke-agent-navigation'
 import { checkAgentPreview, restoreAgentPreview } from './smoke-agent-preview'
 import { checkAgentQuestion } from './smoke-agent-question'
+import { checkAgentRuntime } from './smoke-agent-runtime'
+import { checkAgentVerify } from './smoke-agent-verify'
+import { checkBrowserSetup, restoreBrowserSetup } from './smoke-browser-setup'
 import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
@@ -552,6 +557,15 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreSkillsSettings(host)
+      }
+    },
+    {
+      name: 'browser-setup',
+      run: async () => {
+        await checkBrowserSetup(host, artifacts)
+      },
+      cleanup: async () => {
+        await restoreBrowserSetup(host)
       }
     },
     {
@@ -1412,11 +1426,38 @@ export async function runNativeCoreSmoke(
       }
     },
     {
+      name: 'agent-runtime',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkAgentRuntime(host, page, artifacts)
+      }
+    },
+    {
+      name: 'agent-navigation',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkAgentNavigation(artifacts)
+      }
+    },
+    {
+      name: 'agent-verify',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkAgentVerify(page, artifacts)
+      }
+    },
+    {
       name: 'managed-agent-browser',
       dependsOn: ['open-project'],
       run: async () => {
         await checkManagedAgentBrowser(host, page, artifacts)
       }
+    },
+    {
+      name: 'agent-integration',
+      dependsOn: ['open-project'],
+      run: () => checkAgentIntegration(host, fixture, artifacts, firstProject),
+      cleanup: () => restoreAgentIntegration(host, firstProject)
     },
     {
       name: 'preview-timing',

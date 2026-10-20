@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { RunningDevServer } from '../shared/api'
+import { describeSource, type RuntimeIdentity, type SourceIdentity } from './agent-identity'
 import { previewServers } from './preview-evidence'
 import { previewLoads } from './preview-loads'
 
@@ -23,6 +24,14 @@ export interface PreviewIdentity {
   /** The live checkout's HEAD now. */
   liveRevision: string | null
   stale: boolean
+  /**
+   * LOCAL-WEBKIT-1, private agent pages only: the server that serves the page (the
+   * agent's worktree, its private runtime and generation) and the worktree's exact
+   * source. There `servedRevision`/`liveRevision` are the worktree's HEAD when the
+   * document loaded and now, and `stale` is `!source.verified`.
+   */
+  runtime?: RuntimeIdentity
+  source?: SourceIdentity
 }
 
 const execFileP = promisify(execFile)
@@ -114,6 +123,8 @@ const short = (sha: string | null) => sha?.slice(0, 10) ?? 'unknown'
 /** One line for a tool answer: the identity fields, and the stale flag when it applies. */
 export function describeIdentity(identity: PreviewIdentity): string {
   const line = `Preview identity: session ${identity.session ?? 'none'}, navigation ${identity.navigation}, document started ${identity.documentStartedAt ?? 'unknown'}, served revision ${short(identity.servedRevision)}.`
+  const source = describeSource(identity)
+  if (source) return `${line} ${source}`
   return identity.stale
     ? `${line} Stale: this document loaded at ${short(identity.servedRevision)} and the live checkout has since moved to ${short(identity.liveRevision)}. Hot reload usually applies the change; if the page does not show it, call reload_preview.`
     : line

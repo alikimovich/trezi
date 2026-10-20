@@ -10,6 +10,7 @@ extension Host {
         guard webView === views["preview"] else {
             // LKM-230: preview_interact waits for a navigation its action started.
             if let name = views.first(where: { $0.value === webView })?.key, name.hasPrefix("agent:") {
+                agentRoutes[name]?.started(navigation)
                 emit(["event":"agent-navigation", "view":name, "phase":"start", "url":String((webView.url?.absoluteString ?? "").prefix(500))])
             }
             return
@@ -18,18 +19,28 @@ extension Host {
         emit(["event":"navigation-start", "view":"preview", "url":webView.url?.absoluteString ?? ""])
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        previewNavigationFailed(webView, error, committed: true)
+        previewNavigationFailed(webView, error, committed: true, navigation: navigation)
     }
     /// A superseded or policy-ended navigation is a cancel, never the preview's error page.
-    func previewNavigationFailed(_ webView: WKWebView, _ error: Error, committed: Bool) {
+    func previewNavigationFailed(_ webView: WKWebView, _ error: Error, committed: Bool, navigation: WKNavigation?) {
         let name = views.first(where: { $0.value === webView })?.key ?? ""
         let nsError = error as NSError
         let url = nsError.userInfo[NSURLErrorFailingURLStringErrorKey] as? String ?? webView.url?.absoluteString ?? ""
         let cancelled = (nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled) || (nsError.domain == "WebKitErrorDomain" && nsError.code == 102)
         // An agent browser is private: its failed load answers the agent's call and never reaches the user's UI.
+        // Only the navigation the pending open started can fail it; the cancel of a superseded one (the page's
+        // own reload, or the open taking over) is a notice, and the navigation that took over answers the open.
         if name.hasPrefix("agent:") {
-            if let pending = agentBrowserLoads.removeValue(forKey: name) { reply(pending, error: error.localizedDescription) }
-            emit(["event":"agent-navigation", "view":name, "phase":"failed", "url":String(url.prefix(500)), "message":cancelled ? "cancelled" : error.localizedDescription])
+            let outcome = agentRoutes[name]?.failed(navigation, cancelled: cancelled)
+            if outcome == .reject, let pending = agentBrowserLoads.removeValue(forKey: name) {
+                agentRoutes.removeValue(forKey: name)
+                reply(pending, error: error.localizedDescription)
+            }
+            // A real failure of a navigation the pending open does not own is flagged stale: Bun records
+            // the notice but must not end the load or drop the source capture of the navigation in flight.
+            var notice: [String: Any] = ["event":"agent-navigation", "view":name, "phase":"failed", "url":String(url.prefix(500)), "message":cancelled ? "cancelled" : error.localizedDescription]
+            if outcome == .ignore { notice["stale"] = true }
+            emit(notice)
             return
         }
         if cancelled { emit(["event":"navigation-cancelled", "view":name, "url":url]); return }
@@ -45,12 +56,17 @@ extension Host {
 /// The same URL reloads from origin, which keeps the route and the scroll position.
 enum PreviewCache {
     static let types: Set<String> = [WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeFetchCache]
-    static func reload(_ view: WKWebView, url: URL?) {
+    /// The caches clear asynchronously, so `shouldLoad` is asked once they are clear and before anything
+    /// loads: a caller that was superseded or closed meanwhile must not start (and so cancel) a navigation.
+    /// `started` receives the navigation once the load began.
+    static func reload(_ view: WKWebView, url: URL?, shouldLoad: @escaping () -> Bool = { true }, started: ((WKNavigation?) -> Void)? = nil) {
         view.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak view] in
-            guard let view else { return }
+            guard let view, shouldLoad() else { return }
+            let navigation: WKNavigation?
             if let url, view.url?.absoluteString != url.absoluteString {
-                view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
-            } else { view.reloadFromOrigin() }
+                navigation = view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
+            } else { navigation = view.reloadFromOrigin() }
+            started?(navigation)
         }
     }
 }

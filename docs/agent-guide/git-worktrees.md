@@ -56,5 +56,18 @@ Moved from the old `CLAUDE.md` ("Gotchas", "Conventions") and `AGENTS.md`
   changed since that fork whose content still differs from the fetched default
   branch (`src/main/publish-scope.ts`). This excludes later main-only changes
   and content already integrated by squash or cherry-pick.
+- **Nothing lands without a passing host check on its exact source (LOCAL-WEBKIT-3).**
+  The candidate is the Git tree of the worktree's source (`source-tree.ts`, commit-
+  invariant), named by `integrationGate` (`integration-gate.ts`) from the session's own
+  receipts: a verified `preview_verify` for a web project, `run_checks` otherwise
+  (`command-checks.ts`). The Swift owner (`RepositoryGate.swift`) lands only that tree,
+  and only when the live tree still equals the fork point; otherwise it answers `held`
+  (`unchecked`, `source-changed`, `live-changed`) and writes nothing live. Every landing
+  path passes the candidate: turn end, `land_now`, Keep, Retry, Resolve, release
+  salvage, parked Apply, the binary/delete fallback, a spawn's finish and branch apply
+  (no session there, so it holds). `live-changed` is strict, including unrelated WIP:
+  reconcile (`stageResolve`), then the session's passing checks are replayed on the
+  new source before landing. Tests that land without being about the gate record a
+  check with `test/helpers/gate-checks.mjs`. Details: `docs/WORKTREES.md`.
 - **A tool callback's `root` is the chat's WORKTREE, not the live tree** — persist app
   state under `SpawnContext.liveRoot` (details in [gotchas.md](gotchas.md)).

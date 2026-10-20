@@ -59,10 +59,18 @@ const UNIT = [
   'trezi-agent-tools',
   'preview-agent-tools',
   'agent-browser',
+  'agent-runtime-isolation',
+  'source-tree',
+  'integration-gate',
   'managed-agent-browser',
   'managed-browser-path',
   'managed-browser-provider',
+  'browser-setup',
+  'browser-setup-recovery',
+  'browser-tools-install',
   'agent-interact',
+  'browser-verify',
+  'browser-verify-bounds',
   'preview-slow-motion',
   'codex-mcp',
   'codex-mcp-approvals',
@@ -130,6 +138,7 @@ const UNIT = [
   'sidebar-sizing',
   'preview-overlay',
   'key-shortcuts',
+  'agent-load-routing',
   'sidebar-icon',
   'sidebar-focus',
   'native-git',
@@ -262,7 +271,13 @@ const UNIT = [
   'lint'
 ]
 
-const NATIVE = ['native-runtime', 'native-source-window', 'native-chat-scroll', 'native-next-hmr']
+const NATIVE = [
+  'native-runtime',
+  'native-source-window',
+  'native-chat-scroll',
+  'native-next-hmr',
+  'browser-setup-packaged'
+]
 const LIVE = ['native-runtime-live', 'provider-live-parity']
 const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 // Unit tests share workers: every swiftc compile goes through the 2-wide swiftc lane in
@@ -270,8 +285,10 @@ const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 // still get a longer budget for a cold Swift cache.
 const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,
-  // Its Swift fixture queues behind other tests' swiftc runs; it takes 110 s+ under load.
-  'repository-owner': 240_000,
+  // Its Swift fixtures queue behind other tests' swiftc runs; it takes 110 s+ under load.
+  // The sections themselves are ~25 s warm (LOCAL-WEBKIT-PUBLISH: a 3-worker CI run with a
+  // cold Swift cache hit 240 s inside the sections after `crash`, with no hang).
+  'repository-owner': 420_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
@@ -286,6 +303,8 @@ const UNIT_TIMEOUT_MS = {
   // 8-worker run took 120 s+ for the first two and 106–120 s for the last two, against
   // 22–40 s on a warm tree; a longer budget separates queueing from a real hang.
   'platform-owner': 240_000,
+  // LOCAL-WEBKIT-4: the same platform fixture compile, then scripted installs.
+  'browser-tools-install': 240_000,
   'native-settings-layout': 240_000,
   'native-composer-layout': 240_000,
   'native-chat-latest-settle': 240_000,

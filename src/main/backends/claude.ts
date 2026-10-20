@@ -6,7 +6,9 @@ import { chatIslandDescription, chatIslandShape } from '../../../bin/chat-island
 import { chatUiDescription, chatUiShape } from '../../../bin/chat-ui-schema.mjs'
 import {
   previewToolText as PREVIEW_TOOL_TEXT,
-  previewToolShapes as previewShapes
+  previewToolShapes as previewShapes,
+  runChecksShape,
+  runChecksText
 } from '../../../bin/preview-tool-schema.mjs'
 import { statesCanvasDescription, statesCanvasShape } from '../../../bin/states-canvas-schema.mjs'
 import type { NativeView } from '../../native/platform'
@@ -104,13 +106,17 @@ const PREVIEW_TOOL_NAMES = new Set([
   'mcp__trezi__preview_screenshot',
   // LKM-138: isolated-world inspection; evaluate is read-only and bounded, and a
   // viewport change is temporary and restores itself; a speed change (LKM-206) lasts
-  // only for the preview session. Interaction (LKM-230) drives only the private agent browser.
+  // only for the preview session. Interaction (LKM-230) drives only the private agent
+  // browser; verification (LOCAL-WEBKIT-2) only it or a private managed Chromium session.
   'mcp__trezi__preview_inspect',
   'mcp__trezi__preview_evaluate',
   'mcp__trezi__preview_console',
   'mcp__trezi__preview_viewport',
   'mcp__trezi__preview_speed',
-  'mcp__trezi__preview_interact'
+  'mcp__trezi__preview_interact',
+  'mcp__trezi__preview_verify',
+  // LOCAL-WEBKIT-3: only the project's own scripts as the live checkout defines them.
+  'mcp__trezi__run_checks'
 ])
 // Validated in-process tools are auto-allowed by both allowedTools and
 // canUseTool. Chat islands persist through the island service; main remains
@@ -589,7 +595,10 @@ async function startSession(
     }
   }
   // The preview observers already answer as MCP content (text or a JPEG); a failure is text.
-  const observed = async (action: PreviewObserver | 'preview_interact', args: unknown = {}) => {
+  const observed = async (
+    action: PreviewObserver | 'preview_interact' | 'preview_verify',
+    args: unknown = {}
+  ) => {
     const result = (await treziTool(action, args)) as { content?: unknown } | null
     return Array.isArray(result?.content)
       ? (result as { content: never[] })
@@ -730,6 +739,15 @@ async function startSession(
         PREVIEW_TOOL_TEXT.preview_interact,
         previewShapes.preview_interact,
         async (args) => observed('preview_interact', args)
+      ),
+      tool(
+        'preview_verify',
+        PREVIEW_TOOL_TEXT.preview_verify,
+        previewShapes.preview_verify,
+        async (args) => observed('preview_verify', args)
+      ),
+      tool('run_checks', runChecksText, runChecksShape, async (args) =>
+        asText(treziTool('run_checks', args))
       ),
       tool(
         'open_preview',

@@ -7,7 +7,8 @@ import Darwin
 /// - scoped media grants for the native source editor (`MediaScopes`);
 /// - pasted composer images, uploaded in bounded chunks (`AttachmentUploads`);
 /// - the "Running servers" recovery sheet's inspection and SIGTERM (`PreviewServers`);
-/// - opening links, files and "Open in editor" (`PlatformOpen`, LKM-102).
+/// - opening links, files and "Open in editor" (`PlatformOpen`, LKM-102);
+/// - Settings → Browser Checks' user-pressed tool installs (`BrowserToolsInstaller`, LOCAL-WEBKIT-4).
 /// Bun asks over the private pipe (`{"service":"platform",…}`) and keeps the views, the
 /// sheet and the bridge page's bezel asset (a JS module it proposes with each start).
 final class PlatformOwner: @unchecked Sendable {
@@ -33,11 +34,14 @@ final class PlatformOwner: @unchecked Sendable {
         var open = PlatformOpen.Tools()
         /// Tool paths and timings for the simulator; nil uses the system tools.
         var simulator: SimulatorCoordinator.Options?
+        /// Settings → Browser Checks' installs; nil derives them from `environment`.
+        var browserTools: BrowserToolsInstaller.Tools?
     }
 
     let options: Options
     let media: MediaScopes
     let attachments: AttachmentUploads
+    private(set) var browserTools: BrowserToolsInstaller!
     private(set) var simulator: SimulatorCoordinator!
     private let send: @Sendable (Data) -> Void
     private let queue = DispatchQueue(label: "dev.trezi.platform.owner")
@@ -56,6 +60,10 @@ final class PlatformOwner: @unchecked Sendable {
             log: { [weak self] line in self?.event("simulator-log", [("line", .string(JSText(line)))]) },
             picked: { [weak self] source, tag in
                 self?.event("simulator-picked", [("source", source.map { .string(JSText($0)) } ?? .null), ("tag", .string(JSText(tag)))])
+            })
+        browserTools = BrowserToolsInstaller(tools: options.browserTools ?? .standard(environment: options.environment, profile: options.profile),
+            progress: { [weak self] step, line in
+                self?.event("browser-tools-progress", [("step", .string(JSText(step))), ("line", .string(JSText(line)))])
             })
     }
 
@@ -182,6 +190,16 @@ final class PlatformOwner: @unchecked Sendable {
             case ("openLink", "mutation"):
                 let url = try Self.text(try Self.fields(frame, ["url": .string]), "url", max: 8192)
                 perform(frame) { try PlatformOpen.link(url, tools: self.options.open); return .object([]) }
+            case ("browserToolsInstall", "mutation"):
+                // LOCAL-WEBKIT-4: only the two fixed installs, only on the user's explicit press.
+                let body = try Self.fields(frame, ["intent": .string, "step": .string])
+                try Self.intent(body, "install")
+                let step = try Self.text(body, "step", max: 16)
+                guard BrowserToolsInstaller.steps[step] != nil else { throw ServiceContractFailure.invalidRequest }
+                perform(frame) { try self.browserTools.install(step) }
+            case ("browserToolsCancel", "mutation"):
+                try Self.intent(try Self.fields(frame, ["intent": .string]), "cancel")
+                answer(frame, .succeeded(.object([(JSText("cancelled"), .bool(browserTools.cancel()))])))
             case ("openFile", "mutation"):
                 let path = try Self.text(try Self.fields(frame, ["path": .string]), "path")
                 perform(frame) { .object([(JSText("error"), .string(JSText(PlatformOpen.file(path, tools: self.options.open))))]) }
@@ -225,6 +243,7 @@ final class PlatformOwner: @unchecked Sendable {
     @discardableResult
     func close(timeout: TimeInterval) -> Bool {
         queue.sync { closed = true }
+        browserTools.close()
         return simulator.close(timeout: timeout)
     }
 

@@ -113,6 +113,22 @@ commands. Each is recorded in `docs/TASKS.md`.
   written; a batch over 16 MiB parks instead of crossing the pipe. A turn's file list
   names both sides of a rename (`--no-renames`), so a renamed file's old name is a
   deletion the landing refuses (parks) instead of a file left behind on live.
+- **Checked candidate (LOCAL-WEBKIT-3).** `completeTurn` (with `land`), `autoApply`,
+  `applyParked` and `applyBranch` take `candidate`, the Git tree Bun's integration gate
+  says a host check passed on. Inside the lane, after the worktree commit and before any
+  live write, `RepositoryGate.swift` answers `held` instead of landing when there is no
+  valid candidate (`unchecked`), the commit's tree is not the candidate
+  (`source-changed`), or the live tree is no longer the fork point's tree
+  (`live-changed`, with the files; any drift, including unrelated user work). A hold
+  writes nothing live and keeps the commit and branch. Landed bytes come from the
+  commit, never from the worktree's files. A landed `completeTurn` also answers the
+  live tree after landing (`liveTree`). The tip is read once: the commit that passed
+  the gate is the one whose blobs are written and preserved, even if the worktree's
+  branch moves meanwhile. The file list is the whole `base..tip` diff, derived in the
+  owner; a caller's list that omits or adds a path is `held` (`source-changed`, the
+  paths that differ), so part of a checked candidate never lands. After the writes the
+  live tree must equal the tip's tree, or every write (contents and exec bits) is undone
+  and the landing is refused.
 - **Conflicts, not errors (LKM-130).** `git apply --3way` refuses a whole patch, writing
   nothing, for add/add, modify/delete, delete/modify and a rename whose source is gone.
   Explicit apply (`applyParked`, `applyBranch`) and Resolve (`stageResolve`) then merge
@@ -240,7 +256,10 @@ surrogates are refused before anything is journaled.
 
 `test/repository-owner.mjs` (unit tier) compiles the real owner into a fixture
 (`test/fixtures/repository-owner/main.swift`, `REPOSITORY_FAULT=<point>` SIGKILLs
-inside an effect) and drives it through Bun's client and the unchanged TS entry points:
+inside an effect; `REPOSITORY_RUN_AT=<point>` with `REPOSITORY_RUN=<script>` runs a
+script once at that point, as a concurrent writer would, e.g. a provider commit in the
+worktree at `land.validated`) and drives it through Bun's client and the unchanged TS
+entry points:
 - **Parity.** The legacy suites `chat-worktrees`, `worktrees`, `live-commit`, `git`,
   `chat-recovery`, `auto-reconciliation` and `setup-next` run unchanged with the Swift
   owner preloaded (`test/helpers/repository-owner-preload.mjs`, which since LKM-111

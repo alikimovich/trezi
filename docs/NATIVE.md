@@ -172,6 +172,26 @@ and unchanged Swift is copied from a shared binary cache (`scripts/native-swift.
 LKM-175; see `docs/TESTING.md`). There is no Vite/Tailwind application build or
 loopback renderer asset server in native mode. `TREZI_NATIVE_PORT` is obsolete.
 
+### What a built app still needs outside itself (LOCAL-WEBKIT-4)
+
+Inside `Trezi.app`: the host, XPC service, bundled Bun, the backend and provider-helper
+bundles, and (`Resources/browser/bin`) the managed agent-browser launcher with its
+detection, guard and policy. Built-in WebKit needs nothing else. Still outside the app:
+
+- **Backend packages** (`out/native/build-inputs.json` `externalImports`), resolved from the
+  checkout's `node_modules`: `typescript`, `zod`, `svelte`, `react-docgen`, `parse5`,
+  `@babel/parser`, `@json-render/core`, `@json-render/codegen`, `@modelcontextprotocol/sdk`,
+  `apca-w3`, `colorparsley`. Until these ship inside the app, a copy moved away from its
+  checkout cannot start the backend; `test/browser-setup-packaged.mjs` proves the moved
+  copy's `otool` WebKit linkage, packaged launcher/guard/detection and a scripted owned-tools
+  route. It does not launch real WebKit from the moved copy (validation gap: the backend
+  cannot start there, and a backend-less host launch does not exist yet).
+- **Provider SDKs**, same resolution, listed apart because each provider is optional:
+  `@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk`, plus the user's own provider login.
+- **Optional browser tools**, never bundled: the Vercel agent-browser CLI (0.26.x tested)
+  and the Chromium headless shell, installed from Settings → Browser Checks with Node.js
+  and npm/npx ([agent browsers](agent-guide/agent-browser.md)).
+
 The native platform (`src/native/platform.ts`) is imported directly by backend
 services. Its `main` object is a trusted service sender, not a hidden browser. Swift refuses creation of any
 application WebView other than `preview`.

@@ -255,17 +255,52 @@ final class RepositoryEffects: @unchecked Sendable {
 
     struct Edit { let file: String; let before: Data; let after: Data; let existed: Bool }
 
+    /// The gated `autoApply` method: the worktree's committed HEAD lands only as the
+    /// checked candidate onto an unmoved live checkout (`RepositoryGate.swift`).
+    func autoApply(_ c: RepositoryContext, _ wt: RepositoryWorktree, files: [String], candidate: String?) throws
+        -> (applied: Bool, edits: [Edit], hold: Hold?) {
+        try linked(c, wt)
+        // One read of the tip: the gate, the file list and every byte come from this commit,
+        // whatever the worktree's branch does next.
+        let tip = try head(wt.path)
+        if let hold = try hold(c, directory: wt.path, tip: tip, base: wt.baseSha, candidate: candidate) {
+            return (false, [], hold)
+        }
+        c.point("land.validated")
+        if let hold = try incomplete(wt, tip: tip, given: files) { return (false, [], hold) }
+        let (applied, edits) = try writeCommitted(c, wt, tip: tip, files: try landingFiles(wt, tip: tip))
+        return (applied, edits, nil)
+    }
+
+    /// Every path that differs between the fork point and `tip`, both names of a rename:
+    /// the whole checked candidate, which is what has to land.
+    func landingFiles(_ wt: RepositoryWorktree, tip: String) throws -> [String] {
+        try git.paths(wt.path, ["diff-tree", "-r", "--name-only", "--no-renames", "-z", wt.baseSha, tip])
+    }
+
+    /// A caller's list that is not exactly the base..tip diff would land part of a
+    /// candidate that passed its checks whole: held, with the paths that differ.
+    func incomplete(_ wt: RepositoryWorktree, tip: String, given: [String]) throws -> Hold? {
+        let whole = Set(try landingFiles(wt, tip: tip)), listed = Set(given)
+        if whole == listed { return nil }
+        return Hold(reason: "source-changed", files: whole.symmetricDifference(listed).sorted())
+    }
+
     /// Writes a finished change's files onto the live checkout, only where safe: the
     /// live file still equals the fork point or already equals the target. Any drift,
     /// binary, deleted or oversized change refuses the whole batch before anything is
-    /// written. A write failure restores the files already written.
-    func autoApply(_ c: RepositoryContext, _ wt: RepositoryWorktree, files: [String]) throws -> (applied: Bool, edits: [Edit]) {
-        try linked(c, wt)
+    /// written. A write failure restores the files already written. The bytes and exec
+    /// bit come from the commit `tip` (LOCAL-WEBKIT-3), the one that passed the gate,
+    /// never from the worktree's files or a HEAD read again. The live tree afterwards
+    /// must be exactly that commit's tree, or every write is undone. Callers have passed
+    /// the gate and hand the complete `base..tip` file list.
+    private func writeCommitted(_ c: RepositoryContext, _ wt: RepositoryWorktree, tip: String, files: [String]) throws -> (applied: Bool, edits: [Edit]) {
         let refused: (Bool, [Edit]) = (false, [])
         guard let liveReal = RepositoryPaths.realpath(c.root) else { return refused }
-        var edits: [Edit] = [], bytes = 0
+        let expected = try git.line(wt.path, ["rev-parse", "\(tip)^{tree}"])
+        var edits: [Edit] = [], modes: [(String, Bool)] = [], priorModes: [(String, mode_t)] = [], bytes = 0
         for rel in files {
-            guard Self.relative(rel), let after = FileManager.default.contents(atPath: wt.path + "/" + rel), !after.contains(0) else { return refused }
+            guard Self.relative(rel), let (after, executable) = blob(wt.path, tip, rel), !after.contains(0) else { return refused }
             let base = (try? git.data(c.root, ["show", "\(wt.baseSha):\(rel)"])) ?? Data()
             let target = c.root + "/" + rel
             var info = stat()
@@ -279,23 +314,36 @@ final class RepositoryEffects: @unchecked Sendable {
             bytes += before.count + after.count
             guard bytes <= Self.maxEditBytes else { return refused }
             edits.append(Edit(file: target, before: before, after: after, existed: existed))
+            if !existed || ((info.st_mode & 0o100) != 0) != executable { modes.append((target, executable)) }
+            if existed { priorModes.append((target, info.st_mode & 0o7777)) }
         }
         let changes = edits.filter { $0.before != $0.after }
-        guard !changes.isEmpty else { return (false, edits) }
-        // An interrupted landing is recoverable: the target commit stays reachable.
-        let target = try c.preserve(try head(wt.path), label: "target")
         var written: [Edit] = []
+        func undo() {
+            for done in written.reversed() where FileManager.default.contents(atPath: done.file) == done.after {
+                if done.existed { _ = Self.write(done.before, to: done.file) } else { unlink(done.file) }
+            }
+            for (path, mode) in priorModes { chmod(path, mode) }
+        }
+        guard !changes.isEmpty else {
+            for (path, executable) in modes { Self.setExecutable(path, executable) }
+            if liveTree(c) != expected { undo(); return refused }
+            return (!modes.isEmpty, edits)
+        }
+        // An interrupted landing is recoverable: the target commit stays reachable.
+        let target = try c.preserve(tip, label: "target")
         for edit in changes {
             if Self.write(edit.after, to: edit.file) {
                 written.append(edit)
                 c.point("land.write")
                 continue
             }
-            for done in written.reversed() where FileManager.default.contents(atPath: done.file) == done.after {
-                if done.existed { _ = Self.write(done.before, to: done.file) } else { unlink(done.file) }
-            }
+            undo()
             return refused
         }
+        for (path, executable) in modes { Self.setExecutable(path, executable) }
+        // Live now has to be exactly the commit that was checked, or nothing lands.
+        if liveTree(c) != expected { undo(); c.release(target); return refused }
         c.release(target)
         return (true, edits)
     }
@@ -318,29 +366,43 @@ final class RepositoryEffects: @unchecked Sendable {
         }
     }
 
-    enum TurnOutcome { case noop, merged, parked }
+    enum TurnOutcome { case noop, merged, parked, held }
 
-    func completeTurn(_ c: RepositoryContext, _ wt: RepositoryWorktree, message: String, land: Bool, keepHistory: Bool = false)
-        throws -> (outcome: TurnOutcome, files: [String], edits: [Edit], newBase: String?) {
+    struct Turn {
+        var outcome: TurnOutcome, files: [String], edits: [Edit] = [], newBase: String? = nil
+        var hold: Hold? = nil, liveTree: String? = nil
+    }
+
+    /// `held` (LOCAL-WEBKIT-3): the turn is committed on its branch, nothing was written
+    /// live, and `hold` says why (`RepositoryGate.swift`). `liveTree`: the live tree right
+    /// after a merge that wrote files, for the exactness record.
+    func completeTurn(_ c: RepositoryContext, _ wt: RepositoryWorktree, message: String, land: Bool, keepHistory: Bool = false,
+                      candidate: String? = nil) throws -> Turn {
         try linked(c, wt)
         if git.revision(wt.path, "MERGE_HEAD") != nil {
             let files = try git.paths(wt.path, ["diff", "--name-only", "--diff-filter=U", "-z"])
-            return (.parked, files, [], nil)
+            return Turn(outcome: .parked, files: files)
         }
         let (committed, files) = try commitWorktree(c, wt, message: message, keepHistory: keepHistory)
-        if !committed { return (.noop, [], [], try head(wt.path)) }
+        if !committed { return Turn(outcome: .noop, files: [], newBase: try head(wt.path)) }
         // Failed/interrupted turns stay on their branch; they never land automatically.
-        if !land { return (.parked, files, [], nil) }
-        if !conflictMarkerFiles(wt, files).isEmpty { return (.parked, files, [], nil) }
-        let preserveHistory = keepHistory || ((try? git.line(wt.path, ["rev-list", "--count", "--merges", "\(wt.baseSha)..HEAD"])) ?? "0") != "0"
-        if preserveHistory && files.isEmpty { return (.merged, [], [], try head(wt.path)) }
-        let (applied, edits) = try autoApply(c, wt, files: files)
-        if applied { return (.merged, files, edits, try head(wt.path)) }
+        if !land { return Turn(outcome: .parked, files: files) }
+        if !conflictMarkerFiles(wt, files).isEmpty { return Turn(outcome: .parked, files: files) }
+        let tip = try head(wt.path)
+        if let hold = try hold(c, directory: wt.path, tip: tip, base: wt.baseSha, candidate: candidate) {
+            return Turn(outcome: .held, files: files, hold: hold)
+        }
+        c.point("land.validated")
+        if let hold = try incomplete(wt, tip: tip, given: files) { return Turn(outcome: .held, files: files, hold: hold) }
+        let preserveHistory = keepHistory || ((try? git.line(wt.path, ["rev-list", "--count", "--merges", "\(wt.baseSha)..\(tip)"])) ?? "0") != "0"
+        if preserveHistory && files.isEmpty { return Turn(outcome: .merged, files: [], newBase: tip) }
+        let (applied, edits) = try writeCommitted(c, wt, tip: tip, files: files)
+        if applied { return Turn(outcome: .merged, files: files, edits: edits, newBase: tip, liveTree: liveTree(c)) }
         if preserveHistory && edits.isEmpty && files.allSatisfy({ rel in
-            FileManager.default.contents(atPath: wt.path + "/" + rel) == FileManager.default.contents(atPath: c.root + "/" + rel)
-        }) { return (.merged, files, [], try head(wt.path)) }
-        if edits.isEmpty { return (.parked, files, [], nil) }
-        return (.noop, files, [], try head(wt.path))
+            blob(wt.path, tip, rel)?.data == FileManager.default.contents(atPath: c.root + "/" + rel)
+        }) { return Turn(outcome: .merged, files: files, newBase: tip) }
+        if edits.isEmpty { return Turn(outcome: .parked, files: files) }
+        return Turn(outcome: .noop, files: files, newBase: tip)
     }
 
     func conflictMarkerFiles(_ wt: RepositoryWorktree, _ files: [String]) -> [String] {

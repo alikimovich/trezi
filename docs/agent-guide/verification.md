@@ -60,7 +60,7 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
 - No Electron tests remain.
 - `bun run dev:native --test --only=group,group` (or `bun test/native-runtime.mjs
   --only=…`) runs only the named native smoke groups: `core`, `islands`,
-  `shadow-light`, `sidebar`, `settings`, `chat`, `composer`. An unknown name fails
+  `shadow-light`, `sidebar`, `settings`, `chat`, `composer`, `agent-browser`. An unknown name fails
   before the build; no flag runs every group, which acceptance still requires.
   Groups are defined in `src/native/smoke-groups.ts`.
 - Native test builds use the `-Onone` test profile and a shared Swift binary cache, so
