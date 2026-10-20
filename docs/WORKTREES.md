@@ -26,6 +26,8 @@ idle (detached worktree, no chat branch)
   → model edits privately
   → repository landing queue
       → success: validate, write + commit live, detach, delete chat branch
+          (only the exact tree a host check passed on, onto an unchanged live tree)
+      → no passing check on the exact source: commit on chat branch, hold (Retry)
       → failure/interruption: commit partial work only on chat branch, park
       → text drift: three-way merge privately; land clean edits automatically
       → text overlap: one automatic AI reconciliation, then land or park
@@ -62,6 +64,9 @@ from growing with every chat.
   and teardown crosses the repository queue.
 - Only a successful provider terminal outcome may auto-land. Failed or interrupted
   work stays parked and recoverable.
+- Nothing lands without a passing host check on the exact source that lands, and the
+  live tree unchanged since the fork point
+  ([integration gate](#integration-gate-local-webkit-3)).
 - A provider's duplicate terminal events finalize a turn once. In particular, Codex's
   `error` followed by `done` is one failed turn.
 - A batch is validated before live writes. Complete Git conflict-marker triplets never
@@ -300,10 +305,18 @@ commit ancestry or patch equivalence against live `HEAD`; it never deletes a che
 out branch, a persisted park, or a tip carrying a unique patch. Other namespaces such
 as `backup/*`, normal work branches, and comment-agent branches are outside this sweep.
 
-The preview currently serves the live checkout, so mid-turn worktree edits are not
-visible there until landing. Isolation currently applies only when the opened folder is
+The visible preview serves the live checkout, so mid-turn worktree edits are not
+visible there until landing. An agent's own WebKit page (`open_preview` and the
+`preview_*` tools) is different: when the session runs in a worktree, that page loads
+from a private dev server the runtime owner starts in that worktree, using its own
+`node_modules`, framework cache, port and existing `.env` link. Its identity names the
+worktree's exact source snapshot and server generation (LOCAL-WEBKIT-1). Closing the
+chat or session stops that private server. The visible server and the selected project
+are never touched; see [private agent runtimes](agent-guide/agent-browser.md#private-agent-runtimes).
+Isolation currently applies only when the opened folder is
 the Git repository root; non-Git folders and Git subdirectories use the live path and do
-not receive this concurrency guarantee.
+not receive this concurrency guarantee (nor the integration gate below; the agent's
+`workspace_state` says so).
 
 Implementation: `src/main/repo-write-queue.ts`, `src/main/chat-isolation.ts` (with
 `src/main/chat-state.ts`, `src/main/chat-park.ts`, `src/main/chat-landing.ts`,
@@ -339,6 +352,75 @@ the chat's provider as a tool-less one-shot on its background model (Haiku for C
 Coverage: `test/commit-message.mjs` (mocked model, timeout, refusals, conventions,
 combined diff, trailers), `test/live-commit.mjs` (re-squash after a park),
 `test/chat-landing.mjs`, `test/publish-description.mjs`.
+
+## Integration gate (LOCAL-WEBKIT-3)
+
+A turn ending is not evidence that its work is right, so it is no longer a reason to
+land. Code reaches the live checkout only when a check the host ran itself passed on the
+exact source that would land.
+
+- **Candidate.** The Git tree of the worktree's source as it is now (`src/main/source-tree.ts`,
+  the same exclusions as snapshots). It does not depend on commits: committing the same
+  bytes keeps it, and any edit, sync, merge or resolution makes a new one.
+- **Checks.** Receipts of the session (`receiptSession(emitKey, projectKey(root))`) on that
+  tree. A web project needs a verified `preview_verify` (WebKit or managed Chromium) whose
+  private server is still the one it checked; a project without a web preview (native,
+  Swift, libraries) needs `run_checks`; an undetected kind takes either. `run_checks`
+  (`src/main/command-checks.ts`) runs the live checkout's own `package.json` script with
+  `bun run` (refused if the chat changed the script or its `pre`/`post` hook) or
+  `swift build`/`swift test`, in its own process group with a deadline and a minimal
+  environment; it passes only on exit 0 with the same source before and after. The newest
+  receipt per check counts; a failed, cancelled, timed-out or still-running check blocks.
+  `integrationGate` (`src/main/integration-gate.ts`) names the candidate or the reason
+  (`no-source`, `unchecked`, `check-failed`, `check-running`, `runtime-changed`), and
+  `workspace_state.landingChecks` shows the agent the same verdict.
+- **Owner hold.** The Swift owner (`src/service/RepositoryGate.swift`) re-reads under the
+  repository lease, after committing the worktree and before any live write: no
+  candidate → `unchecked`; the branch tip's tree is not the candidate → `source-changed`;
+  the live tree (staged and unstaged, untracked included, exclusions applied) is not the
+  fork point's tree → `live-changed`, with the files. A hold writes nothing live and keeps
+  the work committed on the chat branch. Unrelated user WIP is still drift: the check did
+  not see it, so it holds too. The tip is read once and every blob comes from that
+  commit, so a provider commit in the worktree after the gate cannot land unchecked
+  bytes; the file list is the whole `base..tip` diff (a list that omits or adds a path
+  is `held`, never a partial landing); and the live tree after the writes must equal the
+  tip's tree, or the writes are undone. The Bun source id and the candidate tree use
+  Git's own exec rule (the owner bit), so a `chmod` that changes the tree changes the id.
+- **Every path.** Turn end, `land_now`, a stopped turn's Keep, Retry, Resolve (clean
+  `stageResolve` included), release salvage, parked Apply and the binary/delete fallback
+  (`applyParked`), a spawn's finish (`autoApplyWorktree`) and branch apply all pass the
+  candidate. A finished background or crash-recovered branch has no session and so no
+  checks: it is held with an explanation instead of applied.
+- **Drift.** With reconciliation (turn end, `land_now`), `live-changed` brings the live
+  tree into the worktree (`stageResolve`) and, if clean, replays the session's checks that
+  passed before on the new source (`replayChecks`, still inside the lease) before landing
+  again; overlap becomes the ordinary conflict card. Retry does the same. A resolution is
+  new source and lands only after a check on it. A concurrent live edit after the check
+  makes the owner hold again, so check, capture and write cannot interleave.
+- **Holds in the chat.** `unchecked`, `check-failed`, `check-running`, `runtime-changed`
+  and `source-changed` show the failed-landing card with the reason and Retry;
+  `live-changed` without reconciliation is a drift park (Resolve).
+- **Refresh.** A landing writes code only; the visible preview picks it up through its
+  usual reload path in the same web view, so its cookies, storage, session and focus stay.
+  Agent pages use their own non-persistent WebKit data stores; nothing is copied between
+  them and the user's preview.
+- **What isolation does not cover.** Worktrees do not clone databases or remote services,
+  and the `.env` link can point a private server and the visible one at the same backend.
+  Navigation limits on agent pages do not stop the page's `fetch`/XHR or server-side
+  effects. A check that mutates data needs the project's own fixture services; Trezi
+  copies no secrets and invents no credentials.
+- **No isolation.** A project that is not a Git repository root (a subdirectory, a
+  non-Git folder) runs on the live checkout: edits are live as they are made and there is
+  no gate. `workspace_state.landingChecks` says `isolation: "unavailable"` with the reason
+  instead of claiming a private check.
+
+Coverage: `test/integration-gate.mjs` (real `run_checks` scripts on a real worktree),
+`test/worktrees.mjs` and `test/repository-owner.mjs` (owner holds), the chat landing
+suites, and the native `agent-integration` smoke (`src/native/smoke-agent-integration.ts`):
+two worktrees with private pages and markers, a stale receipt and a failed check held with
+live unchanged, WebKit and Chromium checks on one tree landing exactly that tree, the
+visible page reloading with its cookie, storage and OS focus metrics unchanged, and a
+concurrent user edit resolved and checked again before landing.
 
 ## Chat workspace cleanup
 
@@ -652,6 +734,8 @@ Preview processes belong to the app, independently of chat worktrees. Terminal
 interrupts and app quit await termination of each owned process group, escalating
 to SIGKILL after one second. Shell exit does not release ownership while descendants
 survive. Shutdown does not land or discard worktree edits or target unrelated servers.
+An agent's private worktree server is the one preview process tied to a chat: it
+stops when that chat or session closes, when its page idles out, and at quit.
 
 Legacy profile/worktree paths and the identities kept on purpose are listed in
 [legacy names](agent-guide/legacy-names.md).

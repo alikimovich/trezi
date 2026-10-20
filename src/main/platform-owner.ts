@@ -19,7 +19,8 @@ export interface PreviewProcess {
  * - scoped media grants for the native source editor (view-bound, expiring, hashed);
  * - pasted composer images (uploaded in bounded chunks, hash-checked, written by it);
  * - the "Running servers" recovery sheet's inspection and SIGTERM;
- * - opening links, files and "Open in editor" (LKM-102).
+ * - opening links, files and "Open in editor" (LKM-102);
+ * - Settings → Browser Checks' installs of agent-browser and the headless shell (LOCAL-WEBKIT-4).
  * There is no other owner (LKM-111 removed the TS twins).
  */
 
@@ -77,6 +78,20 @@ export interface PlatformOwner {
     line: number,
     column?: number
   ): Promise<{ ok: boolean; error?: string }>
+  /** Settings → Browser Checks' user-initiated install of one external tool (LOCAL-WEBKIT-4);
+   *  resolves with where the files landed, which is not Ready (only a launch check is). */
+  browserToolsInstall(step: BrowserToolStep): Promise<BrowserToolInstalled>
+  /** Stops the running install's process group; false when none was running. */
+  browserToolsCancel(): Promise<boolean>
+  onBrowserToolsProgress(listener: (step: BrowserToolStep, line: string) => void): void
+}
+
+export type BrowserToolStep = 'cli' | 'shell'
+export interface BrowserToolInstalled {
+  step: BrowserToolStep
+  path: string
+  version?: string
+  revision?: number
 }
 
 let owner: PlatformOwner | null = null

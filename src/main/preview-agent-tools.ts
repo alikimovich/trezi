@@ -187,6 +187,11 @@ async function measure(host: PreviewAgentHost, width: number | null) {
 
 async function viewport(host: PreviewAgentHost, raw: unknown) {
   const args = (raw ?? {}) as Record<string, unknown>
+  if (args.height !== undefined || args.theme !== undefined)
+    return json({
+      error:
+        "height and theme apply to the agent browser only; the user's preview keeps its own size and appearance."
+    })
   if (args.restore === true) {
     const timer = restoreTimers.get(host)
     if (timer) clearTimeout(timer)

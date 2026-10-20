@@ -116,6 +116,8 @@ export function serviceRepository(
     baseSha: wt.baseSha
   })
   const on = (wt: OwnedWorktree) => ({ root: wt.repoRoot, worktree: tree(wt) })
+  /** LOCAL-WEBKIT-3: the checked tree; without one the owner holds the landing. */
+  const checked = (candidate: string | null | undefined) => (candidate ? { candidate } : {})
 
   return {
     async withLease(root, operation) {
@@ -145,16 +147,20 @@ export function serviceRepository(
       await effect('retireBranch', on(wt))
     },
     commitWorktree: (wt, message) => effect('commitWorktree', { ...on(wt), message }),
-    autoApply: (wt, files) => effect('autoApply', { ...on(wt), files, intent: 'land' }),
-    completeTurn: (wt, message, land, keepHistory) =>
+    autoApply: (wt, files, candidate) =>
+      effect('autoApply', { ...on(wt), files, intent: 'land', ...checked(candidate) }),
+    completeTurn: (wt, message, land, keepHistory, candidate) =>
       effect('completeTurn', {
         ...on(wt),
         message,
         intent: land ? 'land' : 'park',
-        ...(keepHistory ? { keepHistory } : {})
+        ...(keepHistory ? { keepHistory } : {}),
+        ...(land ? checked(candidate) : {})
       }),
-    applyParked: (wt) => effect('applyParked', { ...on(wt), intent: 'land' }),
-    applyBranch: (root, branch) => effect('applyBranch', { root, branch, intent: 'land' }),
+    applyParked: (wt, candidate) =>
+      effect('applyParked', { ...on(wt), intent: 'land', ...checked(candidate) }),
+    applyBranch: (root, branch, candidate) =>
+      effect('applyBranch', { root, branch, intent: 'land', ...checked(candidate) }),
     stageResolve: (wt) => effect('stageResolve', { ...on(wt), intent: 'reconcile' }),
     gitSyncBase: (wt, ref) => effect('gitSyncBase', { ...on(wt), ref, intent: 'sync' }),
     gitMergeContinue: (wt) => effect('gitMergeContinue', { ...on(wt), intent: 'continue' }),

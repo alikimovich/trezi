@@ -159,7 +159,8 @@ try {
     'native-runtime',
     'native-source-window',
     'native-chat-scroll',
-    'native-next-hmr'
+    'native-next-hmr',
+    'browser-setup-packaged'
   ]
   for (const name of nativeFixtures) {
     writeFileSync(join(cli, `test/${name}.mjs`), `console.log('${name.toUpperCase()} PASS')`)

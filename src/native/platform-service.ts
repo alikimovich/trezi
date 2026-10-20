@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { type MediaGrant, PlatformError, type PlatformOwner } from '../main/platform-owner'
+import {
+  type BrowserToolStep,
+  type MediaGrant,
+  PlatformError,
+  type PlatformOwner
+} from '../main/platform-owner'
 import type { ImageAttachment, SimElementPick } from '../shared/api'
 import { FRAME_ASPECT, FRAME_DATA_URI, FRAME_INSET } from '../shared/iphone-frame'
 import type { ServiceFailure } from '../shared/service-contract/types'
@@ -12,6 +17,7 @@ interface ServiceMessage {
   line?: string
   source?: string | null
   tag?: string
+  step?: string
   reply?: { result: Result }
 }
 /** Bun's end of the supervised private pipe (see `NativeBridge.sendService`). */
@@ -35,7 +41,10 @@ const TIMEOUTS: Record<string, number> = {
   serverStop: 60_000,
   openLink: 45_000,
   openFile: 45_000,
-  openInEditor: 60_000
+  openInEditor: 60_000,
+  // The service stops an install after 15 minutes; this is only the reply's backstop.
+  browserToolsInstall: 16 * 60_000,
+  browserToolsCancel: 15_000
 }
 const READS = new Set(['status', 'simulatorPreflight', 'mediaResolve', 'servers'])
 /** The service's cap on a pasted image, as the legacy writer's. */
@@ -63,6 +72,7 @@ export function servicePlatform(
   >()
   const logs = new Set<(line: string) => void>()
   const picks = new Set<(pick: SimElementPick) => void>()
+  const installs = new Set<(step: BrowserToolStep, line: string) => void>()
   const aliases = new Map<string, string>()
   let sequence = 0
 
@@ -85,6 +95,12 @@ export function servicePlatform(
       }
       for (const listener of picks) listener(pick)
     }
+    if (
+      message.kind === 'browser-tools-progress' &&
+      (message.step === 'cli' || message.step === 'shell') &&
+      typeof message.line === 'string'
+    )
+      for (const listener of installs) listener(message.step, message.line)
   })
 
   const call = (method: string, body: object): Promise<any> => {
@@ -216,6 +232,12 @@ export function servicePlatform(
     },
     openFile: async (path) => (await call('openFile', { path })).error as string,
     openInEditor: (root, file, line, column) =>
-      call('openInEditor', { root, path: file, line, ...(column != null ? { column } : {}) })
+      call('openInEditor', { root, path: file, line, ...(column != null ? { column } : {}) }),
+    browserToolsInstall: (step) => call('browserToolsInstall', { intent: 'install', step }),
+    browserToolsCancel: async () =>
+      (await call('browserToolsCancel', { intent: 'cancel' })).cancelled === true,
+    onBrowserToolsProgress: (listener) => {
+      installs.add(listener)
+    }
   }
 }

@@ -74,7 +74,13 @@ try {
       3
     )
     assert.equal(version(managed.work), '0.2.6')
-    const landing = await owner.completeTurn(managed.wt, 'Resolve package version', true)
+    const landing = await owner.completeTurn(
+      managed.wt,
+      'Resolve package version',
+      true,
+      false,
+      git(managed.work, 'rev-parse', 'HEAD^{tree}')
+    )
     assert.equal(landing.outcome, 'merged')
     const liveCommit = await owner.commitLive(
       managed.live,
@@ -214,7 +220,13 @@ try {
     git(full.work, 'add', 'package.json')
     git(full.work, 'commit', '-q', '-m', 'Resolve raw git merge')
     const rawHead = git(full.work, 'rev-parse', 'HEAD')
-    const rawLanding = await owner.completeTurn(full.wt, 'Land raw merge', true, true)
+    const rawLanding = await owner.completeTurn(
+      full.wt,
+      'Land raw merge',
+      true,
+      true,
+      git(full.work, 'rev-parse', 'HEAD^{tree}')
+    )
     assert.equal(rawLanding.outcome, 'merged')
     const rawLive = await owner.commitLive(
       full.live,
@@ -231,7 +243,13 @@ try {
     writeFileSync(join(committed.work, 'package.json'), '{"version":"0.2.7"}\n')
     git(committed.work, 'commit', '-q', '-am', 'Agent makes a raw commit')
     const commitHead = git(committed.work, 'rev-parse', 'HEAD')
-    const commitLanding = await owner.completeTurn(committed.wt, 'Land raw commit', true, true)
+    const commitLanding = await owner.completeTurn(
+      committed.wt,
+      'Land raw commit',
+      true,
+      true,
+      git(committed.work, 'rev-parse', 'HEAD^{tree}')
+    )
     assert.equal(commitLanding.outcome, 'merged')
     await owner.commitLive(
       committed.live,

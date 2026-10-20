@@ -8,7 +8,8 @@ import { landStoppedTurn, markStoppedReverted, stoppedHold } from './parked-chat
  *    work is discarded at the next turn start or chat release; until then Undo puts
  *    the hold back;
  *  - keep it: land the partial work now like a finished turn, with its undo group, so
- *    the message's Revert still works; live drift parks it as an ordinary conflict;
+ *    the message's Revert still works; live drift parks it as an ordinary conflict,
+ *    and work without passing checks on its exact source is held (LOCAL-WEBKIT-3);
  *  - ask the agent to finish: a normal follow-up turn on top of the held work, whose
  *    successful landing carries the whole batch.
  */
@@ -52,7 +53,7 @@ export async function keepStoppedTurn(sessionKey: string): Promise<StoppedTurnRe
   if (!hold || hold.reverted) return { ...nothingHeld }
   try {
     const landed = await landStoppedTurn(sessionKey)
-    return landed ? { ok: true, ...landed } : { ...nothingHeld }
+    return landed ? { ok: !landed.error, ...landed } : { ...nothingHeld }
   } catch (error) {
     return { ok: false, files: [], error: error instanceof Error ? error.message : String(error) }
   }

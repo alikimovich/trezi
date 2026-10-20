@@ -1,6 +1,6 @@
 /**
- * LKM-130: Resolve (stageResolve) and the explicit landing (applyParked) end in a
- * resolvable conflict, never an error, when `git apply --3way` refuses the chat's
+ * LKM-130: Resolve (stageResolve) ends in a resolvable conflict, and the explicit
+ * landing (applyParked) in a hold (LOCAL-WEBKIT-3), never an error, when `git apply --3way` refuses the chat's
  * patch as a whole: add/add, modify/delete, delete/modify, rename/delete, a rename
  * with an overlapping edit, a file live renamed, all at once with an ordinary content
  * conflict and a binary file, and on the live checkout. The conflicted files carry
@@ -13,12 +13,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
-  applyParked,
-  completeTurn,
+  applyParked as applyParkedRaw,
+  completeTurn as completeTurnRaw,
   createChatWorktree,
   discardParked,
   stageResolve
 } from '../src/main/chat-worktrees.ts'
+import { candidateOf } from './helpers/gate-checks.mjs'
+
+// LOCAL-WEBKIT-3: each landing names its checked candidate (the worktree's source here).
+const completeTurn = async (live, wt, message) =>
+  completeTurnRaw(live, wt, message, { candidate: await candidateOf(wt.path) })
+const applyParked = async (live, wt) => applyParkedRaw(live, wt, await candidateOf(wt.path))
 
 const base = mkdtempSync(join(tmpdir(), 'trezi-resolve-'))
 const worktreesDir = join(base, 'worktrees')
@@ -62,7 +68,10 @@ async function parked(files, chatEdits, liveEdits) {
   chatEdits(wt.path)
   liveEdits(repo)
   const turn = await completeTurn(repo, wt, 'chat turn')
-  ok(turn.outcome === 'parked', `repo${repos}: the turn parks: ${turn.outcome}`)
+  ok(
+    turn.outcome === 'held' && turn.hold?.reason === 'live-changed',
+    `repo${repos}: the turn is held on live drift: ${turn.outcome}`
+  )
   return { repo, wt }
 }
 
@@ -272,8 +281,9 @@ try {
     )
   }
 
-  // The explicit landing on the live checkout: add/add + modify/delete is a conflict with
-  // markers in the project (as a textual overlap always was), not "couldn't apply".
+  // The explicit landing on the live checkout: add/add + modify/delete. LOCAL-WEBKIT-3:
+  // live moved since the checked fork point, so the owner holds it and names the files;
+  // no unchecked merge (or marker) reaches the project. Resolve (above) reconciles it.
   {
     const { repo, wt } = await parked(
       { [CSS]: css('red'), 'README.md': 'base\n' },
@@ -288,16 +298,16 @@ try {
     )
     const applied = await applyParked(repo, wt)
     ok(
-      !applied.ok && applied.conflict,
-      `the landing reports a conflict: ${JSON.stringify(applied)}`
+      !applied.ok && applied.hold?.reason === 'live-changed',
+      `the landing is held: ${JSON.stringify(applied)}`
     )
     ok(
-      /page\.tsx/.test(applied.error ?? '') && /Header\.module\.css/.test(applied.error ?? ''),
-      `the conflict names the files: ${applied.error}`
+      applied.hold?.files.includes(PAGE) && applied.hold.files.includes(CSS),
+      `the hold names the files: ${JSON.stringify(applied.hold)}`
     )
     ok(
-      markers(read(repo, PAGE)) && markers(read(repo, CSS)),
-      'the live files carry markers for the user'
+      read(repo, PAGE) === 'export default () => "live"\n' && !existsSync(join(repo, CSS)),
+      'the live files are untouched'
     )
   }
 

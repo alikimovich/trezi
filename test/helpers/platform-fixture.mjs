@@ -39,6 +39,7 @@ export const SOURCES = [
   'RepositoryCleanup',
   'RepositoryLock',
   'RepositoryMerge',
+  'RepositoryGate',
   'RepositoryOwner',
   'SourcePaths',
   'PlatformTools',
@@ -47,6 +48,7 @@ export const SOURCES = [
   'SimulatorTools',
   'SimulatorBridge',
   'SimulatorOwner',
+  'BrowserTools',
   'PlatformOwner'
 ].map((name) => `src/service/${name}.swift`)
 

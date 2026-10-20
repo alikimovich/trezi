@@ -25,9 +25,14 @@ export async function checkManagedAgentBrowser(host: NativeBridge, page: Page, a
   assert.ok(active, 'an open project for browser verification')
   const server = previewServers.get(projectKey(active.root))
   assert.ok(server, 'Trezi-managed preview server is running')
-  // The provider helper's own resolution: same functions, same bundle base (out/native).
+  // The provider helper's own resolution: same functions, same bundle base. LOCAL-WEBKIT-4:
+  // a bundle resolves only the copy packaged inside Trezi.app, never the checkout's bin.
   const managedDir = managedBrowserDirectory(__dirname)
   assert.ok(managedDir, 'managed browser directory resolves from the built bundle')
+  assert.ok(
+    managedDir.endsWith('.app/Contents/Resources/browser/bin/managed'),
+    `packaged managed wrapper: ${managedDir}`
+  )
   const wrapper = managedBrowserWrapper(__dirname)
   assert.equal(wrapper, join(managedDir, 'agent-browser'), 'verified absolute managed wrapper')
   const helperPath = managedBrowserPath(managedDir, process.env.PATH, process.execPath)

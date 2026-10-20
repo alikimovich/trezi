@@ -11,7 +11,8 @@ const sections = [
   ['providers', 'AI Providers', 'sparkles'],
   ['skills', 'Skills', 'book.closed'],
   ['experimental', 'Experimental', 'testtube.2'],
-  ['dreamer', 'Dreamer', 'moon.stars']
+  ['dreamer', 'Dreamer', 'moon.stars'],
+  ['browser', 'Browser Checks', 'safari']
 ].map(([id, label, symbol]) => ({ id, label, symbol }))
 const button = (action, title, label, extra = {}) => ({
   action,
@@ -31,7 +32,7 @@ const base = {
   values: {},
   section: 'skills',
   sections,
-  sidebarRows: 5,
+  sidebarRows: 6,
   sidebarSelected: 2,
   sidebarFocused: true,
   windowTitle: 'Skills',

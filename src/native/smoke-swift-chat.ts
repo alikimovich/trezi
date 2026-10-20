@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { stubAgentSendForSmoke } from '../main/agent'
 import { isolatedCwd } from '../main/chat-isolation'
+import { sourceSnapshot } from '../main/source-snapshot'
+import { newReceiptId, receiptSession, recordCommandReceipt } from '../main/verification-receipts'
 import type { AgentEvent } from '../shared/api'
+import { projectKey } from '../shared/projectKey'
 import type { ProviderReadinessMap } from '../shared/provider-readiness'
 import type { NativeBridge } from './bridge'
 import { landingChecks, nativeChat } from './chat-runtime'
@@ -16,6 +19,35 @@ export function initRepo(project: string) {
   git(project, 'init', '-q', '-b', 'main')
   git(project, 'add', '-A')
   git(project, '-c', 'user.name=Smoke', '-c', 'user.email=smoke@local', 'commit', '-qm', 'Fixture')
+}
+
+/**
+ * LOCAL-WEBKIT-3: a turn lands only after a host check passed on its exact source. These
+ * smokes are about the chat and preview pipeline, not the gate (smoke-agent-integration.ts
+ * runs real checks), so the scripted model records a passing check on what it wrote, as
+ * `run_checks` would; a real `swift build` would also fail their deliberately broken edits.
+ */
+async function fixtureCheck(chat: string, worktree: string) {
+  const snapshot = await sourceSnapshot(worktree)
+  if (!snapshot.tree) throw new Error(`No source tree for the chat worktree: ${snapshot.reason}`)
+  const { id, tree, head, dirty } = snapshot
+  recordCommandReceipt(receiptSession(chat, projectKey(worktree)), {
+    id: newReceiptId(),
+    createdAt: new Date().toISOString(),
+    kind: 'command',
+    check: 'smoke-fixture',
+    command: ['smoke-fixture'],
+    root: worktree,
+    source: { snapshot: id, tree, head, dirty },
+    exitCode: 0,
+    signal: null,
+    timedOut: false,
+    cancelled: false,
+    output: '',
+    verified: true,
+    reason: null,
+    ms: 0
+  })
 }
 
 /** What one chat turn did, read back from the real pipeline. */
@@ -118,6 +150,7 @@ export class SwiftChatTurns {
         if (worktree === this.project) throw new Error('The chat has no worktree of its own.')
         const branch = git(worktree, 'rev-parse', '--abbrev-ref', 'HEAD')
         edit(text, worktree)
+        await fixtureCheck(this.chat, worktree)
         const clean = git(this.project, 'diff', 'HEAD', '--stat') === ''
         this.seen = { received: text, worktree, branch, clean }
         this.provider?.emit({ type: 'done' })

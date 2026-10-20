@@ -22,6 +22,7 @@ import { setEditingOwner } from '../src/main/editing-owner.ts'
 import { setRepositoryOwner } from '../src/main/repository-owner.ts'
 import { NativeRecoveryRefs, recoveryNotices } from '../src/native/repository-recovery.ts'
 import { compileEditingFixture, startEditingFixture } from './helpers/editing-fixture.mjs'
+import { candidateOf } from './helpers/gate-checks.mjs'
 import { compileRepositoryFixture, startRepositoryFixture } from './helpers/repository-fixture.mjs'
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-repository-recovery-')))
@@ -92,7 +93,10 @@ try {
     await syncFromLive(live, parked)
     writeFileSync(join(parked.path, 'a.txt'), "one, the chat's version\n")
     writeFileSync(join(live, 'a.txt'), "one, the user's version\n")
-    assert.equal((await completeTurn(live, parked, 'parked turn')).outcome, 'parked')
+    const held = await completeTurn(live, parked, 'parked turn', {
+      candidate: await candidateOf(parked.path)
+    })
+    assert.equal(held.hold?.reason, 'live-changed')
     const tip = g(parked.path, 'rev-parse', 'HEAD')
     await stop(owned)
 

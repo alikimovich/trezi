@@ -34,6 +34,26 @@ call them, and every result is bounded. Prefer them to any external browser.
   or network idle. Target a `selector`, a `source` stamp or `x`/`y`. Each call returns
   the URL, console errors and a small screenshot. It never drives the user's preview;
   uploads, downloads, leaving the dev server and external form posts are refused.
+  Action `refs` lists elements with refs (`1a2b3c4d:e12`) you can pass as `ref`; a ref
+  goes stale when the page navigates. Events are synthetic: CSS `:hover` never
+  applies, and key defaults WebKit does not emulate are refused, not faked.
+- `preview_verify` — the final check: optional `steps` (as `preview_interact`), then
+  declarative `checks` (text, visible, count, style, url, noConsoleErrors, …, with an
+  optional `timeoutMs` wait). Trezi runs and judges them and returns a receipt bound to
+  your worktree's exact source, its private server and the document; `list: true` shows
+  which receipts still hold after edits or reloads. `engine: "chromium"` runs the same
+  checks with trusted input in Trezi's managed agent-browser (for `:hover` and native
+  key behaviour). Report the receipt id and whether it was verified, never a pass it
+  did not record. In an agent page, `preview_viewport` also takes `height` and `theme`
+  without touching the user's preview; neither engine is Windows, Android, iOS or a
+  real device.
+- `run_checks` — for work without a web preview (native, Swift, libraries): Trezi runs
+  the project's own `package.json` scripts (as the live checkout defines them) or
+  `swift-build`/`swift-test` in your worktree and records a receipt bound to its exact
+  source. `list: true` names them.
+- Landing: Trezi lands your work only when a passing `preview_verify` (web) or
+  `run_checks` receipt is on the exact source that would land. Check after your last
+  edit; `workspace_state.landingChecks` says what is still missing.
 
 ## The loop
 
@@ -43,7 +63,7 @@ call them, and every result is bounded. Prefer them to any external browser.
 4. `preview_screenshot` (cropped when it helps) to verify the change landed. For
    layout changes, check phone/tablet/desktop with `preview_viewport`, then restore.
    For interactive changes (filters, tabs, menus, forms), use them with
-   `preview_interact` and check the result it returns.
+   `preview_interact`, then confirm with `preview_verify` and report its receipt.
 
 ## Required Vercel agent-browser checks
 

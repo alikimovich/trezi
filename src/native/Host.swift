@@ -372,12 +372,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             threeD.dismiss(); threeD.clear(); nativeLayout.layout()
         case "workbenches": shell.updateWorkbenches(c["items"] as? [[String: Any]] ?? [])
         case "previewViewport":
-            if name.hasPrefix("agent:"), let view {
-                let width = c["width"] as? Double
-                let cssWidth = width != nil && width!.isFinite ? min(3840, max(240, width!)) : 1280
-                view.frame = NSRect(x: -10000, y: -10000, width: cssWidth, height: 800)
-                reply(id, ["width": width == nil ? NSNull() : cssWidth as Any, "zoom": 1])
-            } else { reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"])) }
+            if name.hasPrefix("agent:"), let view { reply(id, PreviewAgent.setAgentViewport(c, view: view)) }
+            else { reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"])) }
         case "previewOverlay": previewOverlay.apply(c)
         case "capture":
             if let agent = c["agent"] as? [String: Any] {

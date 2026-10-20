@@ -99,6 +99,22 @@ Events: `{"event":"service-event","service":"platform","kind":"simulator-log","l
 | `openLink` / `openFile` (LKM-102) | mutation | `{url}` (http(s) only) → `{}` / `{path}` → `{error}` (`""` on success) |
 | `openInEditor` (LKM-102) | mutation | `{root, path, line, column?}`: a file inside the project; `code -g`, `cursor -g`, `zed`, `subl`, then `open` → `{ok, error?}` |
 
+| `browserToolsInstall` (LOCAL-WEBKIT-4) | mutation | `{intent:"install", step:"cli"\|"shell"}` → `{step, path, version?\|revision?}`; `busy` while one runs, `unavailable` without npm/npx (or Node < 20 for the shell), `cancelled`, `deadlineExceeded` after 15 minutes, `ioFailure` with the redacted tail |
+| `browserToolsCancel` (LOCAL-WEBKIT-4) | mutation | `{intent:"cancel"}` → `{cancelled}` |
+
+`browserToolsInstall` containment: before the installer starts, `prepare()` lstat-walks each folder from `~/Library` to the tools folder, `tmp`, `npm-cache` and the destination (`agent-browser/` or `ms-playwright/`), creating missing ones itself (0700 for the last) and refusing a link, a non-folder or a folder not owned by the user with `ioFailure`; it also sweeps the first levels inside the destination. A shell install first removes `chromium_headless_shell-*/INSTALLATION_COMPLETE` so Playwright repairs a broken copy.
+
+`BrowserTools.swift` runs only the two pinned installs the user pressed in Settings → Browser
+Checks: `npm install --prefix <tools>/agent-browser --ignore-scripts … agent-browser@0.26.0` and
+`npx --yes --package=playwright@1.64.1 playwright install chromium-headless-shell --no-remove`
+with `PLAYWRIGHT_BROWSERS_PATH=<tools>/ms-playwright`, where `<tools>` is
+`~/Library/Caches/Trezi/browser-tools`. npm, npx and node come from the service's PATH plus
+Homebrew's folders; the child gets an allowlisted environment (no tokens), its own process group and
+a 15-minute deadline, and its output arrives as `kind:"browser-tools-progress"` `{step, line}`
+events: redacted (credentials, the home path), at most 300 characters and 2,000 lines. The
+`TREZI_TEST_PROFILE` build reads npm/npx only from `<test dir>/browser-tools-fixture/bin` and
+installs under `<test dir>/browser-tools-home`.
+
 `PlatformOpen.swift` replaced Bun's own `open` and editor CLI runs (`native/platform.ts`,
 `main/props.ts`). Their rollback twins were removed in LKM-111;
 `test/helpers/platform-checks.mjs` (`checkOpen`) checks the owner's argv against

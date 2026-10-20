@@ -33,6 +33,7 @@ import {
 import { scaffold } from '../src/main/setup.ts'
 import { setWorkflowOwner } from '../src/main/workflow-owner.ts'
 import { setupPrompt } from '../src/shared/setup-prompt.ts'
+import { passCheck } from './helpers/gate-checks.mjs'
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-setup-worktree-')))
 const git = (cwd, ...args) =>
@@ -158,6 +159,7 @@ try {
 
   // The agent wires the config in its checkout; the turn lands on the live tree.
   writeFileSync(join(cwd, 'vite.config.js'), WIRED)
+  await passCheck(key, cwd)
   events.length = 0
   await afterTurn(key, 'Connect this project to Trezi', [], 'success')
   const merged = events.find((e) => e.type === 'isolation' && e.state === 'merged')
