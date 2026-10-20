@@ -44,25 +44,53 @@ export interface RepositoryOwner {
     wt: OwnedWorktree,
     message: string
   ): Promise<{ committed: boolean; files: string[] }>
-  autoApply(wt: OwnedWorktree, files: string[]): Promise<{ applied: boolean; edits: OwnedEdit[] }>
+  /**
+   * Every landing (LOCAL-WEBKIT-3) names `candidate`, the tree its checks passed on
+   * (`src/main/integration-gate.ts`). The owner lands only that tree onto a live
+   * checkout still at the fork point; otherwise it writes nothing and answers `hold`.
+   */
+  autoApply(
+    wt: OwnedWorktree,
+    files: string[],
+    candidate: string | null
+  ): Promise<{ applied: boolean; edits: OwnedEdit[]; hold?: LandingHold }>
   completeTurn(
     wt: OwnedWorktree,
     message: string,
     land: boolean,
-    keepHistory?: boolean
+    keepHistory?: boolean,
+    candidate?: string | null
   ): Promise<{
-    outcome: 'noop' | 'merged' | 'parked'
+    outcome: 'noop' | 'merged' | 'parked' | 'held'
     files: string[]
     edits: OwnedEdit[]
     newBase?: string
+    /** The live tree right after a merge that wrote files. */
+    liveTree?: string
+    hold?: LandingHold
   }>
   applyParked(
-    wt: OwnedWorktree
-  ): Promise<{ ok: boolean; conflict: boolean; files: string[]; newBase?: string; error?: string }>
+    wt: OwnedWorktree,
+    candidate: string | null
+  ): Promise<{
+    ok: boolean
+    conflict: boolean
+    files: string[]
+    newBase?: string
+    error?: string
+    hold?: LandingHold
+  }>
   applyBranch(
     root: string,
-    branch: string
-  ): Promise<{ ok: boolean; conflict: boolean; empty?: boolean; error?: string }>
+    branch: string,
+    candidate: string | null
+  ): Promise<{
+    ok: boolean
+    conflict: boolean
+    empty?: boolean
+    error?: string
+    hold?: LandingHold
+  }>
   stageResolve(
     wt: OwnedWorktree
   ): Promise<{ conflicted: string[]; files: string[]; clean: boolean; baseSha: string }>
@@ -117,6 +145,12 @@ export interface RepositoryOwner {
     root: string,
     refs: { ref: string; sha: string }[]
   ): Promise<{ deleted: string[]; kept: string[] }>
+}
+
+/** Why the owner refused a landing (`src/service/RepositoryGate.swift`); nothing was written. */
+export interface LandingHold {
+  reason: 'unchecked' | 'source-changed' | 'live-changed'
+  files: string[]
 }
 
 export interface RepositoryJournalEntry {

@@ -6,7 +6,7 @@ import type { DependencyIssue } from '../shared/dependency-issue'
 import { DependencyConflictError, hasConflictMarkers, markerConflict } from './conflict-markers'
 import { editingOwner } from './editing-owner'
 import { productLog } from './product-log'
-import { repositoryOwner } from './repository-owner'
+import { type LandingHold, repositoryOwner } from './repository-owner'
 import { withGitLockRecovery } from './self-heal/git-lock'
 import { dependenciesInstalling, provisionDependencies } from './worktree-dependencies'
 import { createWorktree, type Worktree } from './worktrees'
@@ -128,11 +128,15 @@ export async function syncFromLive(
 }
 
 export interface TurnOutcome {
-  outcome: 'noop' | 'merged' | 'parked'
+  outcome: 'noop' | 'merged' | 'parked' | 'held'
   files: string[]
   edits: { file: string; before: string; after: string }[]
   /** Worktree HEAD after a merge — the caller advances `wt.baseSha` to it. */
   newBase?: string
+  /** The live tree right after a merge that wrote files (LOCAL-WEBKIT-3). */
+  liveTree?: string
+  /** `held`: why the owner refused to land the committed work (nothing was written). */
+  hold?: LandingHold
 }
 
 /**
@@ -142,20 +146,22 @@ export interface TurnOutcome {
  *  - nothing committed            → `noop`
  *  - applied onto the live tree   → `merged` (+ `edits` for the undo history, `newBase`)
  *  - refused (live drifted), unresolved markers or `land: false` → `parked`
+ *  - committed, but not the checked `candidate` tree or live moved → `held`
  *  - already at target (no write) → `noop`
  */
 export async function completeTurn(
   liveRoot: string,
   wt: Worktree,
   message: string,
-  opts: { land?: boolean; keepHistory?: boolean } = {}
+  opts: { land?: boolean; keepHistory?: boolean; candidate?: string | null } = {}
 ): Promise<TurnOutcome> {
   return withGitLockRecovery([liveRoot, wt.path], () =>
     repositoryOwner().completeTurn(
       { ...wt, repoRoot: liveRoot },
       message,
       opts.land !== false,
-      opts.keepHistory
+      opts.keepHistory,
+      opts.candidate ?? null
     )
   )
 }
@@ -190,16 +196,22 @@ export interface ApplyOutcome {
   /** Worktree HEAD when the apply landed cleanly — caller advances `wt.baseSha`. */
   newBase?: string
   error?: string
+  /** The branch is not the checked `candidate`, or live moved since the fork point. */
+  hold?: LandingHold
 }
 
 /**
  * Explicit user "Apply" of a PARKED chat: 3-way apply the branch's cumulative diff onto
- * the live tree (tolerates the user's uncommitted WIP; may leave conflict markers, which
- * is acceptable for an explicit action). On a clean apply, return `newBase` so the caller
- * advances the fork point and unparks.
+ * the live tree. Only the checked `candidate` tree onto a live checkout still at the
+ * fork point (LOCAL-WEBKIT-3); anything else is `hold` and writes nothing. On a clean
+ * apply, return `newBase` so the caller advances the fork point and unparks.
  */
-export async function applyParked(liveRoot: string, wt: Worktree): Promise<ApplyOutcome> {
-  const result = await repositoryOwner().applyParked({ ...wt, repoRoot: liveRoot })
+export async function applyParked(
+  liveRoot: string,
+  wt: Worktree,
+  candidate: string | null
+): Promise<ApplyOutcome> {
+  const result = await repositoryOwner().applyParked({ ...wt, repoRoot: liveRoot }, candidate)
   const { ok, conflict, error } = result
   productLog.info('parking', 'Parked work applied', {
     worktree: wt.id,

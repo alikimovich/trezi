@@ -66,6 +66,14 @@ const sections = (): NativeSheetSection[] => [
     label: 'Dreamer',
     symbol: 'moon.stars',
     detail: 'Where Send to Agent OS posts the Dreamer’s proposals, and the optional weekly run.'
+  },
+  // LOCAL-WEBKIT-4: its rows come from `settings-browser.ts`.
+  {
+    id: 'browser',
+    label: 'Browser Checks',
+    symbol: 'safari',
+    detail:
+      'Built-in WebKit checks always work. Cross-browser Chromium checks need two tools you install once.'
   }
 ]
 /** LKM-136: chat workspace cleanup, under General. Keep in sync with `src/main/chat-workspaces.ts`. */

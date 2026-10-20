@@ -13,11 +13,13 @@ import {
 import { AGENT_FILE_ACCESS_KEY, setAgentFileAccessSource } from '../main/agent-file-access'
 import { AGENT_GIT_ACCESS_KEY, setAgentGitAccessSource } from '../main/agent-git-access'
 import { AGENT_MERGE_KEY, setAgentMergeSource } from '../main/agent-merge-setting'
+import { installAgentRuntimes } from '../main/agent-runtime'
 import { registerAnnotationsIpc } from '../main/annotations'
 import {
   CLAUDE_USER_PLUGINS_KEY,
   setClaudeUserPluginsSource
 } from '../main/backends/claude-isolation'
+import { browserSetup } from '../main/browser-setup'
 import {
   CHAT_WORKSPACE_IDLE_KEY,
   cleanLegacyWorkspaces,
@@ -105,6 +107,7 @@ import { NativeRecoveryRefs } from './repository-recovery'
 import { serviceRepository } from './repository-service'
 import { NativeReviewController } from './review-controller'
 import { type ProjectRuntime, serviceRuntime } from './runtime-service'
+import { withBrowserPane } from './settings-browser'
 import { withBuildCheckSetting } from './settings-build-check'
 import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
@@ -218,6 +221,8 @@ async function main() {
   const runtimeOwner = serviceRuntime(host)
   runtime = runtimeOwner
   setDependencyInstaller((root) => runtimeOwner.install(root))
+  // Private agent dev servers (LOCAL-WEBKIT-1): a previous Bun's are stopped, never adopted.
+  void installAgentRuntimes(runtimeOwner)
   // Repository coordination (S07): every Trezi Git effect and repository lease goes
   // through the service's per-repository lane, journal and recovery refs.
   const repository: RepositoryOwner = serviceRepository(host)
@@ -933,22 +938,27 @@ async function main() {
   nativeSkills.current = serviceSkills(host)
   // LKM-287: every chat session pins and projects the library through the same owner.
   setSessionSkillsSource(() => nativeSkills.current)
-  const settingsController = withProviderFallbackSetting(
-    withBuildCheckSetting(
-      withDreamerPane(
-        withSkillsPane(
-          withClaudePane(
-            new NativeSettingsController(sheetController, preferences, refreshPreferences)
+  const settingsController = withBrowserPane(
+    withProviderFallbackSetting(
+      withBuildCheckSetting(
+        withDreamerPane(
+          withSkillsPane(
+            withClaudePane(
+              new NativeSettingsController(sheetController, preferences, refreshPreferences)
+            ),
+            nativeSkills.current,
+            () => host!.request('pick', {}, 0x7fffffff)
           ),
-          nativeSkills.current,
-          () => host!.request('pick', {}, 0x7fffffff)
+          preferences
         ),
-        preferences
+        preferences,
+        () => void buildStatus.check()
       ),
-      preferences,
-      () => void buildStatus.check()
+      preferences
     ),
-    preferences
+    // LOCAL-WEBKIT-4: Settings → Browser Checks; installs and checks only on a press there.
+    browserSetup,
+    (url) => platform.openLink(url)
   )
   const dreamerController = new NativeDreamerController(sheetController, preferences, {
     pickExport: async (name) => {

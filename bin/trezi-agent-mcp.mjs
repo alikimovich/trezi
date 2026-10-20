@@ -9,7 +9,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from './chat-island-schema.mjs'
 import { chatUiDescription, chatUiShape } from './chat-ui-schema.mjs'
-import { previewToolShapes, previewToolText } from './preview-tool-schema.mjs'
+import {
+  previewToolShapes,
+  previewToolText,
+  runChecksShape,
+  runChecksText
+} from './preview-tool-schema.mjs'
 import { statesCanvasDescription, statesCanvasShape } from './states-canvas-schema.mjs'
 
 const socketPath = process.env.TREZI_AGENT_TOOL_SOCKET
@@ -251,7 +256,8 @@ for (const name of [
   'preview_console',
   'preview_viewport',
   'preview_speed',
-  'preview_interact'
+  'preview_interact',
+  'preview_verify'
 ]) {
   server.registerTool(
     name,
@@ -259,7 +265,7 @@ for (const name of [
       description: previewToolText[name],
       inputSchema: previewToolShapes[name],
       annotations: {
-        readOnlyHint: !['preview_viewport', 'preview_speed', 'preview_interact'].includes(name),
+        readOnlyHint: !['preview_viewport', 'preview_speed', 'preview_interact', 'preview_verify'].includes(name),
         destructiveHint: false,
         openWorldHint: false
       }
@@ -267,6 +273,16 @@ for (const name of [
     async (args) => invoke(name, args)
   )
 }
+
+server.registerTool(
+  'run_checks',
+  {
+    description: runChecksText,
+    inputSchema: runChecksShape,
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  },
+  async (args) => result(await invoke('run_checks', args))
+)
 
 server.registerTool(
   'project_ui_catalog',

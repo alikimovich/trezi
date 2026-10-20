@@ -9,7 +9,8 @@ import Darwin
 /// installs stay inside Bun's repository write queue until S07; Bun holds that lease
 /// while this owner runs the install. HTML stamping stays a JS helper (parse5):
 /// the static site asks Bun over the same pipe and serves unstamped HTML if it
-/// cannot answer. Nothing here adopts a process it did not launch.
+/// cannot answer. Nothing here adopts a process it did not launch. Private agent
+/// runtimes (LOCAL-WEBKIT-1) are described with their keys in `RuntimeServer.swift`.
 final class RuntimeOwner: @unchecked Sendable {
     static let service = "runtime"
     static let helperPrefix = Data("{\"service\":\"runtime-helper\"".utf8)
@@ -51,6 +52,9 @@ final class RuntimeOwner: @unchecked Sendable {
     private var cancelledInstalls = Set<ObjectIdentifier>()
     private var timedOutInstalls = Set<ObjectIdentifier>()
     private var reserved = Set<Int>()
+    /// Private runtime keys between a start and its launch (with the generation that
+    /// holds the slot), counted against the cap. A superseded launch never frees a newer slot.
+    private var startingAgents = [String: Int]()
     private var closed = false
     // Stamping requests to Bun, owned by `helperLock`.
     private let helperLock = NSLock()
@@ -85,14 +89,19 @@ final class RuntimeOwner: @unchecked Sendable {
                     do { self.answer(frame, .succeeded(try RuntimeDetect.detect(root: root))) }
                     catch { self.answer(frame, .failed(Self.fail(.unavailable, (error as? RuntimeDetect.Failure)?.message ?? "\(error)"))) }
                 }
-            case ("info", "read"): answer(frame, .succeeded(info(try Self.root(Self.fields(frame, ["root"])))))
+            case ("info", "read"):
+                let body = try Self.fields(frame, ["root"], optional: ["agent"])
+                answer(frame, .succeeded(info(try Self.root(body), agent: try Self.agent(body))))
             case ("start", "mutation"):
-                let body = try Self.fields(frame, ["root", "command"], optional: ["framework", "cleanCache"])
+                let body = try Self.fields(frame, ["root", "command"], optional: ["framework", "cleanCache", "agent"])
                 guard let command = body["command"]?.text, command.count <= 65_536, !command.contains(0),
                       body["framework"].map({ ($0.text?.count ?? 65) <= 64 }) ?? true else { throw ServiceContractFailure.invalidRequest }
                 start(frame, root: try Self.root(body), command: command.string, framework: body["framework"]?.text?.string,
-                      cleanCache: body["cleanCache"] == .bool(true))
-            case ("stop", "mutation"): stop(frame, root: try Self.root(Self.fields(frame, ["root"])))
+                      cleanCache: body["cleanCache"] == .bool(true), agent: try Self.agent(body))
+            case ("stop", "mutation"):
+                let body = try Self.fields(frame, ["root"], optional: ["agent"])
+                stop(frame, root: try Self.root(body), agent: try Self.agent(body))
+            case ("stopAgents", "mutation"): stopAgents(frame, agent: try Self.agent(Self.fields(frame, [], optional: ["agent"])))
             case ("install", "mutation"): install(frame, root: try Self.root(Self.fields(frame, ["root"])))
             case ("stopAll", "mutation"):
                 _ = try Self.fields(frame, [])
@@ -104,8 +113,8 @@ final class RuntimeOwner: @unchecked Sendable {
         }
     }
 
-    private func info(_ root: String) -> JSValue {
-        guard let server = servers[Self.key(root)] else { return .object([(JSText("running"), .bool(false))]) }
+    private func info(_ root: String, agent: String? = nil) -> JSValue {
+        guard let server = servers[Self.key(root, agent: agent)] else { return .object([(JSText("running"), .bool(false))]) }
         var fields: [(JSText, JSValue)] = [(JSText("running"), .bool(true))]
         if let info = server.info { fields.append((JSText("server"), info)) }
         return .object(fields)
@@ -120,16 +129,24 @@ final class RuntimeOwner: @unchecked Sendable {
 
     // MARK: Start
 
-    private func start(_ frame: PipeFrame, root: String, command: String, framework: String?, cleanCache: Bool = false) {
-        let key = Self.key(root), generation = bump(key)
+    private func start(_ frame: PipeFrame, root: String, command: String, framework: String?, cleanCache: Bool = false, agent: String? = nil) {
+        let key = Self.key(root, agent: agent)
+        if agent != nil {
+            let others = Set(servers.keys).union(startingAgents.keys).filter { $0.hasPrefix(Self.agentPrefix) && $0 != key }
+            guard others.count < Self.maxAgentRuntimes else {
+                return answer(frame, .failed(Self.fail(.busy, "Private agent runtime limit (\(Self.maxAgentRuntimes)) reached.", retryable: true)))
+            }
+        }
+        let generation = bump(key)
+        if agent != nil { startingAgents[key] = generation }
         let previous = servers.removeValue(forKey: key)
         previous?.readiness?.settle(.failed(.cancelled, Self.cancelled))
         if let previous { retiring[ObjectIdentifier(previous)] = previous }
         work.async {
             // A restart never overlaps its predecessor: the old group is gone first.
             if let previous { self.retire(previous) }
-            if cleanCache { self.clearDependencyCaches(root, framework: framework) }
-            self.queue.async { self.launch(frame, root: root, key: key, command: command, framework: framework, generation: generation) }
+            if cleanCache { self.clearDependencyCaches(root, framework: framework, agent: agent) }
+            self.queue.async { self.launch(frame, root: root, key: key, command: command, framework: framework, generation: generation, agent: agent) }
         }
     }
 
@@ -141,26 +158,29 @@ final class RuntimeOwner: @unchecked Sendable {
         framework == "next" ? ["node_modules/.vite", ".next/cache"] : ["node_modules/.vite"]
     }
 
-    private func clearDependencyCaches(_ root: String, framework: String?) {
+    private func clearDependencyCaches(_ root: String, framework: String?, agent: String? = nil) {
         for relative in Self.dependencyCaches(framework: framework) {
             let path = root + "/" + relative
             guard (try? FileManager.default.attributesOfItem(atPath: path)) != nil else { continue }
             do {
                 try FileManager.default.removeItem(atPath: path)
-                log(root, "Cleared the dependency cache \(relative).")
-            } catch { log(root, "Could not clear the dependency cache \(relative): \(error.localizedDescription)") }
+                log(root, "Cleared the dependency cache \(relative).", agent: agent)
+            } catch { log(root, "Could not clear the dependency cache \(relative): \(error.localizedDescription)", agent: agent) }
         }
     }
 
-    private func launch(_ frame: PipeFrame, root: String, key: String, command: String, framework: String?, generation: Int) {
+    private func launch(_ frame: PipeFrame, root: String, key: String, command: String, framework: String?, generation: Int, agent: String? = nil) {
+        if startingAgents[key] == generation { startingAgents.removeValue(forKey: key) }
         guard !closed else { return answer(frame, .failed(Self.stopping)) }
         guard generations[key] == generation else { return answer(frame, .failed(Self.fail(.cancelled, Self.cancelled))) }
         guard let port = options.allocatePort(reserved) else {
             return answer(frame, .failed(Self.fail(.unavailable, "No free port found from \(RuntimeNet.portBase).", retryable: true)))
         }
         reserved.insert(port)
-        log(root, "Assigned free port \(port) (binding \(RuntimeNet.previewHost)).")
-        if framework == "static" && command.isEmpty { return startSite(frame, root: root, key: key, port: port) }
+        log(root, "Assigned free port \(port) (binding \(RuntimeNet.previewHost)).", agent: agent)
+        if framework == "static" && command.isEmpty {
+            return startSite(frame, root: root, key: key, port: port, agent: agent, generation: generation)
+        }
 
         let forced = "http://\(RuntimeNet.previewHost):\(port)"
         var environment = options.environment
@@ -176,7 +196,7 @@ final class RuntimeOwner: @unchecked Sendable {
             // The command is the detected literal or the user's own; never project file content.
             process = try ManagedProcess.launch(ProcessLaunch(executable: "/bin/sh", arguments: ["-c", RuntimeDetect.withPort(command, framework: framework, port: port)],
                                                               directory: root, environment: environment, watchdog: options.watchdog),
-                onOutput: { chunk in self.output(chunk, lines, root: root, readiness: readiness, forced: forced) },
+                onOutput: { chunk in self.output(chunk, lines, root: root, readiness: readiness, forced: forced, agent: agent) },
                 onExit: { process, status in
                     self.options.journal?.remove(process.pid)
                     let code = ProcessGroup.exitCode(status)
@@ -190,7 +210,7 @@ final class RuntimeOwner: @unchecked Sendable {
             return answer(frame, .failed(Self.fail(.unavailable, "Failed to start dev server: \(error)")))
         }
         if let identity = process.identity { options.journal?.add(identity) }
-        servers[key] = RuntimeServer(root: root, key: key, port: port, kind: .process(process), readiness: readiness)
+        servers[key] = RuntimeServer(root: root, key: key, port: port, kind: .process(process), readiness: readiness, agent: agent, generation: generation)
         let probe = options.probe
         work.async {
             if RuntimeNet.waitForReachable([forced], settled: { readiness.settled }, probe: probe) != nil {
@@ -204,11 +224,13 @@ final class RuntimeOwner: @unchecked Sendable {
         }
     }
 
-    private func output(_ chunk: Data, _ lines: OutputLines, root: String, readiness: Readiness, forced: String) {
+    private func output(_ chunk: Data, _ lines: OutputLines, root: String, readiness: Readiness, forced: String, agent: String?) {
         let (complete, partial) = lines.append(chunk)
-        for line in complete { if let text = OutputLines.loggable(line) { log(root, text) } }
-        // Fallback: a framework that ignored our port printed its own URL.
-        guard !readiness.settled, let raw = (complete + [partial]).lazy.compactMap(RuntimeNet.firstURL).first, lines.claimURL() else { return }
+        for line in complete { if let text = OutputLines.loggable(line) { log(root, text, agent: agent) } }
+        // Fallback: a framework that ignored our port printed its own URL. A private runtime
+        // never adopts one: a printed URL may be the live preview or another server, and its
+        // page must load only the origin allocated to it (`forced`), or the start times out.
+        guard agent == nil, !readiness.settled, let raw = (complete + [partial]).lazy.compactMap(RuntimeNet.firstURL).first, lines.claimURL() else { return }
         let probe = options.probe
         work.async {
             if let url = RuntimeNet.waitForReachable(RuntimeNet.hostVariants(RuntimeNet.normalizeURL(raw)), settled: { readiness.settled }, probe: probe) {
@@ -223,9 +245,9 @@ final class RuntimeOwner: @unchecked Sendable {
             guard let server = servers[key], server.readiness === readiness, case .process(let process) = server.kind else {
                 return answer(frame, .failed(Self.fail(.cancelled, Self.cancelled)))
             }
-            let running = RuntimeServer.running(url: url, pid: process.pid)
+            let running = server.running(url: url, pid: process.pid)
             server.info = running
-            if let note { log(server.root, note) }
+            if let note { log(server.root, note, agent: server.agent) }
             answer(frame, .succeeded(running))
             watch(process, key: key, url: url, misses: 0)
         case let .failed(code, message):
@@ -252,7 +274,7 @@ final class RuntimeOwner: @unchecked Sendable {
                     let missed = answered ? 0 : misses + 1
                     guard missed >= self.options.healthFailures else { return self.watch(process, key: key, url: url, misses: missed) }
                     self.unresponsive.insert(ObjectIdentifier(process))
-                    self.log(server.root, "The dev server stopped responding at \(url); stopping it.")
+                    self.log(server.root, "The dev server stopped responding at \(url); stopping it.", agent: server.agent)
                     self.work.async { process.stop(grace: self.options.stopGrace) }
                 }
             }
@@ -269,21 +291,21 @@ final class RuntimeOwner: @unchecked Sendable {
         servers.removeValue(forKey: key)
         guard let url = server.url else { return }
         event("exit", [("root", .string(JSText(server.root))), ("url", .string(JSText(url))),
-                       ("reason", .string(JSText(hung ? "The dev server stopped responding." : reason)))])
+                       ("reason", .string(JSText(hung ? "The dev server stopped responding." : reason)))] + Self.scope(server))
     }
 
-    private func startSite(_ frame: PipeFrame, root: String, key: String, port: Int) {
-        let site = StaticSite(root: root, stamp: { html, path in self.stamp(html, path) }, log: { line in self.log(root, line) })
+    private func startSite(_ frame: PipeFrame, root: String, key: String, port: Int, agent: String? = nil, generation: Int = 0) {
+        let site = StaticSite(root: root, stamp: { html, path in self.stamp(html, path) }, log: { line in self.log(root, line, agent: agent) })
         let server: StaticServer
         do { server = try StaticServer.listen(site: site, host: RuntimeNet.previewHost, port: port) } catch {
             reserved.remove(port)
             return answer(frame, .failed(Self.fail(.unavailable, "Failed to start static server: \(error)", retryable: true)))
         }
         let url = "http://\(RuntimeNet.previewHost):\(port)"
-        let entry = RuntimeServer(root: root, key: key, port: port, kind: .site(server), readiness: nil)
-        entry.info = RuntimeServer.running(url: url, pid: getpid())
+        let entry = RuntimeServer(root: root, key: key, port: port, kind: .site(server), readiness: nil, agent: agent, generation: generation)
+        entry.info = entry.running(url: url, pid: getpid())
         servers[key] = entry
-        log(root, "Static server serving \(root) at \(url).")
+        log(root, "Static server serving \(root) at \(url).", agent: agent)
         answer(frame, .succeeded(entry.info!))
     }
 
@@ -298,9 +320,10 @@ final class RuntimeOwner: @unchecked Sendable {
         }
     }
 
-    private func stop(_ frame: PipeFrame, root: String) {
-        let key = Self.key(root)
+    private func stop(_ frame: PipeFrame, root: String, agent: String? = nil) {
+        let key = Self.key(root, agent: agent)
         _ = bump(key)
+        startingAgents.removeValue(forKey: key)
         let server = servers.removeValue(forKey: key)
         server?.readiness?.settle(.failed(.cancelled, Self.cancelled))
         if let server { retiring[ObjectIdentifier(server)] = server }
@@ -312,9 +335,27 @@ final class RuntimeOwner: @unchecked Sendable {
         }
     }
 
+    /// Private runtimes only (one agent's, or every agent's): starting ones are superseded,
+    /// running ones stopped in parallel. Visible servers and installs are left alone.
+    private func stopAgents(_ frame: PipeFrame, agent: String?) {
+        let prefix = agent.map { Self.agentPrefix + $0 + ":" } ?? Self.agentPrefix
+        for key in Set(servers.keys).union(startingAgents.keys) where key.hasPrefix(prefix) { _ = bump(key); startingAgents.removeValue(forKey: key) }
+        let stopping = servers.keys.filter { $0.hasPrefix(prefix) }.compactMap { servers.removeValue(forKey: $0) }
+        for server in stopping {
+            server.readiness?.settle(.failed(.cancelled, Self.cancelled))
+            retiring[ObjectIdentifier(server)] = server
+        }
+        work.async {
+            DispatchQueue.concurrentPerform(iterations: stopping.count) { self.retire(stopping[$0]) }
+            self.answer(frame, .succeeded(.object([(JSText("stopped"), .number(Double(stopping.count)))])))
+        }
+    }
+
     /// Every server and install, in parallel; `done` runs once all are gone.
     private func stopEverything(_ done: @escaping @Sendable () -> Void) {
-        for key in Set(servers.keys).union(installs.keys) { _ = bump(key) }
+        // Pending private starts are superseded too, so none launches after this stop.
+        for key in Set(servers.keys).union(installs.keys).union(startingAgents.keys) { _ = bump(key) }
+        startingAgents.removeAll()
         // Servers already retiring are stopped again: a repeated stop joins the first.
         let all = Array(servers.values) + Array(retiring.values), running = Array(installs.values)
         servers.removeAll()
@@ -430,7 +471,11 @@ final class RuntimeOwner: @unchecked Sendable {
 
     // MARK: Frames
 
-    private func log(_ root: String, _ line: String) { event("log", [("root", .string(JSText(root))), ("line", .string(JSText(line)))]) }
+    private func log(_ root: String, _ line: String, agent: String? = nil) {
+        var fields: [(String, JSValue)] = [("root", .string(JSText(root))), ("line", .string(JSText(line)))]
+        if let agent { fields.append(("agent", .string(JSText(agent)))) }
+        event("log", fields)
+    }
 
     private func event(_ kind: String, _ fields: [(String, JSValue)]) {
         let head: [(JSText, JSValue)] = [(JSText("event"), .string(JSText("service-event"))), (JSText("service"), .string(JSText(Self.service))),

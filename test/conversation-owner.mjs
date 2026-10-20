@@ -134,6 +134,7 @@ const { setRepositoryOwner } = await import('../src/main/repository-owner.ts')
 const { setSourceOwner } = await import('../src/main/source-owner.ts')
 const { setEditingOwner } = await import('../src/main/editing-owner.ts')
 const { NativeChatController } = await import('../src/native/chat-controller.ts')
+const { passCheck } = await import('./helpers/gate-checks.mjs')
 
 const handlers = new Map()
 let window = () => {}
@@ -468,6 +469,7 @@ try {
     p2.say('Par')
     p1.tool('Read', { file_path: 'a.txt' })
     writeFileSync(join(p1.cwd, 'a.txt'), 'from chat one\n')
+    await passCheck(key, p1.cwd)
     p1.tool('Edit', { file_path: 'a.txt' })
     p2.say('allel')
     p1.say(' world')

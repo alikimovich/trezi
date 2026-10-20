@@ -233,9 +233,23 @@ for (const rules of [withTools, codexObservers]) {
     'preview_console',
     'preview_viewport',
     'preview_speed',
-    'preview_interact'
+    'preview_interact',
+    'preview_verify'
   ])
     assert(rules.includes(tool), `preview tools: teaches ${tool}`)
+  // LOCAL-WEBKIT-2: receipts, not claims; emulation is not device coverage.
+  assert(/never a pass it did not record/.test(rules), 'preview_verify: receipts, not claims')
+  // LOCAL-WEBKIT-3: landing needs a passing check on the exact source that lands.
+  assert(
+    /lands your work only when a check it ran itself passed on the exact source/.test(rules) &&
+      rules.includes('run_checks'),
+    'landing gate taught'
+  )
+  assert(
+    /not Windows, Android, iOS or real-device coverage/.test(rules),
+    'no implied device coverage'
+  )
+  assert(/CSS :hover never applies/.test(rules), 'synthetic hover is stated')
   assert(
     /MUST use Trezi's preview tools/.test(rules),
     'preview tools: required for visual verification'

@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  completeTurn,
+  completeTurn as completeTurnRaw,
   createChatWorktree,
   discardParked,
   stageResolve,
@@ -39,8 +39,15 @@ import { setEditingOwner } from '../src/main/editing-owner.ts'
 import { commitLiveTurn } from '../src/main/live-commit.ts'
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import { setRepositoryOwner } from '../src/main/repository-owner.ts'
-import { pruneOrphans, removeWorktree, retireWorktreeBranch } from '../src/main/worktrees.ts'
+import {
+  autoApplyWorktree,
+  commitWorktree,
+  pruneOrphans,
+  removeWorktree,
+  retireWorktreeBranch
+} from '../src/main/worktrees.ts'
 import { compileEditingFixture, startEditingFixture } from './helpers/editing-fixture.mjs'
+import { candidateOf } from './helpers/gate-checks.mjs'
 import { compileRepositoryFixture, startRepositoryFixture } from './helpers/repository-fixture.mjs'
 import { useRunnerEnv } from './helpers/runner-env.mjs'
 
@@ -53,6 +60,17 @@ const g = (cwd, ...args) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const read = (path) => readFileSync(path, 'utf8')
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// LOCAL-WEBKIT-3: the owner lands only the checked candidate (here the worktree's source
+// now). Live moved under the chat holds it; like a finished turn, reconcile and land the
+// (re-checked) result.
+const completeTurn = async (live, wt, message) =>
+  completeTurnRaw(live, wt, message, { candidate: await candidateOf(wt.path) })
+async function landReconciled(live, wt, message) {
+  const outcome = await completeTurn(live, wt, message)
+  if (outcome.outcome !== 'held' || outcome.hold?.reason !== 'live-changed') return outcome
+  assert.equal((await stageResolve(live, wt)).clean, true, message)
+  return completeTurn(live, wt, message)
+}
 
 function repo(files = { 'a.txt': 'one\n', 'b.txt': 'two\n' }) {
   const path = join(scratch, `repo-${++repos}`)
@@ -252,7 +270,7 @@ try {
     writeFileSync(join(two.path, 'two.txt'), 'from chat two\n')
     const land = (wtree, title) =>
       enqueueRepoWrite(live, async () => {
-        const outcome = await completeTurn(live, wtree, title)
+        const outcome = await landReconciled(live, wtree, title)
         assert.equal(outcome.outcome, 'merged', title)
         return commitLiveTurn(live, outcome.files, { title })
       })
@@ -281,7 +299,7 @@ try {
     g(live, 'add', 'c.txt')
     const wt = await chat(live, dir, 'ext1')
     writeFileSync(join(wt.path, 'a.txt'), 'one, by the chat\n')
-    let outcome = await completeTurn(live, wt, 'turn under a lock')
+    let outcome = await landReconciled(live, wt, 'turn under a lock')
     assert.equal(outcome.outcome, 'merged')
     wt.baseSha = outcome.newBase
     // A foreign Git process holds the index: the commit is refused, the files stay.
@@ -302,7 +320,7 @@ try {
     assert.equal((await syncFromLive(live, wt)).synced, true)
     assert.equal(read(join(wt.path, 'b.txt')), 'two, committed outside Trezi\n')
     writeFileSync(join(wt.path, 'e.txt'), 'new\n')
-    outcome = await completeTurn(live, wt, 'after the outside commit')
+    outcome = await landReconciled(live, wt, 'after the outside commit')
     assert.equal(outcome.outcome, 'merged')
     assert.equal(
       (await commitLiveTurn(live, outcome.files, { title: 'after the outside commit' })).committed,
@@ -565,7 +583,7 @@ try {
     const parked = await chat(parkedLive, dir, 'crash2')
     writeFileSync(join(parked.path, 'a.txt'), "one, the chat's version\n")
     writeFileSync(join(parkedLive, 'a.txt'), "one, the user's version\n")
-    assert.equal((await completeTurn(parkedLive, parked, 'parked turn')).outcome, 'parked')
+    assert.equal((await completeTurn(parkedLive, parked, 'parked turn')).outcome, 'held')
     const parkedTip = g(parked.path, 'rev-parse', 'HEAD')
     setRepositoryOwner(null)
     await stop(owned)
@@ -610,7 +628,7 @@ try {
     const parked = await chat(live, dir, 'orph2')
     writeFileSync(join(parked.path, 'a.txt'), "one, the parked chat's version\n")
     writeFileSync(join(live, 'a.txt'), "one, the user's version\n")
-    assert.equal((await completeTurn(live, parked, 'parked turn')).outcome, 'parked')
+    assert.equal((await completeTurn(live, parked, 'parked turn')).outcome, 'held')
     const parkedTip = g(parked.path, 'rev-parse', 'HEAD')
     writeFileSync(join(plain.path, 'x.txt'), 'plain dirty work\n')
     writeFileSync(join(parked.path, 'y.txt'), 'parked dirty work\n')
@@ -763,6 +781,61 @@ try {
       "the service log has Git's full error output"
     )
     assert.equal(read(join(live, 'a.txt')), 'one\n')
+    await stop(owned)
+  })
+
+  // LOCAL-WEBKIT-3: what lands is exactly the commit that passed the gate, whole. The
+  // worktree's branch moves between validation and the reads (`land.validated`, a script
+  // the fixture runs at that point); an omitted or obsolete path in a caller's list is held.
+  await section('checked-tip', async () => {
+    const home = profile('checked-tip')
+    const dir = join(home, 'trezi', 'worktrees')
+    const script = join(home, 'move-head.sh')
+    const identity = ['-c', 'user.name=Provider', '-c', 'user.email=provider@local']
+    let owned = await fixture(home, { REPOSITORY_RUN_AT: 'land.validated', REPOSITORY_RUN: script })
+    await install(owned)
+    const live = repo({ 'a.txt': 'one\n', 'b.txt': 'two\n' })
+    const wt = await chat(live, dir, 'tip1')
+    writeFileSync(join(wt.path, 'a.txt'), 'one, checked\n')
+    const checked = await candidateOf(wt.path)
+    // A provider commit lands in the worktree after the gate passed and before any read.
+    writeFileSync(
+      script,
+      `cd '${wt.path}' && echo 'one, unchecked' > a.txt && echo extra > extra.txt && git ${identity.join(' ')} add -A && git ${identity.join(' ')} commit -q --no-verify -m moved\n`
+    )
+    const outcome = await completeTurnRaw(live, wt, 'moving tip', { candidate: checked })
+    const moved = g(wt.path, 'rev-parse', 'HEAD')
+    assert.notEqual(moved, outcome.newBase, 'the worktree branch moved after the gate')
+    assert.equal(outcome.outcome, 'merged')
+    assert.equal(read(join(live, 'a.txt')), 'one, checked\n', 'the checked bytes landed')
+    assert.equal(existsSync(join(live, 'extra.txt')), false, 'nothing from the later commit landed')
+    assert.equal(await candidateOf(live), checked, 'live is exactly the checked candidate')
+    assert.equal(outcome.liveTree, checked)
+    setRepositoryOwner(null)
+    await stop(owned)
+
+    // A caller's list must be the whole base..tip diff: a part of A+B is not what was checked.
+    owned = await fixture(home)
+    await install(owned)
+    const whole = repo({ 'a.txt': 'one\n', 'b.txt': 'two\n' })
+    const spawned = await chat(whole, dir, 'tip2')
+    writeFileSync(join(spawned.path, 'a.txt'), 'one, by the spawn\n')
+    writeFileSync(join(spawned.path, 'b.txt'), 'two, by the spawn\n')
+    const made = await commitWorktree(spawned, 'A and B')
+    assert.deepEqual([...made.files].sort(), ['a.txt', 'b.txt'])
+    const both = await candidateOf(spawned.path)
+    const partial = await autoApplyWorktree(whole, spawned, ['a.txt'], both)
+    assert.equal(partial.applied, false)
+    assert.deepEqual(partial.hold, { reason: 'source-changed', files: ['b.txt'] })
+    const obsolete = await autoApplyWorktree(whole, spawned, [...made.files, 'gone.txt'], both)
+    assert.equal(obsolete.applied, false)
+    assert.deepEqual(obsolete.hold, { reason: 'source-changed', files: ['gone.txt'] })
+    assert.equal(read(join(whole, 'a.txt')), 'one\n', 'a held landing wrote nothing')
+    assert.equal(read(join(whole, 'b.txt')), 'two\n')
+    const landed = await autoApplyWorktree(whole, spawned, made.files, both)
+    assert.equal(landed.applied, true)
+    assert.equal(await candidateOf(whole), both, 'the whole candidate landed')
+    setRepositoryOwner(null)
     await stop(owned)
   })
 

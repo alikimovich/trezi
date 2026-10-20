@@ -34,6 +34,7 @@ import {
   workspaceUsage
 } from '../src/main/chat-workspaces.ts'
 import { removeLegacyFolder } from '../src/main/worktrees.ts'
+import { passCheck } from './helpers/gate-checks.mjs'
 
 const DAY = 24 * 60 * 60 * 1000
 const base = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-workspace-cleanup-')))
@@ -84,6 +85,7 @@ async function turn(key, root, file, text) {
   await beforeTurn(key, 'edit')
   const cwd = await isolatedCwd(root, key)
   writeFileSync(join(cwd, file), text)
+  await passCheck(key, cwd)
   await afterTurn(key, `write ${file}`, [], 'success')
   return cwd
 }
@@ -114,6 +116,7 @@ try {
   await beforeTurn('parked', 'edit')
   writeFileSync(join(parked, 'a.txt'), 'chat side\n')
   writeFileSync(join(live, 'a.txt'), 'user side\n')
+  await passCheck('parked', parked)
   await afterTurn('parked', 'conflicting', [], 'success')
   assert.ok(records.get(`chatpark-${parked.split('/').at(-1)}`), 'the conflicting turn parked')
   writeFileSync(join(live, 'a.txt'), 'one\n')

@@ -207,16 +207,10 @@ enum RepositoryPaths {
     /// checkout's own index and files are never touched. A clean tree yields HEAD.
     static func snapshot(_ git: RepositoryGit, _ directory: String, index: String, message: String) throws -> String {
         let head = try git.line(directory, ["rev-parse", "HEAD"])
-        var env = RepositoryGit.identity
-        env["GIT_INDEX_FILE"] = index
-        defer { unlink(index); unlink(index + ".lock") }
-        try git.data(directory, ["read-tree", "HEAD"], env: env)
-        try git.data(directory, ["add", "-A"], env: env)
-        try unstageExcluded(git, directory, env: env)
-        let tree = try git.line(directory, ["write-tree"], env: env)
+        let tree = try Self.tree(git, directory, index: index)
         if tree.isEmpty { return head }
         if let headTree = try? git.line(directory, ["rev-parse", "HEAD^{tree}"]), headTree == tree { return head }
-        let commit = try git.line(directory, ["commit-tree", tree, "-p", head, "-m", message], env: env)
+        let commit = try git.line(directory, ["commit-tree", tree, "-p", head, "-m", message], env: RepositoryGit.identity)
         return commit.isEmpty ? head : commit
     }
 

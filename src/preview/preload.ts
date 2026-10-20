@@ -8,6 +8,7 @@ import { sourceSelector, sourceStamp } from './source-stamp'
 import './agent-console'
 import './agent-inspect'
 import './agent-interact'
+import './agent-observe'
 /**
  * Preview preload — injected into the previewed app's native WebContentsView.
  *
