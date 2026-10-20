@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: `repository-owner` budget after a CI timeout
+
+- **What happened.** GitHub CI run 39363163815 (3 workers, cold Swift cache, tree 3c5f9844) ended `repository-owner` with `TIMEOUT 240.0s`; its log showed the sections up to `crash` passed. That failed attempt stays on record.
+- **Diagnosis.** Not a hang: run alone, the sections after `crash` (`orphans`, `relaunch`, `malformed-patch`, `checked-tip`, `drain`) take about 10 s together and all 11 sections about 25 s (about 92 s with the fixture startup); nothing waits on a hold or on `land.validated`. In CI the test started beside `swift-preview` (186 s) and `swift-preview-target` (221 s) on the 2-wide swiftc lane, so its cold Swift fixtures (more service sources since LOCAL-WEBKIT-3) queued for most of the 240 s. The new `checked-tip` section and `landReconciled` add seconds, not minutes, so there was nothing to trim.
+- **Change.** `UNIT_TIMEOUT_MS['repository-owner']` in `test/run.mjs` goes from 240 s to 420 s, with the reason in the comment. No product code changed.
+
 ## 2026-10-18 — LOCAL-WEBKIT-4 repair 2: identity taken before the launch, honest cleanup after a failed close
 
 - **Mid-check replacement.** `BrowserSetup.recheck` (`src/main/browser-setup.ts`) takes the fingerprint (paths, versions and executable identity) *before* `checkBrowserTools`, stores the check under that fingerprint and recomputes it afterwards; a change makes the result a failed "changed while it was being checked" one. *Why:* the old order stat'ed the files after the launch, so a same-version file swapped in during the check was bound to a success from the old binary. Regression: `test/browser-setup-recovery.mjs` swaps the shell, then the CLI, from inside the injected `ps` hook; the state is `unchecked`, never `ready`, and a quiet recheck reaches Ready.

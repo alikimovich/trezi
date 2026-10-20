@@ -284,8 +284,10 @@ const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 // still get a longer budget for a cold Swift cache.
 const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,
-  // Its Swift fixture queues behind other tests' swiftc runs; it takes 110 s+ under load.
-  'repository-owner': 240_000,
+  // Its Swift fixtures queue behind other tests' swiftc runs; it takes 110 s+ under load.
+  // The sections themselves are ~25 s warm (LOCAL-WEBKIT-PUBLISH: a 3-worker CI run with a
+  // cold Swift cache hit 240 s inside the sections after `crash`, with no hang).
+  'repository-owner': 420_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
