@@ -19,6 +19,20 @@ export function setAgentBrowserIdleMs(ms: number | null): void {
   idleMs = ms ?? AGENT_BROWSER_IDLE_MS
 }
 
+/**
+ * Whether a host notice ends the load in flight. A cancel means another navigation took
+ * over (the page's own reload) and a `stale` failure belongs to a navigation the pending
+ * open does not own: neither may clear the state (pending source capture, `loading`) of
+ * the navigation that is still going to load.
+ */
+export function navigationEndsLoad(event: {
+  phase?: string
+  message?: string
+  stale?: boolean
+}): boolean {
+  return event.phase === 'failed' && event.message !== 'cancelled' && event.stale !== true
+}
+
 /** A navigation the host refused or that failed (LKM-230), newest last. */
 export interface AgentNotice {
   phase: 'blocked' | 'failed'
@@ -147,7 +161,11 @@ async function webkitBrowser(key: string, root: string, isolated = false): Promi
     loadWaiters.clear()
   }
   const onNavigation = (
-    event: Omit<Partial<AgentNotice>, 'phase'> & { view?: string; phase?: string }
+    event: Omit<Partial<AgentNotice>, 'phase'> & {
+      view?: string
+      phase?: string
+      stale?: boolean
+    }
   ) => {
     if (event.view !== viewName) return
     if (event.phase === 'start') {
@@ -157,9 +175,9 @@ async function webkitBrowser(key: string, root: string, isolated = false): Promi
       return
     }
     if (event.phase !== 'blocked' && event.phase !== 'failed') return
-    // A cancel means another navigation took over (the page's own reload); that one's start
-    // and `loaded` settle the state. Only a real failure ends the load here.
-    if (event.phase === 'failed' && event.message !== 'cancelled') {
+    // That navigation's start and `loaded` settle the state after a cancel or a stale
+    // failure; only the failure of the load in flight ends it here.
+    if (navigationEndsLoad(event)) {
       browser.loading = false
       pending = null
     }

@@ -138,6 +138,7 @@ const UNIT = [
   'sidebar-sizing',
   'preview-overlay',
   'key-shortcuts',
+  'agent-load-routing',
   'sidebar-icon',
   'sidebar-focus',
   'native-git',

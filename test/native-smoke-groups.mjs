@@ -18,7 +18,16 @@ import {
   smokeLauncherTimeoutMs
 } from '../src/native/smoke-groups.ts'
 
-const all = ['core', 'islands', 'shadow-light', 'sidebar', 'settings', 'chat', 'composer']
+const all = [
+  'core',
+  'islands',
+  'shadow-light',
+  'sidebar',
+  'settings',
+  'chat',
+  'composer',
+  'agent-browser'
+]
 assert.deepEqual([...NATIVE_SMOKE_GROUPS], all)
 assert.deepEqual([...parseSmokeGroups([])], all, 'No flag runs every group')
 assert.deepEqual([...parseSmokeGroups(['--test', '--project', '/tmp/x'])], all)

@@ -31,11 +31,16 @@ extension Host {
         // Only the navigation the pending open started can fail it; the cancel of a superseded one (the page's
         // own reload, or the open taking over) is a notice, and the navigation that took over answers the open.
         if name.hasPrefix("agent:") {
-            if agentRoutes[name]?.failed(navigation, cancelled: cancelled) == .reject, let pending = agentBrowserLoads.removeValue(forKey: name) {
+            let outcome = agentRoutes[name]?.failed(navigation, cancelled: cancelled)
+            if outcome == .reject, let pending = agentBrowserLoads.removeValue(forKey: name) {
                 agentRoutes.removeValue(forKey: name)
                 reply(pending, error: error.localizedDescription)
             }
-            emit(["event":"agent-navigation", "view":name, "phase":"failed", "url":String(url.prefix(500)), "message":cancelled ? "cancelled" : error.localizedDescription])
+            // A real failure of a navigation the pending open does not own is flagged stale: Bun records
+            // the notice but must not end the load or drop the source capture of the navigation in flight.
+            var notice: [String: Any] = ["event":"agent-navigation", "view":name, "phase":"failed", "url":String(url.prefix(500)), "message":cancelled ? "cancelled" : error.localizedDescription]
+            if outcome == .ignore { notice["stale"] = true }
+            emit(notice)
             return
         }
         if cancelled { emit(["event":"navigation-cancelled", "view":name, "url":url]); return }
@@ -51,10 +56,12 @@ extension Host {
 /// The same URL reloads from origin, which keeps the route and the scroll position.
 enum PreviewCache {
     static let types: Set<String> = [WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeFetchCache]
-    /// `started` receives the navigation once the caches are cleared and the load began.
-    static func reload(_ view: WKWebView, url: URL?, started: ((WKNavigation?) -> Void)? = nil) {
+    /// The caches clear asynchronously, so `shouldLoad` is asked once they are clear and before anything
+    /// loads: a caller that was superseded or closed meanwhile must not start (and so cancel) a navigation.
+    /// `started` receives the navigation once the load began.
+    static func reload(_ view: WKWebView, url: URL?, shouldLoad: @escaping () -> Bool = { true }, started: ((WKNavigation?) -> Void)? = nil) {
         view.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak view] in
-            guard let view else { return }
+            guard let view, shouldLoad() else { return }
             let navigation: WKNavigation?
             if let url, view.url?.absoluteString != url.absoluteString {
                 navigation = view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))

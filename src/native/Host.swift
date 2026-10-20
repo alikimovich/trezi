@@ -233,10 +233,13 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             // A reload of the page already shown goes back to the origin; hard also drops WebKit's caches.
             if c["hard"] as? Bool == true {
                 agentRoutes[name] = AgentLoadRouting(nil)
-                PreviewCache.reload(view, url: url) { [weak self] navigation in
-                    guard let self, self.agentBrowserLoads[name] == id else { return }
-                    self.agentRoutes[name]?.record(navigation)
-                }
+                // Still this open, on this page, once the caches are clear; otherwise nothing loads.
+                PreviewCache.reload(view, url: url, shouldLoad: { [weak self, weak view] in
+                    guard let self, let view else { return false }
+                    return self.agentBrowserLoads[name] == id && self.views[name] === view
+                }, started: { [weak self] navigation in
+                    self?.agentRoutes[name]?.record(navigation)
+                })
             } else if c["reload"] as? Bool == true {
                 agentRoutes[name] = AgentLoadRouting(view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)))
             } else { agentRoutes[name] = AgentLoadRouting(view.load(URLRequest(url: url))) }
