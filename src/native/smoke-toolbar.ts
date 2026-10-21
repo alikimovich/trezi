@@ -16,13 +16,18 @@ const MAX_TRAILING_INSET = 24
 type Toolbar = Record<string, any>
 
 const gapOf = (state: Toolbar) => state.rightGroupLeading - state.addressTrailing
-const pick = (state: Toolbar) => ({
+export const pick = (state: Toolbar) => ({
   windowWidth: state.windowWidth,
   addressLeading: state.addressLeading,
   addressTrailing: state.addressTrailing,
   addressWidth: state.addressWidth,
   addressFormerWidth: state.addressFormerWidth,
+  addressConstant: state.addressConstant,
+  addressExtra: state.addressExtra,
+  sidebarInset: state.sidebarInset,
+  chatLead: state.chatLead,
   chatHeaderWidth: state.chatHeaderWidth,
+  chatHeaderAttached: state.chatHeaderAttached,
   chatHeaderTrailing: state.chatHeaderTrailing,
   measuredRightInset: state.rightInset,
   rightInsetMeasured: state.rightInsetMeasured,

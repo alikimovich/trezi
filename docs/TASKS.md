@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Toolbar controls overflow when expanding/restoring the preview at ample width (LKM-296)
+
+- [x] Reproduce with per-frame passive toolbar traces and foreground captures; root cause in `docs/evidence/lkm-296/ROOT-CAUSE.md`.
+- [x] Size the address block and chat header for where the toolbar settles (expand, restore, split resize, inserted chat header).
+- [x] Regression `src/native/smoke-toolbar-overflow.ts` (core `toolbar-address`): no actionable control and no "…" in the overflow menu in any frame at 1320/1810 pt, expand/restore, rapid toggles, sidebar 340/180/230; real controls still overflow below the minimum width.
+- [ ] Full screen not exercised (the toolbar lives in a separate window there).
+
 ## Ship dependency onboarding and packaged managed browser launcher (LOCAL-WEBKIT-4)
 
 - [x] Settings → Browser Checks: WebKit always Available; Chromium missing / partial / unchecked / ready / failed / unsupported with versions, paths, prerequisites, commands, verified links, Install, Cancel and Check Again (`src/native/settings-browser.ts`, `src/main/browser-setup.ts`).

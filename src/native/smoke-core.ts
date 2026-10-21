@@ -85,6 +85,7 @@ import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
 import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
 import { checkToolbarMore } from './smoke-toolbar-more'
+import { checkToolbarOverflow, observeFirstExpansion } from './smoke-toolbar-overflow'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -604,8 +605,8 @@ export async function runNativeCoreSmoke(
         const initial = await host.request('layoutInspect')
         for (const delta of [-30, 30, -20, 20]) await host.request('dividerPerform', { delta })
         await inspect('layoutInspect', (s) => Math.abs(s.width - initial.width) < 1)
-        await host.request('shellPerform', { action: 'expand' })
-        await inspect('layoutInspect', (s) => s.fraction === 0)
+        // LKM-296: the session's first expansion, read as laid out (asserted in toolbar-address).
+        await observeFirstExpansion(host, artifacts)
         await host.request('shellPerform', { action: 'expand' })
         await inspect('layoutInspect', (s) => s.fraction === 1)
         await host.request('shellPerform', { action: 'device' })
@@ -635,6 +636,7 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: async () => {
         await checkToolbarAddress(host, artifacts)
+        await checkToolbarOverflow(host, artifacts)
       },
       cleanup: async () => {
         await restoreToolbarAddress(host)
