@@ -45,6 +45,28 @@ that exactly one WebKit view exists. `TREZI_NATIVE_BACKGROUND_TEST=1` skips real
 pointer gestures/animation timing, which must be reported as reduced coverage.
 `test:native-live` separately submits a real provider turn against a fixture.
 
+### Focused verification (LOCAL-TEST-AUDIT)
+
+Use exact registered test names with `--filter`; inspect the selection with `--list`
+before running it. Listing validates tiers and names, prints tab-separated tier/name
+pairs (including requested typechecks), and exits without acquiring a lock or creating
+artifacts. Empty, unknown and wrong-tier selections fail with exit 2.
+
+```sh
+bun test/run.mjs unit --filter=test-runner,display-path --list
+bun test/run.mjs unit --filter=test-runner,display-path
+bun test/run.mjs native --list
+```
+
+For test, runner, docs or copy-only changes with unchanged application behavior,
+run typecheck, lint and the relevant focused tests. A runner change also needs its
+CLI selection regressions; console-only temporary fixtures cover native/live dispatch
+without launching the desktop or calling providers. This scoped evidence does not
+claim full-suite acceptance. Native UI behavior changes still need native evidence;
+the manager schedules desktop suites under its shared desktop lock. Listing a native
+tier is safe and does not build or launch the app. See `docs/TEST-CLEANUP-AUDIT.md`
+for this cleanup's preserved coverage and validation limits.
+
 ### Unit tier speed (LKM-167)
 
 - **Swift build cache.** Every unit test that compiles Swift calls
