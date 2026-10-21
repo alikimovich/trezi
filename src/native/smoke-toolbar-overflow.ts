@@ -107,7 +107,6 @@ export async function observeFirstExpansion(host: NativeBridge, artifacts: strin
  *  goes to AppKit's overflow menu; below the minimum window width real controls still do. */
 export async function checkToolbarOverflow(host: NativeBridge, artifacts: string) {
   const results: Record<string, Passive> = {}
-  const settledOnly = new Set<string>()
   if (sessionFirst) results['session-first-expand'] = sessionFirst
   const save = () =>
     writeFileSync(join(artifacts, 'toolbar-overflow.json'), JSON.stringify(results, null, 2))
@@ -158,9 +157,7 @@ export async function checkToolbarOverflow(host: NativeBridge, artifacts: string
     }
     assert.ok(await resize(1320), 'resize to 1320')
     for (const sidebar of [340, 180, 230]) {
-      // Settled only: a split resize lays the toolbar out before it can be measured. Before the
-      // fix the block stayed overflowed at 340 pt with nothing to measure it again.
-      settledOnly.add(`sidebar-${sidebar}`)
+      // Before the fix the block stayed overflowed at 340 pt with nothing to measure it again.
       await record(`sidebar-${sidebar}`, async () =>
         assert.ok(
           await host.request('shellPerform', { action: 'sidebar-width', row: String(sidebar) }),
@@ -216,7 +213,7 @@ export async function checkToolbarOverflow(host: NativeBridge, artifacts: string
   for (const [name, result] of Object.entries(results)) {
     // Every frame of the transition, not only the settled toolbar: the controls must not
     // flash into the overflow menu while the sidebar and chat column animate.
-    const samples = settledOnly.has(name) ? [] : (result.trace?.samples ?? [])
+    const samples = result.trace?.samples ?? []
     const frames = samples.map((sample: Passive) => [`frame ${sample.ms} ms`, sample])
     for (const [stage, state] of [
       ['settled', result.settled],

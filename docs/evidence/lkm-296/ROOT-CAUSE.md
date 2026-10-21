@@ -193,3 +193,15 @@ e3c98885). That covers groups only, not the full suite.
   - two foreground transition captures.
 - `before-fix/` and `after-fix/` are unchanged. The failed runs (`full-suite-attempt-1`,
   `settled-offset-attempt-1`) are kept by the manager.
+
+### Review follow-up: every frame asserted
+
+The independent review of e61c3ad9 asked that the manual sidebar resizes (340/180/230) be
+asserted frame by frame too. Their earlier settled-only exemption is gone; only the test
+changed.
+
+- **Focused native run (agentos 493ec0cc).** `toolbar-address` passed: 1,122 ample-width
+  frames, 0 actionable, 0 "…". That includes 53/52/53 frames for the sidebar resizes.
+- **Not a full suite pass.** The run was stopped after that check at the user's request. The
+  user chose to reuse e61c3ad9's full native 66/66, since the application code is unchanged.
+- **Raw evidence.** Kept by the owner (`review-followup-focused-evidence`).

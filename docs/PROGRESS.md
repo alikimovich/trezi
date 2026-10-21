@@ -29,7 +29,8 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - Covers: sidebar 340/180/230 then expand/restore, a narrow window then expand and widen,
     and 5-toggle rapid expand and rapid restore.
   - Every frame at ample width must have no actionable control and no "…" in the overflow
-    menu. Only the manual sidebar resize itself is asserted settled-only.
+    menu, the manual sidebar resizes included (their settled-only exemption was removed after
+    review).
   - At 688 pt real controls (address, publish) must overflow, with "…" hidden on purpose.
 - **Evidence.** Kept in `docs/evidence/lkm-296/`:
   - `before-fix/`: 1–5 overflow frames per wide transition, and the » capture.
@@ -67,6 +68,22 @@ Newest first. Append a dated entry when you finish a chunk of work.
     - Narrow: address and publish still overflow.
     - 850 pt: gap 20.
     - Evidence: `docs/evidence/lkm-296/after-repair/`.
+- **Review follow-up.** Independent review of e61c3ad9 found the diagnosis and repairs sound
+  (full manager native 66/66). It asked to drop the settled-only exemption for the manual
+  sidebar resizes to 340/180/230, whose traces already had zero overflow.
+  `smoke-toolbar-overflow.ts` now asserts every ample-width frame of those resizes too: no
+  actionable control and no "…" in the overflow menu. There is no product change.
+  - **Verified (focused, by the user's choice).** Quick: unit 256, typechecks and lint pass.
+    A native run (agentos 493ec0cc) passed `toolbar-address` in 32.1 s with the stricter
+    fixture: 1,122 ample-width frames across 22 wide transitions, 0 actionable, 0 "…".
+    The manual sidebar resizes contributed 53/52/53 of those frames. At 688 pt address and
+    publish still overflow.
+  - The owner stopped that run after `toolbar-address`, at the user's request. It is not a
+    full suite pass. The application code is unchanged from e61c3ad9, so the user chose to
+    reuse its full native 66/66 instead of running the suite again. The fixture's SHA-256
+    (`717be557…`) matches the focused run.
+  - Raw frames and logs are kept by the owner (`review-followup-focused-evidence`). Full
+    screen is still untested.
 
 ## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: -999 repair 3 — load timeout diagnosed, deterministic provisional-cancel regression
 
