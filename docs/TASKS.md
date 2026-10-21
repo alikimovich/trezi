@@ -2965,4 +2965,9 @@ Ranked by leverage. Deferred items note *why* they're not auto-completable.
 
 - [ ] Fix startup-intro regression: recognize localhost native previews and keep the restored preview hidden throughout the intro crossfade (observed during Git-update verification, 2026-09-16).
 
+## LOCAL-SELECTION-FIX
+
+- [x] Diagnose and fix preview inline editing/selection lifecycle; add focused regressions.
+- [x] Manager: run disposable selection-input/text-edit desktop checks under native-desktop lock and inspect selection-lifecycle PNG/JSON.
+- [x] Prepare focused selection group and changed-text/Finder blur-refocus native assertions for manager desktop acceptance.
 - [x] LOCAL-TEST-AUDIT (2026-10-20): bounded redundant assertion cleanup, validated focused selection/listing, and coverage inventory in `docs/TEST-CLEANUP-AUDIT.md`; ready for independent review, not full-suite acceptance.

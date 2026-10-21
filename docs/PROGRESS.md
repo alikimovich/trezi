@@ -2,6 +2,37 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-20 — LOCAL-SELECTION-FIX: focused native acceptance preparation
+
+- Added `selection` smoke group: `selection-input`/`text-edit` plus prelude only.
+- Extended disposable WebKit input fixture with changed-text outside-click commit
+  messages from a controlled stamped leaf (isolated interception avoids HMR races),
+  Finder app blur/refocus, re-entry and another changed outside-click selection.
+  Existing text-edit checks preserve real source writing/undo/redo coverage.
+- Moved diagnosis/evidence notes to `docs/evidence/local-selection-fix/diagnosis.md`;
+  original worker baseline e61c3ad9 and manager implementation head cce2546b are
+  distinct. Manager runs `bun test/native-runtime.mjs --only=selection` under the
+  shared native-desktop lock; no worker desktop run or capture inspection.
+- Repair worker non-GUI checks passed: smoke group selection, edit lifecycle,
+  mocked foreground capture, typecheck, focused Biome and docs-links. Exact
+  commands/results are appended to the diagnosis evidence file.
+
+## 2026-10-20 — LOCAL-SELECTION-FIX: inline edit teardown and outside selection
+
+- Confirmed diagnosis in `docs/evidence/local-selection-fix/diagnosis.md`: prevented pointer defaults suppress blur,
+  while click returned during editing. Native mode relays are connected; no native
+  focus-policy defect confirmed. Outside trusted clicks now commit before picking.
+- Teardown removes blur/key listeners, restores authored editor attributes/outline,
+  releases focus and clears browser ranges. Enter/mode exit commit; Escape restores.
+- Focused production-handler regression: `bun test/preview-edit-lifecycle.mjs`.
+  Extended existing disposable `selection-input` WebKit fixture for outside selection,
+  mode exit, overlays/ranges and re-entry, with JSON plus foreground PNG evidence.
+- Desktop execution/capture inspection is reserved for the manager under the shared
+  native-desktop lock. No GUI/native suite was run by the worker.
+- Worker checks passed: `bun run typecheck`, `bun run lint`,
+  `bun test/preview-edit-lifecycle.mjs`, `bun test/native-visible-capture.mjs`
+  (the last uses a mocked bridge). Commands/results and baseline HEAD are in docs/evidence/local-selection-fix/diagnosis.md.
+
 ## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: -999 repair 3 — load timeout diagnosed, deterministic provisional-cancel regression
 
 Native verify2 failed `core/agent-navigation` with `Agent browser load timed out` (the failed run stays on record, as do 08bbedaf -999 and the two `repository-owner` CI timeouts). Supersedes the "Regression" bullets of repair 2.
