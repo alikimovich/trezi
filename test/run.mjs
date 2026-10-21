@@ -351,11 +351,13 @@ const options = {
 let serial = false
 let report = false
 let typecheck = false
+let list = false
 try {
   for (const arg of process.argv.slice(2)) {
     if (arg === '--serial') serial = true
     else if (arg === '--report') report = true
     else if (arg === '--typecheck') typecheck = true
+    else if (arg === '--list') list = true
     else if (arg === 'all') for (const t of Object.keys(TIERS)) selected.add(t)
     else if (Object.hasOwn(TIERS, arg)) selected.add(arg)
     else {
@@ -379,9 +381,21 @@ try {
   }
 } catch (error) {
   console.error(
-    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name] [--report] [--typecheck]`
+    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name] [--report] [--typecheck] [--list]`
   )
   process.exit(2)
+}
+
+// Resolve and validate the same selection as execution, without locks, artifacts,
+// builds, provider calls or desktop access. One tier/name pair per line.
+if (list) {
+  for (const [tier, members] of Object.entries(TIERS)) {
+    if (!selected.has(tier)) continue
+    for (const name of members)
+      if (!options.filter || options.filter.has(name)) console.log(`${tier}\t${name}`)
+  }
+  if (typecheck) for (const name of Object.keys(TYPECHECKS)) console.log(`typecheck\t${name}`)
+  process.exit(0)
 }
 
 const artifacts = join(TEST_DIR, 'artifacts', 'runs')

@@ -14192,3 +14192,14 @@ Fixes "opening a project I already run doesn't work" (hit on lkmv.ch):
   preview with IPC geometry sync; typed `window.api`; dev-server runner
   (detect/spawn/parse/readiness). Playwright+Electron smoke + open→preview tests.
 - Made dsgn its own standalone git repo.
+
+## 2026-10-20 — LOCAL-TEST-AUDIT: bounded test cleanup and selection preview
+
+- Removed three redundant or implementation-shape assertions; all fixture behavior,
+  security/data-integrity checks and LKM-296 toolbar/sidebar checks remain unchanged.
+- Added validated `--list` to the tier runner and CLI regressions using console-only
+  temporary fixtures. Focused verification policy is separate from suite cleanup.
+- Inventory, rationale, exact evidence, intermediate failures and Queue/Skills/toolbar
+  overlap risks: `docs/TEST-CLEANUP-AUDIT.md`. No other worktrees accessed or integrated.
+- Local files only; manager owns staging, commits, configured verification and desktop
+  suites. No full-suite acceptance claimed.
