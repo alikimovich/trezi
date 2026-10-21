@@ -21,7 +21,10 @@ shared native-desktop lock; this worker runs only focused non-GUI checks.
 
 ## Worker evidence
 
-- HEAD: e61c3ad9 (issue baseline); changes are uncommitted in this checkout.
+- Original worker baseline: e61c3ad9. Manager committed the first implementation
+  as cce2546b (`Implement LOCAL-SELECTION-FIX`). This repair starts at that head;
+  its changes are left uncommitted for the manager. Record the manager's next
+  committed head alongside the desktop command/results, not as the worker baseline.
 - `bun test/preview-edit-lifecycle.mjs`: PASS. Runs production handlers in a DOM
   model, including changed-text commit ordering, cancel, Enter, blur/re-entry,
   mode exit, listener/range cleanup and normal page input after exit.
@@ -39,3 +42,37 @@ shared native-desktop lock; this worker runs only focused non-GUI checks.
   disposable fixtures/profile. Inspect `selection-lifecycle.png` (foreground window)
   and `selection-lifecycle.json`, alongside existing element-toolbar evidence.
   Do not treat the worker's model test as proof of WKWebView focus or paint.
+
+## Focused acceptance preparation (repair)
+
+- Added `selection` group: only `selection-input` and `text-edit`, plus the existing
+  startup/open-project/chat-ready/final-shell prelude. Group selection unit test
+  asserts the exact list, excluding other core checks.
+- The native fixture types changed text in a controlled stamped leaf with genuine
+  WebKit input. Its isolated-world transport wrapper captures only that leaf's
+  text-edit messages and restores the transport in finally. No source write/HMR
+  can race the outside-click selection assertion. Expected commits are exactly
+  `Controlled textx`, `Controlled textxy`, `Controlled textxyz`, once each.
+- While editing `Controlled textxy`, it activates the already-running Finder,
+  verifies Finder is frontmost and the page lost focus, then restores Trezi via
+  smokeFocus. It records whether WebKit retained the DOM editor; Enter finishes
+  the edit if needed, and re-entry plus another changed outside click must work.
+  This records actual WebKit behavior instead of assuming app blur ends editing.
+- Existing `text-edit` exercises source persistence, undo and redo separately.
+- Pending manager command: `bun test/native-runtime.mjs --only=selection`, run
+  through native-locked.ts/withResource using resource `native-desktop` in
+  `/Users/panda/dev/agent-os/.local/agent-os.sqlite`. No desktop execution or PNG
+  inspection was performed by this worker. Inspect selection-lifecycle PNG/JSON;
+  JSON now also includes exact intercepted commits and Finder/return focus state.
+
+Repair worker non-GUI results (starting HEAD cce2546b; repair left uncommitted):
+
+- `bun test/native-smoke-groups.mjs`: PASS, exact selection list and dependencies;
+  launcher validation rejects invalid groups before building. No desktop run.
+- `bun test/preview-edit-lifecycle.mjs`: PASS.
+- `bun test/native-visible-capture.mjs`: PASS (mocked bridge only).
+- `bun run typecheck`: PASS (node and isolated preview).
+- `bunx biome check src/native/smoke-input.ts src/native/smoke-groups.ts test/native-smoke-groups.mjs --max-diagnostics=0`:
+  PASS, three warnings only.
+- `bun test/docs-links.mjs`: PASS, 277 path references resolve.
+- Manager commit trailer: `Co-Authored-By: Codex <codex@openai.com>`.

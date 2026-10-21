@@ -2969,3 +2969,4 @@ Ranked by leverage. Deferred items note *why* they're not auto-completable.
 
 - [x] Diagnose and fix preview inline editing/selection lifecycle; add focused regressions.
 - [ ] Manager: run disposable selection-input/text-edit desktop checks under native-desktop lock and inspect selection-lifecycle PNG/JSON.
+- [x] Prepare focused selection group and changed-text/Finder blur-refocus native assertions for manager desktop acceptance.

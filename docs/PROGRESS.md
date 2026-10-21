@@ -2,6 +2,21 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-20 — LOCAL-SELECTION-FIX: focused native acceptance preparation
+
+- Added `selection` smoke group: `selection-input`/`text-edit` plus prelude only.
+- Extended disposable WebKit input fixture with changed-text outside-click commit
+  messages from a controlled stamped leaf (isolated interception avoids HMR races),
+  Finder app blur/refocus, re-entry and another changed outside-click selection.
+  Existing text-edit checks preserve real source writing/undo/redo coverage.
+- Moved diagnosis/evidence notes to `docs/evidence/local-selection-fix/diagnosis.md`;
+  original worker baseline e61c3ad9 and manager implementation head cce2546b are
+  distinct. Manager runs `bun test/native-runtime.mjs --only=selection` under the
+  shared native-desktop lock; no worker desktop run or capture inspection.
+- Repair worker non-GUI checks passed: smoke group selection, edit lifecycle,
+  mocked foreground capture, typecheck, focused Biome and docs-links. Exact
+  commands/results are appended to the diagnosis evidence file.
+
 ## 2026-10-20 — LOCAL-SELECTION-FIX: inline edit teardown and outside selection
 
 - Confirmed diagnosis in `diagnosis.md`: prevented pointer defaults suppress blur,
