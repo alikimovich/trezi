@@ -52,7 +52,7 @@ Use **Bun**, not npm/yarn (Node 22 remains for tooling). Native builds need macO
 
 ## Verify your own work without asking the user
 
-- Run typecheck and the relevant unit tests after every change; native changes also
+- Run typecheck and relevant unit tests after changes; native app changes also
   need `bun run typecheck:native` and `bun run test:native`.
 - Lint is part of quick verification (unit tier): keep `bun run lint` at exit 0.
 - Never run real provider calls (`test:native-live`, `verify`) without authorization.

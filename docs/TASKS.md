@@ -2964,3 +2964,5 @@ Ranked by leverage. Deferred items note *why* they're not auto-completable.
       branches, and one-time sidecar/userData migration. See PROGRESS 2026-07-17.
 
 - [ ] Fix startup-intro regression: recognize localhost native previews and keep the restored preview hidden throughout the intro crossfade (observed during Git-update verification, 2026-09-16).
+
+- [x] LOCAL-TEST-AUDIT (2026-10-20): bounded redundant assertion cleanup, validated focused selection/listing, and coverage inventory in `docs/TEST-CLEANUP-AUDIT.md`; ready for independent review, not full-suite acceptance.

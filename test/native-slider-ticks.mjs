@@ -34,7 +34,9 @@ for (const name of readdirSync(join(root, 'src/native')).filter((name) =>
   }
 }
 assert.ok(checked > 0, 'Found the SwiftUI Slider inside SnappedSlider')
-for (const name of ['EditingInspector', 'ChatIsland']) {
+// InspectorFieldView is exercised by the Swift fixture below; retain the island
+// wiring check because that fixture hosts SnappedSlider directly for the island.
+for (const name of ['ChatIsland']) {
   assert.match(
     readFileSync(join(root, `src/native/${name}.swift`), 'utf8'),
     /SnappedSlider\(/,
