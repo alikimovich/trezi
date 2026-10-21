@@ -100,6 +100,7 @@ const UNIT = [
   'project-planning',
   'native-long-chat-perf',
   'preview-hover-coalesce',
+  'preview-edit-lifecycle',
   'chat-attachments',
   'stop-recovery-ui',
   'chat-stuck-turn',

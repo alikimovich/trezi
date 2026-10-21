@@ -2964,3 +2964,8 @@ Ranked by leverage. Deferred items note *why* they're not auto-completable.
       branches, and one-time sidecar/userData migration. See PROGRESS 2026-07-17.
 
 - [ ] Fix startup-intro regression: recognize localhost native previews and keep the restored preview hidden throughout the intro crossfade (observed during Git-update verification, 2026-09-16).
+
+## LOCAL-SELECTION-FIX
+
+- [x] Diagnose and fix preview inline editing/selection lifecycle; add focused regressions.
+- [ ] Manager: run disposable selection-input/text-edit desktop checks under native-desktop lock and inspect selection-lifecycle PNG/JSON.

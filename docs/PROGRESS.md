@@ -2,6 +2,88 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-20 — LOCAL-SELECTION-FIX: inline edit teardown and outside selection
+
+- Confirmed diagnosis in `diagnosis.md`: prevented pointer defaults suppress blur,
+  while click returned during editing. Native mode relays are connected; no native
+  focus-policy defect confirmed. Outside trusted clicks now commit before picking.
+- Teardown removes blur/key listeners, restores authored editor attributes/outline,
+  releases focus and clears browser ranges. Enter/mode exit commit; Escape restores.
+- Focused production-handler regression: `bun test/preview-edit-lifecycle.mjs`.
+  Extended existing disposable `selection-input` WebKit fixture for outside selection,
+  mode exit, overlays/ranges and re-entry, with JSON plus foreground PNG evidence.
+- Desktop execution/capture inspection is reserved for the manager under the shared
+  native-desktop lock. No GUI/native suite was run by the worker.
+- Worker checks passed: `bun run typecheck`, `bun run lint`,
+  `bun test/preview-edit-lifecycle.mjs`, `bun test/native-visible-capture.mjs`
+  (the last uses a mocked bridge). Commands/results and baseline HEAD are in diagnosis.md.
+
+## 2026-10-20 — LKM-296: toolbar controls no longer overflow when expanding/restoring the preview
+
+- **Cause.** The full note with file and line references is `docs/evidence/lkm-296/ROOT-CAUSE.md`.
+  - AppKit's unified toolbar overflows by `visibilityPriority` ("…" first, then the address
+    block) when Trezi's widths don't fit.
+  - Trezi sizes the address block and chat header from positions read in the *previous*
+    toolbar layout, with only 4–6 pt of slack.
+  - Expand/restore animates the sidebar and removes or inserts the chat item at the same time.
+  - Expanding sized the block from its final leading edge, while the closing sidebar still
+    held it further right.
+  - Restoring sized the header and block for the current, lagging positions. Each animation
+    step moved them right before they shrank.
+  - Inserting the chat item beside the still-wide block overflowed the chat header.
+  - A split resize measured before the toolbar was laid out again. At a 340 pt sidebar the
+    block stayed in the overflow menu.
+- **Fix.** `blockSlot`, `sidebarOpening` and `chatHeaderLeading` size the header and block
+  for where the toolbar settles. A split resize lays out before measuring. An inserted chat
+  item is aligned and laid out immediately. `extra` is never negative. Narrow windows are
+  unchanged.
+- **Regression.** `src/native/smoke-toolbar-overflow.ts` (core `toolbar-address`) uses the
+  `toolbarOverflow` test seam (`src/native/ToolbarOverflowVerification.swift`). It traces
+  every frame for 900 ms with no forced layout.
+  - Covers: the session's first expand, plus expand/restore at 1320 and 1810 pt after a
+    simulated fresh launch and again.
+  - Covers: sidebar 340/180/230 then expand/restore, a narrow window then expand and widen,
+    and 5-toggle rapid expand and rapid restore.
+  - Every frame at ample width must have no actionable control and no "…" in the overflow
+    menu. Only the manual sidebar resize itself is asserted settled-only.
+  - At 688 pt real controls (address, publish) must overflow, with "…" hidden on purpose.
+- **Evidence.** Kept in `docs/evidence/lkm-296/`:
+  - `before-fix/`: 1–5 overflow frames per wide transition, and the » capture.
+  - `after-fix/`: zero overflow frames in all 22 wide transitions.
+- **Not covered.** Full screen, where the toolbar lives in its own window.
+- **Repair: regression introduced by this fix.** The manager's full suite failed the existing
+  `toolbar-address` minimum-width gap assertion (gap 28, expected 20) before the new fixture
+  ran. A diagnostic native run (sidebar, settings and core) reproduced it with `sidebarInset`
+  16 and `chatLead` -34 (`extra` 0).
+  - **Cause.** `sidebarOpening` learned `sidebarInset` from every alignment, via a `max`
+    capped at 16. A transient split during the sidebar group's 260/180 pt resizes latched it
+    at 16, against a real settled spacing of 8. From then on every at-rest layout reserved an
+    8 pt "opening" and gave the block 8 pt too little.
+  - **Fix.** The reservation applies only while `update`'s sidebar animation is in flight
+    (`sidebarAnimations`, counted down in its completion). At rest it is 0, and
+    `sidebarInset` / `chatLead` are relearned as the latest value, clamped to 0–16.
+    Baseline (pre-LKM-296) code has no such cache. That it passed this assertion is
+    inferred from source, not re-run.
+  - **Regression test.** The overflow fixture now asserts the at-rest 20 pt gap after each
+    sidebar resize and expand/restore. Every frame assertion is unchanged.
+- **Second repair: the end of the restore animation.** The next native run (sidebar, settings
+  and core) passed the 850 pt gap. The strict trace then failed: "…" overflowed for one frame
+  (about 254 ms) in `launch-restore-1320`, `sidebar-340-restore` and `sidebar-230-restore`,
+  with 0 actionable frames.
+  - **Cause.** The chat header was 5–7 pt wider than settled when it reached its final x. Its
+    width came from its lagging laid-out x, both:
+    - once the detail column had settled (`opening` 0) while the toolbar items had not;
+    - after the completion ended transition mode before AppKit laid the items out at the
+      destination.
+  - **Fix.** During the animation `chatHeaderLeading` always uses the settled position. The
+    completion lays out at the destination before leaving transition mode, then aligns once.
+    Details: `docs/evidence/lkm-296/ROOT-CAUSE.md`.
+  - **Verified (groups only, not the full suite).** Native sidebar, settings and core: 50/50.
+    - 1,125 ample-width frames: 0 with actionable overflow, 0 with "…" overflowed.
+    - Narrow: address and publish still overflow.
+    - 850 pt: gap 20.
+    - Evidence: `docs/evidence/lkm-296/after-repair/`.
+
 ## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: -999 repair 3 — load timeout diagnosed, deterministic provisional-cancel regression
 
 Native verify2 failed `core/agent-navigation` with `Agent browser load timed out` (the failed run stays on record, as do 08bbedaf -999 and the two `repository-owner` CI timeouts). Supersedes the "Regression" bullets of repair 2.

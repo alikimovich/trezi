@@ -23,7 +23,8 @@ export async function captureForegroundChat(host: NativeBridge): Promise<any> {
 /** Real WebKit input: page capture listeners are registered by the HTML fixture. */
 export async function checkSelectionInput(
   host: NativeBridge,
-  toolbarShown: (shown: ToolbarShown) => Promise<void>
+  toolbarShown: (shown: ToolbarShown) => Promise<void>,
+  lifecycleEvidence?: (state: unknown) => Promise<void>
 ): Promise<void> {
   const evaluate = (code: string, isolated = false) =>
     host.request('evaluate', { view: 'preview', code, isolated })
@@ -96,6 +97,49 @@ export async function checkSelectionInput(
   await input({ ...point, clicks: 2 })
   await wait(`document.querySelector('#native-title').isContentEditable`)
   await input({ key: 'Enter' })
+  await wait(`!document.querySelector('#native-title').isContentEditable`)
+  // A blocked pointer-down must not strand editing until an app switch blurs it.
+  // Keep this native path source-neutral; the focused unit regression verifies
+  // changed-text commit payloads, and text-edit checks persistence/undo/redo.
+  await input({ ...point, clicks: 2 })
+  await wait(`document.querySelector('#native-title').isContentEditable`)
+  const other = await evaluate(`(() => {
+    const el = document.querySelector('p'), r = el.getBoundingClientRect();
+    const point = {x:r.right-20,y:r.y+r.height/2};
+    if (document.elementFromPoint(point.x,point.y) !== el) throw new Error('Paragraph is not the pointer hit target');
+    return point;
+  })()`)
+  await input(other)
+  await wait(
+    `!document.querySelector('#native-title').isContentEditable && getSelection().rangeCount === 0`
+  )
+  await wait(
+    `document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-selbadge]')?.textContent.startsWith('p')`
+  )
+  const picked = await evaluate(`(() => {
+    const root = document.querySelector('[data-trezi-overlay]').shadowRoot;
+    return {badge:root.querySelector('[data-trezi-selbadge]').textContent,
+      ranges:getSelection().rangeCount, editing:document.querySelector('#native-title').isContentEditable};
+  })()`)
+  await input({ ...point, clicks: 2 })
+  await wait(`document.querySelector('#native-title').isContentEditable`)
+  await host.request('shellPerform', { action: 'select-object' })
+  await wait(
+    `!document.querySelector('#native-title').isContentEditable && document.documentElement.style.cursor !== 'crosshair'`
+  )
+  const exited = await evaluate(`(() => {
+    const root = document.querySelector('[data-trezi-overlay]').shadowRoot;
+    return {ranges:getSelection().rangeCount, boxes:root.querySelectorAll('[data-trezi-selbox]').length,
+      toolbar:root.querySelector('[data-trezi-toolbar]').style.display};
+  })()`)
+  if (exited.ranges !== 0 || exited.boxes !== 0 || exited.toolbar !== 'none')
+    throw new Error(`Selection exit left UI behind: ${JSON.stringify(exited)}`)
+  await lifecycleEvidence?.({ picked, exited })
+  await host.request('shellPerform', { action: 'select-object' })
+  await wait(`document.documentElement.style.cursor === 'crosshair'`)
+  await input({ ...point, clicks: 2 })
+  await wait(`document.querySelector('#native-title').isContentEditable`)
+  await input({ key: 'Escape' })
   await wait(`!document.querySelector('#native-title').isContentEditable`)
   console.log(
     'Native selection blocks page input; inline caret movement and normal interaction passed.'
