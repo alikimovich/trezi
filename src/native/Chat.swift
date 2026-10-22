@@ -405,13 +405,15 @@ struct ChatConversation: View {
                     .onPreferenceChange(AttachmentFrames.self) { model.attachmentFrames = $0 }
                     .onPreferenceChange(AgentCardFrames.self) { model.agentCardFrames = $0 }
                     .onPreferenceChange(ChatUiFrames.self) { model.chatUiFrames = $0 }
-                    .overlay(alignment: .top) {
-                        stickyRequest(proxy: proxy)
-                    }
                     .onPreferenceChange(BottomPosition.self) { bottom in
+                        // Read below the overlay: above it the end marker reads 0, so
+                        // every settle ran out its attempts relaying out (LKM-312).
                         // Pinned state follows user input only (see ChatScrollStyleProbe);
                         // a stale NSApp.currentEvent would re-pin after a programmatic pin.
                         model.bottomPosition = bottom
+                    }
+                    .overlay(alignment: .top) {
+                        stickyRequest(proxy: proxy)
                     }
                     // Metric-only changes: the probe pins from settled AppKit bounds.
                     .onAppear { viewportHeight = viewport.size.height }
