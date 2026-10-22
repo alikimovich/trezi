@@ -45,6 +45,22 @@ Newest first. Append a dated entry when you finish a chunk of work.
   native run was skipped behind the `project-switching` failure above. Later preflight unit
   runs failed in unrelated timing-sensitive tests on a loaded machine, and the session's
   verification budget ran out. No captures or geometry from this change exist yet.
+## 2026-10-22 — LKM-297 reconcile: reviewed selector patch onto main e3567469 (local, unpublished)
+
+Status: **locally ready, awaiting the coordinator's integrated gates and GitHub CI; not Done.** Details: `docs/TEST-CLEANUP-V2.md` "Reconcile onto main e3567469".
+
+- **What.** The reviewed adoption patch (commit `493de503`, base `1632c67d`, SHA256 `832a1ca6…aa16`) was applied once to main `e3567469` (LKM-295 Skills copy, LKM-296 toolbar fix). 49 of its 50 files applied unchanged; only this log conflicted, and its three reviewed entries are inserted verbatim. No code, test, CI or assertion was edited during the reconcile.
+- **Checked.** `test/tiers.mjs` against main's `test/run.mjs`: UNIT 257 → 259 (+`test-selection`, +`swift-build-lock`, order kept), NATIVE 5, LIVE 2, `UNIT_TIMEOUT_MS` and `TYPECHECKS` deep-equal. `test-selection` passes on this tree. LKM-295/296 sources (`settings-controller.ts`, `ToolbarOverflowVerification.swift`, `smoke-toolbar-overflow.ts`) plan FULL; `SidebarIcon.swift` 7, `README.md` 2, a test script 4, `docs/TESTING.md` 1 — the reviewed counts.
+- **Left in place, on purpose.** CI's LKM-300 `Typecheck` step still runs `typecheck:native`, which re-checks the program `typecheck:node` checks. Dropping it is a CI change the adoption instructions keep out of scope.
+
+## 2026-10-22 — LKM-297 adoption: reviewed test selector and Swift build lock onto main 1632c67d (local, unpublished)
+
+Status: **locally ready, awaiting the coordinator's canonical candidate gates and GitHub CI; not Done.** Details: `docs/TEST-CLEANUP-V2.md` "Adoption onto main 1632c67d".
+
+- **What.** The reviewed `ce213841..96a8a8fd` diff (`a0502c2d` + `96a8a8fd`, 46 files) was applied to main: 41 files unchanged, five conflicts merged by hand (`ci.yml`, `PROGRESS.md`, `TASKS.md`, `TESTING.md`, `test/run.mjs`). No test, fixture or assertion was removed; the original entries and evidence stay as recorded. Main's `preview-edit-lifecycle` registration moved into `test/tiers.mjs`, and its lists were checked equal to main's apart from the two reviewed tests.
+- **Decision: LKM-300 CI wins where they overlap.** The separate `Typecheck` step (both scripts) stays and runs on every event, including narrowed PRs. *Why:* it is LKM-300's contention mitigation and is pinned by `test/dependency-audit.mjs`; gating it on the plan would be a new design. The reviewed two-call `if`/`else` became one `Unit tests` call with a PR-only `--changed` argument, so LKM-300's "one runner call" and "no `--typecheck|--filter|--serial|--jobs`" assertions still hold. That test now pins the exact command and the PR-only base. Removing `|| ''`, adding `--typecheck` or `--serial` all failed it, and the workflow was restored byte-identical.
+- **Checked on current source.** `test-selection` passes against main's tests. Real-Git plans in a throwaway clone: `src/native/ComposerQueue.swift`, shared/service/package/helper/unaudited-fixture/unknown/deleted/clean all FULL (259); docs 1-2, test-only 4, `SidebarIcon.swift` 7. Bad or option-like refs and directory `--path` exit 2. The 4-test plan for `test/preview-edit-lifecycle.mjs` ran once: 4 PASS, 2.1 s; this is not compared with any full-run number.
+- **Not run.** Full unit tier, native/GUI, live providers, GitHub CI; no commit or push (the coordinator owns publication).
 
 ## 2026-10-20 — LKM-296: toolbar controls no longer overflow when expanding/restoring the preview
 
@@ -151,6 +167,26 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Checks.** Final external run `test/artifacts/runs/run-5Mh8lN` passed all six checks with no skips: both typechecks, docs links, graph tests, toolchain tests (including a real #Preview with the selected DEVELOPER_DIR and unchanged xcode-select), and the real build fixture (package app and Scraib copy; original byte-compared unchanged). Lint exited 0 with existing warnings. The earlier worker-sandbox ENVIRONMENT skip is superseded by this external evidence. The worker reported that attempt counts 1 and 3 fail the regression, then restored 2; raw mutation logs were not retained, so those mutation results are worker-reported only. No commit, push, CI run or GUI/native suite; this focused local evidence does not show GitHub CI green.
 
 - **External focused confirmation (2026-10-22 UTC).** The coordinator ran `bun test/run.mjs unit --filter=swift-preview-toolchain,swift-preview-graph,swift-preview-build,docs-links --serial --timeout-ms=360000 --typecheck` outside the nested worker sandbox: 6 PASS, no skips, 64.3 s (`test/artifacts/runs/run-5Mh8lN`). Both typechecks, the deterministic metadata regression and graph/docs checks passed. The real fixture built the package app and Scraib copy and byte-compared the original unchanged. This is focused local evidence, not a green GitHub CI result or full-suite/native acceptance.
+
+## 2026-10-20 — LOCAL-TEST-CLEANUP-V2 (LKM-297): review repair
+
+Status unchanged: locally review-ready, publication held, **not Done**. The independent review of `a0502c2d` asked for six fixes; all are in. This entry supersedes the "2 → 1 swiftc runs" wording of the entry below.
+
+- **Typecheck skip.** `typecheckPlan` treated any falsy `composite` as the default, so `0`, `''` or `null` in `tsconfig.native.json` (rejected by tsc) would still have skipped `typecheck-native`. Only an exact `false`, or no value at all, counts as the default now; non-object configs or `compilerOptions` run both checks. `test/test-selection.mjs` covers `0`, `''`, `null` and `'false'`, and fails if the old rule comes back.
+- **swiftc counts are estimates.** The measurement driver judged "ran swiftc" from per-child CPU (>0.3 s user). It never counted compiler invocations, and its header claiming a directory-watch count was wrong (that approach failed with EMFILE). The counts are relabelled as estimates in `docs/TEST-CLEANUP-V2.md`, the driver copy and the helper comment. The CPU totals are real. The direct proof that only one build runs while the others wait is `test/swift-build-lock.mjs`. No benchmark was rerun.
+- **`--path` validation.** `select.mjs --path` exits 2 for a file that does not exist or is neither tracked nor untracked. Before, a typo or a deleted file got a confident, wrong plan. All paths in the earlier evidence existed, so that evidence stands.
+- **Fixture users.** Users of an audited fixture folder are now found by its bare name anywhere under `test/`, so `join(…, 'fixtures', 'sidebar-icon')` counts too. A registered unit test that names it joins the plan; a helper, an unregistered script or another fixture forces the full run. Covered in `test-selection`.
+- **Manager results recorded.** On `a0502c2d` the manager passed `settings-skills` on the host, where the worker's sandbox had hit `EADDRINUSE`. Real-Git `--changed` runs executed the docs plan (2 PASS) and the test plan (4 PASS), and listed the UI plan (7 tests). The earlier worker limitations stay on record in `docs/TEST-CLEANUP-V2.md`.
+
+## 2026-10-20 — LOCAL-TEST-CLEANUP-V2 (LKM-297): fewer duplicate executions, audited changed-file selection
+
+Status: locally review-ready, publication held, **not Done** (no full unit, native or GitHub CI run yet). Details, measurements and limits: `docs/TEST-CLEANUP-V2.md`; evidence in `docs/evidence/test-cleanup-v2/`.
+
+- **Duplicate typecheck.** `typecheck-native` checked the same program as `typecheck:node`: `tsconfig.native.json` only restates the default `composite: false` and the same `lib`, and `tsc --showConfig` and `--listFilesOnly` agree. `--typecheck` now runs it only if the configs or scripts diverge (`typecheckPlan`). Matched local run: 12.02 s → 6.17 s user CPU, wall 3.78 s → 3.65 s (the two ran concurrently). *Why:* CPU on a shared 3-core runner, not wall time.
+- **Duplicate swiftc runs.** Two processes needing the same uncached fixture binary each took a slot and compiled it, as measured with four concurrent builds. A per-binary build lock in `swiftBuild` makes one build and the rest wait; a dead or failed builder does not block. Skills fixture: 2 → 1 swiftc runs, child CPU 12.5 s → 6.5 s. Regression: `test/swift-build-lock.mjs`.
+- **Selection.** `node test/run.mjs unit --changed=<ref>` (and `test/select.mjs`) narrow docs, edited unit test scripts, the audited `sidebar-icon` fixture and `src/native/SidebarIcon.swift` to their tests and audited readers. Anything else (including the selector, the workflow, helpers, deletions, renames, empty or broad diffs) runs everything. Ref or diff errors exit 2. Tier lists moved verbatim to `test/tiers.mjs`. *Why explicit rules, not a graph:* each narrowing has an audited reader list and a drift guard (`test/test-selection.mjs`); unknown means full.
+- **CI.** PRs pass the event base SHA to `--changed`; the app build skips only for plans with no product change; pushes to `main` run everything; no `paths-ignore`. Audited locally (YAML parse, condition walk), not run on GitHub.
+- **Not removed.** No test, fixture or assertion was deleted. Full runs have one more process than before (two small safety tests replace the typecheck entry). There is no matched full-suite speedup claim.
 
 ## 2026-10-20 — LKM-294: composer queue cards that slide up on insertion
 

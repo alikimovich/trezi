@@ -141,11 +141,8 @@ try {
   assert.match(await skipReason(marker, 'auto-reconciliation-live'), /unavailable/)
   const cli = join(root, 'cli')
   mkdirSync(join(cli, 'test/helpers'), { recursive: true })
-  writeFileSync(join(cli, 'test/run.mjs'), readFileSync(new URL('./run.mjs', import.meta.url)))
-  writeFileSync(
-    join(cli, 'test/helpers/test-runner.mjs'),
-    readFileSync(new URL('./helpers/test-runner.mjs', import.meta.url))
-  )
+  for (const path of ['run.mjs', 'tiers.mjs', 'helpers/test-runner.mjs', 'helpers/test-plan.mjs'])
+    writeFileSync(join(cli, 'test', path), readFileSync(new URL(`./${path}`, import.meta.url)))
   // Populate every native member with a console-only stub; no desktop is launched.
   const nativeFixtures = [
     'native-runtime',

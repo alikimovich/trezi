@@ -1,0 +1,25 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq
+
+unit: 7 tests, at most 8 workers
+START [unit] skills-registry
+START [unit] skills-registry-boundaries
+START [unit] skills-registry-safety
+START [unit] settings-skills
+START [unit] test-runner
+START [unit] test-selection
+START [unit] swift-build-lock
+FAIL [unit] settings-skills 0.0s
+  Log: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-settings-skills.log
+PASS [unit] test-selection 2.1s
+PASS [unit] test-runner 2.6s
+PASS [unit] swift-build-lock 3.2s
+PASS [unit] skills-registry 9.6s
+PASS [unit] skills-registry-boundaries 15.5s
+PASS [unit] skills-registry-safety 28.8s
+
+SUMMARY: 6 PASS, 1 FAIL; wall time 28.8s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/summary.json
+real 28.80
+user 11.26
+sys 4.18
+exit=1

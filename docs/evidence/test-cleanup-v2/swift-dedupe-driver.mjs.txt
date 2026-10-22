@@ -1,0 +1,68 @@
+// Scratch measurement (not part of the repo). One fresh Swift cache; the Clang module
+// cache is warmed by a different build first, then N processes build the same
+// sidebar-icon (or skills-owner) binary at once, and reports each child's CPU from
+// /usr/bin/time.
+// CORRECTED NOTE (review repair): this is the driver exactly as run, except for this
+// comment. It does NOT count swiftc invocations. An earlier version watched for
+// `<binary>.<pid>.tmp` outputs, but fs.watch failed here with EMFILE; the unused `watch`
+// import is left over from that attempt. "children-that-ran-swiftc" is an ESTIMATE: a
+// child counts when its user CPU is above 0.3 s (a child that only waited used about
+// 0.06 s). The inode output proves nothing: the sidebar build renames into place, so
+// every child sees the same inode, and the skills build copies, so each sees its own.
+// The CPU totals are real measurements.
+import { spawn } from 'node:child_process'
+import { mkdtempSync, rmSync, watch } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const [worktree, count = '4'] = process.argv.slice(2)
+const cache = mkdtempSync(join(tmpdir(), 'swift-dedupe-'))
+const sources = "['test/fixtures/sidebar-icon/main.swift', 'src/native/SidebarIcon.swift']"
+const child = (code) =>
+  new Promise((resolve) => {
+    const proc = spawn('/usr/bin/time', ['-p', 'bun', '-e', code], {
+      cwd: worktree,
+      env: { ...process.env, TREZI_TEST_CACHE: cache }
+    })
+    let out = ''
+    proc.stdout.on('data', (d) => (out += d))
+    proc.stderr.on('data', (d) => (out += d))
+    proc.on('close', (status) => resolve({ status, out }))
+  })
+const prelude = `import { statSync } from 'node:fs'
+import { swiftBuild } from '${worktree}/test/helpers/swift-build.mjs'
+const start = Date.now()`
+const warm = await child(`${prelude}
+swiftBuild('warm-modules', [...${sources}, '-DTREZI_WARM_ONLY'])`)
+console.log('warm-up exit', warm.status)
+const fixture = process.argv[4] ?? 'sidebar-icon'
+const build =
+  fixture === 'skills'
+    ? `const { compileSkills } = await import('${worktree}/test/helpers/skills-fixture.mjs')
+const binary = '${cache}/out-' + process.pid
+compileSkills(binary)`
+    : `const binary = swiftBuild('sidebar-icon', ${sources})`
+const start = Date.now()
+const results = await Promise.all(
+  Array.from({ length: Number(count) }, () =>
+    child(`${prelude}
+${build}
+console.log(JSON.stringify({ pid: process.pid, inode: statSync(binary).ino, ms: Date.now() - start }))`)
+  )
+)
+const wall = Date.now() - start
+let user = 0
+let sys = 0
+let compiled = 0
+for (const r of results) {
+  console.log(r.status, r.out.trim().replace(/\n/g, ' | '))
+  const u = Number(/^user (\S+)/m.exec(r.out)?.[1] ?? 0)
+  user += u
+  sys += Number(/^sys (\S+)/m.exec(r.out)?.[1] ?? 0)
+  // A child that only waited and read the binary uses well under a second of CPU.
+  if (u > 0.3) compiled++
+}
+console.log(
+  `processes=${results.length} children-that-ran-swiftc=${compiled} wall=${wall}ms children-user=${user.toFixed(2)}s children-sys=${sys.toFixed(2)}s warm-up=${warm.out.trim().replace(/\n/g, ' | ')}`
+)
+rmSync(cache, { recursive: true, force: true })

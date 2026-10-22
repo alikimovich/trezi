@@ -17,7 +17,7 @@ and hard-won constraints"). Linked from [AGENTS.md](../../AGENTS.md).
   consumers in sync.
 - Keep files under ~500 lines; extract modules instead of growing oversized files.
 - New test = new `.mjs` in `test/` **plus** its name in the right tier array in
-  `test/run.mjs` (`unit` / `native` / `live`). `bun run test` and `verify` dispatch
+  `test/tiers.mjs` (`unit` / `native` / `live`). `bun run test` and `verify` dispatch
   through the runner — don't hand-edit `&&` chains.
 - Prop editing requires `PropInspection.hasSchema`; unresolved components remain
   prompt-only. React and Svelte have separate splice engines.
