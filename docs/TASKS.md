@@ -3,6 +3,9 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Skills screen: replace explanatory paragraph copy (LKM-295)
+
+- [x] Settings → Skills reads "Manage skills here without changing your project or global files" (no final period); title, rows and skills behaviour unchanged.
 ## CI execution reliability (LOCAL-CI-EXECUTION-RELIABILITY)
 
 - [x] Ran both typechecks as a separate `Typecheck` CI step before the unit tier (no `--typecheck` there) and added elapsed stage logging to `test/swift-preview-target.mjs`, after merged-main run 39721071506 timed out `swift-preview-target` at 300 s twice; policy asserted in `test/dependency-audit.mjs`; `docs/TESTING.md` "GitHub CI". Local only; cause is an inference.
