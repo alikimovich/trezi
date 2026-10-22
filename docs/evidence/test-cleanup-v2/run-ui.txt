@@ -1,0 +1,24 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH
+
+unit: 7 tests, at most 8 workers
+START [unit] native-settings-layout
+START [unit] no-system-preferences
+START [unit] native-slider-ticks
+START [unit] sidebar-evidence
+START [unit] sidebar-icon
+START [unit] legacy-names-audit
+START [unit] retirement-census
+PASS [unit] sidebar-evidence 0.0s
+PASS [unit] legacy-names-audit 0.1s
+PASS [unit] retirement-census 0.1s
+PASS [unit] no-system-preferences 0.2s
+PASS [unit] sidebar-icon 34.8s
+PASS [unit] native-slider-ticks 40.6s
+PASS [unit] native-settings-layout 48.1s
+
+SUMMARY: 7 PASS; wall time 48.1s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/summary.json
+real 48.09
+user 37.36
+sys 4.22
+exit=0

@@ -1,0 +1,12 @@
+  1 changed path(s)
+    M test/display-path.mjs
+Plan: SELECTED — 4 of 257 unit tests:
+  display-path — M test/display-path.mjs: test change
+  no-system-preferences — M test/display-path.mjs: reads or scans it
+  legacy-names-audit — M test/display-path.mjs: reads or scans it
+  lint — M test/display-path.mjs: reads or scans it
+Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)
+App build: not needed (docs and test-only change)
+real 0.08
+user 0.04
+sys 0.04

@@ -1,0 +1,47 @@
+{
+  "duration": 745,
+  "counts": {
+    "PASS": 4
+  },
+  "builds": [],
+  "selection": null,
+  "notRun": [],
+  "results": [
+    {
+      "tier": "unit",
+      "name": "display-path",
+      "outcome": "PASS",
+      "duration": 27,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-ZCcK6k/unit-display-path.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "no-system-preferences",
+      "outcome": "PASS",
+      "duration": 222,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-ZCcK6k/unit-no-system-preferences.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "legacy-names-audit",
+      "outcome": "PASS",
+      "duration": 96,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-ZCcK6k/unit-legacy-names-audit.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "lint",
+      "outcome": "PASS",
+      "duration": 739,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-ZCcK6k/unit-lint.log",
+      "code": 0,
+      "signal": null
+    }
+  ]
+}

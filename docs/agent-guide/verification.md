@@ -25,7 +25,8 @@ and fails on an unlisted one; the gate requires 0 Bun-owned rows and no rollback
 | `bun run typecheck` | Type-check native/backend/shared code and isolated preview. Run after every change |
 | `bun run typecheck:native` | Native/backend/shared check only |
 | `node test/run.mjs unit` | Backend and controller tests, no desktop |
-| `bun run test:quick` | Quick verification in one command: both typechecks next to the unit tier, plus the 20 slowest tests (`--typecheck --report`, `docs/TESTING.md`) |
+| `bun run test:quick` | Quick verification in one command: the typecheck next to the unit tier (`typecheck:native` too once its config differs from `typecheck:node`), plus the 20 slowest tests (`--typecheck --report`, `docs/TESTING.md`) |
+| `node test/run.mjs unit --changed=main` | Only the tests the diff against `main` needs, with reasons; anything outside the audited docs, test and UI rules runs everything (`docs/TESTING.md`, "Changed-file selection") |
 | `bun run test:<name>` | One test (see package.json for ~40 aliases) |
 | `bun run test:native` | Disposable-profile native desktop integration |
 | `bun run test` | Unit + native UI tiers (via `test/run.mjs`) |
@@ -49,7 +50,8 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
 - For test, docs or copy-only changes with unchanged application behavior, typecheck,
   lint and relevant focused unit tests provide scoped evidence; a full native rerun
   is not required. Use `bun test/run.mjs unit --filter=name,name --list` to inspect
-  the selection first. This is distinct from full-suite acceptance.
+  the selection first, or `node test/run.mjs unit --changed=main --list` for the
+  audited changed-file plan. This is distinct from full-suite acceptance.
 - Live provider calls (`test:native-live` / `verify`) require authorization. Do not
   run real provider calls without it.
 - The runner tiers are `unit`, `native`, `live`, and `all`. Unit jobs are bounded

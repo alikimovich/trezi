@@ -1,0 +1,15 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-wQzRdQ
+NOT RUN [typecheck] typecheck-native — tsconfig.native.json resolves to tsconfig.node.json, which typecheck checks
+START [typecheck] typecheck
+
+unit: 1 tests, at most 8 workers
+START [unit] docs-links
+PASS [unit] docs-links 0.1s
+PASS [typecheck] typecheck 3.6s
+
+SUMMARY: 2 PASS; wall time 3.6s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-wQzRdQ/summary.json
+real 3.65
+user 6.17
+sys 0.39
+exit=0

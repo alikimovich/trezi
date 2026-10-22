@@ -1,0 +1,16 @@
+  1 changed path(s)
+    M src/native/SidebarIcon.swift
+Plan: SELECTED — 7 of 257 unit tests:
+  native-settings-layout — M src/native/SidebarIcon.swift: ui change
+  no-system-preferences — M src/native/SidebarIcon.swift: reads or scans it
+  native-slider-ticks — M src/native/SidebarIcon.swift: reads or scans it
+  sidebar-evidence — M src/native/SidebarIcon.swift: ui change
+  sidebar-icon — M src/native/SidebarIcon.swift: ui change
+  legacy-names-audit — M src/native/SidebarIcon.swift: reads or scans it
+  retirement-census — M src/native/SidebarIcon.swift: reads or scans it
+Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)
+App build: required (product source changed)
+Native evidence still owed (not run by this tier): bun test/native-runtime.mjs --only=sidebar,settings
+real 0.06
+user 0.04
+sys 0.03

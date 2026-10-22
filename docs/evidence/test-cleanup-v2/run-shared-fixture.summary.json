@@ -1,0 +1,75 @@
+{
+  "duration": 28770,
+  "counts": {
+    "PASS": 6,
+    "FAIL": 1
+  },
+  "builds": [],
+  "selection": null,
+  "notRun": [],
+  "results": [
+    {
+      "tier": "unit",
+      "name": "skills-registry",
+      "outcome": "PASS",
+      "duration": 9601,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-skills-registry.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "skills-registry-boundaries",
+      "outcome": "PASS",
+      "duration": 15470,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-skills-registry-boundaries.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "skills-registry-safety",
+      "outcome": "PASS",
+      "duration": 28766,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-skills-registry-safety.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "settings-skills",
+      "outcome": "FAIL",
+      "duration": 45,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-settings-skills.log",
+      "code": 1,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "test-runner",
+      "outcome": "PASS",
+      "duration": 2597,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-test-runner.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "test-selection",
+      "outcome": "PASS",
+      "duration": 2090,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-test-selection.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "swift-build-lock",
+      "outcome": "PASS",
+      "duration": 3151,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-KnbWNq/unit-swift-build-lock.log",
+      "code": 0,
+      "signal": null
+    }
+  ]
+}
