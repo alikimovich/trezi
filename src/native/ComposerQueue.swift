@@ -25,6 +25,59 @@ private extension View {
     }
 }
 
+/// How a newly queued message appears (LKM-294): it fades in while rising `rise` pt into
+/// place. With Reduce Motion it only fades.
+struct ComposerQueueMotion: Equatable {
+    let rise: CGFloat
+    let duration: Double
+    init(reduceMotion: Bool) { rise = reduceMotion ? 0 : 8; duration = reduceMotion ? 0.15 : 0.24 }
+    var animation: Animation { .easeOut(duration: duration) }
+    var dictionary: [String: Any] { ["rise": Double(rise), "duration": duration] }
+    /// The ids in `next` that were not queued before while the same chat stayed shown; only
+    /// these animate. Another chat's queue, or the first one shown, appears without motion.
+    static func inserted(previous: [String], next: [String], sameChat: Bool) -> [String] {
+        guard sameChat else { return [] }
+        let known = Set(previous)
+        return next.filter { !known.contains($0) }
+    }
+}
+
+/// What the queue shows. The host changes it in place instead of replacing its root view, so
+/// each row keeps its identity (`message.id`) across updates (LKM-294).
+final class ComposerQueueModel: ObservableObject {
+    @Published var messages: [QueuedComposerMessage] = []
+    @Published var paused = false
+    /// Why the queue is not sending yet, including an answer waiting for a provider turn.
+    @Published var note = ""
+    @Published var canSend = true
+    @Published var motion = ComposerQueueMotion(reduceMotion: false)
+    /// Ids whose row has not appeared yet and enters with motion. Not published: a row reads it
+    /// once when it is created and consumes it when it appears, so a remount never replays.
+    var entering: Set<String> = []
+}
+
+/// A row's own appearance: it starts transparent and `rise` pt low, then settles. The change is
+/// the row's own `@State`, so its animation covers only this row's opacity and offset. Layout,
+/// and every other row, never sit in an animated transaction (LKM-294).
+private struct ComposerQueueEntrance: ViewModifier {
+    let id: String
+    let motion: ComposerQueueMotion
+    let consume: (String) -> Void
+    @State private var shown: Bool
+    init(id: String, entering: Bool, motion: ComposerQueueMotion, consume: @escaping (String) -> Void) {
+        self.id = id; self.motion = motion; self.consume = consume
+        _shown = State(initialValue: !entering)
+    }
+    func body(content: Content) -> some View {
+        content.opacity(shown ? 1 : 0).offset(y: shown ? 0 : motion.rise)
+            .onAppear {
+                consume(id)
+                guard !shown else { return }
+                withAnimation(motion.animation) { shown = true }
+            }
+    }
+}
+
 struct ComposerQueue: View {
     /// The box sits `inset` inside the composer's sides, so its trailing edge meets the send
     /// button's, and tucks `overlap` (the composer's corner radius) under the composer at every
@@ -33,19 +86,24 @@ struct ComposerQueue: View {
     /// The note line and each row are `rowHeight` tall with their content centred, `spacing`
     /// apart, with `padding` above the first and below the last in the visible part.
     static let rowHeight: CGFloat = 24, spacing: CGFloat = 4, padding: CGFloat = 10
+    /// Each message is its own card, `cardInset` inside the box's sides (LKM-294).
+    static let cardInset: CGFloat = 4, cardRadius: CGFloat = 8
     /// The composer's placeholder starts 19 pt in: 12 pt scroll inset plus its 7 pt draw origin.
     static let textInset: CGFloat = 19 - inset
     /// Trailing buttons take the send button's 30 pt column.
     static let control: CGFloat = 30
     static let visibleRows = 3
+    /// A light card on the box's material: near-white in light mode, a faint white wash in dark.
+    static let cardFill = Color(nsColor: NSColor(name: nil) {
+        $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .white.withAlphaComponent(0.09) : .white.withAlphaComponent(0.88)
+    })
 
-    let messages: [QueuedComposerMessage]
-    let paused: Bool
-    /// Why the queue is not sending yet, including an answer waiting for a provider turn.
-    var note = ""
-    var canSend = true
+    @ObservedObject var model: ComposerQueueModel
     var measured: ([String: CGRect]) -> Void = { _ in }
     let action: (String, String?) -> Void
+    private var paused: Bool { model.paused }
+    private var note: String { model.note }
+    private var canSend: Bool { model.canSend }
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: Self.spacing) {
@@ -65,8 +123,10 @@ struct ComposerQueue: View {
                 }
                 ScrollView {
                     VStack(spacing: Self.spacing) {
-                        ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
-                            row(message, index: index)
+                        ForEach(Array(model.messages.enumerated()), id: \.element.id) { index, message in
+                            row(message, index: index).modifier(ComposerQueueEntrance(
+                                id: message.id, entering: model.entering.contains(message.id), motion: model.motion,
+                                consume: { model.entering.remove($0) }))
                         }
                     }
                 }.scrollIndicators(.automatic)
@@ -117,7 +177,16 @@ struct ComposerQueue: View {
         }
         .font(.system(size: 13)).padding(.leading, Self.textInset)
         .frame(height: Self.rowHeight).queueFrame("row-\(index)")
+        .background { card }
         .help(message.label)
+    }
+    /// Draws inside the row, so the row frames, text inset and control column stay as measured.
+    private var card: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
+        return shape.fill(Self.cardFill)
+            .overlay { shape.strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5) }
+            .shadow(color: .black.opacity(0.06), radius: 1, y: 0.5)
+            .padding(.horizontal, Self.cardInset)
     }
     private func controlLabel(_ symbol: String) -> some View {
         Image(systemName: symbol).frame(width: Self.control, height: Self.rowHeight).contentShape(Rectangle())
@@ -128,27 +197,50 @@ struct ComposerQueue: View {
 
 final class ComposerQueueHost: NSHostingView<AnyView> {
     private var signature = Data()
+    private let model = ComposerQueueModel()
+    private var chat: String?
     var action: ((String, String?) -> Void)?
     private(set) var count = 0
     /// Row, text and control frames from the last SwiftUI pass, top-left origin in this view.
     private(set) var frames: [String: CGRect] = [:]
+    /// Updates that animated a message in, and the ids the latest update animated.
+    private(set) var insertions = 0
+    private(set) var lastInserted: [String] = []
+    /// The ids of the latest insertion; unlike `lastInserted`, a later unrelated update keeps it.
+    private(set) var lastInsertion: [String] = []
+    /// Test-only Reduce Motion; nil follows macOS (or the chat acceptance override).
+    var reduceMotionOverride: Bool?
+    var reduceMotion: Bool { reduceMotionOverride ?? ChatSystemEnvironment.shared.accessibility.reduceMotion }
     /// The visible part, above the composer: padding, the note line and up to three rows.
     static func height(count: Int, paused: Bool, note: String = "") -> CGFloat {
         guard count > 0 else { return 0 }
         let lines = min(count, ComposerQueue.visibleRows) + (ComposerQueue.hasHeader(paused: paused, note: note) ? 1 : 0)
         return 2 * ComposerQueue.padding + CGFloat(lines) * ComposerQueue.rowHeight + CGFloat(lines - 1) * ComposerQueue.spacing
     }
-    init() { super.init(rootView: AnyView(EmptyView())); sizingOptions = []; isHidden = true }
+    init() {
+        super.init(rootView: AnyView(EmptyView())); sizingOptions = []; isHidden = true
+        rootView = AnyView(ComposerQueue(model: model, measured: { [weak self] in self?.frames = $0 }) { [weak self] name, id in self?.action?(name, id) })
+    }
     required init(rootView: AnyView) { fatalError("init(rootView:) has not been implemented") }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func update(_ entries: [[String: Any]], paused: Bool, note: String = "", canSend: Bool = true) {
-        let data = (try? JSONSerialization.data(withJSONObject: ["entries": entries, "paused": paused, "note": note, "canSend": canSend], options: [.sortedKeys])) ?? Data()
+    /// Only messages newly queued in the shown chat animate; a note, pause or canSend change,
+    /// a removal or another chat's queue changes the rows without motion (LKM-294).
+    func update(_ entries: [[String: Any]], paused: Bool, note: String = "", canSend: Bool = true, chat: String = "") {
+        let data = (try? JSONSerialization.data(withJSONObject: ["entries": entries, "paused": paused, "note": note, "canSend": canSend, "chat": chat], options: [.sortedKeys])) ?? Data()
         guard data != signature else { return }
         signature = data
         let items = (try? JSONSerialization.data(withJSONObject: entries)).flatMap { try? JSONDecoder().decode([QueuedComposerMessage].self, from: $0) } ?? []
-        count = items.count; isHidden = items.isEmpty; frames = [:]
-        rootView = items.isEmpty ? AnyView(EmptyView()) : AnyView(ComposerQueue(messages: items, paused: paused, note: note, canSend: canSend,
-            measured: { [weak self] in self?.frames = $0 }) { [weak self] name, id in self?.action?(name, id) })
+        lastInserted = ComposerQueueMotion.inserted(previous: model.messages.map(\.id), next: items.map(\.id), sameChat: chat == self.chat)
+        self.chat = chat
+        count = items.count; isHidden = items.isEmpty
+        model.paused = paused; model.note = note; model.canSend = canSend
+        model.motion = ComposerQueueMotion(reduceMotion: reduceMotion)
+        // The list itself never animates: a row that is already shown keeps its width and opacity.
+        // A new row animates its own appearance (`ComposerQueueEntrance`).
+        model.entering = Set(lastInserted)
+        if !lastInserted.isEmpty { insertions += 1; lastInsertion = lastInserted }
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) { model.messages = items }
     }
     /// Measured layout for the smoke check: `top`/`bottom` count down from this view's top edge,
     /// `visible` is the part above the composer, and x values are in the superview's space.
@@ -161,6 +253,28 @@ final class ComposerQueueHost: NSHostingView<AnyView> {
             guard let row = line("row-\(index)") else { continue }
             rows.append(["row": row, "text": line("text-\(index)") ?? [:], "more": line("more-\(index)") ?? [:]])
         }
-        return ["visible": Double(frame.maxY - composerTop), "height": Double(frame.height), "header": line("header") ?? NSNull(), "rows": rows]
+        return ["visible": Double(frame.maxY - composerTop), "height": Double(frame.height), "header": line("header") ?? NSNull(), "rows": rows,
+                "cards": ["inset": Double(ComposerQueue.cardInset), "radius": Double(ComposerQueue.cardRadius)],
+                "motion": model.motion.dictionary.merging(["insertions": insertions, "lastInserted": lastInserted, "lastInsertion": lastInsertion, "reduceMotion": reduceMotion]) { _, new in new }]
+    }
+    /// Test-only: waits for the insertion after `after`, then captures `view` `shots` times,
+    /// `interval` seconds apart, with the rows' measured frames at each capture.
+    func captureInsertion(of view: NSView, after: Int, shots: Int, interval: Double) async throws -> [[String: Any]] {
+        let start = Date()
+        while insertions <= after {
+            guard Date().timeIntervalSince(start) < 5 else { throw NSError(domain: "Trezi", code: 1, userInfo: [NSLocalizedDescriptionKey: "No queue insertion after \(after)"]) }
+            try await Task.sleep(nanoseconds: 4_000_000)
+        }
+        let inserted = Date()
+        var captures: [[String: Any]] = []
+        for _ in 0..<max(1, min(shots, 30)) {
+            view.layoutSubtreeIfNeeded()
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { break }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            captures.append(["ms": Date().timeIntervalSince(inserted) * 1000, "png": bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "",
+                             "rows": (0..<count).compactMap { frames["row-\($0)"].map { Double($0.minY) } }])
+            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        return captures
     }
 }

@@ -11,7 +11,8 @@ export const NATIVE_SMOKE_GROUPS = [
   'settings',
   'chat',
   'composer',
-  'agent-browser'
+  'agent-browser',
+  'selection'
 ] as const
 export type NativeSmokeGroup = (typeof NATIVE_SMOKE_GROUPS)[number]
 
@@ -67,12 +68,12 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'shell-layout': ['core'],
   'toolbar-address': ['core'],
   'device-frame': ['core'],
-  'selection-input': ['core'],
+  'selection-input': ['core', 'selection'],
   inspector: ['core'],
   'layers-island': ['core'],
   'movable-islands': ['core'],
   'preview-overlay': ['core'],
-  'text-edit': ['core'],
+  'text-edit': ['core', 'selection'],
   'editor-freshness': ['core'],
   'source-editor': ['core'],
   'source-syntax': ['core'],

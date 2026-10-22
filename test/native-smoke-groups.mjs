@@ -26,7 +26,8 @@ const all = [
   'settings',
   'chat',
   'composer',
-  'agent-browser'
+  'agent-browser',
+  'selection'
 ]
 assert.deepEqual([...NATIVE_SMOKE_GROUPS], all)
 assert.deepEqual([...parseSmokeGroups([])], all, 'No flag runs every group')
@@ -86,6 +87,11 @@ for (const name of Object.keys(SMOKE_CHECK_GROUPS))
     `Group map names a real check: ${name}`
   )
 const listed = names.map((check) => check.name)
+assert.deepEqual(
+  selectSmokeChecks(names, parseSmokeGroups(['--only=selection']), () => {}).map((c) => c.name),
+  ['startup', 'open-project', 'chat-ready', 'selection-input', 'text-edit', 'final-shell'],
+  'Selection runs only its two checks plus the prelude'
+)
 assert.deepEqual(
   selectSmokeChecks(names, parseSmokeGroups([])).map((c) => c.name),
   listed,

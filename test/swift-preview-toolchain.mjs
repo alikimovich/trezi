@@ -30,9 +30,14 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const FIXTURE = join(ROOT, 'test/fixtures/swift-multi-module')
-const { selectToolchain, toolchainInfo, toolchainStamp, developerDirOf } = await import(
-  '../src/swift-preview/toolchain.ts'
-)
+const {
+  selectToolchain,
+  toolchainInfo,
+  toolchainStamp,
+  developerDirOf,
+  inspectToolchain,
+  probePreview
+} = await import('../src/swift-preview/toolchain.ts')
 const { PreviewSession } = await import('../src/swift-preview/session.ts')
 const { parseManifest } = await import('../src/swift-preview/manifest.ts')
 const { nativeGraph } = await import('../src/swift-preview/graph.ts')
@@ -315,6 +320,112 @@ try {
   // The probe uses the compiler's normal flags only: no sandbox is ever disabled.
   for (const line of lines()) assert.doesNotMatch(line, /disable-sandbox/, line)
   assert.ok(compiles().every((line) => line.includes('-c ') && line.includes('Probe.swift')))
+
+  // --- Metadata queries retry a timeout once, and nothing else (CI: a stalled xcrun) ---
+  // A scripted xcrun counts each query per developer directory and can hang (`hang-<key>`:
+  // how many first attempts never answer) or fail (`fail-<key>`). The cap is 0.6 s, not 20 s.
+  const stalled = (name) => {
+    const dir = join(temp, name, 'Developer')
+    write(
+      join(dir, 'fake-xcrun'),
+      `#!/bin/sh
+echo "$DEVELOPER_DIR $*" >> '${log}'
+case "$*" in
+  "swiftc --version") key=swift ;;
+  "--sdk macosx --show-sdk-version") key=sdkv ;;
+  "--sdk macosx --show-sdk-path") key=sdkp ;;
+  *) key=compile ;;
+esac
+n=$(cat "$DEVELOPER_DIR/n-$key" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo $n > "$DEVELOPER_DIR/n-$key"
+hangs=$(cat "$DEVELOPER_DIR/hang-$key" 2>/dev/null || echo 0)
+[ "$n" -le "$hangs" ] && exec sleep 30
+if [ -f "$DEVELOPER_DIR/fail-$key" ]; then echo "error: scripted failure" >&2; exit 1; fi
+case $key in
+  swift) echo "Apple Swift version 6.3.2 (swiftlang-6.3.2)" ;;
+  sdkv) echo "26.5" ;;
+  sdkp) echo "$DEVELOPER_DIR/SDKs/MacOSX26.5.sdk" ;;
+esac
+exit 0
+`,
+      0o755
+    )
+    return dir
+  }
+  const script = (dir, key, kind, value) => write(join(dir, `${kind}-${key}`), `${value}\n`)
+  const attempts = (dir, key) => Number(readFileSync(join(dir, `n-${key}`), 'utf8'))
+  const KEYS = ['swift', 'sdkv', 'sdkp']
+  const quick = options({ timeoutMs: 600 })
+  const inspect = (dir) => inspectToolchain(dir, ['setting'], quick)
+
+  // One stalled first attempt per query: each retries once and the toolchain is complete.
+  const slow = stalled('slow')
+  for (const key of KEYS) script(slow, key, 'hang', 1)
+  let started = Date.now()
+  let inspected = await inspect(slow)
+  assert.deepEqual(inspected.errors, [], 'a recovered stall leaves no error')
+  assert.deepEqual(
+    [inspected.swiftVersion, inspected.sdkVersion, inspected.sdkPath],
+    ['6.3.2', '26.5', `${slow}/SDKs/MacOSX26.5.sdk`]
+  )
+  assert.deepEqual(
+    KEYS.map((key) => attempts(slow, key)),
+    [2, 2, 2]
+  )
+  assert.ok(Date.now() - started < 5000, 'one cap plus the answer, not 20 s sleeps')
+  assert.ok(
+    lines().filter((line) => line.startsWith(`${slow} `)).length === 6,
+    'every attempt kept the same DEVELOPER_DIR'
+  )
+
+  // Always stalled: exactly two attempts per query, then the timeout is reported as before.
+  const dead = stalled('dead')
+  for (const key of KEYS) script(dead, key, 'hang', 99)
+  started = Date.now()
+  inspected = await inspect(dead)
+  const elapsed = Date.now() - started
+  assert.deepEqual(
+    KEYS.map((key) => attempts(dead, key)),
+    [2, 2, 2],
+    'bounded: never more than two attempts'
+  )
+  assert.ok(elapsed >= 1100 && elapsed < 5000, `two caps run concurrently, took ${elapsed} ms`)
+  assert.equal(inspected.swiftVersion, '')
+  assert.match(inspected.errors[0], /^xcrun swiftc --version timed out after 1 s\./)
+  assert.ok(inspected.errors.some((error) => /has no macOS SDK/.test(error)))
+
+  // A non-zero exit (a diagnostic) is an answer: one attempt, the same message as before.
+  const failing = stalled('failing')
+  for (const key of KEYS) script(failing, key, 'fail', 1)
+  inspected = await inspect(failing)
+  assert.deepEqual(
+    KEYS.map((key) => attempts(failing, key)),
+    [1, 1, 1],
+    'no retry for a non-zero exit'
+  )
+  assert.match(inspected.errors[0], /^xcrun swiftc --version failed: error: scripted failure/)
+  // A missing tool is not retried either: spawn fails, nothing runs twice.
+  const missing = await inspectToolchain(failing, ['setting'], {
+    ...quick,
+    xcrun: join(temp, 'bin/no-such-xcrun')
+  })
+  assert.match(missing.errors[0], /no-such-xcrun is missing/)
+  assert.deepEqual(
+    KEYS.map((key) => attempts(failing, key)),
+    [1, 1, 1],
+    'the missing tool never ran'
+  )
+
+  // The probe compile is not a metadata query: a stalled compile is reported once.
+  const building = stalled('building')
+  script(building, 'compile', 'hang', 99)
+  const intact = await inspect(building)
+  assert.deepEqual(intact.errors, [])
+  const probed = await probePreview(intact, quick)
+  assert.equal(probed.status, 'broken')
+  assert.match(probed.message, /could not compile a #Preview: xcrun --sdk macosx timed out/)
+  assert.equal(attempts(building, 'compile'), 1, 'builds and the probe compile never retry')
 
   // --- The manifest's developerDir ---
   const manifest = (fields) =>
