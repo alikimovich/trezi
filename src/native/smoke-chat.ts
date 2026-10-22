@@ -8,7 +8,7 @@ import { nativeChat } from './chat-runtime'
 import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
-import { checkQueueGeometry, checkQueueInsertion } from './smoke-queue'
+import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -155,12 +155,22 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       if (index === 0) await checkQueueGeometry(host, screenshot, '2', 2, false)
     }
     queue = await checkQueueGeometry(host, screenshot, '3', 3, false)
+    // LKM-302: the same three rows paused (as after Stop): pause glyph, Send now and divider.
+    const pausing = nativeChat.get(state.chat)
+    pausing.paused = true
+    nativeChat.changed(pausing)
+    await checkQueueGeometry(host, screenshot, 'paused', 3, true, true)
+    pausing.paused = false
+    nativeChat.changed(pausing)
+    await checkQueueGeometry(host, screenshot, '3-resumed', 3, false)
     for (const { id } of queue.queue)
       await host.request('chatPerform', { action: 'queue-remove', card: id })
     for (let i = 0; i < 100 && (await host.request('composerInspect')).queueCount; i++)
       await new Promise((resolve) => setTimeout(resolve, 50))
     if ((await host.request('composerInspect')).queueCount)
       throw new Error('Removed queue row remained visible')
+    const emptied = emptyQueueProblems(await host.request('composerInspect'))
+    if (emptied.length) throw new Error(`Empty queue still shows its panel: ${emptied.join('; ')}`)
     if (sent.length !== 1) throw new Error('Queued message bypassed the active turn')
     send({
       type: 'delta',
@@ -302,7 +312,14 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
         !composer.queueNote.startsWith('Waiting for Resolve')
       )
         throw new Error(`Resolve queue is not visibly waiting: ${JSON.stringify(composer)}`)
-      await checkQueueGeometry(host, screenshot, `note-${width}`, 1, true)
+      await checkQueueGeometry(
+        host,
+        screenshot,
+        `note-${width}`,
+        1,
+        true,
+        composer.queuePaused === true
+      )
       if (
         !card?.detail?.includes('project changed under them') ||
         !card.detail.includes('src/native/fixture.ts') ||

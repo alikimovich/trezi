@@ -659,6 +659,13 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] Box 10 pt inside the composer's sides, tucked 24 pt (the composer's radius) under it at every count, radius 18; text at the placeholder's x, the "…" menu in Send's 30 pt column.
 - [x] Composer-layout fixture (heights, overlap, insets for 1/2/3/5 rows, with and without a note); chat smoke `checkQueueGeometry` (`src/native/smoke-queue.ts`) asserts measured SwiftUI frames (|top − bottom| ≤ 1, centred rows, text vs placeholder and menu vs Send ±1) for 1 row, 3 rows and the Resolve note at both widths, with light and dark `-queue-<label>-{light,dark}.png` captures and JSON; CHANGELOG line.
 
+## Composer queue: one frosted panel with flat rows (LKM-302)
+
+- [x] `ComposerQueue`: one `.thinMaterial` panel with a faint rim replaces the LKM-294 cards; flat 28 pt rows with no fill, border or shadow, hairlines between them; leading queue glyph in the + button's column, edit/remove/… in Send's; totals unchanged (44 / 72 / 100 pt, +28 with a header).
+- [x] Header: `pause.circle` with Send now (`queue-resume`) when paused, `clock` for a waiting note, hairline divider; row identity, entrance motion, Reduce Motion and the hidden empty state unchanged.
+- [x] `queueGeometryProblems` and `emptyQueueProblems` (`src/native/smoke-queue.ts`), with `plusMidX` in `composerInspect`. The chat smoke covers paused, resumed and empty states and takes foreground light/dark captures. Unit test `test/composer-queue-panel.mjs`. The composer-layout fixture checks the + and Send columns. CHANGELOG line.
+- [ ] Native chat/composer verification with foreground capture review, then independent review (no publication).
+
 ## Composer queue: one rounded card per message, slide-up on insertion (LKM-294)
 
 - [x] Each row draws its own card (light fill, 0.5 pt separator stroke, faint shadow, radius 8, 4 pt inside the box's sides) behind the unchanged 24 pt row; heights, overlap, text inset, control column and frame keys are as in LKM-198.
