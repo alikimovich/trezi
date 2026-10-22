@@ -132,7 +132,7 @@ Full list: [conventions](docs/agent-guide/conventions.md). Hard-won traps:
 XPC/quit, shortcuts, Styles, control panels or model lists.
 
 - Keep files under ~500 lines. SDKs are ESM-only in a CJS bundle: dynamic `import()`.
-- New `.mjs` test → register it in its tier in `test/run.mjs`.
+- New `.mjs` test → register it in its tier in `test/tiers.mjs`.
 - Never commit secrets; a connection's API key never leaves main (UI sees `hasKey`).
 - Agents cannot write a target's `.trezi/` (or the [legacy](docs/agent-guide/legacy-names.md) sidecar folders).
 - Keep `docs/WORKTREES.md`, `docs/PROVIDERS.md` and `docs/MEMORY.md` current.

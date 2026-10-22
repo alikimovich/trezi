@@ -1,0 +1,45 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w
+NOT RUN [typecheck] typecheck-native — tsconfig.native.json resolves to tsconfig.node.json, which typecheck checks
+START [typecheck] typecheck
+
+unit: 16 tests, at most 8 workers
+START [unit] service-contract
+START [unit] native-settings-layout
+START [unit] no-system-preferences
+START [unit] native-slider-ticks
+START [unit] sidebar-evidence
+START [unit] sidebar-icon
+START [unit] test-runner
+START [unit] test-selection
+PASS [unit] sidebar-evidence 0.1s
+START [unit] swift-build-lock
+PASS [unit] no-system-preferences 0.3s
+START [unit] legacy-names-audit
+PASS [unit] sidebar-icon 0.3s
+START [unit] retirement-census
+PASS [unit] legacy-names-audit 0.1s
+START [unit] distribution
+PASS [unit] distribution 0.0s
+START [unit] docs-links
+PASS [unit] retirement-census 0.1s
+START [unit] docs-merge-union
+PASS [unit] docs-links 0.1s
+START [unit] versioning
+PASS [unit] native-slider-ticks 0.8s
+START [unit] lint
+PASS [unit] service-contract 3.5s
+PASS [unit] lint 2.7s
+PASS [unit] docs-merge-union 3.0s
+PASS [typecheck] typecheck 3.8s
+PASS [unit] swift-build-lock 4.1s
+PASS [unit] test-runner 4.5s
+PASS [unit] versioning 4.1s
+PASS [unit] test-selection 4.6s
+PASS [unit] native-settings-layout 8.7s
+
+SUMMARY: 17 PASS; wall time 8.7s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/summary.json
+real 8.76
+user 15.56
+sys 3.52
+exit=0

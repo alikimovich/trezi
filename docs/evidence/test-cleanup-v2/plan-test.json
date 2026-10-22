@@ -1,0 +1,45 @@
+{
+  "mode": "selected",
+  "changes": [
+    {
+      "status": "M",
+      "path": "test/display-path.mjs"
+    }
+  ],
+  "reasons": [
+    [
+      "display-path",
+      [
+        "M test/display-path.mjs: test change"
+      ]
+    ],
+    [
+      "no-system-preferences",
+      [
+        "M test/display-path.mjs: reads or scans it"
+      ]
+    ],
+    [
+      "legacy-names-audit",
+      [
+        "M test/display-path.mjs: reads or scans it"
+      ]
+    ],
+    [
+      "lint",
+      [
+        "M test/display-path.mjs: reads or scans it"
+      ]
+    ]
+  ],
+  "unit": [
+    "display-path",
+    "no-system-preferences",
+    "legacy-names-audit",
+    "lint"
+  ],
+  "typecheck": false,
+  "typecheckReason": "no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+  "appBuild": false,
+  "native": []
+}

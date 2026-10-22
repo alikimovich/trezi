@@ -60,30 +60,37 @@ const alive = (pid) => {
   }
 }
 
+/** Creates the lock file `path` with this pid and returns its release, or null while a
+ *  live process holds it (a dead owner's lock is removed for the next try). */
+function tryLock(path) {
+  try {
+    const fd = openSync(path, 'wx')
+    writeFileSync(fd, `${process.pid}\n`)
+    closeSync(fd)
+    return () => rmSync(path, { force: true })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    let owner = 0
+    try {
+      owner = Number(readFileSync(path, 'utf8'))
+    } catch {}
+    // An empty file is a lock being written right now, unless it is old.
+    const stale = owner
+      ? !alive(owner)
+      : Date.now() - (statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 0) > 5_000
+    if (stale) rmSync(path, { force: true })
+    return null
+  }
+}
+
 /** Takes one of SWIFT_SLOTS lock files; a slot whose owner died is taken over. */
 function acquireSlot() {
   const slots = join(SWIFT_CACHE, 'slots')
   mkdirSync(slots, { recursive: true })
   for (;;) {
     for (let i = 0; i < SWIFT_SLOTS; i++) {
-      const path = join(slots, `slot-${i}`)
-      try {
-        const fd = openSync(path, 'wx')
-        writeFileSync(fd, `${process.pid}\n`)
-        closeSync(fd)
-        return () => rmSync(path, { force: true })
-      } catch (error) {
-        if (error.code !== 'EEXIST') throw error
-        let owner = 0
-        try {
-          owner = Number(readFileSync(path, 'utf8'))
-        } catch {}
-        // An empty file is a slot being written right now, unless it is old.
-        const stale = owner
-          ? !alive(owner)
-          : Date.now() - (statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 0) > 5_000
-        if (stale) rmSync(path, { force: true })
-      }
+      const release = tryLock(join(slots, `slot-${i}`))
+      if (release) return release
     }
     pause(100)
   }
@@ -116,21 +123,37 @@ function keyPart(arg, cwd) {
   return [`arg:${arg}`]
 }
 
+/** The cache path `swiftBuild` uses for these arguments. */
+export function swiftBinary(name, args, { cwd = root } = {}) {
+  assert.match(name, /^[a-z0-9][a-z0-9-]*$/, 'swiftBuild name')
+  const key = createHash('sha256').update(toolchainKey())
+  for (const arg of args) for (const part of keyPart(arg, cwd)) key.update(part).update('\0')
+  return join(SWIFT_CACHE, `${name}-${key.digest('hex').slice(0, 24)}`)
+}
+
 /** Compiles `args` (sources and flags; relative paths from `cwd`, the repo by default)
  *  once per toolchain, flags and source contents and returns the cached binary. With
  *  `out`, copies it there and returns `out` (for a binary that is signed, bundled or
  *  must not be replaced while it runs). `name` must be unique per distinct build: a
  *  new build of a name prunes that name's older binaries. */
 export function swiftBuild(name, args, { out, cwd = root, timeout = 400_000 } = {}) {
-  assert.match(name, /^[a-z0-9][a-z0-9-]*$/, 'swiftBuild name')
-  const key = createHash('sha256').update(toolchainKey())
-  for (const arg of args) for (const part of keyPart(arg, cwd)) key.update(part).update('\0')
-  const binary = join(SWIFT_CACHE, `${name}-${key.digest('hex').slice(0, 24)}`)
+  const binary = swiftBinary(name, args, { cwd })
   mkdirSync(SWIFT_CACHE, { recursive: true })
-  if (!existsSync(binary)) {
-    const release = acquireSlot()
+  // One process builds a binary; others that need it wait for that build instead of
+  // compiling it again in the second swiftc slot (LOCAL-TEST-CLEANUP-V2: with four
+  // workers asking for the shared skills fixture at once, two spent compile-sized CPU,
+  // an estimate from per-process CPU). If the builder fails or dies, the next waiter
+  // builds.
+  let unlock = null
+  while (!existsSync(binary) && !unlock) {
+    unlock = tryLock(`${binary}.lock`)
+    if (!unlock) pause(100)
+  }
+  if (unlock) {
+    let release = () => {}
     try {
-      // Another worker may have built it while this one waited for a slot.
+      release = acquireSlot()
+      // Another worker may have built it before this one took the build lock.
       if (!existsSync(binary)) {
         const building = `${binary}.${process.pid}.tmp`
         const result = spawnSync(
@@ -152,6 +175,7 @@ export function swiftBuild(name, args, { out, cwd = root, timeout = 400_000 } = 
       }
     } finally {
       release()
+      unlock()
     }
   }
   if (!out) return binary

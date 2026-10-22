@@ -1,0 +1,13 @@
+  3 changed path(s)
+    M docs/TESTING.md
+    M docs/agent-guide/verification.md
+    M CHANGELOG.md
+Plan: SELECTED — 3 of 257 unit tests:
+  legacy-names-audit — M docs/TESTING.md: reads or scans it; M docs/agent-guide/verification.md: reads or scans it; M CHANGELOG.md: reads or scans it
+  docs-links — M docs/agent-guide/verification.md: reads or scans it
+  versioning — M CHANGELOG.md: reads or scans it
+Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)
+App build: not needed (docs and test-only change)
+real 0.05
+user 0.03
+sys 0.01
