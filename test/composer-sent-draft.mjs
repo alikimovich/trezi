@@ -185,4 +185,60 @@ const open = (h) =>
   assert.deepEqual(h.sent(), ['Early'], 'only the submitted draft is sent')
   assert.deepEqual(h.chat().sent, { count: 1, revision: at })
 }
-console.log('Composer sent draft: stale inputs, new text, busy controls, queue and refusal passed.')
+
+// 7. The new-project (planning) chat: a message sent while its turn runs is queued once.
+//    The draft clears, a stale input and a second Enter queue nothing more, and what the
+//    user types meanwhile survives the queued message's own send.
+{
+  let finish = () => {}
+  const planned = []
+  const renders = []
+  const controller = new NativeChatController({
+    invoke: async (channel, ...args) => {
+      if (channel === 'planning:send') {
+        planned.push(args[2])
+        if (planned.length === 1) await new Promise((resolve) => (finish = resolve))
+        return { record: { transcript: [] } }
+      }
+      return { ok: true }
+    },
+    render: (state) => renders.push(structuredClone(state)),
+    effect: () => {}
+  })
+  controller.start.planningKey = 'plan'
+  controller.active = 'plan'
+  const chat = controller.get('plan')
+  chat.ready = true
+  let revision = 0
+  const input = (text, sent = 0) =>
+    controller.composer({
+      chat: 'plan',
+      action: 'input',
+      text,
+      caret: text.length,
+      revision: ++revision,
+      sent
+    })
+  const enter = () => controller.composer({ chat: 'plan', action: 'key', key: 'Enter' })
+  await input('First')
+  void enter()
+  await tick()
+  assert.deepEqual(planned, ['First'])
+  assert.equal(chat.isRunning, true)
+  await input('Second', 1)
+  const at = revision
+  await enter()
+  await input('Second’s', 1) // stale: typed before the clear reached the composer
+  await enter()
+  assert.equal(chat.text, '', 'the queued draft is cleared')
+  assert.deepEqual(renders.at(-1).composer.sent, { count: 2, revision: at })
+  assert.deepEqual(controller.planningQueued.get('plan'), ['Second'], 'queued exactly once')
+  await input('Third', 2)
+  finish()
+  await tick(20)
+  assert.deepEqual(planned, ['First', 'Second'], 'the queued message is sent after the turn')
+  assert.equal(chat.text, 'Third', 'the queued send leaves the new draft alone')
+}
+console.log(
+  'Composer sent draft: stale inputs, new text, busy controls, queue, planning queue and refusal passed.'
+)

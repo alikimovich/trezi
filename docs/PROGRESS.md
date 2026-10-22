@@ -32,6 +32,16 @@ Newest first. Append a dated entry when you finish a chunk of work.
   `steps`/`substitute`/`append`.
 - **Not changed.** A non-busy `agent:send` failure keeps the message as a transcript turn
   ("Unable to send"), as before. Programmatic sends still clear the draft.
+- **Review repair: the planning chat's queued send.** `planningSend` queued a message sent
+  while its turn ran (`planningQueued`) and returned before clearing the draft, so the text
+  stayed in the composer and Enter queued it again.
+  - It now clears the draft (`clearSentDraft`) when it queues, and re-renders.
+  - Both planning paths clear only when the sent text is the composer's own draft. A queued
+    message sent when the turn ends no longer wipes what the user typed meanwhile.
+  - Unit case 7 in `composer-sent-draft`: one queue entry after a stale input and a second
+    Enter, `sent.count` raised, the later draft kept.
+  - The native `composer-send` check has still not run: this repair session had no native
+    calls. It needs `--only=composer` from the manager.
 ## 2026-10-22 — LKM-297 reconcile: reviewed selector patch onto main e3567469 (local, unpublished)
 
 Status: **locally ready, awaiting the coordinator's integrated gates and GitHub CI; not Done.** Details: `docs/TEST-CLEANUP-V2.md` "Reconcile onto main e3567469".

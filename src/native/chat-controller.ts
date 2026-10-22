@@ -196,15 +196,21 @@ export class NativeChatController {
     this.changed(chat)
   }
   private async planningSend(chat: Chat, raw: string) {
+    // LKM-304: only the composer's own draft is cleared. A queued message sent later
+    // (`raw` from `planningQueued`) leaves what the user has typed since.
+    const fromDraft = raw === chat.text
     if (chat.sending || chat.isRunning) {
-      if (raw.trim())
+      if (raw.trim()) {
         this.planningQueued.set(chat.chat, [...(this.planningQueued.get(chat.chat) ?? []), raw])
+        if (fromDraft) clearSentDraft(chat)
+        this.changed(chat)
+      }
       return
     }
     if (!raw.trim() && !chat.attachments.length) return
     const turn = crypto.randomUUID()
     const attachments = chat.attachments
-    clearSentDraft(chat)
+    if (fromDraft) clearSentDraft(chat)
     chat.attachments = []
     chat.sending = true
     chat.isRunning = true
