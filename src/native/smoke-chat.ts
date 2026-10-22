@@ -8,7 +8,7 @@ import { nativeChat } from './chat-runtime'
 import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
-import { checkQueueGeometry } from './smoke-queue'
+import { checkQueueGeometry, checkQueueInsertion } from './smoke-queue'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -141,14 +141,18 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     if (queue.queueCount !== 1) throw new Error('An edited message was not queued again')
-    for (const text of ['A second queued message', 'A third queued message']) {
+    // LKM-294: the second message slides in, the third only fades in under Reduce Motion.
+    for (const [index, text] of ['A second queued message', 'A third queued message'].entries()) {
       await host.request('composerPerform', { text })
       await inspectUntil(
         (method) => host.request(method),
         'composerInspect',
         (value) => value.text === text
       )
-      await host.request('composerPerform', { action: 'send' })
+      await checkQueueInsertion(host, screenshot, index === 1, () =>
+        host.request('composerPerform', { action: 'send' })
+      )
+      if (index === 0) await checkQueueGeometry(host, screenshot, '2', 2, false)
     }
     queue = await checkQueueGeometry(host, screenshot, '3', 3, false)
     for (const { id } of queue.queue)
