@@ -67,6 +67,8 @@ interface RunResult {
   stdout: string
   stderr: string
   error: string
+  /** The tool was killed at `timeoutMs`; every other failure leaves it unset. */
+  timedOut?: boolean
 }
 
 /** One tool run with a timeout; `error` is a sentence for the user, empty on success. */
@@ -80,11 +82,11 @@ export function runTool(
     let stdout = ''
     let stderr = ''
     let settled = false
-    const done = (code: number | null, error: string) => {
+    const done = (code: number | null, error: string, timedOut?: boolean) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      resolve({ code, stdout, stderr, error })
+      resolve({ code, stdout, stderr, error, ...(timedOut ? { timedOut } : {}) })
     }
     // Its own process group, so a timeout also ends the tool's children (xcodebuild's).
     const child = spawn(command, args, {
@@ -101,7 +103,7 @@ export function runTool(
       }
       child.stdout.destroy()
       child.stderr.destroy()
-      done(null, `${label} timed out after ${Math.round(options.timeoutMs / 1000)} s.`)
+      done(null, `${label} timed out after ${Math.round(options.timeoutMs / 1000)} s.`, true)
     }, options.timeoutMs)
     child.stdout.on('data', (chunk: Buffer) => {
       stdout = (stdout + chunk.toString('utf8')).slice(-8_000_000)
