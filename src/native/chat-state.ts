@@ -46,6 +46,9 @@ export interface Chat extends NativeChatMirror {
   text: string
   caret: number
   revision: number
+  /** LKM-304: accepted sends of the draft (`count`) and the composer revision of the last
+   *  one. The composer removes exactly that text; inputs of an older count are stale. */
+  sent: { count: number; revision: number }
   attachments: Attachment[]
   commands: SlashCommandItem[]
   menuIndex: number
@@ -131,6 +134,7 @@ export function newChat(chat: string): Chat {
     text: '',
     caret: 0,
     revision: 0,
+    sent: { count: 0, revision: 0 },
     attachments: [],
     commands: [],
     menuIndex: 0,
@@ -148,6 +152,14 @@ export function newChat(chat: string): Chat {
     stepAt: 0,
     aliveAt: 0
   }
+}
+/** LKM-304: a send was accepted (started or queued) with the draft at composer `revision`.
+ *  AppKit may still edit that draft before the cleared snapshot arrives (a smart quote, a
+ *  key typed after Return): those inputs carry the older count and never restore it. */
+export function clearSentDraft(chat: Chat, revision = chat.revision) {
+  chat.text = ''
+  chat.caret = 0
+  chat.sent = { count: chat.sent.count + 1, revision }
 }
 /** A turn starts thinking: its step timer and liveness start now. */
 export function begin(chat: Chat, now = Date.now()) {
