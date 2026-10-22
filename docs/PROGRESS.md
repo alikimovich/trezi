@@ -43,6 +43,46 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - `test/composer-queue-panel.mjs` (unit) runs the checker against synthetic layouts and
     rejects the LKM-294 cards. The composer-layout fixture checks the + and Send column
     alignment and that rows have no gap.
+## 2026-10-22 — LKM-304: an accepted send clears exactly the draft it sent
+
+- **Cause.** Swift applies a snapshot's draft only when its revision is at least the
+  composer's own. Bun cleared the draft on an accepted send without a new revision. Any
+  composer edit emitted after Return and before that snapshot arrived had a newer revision:
+  - AppKit's smart quote curling the apostrophe (the report: bubble `'`, draft `’`), or a key
+    typed after Return.
+  - Swift then ignored the clear, and Bun accepted the edit's full text as the draft again.
+  - The message stayed in the composer while the turn ran, with Send instead of Stop, and
+    could be sent twice.
+  - `test/composer-sent-draft.mjs` reproduced it on the pre-fix controller:
+    `'Don’t stop' !== ''`.
+- **Fix.** `Chat.sent` (`count`, `revision`) names the last accepted send and the draft
+  revision it sent (`clearSentDraft`, `src/native/chat-state.ts`).
+  - Inputs carry the count the composer applied. Older ones were typed against a sent draft
+    and are ignored.
+  - `Composer.swift` keeps, per revision, the length of the text then. Edits inside it (smart
+    quotes, dashes, replacements) move that length, typing after it does not.
+  - On a newer count it removes exactly that prefix, keeps the rest (the caret too) and sends
+    it as the next input.
+  - `submit` names the revision captured before `initialize`, so text typed meanwhile stays.
+  - A refused send (not ready, switching, start hold) changes nothing.
+  - The Send button reports whether it showed Stop, so a second Send click emitted before the
+    snapshot no longer interrupts the turn the first one started.
+- **Tests.** Unit `composer-sent-draft`: smart quote, new text, double click and Stop,
+  queued send, refusal, typing during `initialize`. Native `composer-send` (composer group)
+  drives the real `NSTextView` in one main-thread turn per sequence through `composerPerform`
+  `steps`/`substitute`/`append`.
+- **Not changed.** A non-busy `agent:send` failure keeps the message as a transcript turn
+  ("Unable to send"), as before. Programmatic sends still clear the draft.
+- **Review repair: the planning chat's queued send.** `planningSend` queued a message sent
+  while its turn ran (`planningQueued`) and returned before clearing the draft, so the text
+  stayed in the composer and Enter queued it again.
+  - It now clears the draft (`clearSentDraft`) when it queues, and re-renders.
+  - Both planning paths clear only when the sent text is the composer's own draft. A queued
+    message sent when the turn ends no longer wipes what the user typed meanwhile.
+  - Unit case 7 in `composer-sent-draft`: one queue entry after a stale input and a second
+    Enter, `sent.count` raised, the later draft kept.
+  - The native `composer-send` check has still not run: this repair session had no native
+    calls. It needs `--only=composer` from the manager.
 ## 2026-10-22 — LKM-297 reconcile: reviewed selector patch onto main e3567469 (local, unpublished)
 
 Status: **locally ready, awaiting the coordinator's integrated gates and GitHub CI; not Done.** Details: `docs/TEST-CLEANUP-V2.md` "Reconcile onto main e3567469".

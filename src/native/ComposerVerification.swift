@@ -2,6 +2,20 @@ import AppKit
 
 // Called only by the ephemeral-profile Host verification command.
 extension NativeComposer {
+    /// LKM-304: edits after Return through the text system's own path, as a key typed at
+    /// the end (`append`) or AppKit's smart-quote substitution (`substitute`) makes them.
+    func performEdit(_ c: [String: Any]) {
+        if let typed = c["append"] as? String {
+            text.insertText(typed, replacementRange: NSRange(location: (text.string as NSString).length, length: 0))
+        }
+        if let swap = c["substitute"] as? [String], swap.count == 2 {
+            let range = (text.string as NSString).range(of: swap[0])
+            if range.location != NSNotFound, text.shouldChangeText(in: range, replacementString: swap[1]) {
+                text.textStorage?.replaceCharacters(in: range, with: swap[1]); text.didChangeText()
+            }
+        }
+    }
+
     func verifyInteraction(_ command: [String: Any]) -> [String: Any] {
         guard let window else { return ["error": "No composer window"] }
         if command["prepare"] as? Bool == true {

@@ -56,6 +56,10 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     var state: [String: Any] = [:]
     var chat = ""
     var revision = 0
+    /// LKM-304: the accepted sends applied (Bun's `sent.count`), and per revision the
+    /// length of the text then, moved by later edits inside it: what a send removes.
+    var sent = 0
+    var sentLengths: [Int: Int] = [:]
     var applying = false
     var glass = false
     var choicesSignature = Data()
@@ -212,7 +216,38 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         // The no-project chat ('') takes a draft only on the start screen (LKM-232).
         guard !applying, !chat.isEmpty || state["home"] as? Bool == true else { return }
         revision += 1
-        emitAction("input", ["text":text.string, "caret":text.selectedRange().location, "revision":revision])
+        sentLengths[revision] = (text.string as NSString).length
+        if sentLengths.count > 256, let oldest = sentLengths.keys.min() { sentLengths[oldest] = nil }
+        emitAction("input", ["text":text.string, "caret":text.selectedRange().location, "revision":revision, "sent":sent])
+    }
+    /// Smart quotes, dashes and text replacement edit through here as well as typing: an edit
+    /// inside a draft that may be sent belongs to it; text after it does not.
+    func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
+        guard let replacement = replacementString else { return true }
+        let added = (replacement as NSString).length
+        for (key, length) in sentLengths where range.location < length {
+            sentLengths[key] = max(range.location + added, length + added - range.length)
+        }
+        return true
+    }
+    /// The draft at the accepted send's revision was sent. Remove exactly it and keep what
+    /// was typed after; the remainder is the next input, at the new send count.
+    private func removeSent(_ next: [String: Any]) {
+        guard let accepted = next["sent"] as? [String: Any], let count = accepted["count"] as? Int,
+              count > sent, !text.hasMarkedText() else { return }
+        sent = count
+        let at = accepted["revision"] as? Int ?? 0
+        defer { sentLengths = sentLengths.filter { $0.key >= revision } }
+        // Nothing edited since: the snapshot's own (empty) text applies below.
+        guard revision > at else { return }
+        let current = text.string as NSString
+        let cut = min(sentLengths[at] ?? 0, current.length)
+        let caret = max(0, text.selectedRange().location - cut)
+        text.string = current.substring(from: cut)
+        text.setSelectedRange(NSRange(location: min(caret, (text.string as NSString).length), length: 0))
+        revision += 1
+        sentLengths[revision] = (text.string as NSString).length
+        emitAction("input", ["text":text.string, "caret":text.selectedRange().location, "revision":revision, "sent":sent])
     }
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         if text.hasMarkedText() { return false }
@@ -224,7 +259,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         }
         return false
     }
-    @objc func send(_ sender: Any?) { if sendButton.isEnabled { emitAction("send") } }
+    @objc func send(_ sender: Any?) { if sendButton.isEnabled { emitAction("send", ["stop":state["stop"] as? Bool ?? false]) } }
     @objc func clearContext(_ sender: Any?) { emitAction("context") }
     /// LKM-181: island references from Copy reference, one chip each beside the element chip.
     private func updateReferences(_ names: [String]) {
@@ -316,6 +351,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             readyBeam.show(false, radius: 24)
             buttonBeam.show(false, radius: 15)
             text.undoManager?.removeAllActions(); chat = nextChat; revision = next["revision"] as? Int ?? 0
+            sent = (next["sent"] as? [String: Any])?["count"] as? Int ?? 0; sentLengths = [:]
         }
         buttonBeam.show(!isHidden && next["thinking"] as? Bool == true, radius: 15)
         if isHidden { readyBeam.show(false, radius: 24) }
@@ -323,12 +359,14 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             readyBeam.show(true, radius: 24, once: true)
         }
         needsLayout = true
+        removeSent(next)
         if (next["revision"] as? Int ?? 0) >= revision && !text.hasMarkedText() {
             let value = next["text"] as? String ?? ""
             if text.string != value {
                 text.string = value
                 let cursor = min((value as NSString).length, next["caret"] as? Int ?? (value as NSString).length)
                 text.setSelectedRange(NSRange(location: cursor, length: 0))
+                sentLengths = [revision: (value as NSString).length]
             }
         }
         sendButton.isEnabled = next["enabled"] as? Bool ?? false
@@ -412,7 +450,10 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     }
     func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.item(at: 0)?.image != nil && (plus.cell as? NSPopUpButtonCell)?.arrowPosition == .noArrow, "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
     func perform(_ c: [String: Any]) {
+        // Ordered steps in one main-thread turn: no snapshot can arrive between them.
+        (c["steps"] as? [[String: Any]])?.forEach(perform)
         if let value = c["text"] as? String { text.string = value; text.setSelectedRange(NSRange(location: (value as NSString).length, length: 0)); changed() }
+        performEdit(c)
         if c["action"] as? String == "send" { send(nil) }
         if let key = c["key"] as? String { emitAction("key", ["key":key]) }
         if let label = c["label"] as? String, let value = c["value"] as? String, let picker = pickers[label], picker.isEnabled,

@@ -96,6 +96,7 @@ export const UNIT = [
   'chat-stuck-turn',
   'chat-send-queue',
   'composer-queue-panel',
+  'composer-sent-draft',
   'chat-auto-resolve',
   'live-write-guard',
   'agent-file-access',
