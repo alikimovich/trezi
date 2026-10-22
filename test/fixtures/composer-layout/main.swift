@@ -175,8 +175,8 @@ require(composer.verificationLayout()["alignment"] as? Bool == false, "Attachmen
 provider.frame = oldProviderFrame
 print("Composer alignment: AppKit insets, all control gaps, containment and rejected overlaps passed without a window")
 
-// LKM-198: the queue box keeps 10 pt above and below its lines, tucks 24 pt under the
-// composer at every count, and its text inset and trailing column meet the placeholder and Send.
+// LKM-198: the queue box keeps even padding above and below its lines and tucks 24 pt under
+// the composer at every count (LKM-302: 8 pt padding and 28 pt flat rows, same totals).
 for (count, paused, note, wanted) in [(1, false, "", 44), (2, false, "", 72), (3, false, "", 100), (5, false, "", 100), (1, false, "Waiting for Resolve", 72), (3, true, "", 128)] as [(Int, Bool, String, CGFloat)] {
     let entries = (0..<count).map { ["id": "q\($0)", "text": "queued \($0)", "attachments": 0] as [String: Any] }
     let height = ComposerQueueHost.height(count: count, paused: paused, note: note)
@@ -188,12 +188,16 @@ for (count, paused, note, wanted) in [(1, false, "", 44), (2, false, "", 72), (3
     let form = composer.content.convert(composer.content.bounds, to: composer)
     require(queue.maxY == composer.bounds.maxY && queue.maxY - form.maxY == height, "Queue of \(count): visible part above the composer (\(queue), \(form))")
     require(form.maxY - queue.minY == ComposerQueue.overlap, "Queue of \(count) tucks \(ComposerQueue.overlap) pt under the composer (\(form.maxY - queue.minY))")
-    let placeholder = composer.text.convert(NSPoint(x: 7, y: 0), to: composer).x
-    require(queue.minX + ComposerQueue.textInset == placeholder, "Queue text inset meets the placeholder at \(placeholder)")
+    // LKM-302: the leading glyph column is the + button's, the trailing column Send's.
+    let plusFrame = composer.controls.convert(composer.plus.alignmentRect(forFrame: composer.plus.frame), to: composer)
+    require(queue.minX == plusFrame.minX && ComposerQueue.control == plusFrame.width, "Queue glyph column meets the + button (\(queue.minX), \(plusFrame))")
     require(queue.maxX == composer.sendButton.convert(composer.sendButton.bounds, to: composer).maxX, "Queue trailing column meets Send")
 }
+// LKM-302: flat rows with no gap, so the panel's heights are 2 × padding plus whole lines.
+require(ComposerQueue.rowHeight >= 28 && ComposerQueue.textX > ComposerQueue.control, "Queue rows keep 28 pt hit targets and text after the glyph column")
+require(ComposerQueueHost.height(count: 2, paused: false) - ComposerQueueHost.height(count: 1, paused: false) == ComposerQueue.rowHeight, "Queue rows have no gap between them")
 composer.update(["bounds": ["x": 0.0, "y": 0.0, "width": 420.0, "height": 148.0], "visible": false, "text": ""])
-print("Composer queue: even padding, fixed overlap, placeholder and Send alignment for 1, 2, 3 and 5 rows, with and without a note")
+print("Composer queue: one panel with even padding, fixed overlap, + and Send column alignment for 1, 2, 3 and 5 rows, with and without a note")
 
 // LKM-294: only a message newly queued in the shown chat slides in; unrelated updates never replay it.
 require(ComposerQueueMotion.inserted(previous: ["a"], next: ["a", "b"], sameChat: true) == ["b"], "A new id is an insertion")
