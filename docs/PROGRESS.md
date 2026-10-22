@@ -2,6 +2,46 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-312: the conversation's end marker is measured, so follows settle
+
+- **Report.** Build 1137: TreziHost at 100% of one core (2.4 GB). The main thread was in
+  `GraphHost.flushTransactions`, AttributeGraph updates and `LazyVStack` layout under
+  `ChatConversation.conversationScroll`. The UI stayed frozen after the turn ended and
+  ignored SIGTERM, whose handler runs on the main queue.
+- **Cause.** In `ChatConversation.body`, `.onPreferenceChange(BottomPosition.self)` came
+  after `.overlay { stickyRequest }`. Read there, the end marker's preference was the
+  overlay's default 0, so `model.bottomPosition` stayed 0.
+  - `ChatLatestSettle.step` requires `bottom > 0`, so it returned `.bottom` on every step
+    and never `.settled`.
+  - Every follow ran out all its attempts (20 per run, up to 4 runs). Each one mutated
+    `@State` (`pinRequest`, a `latestNudge` toggle every third step), which is a
+    transaction flush and a lazy-stack relayout. Each streamed frame (a full transcript
+    every 33 ms) and each pin that moved (`onMovedToEnd`) started or extended one.
+  - The existing `chat-latest-settle` fixture copies the view without the overlay, so it
+    never saw this.
+- **Reproduction** (offscreen host of the real chat sources, 120 rich messages):
+  - Pre-fix: the marker read 0. Settles took 20/40/80 attempts, and an 8 s stream at 30
+    frames/s ran 190 settle steps.
+  - With the reader above the overlay: the marker read 569.8–570 (the reading edge).
+    Settles took 2–8 attempts, and the same stream ran 0 steps.
+  - The unbounded main-queue backlog behind the 2.4 GB and the ignored SIGTERM was not
+    reproduced at this scale. The repeated relayout is the work that fell behind.
+- **Fix.** The `BottomPosition` reader now comes before the sticky-request overlay. Follow,
+  pin, latest-button and settle logic are unchanged.
+- **Test.** Unit `native-chat-bottom-marker` (`test/fixtures/chat-bottom-marker/main.swift`)
+  hosts the real `NativeChat` and samples after load, streaming and completion. It requires
+  the marker at the reading edge and fewer than 20 settle attempts.
+  - Against the pre-fix `Chat.swift` (`CHAT_SWIFT=<path>`) it fails: bottom 0, 80 attempts
+    while streaming.
+- **Separate defect, not changed here: the service restart loops in the product log.**
+  Lines like `Request hello refused: recoveryRequired`, `Backend exited status=36608/4352`
+  and `App connection lost` in `~/Library/Logs/Trezi` come from the unit test
+  `test/service-process.mjs`. It starts the real service without `TREZI_LOG_DIR`, so its
+  deliberate recovery and refusal cases write to the user's product log.
+  - That day they appear every 5–7 minutes from 00:15 (one per test run), with no host
+    lines around them.
+  - They are unrelated to the freeze.
+
 ## 2026-10-22 — LKM-304: an accepted send clears exactly the draft it sent
 
 - **Cause.** Swift applies a snapshot's draft only when its revision is at least the

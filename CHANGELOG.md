@@ -14,6 +14,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
 ### Fixed
+- The chat no longer keeps re-laying out the conversation while it follows the latest message, work that could hold Trezi at 100% CPU and leave the window unresponsive during and after a long agent turn (LKM-312).
 - A sent chat message no longer stays in the composer while the agent thinks, for example after macOS curls its apostrophe, so it cannot be sent twice. Text typed after pressing Return is kept, and a quick second click on Send no longer stops the turn it just started (LKM-304).
 - Expanding or restoring the preview, or resizing the sidebar, no longer sends the address bar, chat title or "…" into the toolbar's overflow menu (») while the window has room for them; at genuinely narrow widths controls still overflow (LKM-296).
 - Swift preview toolchain discovery retries a timed-out metadata query once before reporting failure; compiler errors and preview builds keep their existing failure behavior (LOCAL-CI-PROBE-RELIABILITY).
