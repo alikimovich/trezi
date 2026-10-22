@@ -1,0 +1,69 @@
+{
+  "mode": "selected",
+  "changes": [
+    {
+      "status": "M",
+      "path": "src/native/SidebarIcon.swift"
+    }
+  ],
+  "reasons": [
+    [
+      "native-settings-layout",
+      [
+        "M src/native/SidebarIcon.swift: ui change"
+      ]
+    ],
+    [
+      "no-system-preferences",
+      [
+        "M src/native/SidebarIcon.swift: reads or scans it"
+      ]
+    ],
+    [
+      "native-slider-ticks",
+      [
+        "M src/native/SidebarIcon.swift: reads or scans it"
+      ]
+    ],
+    [
+      "sidebar-evidence",
+      [
+        "M src/native/SidebarIcon.swift: ui change"
+      ]
+    ],
+    [
+      "sidebar-icon",
+      [
+        "M src/native/SidebarIcon.swift: ui change"
+      ]
+    ],
+    [
+      "legacy-names-audit",
+      [
+        "M src/native/SidebarIcon.swift: reads or scans it"
+      ]
+    ],
+    [
+      "retirement-census",
+      [
+        "M src/native/SidebarIcon.swift: reads or scans it"
+      ]
+    ]
+  ],
+  "unit": [
+    "native-settings-layout",
+    "no-system-preferences",
+    "native-slider-ticks",
+    "sidebar-evidence",
+    "sidebar-icon",
+    "legacy-names-audit",
+    "retirement-census"
+  ],
+  "typecheck": false,
+  "typecheckReason": "no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+  "appBuild": true,
+  "native": [
+    "sidebar",
+    "settings"
+  ]
+}

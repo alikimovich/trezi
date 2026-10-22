@@ -1,0 +1,31 @@
+Selection against ab383987c939cd70140df50b264d7a303f72cc06 (merge base ab383987c939):
+  1 changed path(s)
+    M test/preview-edit-lifecycle.mjs
+Plan: SELECTED — 4 of 259 unit tests:
+  preview-edit-lifecycle — M test/preview-edit-lifecycle.mjs: test change
+  no-system-preferences — M test/preview-edit-lifecycle.mjs: reads or scans it
+  legacy-names-audit — M test/preview-edit-lifecycle.mjs: reads or scans it
+  lint — M test/preview-edit-lifecycle.mjs: reads or scans it
+Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)
+App build: not needed (docs and test-only change)
+Test logs: <throwaway clone>/test/artifacts/runs/run-4EW2t1
+
+unit: 4 tests, at most 8 workers
+START [unit] preview-edit-lifecycle
+START [unit] no-system-preferences
+START [unit] legacy-names-audit
+START [unit] lint
+PASS [unit] preview-edit-lifecycle 0.1s
+PASS [unit] legacy-names-audit 0.1s
+PASS [unit] no-system-preferences 0.2s
+PASS [unit] lint 2.1s
+
+Slowest 20:
+     2.1s  [unit] lint
+     0.2s  [unit] no-system-preferences
+     0.1s  [unit] legacy-names-audit
+     0.1s  [unit] preview-edit-lifecycle
+Times: <throwaway clone>/.local/test-times.json
+
+SUMMARY: 4 PASS; wall time 2.1s
+Report: <throwaway clone>/test/artifacts/runs/run-4EW2t1/summary.json

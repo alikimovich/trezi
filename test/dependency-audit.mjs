@@ -23,8 +23,9 @@ assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_r
 assert.match(workflow, /app build[\s\S]*?fetch-depth: 0/)
 assert.doesNotMatch(workflow, /candidate/)
 
-// The test job runs both typechecks as their own step, before an unfiltered unit tier
-// that no longer carries --typecheck (they used to compete with the Swift fixtures).
+// The test job runs both typechecks as their own step, before a unit tier that no
+// longer carries --typecheck (they used to compete with the Swift fixtures). The unit
+// tier is unfiltered on a push to main; a pull request adds only --changed=<base SHA>.
 const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  app-build:'))
 const steps = new Map(
   testJob
@@ -40,7 +41,17 @@ const typecheckStep = steps.get('Typecheck')
 assert.match(typecheckStep, /^ {10}bun run typecheck$/m, 'the node + preview typecheck runs')
 assert.match(typecheckStep, /^ {10}bun run typecheck:native$/m, 'the native typecheck runs')
 const unitStep = steps.get('Unit tests')
-assert.match(unitStep, /node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150\n/)
+assert.match(
+  unitStep,
+  /^ {10}node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150 "\$@"\n/m
+)
+// The only extra argument is the PR's own base SHA, and it is empty off pull requests.
+assert.match(
+  unitStep,
+  /TREZI_TEST_BASE: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha \|\| '' \}\}/
+)
+assert.deepEqual(unitStep.match(/set -- .*/g), ['set -- --changed="$TREZI_TEST_BASE"; fi'])
+assert.match(unitStep, /if \[ -n "\$TREZI_TEST_BASE" \]; then set -- /)
 assert.doesNotMatch(
   unitStep,
   /--(typecheck|filter|serial|jobs)/,

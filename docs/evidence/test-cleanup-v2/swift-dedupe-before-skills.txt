@@ -1,0 +1,6 @@
+warm-up exit 0
+0 {"pid":23704,"inode":207257470,"ms":6387} | real 6.40 | user 0.07 | sys 0.05
+0 {"pid":23703,"inode":207257467,"ms":6354} | real 6.37 | user 5.20 | sys 1.13
+0 {"pid":23702,"inode":207257466,"ms":6352} | real 6.37 | user 4.86 | sys 1.07
+0 {"pid":23705,"inode":207257473,"ms":6405} | real 6.42 | user 0.07 | sys 0.05
+processes=4 children-that-ran-swiftc=2 wall=6428ms children-user=10.20s children-sys=2.30s warm-up=real 31.24 | user 28.25 | sys 1.88

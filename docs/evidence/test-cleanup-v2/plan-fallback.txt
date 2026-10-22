@@ -1,0 +1,90 @@
+$ node test/select.mjs --path=docs/TESTING.md --path=src/main/index.ts
+  2 changed path(s)
+    M docs/TESTING.md
+    M src/main/index.ts
+Plan: FULL — every test in the tier runs:
+  M src/main/index.ts: no selection rule covers it (product, build, config or other)
+exit=0
+
+$ node test/select.mjs --path=test/helpers/darwin.mjs --path=test/fixtures/chat-text/main.swift --path=src/native/Shell.swift
+  3 changed path(s)
+    M test/helpers/darwin.mjs
+    M test/fixtures/chat-text/main.swift
+    M src/native/Shell.swift
+Plan: FULL — every test in the tier runs:
+  M test/helpers/darwin.mjs: shared test helper
+  M test/fixtures/chat-text/main.swift: fixture without an audited consumer list
+  M src/native/Shell.swift: no selection rule covers it (product, build, config or other)
+exit=0
+
+$ node test/run.mjs unit --changed=HEAD --typecheck --list  (this worktree: the selector change itself)
+exit=0
+Selection against HEAD (merge base ce213841a5ef):
+  32 changed path(s)
+    M .github/workflows/ci.yml
+    M AGENTS.md
+    M docs/TESTING.md
+    M docs/agent-guide/conventions.md
+    M docs/agent-guide/verification.md
+    M test/run.mjs
+    M test/test-runner.mjs
+    A docs/evidence/test-cleanup-v2/after-runner-typecheck.summary.json
+    A docs/evidence/test-cleanup-v2/after-runner-typecheck.txt
+    A docs/evidence/test-cleanup-v2/before-runner-typecheck.summary.json
+    A docs/evidence/test-cleanup-v2/before-runner-typecheck.txt
+    A docs/evidence/test-cleanup-v2/before-typecheck-native.txt
+    A docs/evidence/test-cleanup-v2/before-typecheck.txt
+    A docs/evidence/test-cleanup-v2/plan-docs.json
+    A docs/evidence/test-cleanup-v2/plan-docs.txt
+    A docs/evidence/test-cleanup-v2/plan-fallback.txt
+    A docs/evidence/test-cleanup-v2/plan-test.json
+    A docs/evidence/test-cleanup-v2/plan-test.txt
+    A docs/evidence/test-cleanup-v2/plan-ui.json
+    A docs/evidence/test-cleanup-v2/plan-ui.txt
+    A docs/evidence/test-cleanup-v2/run-docs.summary.json
+    A docs/evidence/test-cleanup-v2/run-docs.txt
+    A docs/evidence/test-cleanup-v2/run-test.summary.json
+    A docs/evidence/test-cleanup-v2/run-test.txt
+    A docs/evidence/test-cleanup-v2/run-ui-warm.summary.json
+    A docs/evidence/test-cleanup-v2/run-ui-warm.txt
+    A docs/evidence/test-cleanup-v2/run-ui.summary.json
+    A docs/evidence/test-cleanup-v2/run-ui.txt
+    A test/helpers/test-plan.mjs
+    A test/select.mjs
+    A test/test-selection.mjs
+    A test/tiers.mjs
+Plan: FULL — every test in the tier runs:
+  M .github/workflows/ci.yml: runner, selector or CI workflow
+  M test/run.mjs: runner, selector or CI workflow
+  M test/test-runner.mjs: also used by test/helpers/test-plan.mjs, test/test-selection.mjs, test/run.mjs
+  A docs/evidence/test-cleanup-v2/after-runner-typecheck.summary.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/after-runner-typecheck.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/before-runner-typecheck.summary.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/before-runner-typecheck.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/before-typecheck-native.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/before-typecheck.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-docs.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-docs.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-fallback.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-test.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-test.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-ui.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/plan-ui.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-docs.summary.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-docs.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-test.summary.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-test.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-ui-warm.summary.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-ui-warm.txt: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-ui.summary.json: no selection rule covers it (product, build, config or other)
+  A docs/evidence/test-cleanup-v2/run-ui.txt: no selection rule covers it (product, build, config or other)
+  A test/helpers/test-plan.mjs: runner, selector or CI workflow
+  A test/select.mjs: runner, selector or CI workflow
+  A test/test-selection.mjs: new test script
+  A test/tiers.mjs: runner, selector or CI workflow
+not run: typecheck typecheck-native — tsconfig.native.json resolves to tsconfig.node.json, which typecheck checks
+stdout lines:      258 (257 unit, 1 typecheck)
+
+$ node test/run.mjs unit --changed=no-such-ref
+test selection failed, nothing was run: base is not a commit here: no-such-ref
+exit=2

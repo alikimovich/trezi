@@ -1,0 +1,48 @@
+{
+  "mode": "selected",
+  "changes": [
+    {
+      "status": "M",
+      "path": "docs/TESTING.md"
+    },
+    {
+      "status": "M",
+      "path": "docs/agent-guide/verification.md"
+    },
+    {
+      "status": "M",
+      "path": "CHANGELOG.md"
+    }
+  ],
+  "reasons": [
+    [
+      "legacy-names-audit",
+      [
+        "M docs/TESTING.md: reads or scans it",
+        "M docs/agent-guide/verification.md: reads or scans it",
+        "M CHANGELOG.md: reads or scans it"
+      ]
+    ],
+    [
+      "docs-links",
+      [
+        "M docs/agent-guide/verification.md: reads or scans it"
+      ]
+    ],
+    [
+      "versioning",
+      [
+        "M CHANGELOG.md: reads or scans it"
+      ]
+    ]
+  ],
+  "unit": [
+    "legacy-names-audit",
+    "docs-links",
+    "versioning"
+  ],
+  "typecheck": false,
+  "typecheckReason": "no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+  "appBuild": false,
+  "native": []
+}

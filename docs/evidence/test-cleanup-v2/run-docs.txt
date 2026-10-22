@@ -1,0 +1,16 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-T1mTYm
+
+unit: 3 tests, at most 8 workers
+START [unit] legacy-names-audit
+START [unit] docs-links
+START [unit] versioning
+PASS [unit] legacy-names-audit 0.1s
+PASS [unit] docs-links 0.1s
+PASS [unit] versioning 1.5s
+
+SUMMARY: 3 PASS; wall time 1.5s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-T1mTYm/summary.json
+real 1.53
+user 0.86
+sys 0.80
+exit=0

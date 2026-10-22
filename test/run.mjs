@@ -4,338 +4,14 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { describePlan, planFromGit, typecheckPlan } from './helpers/test-plan.mjs'
 import { acquireRunLock, runCommand, runQueue } from './helpers/test-runner.mjs'
+import { TIERS, TYPECHECKS, UNIT_TIMEOUT_MS } from './tiers.mjs'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = dirname(TEST_DIR)
 
-// --- Tier membership (derived from package.json `test` and `verify` scripts) ---
-
-// Backend logic checks run independently of the native desktop.
-const UNIT = [
-  'service-contract',
-  'service-process',
-  'operation-ledger',
-  'preferences-owner',
-  'workspace-owner',
-  'memory-owner',
-  'skills-registry',
-  'skills-registry-boundaries',
-  'skills-registry-safety',
-  'skills-github',
-  'skills-github-import',
-  'settings-skills',
-  'skills-projection',
-  'session-skills',
-  'runtime-owner',
-  'repository-owner',
-  'agent-git',
-  'agent-merge-approval',
-  'git-messages',
-  'repository-recovery',
-  'source-owner',
-  'conversation-owner',
-  'provider-owner',
-  'provider-data',
-  'provider-login',
-  'provider-sign-in',
-  'provider-cold-start',
-  'turn-progress',
-  'provider-helper-tools',
-  'service-session',
-  'native-settings-claude',
-  'editing-owner',
-  'workflow-owner',
-  'workflow-durability',
-  'live-publish-attribution',
-  'branch-safety',
-  'platform-owner',
-  'native-visible-capture',
-  'native-smoke-runner',
-  'native-smoke-report',
-  'rename-compat',
-  'source-stamp',
-  'native-boundary',
-  'trezi-agent-tools',
-  'preview-agent-tools',
-  'agent-browser',
-  'agent-runtime-isolation',
-  'source-tree',
-  'integration-gate',
-  'managed-agent-browser',
-  'managed-browser-path',
-  'managed-browser-provider',
-  'browser-setup',
-  'browser-setup-recovery',
-  'browser-tools-install',
-  'agent-interact',
-  'browser-verify',
-  'browser-verify-bounds',
-  'preview-slow-motion',
-  'codex-mcp',
-  'codex-mcp-approvals',
-  'claude-resume',
-  'claude-cwd',
-  'codex-model',
-  'self-heal',
-  'self-heal-recovery',
-  'native-bridge-close',
-  'native-service-launch',
-  'native-supervised-bridge',
-  'native-preview-recovery',
-  'native-workspace-controller',
-  'chat-new-instant',
-  'smoke-timing',
-  'preview-supervisor',
-  'native-support',
-  'activity-attention',
-  'quit-guard',
-  'display-path',
-  'native-sheets',
-  'native-settings',
-  'native-settings-layout',
-  'native-settings-evidence',
-  'native-chat-controller',
-  'chat-start',
-  'project-planning',
-  'native-long-chat-perf',
-  'preview-hover-coalesce',
-  'preview-edit-lifecycle',
-  'chat-attachments',
-  'stop-recovery-ui',
-  'chat-stuck-turn',
-  'chat-send-queue',
-  'chat-auto-resolve',
-  'live-write-guard',
-  'agent-file-access',
-  'live-change-watch',
-  'project-path',
-  'network-volume-note',
-  'native-composer-layout',
-  'native-chat-latest-settle',
-  'native-smoke-wait',
-  'native-chat-reveal',
-  'native-chat-text',
-  'native-island-editing',
-  'no-system-preferences',
-  'chat-islands',
-  'chat-island-status',
-  'chat-island-new-chat',
-  'chat-island-pending',
-  'island-flicker',
-  'island-override',
-  'island-flicker-frameworks',
-  'dependency-refresh-vite',
-  'native-context',
-  'native-updates',
-  'native-inspector',
-  'style-class-rule',
-  'style-pair',
-  'native-slider-ticks',
-  'native-layers',
-  'native-editor',
-  'native-shell-controller',
-  'sidebar-evidence',
-  'sidebar-sizing',
-  'preview-overlay',
-  'key-shortcuts',
-  'agent-load-routing',
-  'sidebar-icon',
-  'sidebar-focus',
-  'native-git',
-  'publish-progress',
-  'branch-status',
-  'dependency-issue',
-  'dependency-audit',
-  'native-support-sheets',
-  'native-cat-assets',
-  'project-ui',
-  'project-ui-svelte',
-  'project-ui-jev',
-  'docgen-browserslist',
-  'jev-pilot',
-  'test-runner',
-  'setup-stamps',
-  'setup-vite',
-  'setup-vite-real',
-  'code-reveal',
-  'preview-open',
-  'preview-refresh',
-  'editor-freshness',
-  'preview-page',
-  'preview-identity',
-  'turn-timing',
-  'syntax-highlight',
-  'syntax-bundle',
-  'conversation-handoff',
-  'pr-body',
-  'feedback-body',
-  'feedback-diagnostics',
-  'build-status',
-  'product-log',
-  'dreamer-digest',
-  'dreamer-export',
-  'publish-message',
-  'publish-description',
-  'commit-message',
-  'slash-token',
-  'skills-discovery',
-  'provider-skills',
-  'states-workbench',
-  'states-canvas',
-  'states-build',
-  'states-return',
-  'three-d-contract',
-  'github-connect',
-  'html-source',
-  'project-key',
-  'project-create',
-  'environment-changes',
-  'project-icon',
-  'devserver-net',
-  'sidecar-migrate',
-  'legacy-names-migrate',
-  'legacy-names-audit',
-  'diag-cache',
-  'diag-rules',
-  'sessions-store',
-  'preferred-model',
-  'project-memory',
-  'annotation-store',
-  'setup-next',
-  'shadow-controls',
-  'retirement-census',
-  'distribution',
-  'signing-identity',
-  'native-build-cache',
-  'keychain-migration',
-  'keychain-rebuild',
-  'install-update',
-  'project-memory-evaluation',
-  'providers-store',
-  'model-catalog',
-  'model-label',
-  'codex-retry-cause',
-  'codex-stream',
-  'codex-terminal-stream',
-  'interrupt-escalation',
-  'turn-terminal',
-  'chat-title',
-  'chat-settings',
-  'background-model',
-  'comment-agents',
-  'chat-agent-card',
-  'landing-check',
-  'run-stats',
-  'codex-usage',
-  'file-tree',
-  'media-types',
-  'rules',
-  'ask-user',
-  'chat-ui',
-  'chat-ui-model',
-  'device-frame',
-  'tw-classes',
-  'tw-styles',
-  'token-match',
-  'style-tokens',
-  'layers-move',
-  'layers-labels',
-  'measure-distance',
-  'guide-distance',
-  'sibling-drop',
-  'inline-style',
-  'css-values',
-  'style-provenance',
-  'control-panels',
-  'svelte-instance',
-  'docs-links',
-  'spring',
-  'apca',
-  'fluid',
-  'oklch',
-  'shadows',
-  'type-metrics',
-  'skills-install',
-  'trezi-cli',
-  'native-smoke-groups',
-  'docs-merge-union',
-  'versioning',
-  'swift-preview',
-  'swift-preview-graph',
-  'swift-preview-target',
-  'swift-preview-toolchain',
-  'swift-preview-settings',
-  'swift-preview-shadow',
-  'swift-preview-build',
-  'swift-preview-generate',
-  'lint'
-]
-
-const NATIVE = [
-  'native-runtime',
-  'native-source-window',
-  'native-chat-scroll',
-  'native-next-hmr',
-  'browser-setup-packaged'
-]
-const LIVE = ['native-runtime-live', 'provider-live-parity']
-const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
-// Unit tests share workers: every swiftc compile goes through the 2-wide swiftc lane in
-// test/helpers/swift-build.mjs (LKM-167), so no unit test needs to run alone. These
-// still get a longer budget for a cold Swift cache.
-const UNIT_TIMEOUT_MS = {
-  'service-process': 240_000,
-  // Its Swift fixtures queue behind other tests' swiftc runs; it takes 110 s+ under load.
-  // The sections themselves are ~25 s warm (LOCAL-WEBKIT-PUBLISH: a 3-worker CI run with a
-  // cold Swift cache hit 240 s inside the sections after `crash`, with no hang).
-  'repository-owner': 420_000,
-  // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
-  'runtime-owner': 240_000,
-  // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
-  // most service sources after nearly every service change, queued behind other swiftc runs.
-  'workflow-durability': 240_000,
-  'workflow-owner': 240_000,
-  // Compiles the same workflow fixture through the LKM-255 operator script.
-  'live-publish-attribution': 240_000,
-  // Runs Next and Vite dev servers in turn: 52 s alone, over 120 s at load average 35.
-  'island-flicker-frameworks': 240_000,
-  // Same (LKM-217): Swift fixtures that compile the shared service or host sources. A cold
-  // 8-worker run took 120 s+ for the first two and 106–120 s for the last two, against
-  // 22–40 s on a warm tree; a longer budget separates queueing from a real hang.
-  'platform-owner': 240_000,
-  // LOCAL-WEBKIT-4: the same platform fixture compile, then scripted installs.
-  'browser-tools-install': 240_000,
-  'native-settings-layout': 240_000,
-  'native-composer-layout': 240_000,
-  'native-chat-latest-settle': 240_000,
-  // LKM-287: a cold compile of 19 service sources (26 s alone), then 248 creates through
-  // the real SkillsOwner, each F_FULLFSYNC'd objects plus a ledger-backed manifest
-  // replace (~88-190 ms each, growing with the library), for the 128 × 64 regression.
-  // 59 s cold alone, 33 s warm; it passed four sections and then hit 120 s in CI.
-  'skills-projection': 240_000,
-  'keychain-rebuild': 300_000,
-  // LKM-271: four compiles of the preview host and a fixture (6 s warm) outside the lane.
-  'swift-preview': 240_000,
-  // LKM-273: three module compiles per build, six builds, then the driver's own build.
-  'swift-preview-target': 300_000,
-  // LKM-274: scripted toolchains are instant; the real check probes Xcode and then the
-  // driver builds the fixture with a cold module cache for that toolchain.
-  'swift-preview-toolchain': 300_000,
-  // LKM-275: a cold `swift build`, actool and three module compiles for the fixture, then
-  // a disposable Scraib copy (its settings, then a 40-file app target).
-  'swift-preview-build': 600_000,
-  // LKM-276: the SwiftSyntax scanner's first compile, then two generated module builds.
-  'swift-preview-generate': 300_000,
-  // Real Vite install, Swift runtime fixture and a WebKit load.
-  'dependency-refresh-vite': 300_000,
-  'setup-vite-real': 300_000
-}
-// `--typecheck` runs these next to the tests (quick verification in one command).
-const TYPECHECKS = {
-  typecheck: ['run', 'typecheck'],
-  'typecheck-native': ['run', 'typecheck:native']
-}
+// Tier membership, timeouts and typechecks live in test/tiers.mjs.
 // Durations from the last `--report` run; the slowest tests start first.
 const TIMES = join(ROOT, '.local/test-times.json')
 const selected = new Set()
@@ -346,7 +22,8 @@ const options = {
   jobs: Math.max(Math.min(4, availableParallelism()), Math.min(availableParallelism() - 2, 8)),
   'timeout-ms': 120_000,
   'log-tail': 0,
-  filter: null
+  filter: null,
+  changed: null
 }
 let serial = false
 let report = false
@@ -361,10 +38,11 @@ try {
     else if (arg === 'all') for (const t of Object.keys(TIERS)) selected.add(t)
     else if (Object.hasOwn(TIERS, arg)) selected.add(arg)
     else {
-      const match = /^--(jobs|timeout-ms|log-tail|filter)=(.+)$/.exec(arg)
+      const match = /^--(jobs|timeout-ms|log-tail|filter|changed)=(.+)$/.exec(arg)
       if (!match) throw new Error(`unknown argument: ${arg}`)
       const [, key, value] = match
       if (key === 'filter') options.filter = new Set(value.split(','))
+      else if (key === 'changed') options.changed = value
       else {
         const n = Number(value)
         if (!Number.isSafeInteger(n) || n < 1 || n > 2_147_483_647)
@@ -374,6 +52,8 @@ try {
     }
   }
   if (!selected.size) throw new Error('select at least one tier')
+  if (options.changed && (options.filter || selected.size !== 1 || !selected.has('unit')))
+    throw new Error('--changed selects within the unit tier alone and cannot take --filter')
   if (options.filter) {
     const names = [...selected].flatMap((t) => TIERS[t])
     for (const name of options.filter)
@@ -381,10 +61,33 @@ try {
   }
 } catch (error) {
   console.error(
-    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name] [--report] [--typecheck] [--list]`
+    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name | --changed=<base-ref>] [--report] [--typecheck] [--list]`
   )
   process.exit(2)
 }
+
+// --changed: the changed-file plan (test/helpers/test-plan.mjs). No plan, no run: a ref
+// or diff failure exits 2 and never passes by selecting nothing.
+let plan = null
+if (options.changed) {
+  try {
+    plan = planFromGit(ROOT, options.changed)
+  } catch (error) {
+    console.error(`test selection failed, nothing was run: ${error.message}`)
+    process.exit(2)
+  }
+  // With --list stdout stays tier/name pairs; the reasons go to stderr.
+  ;(list ? console.error : console.log)(describePlan(plan))
+  if (plan.mode === 'selected') options.filter = new Set(plan.unit)
+}
+const checks = !typecheck
+  ? { run: [], notRun: [] }
+  : plan?.mode === 'selected'
+    ? {
+        run: [],
+        notRun: Object.keys(TYPECHECKS).map((name) => ({ name, reason: plan.typecheckReason }))
+      }
+    : typecheckPlan((path) => readFileSync(join(ROOT, path), 'utf8'))
 
 // Resolve and validate the same selection as execution, without locks, artifacts,
 // builds, provider calls or desktop access. One tier/name pair per line.
@@ -394,7 +97,9 @@ if (list) {
     for (const name of members)
       if (!options.filter || options.filter.has(name)) console.log(`${tier}\t${name}`)
   }
-  if (typecheck) for (const name of Object.keys(TYPECHECKS)) console.log(`typecheck\t${name}`)
+  for (const name of checks.run) console.log(`typecheck\t${name}`)
+  for (const { name, reason } of checks.notRun)
+    console.error(`not run: typecheck ${name} — ${reason}`)
   process.exit(0)
 }
 
@@ -439,27 +144,27 @@ try {
   previous = JSON.parse(readFileSync(TIMES, 'utf8')).tests ?? {}
 } catch {}
 console.log(`Test logs: ${logs}`)
-const checks = typecheck
-  ? Object.entries(TYPECHECKS).map(async ([name, args]) => {
-      console.log(`START [typecheck] ${name}`)
-      const result = await runCommand({
-        command: 'bun',
-        args,
-        cwd: ROOT,
-        name,
-        log: join(logs, `typecheck-${name}.log`),
-        timeoutMs: 300_000,
-        signal: controller.signal
-      })
-      console.log(`${result.outcome} [typecheck] ${name} ${fmt(result.duration)}`)
-      if (result.outcome !== 'PASS') {
-        console.log(`  Log: ${result.log}`)
-        if (options['log-tail'])
-          console.log(logTail(result.log, options['log-tail'], `typecheck-${name}`))
-      }
-      return { tier: 'typecheck', ...result }
-    })
-  : []
+if (plan) writeFileSync(join(logs, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`)
+for (const { name, reason } of checks.notRun) console.log(`NOT RUN [typecheck] ${name} — ${reason}`)
+const typechecks = checks.run.map(async (name) => {
+  console.log(`START [typecheck] ${name}`)
+  const result = await runCommand({
+    command: 'bun',
+    args: TYPECHECKS[name],
+    cwd: ROOT,
+    name,
+    log: join(logs, `typecheck-${name}.log`),
+    timeoutMs: 300_000,
+    signal: controller.signal
+  })
+  console.log(`${result.outcome} [typecheck] ${name} ${fmt(result.duration)}`)
+  if (result.outcome !== 'PASS') {
+    console.log(`  Log: ${result.log}`)
+    if (options['log-tail'])
+      console.log(logTail(result.log, options['log-tail'], `typecheck-${name}`))
+  }
+  return { tier: 'typecheck', ...result }
+})
 for (const [tier, members] of Object.entries(TIERS)) {
   if (!selected.has(tier)) continue
   const tests = members.filter((name) => !options.filter || options.filter.has(name))
@@ -500,13 +205,24 @@ for (const [tier, members] of Object.entries(TIERS)) {
   )
   results.push(...tierResults.map((r) => ({ tier, ...r })))
 }
-results.push(...(await Promise.all(checks)))
+results.push(...(await Promise.all(typechecks)))
 const duration = Date.now() - start
 const counts = {}
 for (const r of results) counts[r.outcome] = (counts[r.outcome] || 0) + 1
 writeFileSync(
   join(logs, 'summary.json'),
-  JSON.stringify({ duration, counts, builds, results }, null, 2) + '\n'
+  JSON.stringify(
+    {
+      duration,
+      counts,
+      builds,
+      selection: plan && { mode: plan.mode, unit: plan.unit ?? null, reasons: plan.reasons },
+      notRun: checks.notRun,
+      results
+    },
+    null,
+    2
+  ) + '\n'
 )
 if (report) {
   const timed = results.filter((r) => ['PASS', 'SKIP', 'FAIL', 'TIMEOUT'].includes(r.outcome))

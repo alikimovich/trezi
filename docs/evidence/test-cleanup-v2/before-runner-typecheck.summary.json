@@ -1,0 +1,36 @@
+{
+  "duration": 3752,
+  "counts": {
+    "PASS": 3
+  },
+  "builds": [],
+  "results": [
+    {
+      "tier": "unit",
+      "name": "docs-links",
+      "outcome": "PASS",
+      "duration": 90,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-J3gxoD/unit-docs-links.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "typecheck",
+      "name": "typecheck",
+      "outcome": "PASS",
+      "duration": 3751,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-J3gxoD/typecheck-typecheck.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "typecheck",
+      "name": "typecheck-native",
+      "outcome": "PASS",
+      "duration": 3418,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-J3gxoD/typecheck-typecheck-native.log",
+      "code": 0,
+      "signal": null
+    }
+  ]
+}
