@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-20 — LKM-295: Skills screen copy
+
+- Settings → Skills' explanatory paragraph (`SKILLS_DETAIL` in `src/native/settings-controller.ts`) now reads "Manage skills here without changing your project or global files", with no final period. Copy only: the title, rows and skills behaviour are unchanged. No test asserted the old copy.
+
 ## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: -999 repair 3 — load timeout diagnosed, deterministic provisional-cancel regression
 
 Native verify2 failed `core/agent-navigation` with `Agent browser load timed out` (the failed run stays on record, as do 08bbedaf -999 and the two `repository-owner` CI timeouts). Supersedes the "Regression" bullets of repair 2.

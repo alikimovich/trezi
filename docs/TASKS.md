@@ -3,6 +3,10 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Skills screen: replace explanatory paragraph copy (LKM-295)
+
+- [x] Settings → Skills reads "Manage skills here without changing your project or global files" (no final period); title, rows and skills behaviour unchanged.
+
 ## Ship dependency onboarding and packaged managed browser launcher (LOCAL-WEBKIT-4)
 
 - [x] Settings → Browser Checks: WebKit always Available; Chromium missing / partial / unchecked / ready / failed / unsupported with versions, paths, prerequisites, commands, verified links, Install, Cancel and Check Again (`src/native/settings-browser.ts`, `src/main/browser-setup.ts`).
