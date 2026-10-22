@@ -2,6 +2,48 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-302: the composer queue is one frosted panel with flat rows
+
+- **Supersedes LKM-294's cards.** The owner asked for one subtle frosted panel instead of a grey
+  tray with a white card per message. `src/native/ComposerQueue.swift` now:
+  - Draws the panel once: `.thinMaterial` in a continuous 18 pt rounded rectangle with a faint
+    0.5 pt rim (`ComposerQueue.rim`). It is still 10 pt inside the composer's sides and tucked
+    24 pt under it.
+  - Draws rows flat on the panel, with no fill, border or shadow of their own. A 0.5 pt
+    `separatorColor` hairline sits above every row but the first, from the text to 12 pt
+    before the trailing edge.
+  - Adds a leading glyph in the + button's 30 pt column: `arrow.turn.down.right`, or `globe` for
+    a link. The text starts 4 pt after that column. The edit, remove and … controls stay in
+    Send's column.
+  - Gives the header a glyph (`pause.circle` when paused, `clock` for a waiting note) and a
+    12 pt-inset hairline divider. Paused keeps Send now (`queue-resume`, disabled when
+    `canSend` is false).
+- **Geometry.** Rows and the header are 28 pt with no gap between them, with 8 pt padding. The
+  totals stay 44 / 72 / 100 pt for 1 / 2 / 3+ rows (+28 with a header), so the composer's
+  heights, overlap and scroll behaviour are unchanged. Every control's hit target is 30 × 28.
+  The text no longer aligns with the placeholder (LKM-198), because the glyph now takes that
+  column.
+- **Unchanged.** The edit, remove, copy and menu actions; no reorder or steering actions exist,
+  and none were added. Also unchanged: `ComposerQueueModel` row identity, entrance motion
+  (`ComposerQueueEntrance`, bottom-to-top, Reduce Motion fade only) and the hidden empty state.
+- **Tests.**
+  - `queueGeometryProblems` (`src/native/smoke-queue.ts`) checks the following:
+    - flat adjacent rows, with hairlines at every boundary and none above row 0;
+    - the glyph over the + button's alignment rect (new `plusMidX` in `composerInspect`) and
+      the text after the glyph column;
+    - the … control over Send, and hit targets of at least 28 pt;
+    - the header's glyph, its divider, and Send now present if and only if the queue is
+      paused.
+  - `emptyQueueProblems` checks the panel after the last removal.
+  - The chat smoke adds a paused three-row state (the real controller's `paused`, as after
+    Stop), the resumed state and the empty state. The Resolve note at both widths now checks
+    the header's paused flag.
+  - Each geometry check now also writes a foreground `captureVisibleComposer` capture per
+    appearance (`-queue-<label>-{light,dark}-visible.png`), as well as the offscreen one.
+  - `test/composer-queue-panel.mjs` (unit) runs the checker against synthetic layouts and
+    rejects the LKM-294 cards. The composer-layout fixture checks the + and Send column
+    alignment and that rows have no gap.
+
 ## 2026-10-20 — LKM-296: toolbar controls no longer overflow when expanding/restoring the preview
 
 - **Cause.** The full note with file and line references is `docs/evidence/lkm-296/ROOT-CAUSE.md`.

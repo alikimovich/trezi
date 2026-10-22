@@ -105,6 +105,7 @@ const UNIT = [
   'stop-recovery-ui',
   'chat-stuck-turn',
   'chat-send-queue',
+  'composer-queue-panel',
   'chat-auto-resolve',
   'live-write-guard',
   'agent-file-access',

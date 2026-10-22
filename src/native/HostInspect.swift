@@ -340,9 +340,13 @@ extension Host {
             inspected["inputWidth"] = Double(clip.width); inspected["textMinimumHeight"] = Double(composer.text.minSize.height)
             inspected["scrollerStyle"] = composer.scroll.scrollerStyle.rawValue
             // LKM-198: queue rows against the placeholder's x (its 7 pt draw origin) and Send.
+            // LKM-302 aligns them with the + button and Send instead; placeholderX is kept for reference.
             inspected["queueGeometry"] = composer.queuedMessages.inspect(composerTop: composer.content.convert(composer.content.bounds, to: composer).maxY)
             inspected["placeholderX"] = Double(composer.text.convert(NSPoint(x: 7, y: 0), to: composer).x)
             inspected["sendMidX"] = Double(composer.sendButton.convert(composer.sendButton.bounds, to: composer).midX)
+            // LKM-302: the queue's leading glyph sits over the + button (its alignment rect: the
+            // popup's frame includes decoration insets).
+            inspected["plusMidX"] = Double(composer.controls.convert(composer.plus.alignmentRect(forFrame: composer.plus.frame), to: composer).midX)
             reply(id, inspected)
         case "composerIMECheck":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
