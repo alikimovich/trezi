@@ -2,6 +2,9 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-20 — LKM-295: Skills screen copy
+
+- Settings → Skills' explanatory paragraph (`SKILLS_DETAIL` in `src/native/settings-controller.ts`) now reads "Manage skills here without changing your project or global files", with no final period. Copy only: the title, rows and skills behaviour are unchanged. No test asserted the old copy.
 ## 2026-10-22 — LOCAL-CI-EXECUTION-RELIABILITY: typecheck as its own CI step, stage logging in swift-preview-target (local, unpublished)
 
 - **Evidence.** After LKM-300, merged-main CI run 39721071506 attempt 1 hit the outer limits of `swift-preview-target` (300 s) and `swift-preview` (240 s); attempt 2 hit only `swift-preview-target` (300 s: 255 PASS, 1 TIMEOUT, 3 SKIP). `swift-preview-build` and `swift-preview-toolchain` passed in both; that does not locate or establish the cause of the outer fixture timeout. In attempt 2, `typecheck`, `typecheck-native`, `repository-owner`, `swift-preview-target` and `skills-projection` all started within the same second (`--typecheck` plus 3 workers); the typechecks took 85.3/92.6 s, `repository-owner` 122.5 s, `skills-projection` 201.9 s. The same tree on the PR passed: target 142 s, build 92.6 s, toolchain 52.3 s. The timed-out test's log was empty (it printed nothing before `swift-preview-target: ok`), so the stage it was stuck in is unknown.
