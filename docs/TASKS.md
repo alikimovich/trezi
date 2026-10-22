@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## CI probe reliability (LOCAL-CI-PROBE-RELIABILITY)
+
+- [x] Diagnosed `swift-preview-build` failing at `xcrun swiftc --version timed out after 20 s` (PR #287 attempt 1, main CI attempts 1 and 2; PR attempt 2 passed the same tree) and added a bounded, timeout-only retry to `inspectToolchain`'s metadata queries (`src/swift-preview/toolchain.ts`); analysis in `docs/PROGRESS.md`.
+- [x] Deterministic regression in `test/swift-preview-toolchain.mjs`: recovery after one stalled attempt, exactly two attempts when it stays stalled, no retry for a non-zero exit, a missing tool or the probe compile. Local only: not published, CI not re-run.
+- [ ] Independent review before any publication; confirm on CI that `swift-preview-build` no longer fails at the probe (not claimed here).
+
 ## Ship dependency onboarding and packaged managed browser launcher (LOCAL-WEBKIT-4)
 
 - [x] Settings → Browser Checks: WebKit always Available; Chromium missing / partial / unchecked / ready / failed / unsupported with versions, paths, prerequisites, commands, verified links, Install, Cancel and Check Again (`src/native/settings-browser.ts`, `src/main/browser-setup.ts`).
