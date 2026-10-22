@@ -23,6 +23,7 @@ import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
 import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
+import { checkComposerSend } from './smoke-composer-send'
 import { checkDeviceFrame, restoreDeviceFrame } from './smoke-device-frame'
 import { checkDreamerReview } from './smoke-dreamer'
 import {
@@ -1321,6 +1322,12 @@ export async function runNativeCoreSmoke(
       cleanup: async () => {
         await clearComposer()
       }
+    },
+    {
+      name: 'composer-send',
+      dependsOn: ['chat-ready'],
+      run: () => checkComposerSend(host),
+      cleanup: clearComposer
     },
     {
       name: 'start-composer',
