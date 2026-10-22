@@ -664,21 +664,36 @@ export async function runNativeCoreSmoke(
             'SKIP real preview pointer gestures/animation timing: TREZI_NATIVE_BACKGROUND_TEST'
           )
         else
-          await checkSelectionInput(host, async (shown) => {
-            // The offscreen shell capture does not paint the preview's WebKit overlay: take
-            // the foreground window, retrying when ScreenCaptureKit sees the focus move.
-            let png: string | undefined
-            for (let attempt = 1; !png; attempt++) {
-              await preparePreviewInput(host, true)
-              try {
-                png = (await host.request('captureVisibleWindow')).png
-              } catch (error) {
-                if (attempt === 3) throw error
+          await checkSelectionInput(
+            host,
+            async (shown) => {
+              // The offscreen shell capture does not paint the preview's WebKit overlay: take
+              // the foreground window, retrying when ScreenCaptureKit sees the focus move.
+              let png: string | undefined
+              for (let attempt = 1; !png; attempt++) {
+                await preparePreviewInput(host, true)
+                try {
+                  png = (await host.request('captureVisibleWindow')).png
+                } catch (error) {
+                  if (attempt === 3) throw error
+                }
               }
+              writeFileSync(join(artifacts, 'element-toolbar.json'), JSON.stringify(shown, null, 2))
+              writeFileSync(join(artifacts, 'element-toolbar.png'), Buffer.from(png, 'base64'))
+            },
+            async (state) => {
+              await preparePreviewInput(host, true)
+              const capture = await host.request('captureVisibleWindow')
+              writeFileSync(
+                join(artifacts, 'selection-lifecycle.json'),
+                JSON.stringify(state, null, 2)
+              )
+              writeFileSync(
+                join(artifacts, 'selection-lifecycle.png'),
+                Buffer.from(capture.png, 'base64')
+              )
             }
-            writeFileSync(join(artifacts, 'element-toolbar.json'), JSON.stringify(shown, null, 2))
-            writeFileSync(join(artifacts, 'element-toolbar.png'), Buffer.from(png, 'base64'))
-          })
+          )
         await invoke('preview:set-select-mode', false)
         assert.equal(await page('typeof window.api'), 'undefined')
         await assert.rejects(() =>

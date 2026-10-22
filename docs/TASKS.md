@@ -9,6 +9,19 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Size the address block and chat header for where the toolbar settles (expand, restore, split resize, inserted chat header).
 - [x] Regression `src/native/smoke-toolbar-overflow.ts` (core `toolbar-address`): no actionable control and no "…" in the overflow menu in any frame at 1320/1810 pt, expand/restore, rapid toggles, sidebar 340/180/230; real controls still overflow below the minimum width.
 - [ ] Full screen not exercised (the toolbar lives in a separate window there).
+## Skills screen: replace explanatory paragraph copy (LKM-295)
+
+- [x] Settings → Skills reads "Manage skills here without changing your project or global files" (no final period); title, rows and skills behaviour unchanged.
+## CI execution reliability (LOCAL-CI-EXECUTION-RELIABILITY)
+
+- [x] Ran both typechecks as a separate `Typecheck` CI step before the unit tier (no `--typecheck` there) and added elapsed stage logging to `test/swift-preview-target.mjs`, after merged-main run 39721071506 timed out `swift-preview-target` at 300 s twice; policy asserted in `test/dependency-audit.mjs`; `docs/TESTING.md` "GitHub CI". Local only; cause is an inference.
+- [ ] Publish, then watch several CI runs for `swift-preview-target` timeouts; if one recurs, read its last stage line before changing anything else.
+
+## CI probe reliability (LOCAL-CI-PROBE-RELIABILITY)
+
+- [x] Diagnosed `swift-preview-build` failing at `xcrun swiftc --version timed out after 20 s` (PR #287 attempt 1, main CI attempts 1 and 2; PR attempt 2 passed the same tree) and added a bounded, timeout-only retry to `inspectToolchain`'s metadata queries (`src/swift-preview/toolchain.ts`); analysis in `docs/PROGRESS.md`.
+- [x] Deterministic regression in `test/swift-preview-toolchain.mjs`: recovery after one stalled attempt, exactly two attempts when it stays stalled, no retry for a non-zero exit, a missing tool or the probe compile. Local only: not published, CI not re-run.
+- [ ] Independent review before any publication; confirm on CI that `swift-preview-build` no longer fails at the probe (not claimed here).
 
 ## Ship dependency onboarding and packaged managed browser launcher (LOCAL-WEBKIT-4)
 
@@ -636,6 +649,16 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] `ComposerQueue`: list glyph removed; note line and rows 24 pt with centred content, 4 pt apart, 10 pt above the first and below the last visible line (44 / 72 / 100 pt for 1 / 2 / 3+ rows, +28 with a note); more than three rows scroll.
 - [x] Box 10 pt inside the composer's sides, tucked 24 pt (the composer's radius) under it at every count, radius 18; text at the placeholder's x, the "…" menu in Send's 30 pt column.
 - [x] Composer-layout fixture (heights, overlap, insets for 1/2/3/5 rows, with and without a note); chat smoke `checkQueueGeometry` (`src/native/smoke-queue.ts`) asserts measured SwiftUI frames (|top − bottom| ≤ 1, centred rows, text vs placeholder and menu vs Send ±1) for 1 row, 3 rows and the Resolve note at both widths, with light and dark `-queue-<label>-{light,dark}.png` captures and JSON; CHANGELOG line.
+
+## Composer queue: one rounded card per message, slide-up on insertion (LKM-294)
+
+- [x] Each row draws its own card (light fill, 0.5 pt separator stroke, faint shadow, radius 8, 4 pt inside the box's sides) behind the unchanged 24 pt row; heights, overlap, text inset, control column and frame keys are as in LKM-198.
+- [x] `ComposerQueueHost` keeps one root view over a `ComposerQueueModel`, so rows keep their `message.id` identity; only ids new to the shown chat animate (fade + 8 pt rise, 0.24 s ease-out; Reduce Motion: 0.15 s fade, no rise). Note, pause, canSend, removal, identical and chat-switch updates do not.
+- [x] Composer-layout fixture covers the insertion rules and the reduced-motion path; chat smoke `checkQueueInsertion` captures `-queue-insert-<i>.png` and `-queue-insert-reduced-<i>.png` frame sequences (host `composerQueueMotion` / `captureQueueInsertion`, test profile only) and a 2-row geometry check; CHANGELOG line.
+- [x] Insertion repair: the list update runs without animation and only the new row animates its own opacity and rise (`ComposerQueueEntrance`), so existing rows never replay; the test settles the prior entrance before capturing (test-only synchronisation, no product delay).
+- [x] Final verification (details in the LKM-294 closeout in `docs/PROGRESS.md`): unit 256 PASS; native 66/66; native chat scroll and packaged browser setup pass; focused `--only=chat,composer` 18/18. The earlier `chat-gate` failure and first focused run are historical and recorded there.
+- [x] Repaired visual acceptance from the corrected offscreen capture sequence: first card stable across frames, new card fades in with an 8 pt rise, Reduce Motion fades only.
+- [ ] Final independent review of the closeout, then explicit user approval before any Git staging, commit, push or PR.
 
 ## Composer queue: no note for the normal waiting case (LKM-191)
 
@@ -2971,3 +2994,10 @@ Ranked by leverage. Deferred items note *why* they're not auto-completable.
       branches, and one-time sidecar/userData migration. See PROGRESS 2026-07-17.
 
 - [ ] Fix startup-intro regression: recognize localhost native previews and keep the restored preview hidden throughout the intro crossfade (observed during Git-update verification, 2026-09-16).
+
+## LOCAL-SELECTION-FIX
+
+- [x] Diagnose and fix preview inline editing/selection lifecycle; add focused regressions.
+- [x] Manager: run disposable selection-input/text-edit desktop checks under native-desktop lock and inspect selection-lifecycle PNG/JSON.
+- [x] Prepare focused selection group and changed-text/Finder blur-refocus native assertions for manager desktop acceptance.
+- [x] LOCAL-TEST-AUDIT (2026-10-20): bounded redundant assertion cleanup, validated focused selection/listing, and coverage inventory in `docs/TEST-CLEANUP-AUDIT.md`; ready for independent review, not full-suite acceptance.

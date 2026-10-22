@@ -1,14 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync
-} from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -185,9 +177,32 @@ try {
     assert.equal(existsSync(join(cli, 'test/artifacts/runs/.runner-lock')), false)
     return JSON.parse(readFileSync(path))
   }
+  const preview = invoke(['native', '--list'])
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr)
+  assert.equal(preview.stdout, nativeFixtures.map((name) => `native\t${name}\n`).join(''))
+  assert.equal(existsSync(join(cli, 'test/artifacts')), false, 'listing creates no run artifacts')
   const success = invoke(['native', 'live'])
   assert.equal(success.status, 0, success.stdout + success.stderr)
   assert.deepEqual(report(success).counts, { PASS: nativeFixtures.length, SKIP: 2 })
+  const focused = invoke(['native', '--filter=native-source-window'])
+  assert.equal(focused.status, 0, focused.stdout + focused.stderr)
+  assert.deepEqual(
+    report(focused).results.map((r) => r.name),
+    ['native-source-window']
+  )
+  const planned = invoke([
+    'native',
+    'live',
+    '--filter=native-source-window,provider-live-parity',
+    '--list',
+    '--typecheck'
+  ])
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr)
+  assert.equal(
+    planned.stdout,
+    'native\tnative-source-window\nlive\tprovider-live-parity\ntypecheck\ttypecheck\ntypecheck\ttypecheck-native\n'
+  )
+  assert.equal(invoke(['native', '--list']).stdout.trim().split('\n').length, nativeFixtures.length)
   writeFileSync(
     join(cli, 'test/native-runtime.mjs'),
     "for (let i = 1; i <= 5; i++) console.log('line ' + i); process.exit(1)"
@@ -210,6 +225,12 @@ try {
     ['unit', '--jobs=0'],
     ['unit', '--log-tail=0'],
     ['unit', '--filter=missing'],
+    ['unit', '--filter='],
+    ['unit', '--filter=display-path,'],
+    ['native', '--filter=display-path', '--list'],
+    ['unit', '--filter=missing', '--list'],
+    ['unit', '--filter=', '--list'],
+    ['--list'],
     ['constructor']
   ])
     assert.equal(invoke(args).status, 2)

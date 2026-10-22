@@ -57,6 +57,57 @@ export function queueGeometryProblems(composer: any, rows: number, note: boolean
   return problems
 }
 
+async function inspectMotion(host: NativeBridge) {
+  return (await host.request('composerInspect')).queueGeometry.motion
+}
+
+/** LKM-294: runs `send` and captures the queued message it adds sliding in, as
+ *  `<screenshot>-queue-insert[-reduced]-<i>.png` with the timings and row tops in `.json`.
+ *  `reduced` forces Reduce Motion for the queue only (no system setting): no rise, only a fade. */
+export async function checkQueueInsertion(
+  host: NativeBridge,
+  screenshot: string,
+  reduced: boolean,
+  send: () => Promise<unknown>
+) {
+  const prior = await inspectMotion(host)
+  await host.request('composerQueueMotion', { reduceMotion: reduced })
+  try {
+    // Test synchronisation, not a product delay: let the previous message's entrance finish so
+    // its fade cannot be mistaken for a replay in the captured frames.
+    const settle = Math.max(prior.duration ?? 0, (await inspectMotion(host)).duration ?? 0)
+    await new Promise((resolve) => setTimeout(resolve, Math.min(settle * 1000 + 100, 1000)))
+    const before = await inspectMotion(host)
+    const frames = host.request('captureQueueInsertion', {
+      after: before.insertions,
+      shots: 10,
+      interval: 0.03
+    })
+    await send()
+    const captured: { ms: number; png: string; rows: number[] }[] = await frames
+    const motion = (await host.request('composerInspect')).queueGeometry.motion
+    if (motion.insertions !== before.insertions + 1 || motion.lastInsertion.length !== 1)
+      throw new Error(`Queue insertion did not animate one message: ${JSON.stringify(motion)}`)
+    if (motion.reduceMotion !== reduced || (reduced ? motion.rise !== 0 : !(motion.rise > 0)))
+      throw new Error(`Queue insertion motion (reduced ${reduced}): ${JSON.stringify(motion)}`)
+    const stem = screenshot.replace('.png', `-queue-insert${reduced ? '-reduced' : ''}`)
+    captured.forEach((frame, index) => {
+      writeFileSync(`${stem}-${index}.png`, Buffer.from(frame.png, 'base64'))
+    })
+    writeFileSync(
+      `${stem}.json`,
+      JSON.stringify(
+        { reduced, motion, frames: captured.map(({ ms, rows }) => ({ ms, rows })) },
+        null,
+        2
+      )
+    )
+    return motion
+  } finally {
+    await host.request('composerQueueMotion', {})
+  }
+}
+
 /** Waits for the measured layout, asserts it and writes light and dark composer captures with
  *  the geometry beside them (`<screenshot>-queue-<label>-{light,dark}.png` and `.json`). */
 export async function checkQueueGeometry(

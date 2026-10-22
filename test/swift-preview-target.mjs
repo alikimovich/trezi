@@ -37,12 +37,30 @@ const { SWIFT_PREVIEW_DRIVER, nativeProjectInfo, treziManifestDir } = await impo
 )
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-async function until(check, label, timeout = 180_000) {
-  const end = Date.now() + timeout
+// Stage lines with elapsed seconds, so the runner's log shows the last stage that
+// finished when the outer timeout kills this process (its stdout was blank before).
+// Static stage names only: no logs, paths or environment.
+const startedAt = Date.now()
+const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+const stage = (name) => console.log(`swift-preview-target: [${elapsed()}] start ${name}`)
+async function until(check, label, timeout = 180_000, stageName = label) {
+  const begun = Date.now()
+  stage(stageName)
+  const end = begun + timeout
+  let nextHeartbeat = begun + 10_000
   for (;;) {
     const value = await check()
-    if (value) return value
+    if (value) {
+      console.log(
+        `swift-preview-target: [${elapsed()}] done ${stageName} (${((Date.now() - begun) / 1000).toFixed(1)}s)`
+      )
+      return value
+    }
     if (Date.now() > end) throw new Error(`Timed out: ${label}`)
+    if (Date.now() >= nextHeartbeat) {
+      console.log(`swift-preview-target: [${elapsed()}] waiting ${stageName}`)
+      nextHeartbeat = Date.now() + 10_000
+    }
     await sleep(100)
   }
 }
@@ -83,7 +101,12 @@ const texts = (id) => session.describe(id)
 
 try {
   session.start()
-  await until(() => session.state.status === 'ready', `first build (${logs.join(' | ')})`)
+  await until(
+    () => session.state.status === 'ready',
+    `first build (${logs.join(' | ')})`,
+    undefined,
+    'first build'
+  )
   const { plan, manifest, native } = session.state
   assert.deepEqual(manifest, {
     source: 'repo',
@@ -123,6 +146,7 @@ try {
       ['project-header', 'SwiftUI']
     ]
   )
+  stage('frames and texts after first build')
   const badge = await frame('status-badge', 'studiokit-swiftui-status-badge')
   const meter = await frame('level-meter', 'studiokit-appkit-level-meter')
   const header = await frame('project-header', 'studio-cross-module-project-header')
@@ -209,9 +233,12 @@ enum TreziPreviews {
   rmSync(join(project, 'trezi-previews.json'))
   await until(
     () => session.state.status === 'ready' && session.state.generation === 5,
-    `generated (${session.state.message})`
+    `generated (${session.state.message})`,
+    undefined,
+    'generated previews'
   )
   assert.equal(session.state.manifest.source, 'none')
+  stage('generated previews describe')
   const { catalog } = session.state
   assert.deepEqual(
     [catalog.target, catalog.project, catalog.chosenBy],
@@ -258,8 +285,11 @@ try {
       const value = await (await fetch(`${base}/state`)).json()
       return value.status === 'ready' && value
     },
-    `driver build (${driverLog.join('')})`
+    `driver build (${driverLog.join('')})`,
+    undefined,
+    'driver build'
   )
+  stage('driver graph and project info')
   assert.equal(state.manifest.treziPath, join(manifestDir, 'trezi-previews.json'))
   assert.equal(state.plan.target, 'Studio')
   const { graph, plan } = await (await fetch(`${base}/graph`)).json()

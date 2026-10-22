@@ -38,7 +38,7 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
 
 ## Verify your own work WITHOUT asking the user
 
-- After changes run `bun run typecheck` and the relevant unit tests. Native changes
+- After changes run `bun run typecheck` and the relevant unit tests. Native app changes
   also require `bun run typecheck:native` and `bun run test:native`. `bun run test`
   combines unit and native checks.
 - `bun run lint` must exit 0. `test/lint.mjs` runs it in the unit tier, so quick
@@ -46,6 +46,10 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
   `bunx biome check --write <files>`. Warnings and infos do not fail. `biome.json`
   neither formats nor sorts imports in `test/fixtures/**`: fixtures stand in for user
   apps and tests depend on their bytes and line numbers.
+- For test, docs or copy-only changes with unchanged application behavior, typecheck,
+  lint and relevant focused unit tests provide scoped evidence; a full native rerun
+  is not required. Use `bun test/run.mjs unit --filter=name,name --list` to inspect
+  the selection first. This is distinct from full-suite acceptance.
 - Live provider calls (`test:native-live` / `verify`) require authorization. Do not
   run real provider calls without it.
 - The runner tiers are `unit`, `native`, `live`, and `all`. Unit jobs are bounded
@@ -60,9 +64,11 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
 - No Electron tests remain.
 - `bun run dev:native --test --only=group,group` (or `bun test/native-runtime.mjs
   --only=…`) runs only the named native smoke groups: `core`, `islands`,
-  `shadow-light`, `sidebar`, `settings`, `chat`, `composer`, `agent-browser`. An unknown name fails
+  `shadow-light`, `sidebar`, `settings`, `chat`, `composer`, `agent-browser`, `selection`. An unknown name fails
   before the build; no flag runs every group, which acceptance still requires.
   Groups are defined in `src/native/smoke-groups.ts`.
+- Focused selection acceptance: `bun test/native-runtime.mjs --only=selection`
+  runs `selection-input` and `text-edit` plus the prelude, using disposable fixtures.
 - Native test builds use the `-Onone` test profile and a shared Swift binary cache, so
   a ticket that does not touch Swift compiles nothing (LKM-175). `bun run build`
   stays `-O`. Details: `docs/TESTING.md`, "Native build speed".

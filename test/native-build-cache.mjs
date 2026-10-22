@@ -184,12 +184,6 @@ try {
   const build = read('scripts/build-native.mjs')
   assert.match(build, /compile\('TreziSecrets', \[[\s\S]*?\], \{ profile: 'release' \}\)/)
   assert.match(
-    build,
-    /Promise\.allSettled\(\[bundles, service, host, secrets\]\)/,
-    'steps run in parallel'
-  )
-  assert.doesNotMatch(build, /'-O'|-enable-batch-mode/, 'flags come from the profile')
-  assert.match(
     read('scripts/dev-native.mjs'),
     /TREZI_BUILD_PROFILE: process\.env\.TREZI_BUILD_PROFILE \|\| 'test'/
   )

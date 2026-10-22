@@ -363,6 +363,16 @@ extension Host {
             let name = c["appearance"] as? String
             composer.appearance = name == "dark" ? NSAppearance(named: .darkAqua) : name == "light" ? NSAppearance(named: .aqua) : nil
             reply(id, ["dark": composer.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua])
+        // LKM-294: Reduce Motion for the queue only (null follows macOS), and frames of the next insertion.
+        case "composerQueueMotion":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            composer.queuedMessages.reduceMotionOverride = c["reduceMotion"] as? Bool; reply(id, ["reduceMotion": composer.queuedMessages.reduceMotion])
+        case "captureQueueInsertion":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await composer.queuedMessages.captureInsertion(of: composer, after: c["after"] as? Int ?? 0, shots: c["shots"] as? Int ?? 8, interval: c["interval"] as? Double ?? 0.04)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "captureComposer":
             composer.layoutSubtreeIfNeeded()
             let target: NSView = c["contentOnly"] as? Bool == true ? composer.content : composer
