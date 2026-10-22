@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Clear the native composer's sent draft after an accepted send (LKM-304)
+
+- [x] Root cause: a composer edit after Return (smart quote, typing) carried a newer revision than the cleared snapshot, so Swift ignored the clear and Bun restored the stale draft. Reproduced in `test/composer-sent-draft.mjs` before the fix.
+- [x] `Chat.sent` handshake: Bun ignores inputs typed against a sent draft; `Composer.swift` removes exactly the sent text (moved by edits inside it), keeps text typed after it and sends the rest. A Send-arrow click never stops a turn.
+- [x] Native regression `src/native/smoke-composer-send.ts` (composer `composer-send`): smart quote after Return, double Send, a key typed before the acknowledgement.
+- [ ] Programmatic sends (`submit(chat, text)` from cards, Publish recovery) still clear the user's draft as before; not changed here.
+
 ## Toolbar controls overflow when expanding/restoring the preview at ample width (LKM-296)
 
 - [x] Reproduce with per-frame passive toolbar traces and foreground captures; root cause in `docs/evidence/lkm-296/ROOT-CAUSE.md`.

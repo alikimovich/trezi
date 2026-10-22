@@ -34,6 +34,7 @@ import {
   assistant,
   begin,
   type Chat,
+  clearSentDraft,
   finish,
   hydrate,
   late,
@@ -203,8 +204,7 @@ export class NativeChatController {
     if (!raw.trim() && !chat.attachments.length) return
     const turn = crypto.randomUUID()
     const attachments = chat.attachments
-    chat.text = ''
-    chat.caret = 0
+    clearSentDraft(chat)
     chat.attachments = []
     chat.sending = true
     chat.isRunning = true
@@ -533,6 +533,9 @@ export class NativeChatController {
       switch (action.action) {
         case 'input': {
           if (action.revision < chat.revision) return
+          // LKM-304: typed against a draft that was sent. The composer removes the sent
+          // text on the cleared snapshot (rendered below) and sends what is left.
+          if (action.sent !== undefined && action.sent < chat.sent.count) break
           const before = menuQuery(chat.text, chat.caret)
           chat.text = action.text
           chat.caret = action.caret
@@ -559,7 +562,14 @@ export class NativeChatController {
           this.complete(chat, action.index)
           break
         case 'send':
-          if (chat.isRunning && !chat.text.trim() && !chat.attachments.length) await this.stop(chat)
+          // A click on the Send arrow stops nothing, even if its send already started a turn.
+          if (
+            action.stop !== false &&
+            chat.isRunning &&
+            !chat.text.trim() &&
+            !chat.attachments.length
+          )
+            await this.stop(chat)
           else await this.submit(chat)
           break
         case 'choice':
@@ -612,6 +622,8 @@ export class NativeChatController {
       return this.planningSend(chat, raw)
     }
     if (this.start.holds(this, chat)) return
+    // The draft's revision when it was sent: inputs during `initialize` came after it.
+    const revision = chat.revision
     if (!chat.ready) await this.initialize(chat)
     if (!chat.ready || chat.switching || (!raw.trim() && !chat.attachments.length)) return
     const submission: Submission = {
@@ -621,8 +633,7 @@ export class NativeChatController {
       selection: chat.context?.selection ?? chat.draftSelection ?? null,
       turn: chat.context?.turn ?? {}
     }
-    chat.text = ''
-    chat.caret = 0
+    clearSentDraft(chat, revision)
     chat.attachments = []
     chat.dismissed = true
     this.clearSelection(chat)

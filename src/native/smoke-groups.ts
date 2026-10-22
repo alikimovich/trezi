@@ -126,6 +126,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   composer: ['composer'],
   'chat-drafts': ['composer'],
   'visible-composer': ['composer'],
+  'composer-send': ['composer'],
   'start-composer': ['composer']
 }
 

@@ -2,6 +2,37 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-304: an accepted send clears exactly the draft it sent
+
+- **Cause.** Swift applies a snapshot's draft only when its revision is at least the
+  composer's own. Bun cleared the draft on an accepted send without a new revision. Any
+  composer edit emitted after Return and before that snapshot arrived had a newer revision:
+  - AppKit's smart quote curling the apostrophe (the report: bubble `'`, draft `’`), or a key
+    typed after Return.
+  - Swift then ignored the clear, and Bun accepted the edit's full text as the draft again.
+  - The message stayed in the composer while the turn ran, with Send instead of Stop, and
+    could be sent twice.
+  - `test/composer-sent-draft.mjs` reproduced it on the pre-fix controller:
+    `'Don’t stop' !== ''`.
+- **Fix.** `Chat.sent` (`count`, `revision`) names the last accepted send and the draft
+  revision it sent (`clearSentDraft`, `src/native/chat-state.ts`).
+  - Inputs carry the count the composer applied. Older ones were typed against a sent draft
+    and are ignored.
+  - `Composer.swift` keeps, per revision, the length of the text then. Edits inside it (smart
+    quotes, dashes, replacements) move that length, typing after it does not.
+  - On a newer count it removes exactly that prefix, keeps the rest (the caret too) and sends
+    it as the next input.
+  - `submit` names the revision captured before `initialize`, so text typed meanwhile stays.
+  - A refused send (not ready, switching, start hold) changes nothing.
+  - The Send button reports whether it showed Stop, so a second Send click emitted before the
+    snapshot no longer interrupts the turn the first one started.
+- **Tests.** Unit `composer-sent-draft`: smart quote, new text, double click and Stop,
+  queued send, refusal, typing during `initialize`. Native `composer-send` (composer group)
+  drives the real `NSTextView` in one main-thread turn per sequence through `composerPerform`
+  `steps`/`substitute`/`append`.
+- **Not changed.** A non-busy `agent:send` failure keeps the message as a transcript turn
+  ("Unable to send"), as before. Programmatic sends still clear the draft.
+
 ## 2026-10-20 — LKM-296: toolbar controls no longer overflow when expanding/restoring the preview
 
 - **Cause.** The full note with file and line references is `docs/evidence/lkm-296/ROOT-CAUSE.md`.
