@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## CI execution reliability (LOCAL-CI-EXECUTION-RELIABILITY)
+
+- [x] Ran both typechecks as a separate `Typecheck` CI step before the unit tier (no `--typecheck` there) and added elapsed stage logging to `test/swift-preview-target.mjs`, after merged-main run 39721071506 timed out `swift-preview-target` at 300 s twice; policy asserted in `test/dependency-audit.mjs`; `docs/TESTING.md` "GitHub CI". Local only; cause is an inference.
+- [ ] Publish, then watch several CI runs for `swift-preview-target` timeouts; if one recurs, read its last stage line before changing anything else.
+
 ## CI probe reliability (LOCAL-CI-PROBE-RELIABILITY)
 
 - [x] Diagnosed `swift-preview-build` failing at `xcrun swiftc --version timed out after 20 s` (PR #287 attempt 1, main CI attempts 1 and 2; PR attempt 2 passed the same tree) and added a bounded, timeout-only retry to `inspectToolchain`'s metadata queries (`src/swift-preview/toolchain.ts`); analysis in `docs/PROGRESS.md`.
