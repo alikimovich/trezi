@@ -67,6 +67,36 @@ the manager schedules desktop suites under its shared desktop lock. Listing a na
 tier is safe and does not build or launch the app. See `docs/TEST-CLEANUP-AUDIT.md`
 for this cleanup's preserved coverage and validation limits.
 
+### Changed-file selection (LOCAL-TEST-CLEANUP-V2)
+
+`node test/run.mjs unit --changed=<base-ref>` diffs the working tree (staged,
+unstaged and untracked) against the merge base of `<base-ref>` and `HEAD`, prints a
+plan with a reason for every test, and runs only that plan. `--list` prints the
+selection (reasons on stderr) and runs nothing. `node test/select.mjs --base=<ref>`
+prints the same plan; `--path=<path>` plans a hypothetical edit; `--json` and
+`--github-output` are for tools and CI. Rules live in `test/helpers/test-plan.mjs`,
+tier membership only in `test/tiers.mjs`.
+
+| Change | Plan |
+| --- | --- |
+| Markdown at the top level or under `docs/` (added, edited, deleted or renamed) | the readers of that doc, no typecheck, no app build |
+| A registered unit test script, edited, that nothing else names | that test plus the scanners of `test/` (`lint`, `no-system-preferences`, `legacy-names-audit`) |
+| A file in an audited fixture folder (`FIXTURES`) | that fixture's tests plus scanners |
+| An audited Swift UI source (`UI_SOURCES`, now `src/native/SidebarIcon.swift`) | its unit Swift fixtures, every registered test naming its type, the scanners of `src/native`; the app build stays required, and the plan names the native smoke groups still owed (`--only=sidebar,settings`), which the unit tier never runs |
+| Anything else: other Swift or TypeScript source, helpers, unaudited fixtures, `package.json`, configs, new, deleted, renamed or unregistered tests, native/live tests, `test/run.mjs`, `test/tiers.mjs`, `test/select.mjs`, the selector, `.github/` | **everything** (with the paths that forced it) |
+| No changed paths, more than 40 paths, an unknown Git status | **everything** |
+| A ref that is not a commit, no merge base, unexpected `git diff` output | exit 2; nothing runs |
+
+The docs and scanner readers (`READERS`) were audited from every registered test and
+helper. `test/test-selection.mjs` fails when a test starts walking the tree or naming
+a repository doc without being listed as a reader or an audited exemption, when a
+registered test names an audited UI type without being its consumer, and on any
+narrowing of the fallbacks above. Narrowed plans never run the typecheck: none of
+their paths is a TypeScript program input. Native UI changes still need native
+evidence (`bun test/native-runtime.mjs --only=…` on a Mac); a selected unit plan is
+not that evidence. To audit another UI source, add it to `UI_SOURCES` with its
+fixtures and groups after checking every reader of it.
+
 ### Unit tier speed (LKM-167)
 
 - **Swift build cache.** Every unit test that compiles Swift calls
@@ -80,13 +110,24 @@ for this cleanup's preserved coverage and validation limits.
   module cache). Delete the folder any time.
 - **swiftc lane.** At most 2 compiles run at once across all test processes
   (`.local/test-cache/swift/slots/`; a dead owner's slot is taken over). That is why
-  no unit test needs to be an exclusive barrier any more.
+  no unit test needs to be an exclusive barrier any more. Each cached binary also has
+  a build lock (`<binary>.lock`): a process that needs a binary another process is
+  building waits for that build instead of compiling it again in the second slot; a
+  failed or dead builder lets the next one build (LOCAL-TEST-CLEANUP-V2,
+  `test/swift-build-lock.mjs`).
 - **Order.** `--report` prints the 20 slowest tests and merges each PASS duration into
   `.local/test-times.json`. The next run starts the slowest tests first. Without the
   file, tests run in list order.
-- **Typecheck.** `--typecheck` runs `bun run typecheck` and `bun run typecheck:native`
-  next to the tier and counts them as results (`[typecheck]`). `bun run test:quick`
-  is `unit --typecheck --report`.
+- **Typecheck.** `--typecheck` runs `bun run typecheck` next to the tier and counts it
+  as a result (`[typecheck]`). `bun run test:quick` is `unit --typecheck --report`.
+  It also runs `bun run typecheck:native` unless that checks the same program as
+  `typecheck:node` (part of `typecheck`): today `tsconfig.native.json` only extends
+  `tsconfig.node.json` with the default `composite: false` and the same `lib`, so
+  `tsc --showConfig` resolves both to the same options and files. The runner prints
+  `NOT RUN [typecheck] typecheck-native` with the reason and records it under
+  `notRun` in `summary.json`. Once the configs or scripts diverge (or cannot be
+  read), both run again (`typecheckPlan`, `test/helpers/test-plan.mjs`). The
+  `typecheck:native` command itself is unchanged (LOCAL-TEST-CLEANUP-V2).
 - **Long tests split, sleeps bounded.** `workflow-owner` runs the scenarios;
   `workflow-durability` runs the same file's tool and durability checks in a second
   process. The composer fixture waits for the pin to land (at most 5 s) instead of
@@ -454,7 +495,7 @@ that requested content widths account for sidebar wrapper insets after reveal.
 with `SidebarIconView` across symbol scales at 260/180 points: each folder frame
 must be exactly 16×16, integral, pixel aligned and free of symbol alignment insets.
 
-New tests belong in the appropriate array in `test/run.mjs`. Pure tests must own
+New tests belong in the appropriate array in `test/tiers.mjs`. Pure tests must own
 their temporary directories/ports and clean up processes. Use injected service
 registries when testing lifecycle behavior without the desktop. Renderer-specific
 unit tests were removed; retained backend generation tests use React as a dev
@@ -516,13 +557,23 @@ Superseded runs for the same PR or branch are cancelled.
 
   The two typechecks are their own `Typecheck` step, before the `Unit tests` step; the
   unit step has no `--typecheck`, `--filter`, `--serial` or `--jobs`, so every unit test
-  still runs with the default worker count. Locally `bun run test:quick` keeps running
+  (on a pull request, every planned one; see below) still runs with the default worker
+  count. Locally `bun run test:quick` keeps running
   them together (`--typecheck`). On CI they used to start with the first three
   workers: typecheck took 85-93 s, and `swift-preview-target` hit its 300 s limit on
   merged-main run 39721071506 (attempts 1 and 2). That load is an inference, not a
   proven cause; `test/dependency-audit.mjs` pins the step order and the unchanged
   unit command. `test/swift-preview-target.mjs` prints `[elapsed] start|done <stage>`
   lines, so the last finished stage is in the log if it times out again.
+  The `Typecheck` step calls both scripts directly, so the `typecheckPlan` skip of
+  an equivalent `typecheck-native` applies only to `--typecheck` runs, never to CI.
+
+  On a pull request the unit command adds `--changed=<event base SHA>`
+  (`github.event.pull_request.base.sha`, passed through the environment; the
+  checkout fetches full history for the merge base), so it runs the
+  [changed-file plan](#changed-file-selection-local-test-cleanup-v2). A push to
+  `main` always runs the whole tier, and both typechecks run on every event. There
+  is no `paths-ignore`: every job runs and reports its check on every pull request.
   `actions/cache` restores
   `.local/test-cache` and `.local/test-times.json` from the latest run (key per
   commit, restored by prefix), so unchanged Swift fixtures are not recompiled
@@ -534,7 +585,13 @@ Superseded runs for the same PR or branch are cancelled.
   bundle and icon are nonempty; `test/distribution.mjs` and
   `test/versioning.mjs` inspect the assembled app and matching version stamps.
   `codesign --verify --deep --strict` checks its ad hoc signature. There are no
-  distribution signing credentials in Actions.
+  distribution signing credentials in Actions. On a pull request it first runs
+  `node test/select.mjs --base=<event base SHA> --github-output`; only a plan with
+  no product change (docs, test scripts, audited fixtures) skips the build steps,
+  and the job still reports its check. A push to `main`, an audited UI change and
+  every fallback build; a selection error fails the job. The selection guards
+  against accidental narrowing, not a hostile pull request: the PR's own workflow
+  and selector run, so review of `.github/` and selector changes stays the control.
 - **Dependency audit.** An `ubuntu-latest` job runs `bun audit --json`, which
   reads the full resolved `bun.lock` graph, including transitive and dev
   packages. The script refuses a lockfile with zero resolved packages or an

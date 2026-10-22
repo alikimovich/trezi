@@ -24,8 +24,12 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
+      # Full history: a pull request's selection diffs against the merge base with the
+      # event's base commit (docs/TESTING.md "Changed-file selection").
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -68,8 +72,16 @@ jobs:
 
       # --report prints the 20 slowest. --log-tail prints the last 150 lines of every
       # failing test's log into the job output; the full logs are in the artifact below.
+      # A push to main runs every unit test. A pull request runs the plan for its diff
+      # against the event's base commit (--changed): docs, test-only and audited UI
+      # changes run their tests and readers, anything else runs everything, and a
+      # selection error fails the step. The Typecheck step above always runs.
       - name: Unit tests
-        run: node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150
+        env:
+          TREZI_TEST_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          if [ -n "$TREZI_TEST_BASE" ]; then set -- --changed="$TREZI_TEST_BASE"; fi
+          node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 "$@"
 
       # always(): upload after a green, red or cancelled run alike, so the logs of a
       # failing (or flaky) test can be downloaded for 7 days.
@@ -96,13 +108,26 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.x
+      # Pull requests only: a docs or test-only plan needs no app. The job and its check
+      # still run and report; a push to main, a product change or any fallback builds.
+      # A selection error fails the job.
+      - name: Selection
+        id: plan
+        if: github.event_name == 'pull_request'
+        env:
+          TREZI_TEST_BASE: ${{ github.event.pull_request.base.sha }}
+        run: node test/select.mjs --base="$TREZI_TEST_BASE" --github-output
       - name: Toolchain
+        if: steps.plan.outputs.app_build != 'false'
         run: bun scripts/requirements.mjs --build
       - name: Install dependencies
+        if: steps.plan.outputs.app_build != 'false'
         run: bun install --frozen-lockfile
       - name: Build ad hoc signed distribution
+        if: steps.plan.outputs.app_build != 'false'
         run: TREZI_SIGN_IDENTITY=- bun run build
       - name: Check assembled app, service and resources
+        if: steps.plan.outputs.app_build != 'false'
         run: |
           test -s out/native/Trezi.app/Contents/MacOS/TreziHost
           test -s out/native/Trezi.app/Contents/Helpers/bun

@@ -1,0 +1,18 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-ZCcK6k
+
+unit: 4 tests, at most 8 workers
+START [unit] display-path
+START [unit] no-system-preferences
+START [unit] legacy-names-audit
+START [unit] lint
+PASS [unit] display-path 0.0s
+PASS [unit] legacy-names-audit 0.1s
+PASS [unit] no-system-preferences 0.2s
+PASS [unit] lint 0.7s
+
+SUMMARY: 4 PASS; wall time 0.7s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-ZCcK6k/summary.json
+real 0.78
+user 3.43
+sys 0.64
+exit=0

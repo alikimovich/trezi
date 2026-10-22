@@ -1,0 +1,81 @@
+{
+  "duration": 2081,
+  "counts": {
+    "PASS": 4
+  },
+  "builds": [],
+  "selection": {
+    "mode": "selected",
+    "unit": [
+      "preview-edit-lifecycle",
+      "no-system-preferences",
+      "legacy-names-audit",
+      "lint"
+    ],
+    "reasons": [
+      [
+        "preview-edit-lifecycle",
+        [
+          "M test/preview-edit-lifecycle.mjs: test change"
+        ]
+      ],
+      [
+        "no-system-preferences",
+        [
+          "M test/preview-edit-lifecycle.mjs: reads or scans it"
+        ]
+      ],
+      [
+        "legacy-names-audit",
+        [
+          "M test/preview-edit-lifecycle.mjs: reads or scans it"
+        ]
+      ],
+      [
+        "lint",
+        [
+          "M test/preview-edit-lifecycle.mjs: reads or scans it"
+        ]
+      ]
+    ]
+  },
+  "notRun": [],
+  "results": [
+    {
+      "tier": "unit",
+      "name": "preview-edit-lifecycle",
+      "outcome": "PASS",
+      "duration": 53,
+      "log": "<throwaway clone>/test/artifacts/runs/run-4EW2t1/unit-preview-edit-lifecycle.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "no-system-preferences",
+      "outcome": "PASS",
+      "duration": 219,
+      "log": "<throwaway clone>/test/artifacts/runs/run-4EW2t1/unit-no-system-preferences.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "legacy-names-audit",
+      "outcome": "PASS",
+      "duration": 134,
+      "log": "<throwaway clone>/test/artifacts/runs/run-4EW2t1/unit-legacy-names-audit.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "lint",
+      "outcome": "PASS",
+      "duration": 2073,
+      "log": "<throwaway clone>/test/artifacts/runs/run-4EW2t1/unit-lint.log",
+      "code": 0,
+      "signal": null
+    }
+  ]
+}
