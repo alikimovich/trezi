@@ -193,7 +193,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         toolbarLayout = ToolbarLayout(toolbar: toolbar, sidebar: sidebarItem)
     }
     @objc private func splitResized(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in self?.measureToolbar() }
+        // LKM-296: lay the toolbar out for the new split first; measured before it, the stale
+        // frames left the block overflowed with nothing to measure it again.
+        DispatchQueue.main.async { [weak self] in self?.window?.contentView?.superview?.layoutSubtreeIfNeeded(); self?.measureToolbar() }
     }
     func updatePreviewColor(_ color: NSColor) {
         guard let rgb = color.usingColorSpace(.sRGB) else { return }
@@ -221,19 +223,24 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let windowWidth = window?.frame.width ?? 1320
         fitMore(windowWidth: windowWidth)
         var chatTrailing: CGFloat?
+        let opening = sidebarOpening(), slot = blockSlot + opening
         if chatHeader.window != nil, chatHeaderWidth != nil {
-            let detail = split.splitViewItems[1].viewController.view
-            let target = detail.convert(.zero, to: nil).x + (previewState["chatWidth"] as? Double ?? 440)
-            let leading = chatHeader.convert(.zero, to: nil).x
+            // LKM-296: sized for where the chat column settles, so an opening sidebar only moves them.
+            let detail = split.splitViewItems[1].viewController.view.convert(NSPoint.zero, to: nil).x + opening
+            let target = detail + (previewState["chatWidth"] as? Double ?? 440)
+            let leading = chatHeaderLeading(detail: detail, opening: opening)
             let width = min(max(100, target - leading), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading)))
             chatTitle.isHidden = !chatReady || chatHidden || width < 150
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
             chatTrailing = leading + width
             let formerChat = min(max(100, target - leading), max(100, windowWidth - leading - 500))
             addressLayout.formerWidth = min(180, max(80, windowWidth - leading - formerChat - 400))
+        } else if let chatHeaderWidth, toolbar.items.contains(where: { $0.itemIdentifier.rawValue == "chat" }) {
+            // Inserted but not laid out yet (restoring the preview): it takes the block's slot.
+            chatTrailing = slot + chatHeaderWidth.constant
         }
         guard let addressWidth else { return }
-        let width = addressLayout.width(windowWidth: windowWidth, chatTrailing: chatTrailing)
+        let width = addressLayout.width(windowWidth: windowWidth, chatTrailing: chatTrailing, slot: slot)
         if abs(addressWidth.constant - width) > 0.5 { addressWidth.constant = width }
     }
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -476,11 +483,19 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let expandedPreview = state["chatHidden"] as? Bool ?? false
         if expandedPreview != chatHidden {
             if expandedPreview { sidebarBeforeExpand = sidebarItem.isCollapsed }
-            NSAnimationContext.runAnimationGroup { context in
+            addressLayout.sidebarAnimations += 1
+            NSAnimationContext.runAnimationGroup({ context in
                 context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.24
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0, 0, 1)
                 sidebarItem.animator().isCollapsed = expandedPreview || sidebarBeforeExpand
-            }
+            }, completionHandler: { [weak self] in
+                guard let self else { return }
+                // The toolbar items still lag the split by a layout: lay them out at the destination
+                // before the widths stop reserving for it and the offsets are learned again.
+                self.window?.contentView?.superview?.layoutSubtreeIfNeeded()
+                self.addressLayout.sidebarAnimations = max(0, self.addressLayout.sidebarAnimations - 1)
+                self.alignChatHeader()
+            })
         }
         chatHidden = expandedPreview
         previewState = state
@@ -490,6 +505,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         else if showChat && chatIndex == nil {
             let index = toolbar.items.firstIndex { $0.itemIdentifier.rawValue == "address" } ?? 0
             toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier("chat"), at: index)
+            // LKM-296: narrow the block and lay the toolbar out now: with the block still wide, the
+            // inserted chat header went to the overflow menu until the next layout pass.
+            alignChatHeader(); window?.contentView?.superview?.layoutSubtreeIfNeeded()
         }
 
         if rowsChanged || projectChanged { outline.reloadData() }

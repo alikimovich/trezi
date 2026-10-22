@@ -193,11 +193,47 @@ extension NativeShell {
     }
     /// The first right action group (select/device).
     var rightGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" }?.view }
+    /// LKM-296: where the first item after the sidebar starts in the last toolbar layout. While the
+    /// sidebar closes (expanding the preview) it is still right of the measured `leading`; sizing the
+    /// block from `leading` overflowed it and "…" into AppKit's overflow menu until `backOff`.
+    var blockSlot: CGFloat {
+        let laidOut = addressHeader.window === window ? addressHeader.convert(addressHeader.bounds, to: nil).minX : 0
+        return max(addressLayout.leading, laidOut)
+    }
+    /// LKM-296: how far an opening sidebar (restoring the preview) still moves the toolbar items
+    /// after it. Their frames are read a layout behind, so the widths reserve the rest of the travel.
+    /// Only while `update` animates the sidebar: at rest the frames are final, and the inset is
+    /// learned then. Learned from any frame, a transient split (a sidebar resize) once kept it at
+    /// 16 instead of 8 and every later layout gave the block 8 pt too little.
+    func sidebarOpening() -> CGFloat {
+        guard !sidebarItem.isCollapsed else { return 0 }
+        let open = sidebar.view.frame.width, detail = split.splitViewItems[1].viewController.view.convert(NSPoint.zero, to: nil).x
+        guard addressLayout.sidebarAnimations > 0 else {
+            // The detail column settles a few points past the sidebar's width (8 on macOS 26).
+            addressLayout.sidebarInset = min(16, max(0, detail - open)); return 0
+        }
+        return max(0, open + addressLayout.sidebarInset - detail)
+    }
+    /// LKM-296: where the chat header settles for a detail column settling at `detail`. While the
+    /// sidebar opens the header's frame lags the split by a layout, also once the split itself has
+    /// settled; sized from it, the header ran past the settled column and pushed "…" into the
+    /// overflow menu. It keeps the offset seen with the sidebar open and at rest.
+    func chatHeaderLeading(detail: CGFloat, opening: CGFloat) -> CGFloat {
+        let laidOut = chatHeader.convert(NSPoint.zero, to: nil).x
+        guard addressLayout.sidebarAnimations > 0, !sidebarItem.isCollapsed else {
+            if !sidebarItem.isCollapsed { addressLayout.chatLead = min(16, max(0, laidOut - detail)) }
+            return laidOut
+        }
+        return max(laidOut + opening, detail + addressLayout.chatLead)
+    }
     /// The address block's frame against the first right group, laid out now.
     func toolbarInspect() -> [String: Any] {
         window?.contentView?.superview?.layoutSubtreeIfNeeded()
         return addressLayout.inspect(block: addressHeader, right: rightGroup, address: address, branch: branchMenu)
             .merging(["windowWidth":window?.frame.width ?? 0, "addressConstant":addressWidth?.constant ?? 0,
+                      "toolbarItemFrames":toolbarItemFrames(window).mapValues { NSStringFromRect($0) },
+                      "chatHeaderAttached":chatHeader.window === window, "addressExtra":addressLayout.extra,
+                      "sidebarInset":addressLayout.sidebarInset, "chatLead":addressLayout.chatLead,
                       "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
             .merging(titleAlignment()) { _, new in new }
@@ -238,6 +274,12 @@ struct ToolbarAddressLayout {
     /// `rightInset` as measured while the speed and "…" items were showing (LKM-206); showing
     /// them again restores it exactly instead of adding their estimated width (it varies by 2 pt).
     var shownInset: CGFloat?
+    /// The detail column's settled leading edge minus the sidebar's width (`sidebarOpening`).
+    var sidebarInset: CGFloat = 0
+    /// The chat header's leading edge minus the detail column's, at rest (`chatHeaderLeading`).
+    var chatLead: CGFloat = 0
+    /// Sidebar animations `update` started and AppKit has not finished (`sidebarOpening`).
+    var sidebarAnimations = 0
 
     /// The trailing items hid or showed: the pinned right groups moved by `shift`, an estimate.
     mutating func moveRightGroups(hiding: Bool, by shift: CGFloat) {
@@ -253,7 +295,8 @@ struct ToolbarAddressLayout {
         guard block.window === window, let right, right.window === window else { return }
         let frame = block.convert(block.bounds, to: nil), rightFrame = right.convert(right.bounds, to: nil)
         guard frame.width > 0, rightFrame.width > 0 else { return }
-        if abs(frame.width - constant) <= 8 { extra = frame.width - constant }
+        // Never negative: a frame laid out before the constant last grew (mid-animation) would widen the block.
+        if abs(frame.width - constant) <= 8 { extra = max(0, frame.width - constant) }
         if let chat, chat.window === window { chatOffset = frame.minX - chat.convert(chat.bounds, to: nil).maxX } else { leading = frame.minX }
         let actual = rightFrame.minX - frame.maxX
         if actual >= Self.gap - 1 { rightInset = window.frame.width - rightFrame.minX; measured = true }
@@ -266,11 +309,12 @@ struct ToolbarAddressLayout {
         rightInset += 40; measured = false
         return true
     }
-    /// The block's leading edge for a chat header ending at `chatTrailing` (nil: no chat header).
-    func blockLeading(chatTrailing: CGFloat?) -> CGFloat { chatTrailing.map { $0 + chatOffset } ?? leading }
+    /// The block's leading edge for a chat header ending at `chatTrailing` (nil: no chat header,
+    /// the block starts at `slot`, by default the measured `leading`).
+    func blockLeading(chatTrailing: CGFloat?, slot: CGFloat? = nil) -> CGFloat { chatTrailing.map { $0 + chatOffset } ?? slot ?? leading }
     /// The width constraint that puts the block's trailing edge `gap` before the right groups.
-    func width(windowWidth: CGFloat, chatTrailing: CGFloat?) -> CGFloat {
-        max(Self.floor, windowWidth - rightInset - Self.gap - extra - blockLeading(chatTrailing: chatTrailing))
+    func width(windowWidth: CGFloat, chatTrailing: CGFloat?, slot: CGFloat? = nil) -> CGFloat {
+        max(Self.floor, windowWidth - rightInset - Self.gap - extra - blockLeading(chatTrailing: chatTrailing, slot: slot))
     }
     /// The widest chat header starting at `chatLeading` that still leaves the block its preferred minimum.
     func chatLimit(windowWidth: CGFloat, chatLeading: CGFloat) -> CGFloat {
