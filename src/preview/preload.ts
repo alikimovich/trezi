@@ -1391,12 +1391,17 @@ function onMove(e: MouseEvent): void {
 function onClick(e: MouseEvent): void {
   const selectStart = previewTimings.enabled ? performance.now() : 0
   if (threeD.active()) return
-  if (editing) return
   // Only genuine user input acts — a hostile page can dispatch synthetic clicks
   // while a mode is armed; isTrusted is false for those.
   if (!e.isTrusted) return
   const el = e.target as Element | null
   if (!el || isOverlay(el)) return
+  if (editing) {
+    if (editing.contains(el)) return
+    // Pointer defaults are blocked in select mode, so an outside click cannot
+    // rely on natural blur. Finish first, then let this same click pick its target.
+    commitEdit()
+  }
   if (active) {
     // Swallow the click so the previewed app doesn't also act on it.
     e.preventDefault()
@@ -1442,6 +1447,8 @@ function onClick(e: MouseEvent): void {
 // ---- Inline text editing: double-click a stamped, text-only element ---------
 let editing: HTMLElement | null = null
 let editOriginal = ''
+let editOutline = ''
+let editAttribute: string | null = null
 
 function onDblClick(e: MouseEvent): void {
   if (threeD.active()) return
@@ -1461,6 +1468,8 @@ function startTextEdit(el: HTMLElement): void {
   if (editing) return
   editing = el
   editOriginal = el.textContent ?? ''
+  editOutline = el.style.outline
+  editAttribute = el.getAttribute('contenteditable')
   hideOverlay()
   el.setAttribute('contenteditable', 'plaintext-only')
   el.style.outline = '2px solid #2563eb'
@@ -1477,10 +1486,14 @@ function startTextEdit(el: HTMLElement): void {
 function endEdit(): HTMLElement | null {
   const el = editing
   if (!el) return null
-  el.removeEventListener('keydown', onEditKey, true)
-  el.removeAttribute('contenteditable')
-  el.style.outline = ''
   editing = null
+  el.removeEventListener('blur', commitEdit)
+  el.removeEventListener('keydown', onEditKey, true)
+  if (editAttribute === null) el.removeAttribute('contenteditable')
+  else el.setAttribute('contenteditable', editAttribute)
+  el.style.outline = editOutline
+  window.getSelection()?.removeAllRanges()
+  el.blur()
   return el
 }
 
@@ -1489,7 +1502,7 @@ function commitEdit(): void {
   if (!el) return
   const text = el.textContent ?? ''
   const source = sourceStamp(el)
-  if (source && text.trim() !== editOriginal.trim()) {
+  if (el.isConnected && source && text.trim() !== editOriginal.trim()) {
     ipcRenderer.send(TEXT_EDIT, { source: source.slice(0, 256), text: text.slice(0, 2000) })
   }
 }
@@ -1497,7 +1510,7 @@ function commitEdit(): void {
 function onEditKey(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    ;(editing as HTMLElement | null)?.blur() // triggers commitEdit (once)
+    commitEdit()
   } else if (e.key === 'Escape') {
     e.preventDefault()
     const el = endEdit()
@@ -1825,9 +1838,8 @@ function setActive(next: boolean): void {
   } else {
     hover.clear()
     lastHovered = null
-    // Disarming mid-edit (toolbar toggle / project re-open): discard the edit so
-    // it can't strand the element or commit against a stale source.
-    if (editing) endEdit()
+    // An explicit mode exit accepts the visible edit, like an outside click.
+    if (editing) commitEdit()
     hideOverlay()
     hideToolbar()
     setSelectionHighlight(null)

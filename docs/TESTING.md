@@ -45,6 +45,28 @@ that exactly one WebKit view exists. `TREZI_NATIVE_BACKGROUND_TEST=1` skips real
 pointer gestures/animation timing, which must be reported as reduced coverage.
 `test:native-live` separately submits a real provider turn against a fixture.
 
+### Focused verification (LOCAL-TEST-AUDIT)
+
+Use exact registered test names with `--filter`; inspect the selection with `--list`
+before running it. Listing validates tiers and names, prints tab-separated tier/name
+pairs (including requested typechecks), and exits without acquiring a lock or creating
+artifacts. Empty, unknown and wrong-tier selections fail with exit 2.
+
+```sh
+bun test/run.mjs unit --filter=test-runner,display-path --list
+bun test/run.mjs unit --filter=test-runner,display-path
+bun test/run.mjs native --list
+```
+
+For test, runner, docs or copy-only changes with unchanged application behavior,
+run typecheck, lint and the relevant focused tests. A runner change also needs its
+CLI selection regressions; console-only temporary fixtures cover native/live dispatch
+without launching the desktop or calling providers. This scoped evidence does not
+claim full-suite acceptance. Native UI behavior changes still need native evidence;
+the manager schedules desktop suites under its shared desktop lock. Listing a native
+tier is safe and does not build or launch the app. See `docs/TEST-CLEANUP-AUDIT.md`
+for this cleanup's preserved coverage and validation limits.
+
 ### Unit tier speed (LKM-167)
 
 - **Swift build cache.** Every unit test that compiles Swift calls
@@ -458,6 +480,7 @@ check to its group, and a check with no group there is an error:
 | `chat` | native chat streaming/queues/permissions (`smoke-chat.ts`); sent-bubble attachment thumbnails, wrapping and preview (`smoke-sent-attachments.ts`); comment result rows collapsed/expanded in light and dark (`smoke-comment-rows.ts`); post-landing check: a pass adds no row, problem warning rows (not loaded, dev-server error, blank, console errors) with their actions in light and dark (`smoke-landing-check.ts`); a background agent's question card in light and dark, expanded and answered (`smoke-agent-question.ts`); whole-message selection, Copy and Select All in light and dark (`smoke-chat-text.ts`); answer components (options mid-turn with skeletons, form) in light and dark, with the pick and submit reaching a stubbed provider with their summaries (`smoke-chat-ui.ts`); the chat history menu opened through AppKit's real tracking loop: a background chat's Running then Unread answer rows updating in place, Reduce Motion steady (a test override of the menu, no system setting), light/dark/highlighted menu captures (`history-menu-*.png`), and the dot clearing when the chat is opened (`smoke-history-menu.ts`, `HistoryVerification.swift`) |
 | `composer` | composer growth/paste/attachments, per-chat drafts, slash commands, visible composer |
 | `agent-browser` | `agent-navigation` only (also in `core`): the private agent page's open against navigations it did not start, for a focused run |
+| `selection` | `selection-input` and `text-edit` (also in `core`): WebKit edit/selection lifecycle, Finder blur/refocus, and source apply/undo/redo; prelude retained |
 
 An unknown or empty group name fails before the build. `--live` requires `core`
 (the live turn edits the heading the core group writes). `native-runtime` only

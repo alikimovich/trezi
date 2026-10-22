@@ -16,6 +16,36 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - *Repaired visual acceptance (offscreen `cacheDisplay` captures, so Liquid Glass is not painted).* Corrected `repaired-captures/` (taken after the settling change): in `swift-chat-queue-insert-{0,2,9}.png` the existing first card keeps the same position, width and full opacity in every frame; the second card is a separate near-white rounded card, absent in frame 0, faded and about 8 pt lower in frame 2, settled in frame 9. The third card in `swift-chat-queue-insert-reduced-1.png` is only faded, at its final y (no rise); the reduced run reports `rise: 0`, `duration: 0.15`, `reduceMotion: true`, normal motion `rise: 8`, `duration: 0.24`. The capture JSON lists the same row `minY` values in every frame (`[10, 38]` normal, `[10, 38, 66]` reduced) and the monotonic `insertions` counts (3 and 4) with `lastInsertion` kept; JSON records layout only, so the rise itself is visible in the PNGs, not the JSON. The earlier `repaired-captures-overlap/` set (first card still fading) is the pre-settling capture and is not acceptance evidence. I opened frames 0, 2, 9 and reduced-1 myself; the independent review (`independent-review-latest.json`, verdict "verify", written before the final gates) also checked insert-4, reduced-9 and the dark 3-row and 320 pt note captures.
   - *Why the test settles the prior entrance (intentional, test only).* The fixture re-queues the first message and then adds the second less than 240 ms later, so the first row's own 0.24 s entrance was still running during frames 0/2/4 and looked like a replay on an existing row. `checkQueueInsertion` therefore waits for that entrance (the larger of the inspected `motion.duration` before and after forcing the mode, plus 100 ms, capped at 1 s) and re-baselines `insertions` before the capture. Without it a sequence cannot distinguish "still entering" from "replayed". No product code gained a delay; real users who queue two messages within 240 ms simply see both entrances overlap, which is the intended per-row behaviour.
   - *Open, not blocking.* The review's minor finding stands: `ComposerQueueHost.update` overwrites `model.entering` on every non-identical update, so an unrelated update landing before SwiftUI creates a new row would drop that row's entrance (a missing animation, never a replay). Not changed here. Offscreen captures remain the visual evidence; a foreground Liquid Glass look is the owner's call. Nothing is staged, committed or published; publication waits for explicit approval and a final independent review.
+## 2026-10-20 — LOCAL-SELECTION-FIX: focused native acceptance preparation
+
+- Added `selection` smoke group: `selection-input`/`text-edit` plus prelude only.
+- Extended disposable WebKit input fixture with changed-text outside-click commit
+  messages from a controlled stamped leaf (isolated interception avoids HMR races),
+  Finder app blur/refocus, re-entry and another changed outside-click selection.
+  Existing text-edit checks preserve real source writing/undo/redo coverage.
+- Moved diagnosis/evidence notes to `docs/evidence/local-selection-fix/diagnosis.md`;
+  original worker baseline e61c3ad9 and manager implementation head cce2546b are
+  distinct. Manager runs `bun test/native-runtime.mjs --only=selection` under the
+  shared native-desktop lock; no worker desktop run or capture inspection.
+- Repair worker non-GUI checks passed: smoke group selection, edit lifecycle,
+  mocked foreground capture, typecheck, focused Biome and docs-links. Exact
+  commands/results are appended to the diagnosis evidence file.
+
+## 2026-10-20 — LOCAL-SELECTION-FIX: inline edit teardown and outside selection
+
+- Confirmed diagnosis in `docs/evidence/local-selection-fix/diagnosis.md`: prevented pointer defaults suppress blur,
+  while click returned during editing. Native mode relays are connected; no native
+  focus-policy defect confirmed. Outside trusted clicks now commit before picking.
+- Teardown removes blur/key listeners, restores authored editor attributes/outline,
+  releases focus and clears browser ranges. Enter/mode exit commit; Escape restores.
+- Focused production-handler regression: `bun test/preview-edit-lifecycle.mjs`.
+  Extended existing disposable `selection-input` WebKit fixture for outside selection,
+  mode exit, overlays/ranges and re-entry, with JSON plus foreground PNG evidence.
+- Desktop execution/capture inspection is reserved for the manager under the shared
+  native-desktop lock. No GUI/native suite was run by the worker.
+- Worker checks passed: `bun run typecheck`, `bun run lint`,
+  `bun test/preview-edit-lifecycle.mjs`, `bun test/native-visible-capture.mjs`
+  (the last uses a mocked bridge). Commands/results and baseline HEAD are in docs/evidence/local-selection-fix/diagnosis.md.
 
 ## 2026-10-19 — LOCAL-WEBKIT-PUBLISH: -999 repair 3 — load timeout diagnosed, deterministic provisional-cancel regression
 
@@ -14176,3 +14206,14 @@ Fixes "opening a project I already run doesn't work" (hit on lkmv.ch):
   preview with IPC geometry sync; typed `window.api`; dev-server runner
   (detect/spawn/parse/readiness). Playwright+Electron smoke + open→preview tests.
 - Made dsgn its own standalone git repo.
+
+## 2026-10-20 — LOCAL-TEST-AUDIT: bounded test cleanup and selection preview
+
+- Removed three redundant or implementation-shape assertions; all fixture behavior,
+  security/data-integrity checks and LKM-296 toolbar/sidebar checks remain unchanged.
+- Added validated `--list` to the tier runner and CLI regressions using console-only
+  temporary fixtures. Focused verification policy is separate from suite cleanup.
+- Inventory, rationale, exact evidence, intermediate failures and Queue/Skills/toolbar
+  overlap risks: `docs/TEST-CLEANUP-AUDIT.md`. No other worktrees accessed or integrated.
+- Local files only; manager owns staging, commits, configured verification and desktop
+  suites. No full-suite acceptance claimed.
