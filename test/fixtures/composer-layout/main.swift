@@ -195,6 +195,38 @@ for (count, paused, note, wanted) in [(1, false, "", 44), (2, false, "", 72), (3
 composer.update(["bounds": ["x": 0.0, "y": 0.0, "width": 420.0, "height": 148.0], "visible": false, "text": ""])
 print("Composer queue: even padding, fixed overlap, placeholder and Send alignment for 1, 2, 3 and 5 rows, with and without a note")
 
+// LKM-294: only a message newly queued in the shown chat slides in; unrelated updates never replay it.
+require(ComposerQueueMotion.inserted(previous: ["a"], next: ["a", "b"], sameChat: true) == ["b"], "A new id is an insertion")
+require(ComposerQueueMotion.inserted(previous: ["a", "b"], next: ["b"], sameChat: true).isEmpty, "A removal is not an insertion")
+require(ComposerQueueMotion.inserted(previous: [], next: ["c"], sameChat: false).isEmpty, "Another chat's queue is not an insertion")
+let motionQueue = ComposerQueueHost()
+motionQueue.reduceMotionOverride = false
+func queued(_ ids: [String]) -> [[String: Any]] { ids.map { ["id": $0, "text": "queued \($0)", "attachments": 0] } }
+func motionStep(_ entries: [[String: Any]], paused: Bool = false, note: String = "", canSend: Bool = true, chat: String = "a",
+                wanted: [String], insertions: Int, _ what: String) {
+    motionQueue.update(entries, paused: paused, note: note, canSend: canSend, chat: chat)
+    require(motionQueue.lastInserted == wanted && motionQueue.insertions == insertions,
+            "\(what): animated \(motionQueue.lastInserted) (\(motionQueue.insertions) insertions), wanted \(wanted) (\(insertions))")
+}
+motionStep([], wanted: [], insertions: 0, "First update")
+motionStep(queued(["m0"]), wanted: ["m0"], insertions: 1, "First queued message")
+motionStep(queued(["m0", "m1"]), wanted: ["m1"], insertions: 2, "Second queued message")
+motionStep(queued(["m0", "m1"]), wanted: ["m1"], insertions: 2, "Identical update (skipped by its signature)")
+motionStep(queued(["m0", "m1"]), note: "Waiting for Resolve", wanted: [], insertions: 2, "Note change")
+motionStep(queued(["m0", "m1"]), paused: true, note: "Waiting for Resolve", wanted: [], insertions: 2, "Paused change")
+motionStep(queued(["m0", "m1"]), paused: true, note: "Waiting for Resolve", canSend: false, wanted: [], insertions: 2, "canSend toggle")
+motionStep(queued(["m1"]), wanted: [], insertions: 2, "Removal")
+motionStep(queued(["n0", "n1"]), chat: "b", wanted: [], insertions: 2, "Switch to another chat's queue")
+require(motionQueue.lastInsertion == ["m1"], "An unrelated update keeps the latest insertion (\(motionQueue.lastInsertion))")
+let normalMotion = motionQueue.inspect(composerTop: 0)["motion"] as? [String: Any] ?? [:]
+require(normalMotion["rise"] as? Double == 8 && normalMotion["reduceMotion"] as? Bool == false, "Insertion rises 8 pt (\(normalMotion))")
+motionQueue.reduceMotionOverride = true
+motionStep(queued(["n0", "n1", "n2"]), chat: "b", wanted: ["n2"], insertions: 3, "Reduce Motion insertion")
+let reducedMotion = motionQueue.inspect(composerTop: 0)["motion"] as? [String: Any] ?? [:]
+require(reducedMotion["rise"] as? Double == 0 && reducedMotion["reduceMotion"] as? Bool == true, "Reduce Motion has no translate (\(reducedMotion))")
+require(ComposerQueueMotion(reduceMotion: true).rise == 0 && ComposerQueueMotion(reduceMotion: true).duration <= 0.15, "Reduce Motion is a short plain fade")
+print("Composer queue motion: only new ids in the shown chat animate; note, pause, canSend, removal, identical and chat-switch updates do not; Reduce Motion fades without translate")
+
 // Exterior spacing and reading clearance share the same inset, including when
 // TextKit expands/caps the composer at narrow widths or with attachments/queue.
 for width: CGFloat in [320, 420, 520] {

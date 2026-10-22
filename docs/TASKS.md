@@ -630,6 +630,16 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] Box 10 pt inside the composer's sides, tucked 24 pt (the composer's radius) under it at every count, radius 18; text at the placeholder's x, the "…" menu in Send's 30 pt column.
 - [x] Composer-layout fixture (heights, overlap, insets for 1/2/3/5 rows, with and without a note); chat smoke `checkQueueGeometry` (`src/native/smoke-queue.ts`) asserts measured SwiftUI frames (|top − bottom| ≤ 1, centred rows, text vs placeholder and menu vs Send ±1) for 1 row, 3 rows and the Resolve note at both widths, with light and dark `-queue-<label>-{light,dark}.png` captures and JSON; CHANGELOG line.
 
+## Composer queue: one rounded card per message, slide-up on insertion (LKM-294)
+
+- [x] Each row draws its own card (light fill, 0.5 pt separator stroke, faint shadow, radius 8, 4 pt inside the box's sides) behind the unchanged 24 pt row; heights, overlap, text inset, control column and frame keys are as in LKM-198.
+- [x] `ComposerQueueHost` keeps one root view over a `ComposerQueueModel`, so rows keep their `message.id` identity; only ids new to the shown chat animate (fade + 8 pt rise, 0.24 s ease-out; Reduce Motion: 0.15 s fade, no rise). Note, pause, canSend, removal, identical and chat-switch updates do not.
+- [x] Composer-layout fixture covers the insertion rules and the reduced-motion path; chat smoke `checkQueueInsertion` captures `-queue-insert-<i>.png` and `-queue-insert-reduced-<i>.png` frame sequences (host `composerQueueMotion` / `captureQueueInsertion`, test profile only) and a 2-row geometry check; CHANGELOG line.
+- [x] Insertion repair: the list update runs without animation and only the new row animates its own opacity and rise (`ComposerQueueEntrance`), so existing rows never replay; the test settles the prior entrance before capturing (test-only synchronisation, no product delay).
+- [x] Final verification (details in the LKM-294 closeout in `docs/PROGRESS.md`): unit 256 PASS; native 66/66; native chat scroll and packaged browser setup pass; focused `--only=chat,composer` 18/18. The earlier `chat-gate` failure and first focused run are historical and recorded there.
+- [x] Repaired visual acceptance from the corrected offscreen capture sequence: first card stable across frames, new card fades in with an 8 pt rise, Reduce Motion fades only.
+- [ ] Final independent review of the closeout, then explicit user approval before any Git staging, commit, push or PR.
+
 ## Composer queue: no note for the normal waiting case (LKM-191)
 
 - [x] `queueNote` returns no note for a running turn or a landing, so the queue has no header row (34 pt for one row); Resolve, sign-in, paused and landing-error notes are unchanged.
