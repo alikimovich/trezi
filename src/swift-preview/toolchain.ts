@@ -104,6 +104,14 @@ struct TreziPreviewProbe: View {
 const NOT_FOUND = /plugin for module 'PreviewsMacros' not found/
 /** The plugin server's own sandbox could not start (nested sandbox): an environment failure. */
 const ENVIRONMENT = /produced malformed response|sandbox_apply|sandbox-exec|Operation not permitted/
+/**
+ * Metadata queries (`swiftc --version`, the SDK version and path, the version plist) run
+ * at most this often when they time out. CI saw `xcrun swiftc --version` stall past the
+ * 20 s cap while other test processes compiled, then answer normally on a rerun of the
+ * same tree. Only a timeout retries: a non-zero exit, a missing tool or a compiler
+ * diagnostic is an answer. The worst case is this many caps, run concurrently.
+ */
+const METADATA_ATTEMPTS = 2
 const HOW_TO_SELECT =
   'set "developerDir" in trezi-previews.json or TREZI_DEVELOPER_DIR; the machine default stays as it is'
 
@@ -188,12 +196,19 @@ export async function inspectToolchain(
     return toolchain
   }
   const versionPlist = join(dirname(developerDir), 'version.plist')
-  const run = (command: string, args: string[]) =>
+  const once = (command: string, args: string[]) =>
     runTool(command, args, {
       cwd: '/',
       timeoutMs: options.timeoutMs ?? 20_000,
       env: { DEVELOPER_DIR: developerDir }
     })
+  // Metadata only: the preview probe and every build call `runTool` once, never retried.
+  const run = async (command: string, args: string[]) => {
+    let result = await once(command, args)
+    for (let attempt = 1; result.timedOut && attempt < METADATA_ATTEMPTS; attempt++)
+      result = await once(command, args)
+    return result
+  }
   const xcrun = options.xcrun ?? '/usr/bin/xcrun'
   const [plist, swift, sdkVersion, sdkPath] = await Promise.all([
     existsSync(versionPlist)
