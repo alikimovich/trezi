@@ -95,6 +95,7 @@ export const UNIT = [
   'stop-recovery-ui',
   'chat-stuck-turn',
   'chat-send-queue',
+  'composer-queue-panel',
   'composer-sent-draft',
   'chat-auto-resolve',
   'live-write-guard',
