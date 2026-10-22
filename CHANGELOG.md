@@ -14,6 +14,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
 ### Fixed
+- Expanding or restoring the preview, or resizing the sidebar, no longer sends the address bar, chat title or "…" into the toolbar's overflow menu (») while the window has room for them; at genuinely narrow widths controls still overflow (LKM-296).
 - Swift preview toolchain discovery retries a timed-out metadata query once before reporting failure; compiler errors and preview builds keep their existing failure behavior (LOCAL-CI-PROBE-RELIABILITY).
 - Preview text editing now commits on an outside click and selects that object immediately; leaving selection mode clears the editor, text highlight and selection overlays (LOCAL-SELECTION-FIX).
 - An agent's private WebKit page no longer fails a check with "NSURLErrorDomain error -999" when the page reloads itself (the dev server's live reload) while the agent opens or reloads it: the open follows the navigation that took over, or says the page navigated during open (LOCAL-WEBKIT-PUBLISH).

@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Toolbar controls overflow when expanding/restoring the preview at ample width (LKM-296)
+
+- [x] Reproduce with per-frame passive toolbar traces and foreground captures; root cause in `docs/evidence/lkm-296/ROOT-CAUSE.md`.
+- [x] Size the address block and chat header for where the toolbar settles (expand, restore, split resize, inserted chat header).
+- [x] Regression `src/native/smoke-toolbar-overflow.ts` (core `toolbar-address`): no actionable control and no "…" in the overflow menu in any frame at 1320/1810 pt, expand/restore, rapid toggles, sidebar 340/180/230; real controls still overflow below the minimum width.
+- [ ] Full screen not exercised (the toolbar lives in a separate window there).
 ## Skills screen: replace explanatory paragraph copy (LKM-295)
 
 - [x] Settings → Skills reads "Manage skills here without changing your project or global files" (no final period); title, rows and skills behaviour unchanged.

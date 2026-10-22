@@ -336,6 +336,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-swift-preview.ts` | test | — | smoke fixture |
 | `src/native/smoke-toolbar.ts` | test | — | smoke fixture |
 | `src/native/smoke-toolbar-more.ts` | test | — | smoke fixture |
+| `src/native/smoke-toolbar-overflow.ts` | test | — | smoke fixture |
 
 A row whose module no longer has an effect fails the test too, so a transfer removes
 its row and the gate count in the same change.

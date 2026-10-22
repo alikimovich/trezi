@@ -1,0 +1,168 @@
+{
+  "run": "agentos native worker-verify-2 (e3c98885), groups core,settings,sidebar: 50/50",
+  "transitions": {
+    "session-first-expand": {
+      "frames": 49,
+      "wideFrames": 49,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "launch-expand-1320": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "launch-restore-1320": {
+      "frames": 51,
+      "wideFrames": 51,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "expand-again-1320": {
+      "frames": 51,
+      "wideFrames": 51,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "restore-again-1320": {
+      "frames": 53,
+      "wideFrames": 53,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "launch-expand-1810": {
+      "frames": 49,
+      "wideFrames": 49,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "launch-restore-1810": {
+      "frames": 51,
+      "wideFrames": 51,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "expand-again-1810": {
+      "frames": 49,
+      "wideFrames": 49,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "restore-again-1810": {
+      "frames": 51,
+      "wideFrames": 51,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-340": {
+      "frames": 53,
+      "wideFrames": 53,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-340-expand": {
+      "frames": 50,
+      "wideFrames": 50,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-340-restore": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-180": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-180-expand": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-180-restore": {
+      "frames": 51,
+      "wideFrames": 51,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-230": {
+      "frames": 53,
+      "wideFrames": 53,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-230-expand": {
+      "frames": 50,
+      "wideFrames": 50,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "sidebar-230-restore": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "narrow-collapsed": {
+      "frames": 53,
+      "wideFrames": 0,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "narrow-expand": {
+      "frames": 52,
+      "wideFrames": 0,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "narrow-widened-expanded": {
+      "frames": 50,
+      "wideFrames": 50,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "narrow-widened-restore": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "rapid-expand": {
+      "frames": 50,
+      "wideFrames": 50,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    },
+    "rapid-restore": {
+      "frames": 52,
+      "wideFrames": 52,
+      "actionableOverflowFrames": 0,
+      "moreOverflowFrames": 0
+    }
+  },
+  "narrowCollapsed": {
+    "windowWidth": 688,
+    "overflowItems": [
+      "NSToolbarSidebarTrackingSeparatorItemIdentifier",
+      "address",
+      "NSToolbarFlexibleSpaceItem",
+      "NSToolbarSpaceItem",
+      "NSToolbarSpaceItem",
+      "publish"
+    ],
+    "actionableOverflow": [
+      "address",
+      "publish"
+    ],
+    "hiddenItems": [
+      "more"
+    ],
+    "moreOverflowed": false
+  }
+}
