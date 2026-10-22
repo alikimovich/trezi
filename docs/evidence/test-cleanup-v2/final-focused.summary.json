@@ -1,0 +1,169 @@
+{
+  "duration": 8699,
+  "counts": {
+    "PASS": 17
+  },
+  "builds": [],
+  "selection": null,
+  "notRun": [
+    {
+      "name": "typecheck-native",
+      "reason": "tsconfig.native.json resolves to tsconfig.node.json, which typecheck checks"
+    }
+  ],
+  "results": [
+    {
+      "tier": "unit",
+      "name": "service-contract",
+      "outcome": "PASS",
+      "duration": 3458,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-service-contract.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "native-settings-layout",
+      "outcome": "PASS",
+      "duration": 8694,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-native-settings-layout.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "no-system-preferences",
+      "outcome": "PASS",
+      "duration": 259,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-no-system-preferences.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "native-slider-ticks",
+      "outcome": "PASS",
+      "duration": 796,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-native-slider-ticks.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "sidebar-evidence",
+      "outcome": "PASS",
+      "duration": 125,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-sidebar-evidence.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "sidebar-icon",
+      "outcome": "PASS",
+      "duration": 335,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-sidebar-icon.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "test-runner",
+      "outcome": "PASS",
+      "duration": 4485,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-test-runner.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "test-selection",
+      "outcome": "PASS",
+      "duration": 4617,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-test-selection.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "swift-build-lock",
+      "outcome": "PASS",
+      "duration": 4088,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-swift-build-lock.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "legacy-names-audit",
+      "outcome": "PASS",
+      "duration": 125,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-legacy-names-audit.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "retirement-census",
+      "outcome": "PASS",
+      "duration": 138,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-retirement-census.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "distribution",
+      "outcome": "PASS",
+      "duration": 48,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-distribution.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "docs-links",
+      "outcome": "PASS",
+      "duration": 90,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-docs-links.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "docs-merge-union",
+      "outcome": "PASS",
+      "duration": 3035,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-docs-merge-union.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "versioning",
+      "outcome": "PASS",
+      "duration": 4066,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-versioning.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "lint",
+      "outcome": "PASS",
+      "duration": 2699,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/unit-lint.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "typecheck",
+      "name": "typecheck",
+      "outcome": "PASS",
+      "duration": 3848,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-dhlA3w/typecheck-typecheck.log",
+      "code": 0,
+      "signal": null
+    }
+  ]
+}

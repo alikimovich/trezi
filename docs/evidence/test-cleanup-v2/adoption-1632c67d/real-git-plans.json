@@ -1,0 +1,186 @@
+{
+  "composerqueue": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "    M src/native/ComposerQueue.swift",
+      "Plan: FULL — every test in the tier runs:",
+      "  M src/native/ComposerQueue.swift: no selection rule covers it (product, build, config or other)"
+    ],
+    "edited": [
+      "src/native/ComposerQueue.swift"
+    ]
+  },
+  "sidebaricon": {
+    "exit": 0,
+    "count": 7,
+    "tests": [
+      "unit\tnative-settings-layout",
+      "unit\tno-system-preferences",
+      "unit\tnative-slider-ticks",
+      "unit\tsidebar-evidence",
+      "unit\tsidebar-icon",
+      "unit\tlegacy-names-audit",
+      "unit\tretirement-census"
+    ],
+    "plan": [
+      "    M src/native/SidebarIcon.swift",
+      "Plan: SELECTED — 7 of 259 unit tests:",
+      "  native-settings-layout — M src/native/SidebarIcon.swift: ui change",
+      "  no-system-preferences — M src/native/SidebarIcon.swift: reads or scans it",
+      "  native-slider-ticks — M src/native/SidebarIcon.swift: reads or scans it",
+      "  sidebar-evidence — M src/native/SidebarIcon.swift: ui change",
+      "  sidebar-icon — M src/native/SidebarIcon.swift: ui change",
+      "  legacy-names-audit — M src/native/SidebarIcon.swift: reads or scans it",
+      "  retirement-census — M src/native/SidebarIcon.swift: reads or scans it",
+      "Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+      "App build: required (product source changed)",
+      "Native evidence still owed (not run by this tier): bun test/native-runtime.mjs --only=sidebar,settings"
+    ],
+    "edited": [
+      "src/native/SidebarIcon.swift"
+    ]
+  },
+  "docs-testing": {
+    "exit": 0,
+    "count": 1,
+    "tests": [
+      "unit\tlegacy-names-audit"
+    ],
+    "plan": [
+      "Plan: SELECTED — 1 of 259 unit tests:",
+      "Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+      "App build: not needed (docs and test-only change)"
+    ],
+    "edited": [
+      "docs/TESTING.md"
+    ]
+  },
+  "docs-newdir": {
+    "exit": 0,
+    "count": 2,
+    "tests": [
+      "unit\tlegacy-names-audit",
+      "unit\tdocs-links"
+    ],
+    "plan": [
+      "Plan: SELECTED — 2 of 259 unit tests:",
+      "Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+      "App build: not needed (docs and test-only change)"
+    ],
+    "edited": [
+      "docs/probe-dir/sub/note.md"
+    ]
+  },
+  "test-edit-lifecycle": {
+    "exit": 0,
+    "count": 4,
+    "tests": [
+      "unit\tpreview-edit-lifecycle",
+      "unit\tno-system-preferences",
+      "unit\tlegacy-names-audit",
+      "unit\tlint"
+    ],
+    "plan": [
+      "Plan: SELECTED — 4 of 259 unit tests:",
+      "Typecheck: not needed — no TypeScript program input changed (Markdown, unit test scripts, audited Swift)",
+      "App build: not needed (docs and test-only change)"
+    ],
+    "edited": [
+      "test/preview-edit-lifecycle.mjs"
+    ]
+  },
+  "shared-api": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "src/shared/api.ts"
+    ]
+  },
+  "service-swift": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "src/service/BackendSupervisor.swift"
+    ]
+  },
+  "helper": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "test/helpers/swift-build.mjs"
+    ]
+  },
+  "package-json": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "package.json"
+    ]
+  },
+  "unknown-root": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "probe-unknown.txt"
+    ]
+  },
+  "mixed-docs-native": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "    M src/native/ComposerQueue.swift",
+      "Plan: FULL — every test in the tier runs:",
+      "  M src/native/ComposerQueue.swift: no selection rule covers it (product, build, config or other)"
+    ],
+    "edited": [
+      "docs/TESTING.md",
+      "src/native/ComposerQueue.swift"
+    ]
+  },
+  "fixture-composer": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "test/fixtures/composer-layout/main.swift"
+    ]
+  },
+  "deleted-test": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": [
+      "test/display-path.mjs"
+    ]
+  },
+  "clean": {
+    "exit": 0,
+    "count": 259,
+    "plan": [
+      "Plan: FULL — every test in the tier runs:"
+    ],
+    "edited": []
+  },
+  "_cloneCleanAfter": true,
+  "_base": "ab383987c939cd70140df50b264d7a303f72cc06"
+}

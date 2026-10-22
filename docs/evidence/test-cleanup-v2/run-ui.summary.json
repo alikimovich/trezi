@@ -1,0 +1,74 @@
+{
+  "duration": 48053,
+  "counts": {
+    "PASS": 7
+  },
+  "builds": [],
+  "selection": null,
+  "notRun": [],
+  "results": [
+    {
+      "tier": "unit",
+      "name": "native-settings-layout",
+      "outcome": "PASS",
+      "duration": 48052,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-native-settings-layout.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "no-system-preferences",
+      "outcome": "PASS",
+      "duration": 177,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-no-system-preferences.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "native-slider-ticks",
+      "outcome": "PASS",
+      "duration": 40600,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-native-slider-ticks.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "sidebar-evidence",
+      "outcome": "PASS",
+      "duration": 38,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-sidebar-evidence.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "sidebar-icon",
+      "outcome": "PASS",
+      "duration": 34826,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-sidebar-icon.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "legacy-names-audit",
+      "outcome": "PASS",
+      "duration": 106,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-legacy-names-audit.log",
+      "code": 0,
+      "signal": null
+    },
+    {
+      "tier": "unit",
+      "name": "retirement-census",
+      "outcome": "PASS",
+      "duration": 123,
+      "log": "/Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-aldlmH/unit-retirement-census.log",
+      "code": 0,
+      "signal": null
+    }
+  ]
+}

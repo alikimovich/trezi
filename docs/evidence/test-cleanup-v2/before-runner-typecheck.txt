@@ -1,0 +1,16 @@
+Test logs: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-J3gxoD
+START [typecheck] typecheck
+START [typecheck] typecheck-native
+
+unit: 1 tests, at most 8 workers
+START [unit] docs-links
+PASS [unit] docs-links 0.1s
+PASS [typecheck] typecheck-native 3.4s
+PASS [typecheck] typecheck 3.8s
+
+SUMMARY: 3 PASS; wall time 3.8s
+Report: /Users/panda/Documents/Codex/2026-10-20/task-3/agent-os-cleanup-v2/state/worktrees/trezi-test-cleanup-v2/75959512-b76c-4e2c-bcab-0c4dc425b07e/test/artifacts/runs/run-J3gxoD/summary.json
+real 3.78
+user 12.02
+sys 0.69
+exit=0
