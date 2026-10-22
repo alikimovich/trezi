@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native footer build badge alignment and development build identity (LKM-301)
+
+- [x] Dot drawn and pinned half the cap height above the identity's baseline; identity and context are separate labels (context truncates first, in the middle), no overlap or clipping at a 180 pt sidebar (`src/native/BuildBadge.swift`).
+- [x] Badge text: version, build number and commit, then the branch unless main, then the state in words; no checkmark. No Git, incomplete stamp, detached HEAD and dirty/clean reported (`src/shared/build-status.ts`); `buildInfo` stamps `git`, `dirty: null` when unknown, and `builtAt` each build (`scripts/version.mjs`). Package version unchanged.
+- [x] VoiceOver label: version, build, commit, branch, tree and state. Unit `test/build-status.mjs`; native `build-badge` (sidebar group) asserts geometry, accessibility and captures two revisions, main/branch, clean/dirty, detached, offline, no Git and narrow.
+- [ ] Native `sidebar` group not yet green on the final tree: run it, read `build-badge-*.png` and `build-badge.json` (alignment, narrow, accessibility), and confirm `project-switching` settles at 260 pt.
+- [ ] Publication waits for operator approval, sequenced behind LKM-300, then LKM-295/LKM-296.
 ## Toolbar controls overflow when expanding/restoring the preview at ample width (LKM-296)
 
 - [x] Reproduce with per-frame passive toolbar traces and foreground captures; root cause in `docs/evidence/lkm-296/ROOT-CAUSE.md`.

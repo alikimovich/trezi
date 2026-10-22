@@ -2,6 +2,50 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-301: footer build badge alignment and development build identity
+
+- **Alignment cause.** The badge was one `NSButton` with a 7 pt `circle.fill` symbol as its
+  leading image. The cell centred the image on its own, apart from the title's baseline, so
+  the dot sat off the text. Long text truncated as one string, branch and state included.
+- **Fix (`src/native/BuildBadge.swift`).** One borderless button holds a drawn dot and two
+  labels.
+  - The dot's centre is pinned half the font's cap height above the identity label's first
+    baseline. The context label shares that baseline.
+  - The context (branch and state) truncates first, in the middle, at compression priority
+    249 against the identity's 250 (`.defaultLow`, the old button's). Activity stays
+    required.
+  - First try used 740/730. The native `project-switching` fixture then could not set the
+    sidebar to 260 pt: this worktree's long dirty branch widened it to 340 pt. Above
+    `.defaultLow`, the text outranks the split view's sidebar width.
+  - `hitTest` sends clicks and the context menu to the button. The labels and dot are no
+    accessibility elements.
+- **Identity (`src/shared/build-status.ts`).** The text is `version (build, commit)`, then
+  the branch unless it is main, then the state in words: "modified", "3 behind",
+  "detached", "offline", "not on main".
+  - The checkmark is gone: a clean main build has no context, and the green dot plus the
+    VoiceOver label say On main.
+  - A build outside Git reads "no Git" (`no-git`). A stamp without a real build number,
+    commit or tree state reads "no build info" (`metadata`). Both are Unknown and never ask
+    the network.
+  - `spoken` is the accessibility label: version, build, commit, branch or detached HEAD,
+    clean or uncommitted changes, then the state sentence. Details add `Tree:` and `Built:`.
+- **Stamp (`scripts/version.mjs`).** `buildInfo` adds `git`, a `dirty` of null when
+  `git status` fails, and `builtAt`. The build already calls it every run
+  (`test/versioning.mjs` now asserts the `TREZI_BUILD` define). The package version is
+  unchanged.
+- **Tests.** `test/build-status.mjs` covers every text, two revisions of one version
+  (disposable repos), detached, dirty to clean, no Git, incomplete and older stamps, and
+  `builtAt` per build.
+  - Native `build-badge` (sidebar group) shows 9 states plus a 180 pt sidebar with a long
+    dirty branch. It asserts |dot − cap centre| ≤ 0.5 pt, |dot − text centre| ≤ 1 pt,
+    shared baselines, no overlap, the badge inside the sidebar's 14 pt inset, the
+    accessibility label and role, and whole identity with truncated context when narrow.
+  - Captures are written per state (`build-badge-*.png`, `build-badge.json`).
+- **Not verified.** The native `build-badge` check has not run on the final tree. Its one
+  native run was skipped behind the `project-switching` failure above. Later preflight unit
+  runs failed in unrelated timing-sensitive tests on a loaded machine, and the session's
+  verification budget ran out. No captures or geometry from this change exist yet.
+
 ## 2026-10-20 — LKM-296: toolbar controls no longer overflow when expanding/restoring the preview
 
 - **Cause.** The full note with file and line references is `docs/evidence/lkm-296/ROOT-CAUSE.md`.
