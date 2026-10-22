@@ -58,11 +58,18 @@ jobs:
           key: unit-swift-${{ runner.os }}-${{ github.sha }}
           restore-keys: unit-swift-${{ runner.os }}-
 
-      # Both typechecks run next to the unit tier (--typecheck), and --report prints the
-      # 20 slowest. --log-tail prints the last 150 lines of every failing test's log into
-      # the job output; the full logs are in the artifact below.
-      - name: Typecheck + unit tests
-        run: node test/run.mjs unit --typecheck --report --timeout-ms=120000 --log-tail=150
+      # Keep typechecks ahead of the unit tier so they do not compete with its first
+      # Swift fixture builds (docs/TESTING.md "GitHub CI"). Local `test:quick` still
+      # runs them together; this CI ordering is a resource-contention mitigation.
+      - name: Typecheck
+        run: |
+          bun run typecheck
+          bun run typecheck:native
+
+      # --report prints the 20 slowest. --log-tail prints the last 150 lines of every
+      # failing test's log into the job output; the full logs are in the artifact below.
+      - name: Unit tests
+        run: node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150
 
       # always(): upload after a green, red or cancelled run alike, so the logs of a
       # failing (or flaky) test can be downloaded for 7 days.

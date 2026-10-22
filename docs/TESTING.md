@@ -509,10 +509,21 @@ Superseded runs for the same PR or branch are cancelled.
 
   ```sh
   bun install --frozen-lockfile
-  node test/run.mjs unit --typecheck --report --timeout-ms=120000
+  bun run typecheck
+  bun run typecheck:native
+  node test/run.mjs unit --report --timeout-ms=120000
   ```
 
-  Both typechecks run next to the unit tier. `actions/cache` restores
+  The two typechecks are their own `Typecheck` step, before the `Unit tests` step; the
+  unit step has no `--typecheck`, `--filter`, `--serial` or `--jobs`, so every unit test
+  still runs with the default worker count. Locally `bun run test:quick` keeps running
+  them together (`--typecheck`). On CI they used to start with the first three
+  workers: typecheck took 85-93 s, and `swift-preview-target` hit its 300 s limit on
+  merged-main run 39721071506 (attempts 1 and 2). That load is an inference, not a
+  proven cause; `test/dependency-audit.mjs` pins the step order and the unchanged
+  unit command. `test/swift-preview-target.mjs` prints `[elapsed] start|done <stage>`
+  lines, so the last finished stage is in the log if it times out again.
+  `actions/cache` restores
   `.local/test-cache` and `.local/test-times.json` from the latest run (key per
   commit, restored by prefix), so unchanged Swift fixtures are not recompiled
   ([Unit tier speed](#unit-tier-speed-lkm-167)).

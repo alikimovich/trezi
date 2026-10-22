@@ -22,4 +22,33 @@ const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta
 assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/)
 assert.match(workflow, /app build[\s\S]*?fetch-depth: 0/)
 assert.doesNotMatch(workflow, /candidate/)
+
+// The test job runs both typechecks as their own step, before an unfiltered unit tier
+// that no longer carries --typecheck (they used to compete with the Swift fixtures).
+const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  app-build:'))
+const steps = new Map(
+  testJob
+    .split(/\n {6}- name: /)
+    .slice(1)
+    .map((step) => [step.slice(0, step.indexOf('\n')), step])
+)
+const stepNames = [...steps.keys()]
+const stepIndex = (name) => stepNames.indexOf(name)
+assert.match(testJob, /timeout-minutes: 45\b/)
+assert.ok(stepIndex('Typecheck') >= 0 && stepIndex('Unit tests') > stepIndex('Typecheck'))
+const typecheckStep = steps.get('Typecheck')
+assert.match(typecheckStep, /^ {10}bun run typecheck$/m, 'the node + preview typecheck runs')
+assert.match(typecheckStep, /^ {10}bun run typecheck:native$/m, 'the native typecheck runs')
+const unitStep = steps.get('Unit tests')
+assert.match(unitStep, /node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150\n/)
+assert.doesNotMatch(
+  unitStep,
+  /--(typecheck|filter|serial|jobs)/,
+  'every unit test, default workers'
+)
+assert.equal(
+  testJob.match(/node test\/run\.mjs/g)?.length,
+  1,
+  'one runner call, no second filtered or concurrent run'
+)
 console.log('DEPENDENCY-AUDIT PASS')
