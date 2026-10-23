@@ -2,6 +2,50 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-313: four unit tests no longer fail when the Mac is busy
+
+- **Why.** 12 of 18 quick verifications on 2026-10-22 failed on unrelated unit tests. The
+  manager logs show load, shared ports and torn files, not product bugs:
+  - **browser-verify.** Each fake agent-browser call is two Bun starts (the wrapper, then the
+    fake CLI). That is 2 s idle and 48–90 s under load, which overran the 30 s
+    `CHECK_LIMITS.totalMs` and the wait step's 5 s default.
+  - **browser-verify-bounds.** Under load the fake wrapper didn't reach its hang before a 3 s
+    deadline (24× "the hung read ran") or the 8 s run budget (4× "the wrapper and its child
+    ran").
+  - **platform-owner.** Five causes:
+    - 8 s waits for a fake Metro.
+    - 30 s waits for bootstatus.
+    - The 5 s `http()` timeout while `/control` spawns the fake `idb`.
+    - A non-atomic `metro-*.json` record (JSON EOF).
+    - A fixed bridge base port of 17800 shared by parallel runs in other worktrees, so "the
+      previous bridge is closed" reached another run's bridge.
+  - **provider-helper-tools.** The 60 s turn wait expired after a 30 s session start.
+- **Fixes (tests only).**
+  - **browser-verify.** The managed-Chromium section raises `CHECK_LIMITS.totalMs` and the
+    run's `budgetMs` to 600 s and restores the total afterwards. Its wait step gets the
+    15 s maximum `timeoutMs`. This section judges CLI facts; budgets stay covered by
+    browser-verify-bounds.
+  - **browser-verify-bounds.**
+    - `untilHung` retries the hung-wrapper deadlines (3 s → 10 s → 25 s) and the run budget
+      (8 s → 16 s → 24 s). Every bound is checked on each attempt, and the hang must finally
+      be recorded.
+    - The fake installs its TERM handler before it records pids, and `allGone` waits 10 s.
+    - **Weakened bound (noted):** the wait-step run must finish within 300 ms + cleanup +
+      20 s, up from 8 s. It still fails if the wait ignored its timeout, because the hung
+      read would then hold for the CLI's 30 s cap.
+  - **platform-owner.**
+    - It uses a random per-run bridge base in 20000–47999, and the port assert uses it.
+    - `until` now waits 30 s, `gone` 20 s and bootstatus 60 s.
+    - `http()` defaults to 30 s.
+    - `fake-metro.mjs` writes its record aside and renames it into place.
+  - **provider-helper-tools.** `until` defaults to 180 s.
+  - **`test/tiers.mjs` budgets.** platform-owner 420 s, provider-helper-tools 300 s,
+    browser-verify and browser-verify-bounds 240 s.
+  - No assertion was removed, and no test left the unit tier.
+- **Not covered.** Other unit tests also failed under load: island-flicker-frameworks,
+  workflow-durability, codex-model, repository-owner and others. They are outside this ticket
+  and can still break a 3-parallel run.
+
 ## 2026-10-22 — LKM-302: the composer queue is one frosted panel with flat rows
 
 - **Supersedes LKM-294's cards.** The owner asked for one subtle frosted panel instead of a grey

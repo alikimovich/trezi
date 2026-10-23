@@ -129,9 +129,10 @@ const args = process.argv.slice(4).filter((a) => a !== '--json')
 const [cmd, a] = args
 const ok = (data) => console.log(JSON.stringify({ success: true, data }))
 const hang = () => {
+  // TERM is ignored before the pids are recorded: a recorded hang always ignores it.
+  process.on('SIGTERM', () => {})
   const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'], { stdio: 'inherit' })
   appendFileSync(dir + '/pids', process.pid + ',' + child.pid + ',')
-  process.on('SIGTERM', () => {})
   setInterval(() => {}, 1000)
 }
 const hangs = (process.env.FAKE_HANG ?? '').split('|')
@@ -158,10 +159,22 @@ const alive = (pid) => {
     return false
   }
 }
-/** Every recorded fake process is gone (SIGKILL lands a moment after the run resolves). */
+/** Every recorded fake process is gone (SIGKILL lands a moment after the run resolves; a
+ *  busy machine can take seconds to reap it). */
 const allGone = async () => {
-  for (let i = 0; i < 40 && pids().some(alive); i++) await sleep(50)
+  for (let i = 0; i < 200 && pids().some(alive); i++) await sleep(50)
   return pids().every((pid) => !alive(pid))
+}
+/** A fake wrapper is a whole Bun start: on a busy machine (parallel test runs) it may not
+ *  reach its hang before a short deadline, and then the kill was never exercised. `attempt`
+ *  runs with each deadline in turn, all its bounds checked every time, until the hang was
+ *  recorded. */
+async function untilHung(deadlines, env, attempt) {
+  for (const ms of deadlines) {
+    reset(env)
+    await attempt(ms)
+    if (pids().length) return
+  }
 }
 const reset = (env = {}) => {
   rmSync(state, { recursive: true, force: true })
@@ -173,14 +186,15 @@ const CLEANUP = CLI_KILL_AFTER_MS + CLI_ABANDON_AFTER_MS
 
 // A hung wrapper (and the grandchild it started) is killed and the call settles in time.
 {
-  reset({ FAKE_HANG: 'all' })
-  const started = Date.now()
-  const result = await runManagedCli(wrapper, 'trezi-vtest', work, ['get', 'url'], 3000)
-  const took = Date.now() - started
-  assert.equal(result.timedOut, true)
-  assert.ok(took >= 3000 && took < 3000 + CLEANUP + 2500, `settled within the bound (${took} ms)`)
+  await untilHung([3000, 10_000, 25_000], { FAKE_HANG: 'all' }, async (ms) => {
+    const started = Date.now()
+    const result = await runManagedCli(wrapper, 'trezi-vtest', work, ['get', 'url'], ms)
+    const took = Date.now() - started
+    assert.equal(result.timedOut, true)
+    assert.ok(took >= ms && took < ms + CLEANUP + 2500, `settled within the bound (${took} ms)`)
+    assert.equal(await allGone(), true, 'neither the wrapper nor its child outlives the call')
+  })
   assert.equal(pids().length, 2, 'the wrapper and its child ran')
-  assert.equal(await allGone(), true, 'neither the wrapper nor its child outlives the call')
   // A spent deadline starts nothing.
   reset()
   const none = await runManagedCli(wrapper, 'trezi-vtest', work, ['get', 'url'], 0)
@@ -202,20 +216,25 @@ const run = (over = {}) => ({
   ...over
 })
 
-// The run's budget bounds a CLI that never answers a read; nothing is left running.
+// The run's budget bounds a CLI that never answers a read; nothing is left running. Four
+// calls (each a fake wrapper start) come before the read. Even the longest budget's bound
+// is below the CLI_TIMEOUT_MS (30 s) a read held only by its own cap would take.
 {
-  reset({ FAKE_HANG: 'get count' })
-  const started = Date.now()
-  const outcome = await runChromiumChecks(run({ budgetMs: 8000 }))
-  const took = Date.now() - started
-  assert.ok(took < 8000 + CLEANUP + 4000, `the run stayed inside its budget (${took} ms)`)
+  await untilHung([8000, 16_000, 24_000], { FAKE_HANG: 'get count' }, async (budgetMs) => {
+    const started = Date.now()
+    const outcome = await runChromiumChecks(run({ budgetMs }))
+    const took = Date.now() - started
+    assert.ok(took < budgetMs + CLEANUP + 4000, `the run stayed inside its budget (${took} ms)`)
+    assert.equal(outcome.checks[0].pass, false)
+    assert.ok(outcome.stopped, 'a run that ran out of time is never verified')
+    assert.equal(await allGone(), true, 'no child outlives the run')
+  })
   assert.ok(pids().length >= 2, 'the hung read ran, with its child')
-  assert.equal(outcome.checks[0].pass, false)
-  assert.ok(outcome.stopped, 'a run that ran out of time is never verified')
-  assert.equal(await allGone(), true, 'no child outlives the run')
 }
 
-// A wait step keeps its own timeout even when each read hangs.
+// A wait step keeps its own timeout even when each read hangs. The run also starts the
+// wrapper for open, reload and close, seconds each on a busy machine; the bound stays
+// below the CLI_TIMEOUT_MS (30 s) a wait that ignored its timeout would hold the read.
 {
   reset({ FAKE_HANG: 'get count' })
   const started = Date.now()
@@ -229,7 +248,7 @@ const run = (over = {}) => ({
     })
   )
   const took = Date.now() - started
-  assert.ok(took < 300 + CLEANUP + 8000, `the wait stopped at its timeout (${took} ms)`)
+  assert.ok(took < 300 + CLEANUP + 20_000, `the wait stopped at its timeout (${took} ms)`)
   assert.match(outcome.stopped, /^step-failed: wait/)
   assert.equal(outcome.checks.length, 0)
   assert.equal(await allGone(), true)

@@ -78,7 +78,9 @@ const alive = (pid) => {
     return error.code === 'EPERM'
   }
 }
-async function gone(pid, what, ms = 6000) {
+// Waits are generous: a fake process is a whole Bun or shell start, seconds each while the
+// unit tier runs in parallel. Only a hang reaches them; a pass returns as soon as it holds.
+async function gone(pid, what, ms = 20_000) {
   for (const deadline = Date.now() + ms; Date.now() < deadline; await sleep(50))
     if (!alive(pid)) return
   assert.fail(`${what} (pid ${pid}) is still running`)
@@ -91,7 +93,7 @@ function readJsonIfComplete(path) {
     return false
   }
 }
-async function until(test, what, ms = 8000) {
+async function until(test, what, ms = 30_000) {
   for (const deadline = Date.now() + ms; Date.now() < deadline; await sleep(50)) {
     const value = await test()
     if (value) return value
@@ -146,13 +148,17 @@ const rejects = async (promise, code, pattern) => {
   if (pattern) assert.match(error.message, pattern)
   return error
 }
+// A port range of this run's own: with one fixed base, a parallel run in another worktree
+// could take the port a closed bridge left, and "the previous bridge is closed" would then
+// reach that run's bridge. Below the ephemeral range (49152+) outgoing sockets use.
+const bridgeBase = 20_000 + Math.floor(Math.random() * 28_000)
 const env = {
   FAKE_SIM_DIR: sim,
   PLATFORM_XCRUN: fakes.xcrun,
   PLATFORM_PKILL: fakes.pkill,
   PLATFORM_IDB: fakes.idb,
   PLATFORM_IDB_STATE: join(scratch, 'idb-state'),
-  PLATFORM_BRIDGE_BASE: '17800'
+  PLATFORM_BRIDGE_BASE: String(bridgeBase)
 }
 async function fixture(profile, extra = {}) {
   mkdirSync(profile, { recursive: true })
@@ -370,7 +376,7 @@ try {
     }
   )
   const port = Number(/^http:\/\/127\.0\.0\.1:(\d+)\/\?treziSim=1$/.exec(first.url)?.[1])
-  assert.ok(port >= 17800, first.url)
+  assert.ok(port >= bridgeBase, first.url)
   for (const line of [
     'Using iPhone 16 Pro · com.apple.CoreSimulator.SimRuntime.iOS-26-0',
     'Booting simulator 22222222-2222-4222-8222-222222222222…',
@@ -544,7 +550,7 @@ try {
   const status = await until(
     () => readJsonIfComplete(join(sim, 'bootstatus.json')),
     'bootstatus',
-    30_000
+    60_000
   )
   await gone(secondMetro.pid, 'the running preview replaced by the new start')
   const stopAt = Date.now()
@@ -561,7 +567,7 @@ try {
   const waiting = await until(
     () => readJsonIfComplete(join(sim, 'bootstatus.json')),
     'bootstatus',
-    30_000
+    60_000
   )
   mode({})
   const newer = owner.simulatorStart({ root: project, command: fakes.metro('ready') })

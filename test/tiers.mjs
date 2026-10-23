@@ -297,7 +297,14 @@ export const UNIT_TIMEOUT_MS = {
   // Same (LKM-217): Swift fixtures that compile the shared service or host sources. A cold
   // 8-worker run took 120 s+ for the first two and 106–120 s for the last two, against
   // 22–40 s on a warm tree; a longer budget separates queueing from a real hang.
-  'platform-owner': 240_000,
+  // LKM-313: passes took up to 225 s while three unit runs shared the Mac.
+  'platform-owner': 420_000,
+  // LKM-313: a helper, a fake provider CLI and an MCP bridge per turn; 75 s+ under load.
+  'provider-helper-tools': 300_000,
+  // LKM-313: every fake CLI call is two Bun starts. browser-verify is 3 s idle and 90 s+
+  // under load; the bounds test retries a deadline the fake missed (15 s idle, ~100 s worst).
+  'browser-verify': 240_000,
+  'browser-verify-bounds': 240_000,
   // LOCAL-WEBKIT-4: the same platform fixture compile, then scripted installs.
   'browser-tools-install': 240_000,
   'native-settings-layout': 240_000,

@@ -474,6 +474,11 @@ assert.equal(
 // --- the managed Chromium route through the real wrapper ---------------------------------------------
 const wrapper = join(import.meta.dir, '../bin/managed/agent-browser')
 Object.assign(process.env, { TREZI_BROWSER_TEST: '1', TREZI_BROWSER_TEST_ROOT: join(work, 'ab') })
+// Every fake CLI call is two Bun starts (wrapper and fake CLI): 2 s for a round of ten checks
+// when idle, over a minute under parallel test load. This section judges the CLI's facts;
+// the run, check and wait budgets are covered by test/browser-verify-bounds.mjs.
+const checkTotal = CHECK_LIMITS.totalMs
+CHECK_LIMITS.totalMs = 600_000
 const run = (over = {}) => ({
   wrapper,
   cwd: work,
@@ -483,6 +488,7 @@ const run = (over = {}) => ({
   steps: [],
   checks: one,
   screenshotPath: null,
+  budgetMs: 600_000,
   ...over
 })
 {
@@ -556,7 +562,7 @@ Object.assign(process.env, { TREZI_BROWSER_TEST_CLI: cli, TREZI_BROWSER_TEST_SHE
         steps: [
           { action: 'click', selector: '#save' },
           { action: 'press', selector: '#q', key: 'Enter' },
-          { action: 'wait', selector: '#status' }
+          { action: 'wait', selector: '#status', timeoutMs: 15_000 }
         ]
       }).steps,
       screenshotPath: shot
@@ -687,6 +693,7 @@ Object.assign(process.env, { TREZI_BROWSER_TEST_CLI: cli, TREZI_BROWSER_TEST_SHE
   setVerifyWrapperForTests(null)
   clearReceipts(receiptSession(scope.emitKey, projectKey(work)))
 }
+CHECK_LIMITS.totalMs = checkTotal
 assert.ok(REF_PATTERN.test('0123abcd:e12') && !REF_PATTERN.test('e12'))
 
 setVerificationArtifactsRoot(null)

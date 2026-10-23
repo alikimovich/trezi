@@ -306,7 +306,9 @@ const view = {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const until = async (condition, label, ms = 60_000) => {
+// A turn starts a helper, a fake provider CLI and its MCP bridge: 10 s idle, but the session
+// came up 30 s+ after the send under parallel test load (LKM-313). Only a hang waits it out.
+const until = async (condition, label, ms = 180_000) => {
   const deadline = Date.now() + ms
   while (!condition()) {
     assert.ok(Date.now() < deadline, `Timed out: ${label}\n${fixture?.stderr ?? ''}`)
