@@ -117,7 +117,6 @@ export const UNIT = [
   'chat-island-pending',
   'island-flicker',
   'island-override',
-  'island-flicker-frameworks',
   'dependency-refresh-vite',
   'native-context',
   'native-updates',
@@ -272,6 +271,10 @@ export const NATIVE = [
   'native-source-window',
   'native-chat-scroll',
   'native-next-hmr',
+  // LKM-313: moved from the unit tier. Real Next and Vite dev servers measured by the native
+  // host's WebKit (it SKIPs without TreziHost): 52 s alone, 60–120 s+ and several load-only
+  // failures (a watcher that missed a write) in parallel unit runs. Exclusive and serial here.
+  'island-flicker-frameworks',
   'browser-setup-packaged'
 ]
 export const LIVE = ['native-runtime-live', 'provider-live-parity']
@@ -293,12 +296,25 @@ export const UNIT_TIMEOUT_MS = {
   'workflow-owner': 240_000,
   // Compiles the same workflow fixture through the LKM-255 operator script.
   'live-publish-attribution': 240_000,
-  // Runs Next and Vite dev servers in turn: 52 s alone, over 120 s at load average 35.
+  // Runs Next and Vite dev servers in turn: 52 s alone, over 120 s at load average 35. Now in
+  // the native tier (LKM-313); the budget applies there too (`test/run.mjs`).
   'island-flicker-frameworks': 240_000,
   // Same (LKM-217): Swift fixtures that compile the shared service or host sources. A cold
   // 8-worker run took 120 s+ for the first two and 106–120 s for the last two, against
   // 22–40 s on a warm tree; a longer budget separates queueing from a real hang.
-  'platform-owner': 240_000,
+  // LKM-313: passes took up to 225 s while three unit runs shared the Mac.
+  'platform-owner': 420_000,
+  // LKM-313: a helper, a fake provider CLI and an MCP bridge per turn; 75 s+ under load.
+  'provider-helper-tools': 300_000,
+  // LKM-313: every fake CLI call is two Bun starts. browser-verify is 3 s idle and 90 s+
+  // under load; the bounds test retries a deadline the fake missed (15 s idle, ~100 s worst).
+  'browser-verify': 240_000,
+  'browser-verify-bounds': 240_000,
+  // LKM-313: real Bun/bash stand-in processes (a catalog probe, the SDK's own CLI, hung tools
+  // killed at probe limits). 10–25 s idle, 98 s+ and six 120 s TIMEOUTs under parallel load.
+  'codex-model': 240_000,
+  'managed-browser-path': 240_000,
+  'browser-setup-recovery': 240_000,
   // LOCAL-WEBKIT-4: the same platform fixture compile, then scripted installs.
   'browser-tools-install': 240_000,
   'native-settings-layout': 240_000,

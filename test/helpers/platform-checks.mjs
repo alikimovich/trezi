@@ -38,7 +38,7 @@ export async function checkMedia({ fixture, scratch, log, rejects, sleep }) {
   symlinkSync(outside, join(root, 'link-out.png'))
   symlinkSync(join(root, 'logo.png'), join(root, 'link-in.png'))
   const media = await fixture(join(scratch, 'media-profile'), {
-    PLATFORM_MEDIA_TTL: '1',
+    PLATFORM_MEDIA_TTL: '6',
     PLATFORM_MEDIA_MAX: String(1024 * 1024),
     PLATFORM_MEDIA_TOKENS: '3'
   })
@@ -126,18 +126,20 @@ export async function checkMedia({ fixture, scratch, log, rejects, sleep }) {
     'and is not granted again'
   )
 
-  // Expiry (1 s here), extended by each use.
+  // Expiry (6 s here), extended by each use. A resolve is a round trip to the fixture, which
+  // can take seconds under parallel test load (LKM-313), so each "still valid" gap leaves
+  // 3.5 s of margin and the expiry sleep is longer than the TTL; a longer sleep cannot fail.
   const fresh = await owner.grantMedia(root, 'logo.png')
   assert.equal(
     (await resolve(grant.token)).payload.code,
     'notFound',
     're-granting a file revokes its older token'
   )
-  await sleep(600)
+  await sleep(2500)
   assert.equal((await resolve(fresh.token)).kind, 'succeeded')
-  await sleep(600)
+  await sleep(2500)
   assert.equal((await resolve(fresh.token)).kind, 'succeeded', 'use extends the grant')
-  await sleep(1200)
+  await sleep(7000)
   assert.equal((await resolve(fresh.token)).payload.code, 'deadlineExceeded')
   assert.equal(
     await owner.mediaPath(fresh.url, root, join(root, 'logo.png')),

@@ -2,6 +2,77 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-313: four unit tests no longer fail when the Mac is busy
+
+- **Why.** 12 of 18 quick verifications on 2026-10-22 failed on unrelated unit tests. The
+  manager logs show load, shared ports and torn files, not product bugs:
+  - **browser-verify.** Each fake agent-browser call is two Bun starts (the wrapper, then the
+    fake CLI). That is 2 s idle and 48–90 s under load, which overran the 30 s
+    `CHECK_LIMITS.totalMs` and the wait step's 5 s default.
+  - **browser-verify-bounds.** Under load the fake wrapper didn't reach its hang before a 3 s
+    deadline (24× "the hung read ran") or the 8 s run budget (4× "the wrapper and its child
+    ran").
+  - **platform-owner.** Five causes:
+    - 8 s waits for a fake Metro.
+    - 30 s waits for bootstatus.
+    - The 5 s `http()` timeout while `/control` spawns the fake `idb`.
+    - A non-atomic `metro-*.json` record (JSON EOF).
+    - A fixed bridge base port of 17800 shared by parallel runs in other worktrees, so "the
+      previous bridge is closed" reached another run's bridge.
+  - **provider-helper-tools.** The 60 s turn wait expired after a 30 s session start.
+- **Fixes (tests only).**
+  - **browser-verify.** The managed-Chromium section raises `CHECK_LIMITS.totalMs` and the
+    run's `budgetMs` to 600 s and restores the total afterwards. Its wait step gets the
+    15 s maximum `timeoutMs`. This section judges CLI facts; budgets stay covered by
+    browser-verify-bounds.
+  - **browser-verify-bounds.**
+    - `untilHung` retries the hung-wrapper deadlines (3 s → 10 s → 25 s) and the run budget
+      (8 s → 16 s → 24 s). Every bound is checked on each attempt, and the hang must finally
+      be recorded.
+    - The fake installs its TERM handler before it records pids, and `allGone` waits 10 s.
+    - **Weakened bound (noted):** the wait-step run must finish within 300 ms + cleanup +
+      20 s, up from 8 s. It still fails if the wait ignored its timeout, because the hung
+      read would then hold for the CLI's 30 s cap.
+  - **platform-owner.**
+    - It uses a random per-run bridge base in 20000–47999, and the port assert uses it.
+    - `until` now waits 30 s, `gone` 20 s and bootstatus 60 s.
+    - `http()` defaults to 30 s.
+    - `fake-metro.mjs` writes its record aside and renames it into place.
+  - **provider-helper-tools.** `until` defaults to 180 s.
+  - **`test/tiers.mjs` budgets.** platform-owner 420 s, provider-helper-tools 300 s,
+    browser-verify and browser-verify-bounds 240 s.
+  - No assertion was removed, and no test left the unit tier.
+- **Repair round: the rest of the unit tier.** Review asked for every load-sensitive test, not
+  only the four in the title. I read the manager logs of each and ran three copies of it at once
+  here (the same run-lock-free way parallel worktrees collide):
+  - **codex-model (12 TIMEOUTs at 120 s).** Trezi probes the stand-in `codex` with `--version`
+    (4 s) and `debug models` (8 s); the stand-in was a Bun script, and three copies at once all
+    failed at 4 s with "the `codex` CLI was not found". The stand-in is now a `/bin/sh` script
+    that answers those two itself and starts Bun only for `exec`. Three parallel copies pass in
+    ~24 s. Budget 240 s.
+  - **browser-setup-recovery.** A hung bash tool killed at the 1.5 s probe limit before it wrote
+    its pid file gave `ENOENT` on the pid read. `untilRecorded` re-runs each hang check with
+    1.5 s, 6 s and 20 s limits until the pid files exist, with every bound checked on each
+    attempt (limits are relative: `limit + 3.5 s`, still far below the tools' 300 s sleep).
+    `until` waits 30 s, not 8 s. Budget 240 s; three parallel copies pass in ~28 s.
+  - **managed-browser-path.** One 120 s TIMEOUT, no logic failure: budget 240 s (3 copies pass in 18 s).
+  - **repository-owner, workflow-owner, workflow-durability.** Three parallel copies of each pass
+    (110 s, 67 s, 68 s) inside their existing budgets (420/240/240 s). Their other logged
+    failures were assertion or swiftc errors of the tickets that ran them, not load. No change.
+  - **island-flicker-frameworks: moved to the native tier.** It needs the native host
+    (it SKIPs in a worktree without one) and runs real Next and Vite dev servers; earlier rounds
+    already added port ranges, re-writes and settle nudges, and it still failed at 60–107 s and
+    TIMEOUT 4× at 120 s under load. It is now exclusive and serial there (`test/tiers.mjs`,
+    `test/test-runner.mjs`, `docs/TESTING.md`); `test/run.mjs` applies a test's
+    `UNIT_TIMEOUT_MS` budget in any tier.
+  - **platform-owner timing checks.** The media grant TTL is 6 s with 2.5 s/2.5 s gaps and a 7 s
+    expiry sleep (was 1 s with 0.6 s/0.6 s/1.2 s: a slow resolve round trip expired the grant).
+    The "Stop reaches a boot still waiting" bound is 30 s, not 3 s; the fake bootstatus waits
+    60 s, so a Stop that waited it out still fails. **Both are looser bounds.**
+  - **browser-verify.** `CHECK_LIMITS.totalMs` is restored in a `finally`.
+- **Not run.** The 5-round × 3-parallel full unit run: it cannot be run from a worker (one run
+  lock per worktree, no background commands, a 5-minute command limit). The manager or the
+  operator has to run it; the three-copy runs above are the evidence here.
 ## 2026-10-22 — LKM-312: the conversation's end marker is measured, so follows settle
 
 - **Report.** Build 1137: TreziHost at 100% of one core (2.4 GB). The main thread was in

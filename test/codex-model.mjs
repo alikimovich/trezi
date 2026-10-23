@@ -146,11 +146,27 @@ writeFileSync(
 // its `--config` leaves on, logs it with the model, and fails a rejected model like the
 // real one (see `reject`), before any output.
 const REAL = new Codex().exec.executablePath
-const CLI = join(scratch, 'codex.mjs')
+const CLI = join(scratch, 'codex')
+const IMPL = join(scratch, 'codex-impl.mjs')
+// LKM-313: Trezi probes `--version` with a 4 s and `debug models` with an 8 s timeout, and a
+// Bun start alone can take longer on a busy Mac ("the codex CLI was not found"). The shell
+// answers those two itself; only `exec` starts Bun.
 writeFileSync(
   CLI,
-  `#!${process.execPath}
-import { execFileSync } from 'node:child_process'
+  `#!/bin/sh
+case "$1" in
+  --version) echo 'codex-cli 0.0.0-test'; exit 0 ;;
+  debug) if [ "$2" = models ]; then
+    echo '${JSON.stringify({ models: MODELS.map((slug, i) => ({ slug, display_name: slug, visibility: 'list', priority: i + 1 })) })}'
+    exit 0
+  fi ;;
+esac
+exec ${JSON.stringify(process.execPath)} ${JSON.stringify(IMPL)} "$@"
+`
+)
+writeFileSync(
+  IMPL,
+  `import { execFileSync } from 'node:child_process'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 const out = (event) => process.stdout.write(JSON.stringify(event) + '\\n')

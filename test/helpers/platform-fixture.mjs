@@ -195,7 +195,8 @@ export async function startPlatformFixture(binary, profile, env = {}) {
 }
 
 /** One HTTP/1.1 exchange over a raw socket (so `Host` can be anything). Resolves when the
- * peer closes, or once `until(text)` holds, with the status, head and body bytes. */
+ * peer closes, or once `until(text)` holds, with the status, head and body bytes. A
+ * `/control` request answers after a fake `idb` run, seconds under parallel test load. */
 export function http(
   port,
   {
@@ -204,7 +205,7 @@ export function http(
     host = `127.0.0.1:${port}`,
     body = null,
     until = null,
-    timeout = 5000
+    timeout = 30_000
   } = {}
 ) {
   return new Promise((resolve, reject) => {
