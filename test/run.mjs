@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describePlan, planFromGit, typecheckPlan } from './helpers/test-plan.mjs'
+import { describePlan, planFromGit, shardTests, typecheckPlan } from './helpers/test-plan.mjs'
 import { acquireRunLock, runCommand, runQueue } from './helpers/test-runner.mjs'
 import { TIERS, TYPECHECKS, UNIT_TIMEOUT_MS } from './tiers.mjs'
 
@@ -23,7 +23,8 @@ const options = {
   'timeout-ms': 120_000,
   'log-tail': 0,
   filter: null,
-  changed: null
+  changed: null,
+  shard: null
 }
 let serial = false
 let report = false
@@ -38,12 +39,17 @@ try {
     else if (arg === 'all') for (const t of Object.keys(TIERS)) selected.add(t)
     else if (Object.hasOwn(TIERS, arg)) selected.add(arg)
     else {
-      const match = /^--(jobs|timeout-ms|log-tail|filter|changed)=(.+)$/.exec(arg)
+      const match = /^--(jobs|timeout-ms|log-tail|filter|changed|shard)=(.+)$/.exec(arg)
       if (!match) throw new Error(`unknown argument: ${arg}`)
       const [, key, value] = match
       if (key === 'filter') options.filter = new Set(value.split(','))
       else if (key === 'changed') options.changed = value
-      else {
+      else if (key === 'shard') {
+        const [index, count] = /^([1-9]\d?)\/([1-9]\d?)$/.exec(value)?.slice(1).map(Number) ?? []
+        if (!count || index > count)
+          throw new Error(`invalid shard: ${value} (want <index>/<count>)`)
+        options.shard = { index, count }
+      } else {
         const n = Number(value)
         if (!Number.isSafeInteger(n) || n < 1 || n > 2_147_483_647)
           throw new Error(`invalid ${key}: ${value}`)
@@ -54,6 +60,8 @@ try {
   if (!selected.size) throw new Error('select at least one tier')
   if (options.changed && (options.filter || selected.size !== 1 || !selected.has('unit')))
     throw new Error('--changed selects within the unit tier alone and cannot take --filter')
+  if (options.shard && (typecheck || selected.size !== 1 || !selected.has('unit')))
+    throw new Error('--shard splits the unit tier alone and cannot take --typecheck')
   if (options.filter) {
     const names = [...selected].flatMap((t) => TIERS[t])
     for (const name of options.filter)
@@ -61,7 +69,7 @@ try {
   }
 } catch (error) {
   console.error(
-    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name | --changed=<base-ref>] [--report] [--typecheck] [--list]`
+    `${error.message}\nusage: node test/run.mjs <unit|native|live|all> [--serial] [--jobs=8] [--timeout-ms=120000] [--log-tail=150] [--filter=name,name | --changed=<base-ref>] [--shard=<index>/<count>] [--report] [--typecheck] [--list]`
   )
   process.exit(2)
 }
@@ -79,6 +87,15 @@ if (options.changed) {
   // With --list stdout stays tier/name pairs; the reasons go to stderr.
   ;(list ? console.error : console.log)(describePlan(plan))
   if (plan.mode === 'selected') options.filter = new Set(plan.unit)
+}
+// --shard: this shard's part of the selection (shardTests in test/helpers/test-plan.mjs).
+if (options.shard) {
+  const { index, count } = options.shard
+  const tests = TIERS.unit.filter((name) => !options.filter || options.filter.has(name))
+  options.filter = new Set(shardTests(tests, count)[index - 1])
+  ;(list ? console.error : console.log)(
+    `Shard ${index}/${count}: ${options.filter.size} of ${tests.length} selected unit tests`
+  )
 }
 const checks = !typecheck
   ? { run: [], notRun: [] }
@@ -217,6 +234,7 @@ writeFileSync(
       counts,
       builds,
       selection: plan && { mode: plan.mode, unit: plan.unit ?? null, reasons: plan.reasons },
+      shard: options.shard && { ...options.shard, unit: [...options.filter] },
       notRun: checks.notRun,
       results
     },

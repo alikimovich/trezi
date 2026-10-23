@@ -44,8 +44,15 @@ export async function checkComposerSend(host: NativeBridge) {
     await finish()
 
     // The Send button twice (the second still showed Send), then a key typed after it.
+    // LKM-325: Send is enabled by the draft's snapshot, as after real typing; in the same turn
+    // as the text it still had the idle snapshot's disabled state and sent nothing.
+    await host.request('composerPerform', { text: 'Ship it' })
+    await wait(
+      async () => chat.text === 'Ship it' && (await inspect()).enabled === true,
+      'Send enabled for the draft'
+    )
     await host.request('composerPerform', {
-      steps: [{ text: 'Ship it' }, { action: 'send' }, { action: 'send' }, { append: 'Next' }]
+      steps: [{ action: 'send' }, { action: 'send' }, { append: 'Next' }]
     })
     await wait(async () => (await inspect()).text === 'Next' && chat.text === 'Next', 'Next')
     assert.equal(sends().length, 2, 'the second click sent nothing')

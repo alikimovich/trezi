@@ -16,13 +16,47 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: typecheck + unit tests
+  # tsc reads no Swift and no SDK, so the typechecks run once, on Linux, next to the unit
+  # shards instead of ahead of them on every macOS runner (LKM-327).
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.x
+
+      # package.json version is SemVer and CHANGELOG.md has an Unreleased section (LKM-143).
+      - name: Version and changelog
+        run: bun scripts/check-version.mjs
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: |
+          bun run typecheck
+          bun run typecheck:native
+
+  unit:
+    # A pull request splits the unit tier over 3 runners; a push to main runs it whole
+    # on one (docs/TESTING.md "GitHub CI"). Every shard computes the same split from the
+    # selection and test/tiers.mjs alone (shardTests in test/helpers/test-plan.mjs).
+    name: unit tests (${{ matrix.shard }}/${{ strategy.job-total }})
     # The Swift service owners compile against the macOS 26 SDK (scripts/requirements.mjs
     # MIN_SDK). The macos-26 image's default Xcode 26 provides it; the toolchain step
     # fails the job if it does not. See docs/TESTING.md "GitHub CI".
     runs-on: macos-26
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(github.event_name == 'pull_request' && '[1, 2, 3]' || '[1]') }}
     steps:
       # Full history: a pull request's selection diffs against the merge base with the
       # event's base commit (docs/TESTING.md "Changed-file selection").
@@ -36,10 +70,6 @@ jobs:
         with:
           bun-version: 1.3.x
 
-      # package.json version is SemVer and CHANGELOG.md has an Unreleased section (LKM-143).
-      - name: Version and changelog
-        run: bun scripts/check-version.mjs
-
       - name: Toolchain
         run: |
           xcode-select -p
@@ -52,36 +82,53 @@ jobs:
 
       # Compiled Swift test fixtures, the shared Clang module cache and the last test
       # times (test/helpers/swift-build.mjs, LKM-167). Binaries are keyed by toolchain,
-      # flags and source contents, so a stale cache only costs a rebuild.
-      - name: Swift test cache
-        uses: actions/cache@v4
+      # flags and source contents, so a stale cache only costs a rebuild. A shard first
+      # restores its own last cache, then main's whole-tier one, then any.
+      - name: Restore Swift test cache
+        id: swift-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             .local/test-cache
             .local/test-times.json
-          key: unit-swift-${{ runner.os }}-${{ github.sha }}
-          restore-keys: unit-swift-${{ runner.os }}-
+          key: unit-swift-${{ runner.os }}-${{ matrix.shard }}of${{ strategy.job-total }}-${{ github.sha }}
+          restore-keys: |
+            unit-swift-${{ runner.os }}-${{ matrix.shard }}of${{ strategy.job-total }}-
+            unit-swift-${{ runner.os }}-1of1-
+            unit-swift-${{ runner.os }}-
 
-      # Keep typechecks ahead of the unit tier so they do not compete with its first
-      # Swift fixture builds (docs/TESTING.md "GitHub CI"). Local `test:quick` still
-      # runs them together; this CI ordering is a resource-contention mitigation.
-      - name: Typecheck
+      - name: Swift test cache result
+        env:
+          HIT: ${{ steps.swift-cache.outputs.cache-hit }}
+          MATCHED: ${{ steps.swift-cache.outputs.cache-matched-key }}
         run: |
-          bun run typecheck
-          bun run typecheck:native
+          echo "exact hit: ${HIT:-false}; restored: ${MATCHED:-nothing (cold cache)}"
+          du -sh .local/test-cache 2>/dev/null || true
 
       # --report prints the 20 slowest. --log-tail prints the last 150 lines of every
       # failing test's log into the job output; the full logs are in the artifact below.
       # A push to main runs every unit test. A pull request runs the plan for its diff
       # against the event's base commit (--changed): docs, test-only and audited UI
       # changes run their tests and readers, anything else runs everything, and a
-      # selection error fails the step. The Typecheck step above always runs.
+      # selection error fails the step. --shard then runs this runner's part of it.
       - name: Unit tests
         env:
           TREZI_TEST_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          TREZI_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
           if [ -n "$TREZI_TEST_BASE" ]; then set -- --changed="$TREZI_TEST_BASE"; fi
-          node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 "$@"
+          node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="$TREZI_TEST_SHARD" "$@"
+
+      # A failed run saves too (a cancelled one does not), so its compiled fixtures are
+      # not built again on the next push.
+      - name: Save Swift test cache
+        if: ${{ !cancelled() && steps.swift-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .local/test-cache
+            .local/test-times.json
+          key: ${{ steps.swift-cache.outputs.cache-primary-key }}
 
       # always(): upload after a green, red or cancelled run alike, so the logs of a
       # failing (or flaky) test can be downloaded for 7 days.
@@ -89,9 +136,26 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-logs
+          name: unit-test-logs-${{ matrix.shard }}of${{ strategy.job-total }}
           path: test/artifacts/runs/
           retention-days: 7
+
+  # The one check for the typecheck and every unit shard, under the name the job had
+  # before the split.
+  test:
+    name: typecheck + unit tests
+    needs: [typecheck, unit]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Typecheck and every unit shard passed
+        env:
+          TYPECHECK: ${{ needs.typecheck.result }}
+          UNIT: ${{ needs.unit.result }}
+        run: |
+          echo "typecheck: $TYPECHECK; unit shards: $UNIT"
+          test "$TYPECHECK" = success && test "$UNIT" = success
 
   app-build:
     name: app build

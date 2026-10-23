@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Faster PR CI unit job (LKM-327)
+
+- [x] Typecheck on its own Linux job; unit tier in 3 macOS shards on a pull request (`--shard=i/n`, deterministic split), whole tier on one runner on `main`; `typecheck + unit tests` gate keeps the check name.
+- [x] Per-shard Swift caches, saved after failures too, with the hit and restored key logged; `docs/TESTING.md` "GitHub CI" describes the split.
+- [ ] Measure the median "typecheck + unit tests" wall time over the next 5 PRs (target ≤ 5 min); if a shard is still long, read its `--report` slowest list (e.g. `swift-preview-build`) and rebalance or fix the top tests.
+
 ## Native footer build badge alignment and development build identity (LKM-301)
 
 - [x] Dot drawn and pinned half the cap height above the identity's baseline; identity and context are separate labels (context truncates first, in the middle), no overlap or clipping at a 180 pt sidebar (`src/native/BuildBadge.swift`).
