@@ -2,6 +2,35 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-314: repository-owner and the workflow tests survive parallel unit runs
+
+- **Why.** LKM-313 left these three unchanged, saying their failures came from other tickets.
+  The manager logs from 2026-10-21 on say otherwise:
+  - **repository-owner.** 13 FAILs, all at 100–102 s. The parity `suites` section starts 14
+    Git suites at once and SIGKILLs each after a fixed 100 s. chat-worktrees, chat-landing,
+    chat-landing-recovery, live-commit and chat-spare were killed before they printed anything.
+  - **workflow-owner, workflow-durability.** 8 and 14 TIMEOUTs at 240 s. None was a hang: each
+    log still showed a scenario finishing every 5–30 s when it was killed. Passes took up to
+    238.7 s and 239.1 s (p90 110 s and 132 s), against a 240 s budget.
+- **Fixes (tests only).**
+  - **repository-owner.** The per-suite limit is 300 s, not 100 s, and a killed suite now
+    reports `SIGKILL at the 300 s suite limit`. The re-entrant lease race allows 60 s, not
+    10 s; a deadlock never resolves, so it still fails. Budget 600 s (was 420 s).
+  - **workflow-owner, workflow-durability.** Budget 420 s (was 240 s). Neither has its own
+    timeouts.
+  - No assertion was removed, and no test left the unit tier.
+- **Repair: native-slider-ticks on macOS 27.** Manager verification failed it on the 27.0.1
+  host (it passed on 25.x): "Baseline stepped Slider draws tick marks ([])". Not load: three
+  reruns failed the same way. A debug dump showed that this SwiftUI draws `Slider` itself, so the
+  windowless hosting view holds only a `_FocusRingView` and no `NSSlider`. origin/main fixed
+  the same fixture in parallel (SKIP when no `NSSlider` is found, source check unchanged); the
+  merge kept main's version of `test/fixtures/slider-ticks/main.swift` and dropped this branch's.
+- **Docs.** `docs/TESTING.md` has a "Parallel load check" section with the operator procedure:
+  three checkouts, 5 rounds.
+- **Waived.** The 5-round × 3-parallel unit run was waived by operator decision (option b) and
+  is tracked by the nightly runs; no follow-up ticket is opened for it. Parallel-load
+  reliability is still unproven. The three tests passed in one filtered run here:
+  repository-owner 181.9 s, workflow-owner 88.2 s, workflow-durability 77.2 s.
 ## 2026-10-23 — LKM-327: PR CI unit tier in 3 shards
 
 - **Why.** "typecheck + unit tests" took 12 min on PR #300. It was one 3-core macOS
