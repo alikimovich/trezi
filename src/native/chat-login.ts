@@ -19,7 +19,11 @@ export interface ChatLogin {
   checking?: boolean
 }
 
-const name = (provider: string) => (provider === 'claude' ? 'Claude' : 'Codex')
+const name = (provider: string) =>
+  provider === 'claude' ? 'Claude' : provider === 'gemini' ? 'Gemini' : 'Codex'
+/** Gemini has no in-app sign-in: its own CLI does it, or a key saved in Settings (LKM-315). */
+const GEMINI_SIGN_IN =
+  'Run gemini in Terminal and choose Login with Google, or save a Gemini API key in Settings → AI Providers → Gemini…, then choose Retry to send this message.'
 const signInActions = (chat: Chat) =>
   (['claude', 'codex'] as const).map((provider) => ({
     label:
@@ -76,7 +80,9 @@ export function loginCard(chat: Chat): NativeChatCard | null {
       ? `${name(chat.settings.provider)} needs sign-in.`
       : `${name(chat.settings.provider)} did not respond.`,
     chat.signInMessage ??
-      `Sign in to ${name(chat.settings.provider)}, then choose Retry to send this message.`,
+      (chat.settings.provider === 'gemini'
+        ? GEMINI_SIGN_IN
+        : `Sign in to ${name(chat.settings.provider)}, then choose Retry to send this message.`),
     report
   ]
     .filter(Boolean)

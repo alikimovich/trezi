@@ -1,12 +1,16 @@
 /** Built-in seats only. Connections to custom endpoints have their own status. */
 export type BuiltinProvider = 'claude' | 'codex'
+/** The seats with a readiness: Gemini only while it is on in Settings (LKM-315). */
+export type SeatProvider = BuiltinProvider | 'gemini'
 export type ProviderReadinessStatus = 'ready' | 'checking' | 'signed_out' | 'failed'
 export interface ProviderReadiness {
   status: ProviderReadinessStatus
   /** Fixed, user-facing recovery text. Never a CLI's raw output or an OAuth URL. */
   detail?: string
 }
-export type ProviderReadinessMap = Record<BuiltinProvider, ProviderReadiness>
+export type ProviderReadinessMap = Record<BuiltinProvider, ProviderReadiness> & {
+  gemini?: ProviderReadiness
+}
 
 export const initialProviderReadiness = (): ProviderReadinessMap => ({
   claude: { status: 'checking' },

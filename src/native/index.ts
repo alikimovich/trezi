@@ -35,6 +35,7 @@ import { setEditingOwner } from '../main/editing-owner'
 import { registerFeedbackIpc } from '../main/feedback'
 import { createProjectFile, deleteProjectFile, renameProjectFile } from '../main/file-ops'
 import { listProjectFiles } from '../main/file-tree'
+import { GEMINI_ENABLED_KEY, setGeminiEnabledSource } from '../main/gemini-setting'
 import { checkoutBranch, ensureBranch, listBranches, switchBranch } from '../main/git'
 import { registerGitRemoteIpc } from '../main/git-remote'
 import { registerGithubIpc } from '../main/github'
@@ -112,6 +113,7 @@ import { withBuildCheckSetting } from './settings-build-check'
 import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
 import { withDreamerPane } from './settings-dreamer'
+import { withGeminiPane } from './settings-gemini'
 import { withProviderFallbackSetting } from './settings-provider-fallback'
 import { nativeSkills, withSkillsPane } from './settings-skills'
 import { NativeSheetController } from './sheets-runtime'
@@ -208,6 +210,8 @@ async function main() {
     throw new Error(`Trezi could not read preferences from its service: ${error.message}`)
   })
   setClaudeUserPluginsSource(() => preferences.get(CLAUDE_USER_PLUGINS_KEY))
+  // LKM-315: Gemini is listed and routed only while Settings turned it on.
+  setGeminiEnabledSource(() => preferences.get(GEMINI_ENABLED_KEY))
   setAgentFileAccessSource(() => preferences.get(AGENT_FILE_ACCESS_KEY))
   setAgentGitAccessSource(() => preferences.get(AGENT_GIT_ACCESS_KEY))
   setAgentMergeSource(() => preferences.get(AGENT_MERGE_KEY))
@@ -943,8 +947,12 @@ async function main() {
       withBuildCheckSetting(
         withDreamerPane(
           withSkillsPane(
-            withClaudePane(
-              new NativeSettingsController(sheetController, preferences, refreshPreferences)
+            withGeminiPane(
+              withClaudePane(
+                new NativeSettingsController(sheetController, preferences, refreshPreferences)
+              ),
+              preferences,
+              () => void chatController.refreshChoices()
             ),
             nativeSkills.current,
             () => host!.request('pick', {}, 0x7fffffff)

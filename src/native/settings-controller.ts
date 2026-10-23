@@ -46,7 +46,7 @@ const origin = (url: string) => {
 export const SETTINGS_SECTION_KEY = 'trezi:settings-section:v1'
 export const AUTO_FIX_CI_KEY = 'trezi:auto-fix-ci:v1'
 const PROVIDERS =
-  'Claude and Codex use your existing sign-ins. Add another provider to use its models in chats.'
+  'Claude and Codex use your existing sign-ins. Gemini is optional: turn it on below. Add another provider to use its models in chats.'
 const SKILLS_DETAIL = 'Manage skills here without changing your project or global files'
 const sections = (): NativeSheetSection[] => [
   { id: 'general', label: 'General', symbol: 'gearshape', detail: 'Changes save automatically.' },
@@ -424,6 +424,16 @@ export class NativeSettingsController {
     if (section) section.detail = pane.detail
     sheet.state.message = undefined
     this.sheets.refresh()
+  }
+  /** The default-model choices again, the panes as they are (LKM-315: Gemini turned on or off). */
+  async refreshChoices(id: string): Promise<ModelChoice[] | undefined> {
+    const choices: ModelChoice[] = await this.invoke('providers:choices')
+    const sheet = this.sheets.current
+    const field = sheet?.state.id === id && sheet.state.fields.find((f) => f.id === 'default')
+    if (!field) return
+    this.choices = choices
+    field.choices = defaultChoices(choices)
+    return choices
   }
   /** Back to the provider list; new or removed providers also change the default-model choices. */
   private async reload(id: string) {

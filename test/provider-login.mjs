@@ -6,7 +6,8 @@
 // - auth: a CLI "Not logged in" / "Invalid API key" reply is an `auth` error, never
 //   assistant text; an unknown error code is a grant violation; a crash is visible;
 // - token: the subscription token is saved encrypted, reaches only a Claude helper as
-//   CLAUDE_CODE_OAUTH_TOKEN, and never comes back in a reply, an event or a report;
+//   CLAUDE_CODE_OAUTH_TOKEN, and never comes back in a reply, an event or a report; a
+//   Gemini API key (LKM-315) reaches only a Gemini helper as GEMINI_API_KEY;
 // - diagnose: "Check provider login" through the helper path, with missing and invalid
 //   auth, an installed CLI that is logged in, and a provider with no check;
 // - parent-session (LKM-124): a Trezi started from a Claude Code or Codex session; its
@@ -58,6 +59,7 @@ const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-provider-login-')
 const CRYPTO = join(root, 'test/fixtures/provider-owner/fake-crypto.mjs')
 const CLAUDE_MESSAGE = 'Claude did not respond — check login (claude auth status) and retry'
 const TOKEN = 'sk-ant-oat01-fake-subscription-token'
+const GEMINI_KEY = 'AIzaFakeGeminiKeyForTests0123456789'
 const fixtures = new Set()
 let count = 0
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -260,16 +262,25 @@ try {
 
   // The subscription token: encrypted at rest, only in a Claude helper, never echoed.
   {
-    const run = await fixture({ bundled: loggedOut })
+    const run = await fixture({
+      bundled: loggedOut,
+      PROVIDER_HELPER_PROVIDERS: 'fake,claude,gemini'
+    })
     const data = run.owner.data
-    assert.deepEqual(await data.seatTokenStatus(), { claude: { hasToken: false } })
+    assert.deepEqual(await data.seatTokenStatus(), {
+      claude: { hasToken: false },
+      gemini: { hasToken: false }
+    })
     await assert.rejects(data.saveSeatToken('claude', 'two words'), /setup-token/)
     await assert.rejects(
       data.saveSeatToken('codex', TOKEN),
       (error) => error.code === 'invalidRequest'
     )
     assert.equal(await data.saveSeatToken('claude', `  ${TOKEN}\n`), true)
-    assert.deepEqual(await data.seatTokenStatus(), { claude: { hasToken: true } })
+    assert.deepEqual(await data.seatTokenStatus(), {
+      claude: { hasToken: true },
+      gemini: { hasToken: false }
+    })
     const file = readFileSync(join(run.home, 'trezi/seat-tokens.json'), 'utf8')
     assert.ok(!file.includes(TOKEN), 'the file holds ciphertext only')
     const names = async (provider) => {
@@ -290,6 +301,25 @@ try {
         ),
       'no other helper does'
     )
+    // LKM-315: the Gemini API key is stored the same way and reaches only a Gemini helper.
+    await assert.rejects(data.saveSeatToken('gemini', 'two words'), /Gemini API key/)
+    assert.equal(await data.saveSeatToken('gemini', GEMINI_KEY), true)
+    assert.deepEqual(await data.seatTokenStatus(), {
+      claude: { hasToken: true },
+      gemini: { hasToken: true }
+    })
+    assert.ok(!readFileSync(join(run.home, 'trezi/seat-tokens.json'), 'utf8').includes(GEMINI_KEY))
+    const gemini = await names('gemini')
+    assert.ok(
+      gemini.includes('GEMINI_API_KEY') && !gemini.includes('CLAUDE_CODE_OAUTH_TOKEN'),
+      'a Gemini helper gets its key and not the Claude token'
+    )
+    for (const provider of ['claude', 'fake'])
+      assert.ok(
+        !(await names(provider)).includes('GEMINI_API_KEY'),
+        `no ${provider} helper gets it`
+      )
+    assert.equal(await data.saveSeatToken('gemini', ''), false, 'an empty key removes it')
     const report = await data.checkLogin('claude', WT)
     assert.equal(report.token, true)
     assert.match(report.detail, /Subscription token from Settings: set/)
@@ -302,9 +332,14 @@ try {
     assert.equal(await leak.owner.data.saveSeatToken('claude', TOKEN), true)
     await assert.rejects(leak.owner.data.checkLogin('claude', WT), /malformed login report/)
     for (const said of [run.said, leak.said])
-      assert.ok(!said.some((line) => line.includes(TOKEN)), 'the token never crosses the pipe')
+      assert.ok(
+        !said.some((line) => line.includes(TOKEN) || line.includes(GEMINI_KEY)),
+        'the token never crosses the pipe'
+      )
     assert.ok(
-      !run.f.stderr.includes(TOKEN) && !leak.f.stderr.includes(TOKEN),
+      !run.f.stderr.includes(TOKEN) &&
+        !run.f.stderr.includes(GEMINI_KEY) &&
+        !leak.f.stderr.includes(TOKEN),
       'nor the service log'
     )
     assert.equal(
@@ -312,7 +347,10 @@ try {
       false,
       'an empty token removes it'
     )
-    assert.deepEqual(await leak.owner.data.seatTokenStatus(), { claude: { hasToken: false } })
+    assert.deepEqual(await leak.owner.data.seatTokenStatus(), {
+      claude: { hasToken: false },
+      gemini: { hasToken: false }
+    })
     await stop(leak)
     console.log('PROVIDER-LOGIN token PASS')
   }

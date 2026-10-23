@@ -34,6 +34,7 @@ export const UNIT = [
   'provider-helper-tools',
   'service-session',
   'native-settings-claude',
+  'gemini-provider',
   'editing-owner',
   'workflow-owner',
   'workflow-durability',

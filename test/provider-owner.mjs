@@ -30,6 +30,7 @@ import { helperProvider } from '../src/main/backends/helper-session.ts'
 import { pickProvider } from '../src/main/backends/index.ts'
 import { interruptWithOwner } from '../src/main/backends/interrupt.ts'
 import { createRecordCapture } from '../src/main/backends/record.ts'
+import { setGeminiEnabledSource } from '../src/main/gemini-setting.ts'
 import { registerPreviewSource } from '../src/main/preview-state.ts'
 import { providerOwner, setProviderOwner } from '../src/main/provider-owner.ts'
 import { LIMITS } from '../src/main/provider-policy.ts'
@@ -135,9 +136,14 @@ try {
       assert.equal(
         pickProvider({ provider: 'gemini' }).host,
         'helper',
-        'gemini without its opt-in falls back to a Claude helper'
+        'gemini turned off falls back to a Claude helper'
       )
       assert.equal(pickProvider({ provider: 'gemini' }).id, 'claude')
+      // LKM-315: turned on in Settings, a Gemini chat runs in its own helper.
+      setGeminiEnabledSource(() => 'true')
+      assert.equal(pickProvider({ provider: 'gemini' }).id, 'gemini')
+      assert.equal(pickProvider({ provider: 'gemini' }).host, 'helper')
+      setGeminiEnabledSource(() => null)
       assert.notEqual(pickProvider({ connectionId: 'c1' }).host, 'helper')
       assert.notEqual(pickProvider({ provider: 'claude', connectionId: 'c1' }).host, 'helper')
       // Inside a helper the routing never nests.
