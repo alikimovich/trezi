@@ -29,7 +29,6 @@ import {
   LAYERS_SELECT,
   LAYERS_SET_WATCH,
   PREVIEW_CANCELLED,
-  PREVIEW_CANVAS_RESULT,
   PREVIEW_CLEAR_SELECTED,
   PREVIEW_COMMENT,
   PREVIEW_COMMENT_MODE,
@@ -43,7 +42,6 @@ import {
   PREVIEW_SET_MODE,
   PREVIEW_SET_PINS,
   PREVIEW_SET_STATUS,
-  PREVIEW_STATES_KEY,
   PREVIEW_STYLES_UPDATED,
   PREVIEW_TEXT_EDIT,
   PREVIEW_TOGGLE_SELECT,
@@ -290,31 +288,8 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   // comment/annotate are handled entirely inside the preview's composer.
   ipcMain.on(PREVIEW_TOOLBAR_ACTION, (e, kind: string) => {
     if (!fromPreview(e)) return
-    if (!['code', 'delete', 'props', 'states'].includes(kind)) return
+    if (!['code', 'delete', 'props'].includes(kind)) return
     sendToMain('preview:toolbar-action', kind)
-  })
-  // LKM-207: H on a states workbench hides the native switcher (for screenshots).
-  ipcMain.on(PREVIEW_STATES_KEY, (e, key: unknown) => {
-    if (
-      !fromPreview(e) ||
-      typeof key !== 'string' ||
-      !/^(hide|close|[a-z0-9][a-z0-9-]{0,39})$/.test(key)
-    )
-      return
-    sendToMain('preview:states-key', key)
-  })
-  ipcMain.on(PREVIEW_CANVAS_RESULT, (e, value: unknown) => {
-    if (!fromPreview(e) || !value || typeof value !== 'object') return
-    const result = value as { session?: unknown; status?: unknown; reason?: unknown }
-    if (
-      typeof result.session !== 'string' ||
-      result.session.length > 64 ||
-      !['loading', 'ready', 'error'].includes(String(result.status)) ||
-      (result.reason !== undefined &&
-        (typeof result.reason !== 'string' || result.reason.length > 240))
-    )
-      return
-    sendToMain('preview:states-canvas-result', result)
   })
   // Renderer dropped the selection (pill ×, message sent) → hide the toolbar.
   ipcMain.on('preview:clear-selected', () => {

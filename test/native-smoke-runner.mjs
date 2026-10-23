@@ -143,7 +143,7 @@ const badRestore = await runSmokeChecks(
   [
     pass('startup'),
     {
-      name: 'states-workbench',
+      name: 'preview-history',
       run: async () => {
         throw new Error('reload missed')
       }
@@ -174,10 +174,10 @@ assert.deepEqual(
   badRestore.map((r) => r.outcome),
   ['pass', 'fail', 'skip', 'skip']
 )
-assert.equal(badRestore[2].dependsOn, 'states-workbench restore failed')
+assert.equal(badRestore[2].dependsOn, 'preview-history restore failed')
 assert.ok(
   afterBadRestore.includes(
-    'WARN [smoke] states-workbench restore after failure: Restore timed out: desktop viewport'
+    'WARN [smoke] preview-history restore after failure: Restore timed out: desktop viewport'
   )
 )
 assert.ok(!afterBadRestore.includes('ran'))

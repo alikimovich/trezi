@@ -77,8 +77,6 @@ import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
 import { checkStartComposer, restoreStartComposer } from './smoke-start'
-import { checkStatesCanvas, restoreStatesCanvas } from './smoke-states-canvas'
-import { checkStatesWorkbench, restoreStatesWorkbench } from './smoke-states-workbench'
 import { checkSwiftBuild, restoreSwiftBuild } from './smoke-swift-build'
 import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
 import { checkSwiftMacros, restoreSwiftMacros } from './smoke-swift-macros'
@@ -158,7 +156,6 @@ export async function runNativeCoreSmoke(
   writeFileSync(join(fixture, 'native-plain.css'), '.plainLayout { display:flex; gap:8px; }\n')
   let firstProject = '',
     originalURL = '',
-    statesURL = '',
     historyURL = '',
     firstChat = ''
   const clearComposer = async () => {
@@ -1517,30 +1514,6 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: async () => {
         await checkToolbarMore(host, page)
-      }
-    },
-    {
-      name: 'states-canvas',
-      dependsOn: ['open-project'],
-      run: async () => {
-        await checkStatesCanvas(host, page, fixture, root, artifacts, invoke)
-        await restoreStatesCanvas(fixture, page, invoke)
-      },
-      cleanup: () => restoreStatesCanvas(fixture, page, invoke)
-    },
-    {
-      name: 'states-workbench',
-      dependsOn: ['open-project'],
-      run: async () => {
-        statesURL = String(await page('location.href'))
-        // Select mode owns the page's keys; the switcher's keys work outside it.
-        await invoke('preview:set-select-mode', false)
-        await checkStatesWorkbench(host, page, fixture, root, artifacts, { invoke, send })
-      },
-      cleanup: async () => {
-        if ((await host.request('sheetInspect')).visible)
-          await host.request('sheetPerform', { action: 'keep' })
-        await restoreStatesWorkbench(page, fixture, statesURL)
       }
     },
     {
