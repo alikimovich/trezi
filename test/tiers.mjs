@@ -284,13 +284,17 @@ export const UNIT_TIMEOUT_MS = {
   // Its Swift fixtures queue behind other tests' swiftc runs; it takes 110 s+ under load.
   // The sections themselves are ~25 s warm (LOCAL-WEBKIT-PUBLISH: a 3-worker CI run with a
   // cold Swift cache hit 240 s inside the sections after `crash`, with no hang).
-  'repository-owner': 420_000,
+  // LKM-314: its parity suites may now take 300 s under three parallel unit runs, then the
+  // sections; passes already took up to 232 s.
+  'repository-owner': 600_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
   // most service sources after nearly every service change, queued behind other swiftc runs.
-  'workflow-durability': 240_000,
-  'workflow-owner': 240_000,
+  // LKM-314: no hang in any logged TIMEOUT: each was still finishing a scenario every 5–30 s
+  // at 240 s, and passes took up to 239 s.
+  'workflow-durability': 420_000,
+  'workflow-owner': 420_000,
   // Compiles the same workflow fixture through the LKM-255 operator script.
   'live-publish-attribution': 240_000,
   // Runs Next and Vite dev servers in turn: 52 s alone, over 120 s at load average 35. Now in
