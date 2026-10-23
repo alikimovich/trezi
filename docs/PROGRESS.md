@@ -20,15 +20,23 @@ Newest first. Append a dated entry when you finish a chunk of work.
     their groups, and `docs/STATES.md`.
 - **Old data.** The `trezi:states-workbenches:v1` and `trezi:states-canvases:v1`
   preferences are no longer read. Nothing in a user's project is touched.
-- **Verification.** Typecheck and lint pass. The unit tier is 255 PASS, 2 SKIP and
-  1 FAIL. The failure is `native-slider-ticks`: its baseline stepped Slider draws no
-  ticks on this macOS, and it compiles none of the edited files. No native run was
-  available.
-- **Slider fixture.** `native-slider-ticks` failed the same way on an untouched HEAD.
-  On this macOS a windowless (or offscreen-window) SwiftUI `Slider` has no `NSSlider`
-  subview, so the baseline probe could not be met. The fixture now runs the pure
-  snapping checks first and reports SKIP (never PASS) when the baseline finds no
-  `NSSlider`. When one exists, every assertion runs as before.
+- **Verification.** Typecheck, lint and the unit tier pass. `native-slider-ticks`
+  reports SKIP on macOS 27, where a SwiftUI `Slider` has no `NSSlider`. The merge
+  kept main's fixture for this, which replaced an equivalent fix on this branch. No
+  native run was available.
+
+## 2026-10-23 — LKM-318: full-width dividers between queued messages
+
+- **Why.** The hairline between two queued rows started at the text and stopped 12 pt
+  before the trailing edge, so it did not run under the reply-arrow glyph or the edit,
+  delete and more buttons.
+- **Change.** `src/native/ComposerQueue.swift` draws a row's `separator-<index>` with no
+  horizontal padding, so it spans the panel from edge to edge. Thickness (`rule`), colour
+  (`separatorColor`), row heights and layout are unchanged; the first row still has none
+  and the header's divider keeps its `ruleInset`.
+- **Check.** `queueGeometryProblems` (`src/native/smoke-queue.ts`) now wants a separator's
+  minX/maxX at the panel's edges; `test/composer-queue-panel.mjs` uses full-width fixtures
+  and rejects the old inset separator.
 
 ## 2026-10-22 — LKM-315: Gemini is an optional provider with an On/Off row in Settings
 
