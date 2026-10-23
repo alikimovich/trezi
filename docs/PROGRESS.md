@@ -22,9 +22,16 @@ Newest first. Append a dated entry when you finish a chunk of work.
   intends.
 - **Open: inspector and layers-island.** The select-mode hover shows over the page but
   does not clear after synthetic moves over the island, although the page's cover shield
-  is connected at the island's rect and `picks` is 0. This needs a native investigation of
-  whether macOS 27 WebKit drops moves over an occluding native view, which would leave a
-  real hover stuck.
+  is connected at the island's rect and `picks` is 0. The page-side code is consistent
+  (`onMove` clears the hover when the target is the shield host, `isOverlay` includes it), so
+  the cause is either that the island move never reaches the page on macOS 27 or something in
+  the preview script. It cannot be told apart without a native run, which this session did
+  not have (0 native calls). Both waits now report `probe` (`src/native/smoke-hover-probe.ts`):
+  whether the island point hits the shield, whether WebKit's `:hover` is on the shield or
+  still on the heading, the hover box's display and the page's focus. The assertions are
+  unchanged. Read `probe` in the next failure: heading `:hover` means the move was dropped
+  (fix the seam in `InspectorIslandVerification.swift` or WebKit's routing); shield `:hover`
+  with the box still shown is a preview-script bug.
 - **Verification.** Typecheck, the native typecheck, lint, the unit tier and
   `bun run build` pass. No native run was available in this session.
 
