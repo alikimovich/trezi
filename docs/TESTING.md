@@ -346,6 +346,10 @@ send, mid-stream and done: visible rows > 0, offset ≤ maxOffset and an unchang
 scroll view/document. It writes `send-after-send.png`, `send-mid-stream.png` and
 `send-visibility.json`. The windowless unit test `test/native-chat-latest-settle.mjs`
 covers the same follow path with a `--no-settle` negative control.
+LKM-312: `test/native-chat-bottom-marker.mjs` hosts the real `NativeChat` (its
+sticky-request overlay included) offscreen and requires the end marker measured
+at the reading edge and each follow settled within one run, after load, streaming
+and completion. `CHAT_SWIFT=<path>` builds it against another `Chat.swift`.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there
