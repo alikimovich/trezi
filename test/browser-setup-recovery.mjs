@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -63,7 +64,7 @@ const alive = (pid) => {
     return error.code === 'EPERM'
   }
 }
-const until = async (what, test, ms = 8000) => {
+const until = async (what, test, ms = 30_000) => {
   const deadline = Date.now() + ms
   while (!test()) {
     assert.ok(Date.now() < deadline, `timed out waiting for ${what}`)
@@ -71,6 +72,20 @@ const until = async (what, test, ms = 8000) => {
   }
 }
 const pidsOf = (...files) => files.map((file) => Number(readFileSync(file, 'utf8').trim()))
+/**
+ * A hung tool is a bash start: on a busy machine (parallel test runs) it may not have recorded
+ * its pid before a short probe limit killed it, and then no kill was exercised (LKM-313, ENOENT
+ * on the pid file). `attempt(limitMs)` runs with each limit in turn, every bound in it checked
+ * each time, until every pid file exists.
+ */
+async function untilRecorded(files, limits, attempt) {
+  for (const limit of limits) {
+    for (const file of files) rmSync(file, { force: true })
+    await attempt(limit)
+    if (files.every((file) => existsSync(file))) return limit
+  }
+  assert.fail(`the hung tool never recorded its pid: ${files.join(', ')}`)
+}
 const allDead = (pids) => pids.every((pid) => !alive(pid))
 
 // A tool that ignores TERM: alone (exec'd sleep keeps the ignored signal) or with a child it waits for.
@@ -117,11 +132,18 @@ const field = (status, id) => browserPane(status).fields.find((f) => f.id === id
   for (const nested of [false, true]) {
     const tool = join(dir, nested ? 'nested' : 'plain')
     hung(tool, nested)
-    const started = Date.now()
-    assert.equal(await toolVersionAsync(tool, { PATH: '/usr/bin:/bin' }, 1500), undefined)
-    assert.ok(Date.now() - started < 5000, 'settled at the limit, not when the tool exits')
-    const pids = pidsOf(`${tool}.pid`, ...(nested ? [`${tool}.child`] : []))
-    await until('the hung tool and its child to be gone', () => allDead(pids))
+    const files = [`${tool}.pid`, ...(nested ? [`${tool}.child`] : [])]
+    await untilRecorded(files, [1500, 6000, 20_000], async (limit) => {
+      const started = Date.now()
+      assert.equal(await toolVersionAsync(tool, { PATH: '/usr/bin:/bin' }, limit), undefined)
+      // The tool sleeps 300 s: only a kill at the limit settles in this time.
+      assert.ok(
+        Date.now() - started < limit + 3500,
+        'settled at the limit, not when the tool exits'
+      )
+      const pids = files.filter((file) => existsSync(file))
+      await until('the hung tool and its child to be gone', () => allDead(pidsOf(...pids)))
+    })
   }
 
   // Detection with a hung CLI, shell and node together still finishes at the probe limit.
@@ -130,32 +152,48 @@ const field = (status, id) => browserPane(status).fields.find((f) => f.id === id
   hung(ownedCli(home), true)
   hung(ownedShell(home), false)
   hung(join(bin, 'node'), false)
-  const started = Date.now()
-  const detection = await detectBrowserTools({ env: envFor(home, bin), home, probeTimeout: 1500 })
-  assert.ok(Date.now() - started < 6000, `detection took ${Date.now() - started} ms`)
-  assert.equal(detection.cli.source, 'trezi')
-  assert.equal(detection.cli.version, undefined)
-  assert.equal(detection.shell.version, undefined)
-  assert.equal(detection.prerequisites.node.version, undefined)
-  const pids = pidsOf(
+  const probed = [
     `${ownedCli(home)}.pid`,
     `${ownedCli(home)}.child`,
     `${ownedShell(home)}.pid`,
     `${join(bin, 'node')}.pid`
-  )
-  await until('every probe to be gone', () => allDead(pids))
-
-  // The wrapper's --version passthrough is killed outright too (exit 1, not a hang).
-  const wrapped = Date.now()
-  const result = spawnSync(process.execPath, [wrapper, '--version'], {
-    env: { ...envFor(home, bin), TREZI_BROWSER_TEST_PASSTHROUGH_MS: '1500' },
-    encoding: 'utf8',
-    timeout: 15_000
+  ]
+  await untilRecorded(probed, [1500, 6000, 20_000], async (limit) => {
+    const started = Date.now()
+    const detection = await detectBrowserTools({
+      env: envFor(home, bin),
+      home,
+      probeTimeout: limit
+    })
+    assert.ok(Date.now() - started < limit + 4500, `detection took ${Date.now() - started} ms`)
+    assert.equal(detection.cli.source, 'trezi')
+    assert.equal(detection.cli.version, undefined)
+    assert.equal(detection.shell.version, undefined)
+    assert.equal(detection.prerequisites.node.version, undefined)
+    const pids = probed.filter((file) => existsSync(file))
+    await until('every probe to be gone', () => allDead(pidsOf(...pids)))
   })
-  assert.equal(result.status, 1, result.stderr)
-  assert.ok(Date.now() - wrapped < 8000)
-  await until('the passthrough CLI to be gone', () => allDead(pidsOf(`${ownedCli(home)}.pid`)))
-  for (const child of pidsOf(`${ownedCli(home)}.child`)) process.kill(child, 'SIGKILL')
+
+  // The wrapper's --version passthrough is killed outright too (exit 1, not a hang). The
+  // wrapper is a Bun start before it runs the CLI, so a short limit may pass before the CLI ran.
+  const passthrough = [`${ownedCli(home)}.pid`, `${ownedCli(home)}.child`]
+  await untilRecorded(passthrough, [1500, 6000, 20_000], async (limit) => {
+    const wrapped = Date.now()
+    const result = spawnSync(process.execPath, [wrapper, '--version'], {
+      env: { ...envFor(home, bin), TREZI_BROWSER_TEST_PASSTHROUGH_MS: String(limit) },
+      encoding: 'utf8',
+      timeout: limit + 15_000
+    })
+    assert.equal(result.status, 1, result.stderr)
+    assert.ok(Date.now() - wrapped < limit + 6500)
+    const pids = passthrough.filter((file) => existsSync(file))
+    await until('the passthrough CLI to be gone', () => allDead(pidsOf(...pids.slice(0, 1))))
+    for (const child of pidsOf(...pids.slice(1))) {
+      try {
+        process.kill(child, 'SIGKILL')
+      } catch {}
+    }
+  })
 }
 
 const fx = writeBrowserFixture(join(T, 'fixture'))

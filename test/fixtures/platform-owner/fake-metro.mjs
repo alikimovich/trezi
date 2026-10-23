@@ -2,12 +2,15 @@
 // must not outlive the group), then behaves per argv[2]:
 // ready (the Expo markers), fail (a build error), exit (exits 3 first), silent.
 import { spawn } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const how = process.argv[2] ?? 'ready'
 const child = spawn('/bin/sleep', ['120'], { stdio: 'ignore' })
-writeFileSync(join(process.env.FAKE_SIM_DIR, `metro-${process.pid}.json`), JSON.stringify({ pid: process.pid, child: child.pid, how }))
+// Written aside and renamed, so a `metro-*.json` the test lists is always complete.
+const aside = join(process.env.FAKE_SIM_DIR, `.tmp-metro-${process.pid}.json`)
+writeFileSync(aside, JSON.stringify({ pid: process.pid, child: child.pid, how }))
+renameSync(aside, join(process.env.FAKE_SIM_DIR, `metro-${process.pid}.json`))
 const say = text => process.stdout.write(`${text}\n`)
 if (how === 'ready') {
   say('\u001b[1mStarting Metro Bundler\u001b[22m')

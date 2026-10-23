@@ -474,33 +474,40 @@ assert.equal(
 // --- the managed Chromium route through the real wrapper ---------------------------------------------
 const wrapper = join(import.meta.dir, '../bin/managed/agent-browser')
 Object.assign(process.env, { TREZI_BROWSER_TEST: '1', TREZI_BROWSER_TEST_ROOT: join(work, 'ab') })
-const run = (over = {}) => ({
-  wrapper,
-  cwd: work,
-  url: 'http://127.0.0.1:4100/settings',
-  origin: 'http://127.0.0.1:4100',
-  viewport: { width: 390, height: 700, theme: 'dark' },
-  steps: [],
-  checks: one,
-  screenshotPath: null,
-  ...over
-})
-{
-  process.env.TREZI_BROWSER_TEST_CLI = join(work, 'no-such-agent-browser')
-  const missing = await runChromiumChecks(run())
-  assert.equal(missing.dependency?.kind, 'vercel-cli', 'a missing CLI is the precise dependency')
-  assert.match(missing.dependency.message, /npm install -g agent-browser/)
-  assert.equal(missing.checks.length, 0, 'nothing was checked')
-}
-// A fake Vercel CLI behind the real wrapper: it answers facts only, with a startup warning.
-const shell = join(work, 'chrome-headless-shell')
-writeFileSync(shell, '#!/bin/sh\nexit 0\n')
-chmodSync(shell, 0o755)
-const log = join(work, 'cli.log')
-const cli = join(work, 'agent-browser')
-writeFileSync(
-  cli,
-  `#!${process.execPath}
+// Every fake CLI call is two Bun starts (wrapper and fake CLI): 2 s for a round of ten checks
+// when idle, over a minute under parallel test load. This section judges the CLI's facts;
+// the run, check and wait budgets are covered by test/browser-verify-bounds.mjs.
+const checkTotal = CHECK_LIMITS.totalMs
+CHECK_LIMITS.totalMs = 600_000
+try {
+  const run = (over = {}) => ({
+    wrapper,
+    cwd: work,
+    url: 'http://127.0.0.1:4100/settings',
+    origin: 'http://127.0.0.1:4100',
+    viewport: { width: 390, height: 700, theme: 'dark' },
+    steps: [],
+    checks: one,
+    screenshotPath: null,
+    budgetMs: 600_000,
+    ...over
+  })
+  {
+    process.env.TREZI_BROWSER_TEST_CLI = join(work, 'no-such-agent-browser')
+    const missing = await runChromiumChecks(run())
+    assert.equal(missing.dependency?.kind, 'vercel-cli', 'a missing CLI is the precise dependency')
+    assert.match(missing.dependency.message, /npm install -g agent-browser/)
+    assert.equal(missing.checks.length, 0, 'nothing was checked')
+  }
+  // A fake Vercel CLI behind the real wrapper: it answers facts only, with a startup warning.
+  const shell = join(work, 'chrome-headless-shell')
+  writeFileSync(shell, '#!/bin/sh\nexit 0\n')
+  chmodSync(shell, 0o755)
+  const log = join(work, 'cli.log')
+  const cli = join(work, 'agent-browser')
+  writeFileSync(
+    cli,
+    `#!${process.execPath}
 const fs = require('node:fs')
 const argv = process.argv.slice(2)
 const args = argv.slice(argv.indexOf('--headed') + 2).filter((a) => a !== '--json')
@@ -527,165 +534,168 @@ else if (cmd === 'screenshot') {
   process.exit(1)
 } else ok({})
 `
-)
-chmodSync(cli, 0o755)
-Object.assign(process.env, { TREZI_BROWSER_TEST_CLI: cli, TREZI_BROWSER_TEST_SHELL: shell })
-{
-  const checks = parseChecks(
-    [
-      { kind: 'text', selector: '#status', equals: 'Saved all' },
-      { kind: 'count', selector: 'li', equals: 3 },
-      { kind: 'visible', selector: '#status' },
-      { kind: 'absent', selector: '#missing' },
-      { kind: 'attribute', selector: '#toggle', name: 'aria-pressed', equals: 'true' },
-      { kind: 'style', selector: '#status', name: 'color', equals: 'rgb(255, 255, 255)' },
-      { kind: 'state', selector: '#save', state: 'enabled' },
-      { kind: 'url', equals: '/settings' },
-      { kind: 'title', equals: 'Settings' },
-      { kind: 'noConsoleErrors' }
-    ],
-    'chromium'
-  ).checks
-  const shot = join(work, 'chromium.png')
-  const outcome = await runChromiumChecks(
-    run({
-      checks,
-      steps: parseVerify({
-        checks: one,
-        engine: 'chromium',
-        steps: [
-          { action: 'click', selector: '#save' },
-          { action: 'press', selector: '#q', key: 'Enter' },
-          { action: 'wait', selector: '#status' }
-        ]
-      }).steps,
-      screenshotPath: shot
-    })
   )
-  assert.equal(outcome.dependency, undefined)
-  assert.equal(outcome.stopped, null, JSON.stringify(outcome.steps))
-  for (const result of outcome.checks) assert.equal(result.pass, true, JSON.stringify(result))
-  assert.ok(outcome.warnings > 0, 'the CLI warned on stderr')
-  assert.equal(outcome.checks.at(-1).actual, 0, 'CLI warnings are never page console errors')
-  assert.deepEqual(
-    outcome.artifacts.map(({ width, height, mimeType }) => [width, height, mimeType]),
-    [[640, 480, 'image/png']]
-  )
-  assert.match(outcome.artifacts[0].sha256, /^[0-9a-f]{64}$/)
-  const calls = (await Bun.file(log).text())
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line))
-  assert.deepEqual(calls.slice(0, 4), [
-    ['open', 'http://127.0.0.1:4100/settings'],
-    ['set', 'viewport', '390', '700'],
-    ['set', 'media', 'dark'],
-    ['reload']
-  ])
-  assert.deepEqual(calls.slice(4, 7), [
-    ['click', '#save'],
-    ['focus', '#q'],
-    ['press', 'Enter']
-  ])
-  assert.deepEqual(calls.at(-1), ['close'], 'the private session is always closed')
-  assert.ok(
-    !calls.some((c) => ['eval', 'download', 'cookies', 'storage'].includes(c[0])),
-    'no page code, downloads or storage'
-  )
-}
-{
-  process.env.FAKE_CONSOLE_ERROR = '1'
-  const checks = parseChecks(
-    [{ kind: 'noConsoleErrors' }, { kind: 'value', selector: '#email', equals: 'x' }],
-    'chromium'
-  ).checks
-  const outcome = await runChromiumChecks(run({ checks }))
-  delete process.env.FAKE_CONSOLE_ERROR
-  assert.equal(outcome.checks[0].pass, false, 'a page console error fails')
-  assert.equal(outcome.checks[1].pass, false, 'an ambiguous CLI answer fails instead of passing')
-  assert.match(outcome.checks[1].detail, /could not be read/)
-}
-{
-  const outcome = await runChromiumChecks(
-    run({
-      steps: parseVerify({
-        checks: one,
-        engine: 'chromium',
-        steps: [{ action: 'click', selector: '#broken' }]
-      }).steps
-    })
-  )
-  assert.match(outcome.stopped, /^step-failed: click: Element not found/)
-  assert.equal(outcome.checks.length, 0, 'no checks after a failed step')
-}
-{
-  process.env.FAKE_URL = 'https://example.com/'
-  const outcome = await runChromiumChecks(run())
-  delete process.env.FAKE_URL
-  assert.equal(outcome.stopped, 'the page left the dev server')
-}
-
-// --- the session tool ---------------------------------------------------------------------------
-{
-  const scope = {
-    root: work,
-    liveRoot: work,
-    emitKey: 'chat-verify',
-    background: false,
-    notify() {}
+  chmodSync(cli, 0o755)
+  Object.assign(process.env, { TREZI_BROWSER_TEST_CLI: cli, TREZI_BROWSER_TEST_SHELL: shell })
+  {
+    const checks = parseChecks(
+      [
+        { kind: 'text', selector: '#status', equals: 'Saved all' },
+        { kind: 'count', selector: 'li', equals: 3 },
+        { kind: 'visible', selector: '#status' },
+        { kind: 'absent', selector: '#missing' },
+        { kind: 'attribute', selector: '#toggle', name: 'aria-pressed', equals: 'true' },
+        { kind: 'style', selector: '#status', name: 'color', equals: 'rgb(255, 255, 255)' },
+        { kind: 'state', selector: '#save', state: 'enabled' },
+        { kind: 'url', equals: '/settings' },
+        { kind: 'title', equals: 'Settings' },
+        { kind: 'noConsoleErrors' }
+      ],
+      'chromium'
+    ).checks
+    const shot = join(work, 'chromium.png')
+    const outcome = await runChromiumChecks(
+      run({
+        checks,
+        steps: parseVerify({
+          checks: one,
+          engine: 'chromium',
+          steps: [
+            { action: 'click', selector: '#save' },
+            { action: 'press', selector: '#q', key: 'Enter' },
+            { action: 'wait', selector: '#status', timeoutMs: 15_000 }
+          ]
+        }).steps,
+        screenshotPath: shot
+      })
+    )
+    assert.equal(outcome.dependency, undefined)
+    assert.equal(outcome.stopped, null, JSON.stringify(outcome.steps))
+    for (const result of outcome.checks) assert.equal(result.pass, true, JSON.stringify(result))
+    assert.ok(outcome.warnings > 0, 'the CLI warned on stderr')
+    assert.equal(outcome.checks.at(-1).actual, 0, 'CLI warnings are never page console errors')
+    assert.deepEqual(
+      outcome.artifacts.map(({ width, height, mimeType }) => [width, height, mimeType]),
+      [[640, 480, 'image/png']]
+    )
+    assert.match(outcome.artifacts[0].sha256, /^[0-9a-f]{64}$/)
+    const calls = (await Bun.file(log).text())
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    assert.deepEqual(calls.slice(0, 4), [
+      ['open', 'http://127.0.0.1:4100/settings'],
+      ['set', 'viewport', '390', '700'],
+      ['set', 'media', 'dark'],
+      ['reload']
+    ])
+    assert.deepEqual(calls.slice(4, 7), [
+      ['click', '#save'],
+      ['focus', '#q'],
+      ['press', 'Enter']
+    ])
+    assert.deepEqual(calls.at(-1), ['close'], 'the private session is always closed')
+    assert.ok(
+      !calls.some((c) => ['eval', 'download', 'cookies', 'storage'].includes(c[0])),
+      'no page code, downloads or storage'
+    )
   }
-  const user = await runTreziTool('preview_verify', { checks: one, target: 'user' }, scope)
-  assert.equal(user.isError, true)
-  assert.match(user.content[0].text, /never checks or moves the user's preview/)
-  const empty = JSON.parse(
-    (await runTreziTool('preview_verify', { list: true }, scope)).content[0].text
-  )
-  assert.deepEqual(empty.receipts, [])
-  setVerifyWrapperForTests(wrapper)
-  // A missing dependency: the precise error, no receipt, no fallback.
-  process.env.TREZI_BROWSER_TEST_CLI = join(work, 'no-such-agent-browser')
-  const missing = await runPreviewVerify({ checks: one, engine: 'chromium' }, scope)
-  assert.equal(missing.isError, true)
-  assert.match(
-    missing.content[0].text,
-    /needs a dependency: vercel-cli: .*No browser was launched\..*Nothing was checked and no receipt was written/s
-  )
-  process.env.TREZI_BROWSER_TEST_CLI = cli
-  // The live checkout's visible server: checks run, the receipt is honestly not verified.
-  previewServers.set(projectKey(work), { url: 'http://127.0.0.1:4100', port: 4100 })
-  const live = await runPreviewVerify(
-    { checks: [{ kind: 'title', equals: 'Settings' }], engine: 'chromium', path: '/settings' },
-    scope
-  )
-  previewServers.delete(projectKey(work))
-  assert.equal(live.isError, true)
-  const liveReceipt = JSON.parse(live.content[1].text)
-  assert.equal(liveReceipt.checksPassed, true)
-  assert.equal(
-    liveReceipt.verified,
-    false,
-    'the live server has no private generation or exact-source record'
-  )
-  assert.match(liveReceipt.reason, /^live-server/)
-  assert.equal(liveReceipt.input, 'cdp-trusted')
-  assert.deepEqual(liveReceipt.coverage.notCovered.slice(0, 3), ['Windows', 'Android', 'iOS'])
-  assert.match(liveReceipt.coverage.emulated.viewport, /CDP viewport emulation/)
-  assert.ok(existsSync(liveReceipt.artifacts[0].path), 'the screenshot artifact exists')
-  assert.match(live.content[0].text, /NOT verified: live-server/)
-  const listed = JSON.parse(
-    (await runTreziTool('preview_verify', { list: true }, scope)).content[0].text
-  )
-  assert.deepEqual(
-    listed.receipts.map((r) => [r.id, r.verified, r.current]),
-    [[liveReceipt.id, false, false]]
-  )
-  const other = JSON.parse(
-    (await runTreziTool('preview_verify', { list: true }, { ...scope, emitKey: 'chat-other' }))
-      .content[0].text
-  )
-  assert.deepEqual(other.receipts, [], "another session's list is empty")
-  setVerifyWrapperForTests(null)
-  clearReceipts(receiptSession(scope.emitKey, projectKey(work)))
+  {
+    process.env.FAKE_CONSOLE_ERROR = '1'
+    const checks = parseChecks(
+      [{ kind: 'noConsoleErrors' }, { kind: 'value', selector: '#email', equals: 'x' }],
+      'chromium'
+    ).checks
+    const outcome = await runChromiumChecks(run({ checks }))
+    delete process.env.FAKE_CONSOLE_ERROR
+    assert.equal(outcome.checks[0].pass, false, 'a page console error fails')
+    assert.equal(outcome.checks[1].pass, false, 'an ambiguous CLI answer fails instead of passing')
+    assert.match(outcome.checks[1].detail, /could not be read/)
+  }
+  {
+    const outcome = await runChromiumChecks(
+      run({
+        steps: parseVerify({
+          checks: one,
+          engine: 'chromium',
+          steps: [{ action: 'click', selector: '#broken' }]
+        }).steps
+      })
+    )
+    assert.match(outcome.stopped, /^step-failed: click: Element not found/)
+    assert.equal(outcome.checks.length, 0, 'no checks after a failed step')
+  }
+  {
+    process.env.FAKE_URL = 'https://example.com/'
+    const outcome = await runChromiumChecks(run())
+    delete process.env.FAKE_URL
+    assert.equal(outcome.stopped, 'the page left the dev server')
+  }
+
+  // --- the session tool ---------------------------------------------------------------------------
+  {
+    const scope = {
+      root: work,
+      liveRoot: work,
+      emitKey: 'chat-verify',
+      background: false,
+      notify() {}
+    }
+    const user = await runTreziTool('preview_verify', { checks: one, target: 'user' }, scope)
+    assert.equal(user.isError, true)
+    assert.match(user.content[0].text, /never checks or moves the user's preview/)
+    const empty = JSON.parse(
+      (await runTreziTool('preview_verify', { list: true }, scope)).content[0].text
+    )
+    assert.deepEqual(empty.receipts, [])
+    setVerifyWrapperForTests(wrapper)
+    // A missing dependency: the precise error, no receipt, no fallback.
+    process.env.TREZI_BROWSER_TEST_CLI = join(work, 'no-such-agent-browser')
+    const missing = await runPreviewVerify({ checks: one, engine: 'chromium' }, scope)
+    assert.equal(missing.isError, true)
+    assert.match(
+      missing.content[0].text,
+      /needs a dependency: vercel-cli: .*No browser was launched\..*Nothing was checked and no receipt was written/s
+    )
+    process.env.TREZI_BROWSER_TEST_CLI = cli
+    // The live checkout's visible server: checks run, the receipt is honestly not verified.
+    previewServers.set(projectKey(work), { url: 'http://127.0.0.1:4100', port: 4100 })
+    const live = await runPreviewVerify(
+      { checks: [{ kind: 'title', equals: 'Settings' }], engine: 'chromium', path: '/settings' },
+      scope
+    )
+    previewServers.delete(projectKey(work))
+    assert.equal(live.isError, true)
+    const liveReceipt = JSON.parse(live.content[1].text)
+    assert.equal(liveReceipt.checksPassed, true)
+    assert.equal(
+      liveReceipt.verified,
+      false,
+      'the live server has no private generation or exact-source record'
+    )
+    assert.match(liveReceipt.reason, /^live-server/)
+    assert.equal(liveReceipt.input, 'cdp-trusted')
+    assert.deepEqual(liveReceipt.coverage.notCovered.slice(0, 3), ['Windows', 'Android', 'iOS'])
+    assert.match(liveReceipt.coverage.emulated.viewport, /CDP viewport emulation/)
+    assert.ok(existsSync(liveReceipt.artifacts[0].path), 'the screenshot artifact exists')
+    assert.match(live.content[0].text, /NOT verified: live-server/)
+    const listed = JSON.parse(
+      (await runTreziTool('preview_verify', { list: true }, scope)).content[0].text
+    )
+    assert.deepEqual(
+      listed.receipts.map((r) => [r.id, r.verified, r.current]),
+      [[liveReceipt.id, false, false]]
+    )
+    const other = JSON.parse(
+      (await runTreziTool('preview_verify', { list: true }, { ...scope, emitKey: 'chat-other' }))
+        .content[0].text
+    )
+    assert.deepEqual(other.receipts, [], "another session's list is empty")
+    setVerifyWrapperForTests(null)
+    clearReceipts(receiptSession(scope.emitKey, projectKey(work)))
+  }
+} finally {
+  CHECK_LIMITS.totalMs = checkTotal
 }
 assert.ok(REF_PATTERN.test('0123abcd:e12') && !REF_PATTERN.test('e12'))
 
