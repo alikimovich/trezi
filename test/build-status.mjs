@@ -1,7 +1,9 @@
 // LKM-226: the build badge. The one state a build gets (On main, Behind main by N, Not
 // on main, Local changes, Unknown), the comparison with origin main against disposable
 // Git repositories (a local bare "origin", no network), the stamp `buildInfo` writes,
-// and the controller's schedule rules: offline or switched off never compares.
+// and the controller's schedule rules: offline or switched off never compares. LKM-301:
+// the badge text (identity, branch off main, state in words), no Git, incomplete stamps,
+// detached HEAD, clean/dirty, two revisions and a fresh build time per build.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
@@ -40,6 +42,8 @@ const stamp = (over = {}) => ({
   branch: 'main',
   dirty: false,
   tag: '',
+  git: true,
+  builtAt: '2026-10-22T06:18:07.000Z',
   ...over
 })
 const input = (over = {}) => ({
@@ -59,8 +63,22 @@ const equal = deriveBuildStatus(
 )
 assert.equal(equal.state, 'on-main')
 assert.equal(equal.tone, 'green')
-assert.equal(equal.text, '0.1.0 · main ✓')
+// LKM-301: the identity (version, build, commit), no branch on main, and no checkmark.
+assert.equal(equal.text, '0.1.0 (712, aaaaaaa)')
+assert.deepEqual([equal.identity, equal.context], ['0.1.0 (712, aaaaaaa)', ''])
+assert.equal(
+  equal.spoken,
+  'Version 0.1.0, build 712, commit aaaaaaa, branch main, clean. On main: this is the published code'
+)
 assert.equal(equal.main, 'aaaaaaa')
+// Two revisions with the same package version read differently.
+const nextRevision = deriveBuildStatus(
+  stamp({ build: '713', commit: 'ccccccc', sha: 'c'.repeat(40) }),
+  input({ comparison: { main: 'c'.repeat(40), contained: true, behind: 0 } })
+)
+assert.equal(nextRevision.version, equal.version)
+assert.equal(nextRevision.text, '0.1.0 (713, ccccccc)')
+assert.notEqual(nextRevision.text, equal.text)
 // A short stamped sha still matches main's full sha.
 assert.equal(
   deriveBuildStatus(
@@ -79,7 +97,7 @@ const behind = deriveBuildStatus(
 assert.equal(behind.state, 'behind')
 assert.equal(behind.tone, 'yellow')
 assert.equal(behind.behind, 3)
-assert.equal(behind.text, '0.1.0 · 3 behind')
+assert.equal(behind.text, '0.1.0 (712, bbbbbbb) · 3 behind')
 assert.match(behind.label, /^Behind main by 3 commits/)
 const behindOne = deriveBuildStatus(
   stamp(),
@@ -93,7 +111,7 @@ const behindUncounted = deriveBuildStatus(
   })
 )
 assert.equal(behindUncounted.state, 'behind')
-assert.equal(behindUncounted.text, '0.1.0 · behind')
+assert.equal(behindUncounted.text, '0.1.0 (712, bbbbbbb) · behind')
 
 const outside = deriveBuildStatus(
   stamp(),
@@ -101,26 +119,37 @@ const outside = deriveBuildStatus(
 )
 assert.equal(outside.state, 'not-on-main')
 assert.equal(outside.tone, 'orange')
-assert.equal(outside.text, '0.1.0 · not on main')
+assert.equal(outside.text, '0.1.0 (712, bbbbbbb) · not on main')
 
+// Off main the branch stays: it names the build next to its identity.
 const candidate = deriveBuildStatus(stamp({ branch: 'candidate' }), input())
 assert.equal(candidate.state, 'not-on-main')
-assert.equal(candidate.text, 'candidate · not on main')
+assert.equal(candidate.text, '0.1.0 (712, bbbbbbb) · candidate')
+assert.equal(candidate.context, 'candidate')
+assert.match(candidate.spoken, /branch candidate, clean\. Not on main: built from the candidate/)
 
 const dirty = deriveBuildStatus(
   stamp({ dirty: true, branch: 'candidate' }),
   input({ online: false })
 )
 assert.equal(dirty.state, 'local-changes', 'a dirty build is Local changes on any branch')
-assert.equal(dirty.text, '0.1.0 · local changes')
+assert.equal(dirty.text, '0.1.0 (712, bbbbbbb) · candidate · modified')
+assert.match(dirty.spoken, /branch candidate, uncommitted changes\. Local changes/)
+const dirtyMain = deriveBuildStatus(stamp({ dirty: true }), input())
+assert.equal(dirtyMain.text, '0.1.0 (712, bbbbbbb) · modified', 'main is never named')
 
 const offline = deriveBuildStatus(stamp(), input({ online: false, checkedAt: null }))
 assert.equal(offline.state, 'unknown')
 assert.equal(offline.reason, 'offline')
-assert.equal(offline.text, '0.1.0 · offline')
-assert.equal(deriveBuildStatus(stamp(), input({ enabled: false })).reason, 'off')
+assert.equal(offline.text, '0.1.0 (712, bbbbbbb) · offline')
+const off = deriveBuildStatus(stamp(), input({ enabled: false }))
+assert.deepEqual([off.reason, off.text], ['off', '0.1.0 (712, bbbbbbb)'])
 assert.equal(deriveBuildStatus(stamp(), input({ checkedAt: null })).reason, 'pending')
-assert.equal(deriveBuildStatus(stamp(), input()).reason, 'unreachable')
+const unreachable = deriveBuildStatus(stamp(), input())
+assert.deepEqual(
+  [unreachable.reason, unreachable.text],
+  ['unreachable', '0.1.0 (712, bbbbbbb) · unknown']
+)
 assert.equal(
   deriveBuildStatus(stamp(), input({ comparison: { main: MAIN, contained: null, behind: null } }))
     .state,
@@ -128,18 +157,44 @@ assert.equal(
 )
 const unbuilt = deriveBuildStatus(null, input())
 assert.deepEqual(
-  [unbuilt.state, unbuilt.reason, unbuilt.text],
-  ['unknown', 'unbuilt', 'dev · unbuilt']
+  [unbuilt.state, unbuilt.reason, unbuilt.text, unbuilt.spoken],
+  ['unknown', 'unbuilt', 'dev · unbuilt', 'Unbuilt development source. Unbuilt development source']
 )
 
-// Detached builds (CI) are judged by their commit alone.
-assert.equal(
-  deriveBuildStatus(
-    stamp({ branch: '' }),
-    input({ comparison: { main: MAIN, contained: true, behind: 2 } })
-  ).state,
-  'behind'
+// Detached builds (CI) are judged by their commit alone, and say they are detached.
+const detached = deriveBuildStatus(
+  stamp({ branch: '' }),
+  input({ comparison: { main: MAIN, contained: true, behind: 2 } })
 )
+assert.equal(detached.state, 'behind')
+assert.equal(detached.text, '0.1.0 (712, bbbbbbb) · detached · 2 behind')
+assert.match(detached.spoken, /commit bbbbbbb, detached HEAD, clean\./)
+
+// LKM-301: no Git and an incomplete stamp are Unknown, never another state.
+const noGit = deriveBuildStatus(
+  stamp({ git: false, build: '0', commit: 'unknown', sha: '', branch: '' }),
+  input({ comparison: { main: MAIN, contained: true, behind: 0 } })
+)
+assert.deepEqual(
+  [noGit.state, noGit.reason, noGit.tone, noGit.text],
+  ['unknown', 'no-git', 'gray', '0.1.0 · no Git']
+)
+assert.match(
+  noGit.spoken,
+  /^Version 0\.1\.0, not built from a Git checkout\. Unknown: built outside/
+)
+assert.deepEqual([noGit.build, noGit.commit], ['', ''], 'no placeholder build or commit to copy')
+for (const missing of [{ dirty: null }, { build: '0' }, { commit: 'unknown' }]) {
+  const status = deriveBuildStatus(
+    stamp(missing),
+    input({ comparison: { main: 'b'.repeat(40), contained: true, behind: 0 } })
+  )
+  assert.deepEqual(
+    [status.state, status.reason, status.text],
+    ['unknown', 'metadata', '0.1.0 · no build info'],
+    JSON.stringify(missing)
+  )
+}
 
 // --- Texts: tooltip/About details, the log line ---
 const details = buildDetails({ ...behind, tag: 'v0.1.0' })
@@ -148,15 +203,26 @@ for (const line of [
   'Build: 712',
   'Commit: bbbbbbb',
   'Branch: main',
+  'Tree: clean',
   'Release tag: v0.1.0',
   'Main: aaaaaaa'
 ])
   assert.ok(details.includes(line), `details carry ${line}: ${details.join(' | ')}`)
 assert.ok(details.some((line) => line.startsWith('Checked: ') && !line.includes('not checked')))
+assert.ok(
+  details.some((line) => /^Built: Oct 2[12], 2026/.test(line)),
+  details.join(' | ')
+)
 assert.ok(buildDetails(offline).includes('Checked: not checked yet'))
+assert.ok(buildDetails(dirty).includes('Tree: uncommitted changes'))
+assert.ok(buildDetails(detached).includes('Branch: detached HEAD'))
+assert.ok(buildDetails(noGit).includes('Branch: no Git'))
+assert.ok(
+  buildDetails(deriveBuildStatus(stamp({ builtAt: '' }), input())).includes('Built: unknown')
+)
 assert.match(
   buildStatusLine(behind),
-  /^Build: Behind main by 3 commits.*commit bbbbbbb, branch main, tag none, dirty false, main aaaaaaa, checked 2025-/
+  /^Build: Behind main by 3 commits.*commit bbbbbbb, branch main, tag none, dirty false, main aaaaaaa, checked 2025-.*, git true, built 2026-10-22T06:18:07\.000Z\)$/
 )
 
 // --- Parsers ---
@@ -189,7 +255,11 @@ assert.deepEqual(fromGitHubCompare(MAIN, { status: 'diverged' }), {
 })
 assert.equal(fromGitHubCompare(MAIN, { message: 'Not Found' }), null)
 assert.equal(parseBuildStamp('not json'), null)
-assert.deepEqual(parseBuildStamp(JSON.stringify(stamp({ dirty: 'yes' }))), stamp({ dirty: false }))
+assert.deepEqual(parseBuildStamp(JSON.stringify(stamp({ dirty: 'yes' }))), stamp({ dirty: null }))
+// An older stamp (no git, builtAt): a Git build of unknown time.
+const { git: _git, builtAt: _builtAt, ...older } = stamp()
+assert.deepEqual(parseBuildStamp(JSON.stringify(older)), stamp({ builtAt: '' }))
+assert.equal(parseBuildStamp(JSON.stringify(stamp({ git: false }))).git, false)
 
 // --- Offline: no usable interface ---
 assert.equal(hasNetwork({ lo0: [{ address: '127.0.0.1', family: 'IPv4', internal: true }] }), false)
@@ -310,22 +380,54 @@ try {
   // buildInfo: branch, dirty flag, exact release tag.
   let info = buildInfo(publisher)
   assert.deepEqual([info.branch, info.dirty, info.tag, info.sha], ['main', false, '', tip])
+  assert.equal(info.git, true)
+  const derived = (built) =>
+    deriveBuildStatus(parseBuildStamp(JSON.stringify(built)), input({ checkedAt: null }))
+  const revisionA = derived(info).identity
+  // LKM-301: each build stamps its own time; the same tree built twice tells apart.
+  const first = buildInfo(publisher, new Date('2026-10-22T06:00:00Z'))
+  const again = buildInfo(publisher, new Date('2026-10-22T06:05:00Z'))
+  assert.deepEqual(
+    [first.builtAt, again.builtAt],
+    ['2026-10-22T06:00:00.000Z', '2026-10-22T06:05:00.000Z']
+  )
   git(publisher, 'tag', 'v0.1.0')
   assert.equal(buildInfo(publisher).tag, 'v0.1.0')
   writeFileSync(join(publisher, 'two'), 'edited')
   assert.equal(buildInfo(publisher).dirty, true)
+  assert.match(derived(buildInfo(publisher)).text, / · modified$/)
   git(publisher, 'checkout', '-q', '.')
+  assert.doesNotMatch(derived(buildInfo(publisher)).text, /modified/, 'clean again')
   git(publisher, 'checkout', '-q', '-b', 'candidate')
   commit(publisher, 'three')
   info = buildInfo(publisher)
   assert.deepEqual([info.branch, info.tag], ['candidate', ''])
+  // A new commit: same package version, another build number and commit.
+  const revisionB = derived(info)
+  assert.equal(info.version, '0.1.0')
+  assert.notEqual(revisionB.identity, revisionA)
+  assert.equal(revisionB.text, `0.1.0 (${info.build}, ${info.commit}) · candidate`)
   git(publisher, 'checkout', '-q', '--detach')
   assert.equal(buildInfo(publisher).branch, '')
+  assert.match(derived(buildInfo(publisher)).text, / · detached$/)
+  // Outside Git: build 0, no commit, `git` false; the badge says so.
+  const loose = join(scratch, 'loose')
+  mkdirSync(loose)
+  writeFileSync(join(loose, 'package.json'), '{ "version": "0.1.0" }\n')
+  const outsideGit = buildInfo(loose)
+  assert.deepEqual(
+    [outsideGit.git, outsideGit.build, outsideGit.commit, outsideGit.sha, outsideGit.dirty],
+    [false, '0', 'unknown', '', false]
+  )
+  assert.equal(derived(outsideGit).text, '0.1.0 · no Git')
   // The Info.plist carries them.
   const plist = appInfoPlist({ ...info, branch: 'feature/<x>', dirty: true, tag: 'v0.1.0' })
   assert.match(plist, /<key>TreziBranch<\/key><string>feature\/&lt;x&gt;<\/string>/)
   assert.match(plist, /<key>TreziDirty<\/key><true\/>/)
   assert.match(plist, /<key>TreziTag<\/key><string>v0\.1\.0<\/string>/)
+  // Git could not tell: the plist says nothing rather than "clean".
+  assert.doesNotMatch(appInfoPlist({ ...info, dirty: null }), /TreziDirty/)
+  assert.match(appInfoPlist({ ...info, dirty: false }), /<key>TreziDirty<\/key><false\/>/)
 } finally {
   rmSync(scratch, { recursive: true, force: true })
 }
@@ -361,7 +463,12 @@ const harness = (over = {}, values = {}) => {
   assert.deepEqual(compared, [['/nowhere', 'b'.repeat(40)]])
   const [method, data] = sent.at(-1)
   assert.equal(method, 'buildStatus')
-  assert.equal(data.text, '0.1.0 · 3 behind')
+  assert.equal(data.text, '0.1.0 (712, bbbbbbb) · 3 behind')
+  assert.deepEqual([data.identity, data.context], ['0.1.0 (712, bbbbbbb)', '3 behind'])
+  assert.match(
+    data.spoken,
+    /^Version 0\.1\.0, build 712, commit bbbbbbb, branch main, clean\. Behind/
+  )
   assert.ok(data.details.includes('Commit: bbbbbbb'))
   assert.match(currentBuildLine(), /^Build: Behind main by 3 commits/)
 }
@@ -452,5 +559,5 @@ for (const local of [{ dirty: true }, { branch: 'candidate' }]) {
 setCurrentBuildStatus(offline)
 assert.match(currentBuildLine(), /^Build: Unknown: offline/)
 console.log(
-  'BUILD STATUS OK — five states derived, origin main compared in disposable repos, stamp carries branch/dirty/tag'
+  'BUILD STATUS OK — five states derived, origin main compared in disposable repos, stamp carries branch/dirty/tag/git/build time, badge shows the build identity'
 )

@@ -34,25 +34,30 @@ const git = (root, args) => {
 }
 
 /**
- * `{ version, build, commit, sha, branch, dirty, tag }` of a checkout. Outside Git the
- * build is 0 and the commit "unknown". LKM-226: `sha` is the full commit, `branch` the
- * checked-out branch ('' when detached), `dirty` whether the tree had uncommitted
- * changes, `tag` the release tag (v…) HEAD is exactly on, else ''. The build badge
- * compares them with GitHub main (`src/shared/build-status.ts`).
+ * `{ version, build, commit, sha, branch, dirty, tag, git, builtAt }` of a checkout.
+ * Outside Git the build is 0 and the commit "unknown". LKM-226: `sha` is the full
+ * commit, `branch` the checked-out branch ('' when detached), `dirty` whether the tree
+ * had uncommitted changes, `tag` the release tag (v…) HEAD is exactly on, else ''. The
+ * build badge compares them with GitHub main (`src/shared/build-status.ts`). LKM-301:
+ * `git` is false outside a Git checkout, `dirty` null when Git could not tell, and
+ * `builtAt` the build's time, so every build carries a fresh stamp.
  */
-export function buildInfo(root) {
+export function buildInfo(root, now = new Date()) {
   const version = packageVersion(root)
   if (!isSemver(version)) throw new Error(`package.json version is not SemVer: ${version}`)
+  const sha = git(root, ['rev-parse', 'HEAD']) ?? ''
   const branch = git(root, ['rev-parse', '--abbrev-ref', 'HEAD']) ?? ''
-  const status = git(root, ['status', '--porcelain'])
+  const status = sha ? git(root, ['status', '--porcelain']) : ''
   return {
     version,
     build: git(root, ['rev-list', '--count', 'HEAD']) ?? '0',
     commit: git(root, ['rev-parse', '--short=7', 'HEAD']) ?? 'unknown',
-    sha: git(root, ['rev-parse', 'HEAD']) ?? '',
+    sha,
     branch: branch === 'HEAD' ? '' : branch,
-    dirty: status === null ? false : status !== '',
-    tag: (git(root, ['tag', '--points-at', 'HEAD', '--sort=-v:refname', '--list', 'v*']) ?? '').split('\n')[0] ?? ''
+    dirty: status === null ? null : status !== '',
+    tag: (git(root, ['tag', '--points-at', 'HEAD', '--sort=-v:refname', '--list', 'v*']) ?? '').split('\n')[0] ?? '',
+    git: sha !== '',
+    builtAt: now.toISOString()
   }
 }
 

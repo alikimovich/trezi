@@ -85,6 +85,7 @@ extension Host {
                 return true
             }
             reply(id, buildBadge.inspect().merging(["activityFrame":NSStringFromRect(activityFrame), "sidebarWidth":shell.sidebar.view.bounds.width,
+                                                    "sidebarFrame":NSStringFromRect(shell.sidebar.view.convert(shell.sidebar.view.bounds, to: nil)),
                                                     "listBottom":shell.outline.enclosingScrollView.map { $0.convert($0.bounds, to: nil).minY } ?? 0]) { _, new in new })
         case "activityMenu":
             // Pipe test: Command-L through the main menu's key equivalents, as the keyboard sends it.
