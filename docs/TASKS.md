@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `IslandSegmentedControl` (`src/native/ToolbarLayout.swift`) hides them on macOS 27 for the interaction, tools and chat islands; macOS 26 and earlier unchanged.
 - [x] Unit `test/toolbar-island-dividers.mjs` (pixels and layers, against a stock control); core `shell-layout` asserts `islandDividers` are zero on macOS 27.
 - [ ] Native `core` group (with `toolbar-address` / `smoke-toolbar-overflow.ts`) and a foreground capture of the islands not yet run.
+## Faster PR CI unit job (LKM-327)
+
+- [x] Typecheck on its own Linux job; unit tier in 3 macOS shards on a pull request (`--shard=i/n`, deterministic split), whole tier on one runner on `main`; `typecheck + unit tests` gate keeps the check name.
+- [x] Per-shard Swift caches, saved after failures too, with the hit and restored key logged; `docs/TESTING.md` "GitHub CI" describes the split.
+- [ ] Measure the median "typecheck + unit tests" wall time over the next 5 PRs (target ≤ 5 min); if a shard is still long, read its `--report` slowest list (e.g. `swift-preview-build`) and rebalance or fix the top tests.
 
 ## Native footer build badge alignment and development build identity (LKM-301)
 

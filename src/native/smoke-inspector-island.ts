@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
+import { hoverProbeScript } from './smoke-hover-probe'
 import { waitFor } from './smoke-wait'
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -253,6 +254,7 @@ async function checkPointer(
       10000,
       async () => ({
         move: over,
+        probe: await page.evaluate(hoverProbeScript(over.expectedCover[0]), true),
         cover: await page.evaluate(
           `(() => {
         const host = document.querySelector('[data-trezi-cover]');

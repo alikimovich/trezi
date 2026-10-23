@@ -48,9 +48,12 @@ extension NativeShell {
         previewMenuAction(entry); return true
     }
     func moreInspect(_ item: NSMenuToolbarItem?) -> [String: Any] {
-        ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
-         "moreVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false,
-         "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
+        // LKM-325: macOS 27 keeps an item hidden by `fitMore` in `visibleItems`; it is not drawn.
+        var hidden = false
+        if #available(macOS 15, *) { hidden = item?.isHidden ?? false }
+        return ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
+                "moreVisible":!hidden && (toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false),
+                "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
     }
     /// LKM-319: dividers that draw inside each toolbar island (none on macOS 27).
     func islandInspect() -> [String: Any] {

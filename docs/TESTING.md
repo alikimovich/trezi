@@ -540,10 +540,51 @@ full suite.
 `dependency audit` with read-only repository permissions and bounded timeouts.
 Superseded runs for the same PR or branch are cancelled.
 
+- **The split (LKM-327).** `typecheck + unit tests` used to be one macOS job: setup,
+  both typechecks, then the whole unit tier on the runner's 3 cores, about 12 min
+  on PR #300. It is now three kinds of job:
+
+  | Job | Runner | What |
+  | --- | --- | --- |
+  | `typecheck` | `ubuntu-latest` | version/changelog check, frozen install, `bun run typecheck`, `bun run typecheck:native` |
+  | `unit tests (i/n)` | `macos-26`, a matrix | the unit tier with `--shard=i/n`: **3 shards on a pull request, 1 (the whole tier) on a push to `main`** |
+  | `typecheck + unit tests` | `ubuntu-latest` | the gate: needs both, runs `if: always()`, and passes only when the typecheck and every shard passed |
+
+  The gate keeps the check name the single job had, so anything that waits for
+  that check still does. A failed, cancelled or skipped shard fails the gate; it
+  never reports as skipped. tsc reads no Swift and no SDK, so the typechecks need
+  no macOS runner; Linux is case-sensitive, so an import whose case differs from
+  the file name fails there.
+
+  `node test/run.mjs unit --shard=<i>/<n>` runs shard `i` of `n` of the selected
+  unit tests (after `--changed` or `--filter`) and prints `Shard i/n: x of y
+  selected unit tests`; `summary.json` records the shard and its tests. It takes
+  only the unit tier and refuses `--typecheck`. The split (`shardTests` in
+  `test/helpers/test-plan.mjs`) is greedy, heaviest test first onto the lightest
+  shard. Its weights are committed data only: a test's `UNIT_TIMEOUT_MS` budget,
+  else `SHARD_WEIGHT_MS` (30 s). It never reads `.local/test-times.json`, because
+  each shard restores its own cache and the shards must agree on one split, so
+  every test runs in exactly one shard. `test/test-selection.mjs` checks that the
+  shards are disjoint, cover the input and stay balanced. Inside a shard the times
+  file still starts the slowest tests first. A narrowed pull-request plan with
+  fewer tests than shards leaves a shard empty; that shard passes with nothing to
+  run. Measured locally (8 workers, 2026-10-23), the three PR shards hold 464 s,
+  433 s and 394 s of the tier's 1291 s of test time.
+
+  Each shard keys its Swift cache as `unit-swift-<os>-<i>of<n>-<sha>` and restores
+  its own last cache first, then main's whole-tier `1of1` cache, then any. The
+  "Swift test cache result" step logs the exact hit and the restored key, so a
+  cold cache shows in the job log. The cache is saved after a passing or failing
+  run (not a cancelled one), so a red push does not recompile on the next one.
+  Logs upload as `unit-test-logs-<i>of<n>`.
+
+  A pull request uses 4 macOS runners at once (3 shards and `app build`); a push
+  to `main` uses 2. A busy account queues runs beyond its macOS concurrency limit.
+
 - **Triggers.** It runs on a push to `main` and on every pull
   request. Pushes to other branches (throwaway and worker branches) do not start
   a run.
-- **Runner.** The job runs on `macos-26`, GitHub's hosted macOS 26 (Tahoe) arm64
+- **Runner.** The unit shards run on `macos-26`, GitHub's hosted macOS 26 (Tahoe) arm64
   image. The Swift service owners compile against the macOS 26 SDK
   (`MIN_SDK` in `scripts/requirements.mjs`). That image's default Xcode 26
   provides it, so the job needs no `xcode-select`. An Ubuntu runner cannot build
@@ -552,24 +593,24 @@ Superseded runs for the same PR or branch are cancelled.
   differs between versions, LKM-150), then runs
   `bun scripts/requirements.mjs --build`. If the image ever ships an older SDK,
   that step fails before any tests run.
-- **Commands**, in order:
+- **Commands.** The `typecheck` job and each unit shard run:
 
   ```sh
   bun install --frozen-lockfile
-  bun run typecheck
-  bun run typecheck:native
-  node test/run.mjs unit --report --timeout-ms=120000
+  bun run typecheck            # typecheck job
+  bun run typecheck:native     # typecheck job
+  node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard=<i>/<n>
   ```
 
-  The two typechecks are their own `Typecheck` step, before the `Unit tests` step; the
-  unit step has no `--typecheck`, `--filter`, `--serial` or `--jobs`, so every unit test
-  (on a pull request, every planned one; see below) still runs with the default worker
-  count. Locally `bun run test:quick` keeps running
+  The unit step has no `--typecheck`, `--filter`, `--serial` or `--jobs`, so every
+  unit test (on a pull request, every planned one; see below) runs in exactly one
+  shard with the default worker count. Locally `bun run test:quick` keeps running
   them together (`--typecheck`). On CI they used to start with the first three
   workers: typecheck took 85-93 s, and `swift-preview-target` hit its 300 s limit on
   merged-main run 39721071506 (attempts 1 and 2). That load is an inference, not a
-  proven cause; `test/dependency-audit.mjs` pins the step order and the unchanged
-  unit command. `test/swift-preview-target.mjs` prints `[elapsed] start|done <stage>`
+  proven cause; the typechecks later moved to a step before the unit tier, and now
+  to their own job. `test/dependency-audit.mjs` pins the jobs, the gate and the unit
+  command. `test/swift-preview-target.mjs` prints `[elapsed] start|done <stage>`
   lines, so the last finished stage is in the log if it times out again.
   The `Typecheck` step calls both scripts directly, so the `typecheckPlan` skip of
   an equivalent `typecheck-native` applies only to `--typecheck` runs, never to CI.
@@ -580,10 +621,10 @@ Superseded runs for the same PR or branch are cancelled.
   [changed-file plan](#changed-file-selection-local-test-cleanup-v2). A push to
   `main` always runs the whole tier, and both typechecks run on every event. There
   is no `paths-ignore`: every job runs and reports its check on every pull request.
-  `actions/cache` restores
+  `actions/cache/restore` restores
   `.local/test-cache` and `.local/test-times.json` from the latest run (key per
-  commit, restored by prefix), so unchanged Swift fixtures are not recompiled
-  ([Unit tier speed](#unit-tier-speed-lkm-167)).
+  shard and commit, restored by prefix; see the split above), so unchanged Swift
+  fixtures are not recompiled ([Unit tier speed](#unit-tier-speed-lkm-167)).
 
 - **App build.** A separate `macos-26` job runs the same toolchain check and
   frozen install, then `TREZI_SIGN_IDENTITY=- bun run build`. It checks that
@@ -610,8 +651,8 @@ Superseded runs for the same PR or branch are cancelled.
   the dependency graph's documented manifest list does not establish that it
   parses `bun.lock` for this repository.
 
-  If a unit step fails, the run uploads `test/artifacts/runs/` as
-  `unit-test-logs`.
+  Each unit shard uploads `test/artifacts/runs/` as
+  `unit-test-logs-<i>of<n>`, pass or fail.
   CI runs no native GUI tier and no live tier. The runner has no desktop session
   for the smoke suite and no provider credentials. Run those tiers on a Mac.
   Branch protection and required check contexts must be configured only after
