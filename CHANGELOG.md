@@ -11,6 +11,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ## [Unreleased]
 
 ### Added
+- Gemini is an optional provider: turn it on in Settings → AI Providers to get its Pro, Flash and Flash-Lite models in the model picker, signed in with the Gemini CLI's Login with Google or a Gemini API key saved under Gemini… (encrypted with your Keychain). Off, the default, hides its models and never starts Gemini. The setting is kept across relaunches (LKM-315).
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
 ### Fixed

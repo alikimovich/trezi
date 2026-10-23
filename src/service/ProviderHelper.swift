@@ -33,9 +33,10 @@ struct ProviderHelperCommand: Sendable {
 ///   runtime variables are not on it (LKM-124). Every `TREZI_*` variable (the profile path,
 ///   the service pid, the agent tool socket and its token) and other providers'
 ///   credentials are left out. Credentials stay in their own stores (the Keychain,
-///   `~/.claude`, `~/.codex`). The one secret the owner passes is the Claude
-///   subscription token saved in Settings (LKM-119): `CLAUDE_CODE_OAUTH_TOKEN`, to
-///   Claude helpers only (`helperEnvironment` in `ProviderLaunch.swift`).
+///   `~/.claude`, `~/.codex`, `~/.gemini`). The secrets the owner passes are the ones
+///   saved in Settings: the Claude subscription token (LKM-119) as `CLAUDE_CODE_OAUTH_TOKEN`
+///   to Claude helpers only, and the Gemini API key (LKM-315) as `GEMINI_API_KEY` to
+///   Gemini helpers only (`helperEnvironment` in `ProviderLaunch.swift`).
 /// - **Process group.** Its own group with a watchdog (`--watch-group`) and an entry
 ///   in the runtime journal, so descendants are stopped with it, on a service crash too.
 /// - **Output.** Line frames of at most `maxLine` bytes; a longer one is a violation
@@ -82,7 +83,8 @@ final class ProviderHelperProcess: @unchecked Sendable {
     ]
     /// The names a provider's CLI or a parent session of it uses. Those not allowed
     /// above are dropped, and Check login lists them by name.
-    static let providerFamilies: [String: [String]] = ["claude": ["CLAUDE", "ANTHROPIC_"], "codex": ["CODEX", "OPENAI_"]]
+    static let providerFamilies: [String: [String]] = ["claude": ["CLAUDE", "ANTHROPIC_"], "codex": ["CODEX", "OPENAI_"],
+                                                       "gemini": ["GEMINI_", "GOOGLE_"]]
 
     static func allowed(_ key: String, provider: String) -> Bool {
         if baseVariables.contains(key) { return true }

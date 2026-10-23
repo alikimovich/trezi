@@ -1,4 +1,5 @@
 import type { AgentOptions } from '../../shared/api'
+import { geminiEnabled } from '../gemini-setting'
 import { codexProvider } from './codex'
 import { helperProvider } from './helper-session'
 import { withSkillMenu } from './skill-menu'
@@ -36,18 +37,12 @@ export type { ModelProvider, PendingPrompt, ProviderSession } from './types'
  * connection uses the user's own API key — encrypted at rest and confined to Bun and
  * the service. No key is ever committed in-repo.
  *
- * Gemini is EXPERIMENTAL and UNWIRED: unlike Claude/Codex it has NO SDK in
- * package.json (it shells out to an external `gemini` CLI that most installs
- * lack), so selecting it by default is a runtime trap. It is therefore gated
- * behind an explicit opt-in — set TREZI_EXPERIMENTAL_GEMINI=1 (or `true`) to
- * enable `provider: 'gemini'`. Without the flag a 'gemini' request falls back to
- * Claude, exactly like an unknown provider. Claude and Codex are unaffected.
+ * Gemini is OPTIONAL (LKM-315): unlike Claude/Codex it has NO SDK in package.json
+ * (it shells out to an external `gemini` CLI that most installs lack), so it runs
+ * only when the user turned it on in Settings → AI Providers (`gemini-setting.ts`).
+ * While it is off a 'gemini' request falls back to Claude, exactly like an unknown
+ * provider, and no Gemini helper starts. Claude and Codex are unaffected.
  */
-function geminiEnabled(): boolean {
-  const v = process.env.TREZI_EXPERIMENTAL_GEMINI
-  return v === '1' || v === 'true'
-}
-
 export function pickProvider(options: AgentOptions): ModelProvider {
   if (options.connectionId) return codexWithSkills
   // A helper never routes again: its own sessions are the adapters themselves (`provider-helper-entry.ts`).

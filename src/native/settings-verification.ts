@@ -133,11 +133,14 @@ export function assertSectionEvidence(
       ],
       'General shows the default model, Claude plugins, agent file and Git access, PR merging, workspace cleanup, Activity, quit and build check pickers'
     )
-  else
+  else {
     assert.ok(
-      ids.every((id) => id === 'connection' || id === 'providerFallback'),
-      'AI Providers shows only its provider picker and the provider fallback picker'
+      ids.every((id) => id === 'connection' || id === 'geminiEnabled' || id === 'providerFallback'),
+      'AI Providers shows only its provider picker, the Gemini On/Off picker and the provider fallback picker'
     )
+    // LKM-315: the Gemini toggle is a picker laid out like the other provider rows.
+    assert.ok(ids.includes('geminiEnabled'), 'AI Providers shows the Gemini On/Off picker')
+  }
   const lines = evidence.text.map(words)
   for (const required of [
     ...SETTINGS_SECTIONS.map((s) => s.label),

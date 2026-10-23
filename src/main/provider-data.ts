@@ -36,10 +36,10 @@ export interface ProviderDataOwner {
   saveCatalog(backend: CatalogBackend, models: CatalogModel[], harness?: string): Promise<boolean>
   /** `codex debug models`, parsed; [] on any failure. */
   codexModels(): Promise<CatalogModel[]>
-  /** A built-in seat's subscription token (`claude setup-token`, LKM-119); '' removes it.
-   *  Answers whether one is saved. The token itself never comes back. */
-  saveSeatToken(provider: 'claude', token: string): Promise<boolean>
-  seatTokenStatus(): Promise<{ claude: { hasToken: boolean } }>
+  /** A built-in seat's credential: the `claude setup-token` token (LKM-119) or a Gemini
+   *  API key (LKM-315); '' removes it. Answers whether one is saved. It never comes back. */
+  saveSeatToken(provider: SeatTokenProvider, token: string): Promise<boolean>
+  seatTokenStatus(): Promise<Partial<Record<SeatTokenProvider, { hasToken: boolean }>>>
   /** "Check provider login": the provider's auth status, from a helper launched like a chat's in `root`. */
   checkLogin(provider: string, root: string): Promise<ProviderLoginReport>
 }
@@ -112,11 +112,17 @@ export function modelCatalog(): ModelCatalog {
   return catalog
 }
 
-/** The Claude subscription token and the login check (LKM-119); both need the service. */
+/** The seats whose credential the service keeps, encrypted with the Keychain helper. */
+export type SeatTokenProvider = 'claude' | 'gemini'
+
+/** The seat credentials and the login check (LKM-119); both need the service. */
 export const seatLogin = {
-  save: (token: string): Promise<boolean> => dataOwner().saveSeatToken('claude', token),
-  hasToken: async (): Promise<boolean> =>
-    owner ? (await owner.seatTokenStatus().catch(() => null))?.claude.hasToken === true : false,
+  save: (token: string, provider: SeatTokenProvider = 'claude'): Promise<boolean> =>
+    dataOwner().saveSeatToken(provider, token),
+  hasToken: async (provider: SeatTokenProvider = 'claude'): Promise<boolean> =>
+    owner
+      ? (await owner.seatTokenStatus().catch(() => null))?.[provider]?.hasToken === true
+      : false,
   check: (provider: string, root: string): Promise<ProviderLoginReport> =>
     dataOwner().checkLogin(provider, root)
 }

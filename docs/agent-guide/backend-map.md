@@ -56,7 +56,8 @@ src/main/
   agent.ts        persistent multi-turn agent session (streams over agent:* IPC);
                   asks the conversation owner before every chat transition
   backends/       provider seam: claude.ts, codex.ts, gemini.ts behind pickProvider
-                  (gemini currently has NO SDK dep — treat as experimental). A set
+                  (gemini has NO SDK dep, it runs the Gemini CLI; optional, routed
+                  only while Settings turned it on: gemini-setting.ts, LKM-315). A set
                   AgentOptions.connectionId routes to codex.ts whatever `provider` says.
                   codex-retry.ts is codex.ts's pure half (the CLI emits all five of its
                   retry attempts as separate `error` events; this collapses them into

@@ -1,6 +1,9 @@
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
+import { accessSync, constants, existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { NativeView } from '../../native/platform'
-import type { AgentEvent, AgentOptions } from '../../shared/api'
+import type { AgentEvent, AgentOptions, ProviderLoginReport } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
 import { treziRules } from '../rules'
 import { compatibilityCatalog } from '../session-skills'
@@ -9,31 +12,93 @@ import { describeTool, sendToRenderer } from './tools'
 import type { ModelProvider, PendingPrompt, ProviderSession, SpawnContext } from './types'
 
 /**
- * EXPERIMENTAL / UNWIRED (v7) — Google Gemini backend via the **Gemini CLI**
- * (`gemini`). Unlike the Claude and Codex backends, this provider has NO SDK
- * dependency in package.json — it shells out to an external `gemini` binary that
- * most installs won't have. Because a selectable-but-missing backend is a runtime
- * trap, `pickProvider` (see ./index.ts) does NOT route to it by default: it is
- * gated behind the TREZI_EXPERIMENTAL_GEMINI=1 opt-in env flag. Do not add a Gemini
- * SDK / wire this into the default provider list without revisiting that gate.
+ * OPTIONAL (LKM-315) — Google Gemini backend via the **Gemini CLI** (`gemini`).
+ * Unlike the Claude and Codex backends, this provider has NO SDK dependency in
+ * package.json — it shells out to an external `gemini` binary that most installs
+ * won't have. So `pickProvider` (see ./index.ts) routes to it only while the user
+ * turned Gemini on in Settings → AI Providers (`../gemini-setting.ts`); off, its
+ * models are not listed and no Gemini helper starts.
  *
  * Auth is the user's **Google account** ("Login with Google": run `gemini` once and
- * sign in) — NO API key. Gemini edits the repo with its own tools; we just map its
- * headless JSONL event stream to trezi's `AgentEvent` stream.
+ * sign in), or a Gemini API key saved in Settings: the service keeps it encrypted
+ * with the Keychain helper and puts it only into a Gemini helper's environment as
+ * `GEMINI_API_KEY` (`ProviderLaunch.swift`). Gemini edits the repo with its own
+ * tools; we just map its headless JSONL event stream to trezi's `AgentEvent` stream.
  *
- * Each turn spawns `gemini -p <prompt> --output-format stream-json` in the repo and
- * streams its JSONL events (`init`/`message`/`tool_use`/`tool_result`/`error`/
- * `result`). Reachable only when `AgentOptions.provider === 'gemini'`. If the CLI
- * isn't installed or the user isn't signed in, the turn fails soft (error + done).
+ * Each turn spawns `gemini -p <prompt> --output-format stream-json [-m <model>]` in
+ * the repo and streams its JSONL events (`init`/`message`/`tool_use`/`tool_result`/
+ * `error`/`result`). Reachable only when `AgentOptions.provider === 'gemini'`. If the
+ * CLI isn't installed or the user isn't signed in, the turn fails soft (error + done).
  *
  * KNOWN LIMITATION: headless `-p` runs one turn per process, so conversation
  * context does not carry across turns yet (a follow-up can use the CLI's session/
  * checkpoint mode or ACP for a persistent thread).
  */
 
-// Overridable so tests can force the CLI-absent path even on machines where a
-// real `gemini` is installed (provider-seam asserts the fail-soft behavior).
-const GEMINI_BIN = process.env.TREZI_GEMINI_BIN || 'gemini'
+/**
+ * The `gemini` to run: `TREZI_GEMINI_BIN` (tests force the CLI-absent path with it,
+ * even on machines where a real `gemini` is installed), else the first executable on
+ * PATH or in the usual install folders (an app opened from the Finder has a short
+ * PATH), else the bare name, which fails soft at spawn.
+ */
+export function geminiBin(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.TREZI_GEMINI_BIN) return env.TREZI_GEMINI_BIN
+  const home = env.HOME || homedir()
+  const candidates = [
+    ...(env.PATH ?? '')
+      .split(':')
+      .filter(Boolean)
+      .map((dir) => join(dir, 'gemini')),
+    '/opt/homebrew/bin/gemini',
+    '/usr/local/bin/gemini',
+    join(home, '.local/bin/gemini'),
+    join(home, '.npm-global/bin/gemini'),
+    join(home, '.bun/bin/gemini')
+  ]
+  for (const path of candidates) {
+    try {
+      accessSync(path, constants.X_OK)
+      return path
+    } catch {}
+  }
+  return 'gemini'
+}
+
+/** Ways the Gemini CLI can be signed in, as the helper sees them (names, never values). */
+function geminiAuth(env: NodeJS.ProcessEnv): string | null {
+  if (env.GEMINI_API_KEY) return 'Gemini API key'
+  if (env.GOOGLE_API_KEY) return 'Google API key'
+  if (env.GOOGLE_GENAI_USE_VERTEXAI === 'true') return 'Vertex AI'
+  if (existsSync(join(env.HOME || homedir(), '.gemini/oauth_creds.json')))
+    return 'Login with Google'
+  return null
+}
+
+/** "Check provider login" for Gemini (LKM-315): the CLI is there and some sign-in is set up. */
+async function checkGeminiLogin(): Promise<Omit<ProviderLoginReport, 'provider'>> {
+  const executable = geminiBin()
+  const version = await new Promise<string | null>((resolve) => {
+    execFile(executable, ['--version'], { timeout: 10_000 }, (error, stdout) =>
+      resolve(error ? null : String(stdout).trim().split('\n')[0].slice(0, 80))
+    )
+  })
+  const token = !!process.env.GEMINI_API_KEY
+  if (version === null)
+    return {
+      loggedIn: false,
+      token,
+      detail:
+        'The Gemini CLI was not found. Install it (npm install -g @google/gemini-cli), then run gemini and choose Login with Google.'
+    }
+  const method = geminiAuth(process.env)
+  return {
+    loggedIn: !!method,
+    executable,
+    token,
+    ...(method ? { authMethod: method } : {}),
+    detail: `Gemini CLI ${version}: ${method ? `signed in with ${method}` : 'not signed in. Run gemini and choose Login with Google, or save a Gemini API key in Settings.'}`
+  }
+}
 
 /** Map one parsed Gemini JSONL event to a trezi AgentEvent (or null to ignore). */
 function mapEvent(ev: unknown): AgentEvent | null {
@@ -86,6 +151,8 @@ async function startSession(
   let disposed = false
   let aborted = false
   let child: ChildProcessWithoutNullStreams | null = null
+  // Each turn is its own process, so a model switch applies from the next one.
+  let model = options.model && options.model !== 'default' ? options.model : undefined
   // trezi rules (v8 R): no system-prompt arg here, so prepend them to the first turn.
   let firstTurn = true
   // LKM-287: experimental — the pinned library skills as a compatibility catalog. Gemini
@@ -112,10 +179,9 @@ async function startSession(
       turnInterrupted = false
       let proc: ChildProcessWithoutNullStreams
       try {
-        proc = spawn(GEMINI_BIN, ['-p', text, '--output-format', 'stream-json'], {
-          cwd: root,
-          env: process.env
-        })
+        // No model: the CLI's own default. Otherwise a picker alias (`pro`, `flash`, …).
+        const args = ['-p', text, '--output-format', 'stream-json', ...(model ? ['-m', model] : [])]
+        proc = spawn(geminiBin(), args, { cwd: root, env: process.env })
       } catch (err) {
         emit({
           type: 'error',
@@ -160,11 +226,22 @@ async function startSession(
         // A non-zero exit with no streamed text usually means not-signed-in / bad input.
         // A turn the USER stopped exits non-zero by definition — reporting that as
         // "Gemini exited with code null" would turn pressing Stop into an error.
+        // With no sign-in set up it is an `auth` error, so the chat shows the same
+        // sign-in card as for Claude and Codex (LKM-315).
         if (codeNum !== 0 && !aborted && !turnInterrupted) {
-          emit({
-            type: 'error',
-            message: `Gemini exited with code ${codeNum}. If you haven't signed in, run \`gemini\` and Login with Google.`
-          })
+          emit(
+            geminiAuth(process.env)
+              ? {
+                  type: 'error',
+                  message: `Gemini exited with code ${codeNum}. If you haven't signed in, run \`gemini\` and Login with Google.`
+                }
+              : {
+                  type: 'error',
+                  code: 'auth',
+                  message:
+                    'Gemini is not signed in. Run gemini and choose Login with Google, or save a Gemini API key in Settings → AI Providers → Gemini….'
+                }
+          )
         }
         cap.finalize()
         emit({ type: 'done' })
@@ -184,6 +261,9 @@ async function startSession(
         : text
       firstTurn = false
       chain = chain.then(() => runTurn(prompt))
+    },
+    setModel: async (next) => {
+      model = next && next !== 'default' ? next : undefined
     },
     pending,
     emit,
@@ -210,4 +290,8 @@ async function startSession(
   }
 }
 
-export const geminiProvider: ModelProvider = { id: 'gemini', startSession }
+export const geminiProvider: ModelProvider = {
+  id: 'gemini',
+  startSession,
+  checkLogin: checkGeminiLogin
+}

@@ -31,7 +31,7 @@ GitHub PR.
 - **AI chat that edits the running app.** A persistent multi-turn agent session
   streams over IPC and edits source with hot-reload. Backends are pluggable —
   Claude (via the Agent SDK), Codex, and Gemini behind one provider seam
-  (Gemini is experimental, gated behind `TREZI_EXPERIMENTAL_GEMINI`). Their
+  (Gemini is optional: off until turned on in Settings → AI Providers). Their
   capabilities differ; see [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 - **Peer chats and project memory.** Every project has a flat set of isolated,
   independently named chats, with background agents nested under the chat that

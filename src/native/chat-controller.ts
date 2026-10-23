@@ -17,9 +17,9 @@ import type {
 import type { NativeComposerAction } from '../shared/native-composer'
 import { defaultChoiceFor, providerOptions, resolveSelection } from '../shared/provider-choices'
 import {
-  type BuiltinProvider,
   initialProviderReadiness,
-  readinessFromLogin
+  readinessFromLogin,
+  type SeatProvider
 } from '../shared/provider-readiness'
 import { statesContext } from '../shared/states-workbench'
 import { cardAction } from './chat-actions'
@@ -267,18 +267,26 @@ export class NativeChatController {
   async refreshChoices() {
     try {
       this.choices = await this.services.invoke('providers:choices')
+      // LKM-315: Gemini has a readiness only while it is on (its models are listed).
+      if (!this.geminiListed()) delete this.readiness.gemini
+      else if (this.readinessStarted && !this.readiness.gemini) void this.refreshReadiness('gemini')
       this.changed()
     } catch (error) {
       this.fail(this.get(this.active), error)
     }
+  }
+  private geminiListed() {
+    return this.choices.some((c) => c.provider === 'gemini' && !c.connectionId)
   }
   private startReadinessIfVisible() {
     if (!this.layout.visible || !this.active || this.readinessStarted) return
     this.readinessStarted = true
     void this.refreshReadiness()
   }
-  async refreshReadiness(provider?: BuiltinProvider) {
-    const providers: BuiltinProvider[] = provider ? [provider] : ['claude', 'codex']
+  async refreshReadiness(provider?: SeatProvider) {
+    const providers: SeatProvider[] = provider
+      ? [provider]
+      : ['claude', 'codex', ...(this.geminiListed() ? (['gemini'] as const) : [])]
     await Promise.all(
       providers.map(async (id) => {
         this.readiness[id] = { status: 'checking' }
@@ -293,6 +301,8 @@ export class NativeChatController {
         } catch {
           this.readiness[id] = readinessFromLogin(null)
         }
+        // Turned off while the check ran.
+        if (id === 'gemini' && !this.geminiListed()) delete this.readiness.gemini
         this.changed()
       })
     )
@@ -471,7 +481,8 @@ export class NativeChatController {
     // A seat that refused a turn is signed out for the start screen too (LKM-232).
     const seat = chat.settings.provider
     if (event.type === 'error' && event.code === 'auth' && !chat.settings.connectionId)
-      if (seat === 'claude' || seat === 'codex') this.readiness[seat] = { status: 'signed_out' }
+      if (seat === 'claude' || seat === 'codex' || (seat === 'gemini' && this.readiness.gemini))
+        this.readiness[seat] = { status: 'signed_out' }
     if (event.type === 'error' || (event.type === 'isolation' && event.state === 'parked')) {
       if (chat.setup || chat.awaitingLanding)
         this.services.effect({

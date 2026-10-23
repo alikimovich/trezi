@@ -171,7 +171,7 @@ for (const width of [680, 780]) {
   const providers = {
     ...structuredClone(general),
     ...sidebar('providers'),
-    controls: [],
+    controls: [control('geminiEnabled', 'Off'), control('providerFallback', 'On')],
     text: [
       'General',
       'AI Providers',
@@ -179,10 +179,12 @@ for (const width of [680, 780]) {
       'Experimental',
       'Dreamer',
       'Al Providers',
-      'Claude and Codex use your existing sign-ins. Add another provider to',
-      'use its models in chats.',
+      'Claude and Codex use your existing sign-ins. Gemini is optional: turn it',
+      'on below. Add another provider to use its models in chats.',
       'Added providers',
       'None',
+      'Gemini',
+      'Off',
       'Browser Checks'
     ]
   }
@@ -207,6 +209,12 @@ for (const width of [680, 780]) {
   reject(general, 'general', (e) => (e.sidebarSelected = 1))
   reject(general, 'general', (e) => (e.foreground = false))
   reject(providers, 'providers', (e) => (e.text = e.text.slice(0, 4)))
+  reject(providers, 'providers', (e) => (e.controls = []))
+  reject(
+    providers,
+    'providers',
+    (e) => (e.controls = e.controls.filter((c) => c.id !== 'geminiEnabled'))
+  )
   reject(providers, 'providers', (e) =>
     e.controls.push(control('default', 'Use last selected model'))
   )
