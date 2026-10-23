@@ -2,6 +2,29 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-324: Show states is removed
+
+- **Why.** The component states canvas and workbench did not work reliably.
+- **Removed entry points.**
+  - "Show states…" on the element toolbar and in the inspector … menu.
+  - The `/states` command and the `component-states` skill.
+  - The toolbar States menu (`ToolbarStates.swift`) and the switcher
+    (`StatesSwitcher.swift`).
+  - The Publish workbench check.
+- **Removed code.** The `states-*` controllers in `src/native`, `src/main`,
+  `src/preview` and `src/shared`.
+  - The three states canvas agent tools, removed from every registration and from
+    both policy lists.
+  - The source owner's `removeWorkbench`, and `bin/states-canvas-schema.*`.
+  - The four unit tests, the `states-canvas`/`states-workbench` smoke checks and
+    their groups, and `docs/STATES.md`.
+- **Old data.** The `trezi:states-workbenches:v1` and `trezi:states-canvases:v1`
+  preferences are no longer read. Nothing in a user's project is touched.
+- **Verification.** Typecheck, lint and the unit tier pass. `native-slider-ticks`
+  reports SKIP on macOS 27, where a SwiftUI `Slider` has no `NSSlider`. The merge
+  kept main's fixture for this, which replaced an equivalent fix on this branch. No
+  native run was available.
+
 ## 2026-10-23 — LKM-318: full-width dividers between queued messages
 
 - **Why.** The hairline between two queued rows started at the text and stopped 12 pt

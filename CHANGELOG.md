@@ -93,6 +93,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Quitting while agents work (⌘Q, Quit, closing the window, logout or restart) now asks first: a sheet lists what is still running per project, with Cancel, Wait and Quit (quits when the work ends; cancelable) and Quit Anyway (stops the agents and keeps their work in each chat’s copy, as Stop does). A landing or publish in progress always finishes first, for up to 15 seconds. “Don’t ask again” is also in Settings → General (LKM-221).
 - Native controls and light/dark appearance for the exploded component view.
 
+### Removed
+- Show states, because it did not work reliably: the "Show states…" action on a selected element (toolbar and inspector … menu), the `/states` command, the isolated states view, the toolbar's States menu and switcher, and the Publish check for a states workbench. Workbench pages the agent already wrote into a project stay untouched (LKM-324).
+
 ## [0.1.0] - 2026-10-09
 
 ### Added

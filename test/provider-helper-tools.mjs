@@ -87,16 +87,6 @@ const CALLS = {
   open_code: { file: 'shadow.js', startLine: 1, endLine: 2 },
   chat_island: island,
   chat_ui: { action: 'catalog' },
-  register_states_canvas: {
-    component: 'Card',
-    source: 'Card.tsx',
-    exportName: 'Card',
-    width: 420,
-    states: [{ id: 'default', label: 'Default', props: {} }],
-    missing: []
-  },
-  open_states_canvas: { id: 'canvas:test' },
-  inspect_states_canvas: {},
   workspace_state: {},
   prepare_conflict_resolution: {},
   git_sync_base: {},

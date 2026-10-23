@@ -48,7 +48,6 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     let toast = NativeToast()
     let previewLoad = NativePreviewLoad()
     let speedBadge = NativePreviewSpeed()
-    let statesSwitcher = NativeStatesSwitcher()
     let threeD = ThreeDChrome()
     var sourceEditors: [String: NativeSourceEditor] = [:]
     var sourceRoot = ""
@@ -136,7 +135,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         shell.updatePreviewColor(views["preview"]!.underPageBackgroundColor)
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
-        canvas.addSubview(previewLoad); canvas.addSubview(speedBadge); canvas.addSubview(statesSwitcher)
+        canvas.addSubview(previewLoad); canvas.addSubview(speedBadge)
         canvas.addSubview(threeD.backdrop, positioned: .above, relativeTo: views["preview"])
         canvas.addSubview(threeD.scene, positioned: .above, relativeTo: threeD.backdrop)
         canvas.addSubview(threeD.header); canvas.addSubview(threeD.footer)
@@ -199,7 +198,6 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "preferences":
             preferences = c["values"] as? [String: Any] ?? [:]
         case "webViews": reply(id, views.keys.filter { !$0.hasPrefix("agent:") }.sorted())
-        case "statesBack": reply(id, previewHistory.back(to: c["url"] as? String ?? ""))
         case "previewRevealAllowed": reply(id, Date().timeIntervalSince(lastUserInteraction) >= 5)
         case "agentBrowserCreate":
             guard let session = c["session"] as? String, !session.isEmpty, session.count <= 128,
@@ -379,12 +377,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                 }
             }
         case "previewSpeed": setPreviewSpeed(c)
-        case "statesState": statesSwitcher.update(c["state"] as? [String: Any]); nativeLayout.layout()
         case "threeDClear":
             // A same-document URL change (pushState, hash) fires no navigation, so the
             // modal scene would stay open without controls: close it before clearing.
             threeD.dismiss(); threeD.clear(); nativeLayout.layout()
-        case "workbenches": shell.updateWorkbenches(c["items"] as? [[String: Any]] ?? [])
         case "previewViewport":
             if name.hasPrefix("agent:"), let view { reply(id, PreviewAgent.setAgentViewport(c, view: view)) }
             else { reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"])) }

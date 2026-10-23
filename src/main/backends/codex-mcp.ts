@@ -83,10 +83,7 @@ const requiredTools = [
   'restart_dev_server',
   'open_code',
   'ask_user',
-  'chat_ui',
-  'register_states_canvas',
-  'open_states_canvas',
-  'inspect_states_canvas'
+  'chat_ui'
 ]
 
 /** LKM-203: `land_now`, `publish_update` and `publish_merge` wait for the real result

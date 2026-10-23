@@ -14,7 +14,6 @@ import type {
   NativeInspectorState
 } from '../shared/native-inspector'
 import { describeSelectionForPrompt } from '../shared/selection-context'
-import { showStatesText } from '../shared/states-workbench'
 import { tokensForProp } from '../shared/token-match'
 
 type Binding = {
@@ -42,8 +41,6 @@ export class NativeInspectorController {
   element: SelectedElement | null = null
   /** Every selection change, null when cleared; Layers follows it (LKM-179). */
   onElement: (element: SelectedElement | null) => void = () => {}
-  /** LKM-220: Show states opens the component's existing workbench (true) instead of asking. */
-  showStates: (root: string, element: SelectedElement) => Promise<boolean> = async () => false
   inspection: PropInspection | null = null
   controls: ResolvedControlPanel[] = []
   tokens: TokenSet | null = null
@@ -275,8 +272,7 @@ export class NativeInspectorController {
     if (element)
       this.state.actions.unshift(
         { id: 'controls', label: 'Create controls…' },
-        { id: 'animation', label: 'Add animation…' },
-        { id: 'states', label: 'Show states…' }
+        { id: 'animation', label: 'Add animation…' }
       )
     if (element?.componentSource)
       this.state.actions.unshift({ id: 'owner', label: 'Inspect owning component' })
@@ -693,12 +689,6 @@ export class NativeInspectorController {
       }
       if (action.action === 'ask-agent' && this.element) {
         await this.agent(root, describeSelectionForPrompt(this.element, root))
-        return
-      }
-      if (action.action === 'states' && this.element) {
-        if (await this.showStates(root, this.element)) return
-        const selection = describeSelectionForPrompt(this.element, root)
-        await this.agent(root, showStatesText(selection, this.element.componentSource), true)
         return
       }
       if (action.action === 'controls' || action.action === 'animation') {

@@ -272,8 +272,8 @@ async function toolbarIcons(evaluate: (code: string) => Promise<any>): Promise<T
   })()`)
   if (!(rect.width > 0 && rect.height > 0))
     throw new Error(`Element toolbar has no size: ${JSON.stringify(rect)}`)
-  for (const kind of ['three-d', 'states'])
-    if (!icons.some((icon) => icon.kind === kind)) throw new Error(`Element toolbar has no ${kind}`)
+  if (!icons.some((icon) => icon.kind === 'three-d'))
+    throw new Error('Element toolbar has no three-d')
   for (const icon of icons)
     if (icon.size !== '15x15' || icon.box !== '0 0 24 24' || icon.stroke !== '2')
       throw new Error(

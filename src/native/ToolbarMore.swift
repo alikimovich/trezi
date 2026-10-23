@@ -41,8 +41,7 @@ extension NativeShell {
         addressLayout.moveRightGroups(hiding: hidden, by: moreShift + segment)
         item.isHidden = hidden
     }
-    /// Pipe checks pick an entry the way a click on it would. (LKM-220: the workbenches
-    /// moved from here to the States menu, `ToolbarStates.swift`.)
+    /// Pipe checks pick an entry the way a click on it would.
     func performMore(_ item: NSMenuToolbarItem?, _ action: String) -> Bool {
         guard let item, item.isEnabled,
               let entry = item.menu.items.first(where: { ($0.representedObject as? [String: String])?["action"] == action }) else { return false }
