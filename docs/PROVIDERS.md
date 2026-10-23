@@ -25,7 +25,7 @@ Trezi has one `ProviderSession` seam, not one identical capability set. A model 
 the native tools and behavior of its harness; Trezi must gate UI and prompts by declared
 capabilities instead of assuming Claude, Codex, gateways, and Gemini are interchangeable.
 
-| Capability | Claude Agent SDK | Codex SDK | Custom gateway | Gemini (experimental) |
+| Capability | Claude Agent SDK | Codex SDK | Custom gateway | Gemini (optional, LKM-315) |
 | --- | --- | --- | --- | --- |
 | Persistent multi-turn context | Yes | Yes | Yes, through Codex | No guaranteed continuity |
 | Repository instruction discovery | `CLAUDE.md` + Claude skills | Codex-native instructions + Trezi rules | Same as Codex | Limited |
@@ -570,6 +570,43 @@ helper under the owner fixture, with stand-in CLIs and scaled deadlines (0.5 s f
 
 Tested by `test/turn-progress.mjs` (estimate, heartbeat, clock), the controller test and
 the progress stage of `test/helpers/native-chat-scroll.mjs`.
+
+## Gemini, an optional provider (LKM-315)
+
+Settings → AI Providers has a **Gemini** On/Off row after the provider list, laid out
+like the fallback row, and a **Gemini…** pane next to **Claude…**. The row is stored as
+`trezi:gemini-enabled:v1` (`'true'`/`'false'`) through the Swift preferences owner, so it
+survives relaunches; with nothing stored it is off unless the old opt-in
+`TREZI_EXPERIMENTAL_GEMINI=1` is set (`src/main/gemini-setting.ts`).
+
+- **Off (the default).** `providers:choices` lists no Gemini models, so the picker,
+  Settings' default model and the start screen never offer it, and the chat controller
+  keeps no Gemini readiness. `pickProvider` routes an old `provider: 'gemini'` chat to
+  Claude, and `providers:check-login` answers "Gemini is off" without starting a helper.
+- **On.** The group *Gemini* lists Default, Pro, Flash and Flash-Lite: the CLI's `-m`
+  aliases, which it resolves to the family's current model (the CLI cannot list its
+  models, so this list is not a fallback). Each turn runs `gemini -p … --output-format
+  stream-json [-m <alias>]` in a supervised provider helper, like the other seats, and a
+  model switch applies from the next turn. Readiness comes from Check login: the CLI
+  answers `--version` and some sign-in exists (`GEMINI_API_KEY`, `GOOGLE_API_KEY`,
+  Vertex AI, or `~/.gemini/oauth_creds.json` from Login with Google; names only).
+  Errors arrive as the same chat cards as Claude's and Codex's; an auth error shows
+  Gemini's sign-in steps.
+- **Sign-in.** Login with Google in the Gemini CLI, or a Gemini API key saved in the
+  Gemini… pane. The key is a draft field, saved with the Claude token through the
+  seat-credential path (`seatTokenSave` with `provider: "gemini"`): encrypted with the
+  Keychain helper in `<profile>/trezi/seat-tokens.json`, never echoed, and put only into
+  a Gemini helper's environment as `GEMINI_API_KEY` (`ProviderLaunch.swift`). A Gemini
+  helper inherits `GEMINI_*`/`GOOGLE_*`; Check login lists those names.
+- **Turning it off** reloads the model lists; a default model that was a Gemini one
+  becomes "Use last selected model".
+
+The CLI must be on the helper's PATH or in `/opt/homebrew/bin`, `/usr/local/bin`,
+`~/.local/bin`, `~/.npm-global/bin` or `~/.bun/bin` (`TREZI_GEMINI_BIN` overrides), and
+it needs Node. Headless `-p` runs one turn per process, so context does not carry across
+turns yet. Tested by `test/gemini-provider.mjs`, the readiness part of
+`test/chat-start.mjs`, routing in `test/provider-owner.mjs` and the key in
+`test/provider-login.mjs`.
 
 ## Codex seat models (LKM-126)
 

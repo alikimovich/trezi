@@ -2,6 +2,59 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-22 — LKM-315: Gemini is an optional provider with an On/Off row in Settings
+
+- **Why.** Gemini was reachable only with `TREZI_EXPERIMENTAL_GEMINI=1`. Its models were
+  never listed, so even with the variable set the picker could not choose it.
+- **Setting.** `src/main/gemini-setting.ts` reads `trezi:gemini-enabled:v1` through the
+  Swift preferences owner. It is off by default, and a stored value wins over the old
+  variable.
+  - `pickProvider` uses it: off still routes a `gemini` chat to Claude.
+  - `providers:choices` lists Gemini Default/Pro/Flash/Flash-Lite only while it is on.
+    These are the CLI's `-m` aliases, because the CLI cannot list its models.
+  - `providers:check-login` answers "Gemini is off" without starting a helper.
+- **Settings.** `src/native/settings-gemini.ts` adds a Gemini On/Off row after the provider
+  list (same kind and choices as the fallback row) and a Gemini… pane next to Claude….
+  - The pane has a draft API key, Check login, and Save/Remove key.
+  - Toggling reloads the Settings default-model list and the chat picker.
+  - If the default model was a Gemini one and Gemini is turned off, the default becomes
+    "Use last selected model".
+- **Key.** The Gemini key uses the existing seat-credential path:
+  - the `seatTokenSave`/`seatTokenStatus` provider `gemini`, stored encrypted in
+    `seat-tokens.json`;
+  - put only into a Gemini helper's environment as `GEMINI_API_KEY`
+    (`ProviderLaunch.swift`);
+  - `GEMINI_*`/`GOOGLE_*` names are listed by Check login (`ProviderHelper.swift`).
+- **Chat.**
+  - Readiness has an optional `gemini` entry, present only while Gemini is listed.
+  - The adapter finds the CLI in the usual install folders and passes `-m <alias>`. It has
+    a real Check login (version plus sign-in method, names only).
+  - A failure with no sign-in set up is an `auth` error, so the same sign-in card shows
+    as for Claude and Codex, with Gemini's steps.
+- **Fix on the way.** Sheet autosave called the `handle` captured at `present`, so panes
+  decorated afterwards never heard autosaved changes. `sheets-runtime.ts` now calls the
+  current `value.handle`, which is what made the Gemini row save at all.
+- **Tests.** New `test/gemini-provider.mjs` (unit tier) covers:
+  - the setting;
+  - off/on choices, routing and Check login;
+  - the Settings row, layout, persistence across a reopen, default fallback and pane;
+  - the adapter against a stand-in CLI.
+  Changes to existing tests:
+  - `test/chat-start.mjs` checks Gemini readiness while it is listed only;
+  - `test/provider-owner.mjs` checks routing on;
+  - `test/provider-login.mjs` checks that the key reaches only a Gemini helper. The fake
+    helper is also hosted as `gemini`.
+- **Review fix.** The native Settings smoke asserted that the AI Providers pane has only the
+  `connection` and `providerFallback` pickers, which the new row would have failed.
+  `assertSectionEvidence` (`settings-verification.ts`) now also allows `geminiEnabled` and
+  requires it, so the capture proves the row is there. `test/native-settings-evidence.mjs`
+  has the matching synthetic evidence (the new pane text) and two new rejections.
+- **Limits.**
+  - No native capture of the row (this run had no native verification).
+  - No real Gemini CLI or Keychain call.
+  - Headless `-p` still keeps no context across turns.
+  - The CLI needs Node on the helper's PATH.
+
 ## 2026-10-22 — LKM-313: four unit tests no longer fail when the Mac is busy
 
 - **Why.** 12 of 18 quick verifications on 2026-10-22 failed on unrelated unit tests. The

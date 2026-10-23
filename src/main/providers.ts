@@ -9,11 +9,13 @@ import type {
   ProviderLoginReport
 } from '../shared/api'
 import { withoutRejected } from './codex-seat'
+import { GEMINI_OFF, geminiEnabled } from './gemini-setting'
 import { checkedJevKey, jevConnection } from './jev-credentials'
 import { type CatalogBackend, type CatalogModel, setModelCatalog } from './model-catalog'
 import {
   codexModels,
   modelCatalog,
+  type SeatTokenProvider,
   seatLogin,
   setProviderDataDir,
   connectionStore as store
@@ -254,6 +256,14 @@ const CODEX_FALLBACK: Array<[modelId: string, label: string]> = [
   ['gpt-6-sol', 'GPT-6-Sol'],
   ['gpt-6-astra', 'GPT-6-Astra']
 ]
+/** Gemini's list (LKM-315). The Gemini CLI cannot be asked for its models, so this one
+ *  is the list, not a fallback: the CLI's `--model` aliases, which it resolves to the
+ *  family's current model, like Claude's above. */
+const GEMINI_MODELS: Array<[modelId: string, label: string]> = [
+  ['pro', 'Pro'],
+  ['flash', 'Flash'],
+  ['flash-lite', 'Flash-Lite']
+]
 
 /**
  * A choice's `value` is namespaced, never the bare model id: "Default" exists in
@@ -298,7 +308,7 @@ function prettyModelLabel(id: string, siblings: string[]): string {
  * `agentModelId` ("modelId === 'default' ⇒ send no model") depend on being first.
  */
 function builtinChoices(
-  provider: CatalogBackend,
+  provider: CatalogBackend | 'gemini',
   group: string,
   fallback: Array<[modelId: string, label: string]>
 ): ModelChoice[] {
@@ -306,7 +316,7 @@ function builtinChoices(
   // itself reaches `app.getPath` on first use, and `choices()` must never throw.
   let discovered: CatalogModel[] | null = null
   try {
-    discovered = modelCatalog().get(provider)
+    if (provider !== 'gemini') discovered = modelCatalog().get(provider)
   } catch {
     /* data dir not resolvable yet — use the fallback */
   }
@@ -337,7 +347,8 @@ function connections(): ProviderConnection[] {
 }
 
 /**
- * Every model the chat picker should offer: the two built-in seats first, then one
+ * Every model the chat picker should offer: the built-in seats first (Gemini only while
+ * it is on in Settings, LKM-315), then one
  * group per connection (labelled with the connection's own name). Recomputed per
  * call, so it always reflects the store — including a connection deleted a moment
  * ago. Keyless connections are still listed: hiding a user's own configuration is
@@ -352,7 +363,8 @@ function connections(): ProviderConnection[] {
 export function choices(): ModelChoice[] {
   const out: ModelChoice[] = [
     ...builtinChoices('claude', 'Claude', CLAUDE_FALLBACK),
-    ...builtinChoices('codex', 'Codex', CODEX_FALLBACK)
+    ...builtinChoices('codex', 'Codex', CODEX_FALLBACK),
+    ...(geminiEnabled() ? builtinChoices('gemini', 'Gemini', GEMINI_MODELS) : [])
   ]
   for (const conn of connections()) {
     for (const modelId of conn.models) {
@@ -393,6 +405,9 @@ export async function resolveConnection(
   if (!apiKey) return null
   return { baseUrl: conn.baseUrl, apiKey, wireApi: conn.wireApi }
 }
+
+const seatOf = (provider?: string): SeatTokenProvider =>
+  provider === 'gemini' ? 'gemini' : 'claude'
 
 /**
  * `providers:*` IPC. `dataDirFn` is agent.ts's `dataDir` — see the note on
@@ -435,16 +450,26 @@ export function registerProviderIpc(
 
   ipcMain.handle('providers:remove', (_e, id: string): Promise<void> => store.remove(id))
 
-  // The Claude subscription token (LKM-119): saved by the service, never read back.
+  // The Claude subscription token (LKM-119) and the Gemini API key (LKM-315): saved by
+  // the service, never read back. No provider argument means Claude.
   ipcMain.handle(
     'providers:seat-token-status',
-    async (): Promise<{ hasToken: boolean }> => ({ hasToken: await seatLogin.hasToken() })
+    async (_e, provider?: string): Promise<{ hasToken: boolean }> => ({
+      hasToken: await seatLogin.hasToken(seatOf(provider))
+    })
   )
   ipcMain.handle(
     'providers:seat-token-save',
-    async (_e, token: string): Promise<{ ok: boolean; hasToken?: boolean; error?: string }> => {
+    async (
+      _e,
+      token: string,
+      provider?: string
+    ): Promise<{ ok: boolean; hasToken?: boolean; error?: string }> => {
       try {
-        return { ok: true, hasToken: await seatLogin.save(typeof token === 'string' ? token : '') }
+        return {
+          ok: true,
+          hasToken: await seatLogin.save(typeof token === 'string' ? token : '', seatOf(provider))
+        }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }
@@ -458,6 +483,9 @@ export function registerProviderIpc(
     'providers:check-login',
     async (_e, provider: string, root?: string): Promise<ProviderLoginReport> => {
       const id = typeof provider === 'string' ? provider : 'claude'
+      // Off, Gemini starts no helper, not even for its login check (LKM-315).
+      if (id === 'gemini' && !geminiEnabled())
+        return { provider: id, loggedIn: null, detail: GEMINI_OFF }
       if (id === 'codex') {
         const loggedIn = await checkCodexLogin()
         return {

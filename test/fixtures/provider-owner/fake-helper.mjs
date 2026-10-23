@@ -28,6 +28,7 @@
 // "Check provider login" is the real Claude check, run against stand-in CLIs named by the
 // arguments --claude-bundled=<path> and --claude-installed=<path:path>, and a stand-in
 // `security` named by --claude-security=<path> (else the first on PATH, then the real one).
+// It is hosted as `gemini` too, for the Gemini API key saved in Settings (LKM-315).
 import { createHash } from 'node:crypto'
 import { fstatSync } from 'node:fs'
 import { checkClaudeLogin, isAuthFailure, resolveClaudeCli } from '../../../src/main/backends/claude-login.ts'
@@ -144,11 +145,12 @@ const claude = {
   id: 'claude',
   checkLogin: () => checkClaudeLogin(claudeCandidates())
 }
+const gemini = { ...fake, id: 'gemini' }
 
 if (process.env.FAKE_PROVIDER_IGNORE_EOF === '1') {
   process.on('SIGTERM', () => {})
   setInterval(() => {}, 1000)
-  runProviderHelper({ fake, claude }, { input: process.stdin, output: process.stdout, exit: () => {} })
+  runProviderHelper({ fake, claude, gemini }, { input: process.stdin, output: process.stdout, exit: () => {} })
 } else {
-  runProviderHelper({ fake, claude })
+  runProviderHelper({ fake, claude, gemini })
 }

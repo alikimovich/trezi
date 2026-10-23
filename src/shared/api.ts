@@ -681,8 +681,8 @@ export interface ModelChoice {
   value: string
   /** Display name ("Opus", "Kimi K3"). */
   label: string
-  /** Which harness runs it. */
-  provider: 'claude' | 'codex'
+  /** Which harness runs it. Gemini only while it is turned on in Settings (LKM-315). */
+  provider: 'claude' | 'codex' | 'gemini'
   /** Set when this model comes from a user connection (absent for built-in seats). */
   connectionId?: string
   /** The model id handed to the backend, when it differs from `value`. */

@@ -53,7 +53,9 @@ export class NativeSheetController {
         Object.fromEntries(
           state.fields.filter((field) => !field.draft).map((field) => [field.id, field.value])
         ),
-        (values) => handle({ id: value.state.id, action: 'save', values }),
+        // Through `value.handle`, so a pane decorated after `present` (Settings → AI
+        // Providers' rows, Dreamer) also hears its autosave.
+        (values) => value.handle({ id: value.state.id, action: 'save', values }),
         (message) => {
           if (this.current === value) {
             value.state.message = message

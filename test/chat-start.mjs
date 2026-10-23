@@ -415,4 +415,29 @@ assert.equal(stay.agentSends.length, 0, 'no send without a new chat')
 assert.equal(stay.target.get(HOME).text, 'Prompt from home', 'the home draft stays')
 await stay.target.composer({ chat: HOME, action: 'send' })
 assert.equal(stay.target.start.pending, false, 'a later Send is not blocked by a stuck pending')
+
+// LKM-315: Gemini off (not listed) has no readiness and no login check; on, it has both.
+const geminiChecks = () =>
+  calls.filter((c) => c[0] === 'providers:check-login' && c[1] === 'gemini').length
+assert.equal(geminiChecks(), 0, 'off, Gemini is never checked')
+assert.equal(controller.readiness.gemini, undefined)
+await controller.refreshReadiness()
+assert.equal(geminiChecks(), 0, 'nor by a full readiness refresh')
+login.gemini = true
+const geminiPro = {
+  value: 'gemini:pro',
+  modelId: 'pro',
+  provider: 'gemini',
+  group: 'Gemini',
+  label: 'Pro'
+}
+choices.push(geminiPro)
+await controller.refreshChoices()
+await until(() => controller.readiness.gemini?.status === 'ready', 'Gemini readiness')
+assert.equal(geminiChecks(), 1)
+assert.ok(usableProviders(choices, controller.readiness).some((o) => o.provider === 'gemini'))
+choices.pop()
+await controller.refreshChoices()
+assert.equal(controller.readiness.gemini, undefined, 'turned off, its readiness is gone')
+assert.ok(!usableProviders(choices, controller.readiness).some((o) => o.provider === 'gemini'))
 console.log('chat-start: ok')

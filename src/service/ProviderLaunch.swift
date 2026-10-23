@@ -9,7 +9,8 @@ import Darwin
 /// - the Claude subscription token (`claude setup-token`) saved in Settings: encrypted
 ///   with the Keychain helper like a connection key, and put into a Claude helper's
 ///   environment as `CLAUDE_CODE_OAUTH_TOKEN` (never another helper's, never a reply,
-///   never an error text);
+///   never an error text); a Gemini API key saved in Settings goes the same way into a
+///   Gemini helper as `GEMINI_API_KEY` (LKM-315);
 /// - "Check provider login": a helper started exactly like a chat's (same allowlisted
 ///   environment, token, cwd) that reports the provider CLI's auth status and exits;
 ///   the owner adds which provider variables were passed and dropped (LKM-124).
@@ -36,6 +37,9 @@ enum Liveness: Int, Comparable {
 
 extension ProviderOwner {
     static let seatTokenVariable = "CLAUDE_CODE_OAUTH_TOKEN"
+    /// Where a seat's saved credential goes in its own helper's environment: the Claude
+    /// token, or the Gemini API key saved in Settings (LKM-315). Never another helper's.
+    static let seatTokenVariables = ["claude": seatTokenVariable, "gemini": "GEMINI_API_KEY"]
 
     /// LKM-287: the only `skills` a helper's context may name: the Skills owner's read-only
     /// projection for this helper's own provider, `<profile>/skills/projections/<sha256>/<provider>`
@@ -92,7 +96,7 @@ extension ProviderOwner {
 
     func helperEnvironment(_ provider: String, token: String?) -> [String: String] {
         var environment = ProviderHelperProcess.environment(base: options.environment, provider: provider)
-        if let token, !token.isEmpty, provider == "claude" { environment[Self.seatTokenVariable] = token }
+        if let token, !token.isEmpty, let name = Self.seatTokenVariables[provider] { environment[name] = token }
         return environment
     }
 
@@ -112,6 +116,7 @@ extension ProviderOwner {
         switch provider {
         case "claude": return "Claude did not respond — check login (claude auth status) and retry"
         case "codex": return "Codex did not respond — check login (codex login status) and retry"
+        case "gemini": return "Gemini did not respond — check its login (run gemini) and retry"
         default: return "The provider did not respond — check its login and retry"
         }
     }
@@ -385,11 +390,13 @@ extension ProviderOwner {
     }
 }
 
-/// The built-in seats' subscription tokens, `<profile>/trezi/seat-tokens.json`
-/// (`{"version":1,"tokens":{"claude":"<base64 ciphertext>"}}`, mode 0600).
+/// The built-in seats' credentials, `<profile>/trezi/seat-tokens.json`
+/// (`{"version":1,"tokens":{"claude":"<base64 ciphertext>","gemini":…}}`, mode 0600):
+/// the Claude subscription token and the Gemini API key (LKM-315).
 extension ProviderData {
-    static let seatProviders: Set<String> = ["claude"]
+    static let seatProviders: Set<String> = ["claude", "gemini"]
     static let badSeatToken = "That does not look like a token from claude setup-token: paste the single line it printed."
+    static let badGeminiKey = "That does not look like a Gemini API key: paste the single line from Google AI Studio."
 
     var seatTokensFile: String { directory + "/seat-tokens.json" }
 
@@ -407,7 +414,7 @@ extension ProviderData {
         var tokens = seatTokens().filter { $0.0.string != provider }
         if !token.isEmpty {
             guard token.utf8.count <= 4096, token.utf8.allSatisfy({ (0x21...0x7E).contains($0) }) else {
-                throw ProviderRefusal(.invalidRequest, Self.badSeatToken)
+                throw ProviderRefusal(.invalidRequest, provider == "gemini" ? Self.badGeminiKey : Self.badSeatToken)
             }
             guard let crypto = tools.crypto, !crypto.isEmpty else { throw ProviderRefusal(.unavailable, Self.noKeyring) }
             guard let sealed = self.crypto("encrypt", Data(token.utf8)) else { throw ProviderRefusal(.unavailable, Self.keychain) }

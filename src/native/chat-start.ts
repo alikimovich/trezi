@@ -40,7 +40,7 @@ export function usableProviders(
   readiness: ProviderReadinessMap
 ): ProviderOption[] {
   return providerOptions(choices).filter(
-    (option) => !!option.connectionId || readiness[option.provider].status === 'ready'
+    (option) => !!option.connectionId || readiness[option.provider]?.status === 'ready'
   )
 }
 
@@ -49,7 +49,9 @@ const selectable = (chat: Chat, usable: ProviderOption[]) =>
   usable.some((option) => option.key === providerKeyFor(chat.settings))
 
 const checking = (readiness: ProviderReadinessMap) =>
-  readiness.claude.status === 'checking' || readiness.codex.status === 'checking'
+  readiness.claude.status === 'checking' ||
+  readiness.codex.status === 'checking' ||
+  readiness.gemini?.status === 'checking'
 
 /** Anything the transcript must show stays in the left layout (a card, a question). */
 function blocked(chat: Chat) {
@@ -177,10 +179,15 @@ export class StartFlow {
         !chat.settings.connectionId && (provider === 'claude' || provider === 'codex')
           ? provider
           : null
-      const label = seat ? SEAT[seat] : 'This connection'
+      // Gemini signs in with its own CLI (or a key in Settings); off, it has no readiness.
+      const gemini = !chat.settings.connectionId && provider === 'gemini'
+      const label = seat ? SEAT[seat] : gemini ? 'Gemini' : 'This connection'
       const other = usable[0]
       return {
-        text: `${label} is not signed in. Your draft is kept.`,
+        text:
+          gemini && !readiness.gemini
+            ? 'Gemini is off in Settings → AI Providers. Your draft is kept.'
+            : `${label} is not signed in. Your draft is kept.`,
         actions: [
           ...(seat ? [{ label: `Sign in to ${SEAT[seat]}`, action: `sign-in-${seat}` }] : []),
           { label: `Use ${other.label}`, action: 'start-provider', value: other.key }

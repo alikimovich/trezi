@@ -34,9 +34,9 @@ export const resolveChoice = (
  */
 export interface ProviderOption {
   key: string
-  /** "Claude", "Codex", or the connection's own label (`ModelChoice.group`). */
+  /** "Claude", "Codex", "Gemini", or the connection's own label (`ModelChoice.group`). */
   label: string
-  provider: 'claude' | 'codex'
+  provider: ModelChoice['provider']
   connectionId?: string
   /** This provider's models, in main's order. Never empty (the option only
    *  exists because a choice created it). */
