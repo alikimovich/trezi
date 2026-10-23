@@ -15,11 +15,12 @@
  * Bump TREZI_RULES_VERSION whenever the rule text changes (so logs/tests can pin it).
  */
 import { chatIslandGuidance } from '../shared/chat-island-guidance'
+import { CONTROLS_REQUEST_HEADER } from '../shared/controls-prompt'
 import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 45
+export const TREZI_RULES_VERSION = 46
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -306,6 +307,8 @@ export function treziRules(opts?: {
       ``,
       `Use chat_island for all requested tuning controls, including shadows, springs, easing,`,
       `typography and styling. These belong inside the conversation. Never substitute a separate panel.`,
+      `The one exception: a message headed "${CONTROLS_REQUEST_HEADER}" comes from the inspector's Custom`,
+      `tab. Answer it with the trezi-controls block it describes and do not call chat_island.`,
       `Expose named constants consumed by the implementation; a literal anchor must occur exactly once`,
       `and end before its value, e.g. const STAGGER_MS = . Do not write .trezi/ yourself.`,
       `When the user already has instrumented values, reuse those constants and define an island.`,

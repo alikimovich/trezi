@@ -11,6 +11,7 @@ import type { NativeChatController } from './chat-controller'
 import { turnBoundaries } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
 import { NativeInspectorController } from './inspector-controller'
+import { chatRequests } from './inspector-custom'
 import { NavigationController } from './navigation-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import type { NativeWorkspaceController } from './workspace-controller'
@@ -77,6 +78,13 @@ export function installNativeInspector(
     render(state)
     navigation.poke()
   }
+  // LKM-323: a Custom tab request is a turn in the project's active chat.
+  controller.custom.generate = chatRequests(
+    (root) => workspace.state.projects.find((p) => p.root === root)?.activeSessionKey ?? null,
+    (key) => chat.chats.get(key)?.messages ?? null,
+    (key, text) => chat.command({ type: 'submit', chat: key, text }),
+    turnBoundaries
+  )
   host.on('inspector-action', (action) => {
     void controller.action(action).catch(report)
   })

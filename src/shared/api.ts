@@ -1269,6 +1269,8 @@ export interface ControlPanelManifest {
   title: string
   params: ControlParam[]
   createdAt: string
+  /** LKM-323: 1 for a requested panel; each comment or removed control adds one. */
+  revision?: number
 }
 
 /**

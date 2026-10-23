@@ -37,6 +37,11 @@ import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
 import { checkHistoryMenu, restoreHistoryMenu } from './smoke-history-menu'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
+import {
+  type CustomSmoke,
+  checkInspectorCustom,
+  restoreInspectorCustom
+} from './smoke-inspector-custom'
 import { checkInspectorIsland } from './smoke-inspector-island'
 import { checkIslandNewChat, restoreIslandNewChat } from './smoke-island-new-chat'
 import { checkChatIslands } from './smoke-islands'
@@ -178,6 +183,33 @@ export async function runNativeCoreSmoke(
     send,
     page,
     props: () => serviceEvents.emit('event', 'preview:toolbar-action', 'props')
+  }
+  const customSmoke: CustomSmoke = {
+    host,
+    fixture,
+    artifacts,
+    inspector,
+    invoke,
+    select: async (source) => {
+      await page(
+        `document.querySelector('#native-title').setAttribute('data-trezi-source',${JSON.stringify(source)})`
+      )
+      const heading = (await invoke('layers:read')).nodes.find((n: any) => n.id === 'native-title')
+      assert.ok(heading, 'preview heading in layers')
+      await send('layers:select', {
+        path: heading.path,
+        fingerprint: { tag: heading.tag, source: heading.source }
+      })
+      await wait(
+        () => inspector.element?.source === source && inspector.state.fields.length > 0,
+        'custom fixture selected'
+      )
+    },
+    open: async () => {
+      if (!(await host.request('inspectorInspect')).visible)
+        serviceEvents.emit('event', 'preview:toolbar-action', 'props')
+      await inspect('inspectorInspect', (s) => s.visible)
+    }
   }
   let freshnessURL = ''
   let layersOriginal = '',
@@ -1171,6 +1203,12 @@ export async function runNativeCoreSmoke(
             action: { root: fixture, generation: state.generation, action: 'close' }
           })
       }
+    },
+    {
+      name: 'inspector-custom',
+      dependsOn: ['open-project'],
+      run: () => checkInspectorCustom(customSmoke),
+      cleanup: () => restoreInspectorCustom(customSmoke)
     },
     {
       name: 'layers-island',

@@ -6,7 +6,7 @@ import type {
   StyleReadResult,
   TokenSet
 } from '../shared/api'
-import { animationControlsPrompt, controlsPrompt } from '../shared/controls-prompt'
+import { animationControlsPrompt } from '../shared/controls-prompt'
 import { numericValue, STYLE_PROP_META, sameCssValue, toCssText } from '../shared/css-values'
 import type {
   NativeInspectorAction,
@@ -15,6 +15,7 @@ import type {
 } from '../shared/native-inspector'
 import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
+import { InspectorCustom } from './inspector-custom'
 
 type Binding = {
   apply(value: string): Promise<any>
@@ -47,6 +48,8 @@ export class NativeInspectorController {
   styles: StyleReadResult | null = null
   classRule: { file: string; className: string } | null = null
   readonly bindings = new Map<string, Binding>()
+  /** The Custom tab's requests and comments (LKM-323). */
+  readonly custom = new InspectorCustom(this)
   private sequence = 0
   private readonly saved = new Map<
     string,
@@ -106,6 +109,7 @@ export class NativeInspectorController {
       'This element may come from a library or generated markup.'
   ) {}
   publish() {
+    this.state.custom = this.state.tab === 'custom' ? this.custom.view() : undefined
     this.render({ ...this.state, fields: [...this.state.fields], actions: [...this.state.actions] })
   }
   async activate(root: string) {
@@ -577,6 +581,7 @@ export class NativeInspectorController {
               id,
               label: param.label,
               group: panel.manifest.title,
+              panel: panel.manifest.id,
               kind,
               value: String(param.value ?? ''),
               disabled: !param.valid,
@@ -634,7 +639,9 @@ export class NativeInspectorController {
           label: 'Custom controls',
           group: '',
           kind: 'readonly',
-          value: 'Create controls for the selected object to expose its source parameters.'
+          value: element?.source
+            ? 'Ask for controls below, e.g. “corner radius and shadow”. The agent wires them to this element’s source.'
+            : 'Select an element to ask for controls for its source parameters.'
         })
     }
   }
@@ -691,11 +698,44 @@ export class NativeInspectorController {
         await this.agent(root, describeSelectionForPrompt(this.element, root))
         return
       }
-      if (action.action === 'controls' || action.action === 'animation') {
+      // LKM-323: "Create controls…" opens the Custom tab's request field.
+      if (action.action === 'controls') {
+        this.state.tab = 'custom'
+        this.build()
+        if (action.value?.trim()) await this.custom.request(action.value)
+        else this.custom.focusField()
+        return
+      }
+      if (action.action === 'custom-request') {
+        await this.custom.request(action.value ?? '')
+        return
+      }
+      if (action.action === 'comment-panel' || action.action === 'comment-control') {
+        const panel = this.controls.find(
+          (p) =>
+            p.manifest.id === action.value ||
+            p.params.some((q) => `custom:${p.manifest.id}:${q.id}` === action.field)
+        )
+        if (panel)
+          this.custom.comment(
+            panel.manifest.id,
+            action.action === 'comment-control' ? action.field : undefined
+          )
+        return
+      }
+      if (action.action === 'custom-target') {
+        this.custom.clearTarget()
+        return
+      }
+      if (action.action === 'remove-control') {
+        await this.custom.removeControl(action.field ?? '')
+        return
+      }
+      if (action.action === 'animation') {
         if (this.element)
           await this.agent(
             root,
-            (action.action === 'animation' ? animationControlsPrompt : controlsPrompt)(
+            animationControlsPrompt(
               this.element,
               root,
               this.inspection,
@@ -715,16 +755,18 @@ export class NativeInspectorController {
         return
       }
       if (action.action.startsWith('regenerate:')) {
+        // A repair is a comment on the panel: the working controls are kept (LKM-323).
         const panel = this.controls.find((p) => p.manifest.id === action.action.slice(11))
-        if (panel && this.element)
-          await this.agent(
-            root,
-            controlsPrompt(this.element, root, this.inspection, action.value, this.provider(), {
-              json: JSON.stringify(panel.manifest),
-              brokenIds: panel.params.filter((p) => !p.valid).map((p) => p.id)
-            }),
-            true
+        if (panel) {
+          this.custom.comment(panel.manifest.id)
+          await this.custom.request(
+            action.value ||
+              `Repair the controls that no longer resolve in the source: ${panel.params
+                .filter((p) => !p.valid)
+                .map((p) => `${p.id} (${p.reason ?? 'unresolved'})`)
+                .join(', ')}.`
           )
+        }
         return
       }
       if (action.action.startsWith('replay:')) {

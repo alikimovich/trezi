@@ -2986,6 +2986,13 @@ Migration sequence and exit checks: [Native migration plan](NATIVE-MIGRATION.md)
 - [x] **`define_controls` for Codex and custom endpoints.** Shared validated
       registration through the session-scoped MCP bridge, including background edits.
 - [ ] **`define_controls` for experimental Gemini.** Still uses typed-prop fallback.
+- [x] **LKM-323 Custom tab requests.** ✅ 2026-10-23 — "Ask for controls…" field
+      (Return sends, Shift-Return adds a line); the answer's `trezi-controls` block
+      becomes a validated panel (`controls:save`); several panels per element;
+      comment on a panel or one control revises it in place; remove panel or control.
+      `src/main/control-requests.ts`, `src/native/inspector-custom.ts`,
+      `src/native/InspectorCustom.swift`, `test/control-requests.mjs`, native smoke
+      `inspector-custom` (written; not run in the worker sandbox).
 
 ## Health / infra (from the 2026-07-07 review)
 

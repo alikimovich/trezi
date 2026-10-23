@@ -115,7 +115,10 @@ src/main/
   control-manifest.ts / control-panels.ts   AI-surfaced control panels:
                   validate + anchor-lex + render literals (pure) and the
                   .trezi/control-panels.json store (rendered here, committed
-                  hash-bound by the editing owner) + controls:* IPC
+                  hash-bound by the editing owner) + controls:* IPC.
+                  control-requests.ts: the pure rules that turn an inspector
+                  Custom tab request's trezi-controls answer into a new or
+                  revised panel (controls:save, controls:remove-param)
   tokens.ts       design-token detection/scaffold   annotations.ts  comments → PR
   publish.ts      Publication's one Bun step (a checkout on its base branch moves to a
                   work branch) and the PR description helper; the workflow owner

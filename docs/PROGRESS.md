@@ -2,6 +2,38 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-323: Custom tab requests, comments and removal
+
+- **Why.** The Custom tab was empty until a chat turn happened to define a panel.
+  Users had no way to ask for controls for the element in front of them, or to
+  change or drop part of a panel.
+- **Design.** A request is a normal turn in the project's active chat, so it gets the
+  same engine, worktree, landing and undo as any edit. The prompt is headed
+  "Inspector Custom tab request <id>." and the rules (v46) make that the one case
+  where the agent answers with a fenced `trezi-controls` JSON block instead of
+  `chat_island`. Once the turn lands (`turnBoundaries`), the controller reads the
+  answer and main's `controls:save` validates it, enforces the selection's file,
+  checks the changed literal anchors against the live file and merges it into
+  `.trezi/control-panels.json` (hash-bound, serialized). A turn that fails or never
+  lands saves nothing and shows an error. Only the turn that starts with the request
+  as the latest user message counts, so a request queued behind another turn waits.
+- **Revisions.** A comment on a panel or a control sends the current panel JSON. The
+  answer replaces the panel in place (same id, `revision` + 1); a control comment
+  replaces only that param, so the other controls and their source values stay.
+  `controls:remove-param` removes one control; removing the last removes the panel.
+  Repair… and Create controls… now go through the same field.
+- **Files.** `src/main/control-requests.ts` (pure rules), `control-panels.ts`
+  (save/remove-param IPC), `src/shared/controls-prompt.ts`, `src/main/rules.ts`,
+  `src/native/inspector-custom.ts`, `InspectorCustom.swift` (NSTextView field,
+  panel/control menus), `EditingInspector.swift`, `HostInspectCustom.swift` (test-only
+  probe, kept apart so the slider fixture builds without Host), `smoke-inspector-custom.ts`.
+  `docs/SWIFT-BACKEND-ROUTES.md` is a frozen 2026-09-27 census (count pinned by
+  `test/service-contract.mjs`), so the two new `controls:*` routes are not added there.
+- **Checks.** typecheck, typecheck:native, swiftc typecheck of the host, lint, unit
+  `control-requests`, `control-panels`, `rules`, `project-path`, `native-inspector`.
+  The native `inspector-custom` smoke (core group, stubbed agent) was written but
+  not run: the worker had no native verification calls.
+
 ## 2026-10-23 — LKM-327: PR CI unit tier in 3 shards
 
 - **Why.** "typecheck + unit tests" took 12 min on PR #300. It was one 3-core macOS
