@@ -425,6 +425,9 @@ try {
   assert.match(plist, /<key>TreziBranch<\/key><string>feature\/&lt;x&gt;<\/string>/)
   assert.match(plist, /<key>TreziDirty<\/key><true\/>/)
   assert.match(plist, /<key>TreziTag<\/key><string>v0\.1\.0<\/string>/)
+  // Git could not tell: the plist says nothing rather than "clean".
+  assert.doesNotMatch(appInfoPlist({ ...info, dirty: null }), /TreziDirty/)
+  assert.match(appInfoPlist({ ...info, dirty: false }), /<key>TreziDirty<\/key><false\/>/)
 } finally {
   rmSync(scratch, { recursive: true, force: true })
 }
