@@ -2,6 +2,29 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-327: PR CI unit tier in 3 shards
+
+- **Why.** "typecheck + unit tests" took 12 min on PR #300. It was one 3-core macOS
+  job that ran setup, both typechecks and then the whole unit tier. Nearly every
+  product PR falls back to the full plan, so `--changed` alone did not help.
+- **Change.** `.github/workflows/ci.yml` now has three kinds of job:
+  - `typecheck` on `ubuntu-latest`.
+  - `unit tests (i/n)` on `macos-26`: 3 shards on a pull request, 1 whole-tier
+    shard on a push to `main`.
+  - A `typecheck + unit tests` gate that keeps the old check name and passes only
+    when everything passed.
+- **Runner.** `node test/run.mjs unit --shard=i/n` (`shardTests` in
+  `test/helpers/test-plan.mjs`) splits the tier greedily. The weights are the
+  committed `UNIT_TIMEOUT_MS` budgets, else 30 s. The times file is not used, so
+  every shard computes the same split.
+- **Cache.** Swift caches are per shard (own, then main's `1of1`, then any). They
+  are saved after a failed run too, and a step logs the exact hit and the restored
+  key.
+- **Checks.** `test/test-selection.mjs` covers the split and the CLI.
+  `test/dependency-audit.mjs` pins the new jobs and the gate. Locally the three
+  shards hold 464 / 433 / 394 s of the tier's 1291 s. The ≤ 5 min CI target is
+  unmeasured until the next PRs run.
+
 ## 2026-10-23 — LKM-324: Show states is removed
 
 - **Why.** The component states canvas and workbench did not work reliably.

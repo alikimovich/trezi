@@ -27,6 +27,7 @@ and fails on an unlisted one; the gate requires 0 Bun-owned rows and no rollback
 | `node test/run.mjs unit` | Backend and controller tests, no desktop |
 | `bun run test:quick` | Quick verification in one command: the typecheck next to the unit tier (`typecheck:native` too once its config differs from `typecheck:node`), plus the 20 slowest tests (`--typecheck --report`, `docs/TESTING.md`) |
 | `node test/run.mjs unit --changed=main` | Only the tests the diff against `main` needs, with reasons; anything outside the audited docs, test and UI rules runs everything (`docs/TESTING.md`, "Changed-file selection") |
+| `node test/run.mjs unit --shard=2/3` | One CI shard of the (selected) unit tier; PR CI runs 3, main runs 1 (`docs/TESTING.md`, "GitHub CI") |
 | `bun run test:<name>` | One test (see package.json for ~40 aliases) |
 | `bun run test:native` | Disposable-profile native desktop integration |
 | `bun run test` | Unit + native UI tiers (via `test/run.mjs`) |
