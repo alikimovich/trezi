@@ -136,7 +136,6 @@ import {
 } from './smoke-report'
 import { serviceSource } from './source-service'
 import { installNativeStart } from './start-runtime'
-import { installStatesWorkbench } from './states-install'
 import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
 import { SyntaxController } from './syntax-controller'
@@ -744,22 +743,6 @@ async function main() {
     (error) => activityController.append(String(error), 'error')
   )
   installPreviewSpeed(host, previewView)
-  const states = installStatesWorkbench({
-    host,
-    preview: previewView,
-    workspace: workspaceController,
-    sheets: sheetController,
-    log: activityController,
-    git: gitController,
-    preferences
-  })
-  // LKM-220: Show states on a component that has a workbench reopens it.
-  inspectorController.showStates = (root, element) =>
-    states.show(
-      root,
-      element,
-      workspaceController.state.projects.find((p) => p.root === root)?.activeSessionKey
-    )
   const renderWorkspace = workspaceController.services.render
   workspaceController.services.render = (state) => {
     renderWorkspace(state)

@@ -94,11 +94,6 @@ export function observedSourceOwner(owner: SourceOwner): SourceOwner {
       const result = await owner.deleteFile(root, path)
       if (result.ok) edited(root, [path])
       return result
-    },
-    async removeWorkbench(root, folder, seams) {
-      const result = await owner.removeWorkbench(root, folder, seams)
-      if (result.ok) edited(root, [folder, ...seams])
-      return result
     }
   }
 }

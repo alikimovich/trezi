@@ -2,6 +2,34 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-324: Show states is removed
+
+- **Why.** The component states canvas and workbench did not work reliably.
+- **Removed entry points.**
+  - "Show states…" on the element toolbar and in the inspector … menu.
+  - The `/states` command and the `component-states` skill.
+  - The toolbar States menu (`ToolbarStates.swift`) and the switcher
+    (`StatesSwitcher.swift`).
+  - The Publish workbench check.
+- **Removed code.** The `states-*` controllers in `src/native`, `src/main`,
+  `src/preview` and `src/shared`.
+  - The three states canvas agent tools, removed from every registration and from
+    both policy lists.
+  - The source owner's `removeWorkbench`, and `bin/states-canvas-schema.*`.
+  - The four unit tests, the `states-canvas`/`states-workbench` smoke checks and
+    their groups, and `docs/STATES.md`.
+- **Old data.** The `trezi:states-workbenches:v1` and `trezi:states-canvases:v1`
+  preferences are no longer read. Nothing in a user's project is touched.
+- **Verification.** Typecheck and lint pass. The unit tier is 255 PASS, 2 SKIP and
+  1 FAIL. The failure is `native-slider-ticks`: its baseline stepped Slider draws no
+  ticks on this macOS, and it compiles none of the edited files. No native run was
+  available.
+- **Slider fixture.** `native-slider-ticks` failed the same way on an untouched HEAD.
+  On this macOS a windowless (or offscreen-window) SwiftUI `Slider` has no `NSSlider`
+  subview, so the baseline probe could not be met. The fixture now runs the pure
+  snapping checks first and reports SKIP (never PASS) when the baseline finds no
+  `NSSlider`. When one exists, every assertion runs as before.
+
 ## 2026-10-22 — LKM-315: Gemini is an optional provider with an On/Off row in Settings
 
 - **Why.** Gemini was reachable only with `TREZI_EXPERIMENTAL_GEMINI=1`. Its models were

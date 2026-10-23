@@ -84,8 +84,6 @@ import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from
 import { createNativeCover } from './native-cover'
 import { createOverlayGuides } from './overlay-guides'
 import { sendPageSpeed } from './speed-control'
-import { installStatesCanvas } from './states-canvas'
-import { installStatesSwitch } from './states-switch'
 import { activeDeclarations, varRefName } from './style-provenance'
 import { watchStyles } from './style-watch'
 import { createThreeDInspector } from './three-d'
@@ -332,12 +330,6 @@ function ensureOverlay(): void {
       title: 'Show the source in the editor',
       svg: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>'
     },
-    states: {
-      title: 'Show states — every state of this component side by side',
-      // A component with its variants stacked behind it, like the States switcher's
-      // square.stack; a grid would read as the layout grid overlay.
-      svg: '<rect x="3" y="10" width="18" height="11" rx="2"/><path d="M5 6.5h14"/><path d="M8 3h8"/>'
-    },
     delete: {
       title: 'Ask Trezi to delete this element',
       svg: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
@@ -411,25 +403,14 @@ function ensureOverlay(): void {
   const propsBtn = makeIcon('props')
   const threeDBtn = makeIcon('three-d')
   const codeBtn = makeIcon('code')
-  const statesBtn = makeIcon('states')
   const deleteBtn = makeIcon('delete')
 
-  // DOM order: comment, [input], edit, props, 3D, code, states | delete. The divider
+  // DOM order: comment, [input], edit, props, 3D, code | delete. The divider
   // sits before Delete only; the button[data-kind] order stays comment, edit, props,
-  // three-d, code, states, delete (the separator has no data-kind).
+  // three-d, code, delete (the separator has no data-kind).
   // `edit` only renders for plain-text stamped leaves (setEditAction) — the
   // discoverable form of the double-click-to-edit gesture.
-  toolbar.append(
-    commentBtn,
-    inputWrap,
-    editBtn,
-    propsBtn,
-    threeDBtn,
-    codeBtn,
-    statesBtn,
-    separator,
-    deleteBtn
-  )
+  toolbar.append(commentBtn, inputWrap, editBtn, propsBtn, threeDBtn, codeBtn, separator, deleteBtn)
 
   shadow.append(sel, box, guideMeas, meas, label, pins, hint, toolbar, style)
   document.documentElement.appendChild(host)
@@ -744,7 +725,6 @@ function isOverlay(el: Element | null): boolean {
   return (
     !!el &&
     (!!el.closest(CONTROL_OVERLAY_SELECTOR) ||
-      !!el.closest('[data-trezi-states-canvas]') ||
       nativeCover.contains(el) ||
       (!!overlayHost && (el === overlayHost || overlayHost.contains(el))))
   )
@@ -1988,8 +1968,6 @@ if (!IS_SIM_BRIDGE) {
   installHistoryKeys(busy, threeD.active)
   window.addEventListener('keydown', onKey, true)
   window.addEventListener('keyup', onKeyUp, true)
-  installStatesSwitch(busy)
-  installStatesCanvas(busy)
   if (location.protocol.startsWith('http')) watchStyles(() => ipcRenderer.send(STYLES_UPDATED))
   for (const type of [
     'keypress',
