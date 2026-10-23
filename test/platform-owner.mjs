@@ -556,7 +556,9 @@ try {
   const stopAt = Date.now()
   await owner.simulatorStop()
   await rejects(booting, 'cancelled', /^Simulator start was cancelled\.$/)
-  assert.ok(Date.now() - stopAt < 3000, 'Stop reaches a boot still waiting')
+  // The fake bootstatus waits 60 s: a Stop that had to wait it out lands past this bound. It was
+  // 3 s, which a busy Mac exceeded (LKM-313); 30 s still separates a stopped wait from a held one.
+  assert.ok(Date.now() - stopAt < 30_000, 'Stop reaches a boot still waiting')
   await gone(status.pid, 'bootstatus')
   await gone(status.child, 'bootstatus descendant')
   assert.equal(metros().length, 3, 'no launch command ran')

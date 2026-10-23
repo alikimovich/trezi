@@ -149,6 +149,7 @@ try {
     'native-source-window',
     'native-chat-scroll',
     'native-next-hmr',
+    'island-flicker-frameworks',
     'browser-setup-packaged'
   ]
   for (const name of nativeFixtures) {

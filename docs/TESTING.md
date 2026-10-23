@@ -452,7 +452,9 @@ not change before the release. It writes `shadow-light-drag.png` (mid-drag),
 `shadow-light-released.png` and `shadow-light-drag.json` (the counts). The unit
 test `test/island-flicker.mjs` models a gap HMR to record the same counts before
 and after the fix. With TreziHost built, `test/island-flicker-frameworks.mjs` runs
-the same drag on real Next.js Webpack HMR and a Vite/CSS module fixture.
+the same drag on real Next.js Webpack HMR and a Vite/CSS module fixture. It is in the
+native tier (LKM-313: it was a unit test, and real dev servers failed it under parallel
+load), so it runs serially with `bun run test:native` or `node test/island-flicker-frameworks.mjs`.
 `test/dependency-refresh-vite.mjs` (LKM-197) runs real Vite with a local `file:`
 dependency through the Swift runtime owner and WebKit: after the dependency's CSS
 changes, the watch's clean restart and hard reload show the new computed style. It

@@ -42,9 +42,37 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - **`test/tiers.mjs` budgets.** platform-owner 420 s, provider-helper-tools 300 s,
     browser-verify and browser-verify-bounds 240 s.
   - No assertion was removed, and no test left the unit tier.
-- **Not covered.** Other unit tests also failed under load: island-flicker-frameworks,
-  workflow-durability, codex-model, repository-owner and others. They are outside this ticket
-  and can still break a 3-parallel run.
+- **Repair round: the rest of the unit tier.** Review asked for every load-sensitive test, not
+  only the four in the title. I read the manager logs of each and ran three copies of it at once
+  here (the same run-lock-free way parallel worktrees collide):
+  - **codex-model (12 TIMEOUTs at 120 s).** Trezi probes the stand-in `codex` with `--version`
+    (4 s) and `debug models` (8 s); the stand-in was a Bun script, and three copies at once all
+    failed at 4 s with "the `codex` CLI was not found". The stand-in is now a `/bin/sh` script
+    that answers those two itself and starts Bun only for `exec`. Three parallel copies pass in
+    ~24 s. Budget 240 s.
+  - **browser-setup-recovery.** A hung bash tool killed at the 1.5 s probe limit before it wrote
+    its pid file gave `ENOENT` on the pid read. `untilRecorded` re-runs each hang check with
+    1.5 s, 6 s and 20 s limits until the pid files exist, with every bound checked on each
+    attempt (limits are relative: `limit + 3.5 s`, still far below the tools' 300 s sleep).
+    `until` waits 30 s, not 8 s. Budget 240 s; three parallel copies pass in ~28 s.
+  - **managed-browser-path.** One 120 s TIMEOUT, no logic failure: budget 240 s (3 copies pass in 18 s).
+  - **repository-owner, workflow-owner, workflow-durability.** Three parallel copies of each pass
+    (110 s, 67 s, 68 s) inside their existing budgets (420/240/240 s). Their other logged
+    failures were assertion or swiftc errors of the tickets that ran them, not load. No change.
+  - **island-flicker-frameworks: moved to the native tier.** It needs the native host
+    (it SKIPs in a worktree without one) and runs real Next and Vite dev servers; earlier rounds
+    already added port ranges, re-writes and settle nudges, and it still failed at 60–107 s and
+    TIMEOUT 4× at 120 s under load. It is now exclusive and serial there (`test/tiers.mjs`,
+    `test/test-runner.mjs`, `docs/TESTING.md`); `test/run.mjs` applies a test's
+    `UNIT_TIMEOUT_MS` budget in any tier.
+  - **platform-owner timing checks.** The media grant TTL is 6 s with 2.5 s/2.5 s gaps and a 7 s
+    expiry sleep (was 1 s with 0.6 s/0.6 s/1.2 s: a slow resolve round trip expired the grant).
+    The "Stop reaches a boot still waiting" bound is 30 s, not 3 s; the fake bootstatus waits
+    60 s, so a Stop that waited it out still fails. **Both are looser bounds.**
+  - **browser-verify.** `CHECK_LIMITS.totalMs` is restored in a `finally`.
+- **Not run.** The 5-round × 3-parallel full unit run: it cannot be run from a worker (one run
+  lock per worktree, no background commands, a 5-minute command limit). The manager or the
+  operator has to run it; the three-copy runs above are the evidence here.
 ## 2026-10-22 — LKM-312: the conversation's end marker is measured, so follows settle
 
 - **Report.** Build 1137: TreziHost at 100% of one core (2.4 GB). The main thread was in

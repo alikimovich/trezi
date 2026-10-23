@@ -179,8 +179,8 @@ for (const [tier, members] of Object.entries(TIERS)) {
     jobs,
     async ({ name }) => {
       console.log(`START [${tier}] ${name}`)
-      const timeoutMs =
-        tier === 'unit' && UNIT_TIMEOUT_MS[name] ? UNIT_TIMEOUT_MS[name] : options['timeout-ms']
+      // The per-test budgets are listed for the unit tier; a test moved to another tier keeps its.
+      const timeoutMs = UNIT_TIMEOUT_MS[name] ?? options['timeout-ms']
       const result = await runCommand({
         command: tier === 'unit' ? 'bun' : 'node',
         args: [join(TEST_DIR, `${name}.mjs`)],
