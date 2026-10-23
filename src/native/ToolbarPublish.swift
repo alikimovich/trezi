@@ -94,7 +94,7 @@ extension NativeShell {
     /// LKM-213: Publish against the other laid-out toolbar items (window x): it must be the last
     /// one, its trailing edge on the toolbar's trailing inset.
     func publishTrailingInspect() -> [String: Any] {
-        let frames = toolbarItemFrames(window)
+        let frames = toolbarFrames
         let order = frames.sorted { $0.value.minX < $1.value.minX }.map(\.key)
         var state: [String: Any] = ["publishMeasured":frames["publish"] != nil, "toolbarItemOrder":order,
             "publishVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "publish" } ?? false]

@@ -34,7 +34,7 @@ extension NativeShell {
         // shows); the segment moves the interaction group's leading edge by its width. Apply that to
         // the reserved inset now: the address block is sized in this same pass, before the
         // toolbar's next layout can be measured.
-        let frames = hidden ? toolbarItemFrames(window) : [:]
+        let frames = hidden ? toolbarFrames : [:]
         if let more = frames["more"], let publish = frames["publish"], publish.minX > more.minX { moreShift = publish.minX - more.minX }
         let group = toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup
         let segment = abs(group?.setSegment("speed", hidden: hidden) ?? 0)

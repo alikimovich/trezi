@@ -39,17 +39,20 @@ func toolbarAccentSymbol(_ name: String, _ label: String? = nil) -> NSImage? {
     return image
 }
 
-/// LKM-213: laid-out toolbar item frames (window coordinates) by identifier. NSToolbarItem has
-/// no public frame, so this reads AppKit's item views; nil-safe for inspection and estimates only.
-func toolbarItemFrames(_ window: NSWindow?) -> [String: NSRect] {
-    guard let root = window?.contentView?.superview else { return [:] }
+/// LKM-213: laid-out toolbar item frames by identifier, in `target`'s coordinates (default: the
+/// window holding the toolbar; LKM-321: in full screen that is AppKit's toolbar window, so the
+/// frames go through the screen). NSToolbarItem has no public frame, so this reads AppKit's item
+/// views; nil-safe for inspection and estimates only.
+func toolbarItemFrames(_ window: NSWindow?, in target: NSWindow? = nil) -> [String: NSRect] {
+    guard let window, let root = window.contentView?.superview ?? window.contentView else { return [:] }
     var frames: [String: NSRect] = [:]
     let key = NSSelectorFromString("item")
     func walk(_ view: NSView) {
         guard !view.isHidden else { return }
         if NSStringFromClass(type(of: view)).contains("Toolbar"), view.responds(to: key),
            let item = view.value(forKey: "item") as? NSToolbarItem, view.bounds.width > 0 {
-            frames[item.itemIdentifier.rawValue] = view.convert(view.bounds, to: nil)
+            let frame = view.convert(view.bounds, to: nil)
+            frames[item.itemIdentifier.rawValue] = target.map { $0 === window ? frame : $0.convertFromScreen(window.convertToScreen(frame)) } ?? frame
             return
         }
         view.subviews.forEach(walk)
