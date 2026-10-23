@@ -89,9 +89,26 @@ final class IslandSegmentedControl: NSSegmentedControl {
         }
         return found
     }
+    private var observations: [NSKeyValueObservation] = []
+    private weak var observedRoot: CALayer?
     private func hideDividers() {
         guard Self.hidesDividers else { return }
-        for layer in dividerLayers where !layer.isHidden { layer.isHidden = true }
+        let dividers = dividerLayers
+        for layer in dividers where !layer.isHidden { layer.isHidden = true }
+        watch(dividers)
+    }
+    /// AppKit updates the inner layers on its own (a segment pressed, enabled or selected, an
+    /// appearance change) without laying out this control again: a layer added to the hosted
+    /// view's layer, or a divider shown again, is hidden at once.
+    private func watch(_ dividers: [CALayer]) {
+        let root = subviews.first?.layer
+        guard observedRoot !== root || observations.count != dividers.count + (root == nil ? 0 : 1) else { return }
+        observations.forEach { $0.invalidate() }
+        observations = dividers.map { layer in
+            layer.observe(\.isHidden, options: [.new]) { layer, change in if change.newValue == false { layer.isHidden = true } }
+        }
+        observedRoot = root
+        if let root { observations.append(root.observe(\.sublayers, options: []) { [weak self] _, _ in self?.hideDividers() }) }
     }
     /// Dividers that draw (checks: none on macOS 27).
     var visibleDividers: Int { dividerLayers.filter { !$0.isHidden && $0.opacity > 0 }.count }

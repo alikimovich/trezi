@@ -23,8 +23,23 @@ Newest first. Append a dated entry when you finish a chunk of work.
     no thin layer may draw. Without the fix it fails (contrast 0.18).
   - Core `shell-layout` asserts the shell's `islandDividers` are zero when
     `islandHidesDividers`.
-- **Not run.** No native run was available, so `smoke-toolbar-overflow.ts` and a
-  foreground capture of the real toolbar (Liquid Glass) still need the native `core` group.
+- **Review repair (independent review).**
+  - `IslandSegmentedControl` also watches the hosted layer's sublayers and each divider's
+    `isHidden` (KVO), so a divider that AppKit adds or shows again without laying out the
+    control is hidden at once. The unit fixture covers a press, a click, a divider shown
+    again and a divider layer inserted, read straight after the change (the last two
+    fail without the observers: 12/8/4 and 14/10/6 visible).
+  - `assertIslandDividers` (`src/native/smoke-toolbar.ts`) reads the live shell's
+    `islandDividers` on macOS 27. Core `shell-layout` runs it at rest and after expand,
+    device (mobile and desktop) and layers (open and closed); `toolbar-address` runs it at
+    every width (850, 950 — slow motion removed — 1800 and the default — restored), before
+    the overflow check. `islandDividers` is part of the toolbar evidence JSON
+    (`toolbar-address.json`).
+  - Foreground captures for review: `test/artifacts/native/islands-layers-open.png`,
+    `islands-after-use.png` (shell-layout) and `toolbar-<minimum|narrow|wide|default>*.png`
+    (toolbar-address).
+- **Not run by the worker.** The native `core` group (this check, `toolbar-address` and
+  `smoke-toolbar-overflow.ts`) runs under the manager's desktop lock.
 ## 2026-10-23 — LKM-327: PR CI unit tier in 3 shards
 
 - **Why.** "typecheck + unit tests" took 12 min on PR #300. It was one 3-core macOS

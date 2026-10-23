@@ -39,6 +39,17 @@ for (const stage of ['initial', 'narrow', 'restored', 'disabled']) {
     }
   }
 }
+// AppKit changes the inner layers without laying out the control: read straight after a press,
+// a click, a divider shown again by the system and a divider layer added to the hosted view.
+for (const [stage, counts] of Object.entries(result.interactive)) {
+  for (const island of ISLANDS)
+    if (result.hidesDividers)
+      assert.equal(
+        counts[island],
+        0,
+        `${island} shows no divider after ${stage}: ${JSON.stringify(counts)}`
+      )
+}
 // Offscreen dark captures are blank; the layers alone show the dividers stay hidden.
 if (result.hidesDividers)
   for (const island of ISLANDS) assert.equal(result.dark[island].thinLayers, 0, `dark: ${island}`)

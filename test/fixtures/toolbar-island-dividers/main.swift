@@ -87,4 +87,34 @@ _ = interaction.setSegment("speed", hidden: false); result["restored"] = measure
 chat.updateEnabled(project: true, history: false); result["disabled"] = measure()
 // Offscreen captures of the dark appearance come out blank: its check reads the layers only.
 window.appearance = NSAppearance(named: .darkAqua); result["dark"] = measure()
+// AppKit changes the inner layers by itself, with no layout of the parent: read straight after each change.
+func islands() -> [String: IslandSegmentedControl] {
+    ["interaction": interaction.view as! IslandSegmentedControl, "tools": tools.view as! IslandSegmentedControl, "chat": chat.control]
+}
+func immediate() -> [String: Int] { islands().mapValues { $0.visibleDividers + thinLayers($0) } }
+func thin(_ control: IslandSegmentedControl) -> [CALayer] {
+    var found: [CALayer] = []
+    func walk(_ layer: CALayer) {
+        if layer.frame.width <= 1.5, layer.frame.height >= control.bounds.height / 3 { found.append(layer) }
+        layer.sublayers?.forEach(walk)
+    }
+    control.subviews.forEach { $0.layer.map(walk) }
+    return found
+}
+var interactive: [String: Any] = [:]
+for control in islands().values { control.setSelected(true, forSegment: 0) }
+interactive["pressed"] = immediate()
+for control in islands().values { control.setSelected(false, forSegment: 0) }
+_ = interaction.clickSegment("device"); _ = tools.clickSegment("layers")
+chat.control.setSelected(true, forSegment: 1); chat.control.sendAction(chat.control.action, to: chat.control.target)
+interactive["clicked"] = immediate()
+// A divider shown again by the system, and a divider layer added to the hosted view's layer.
+for control in islands().values { for layer in thin(control) { layer.isHidden = false } }
+interactive["revealed"] = immediate()
+for control in islands().values {
+    let layer = CALayer(); layer.frame = CGRect(x: control.width(forSegment: 0), y: 5, width: 1, height: control.bounds.height - 10)
+    layer.backgroundColor = NSColor.black.cgColor; control.subviews[0].layer?.addSublayer(layer)
+}
+interactive["inserted"] = immediate()
+result["interactive"] = interactive
 print(String(data: try! JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
