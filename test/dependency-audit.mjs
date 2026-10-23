@@ -23,27 +23,49 @@ assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_r
 assert.match(workflow, /app build[\s\S]*?fetch-depth: 0/)
 assert.doesNotMatch(workflow, /candidate/)
 
-// The test job runs both typechecks as their own step, before a unit tier that no
-// longer carries --typecheck (they used to compete with the Swift fixtures). The unit
-// tier is unfiltered on a push to main; a pull request adds only --changed=<base SHA>.
-const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  app-build:'))
-const steps = new Map(
-  testJob
-    .split(/\n {6}- name: /)
-    .slice(1)
-    .map((step) => [step.slice(0, step.indexOf('\n')), step])
-)
-const stepNames = [...steps.keys()]
-const stepIndex = (name) => stepNames.indexOf(name)
-assert.match(testJob, /timeout-minutes: 45\b/)
-assert.ok(stepIndex('Typecheck') >= 0 && stepIndex('Unit tests') > stepIndex('Typecheck'))
-const typecheckStep = steps.get('Typecheck')
+// LKM-327: both typechecks run once in their own Linux job; the unit tier runs in macOS
+// shards (3 on a pull request, 1 whole run on a push to main) with no --typecheck; one
+// `typecheck + unit tests` gate needs both. The unit tier is unfiltered on a push to
+// main; a pull request adds only --changed=<base SHA>.
+const job = (id) => {
+  const start = workflow.indexOf(`\n  ${id}:\n`)
+  assert.ok(start >= 0, `job ${id}`)
+  const next = workflow.slice(start + 1).search(/\n {2}[a-z-]+:\n/)
+  return next < 0 ? workflow.slice(start) : workflow.slice(start, start + 1 + next)
+}
+const stepsOf = (text) =>
+  new Map(
+    text
+      .split(/\n {6}- name: /)
+      .slice(1)
+      .map((step) => [step.slice(0, step.indexOf('\n')), step])
+  )
+const typecheckJob = job('typecheck')
+assert.match(typecheckJob, /runs-on: ubuntu-latest/)
+const typecheckStep = stepsOf(typecheckJob).get('Typecheck')
 assert.match(typecheckStep, /^ {10}bun run typecheck$/m, 'the node + preview typecheck runs')
 assert.match(typecheckStep, /^ {10}bun run typecheck:native$/m, 'the native typecheck runs')
-const unitStep = steps.get('Unit tests')
+assert.match(typecheckJob, /bun scripts\/check-version\.mjs/)
+
+const unitJob = job('unit')
+assert.match(unitJob, /runs-on: macos-26/)
+assert.match(unitJob, /timeout-minutes: 45\b/)
+assert.match(unitJob, /fail-fast: false/)
+assert.match(
+  unitJob,
+  /shard: \$\{\{ fromJSON\(github\.event_name == 'pull_request' && '\[1, 2, 3\]' \|\| '\[1\]'\) \}\}/,
+  'a push to main runs the whole tier in one shard'
+)
+const unitSteps = stepsOf(unitJob)
+assert.ok(!unitSteps.has('Typecheck'), 'the shards do not typecheck')
+const unitStep = unitSteps.get('Unit tests')
 assert.match(
   unitStep,
-  /^ {10}node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150 "\$@"\n/m
+  /^ {10}node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="\$TREZI_TEST_SHARD" "\$@"\n/m
+)
+assert.match(
+  unitStep,
+  /TREZI_TEST_SHARD: \$\{\{ matrix\.shard \}\}\/\$\{\{ strategy\.job-total \}\}/
 )
 // The only extra argument is the PR's own base SHA, and it is empty off pull requests.
 assert.match(
@@ -58,8 +80,18 @@ assert.doesNotMatch(
   'every unit test, default workers'
 )
 assert.equal(
-  testJob.match(/node test\/run\.mjs/g)?.length,
+  workflow.replace(/^\s*#.*$/gm, '').match(/node test\/run\.mjs/g)?.length,
   1,
   'one runner call, no second filtered or concurrent run'
 )
+// Each shard keys its own Swift cache and logs what it restored.
+assert.match(unitJob, /key: unit-swift-\$\{\{ runner\.os \}\}-\$\{\{ matrix\.shard \}\}of/)
+assert.ok(unitSteps.has('Swift test cache result'))
+assert.match(unitJob, /name: unit-test-logs-\$\{\{ matrix\.shard \}\}of/)
+
+const gate = job('test')
+assert.match(gate, /name: typecheck \+ unit tests\n/)
+assert.match(gate, /needs: \[typecheck, unit\]/)
+assert.match(gate, /if: always\(\)/, 'a failed or cancelled shard fails the check, never skips it')
+assert.match(gate, /test "\$TYPECHECK" = success && test "\$UNIT" = success/)
 console.log('DEPENDENCY-AUDIT PASS')

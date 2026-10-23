@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { TIERS, UNIT } from '../tiers.mjs'
+import { TIERS, UNIT, UNIT_TIMEOUT_MS } from '../tiers.mjs'
 
 // More changed paths than this is a broad change: everything runs.
 export const BROAD = 40
@@ -363,6 +363,30 @@ export function typecheckPlan(read) {
         ]
       }
     : { run: ['typecheck', 'typecheck-native'], notRun: [] }
+}
+
+// A shard's weight for a test: its listed budget (the listed tests are the known slow
+// ones), else this. Only committed data, never `.local/test-times.json`: every CI shard
+// restores its own cache, and the shards must agree on one split (LKM-327).
+export const SHARD_WEIGHT_MS = 30_000
+
+/**
+ * Splits `names` into `count` disjoint shards that together hold every name: heaviest
+ * first, each to the lightest shard (ties: name, then the lower shard). Deterministic
+ * for the same names and tiers.mjs; each shard keeps the order of `names`.
+ */
+export function shardTests(names, count) {
+  if (!Number.isSafeInteger(count) || count < 1) throw new Error(`invalid shard count: ${count}`)
+  const weight = (name) => UNIT_TIMEOUT_MS[name] ?? SHARD_WEIGHT_MS
+  const load = Array(count).fill(0)
+  const shardOf = new Map()
+  const heaviest = [...new Set(names)].sort((a, b) => weight(b) - weight(a) || (a < b ? -1 : 1))
+  for (const name of heaviest) {
+    const shard = load.indexOf(Math.min(...load))
+    shardOf.set(name, shard)
+    load[shard] += weight(name)
+  }
+  return load.map((_, shard) => names.filter((name) => shardOf.get(name) === shard))
 }
 
 /** Readable plan, one line each. */
