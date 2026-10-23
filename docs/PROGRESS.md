@@ -2,6 +2,30 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-319: no dividers inside toolbar islands on macOS 27
+
+- **Why.** On macOS 27 the toolbar islands showed a vertical line between every two
+  buttons: select | device | ruler | slow motion, code | layers | expand, and
+  history | new chat.
+- **Source: the system, not Trezi.** All three islands are `NSSegmentedControl`s
+  (`MomentaryToolbarGroup`, `ChatToolbarActions`). On macOS 27 the control is a hosted
+  view that adds two 1 pt layers at every segment boundary. This holds for every
+  `segmentStyle` and `borderShape`, and no API turns them off: a custom cell is not drawn.
+- **Change.** `IslandSegmentedControl` (`src/native/ToolbarLayout.swift`) hides those
+  thin interior layers after layout and layer updates, on macOS 27 only. Segment widths,
+  hit areas, order, the bezel, the momentary tracking and the LKM-213 slow-motion segment
+  are unchanged. macOS 26 and earlier keep the system dividers.
+- **Checks.**
+  - Unit `test/toolbar-island-dividers.mjs` renders the three islands offscreen next to
+    a stock control, which proves the probe sees a divider. It runs with all segments,
+    with slow motion removed and restored, with a disabled segment and in dark
+    appearance. Each segment boundary must be no darker than the bezel beside it, and
+    no thin layer may draw. Without the fix it fails (contrast 0.18).
+  - Core `shell-layout` asserts the shell's `islandDividers` are zero when
+    `islandHidesDividers`.
+- **Not run.** No native run was available, so `smoke-toolbar-overflow.ts` and a
+  foreground capture of the real toolbar (Liquid Glass) still need the native `core` group.
+
 ## 2026-10-23 — LKM-324: Show states is removed
 
 - **Why.** The component states canvas and workbench did not work reliably.

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Remove dividers inside toolbar islands on macOS 27 (LKM-319)
+
+- [x] Source: the system. On macOS 27 `NSSegmentedControl` (every style) adds a 1 pt divider layer per segment boundary; Trezi draws none.
+- [x] `IslandSegmentedControl` (`src/native/ToolbarLayout.swift`) hides them on macOS 27 for the interaction, tools and chat islands; macOS 26 and earlier unchanged.
+- [x] Unit `test/toolbar-island-dividers.mjs` (pixels and layers, against a stock control); core `shell-layout` asserts `islandDividers` are zero on macOS 27.
+- [ ] Native `core` group (with `toolbar-address` / `smoke-toolbar-overflow.ts`) and a foreground capture of the islands not yet run.
+
 ## Native footer build badge alignment and development build identity (LKM-301)
 
 - [x] Dot drawn and pinned half the cap height above the identity's baseline; identity and context are separate labels (context truncates first, in the middle), no overlap or clipping at a 180 pt sidebar (`src/native/BuildBadge.swift`).

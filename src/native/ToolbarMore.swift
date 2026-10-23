@@ -52,4 +52,10 @@ extension NativeShell {
          "moreVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false,
          "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
     }
+    /// LKM-319: dividers that draw inside each toolbar island (none on macOS 27).
+    func islandInspect() -> [String: Any] {
+        var dividers: [String: Int] = ["chat": chatActions.control.visibleDividers]
+        for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { dividers[group.itemIdentifier.rawValue] = group.visibleDividers }
+        return ["islandDividers": dividers, "islandHidesDividers": IslandSegmentedControl.hidesDividers]
+    }
 }

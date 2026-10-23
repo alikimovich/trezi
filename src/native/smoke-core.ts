@@ -583,6 +583,13 @@ export async function runNativeCoreSmoke(
         assert.equal(shell.outlineRows, shell.rows.filter((r: any) => r.kind === 'project').length)
         assert.deepEqual(shell.toolGroup, ['code', 'layers', 'expand'])
         assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay', 'speed'])
+        // LKM-319: no divider between the buttons of a toolbar island on macOS 27.
+        if (shell.islandHidesDividers)
+          assert.deepEqual(
+            shell.islandDividers,
+            { chat: 0, interaction: 0, tools: 0 },
+            `toolbar islands draw no dividers: ${JSON.stringify(shell.islandDividers)}`
+          )
         assert.ok(
           shell.sidebarContainsTrafficLights && shell.chatTitlePlain && shell.publishStandard
         )
