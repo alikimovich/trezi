@@ -45,6 +45,11 @@ Newest first. Append a dated entry when you finish a chunk of work.
   native run was skipped behind the `project-switching` failure above. Later preflight unit
   runs failed in unrelated timing-sensitive tests on a loaded machine, and the session's
   verification budget ran out. No captures or geometry from this change exist yet.
+- Review follow-up: after the 180 pt narrow case the `build-badge` fixture now waits until
+  `buildBadgeInspect.sidebarWidth` is within 1 pt of the restored width (recorded as
+  `restoredSidebarWidth` in `build-badge.json`), so a badge that holds the sidebar wide fails
+  there. Run the native `sidebar` group in the foreground (`project-switching` and
+  `build-badge` must both pass) and read `build-badge-*.png` and `build-badge.json`.
 ## 2026-10-22 — LKM-312: the conversation's end marker is measured, so follows settle
 
 - **Report.** Build 1137: TreziHost at 100% of one core (2.4 GB). The main thread was in

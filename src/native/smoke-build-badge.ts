@@ -240,10 +240,14 @@ export async function checkBuildBadge(host: NativeBridge, artifacts: string) {
     const narrowShot = await host.request('buildBadgeInspect', { capture: 'current' })
     writeFileSync(join(artifacts, 'build-badge-narrow.png'), Buffer.from(narrowShot.png, 'base64'))
     evidence.narrow = { ...narrow, foreground: narrowShot.foreground }
-    await host.request('shellPerform', {
-      action: 'sidebar-width',
-      row: String(Math.round(Math.min(340, Math.max(180, initialWidth))))
-    })
+    const restoredWidth = Math.round(Math.min(340, Math.max(180, initialWidth)))
+    await host.request('shellPerform', { action: 'sidebar-width', row: String(restoredWidth) })
+    // The badge's text must not hold the sidebar wide once the narrow case is over.
+    const settled = await waitFor(async () => {
+      const value = await host.request('buildBadgeInspect')
+      return Math.abs(value.sidebarWidth - restoredWidth) <= 1 && value
+    }, `sidebar settles at ${restoredWidth} after the narrow case`)
+    evidence.restoredSidebarWidth = settled.sidebarWidth
     // A dark-appearance capture of the behind badge (yellow on the dark sidebar).
     const behind = STATES[2]
     await showState(host, 'behind-dark', behind.status, behind.text, behind.tone)
