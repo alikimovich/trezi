@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
+import { hoverProbeScript } from './smoke-hover-probe'
 import { waitFor } from './smoke-wait'
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -309,7 +310,15 @@ async function checkPointer(
     const before = await island({ pointer: true, target: 'page', ...heading })
     await waitFor(hoverBox, 'select-mode hover over the page')
     const over = await island({ pointer: true, target: 'island', ...heading })
-    await waitFor(async () => !(await hoverBox()), 'select-mode hover cleared over Layers')
+    await waitFor(
+      async () => !(await hoverBox()),
+      'select-mode hover cleared over Layers',
+      10000,
+      async () => ({
+        move: over,
+        probe: await smoke.evaluate(hoverProbeScript((over.expectedCover as Rect[])[0]), true)
+      })
+    )
     const cover = await shields()
     const expected = over.expectedCover as Rect[]
     const layers = (await island()).cover as Rect[]
