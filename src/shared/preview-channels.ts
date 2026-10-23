@@ -77,19 +77,6 @@ export const PREVIEW_STYLES_UPDATED = 'trezi:preview:styles-updated'
 
 export const ANIMATION_REPLAY = 'trezi:preview:animation-replay' // → preload (component name)
 
-// ── States workbench (LKM-207) ─────────────────────────────────────────────
-/** → preload (`PreviewStates | null`): the page is a workbench; keys switch its states. */
-export const PREVIEW_STATES = 'trezi:preview:states'
-/** → preload (state id): switch now (replaceState + `trezi:state`, a load as fallback). */
-export const PREVIEW_STATES_SWITCH = 'trezi:preview:states-switch'
-/** → main ('hide'): H pressed on a workbench page. */
-export const PREVIEW_STATES_KEY = 'trezi:preview:states-key'
-export const PREVIEW_CANVAS = 'trezi:preview:states-canvas' // → isolated preload (bounded recipe/action)
-export const PREVIEW_CANVAS_RESULT = 'trezi:preview:states-canvas-result' // → main (status only)
-export interface PreviewStates {
-  ids: string[]
-}
-
 // ── Chat island gestures (LKM-140) ─────────────────────────────────────────
 export const ISLAND_OVERRIDE = 'trezi:preview:island-override' // → preload (IslandOverrideRequest)
 export const ISLAND_OVERRIDE_REPLY = 'trezi:preview:island-override-reply' // → main ({id, value})

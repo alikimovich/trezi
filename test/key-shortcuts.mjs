@@ -4,10 +4,10 @@ import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-219: shortcuts match the physical key under non-Latin layouts and keep Dvorak's own.
 
-// In-page keys (states switcher, select mode): `key` when it is Latin, else `code`.
+// In-page keys (select mode): `key` when it is Latin, else `code`.
 assert.equal(latinKey({ key: 'ы', code: 'KeyS' }), 's', 'Russian S toggles select mode')
 assert.equal(latinKey({ key: 'Ы', code: 'KeyS' }), 's')
-assert.equal(latinKey({ key: 'р', code: 'KeyH' }), 'h', 'Russian H hides the states switcher')
+assert.equal(latinKey({ key: 'р', code: 'KeyH' }), 'h', 'Russian H')
 assert.equal(latinKey({ key: 'י', code: 'KeyH' }), 'h', 'Hebrew H')
 assert.equal(latinKey({ key: 'η', code: 'KeyH' }), 'h', 'Greek H')
 assert.equal(latinKey({ key: 'х', code: 'BracketLeft' }), '[')

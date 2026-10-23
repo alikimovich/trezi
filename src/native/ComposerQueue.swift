@@ -95,8 +95,8 @@ struct ComposerQueue: View {
     /// Text starts `textGap` after the glyph column.
     static let textGap: CGFloat = 4
     static var textX: CGFloat { control + textGap }
-    /// Hairlines end `ruleInset` before the panel's trailing edge; the header's divider also
-    /// starts `ruleInset` in, a row's separator at the text.
+    /// The header's divider is `ruleInset` in from both panel edges; a row's separator spans the
+    /// panel's full width, under the glyph and the buttons too (LKM-318).
     static let ruleInset: CGFloat = 12, rule: CGFloat = 0.5
     static let visibleRows = 3
     /// A faint rim that keeps the frosted panel's edge legible on a light or dark chat.
@@ -154,7 +154,8 @@ struct ComposerQueue: View {
         .font(.system(size: 12)).padding(.trailing, paused ? 4 : Self.ruleInset)
         .frame(height: Self.rowHeight)
         .overlay(alignment: .bottom) {
-            hairline.padding(.horizontal, Self.ruleInset).queueFrame("divider")
+            // Measured before its inset (LKM-325): the drawn line, not the padded box.
+            hairline.queueFrame("divider").padding(.horizontal, Self.ruleInset)
         }
         .queueFrame("header")
     }
@@ -195,9 +196,9 @@ struct ComposerQueue: View {
         .font(.system(size: 13))
         .frame(height: Self.rowHeight)
         .overlay(alignment: .top) {
-            // A hairline above every row but the first, from the text to the trailing edge.
+            // A hairline above every row but the first, from the panel's leading to its trailing edge.
             if index > 0 {
-                hairline.padding(.leading, Self.textX).padding(.trailing, Self.ruleInset).queueFrame("separator-\(index)")
+                hairline.queueFrame("separator-\(index)")
             }
         }
         .queueFrame("row-\(index)")

@@ -41,16 +41,18 @@ extension NativeShell {
         addressLayout.moveRightGroups(hiding: hidden, by: moreShift + segment)
         item.isHidden = hidden
     }
-    /// Pipe checks pick an entry the way a click on it would. (LKM-220: the workbenches
-    /// moved from here to the States menu, `ToolbarStates.swift`.)
+    /// Pipe checks pick an entry the way a click on it would.
     func performMore(_ item: NSMenuToolbarItem?, _ action: String) -> Bool {
         guard let item, item.isEnabled,
               let entry = item.menu.items.first(where: { ($0.representedObject as? [String: String])?["action"] == action }) else { return false }
         previewMenuAction(entry); return true
     }
     func moreInspect(_ item: NSMenuToolbarItem?) -> [String: Any] {
-        ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
-         "moreVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false,
-         "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
+        // LKM-325: macOS 27 keeps an item hidden by `fitMore` in `visibleItems`; it is not drawn.
+        var hidden = false
+        if #available(macOS 15, *) { hidden = item?.isHidden ?? false }
+        return ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
+                "moreVisible":!hidden && (toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false),
+                "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
     }
 }

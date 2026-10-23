@@ -22,19 +22,105 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Repair: native-slider-ticks on macOS 27.** Manager verification failed it on the 27.0.1
   host (it passed on 25.x): "Baseline stepped Slider draws tick marks ([])". Not load: three
   reruns failed the same way. A debug dump showed that this SwiftUI draws `Slider` itself, so the
-  windowless hosting view holds only a `_FocusRingView` and no `NSSlider`, and there is nothing
-  to count tick marks on or to drag. `test/fixtures/slider-ticks/main.swift` now runs the pure
-  snapping checks first, then, only when the baseline finds no `NSSlider`, prints the
-  runner's SKIP line and exits 0 (SKIP, not PASS). Where an `NSSlider` exists, the baseline,
-  inspector and island checks are unchanged. **Reduced coverage on macOS 27:** tick marks and
-  the drag into the binding are not probed; the source scan for `step:` in `test/native-slider-ticks.mjs`
-  still runs.
+  windowless hosting view holds only a `_FocusRingView` and no `NSSlider`. origin/main fixed
+  the same fixture in parallel (SKIP when no `NSSlider` is found, source check unchanged); the
+  merge kept main's version of `test/fixtures/slider-ticks/main.swift` and dropped this branch's.
 - **Docs.** `docs/TESTING.md` has a "Parallel load check" section with the operator procedure:
   three checkouts, 5 rounds.
-- **Not run.** The 5-round × 3-parallel unit run is still not done, for the same reason as in
-  LKM-313: one run lock per worktree, no background commands, and a 5-minute command limit. The
-  three tests passed in one filtered run here: repository-owner 181.9 s, workflow-owner 88.2 s,
-  workflow-durability 77.2 s.
+- **Waived.** The 5-round × 3-parallel unit run was waived by operator decision (option b) and
+  is tracked by the nightly runs; no follow-up ticket is opened for it. Parallel-load
+  reliability is still unproven. The three tests passed in one filtered run here:
+  repository-owner 181.9 s, workflow-owner 88.2 s, workflow-durability 77.2 s.
+## 2026-10-23 — LKM-327: PR CI unit tier in 3 shards
+
+- **Why.** "typecheck + unit tests" took 12 min on PR #300. It was one 3-core macOS
+  job that ran setup, both typechecks and then the whole unit tier. Nearly every
+  product PR falls back to the full plan, so `--changed` alone did not help.
+- **Change.** `.github/workflows/ci.yml` now has three kinds of job:
+  - `typecheck` on `ubuntu-latest`.
+  - `unit tests (i/n)` on `macos-26`: 3 shards on a pull request, 1 whole-tier
+    shard on a push to `main`.
+  - A `typecheck + unit tests` gate that keeps the old check name and passes only
+    when everything passed.
+- **Runner.** `node test/run.mjs unit --shard=i/n` (`shardTests` in
+  `test/helpers/test-plan.mjs`) splits the tier greedily. The weights are the
+  committed `UNIT_TIMEOUT_MS` budgets, else 30 s. The times file is not used, so
+  every shard computes the same split.
+- **Cache.** Swift caches are per shard (own, then main's `1of1`, then any). They
+  are saved after a failed run too, and a step logs the exact hit and the restored
+  key.
+- **Checks.** `test/test-selection.mjs` covers the split and the CLI.
+  `test/dependency-audit.mjs` pins the new jobs and the gate. Locally the three
+  shards hold 464 / 433 / 394 s of the tier's 1291 s. The ≤ 5 min CI target is
+  unmeasured until the next PRs run.
+## 2026-10-23 — LKM-325: nightly native failures on main 0c21b15b (partial)
+
+- **Why.** The first nightly native run (macOS 27) failed six checks. The causes below
+  come from the run's log and captures.
+- **build-badge.** A borderless `NSButton` with no title or image reports `AXUnknown` on
+  macOS 27. `src/native/BuildBadge.swift` now sets the button role explicitly.
+- **toolbar-address.** At 850 pt the "…" item is hidden by `fitMore` and not drawn (see
+  the capture), but macOS 27 still lists it in `toolbar.visibleItems`. `moreInspect`
+  (`src/native/ToolbarMore.swift`) now reports it shown only when it is not hidden.
+- **native-chat.** The paused header's `divider` frame was measured after its horizontal
+  padding, so it read 10–410 instead of the drawn 22–398. `src/native/ComposerQueue.swift`
+  now measures the hairline before its inset. The drawing is unchanged.
+- **composer-send.** The check typed "Ship it" and pressed Send in one main-thread turn.
+  Send is gated by `sendButton.isEnabled` from the last Bun snapshot, which was the idle,
+  disabled one, so nothing was sent. It had passed only while a stale running (Stop)
+  snapshot was still in place. `src/native/smoke-composer-send.ts` now waits until the
+  draft has enabled Send, then runs Send, Send and the typed key in one turn, as LKM-304
+  intends.
+- **Open: inspector and layers-island.** The select-mode hover shows over the page but
+  does not clear after synthetic moves over the island, although the page's cover shield
+  is connected at the island's rect and `picks` is 0. The page-side code is consistent
+  (`onMove` clears the hover when the target is the shield host, `isOverlay` includes it), so
+  the cause is either that the island move never reaches the page on macOS 27 or something in
+  the preview script. It cannot be told apart without a native run, which this session did
+  not have (0 native calls). Both waits now report `probe` (`src/native/smoke-hover-probe.ts`):
+  whether the island point hits the shield, whether WebKit's `:hover` is on the shield or
+  still on the heading, the hover box's display and the page's focus. The assertions are
+  unchanged. Read `probe` in the next failure: heading `:hover` means the move was dropped
+  (fix the seam in `InspectorIslandVerification.swift` or WebKit's routing); shield `:hover`
+  with the box still shown is a preview-script bug.
+- **Verification.** Typecheck, the native typecheck, lint, the unit tier and
+  `bun run build` pass. No native run was available in this session.
+
+## 2026-10-23 — LKM-324: Show states is removed
+
+- **Why.** The component states canvas and workbench did not work reliably.
+- **Removed entry points.**
+  - "Show states…" on the element toolbar and in the inspector … menu.
+  - The `/states` command and the `component-states` skill.
+  - The toolbar States menu (`ToolbarStates.swift`) and the switcher
+    (`StatesSwitcher.swift`).
+  - The Publish workbench check.
+- **Removed code.** The `states-*` controllers in `src/native`, `src/main`,
+  `src/preview` and `src/shared`.
+  - The three states canvas agent tools, removed from every registration and from
+    both policy lists.
+  - The source owner's `removeWorkbench`, and `bin/states-canvas-schema.*`.
+  - The four unit tests, the `states-canvas`/`states-workbench` smoke checks and
+    their groups, and `docs/STATES.md`.
+- **Old data.** The `trezi:states-workbenches:v1` and `trezi:states-canvases:v1`
+  preferences are no longer read. Nothing in a user's project is touched.
+- **Verification.** Typecheck, lint and the unit tier pass. `native-slider-ticks`
+  reports SKIP on macOS 27, where a SwiftUI `Slider` has no `NSSlider`. The merge
+  kept main's fixture for this, which replaced an equivalent fix on this branch. No
+  native run was available.
+
+## 2026-10-23 — LKM-318: full-width dividers between queued messages
+
+- **Why.** The hairline between two queued rows started at the text and stopped 12 pt
+  before the trailing edge, so it did not run under the reply-arrow glyph or the edit,
+  delete and more buttons.
+- **Change.** `src/native/ComposerQueue.swift` draws a row's `separator-<index>` with no
+  horizontal padding, so it spans the panel from edge to edge. Thickness (`rule`), colour
+  (`separatorColor`), row heights and layout are unchanged; the first row still has none
+  and the header's divider keeps its `ruleInset`.
+- **Check.** `queueGeometryProblems` (`src/native/smoke-queue.ts`) now wants a separator's
+  minX/maxX at the panel's edges; `test/composer-queue-panel.mjs` uses full-width fixtures
+  and rejects the old inset separator.
 
 ## 2026-10-22 — LKM-315: Gemini is an optional provider with an On/Off row in Settings
 

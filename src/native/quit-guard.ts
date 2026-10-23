@@ -9,8 +9,7 @@ export const QUIT_DONT_ASK_CHOICES = [
 export const QUIT_SAFE_POINT_MS = 15_000
 export const QUIT_TITLE = 'Agents are still working'
 
-/** One piece of running work; `project` is the project's display name. A states
- *  workbench build is a chat turn (`/states`), so it counts as a chat. */
+/** One piece of running work; `project` is the project's display name. */
 export interface QuitWork {
   kind: 'chat' | 'background' | 'landing' | 'publish' | 'dreamer'
   project?: string

@@ -4,8 +4,8 @@ import { preparePreviewInput } from './smoke-input'
 import { inspectUntil } from './smoke-wait'
 
 /** Composer queue panel (LKM-198, LKM-302): one frosted panel with flat 28 pt rows and no gap
- *  between them, even padding, a hairline above every row but the first, the leading glyph
- *  over the + button and the trailing actions over Send. */
+ *  between them, even padding, a full-width hairline above every row but the first (LKM-318),
+ *  the leading glyph over the + button and the trailing actions over Send. */
 const PADDING = 8
 const ROW = 28
 const OVERLAP = 24
@@ -84,7 +84,7 @@ export function queueGeometryProblems(
       if (line.separator) problems.push('row 0 has a separator above it')
       return
     }
-    // Flat rows: no gap between them, a hairline at the boundary from the text to the edge.
+    // Flat rows: no gap between them, a full-width hairline at the boundary (LKM-318).
     near(line.row.top, measured[index - 1].row.bottom, `gap above row ${index}`)
     const rule = line.separator
     if (!rule) problems.push(`row ${index}: no separator above it`)
@@ -92,8 +92,8 @@ export function queueGeometryProblems(
       near(rule.top, line.row.top, `row ${index} separator at the row boundary`)
       if (!(rule.height > 0 && rule.height <= 1))
         problems.push(`row ${index} separator ${rule.height} pt, wanted a hairline`)
-      near(rule.minX, panel.textX, `row ${index} separator starts at the text`)
-      near(rule.maxX, panel.maxX - panel.ruleInset, `row ${index} separator end`)
+      near(rule.minX, panel.minX, `row ${index} separator starts at the panel's leading edge`)
+      near(rule.maxX, panel.maxX, `row ${index} separator ends at the panel's trailing edge`)
     }
   })
   if (geometry.header) {

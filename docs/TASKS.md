@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] workflow-owner, workflow-durability: budget 420 s (logged TIMEOUTs were still making progress at 240 s).
 - [x] Operator procedure in `docs/TESTING.md` ("Parallel load check").
 - [ ] Operator: 5 consecutive rounds of `node test/run.mjs unit --timeout-ms=120000 --report` in 3 checkouts at once, all green; attach the summaries to the PR.
+## Faster PR CI unit job (LKM-327)
+
+- [x] Typecheck on its own Linux job; unit tier in 3 macOS shards on a pull request (`--shard=i/n`, deterministic split), whole tier on one runner on `main`; `typecheck + unit tests` gate keeps the check name.
+- [x] Per-shard Swift caches, saved after failures too, with the hit and restored key logged; `docs/TESTING.md` "GitHub CI" describes the split.
+- [ ] Measure the median "typecheck + unit tests" wall time over the next 5 PRs (target ≤ 5 min); if a shard is still long, read its `--report` slowest list (e.g. `swift-preview-build`) and rebalance or fix the top tests.
 
 ## Native footer build badge alignment and development build identity (LKM-301)
 

@@ -15,6 +15,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
 ### Fixed
+- On macOS 27, VoiceOver announces the build badge at the bottom of the projects sidebar as a button again, instead of an unknown element (LKM-325).
+- The divider lines between stacked queued messages above the composer now run across the full width of the queue panel, under the reply arrow and the edit, delete and more buttons too (LKM-318).
 - The build badge at the bottom of the projects sidebar lines its dot up with the text and shows the build number and commit ("0.1.0 (1234, 1a2b3c4)"), so development builds of the same version can be told apart. It names the branch except on main, says "modified", "detached", "no Git" or "no build info" in words instead of a checkmark, truncates a long branch first in a narrow sidebar, and VoiceOver reads the version, build, commit, branch, clean or modified tree and state (LKM-301).
 - The chat no longer keeps re-laying out the conversation while it follows the latest message, work that could hold Trezi at 100% CPU and leave the window unresponsive during and after a long agent turn (LKM-312).
 - A sent chat message no longer stays in the composer while the agent thinks, for example after macOS curls its apostrophe, so it cannot be sent twice. Text typed after pressing Return is kept, and a quick second click on Send no longer stops the turn it just started (LKM-304).
@@ -91,6 +93,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Preview Back and Forward: View → Back (⌘[) and Forward (⌘]), ⌘← / ⌘→ outside text fields and the trackpad two-finger swipe step through the project preview's history, client-side routes included; pages an agent opened are skipped and the address bar follows. In the code editor ⌘[ / ⌘] keep stepping through its files (LKM-219).
 - Quitting while agents work (⌘Q, Quit, closing the window, logout or restart) now asks first: a sheet lists what is still running per project, with Cancel, Wait and Quit (quits when the work ends; cancelable) and Quit Anyway (stops the agents and keeps their work in each chat’s copy, as Stop does). A landing or publish in progress always finishes first, for up to 15 seconds. “Don’t ask again” is also in Settings → General (LKM-221).
 - Native controls and light/dark appearance for the exploded component view.
+
+### Removed
+- Show states, because it did not work reliably: the "Show states…" action on a selected element (toolbar and inspector … menu), the `/states` command, the isolated states view, the toolbar's States menu and switcher, and the Publish check for a states workbench. Workbench pages the agent already wrote into a project stay untouched (LKM-324).
 
 ## [0.1.0] - 2026-10-09
 

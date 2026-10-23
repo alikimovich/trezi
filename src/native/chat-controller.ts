@@ -21,7 +21,6 @@ import {
   readinessFromLogin,
   type SeatProvider
 } from '../shared/provider-readiness'
-import { statesContext } from '../shared/states-workbench'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
 import { autoResolve } from './chat-auto-resolve'
@@ -707,7 +706,7 @@ export class NativeChatController {
       )
       if (cancellation !== chat.cancellation || this.chats.get(chat.chat) !== chat)
         throw new Error('Message cancelled before sending.')
-      const prompt = plan.header + (selection?.prompt ?? '') + text + statesContext(text, chat.chat)
+      const prompt = plan.header + (selection?.prompt ?? '') + text
       await this.services.invoke(
         'agent:send',
         prompt,

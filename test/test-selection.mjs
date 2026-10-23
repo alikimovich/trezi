@@ -26,10 +26,12 @@ import {
   READERS,
   repoContext,
   SELECTOR_FILES,
+  SHARD_WEIGHT_MS,
+  shardTests,
   typecheckPlan,
   UI_SOURCES
 } from './helpers/test-plan.mjs'
-import { TIERS, UNIT } from './tiers.mjs'
+import { TIERS, UNIT, UNIT_TIMEOUT_MS } from './tiers.mjs'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const ctx = repoContext(ROOT)
@@ -260,6 +262,32 @@ try {
     assert.match(typo.stderr, /not an existing tracked or untracked file/)
   }
 
+  // --shard splits the selection: together the shards list it once (LKM-327).
+  const shards = [1, 2, 3].map((index) =>
+    run(['test/run.mjs', 'unit', '--changed=HEAD', `--shard=${index}/3`, '--list'])
+  )
+  for (const shard of shards) assert.equal(shard.status, 0, shard.stderr)
+  assert.deepEqual(shards.flatMap(listed).sort(), ['unit\tdocs-links', 'unit\tlegacy-names-audit'])
+  assert.match(shards[0].stderr, /Shard 1\/3: 1 of 2 selected unit tests/)
+  const sharded = run(['test/run.mjs', 'unit', '--changed=HEAD', '--shard=2/3'])
+  assert.equal(sharded.status, 0, sharded.stdout + sharded.stderr)
+  const shardSummary = JSON.parse(readFileSync(/^Report: (.+)$/m.exec(sharded.stdout)[1], 'utf8'))
+  assert.deepEqual(shardSummary.shard, {
+    index: 2,
+    count: 3,
+    unit: shardSummary.results.map((r) => r.name)
+  })
+  for (const args of [
+    ['unit', '--shard=1/3', '--typecheck', '--list'],
+    ['unit', '--shard=0/3', '--list'],
+    ['unit', '--shard=4/3', '--list'],
+    ['unit', '--shard=1', '--list'],
+    ['native', '--shard=1/2', '--list']
+  ]) {
+    const refused = run(['test/run.mjs', ...args])
+    assert.equal(refused.status, 2, `${args}: ${refused.stdout}${refused.stderr}`)
+  }
+
   appendFileSync(join(cli, 'test/helpers/test-plan.mjs'), '// edited\n')
   const output = join(temp, 'github-output')
   const gate = run(['test/select.mjs', '--base=HEAD', '--github-output'], { GITHUB_OUTPUT: output })
@@ -273,6 +301,35 @@ try {
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }
+
+// Shards: disjoint, together exactly the input, in its order, the same split every time,
+// and the listed slow tests spread over the shards (LKM-327).
+for (const count of [1, 2, 3, 4, 7]) {
+  for (const names of [UNIT, UNIT.filter((_, i) => i % 5 === 0), UNIT.slice(0, 2), []]) {
+    const split = shardTests(names, count)
+    assert.equal(split.length, count)
+    assert.deepEqual(split.flat().sort(), [...names].sort(), `${count} shards cover the input`)
+    for (const shard of split)
+      assert.deepEqual(
+        shard,
+        names.filter((n) => shard.includes(n))
+      )
+    assert.deepEqual(
+      shardTests([...names].reverse(), count).map((s) => s.sort()),
+      split.map((s) => [...s].sort())
+    )
+  }
+}
+assert.throws(() => shardTests(UNIT, 0), /invalid shard count/)
+const slow = Object.keys(UNIT_TIMEOUT_MS).filter((name) => UNIT.includes(name))
+const weight = (shard) =>
+  shard.reduce((sum, name) => sum + (UNIT_TIMEOUT_MS[name] ?? SHARD_WEIGHT_MS), 0)
+const weights = shardTests(UNIT, 3).map(weight)
+assert.ok(
+  Math.max(...weights) - Math.min(...weights) <= Math.max(...Object.values(UNIT_TIMEOUT_MS))
+)
+for (const shard of shardTests(UNIT, 3))
+  assert.ok(shard.filter((name) => slow.includes(name)).length >= Math.floor(slow.length / 3) - 1)
 
 // Typecheck plan: the real configs are one program (and tsc resolves them alike);
 // anything divergent or unreadable runs both.
@@ -352,7 +409,6 @@ const TEMP_WALKERS = [
   'browser-tools-install',
   'syntax-bundle',
   'product-log',
-  'states-build',
   'legacy-names-migrate',
   'annotation-store',
   'native-build-cache',
