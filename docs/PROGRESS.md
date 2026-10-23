@@ -44,6 +44,11 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - `test/provider-owner.mjs` checks routing on;
   - `test/provider-login.mjs` checks that the key reaches only a Gemini helper. The fake
     helper is also hosted as `gemini`.
+- **Review fix.** The native Settings smoke asserted that the AI Providers pane has only the
+  `connection` and `providerFallback` pickers, which the new row would have failed.
+  `assertSectionEvidence` (`settings-verification.ts`) now also allows `geminiEnabled` and
+  requires it, so the capture proves the row is there. `test/native-settings-evidence.mjs`
+  has the matching synthetic evidence (the new pane text) and two new rejections.
 - **Limits.**
   - No native capture of the row (this run had no native verification).
   - No real Gemini CLI or Keychain call.
