@@ -226,6 +226,7 @@ export const UNIT = [
   'chat-ui',
   'chat-ui-model',
   'device-frame',
+  'toolbar-island-dividers',
   'tw-classes',
   'tw-styles',
   'token-match',
