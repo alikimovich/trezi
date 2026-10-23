@@ -189,6 +189,12 @@ assert.match(
   /writeFileSync\(join\(serviceContents, 'Info\.plist'\), serviceInfoPlist\(info\)\)/
 )
 assert.match(build, /TREZI_VERSION: JSON\.stringify\(label\)/, 'both JS bundles are stamped')
+// LKM-301: the badge's stamp comes from this build's own `buildInfo`, never a cached one.
+assert.match(
+  build,
+  /TREZI_BUILD: JSON\.stringify\(JSON\.stringify\(info\)\)/,
+  'badge stamp per build'
+)
 const out = join(root, 'out/native')
 const built = join(out, 'Trezi.app/Contents/Info.plist')
 let builtNote = 'no build present: built plist check SKIPPED'
