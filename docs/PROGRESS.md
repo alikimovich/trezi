@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-318: full-width dividers between queued messages
+
+- **Why.** The hairline between two queued rows started at the text and stopped 12 pt
+  before the trailing edge, so it did not run under the reply-arrow glyph or the edit,
+  delete and more buttons.
+- **Change.** `src/native/ComposerQueue.swift` draws a row's `separator-<index>` with no
+  horizontal padding, so it spans the panel from edge to edge. Thickness (`rule`), colour
+  (`separatorColor`), row heights and layout are unchanged; the first row still has none
+  and the header's divider keeps its `ruleInset`.
+- **Check.** `queueGeometryProblems` (`src/native/smoke-queue.ts`) now wants a separator's
+  minX/maxX at the panel's edges; `test/composer-queue-panel.mjs` uses full-width fixtures
+  and rejects the old inset separator.
+
 ## 2026-10-22 — LKM-315: Gemini is an optional provider with an On/Off row in Settings
 
 - **Why.** Gemini was reachable only with `TREZI_EXPERIMENTAL_GEMINI=1`. Its models were
