@@ -154,7 +154,8 @@ struct ComposerQueue: View {
         .font(.system(size: 12)).padding(.trailing, paused ? 4 : Self.ruleInset)
         .frame(height: Self.rowHeight)
         .overlay(alignment: .bottom) {
-            hairline.padding(.horizontal, Self.ruleInset).queueFrame("divider")
+            // Measured before its inset (LKM-325): the drawn line, not the padded box.
+            hairline.queueFrame("divider").padding(.horizontal, Self.ruleInset)
         }
         .queueFrame("header")
     }

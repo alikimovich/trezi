@@ -56,6 +56,38 @@ Newest first. Append a dated entry when you finish a chunk of work.
   `test/dependency-audit.mjs` pins the new jobs and the gate. Locally the three
   shards hold 464 / 433 / 394 s of the tier's 1291 s. The ≤ 5 min CI target is
   unmeasured until the next PRs run.
+## 2026-10-23 — LKM-325: nightly native failures on main 0c21b15b (partial)
+
+- **Why.** The first nightly native run (macOS 27) failed six checks. The causes below
+  come from the run's log and captures.
+- **build-badge.** A borderless `NSButton` with no title or image reports `AXUnknown` on
+  macOS 27. `src/native/BuildBadge.swift` now sets the button role explicitly.
+- **toolbar-address.** At 850 pt the "…" item is hidden by `fitMore` and not drawn (see
+  the capture), but macOS 27 still lists it in `toolbar.visibleItems`. `moreInspect`
+  (`src/native/ToolbarMore.swift`) now reports it shown only when it is not hidden.
+- **native-chat.** The paused header's `divider` frame was measured after its horizontal
+  padding, so it read 10–410 instead of the drawn 22–398. `src/native/ComposerQueue.swift`
+  now measures the hairline before its inset. The drawing is unchanged.
+- **composer-send.** The check typed "Ship it" and pressed Send in one main-thread turn.
+  Send is gated by `sendButton.isEnabled` from the last Bun snapshot, which was the idle,
+  disabled one, so nothing was sent. It had passed only while a stale running (Stop)
+  snapshot was still in place. `src/native/smoke-composer-send.ts` now waits until the
+  draft has enabled Send, then runs Send, Send and the typed key in one turn, as LKM-304
+  intends.
+- **Open: inspector and layers-island.** The select-mode hover shows over the page but
+  does not clear after synthetic moves over the island, although the page's cover shield
+  is connected at the island's rect and `picks` is 0. The page-side code is consistent
+  (`onMove` clears the hover when the target is the shield host, `isOverlay` includes it), so
+  the cause is either that the island move never reaches the page on macOS 27 or something in
+  the preview script. It cannot be told apart without a native run, which this session did
+  not have (0 native calls). Both waits now report `probe` (`src/native/smoke-hover-probe.ts`):
+  whether the island point hits the shield, whether WebKit's `:hover` is on the shield or
+  still on the heading, the hover box's display and the page's focus. The assertions are
+  unchanged. Read `probe` in the next failure: heading `:hover` means the move was dropped
+  (fix the seam in `InspectorIslandVerification.swift` or WebKit's routing); shield `:hover`
+  with the box still shown is a preview-script bug.
+- **Verification.** Typecheck, the native typecheck, lint, the unit tier and
+  `bun run build` pass. No native run was available in this session.
 
 ## 2026-10-23 — LKM-324: Show states is removed
 

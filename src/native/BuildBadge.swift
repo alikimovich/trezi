@@ -28,6 +28,8 @@ final class BuildBadge: NSObject {
         button.target = self; button.action = #selector(open); button.title = ""
         button.isBordered = false; button.setButtonType(.momentaryChange); button.imagePosition = .noImage
         button.identifier = NSUserInterfaceItemIdentifier("build-badge")
+        // LKM-325: with no title or image, macOS 27 reports the cell as AXUnknown.
+        button.setAccessibilityRole(.button)
         button.setAccessibilityHelp("Shows this build's details")
         dot.translatesAutoresizingMaskIntoConstraints = false
         dot.setAccessibilityElement(false)
