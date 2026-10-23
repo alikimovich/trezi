@@ -254,6 +254,7 @@ export function snapshot(
       text: chat.text,
       caret: chat.caret,
       revision: chat.revision,
+      sent: chat.sent,
       stop,
       ready: ready && !chat.switching,
       running: chat.isRunning,

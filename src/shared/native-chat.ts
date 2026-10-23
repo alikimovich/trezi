@@ -139,6 +139,8 @@ export interface NativeChatState {
     text: string
     caret: number
     revision: number
+    /** LKM-304: accepted sends of the draft and the revision of the last sent draft. */
+    sent: { count: number; revision: number }
     stop: boolean
     enabled: boolean
     sendLabel: string

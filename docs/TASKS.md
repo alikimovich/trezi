@@ -10,6 +10,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] VoiceOver label: version, build, commit, branch, tree and state. Unit `test/build-status.mjs`; native `build-badge` (sidebar group) asserts geometry, accessibility and captures two revisions, main/branch, clean/dirty, detached, offline, no Git and narrow.
 - [ ] Native `sidebar` group not yet green on the final tree: run it, read `build-badge-*.png` and `build-badge.json` (alignment, narrow, accessibility), and confirm `project-switching` settles at 260 pt.
 - [ ] Publication waits for operator approval, sequenced behind LKM-300, then LKM-295/LKM-296.
+## Clear the native composer's sent draft after an accepted send (LKM-304)
+
+- [x] Root cause: a composer edit after Return (smart quote, typing) carried a newer revision than the cleared snapshot, so Swift ignored the clear and Bun restored the stale draft. Reproduced in `test/composer-sent-draft.mjs` before the fix.
+- [x] `Chat.sent` handshake: Bun ignores inputs typed against a sent draft; `Composer.swift` removes exactly the sent text (moved by edits inside it), keeps text typed after it and sends the rest. A Send-arrow click never stops a turn.
+- [x] Native regression `src/native/smoke-composer-send.ts` (composer `composer-send`): smart quote after Return, double Send, a key typed before the acknowledgement.
+- [x] Review repair: a message queued in the planning (new-project) chat clears the draft once; a queued message sent later keeps newer typing (`test/composer-sent-draft.mjs` case 7).
+- [ ] Run the native `composer` group so `composer-send` executes against the real `NSTextView` (not yet run).
+- [ ] Programmatic sends (`submit(chat, text)` from cards, Publish recovery) still clear the user's draft as before; not changed here.
+
 ## Toolbar controls overflow when expanding/restoring the preview at ample width (LKM-296)
 
 - [x] Reproduce with per-frame passive toolbar traces and foreground captures; root cause in `docs/evidence/lkm-296/ROOT-CAUSE.md`.
@@ -656,6 +665,13 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 - [x] `ComposerQueue`: list glyph removed; note line and rows 24 pt with centred content, 4 pt apart, 10 pt above the first and below the last visible line (44 / 72 / 100 pt for 1 / 2 / 3+ rows, +28 with a note); more than three rows scroll.
 - [x] Box 10 pt inside the composer's sides, tucked 24 pt (the composer's radius) under it at every count, radius 18; text at the placeholder's x, the "…" menu in Send's 30 pt column.
 - [x] Composer-layout fixture (heights, overlap, insets for 1/2/3/5 rows, with and without a note); chat smoke `checkQueueGeometry` (`src/native/smoke-queue.ts`) asserts measured SwiftUI frames (|top − bottom| ≤ 1, centred rows, text vs placeholder and menu vs Send ±1) for 1 row, 3 rows and the Resolve note at both widths, with light and dark `-queue-<label>-{light,dark}.png` captures and JSON; CHANGELOG line.
+
+## Composer queue: one frosted panel with flat rows (LKM-302)
+
+- [x] `ComposerQueue`: one `.thinMaterial` panel with a faint rim replaces the LKM-294 cards; flat 28 pt rows with no fill, border or shadow, hairlines between them; leading queue glyph in the + button's column, edit/remove/… in Send's; totals unchanged (44 / 72 / 100 pt, +28 with a header).
+- [x] Header: `pause.circle` with Send now (`queue-resume`) when paused, `clock` for a waiting note, hairline divider; row identity, entrance motion, Reduce Motion and the hidden empty state unchanged.
+- [x] `queueGeometryProblems` and `emptyQueueProblems` (`src/native/smoke-queue.ts`), with `plusMidX` in `composerInspect`. The chat smoke covers paused, resumed and empty states and takes foreground light/dark captures. Unit test `test/composer-queue-panel.mjs`. The composer-layout fixture checks the + and Send columns. CHANGELOG line.
+- [ ] Native chat/composer verification with foreground capture review, then independent review (no publication).
 
 ## Composer queue: one rounded card per message, slide-up on insertion (LKM-294)
 

@@ -78,24 +78,30 @@ private struct ComposerQueueEntrance: ViewModifier {
     }
 }
 
+/// One frosted panel behind and above the composer (LKM-302). Rows are flat lines on the
+/// panel, told apart by their height and a hairline between them; no row has its own fill,
+/// border or shadow.
 struct ComposerQueue: View {
-    /// The box sits `inset` inside the composer's sides, so its trailing edge meets the send
+    /// The panel sits `inset` inside the composer's sides, so its trailing edge meets the send
     /// button's, and tucks `overlap` (the composer's corner radius) under the composer at every
     /// row count, so its lower corners never show (LKM-198).
     static let inset: CGFloat = 10, overlap: CGFloat = 24, radius: CGFloat = 18
-    /// The note line and each row are `rowHeight` tall with their content centred, `spacing`
-    /// apart, with `padding` above the first and below the last in the visible part.
-    static let rowHeight: CGFloat = 24, spacing: CGFloat = 4, padding: CGFloat = 10
-    /// Each message is its own card, `cardInset` inside the box's sides (LKM-294).
-    static let cardInset: CGFloat = 4, cardRadius: CGFloat = 8
-    /// The composer's placeholder starts 19 pt in: 12 pt scroll inset plus its 7 pt draw origin.
-    static let textInset: CGFloat = 19 - inset
-    /// Trailing buttons take the send button's 30 pt column.
+    /// The header and each row are `rowHeight` tall with their content centred and no gap,
+    /// with `padding` above the first and below the last line in the visible part.
+    static let rowHeight: CGFloat = 28, padding: CGFloat = 8
+    /// The leading glyph takes the + button's 30 pt column and the trailing buttons Send's,
+    /// so the panel's columns line up with the composer's controls below it.
     static let control: CGFloat = 30
+    /// Text starts `textGap` after the glyph column.
+    static let textGap: CGFloat = 4
+    static var textX: CGFloat { control + textGap }
+    /// Hairlines end `ruleInset` before the panel's trailing edge; the header's divider also
+    /// starts `ruleInset` in, a row's separator at the text.
+    static let ruleInset: CGFloat = 12, rule: CGFloat = 0.5
     static let visibleRows = 3
-    /// A light card on the box's material: near-white in light mode, a faint white wash in dark.
-    static let cardFill = Color(nsColor: NSColor(name: nil) {
-        $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .white.withAlphaComponent(0.09) : .white.withAlphaComponent(0.88)
+    /// A faint rim that keeps the frosted panel's edge legible on a light or dark chat.
+    static let rim = Color(nsColor: NSColor(name: nil) {
+        $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .white.withAlphaComponent(0.12) : .black.withAlphaComponent(0.08)
     })
 
     @ObservedObject var model: ComposerQueueModel
@@ -105,24 +111,12 @@ struct ComposerQueue: View {
     private var note: String { model.note }
     private var canSend: Bool { model.canSend }
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
         VStack(spacing: 0) {
-            VStack(spacing: Self.spacing) {
-                if ComposerQueue.hasHeader(paused: paused, note: note) {
-                    HStack(spacing: 8) {
-                        Text(note.isEmpty ? "Paused — these won't send until you choose" : note)
-                            .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .help(note)
-                        if paused {
-                            Button("Send now") { action("queue-resume", nil) }.buttonStyle(.plain).disabled(!canSend)
-                                .help(canSend ? "Send the queued messages now" : note)
-                        }
-                    }
-                    .font(.system(size: 11)).padding(.leading, Self.textInset).padding(.trailing, Self.textInset)
-                    .frame(height: Self.rowHeight).queueFrame("header")
-                }
+            VStack(spacing: 0) {
+                if ComposerQueue.hasHeader(paused: paused, note: note) { header }
                 ScrollView {
-                    VStack(spacing: Self.spacing) {
+                    VStack(spacing: 0) {
                         ForEach(Array(model.messages.enumerated()), id: \.element.id) { index, message in
                             row(message, index: index).modifier(ComposerQueueEntrance(
                                 id: message.id, entering: model.entering.contains(message.id), motion: model.motion,
@@ -136,16 +130,39 @@ struct ComposerQueue: View {
             Color.clear.frame(height: Self.overlap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.radius))
-        .overlay { RoundedRectangle(cornerRadius: Self.radius).strokeBorder(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 0.5) }
+        .background(.thinMaterial, in: shape)
+        .overlay { shape.strokeBorder(Self.rim, lineWidth: Self.rule) }
         .coordinateSpace(name: "queue")
         .onPreferenceChange(QueueFrames.self) { measured($0) }
     }
+    /// Why the queue waits: a pause glyph and Send now when paused, otherwise the note.
+    private var header: some View {
+        HStack(spacing: 0) {
+            glyph(paused ? "pause.circle" : "clock").queueFrame("header-glyph")
+            Text(note.isEmpty ? "Paused — these won't send until you choose" : note)
+                .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                .padding(.leading, Self.textGap).frame(maxWidth: .infinity, alignment: .leading)
+                .help(note)
+            if paused {
+                Button { action("queue-resume", nil) } label: {
+                    Text("Send now").padding(.horizontal, 8).frame(height: Self.rowHeight).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).disabled(!canSend).queueFrame("resume")
+                .help(canSend ? "Send the queued messages now" : note)
+            }
+        }
+        .font(.system(size: 12)).padding(.trailing, paused ? 4 : Self.ruleInset)
+        .frame(height: Self.rowHeight)
+        .overlay(alignment: .bottom) {
+            hairline.padding(.horizontal, Self.ruleInset).queueFrame("divider")
+        }
+        .queueFrame("header")
+    }
     private func row(_ message: QueuedComposerMessage, index: Int) -> some View {
         HStack(spacing: 0) {
+            glyph(message.url == nil ? "arrow.turn.down.right" : "globe").queueFrame("glyph-\(index)")
             HStack(spacing: 8) {
                 if let url = message.url {
-                    Image(systemName: "globe").foregroundStyle(.secondary).accessibilityHidden(true)
                     Link(destination: url) {
                         Text(message.label).lineLimit(1).truncationMode(.middle)
                             .foregroundStyle(Color(nsColor: .linkColor)).queueFrame("text-\(index)")
@@ -159,12 +176,12 @@ struct ComposerQueue: View {
                 if message.attachments > 0 && !message.text.isEmpty {
                     Label("\(message.attachments)", systemImage: "paperclip").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
-            }
+            }.padding(.leading, Self.textGap)
             Button { action("queue-edit", message.id) } label: { controlLabel("pencil") }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("edit-\(index)")
                 .help("Edit queued message").accessibilityLabel("Edit queued message: \(message.label)")
             Button { action("queue-remove", message.id) } label: { controlLabel("trash") }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("remove-\(index)")
                 .help("Remove queued message").accessibilityLabel("Remove queued message: \(message.label)")
             Menu {
                 Button("Edit message") { action("queue-edit", message.id) }
@@ -175,18 +192,23 @@ struct ComposerQueue: View {
                 .frame(width: Self.control, height: Self.rowHeight).queueFrame("more-\(index)")
                 .help("Queued message actions").accessibilityLabel("Queued message actions")
         }
-        .font(.system(size: 13)).padding(.leading, Self.textInset)
-        .frame(height: Self.rowHeight).queueFrame("row-\(index)")
-        .background { card }
+        .font(.system(size: 13))
+        .frame(height: Self.rowHeight)
+        .overlay(alignment: .top) {
+            // A hairline above every row but the first, from the text to the trailing edge.
+            if index > 0 {
+                hairline.padding(.leading, Self.textX).padding(.trailing, Self.ruleInset).queueFrame("separator-\(index)")
+            }
+        }
+        .queueFrame("row-\(index)")
         .help(message.label)
     }
-    /// Draws inside the row, so the row frames, text inset and control column stay as measured.
-    private var card: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
-        return shape.fill(Self.cardFill)
-            .overlay { shape.strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5) }
-            .shadow(color: .black.opacity(0.06), radius: 1, y: 0.5)
-            .padding(.horizontal, Self.cardInset)
+    private func glyph(_ symbol: String) -> some View {
+        Image(systemName: symbol).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            .frame(width: Self.control, height: Self.rowHeight).accessibilityHidden(true)
+    }
+    private var hairline: some View {
+        Rectangle().fill(Color(nsColor: .separatorColor)).frame(height: Self.rule)
     }
     private func controlLabel(_ symbol: String) -> some View {
         Image(systemName: symbol).frame(width: Self.control, height: Self.rowHeight).contentShape(Rectangle())
@@ -211,11 +233,11 @@ final class ComposerQueueHost: NSHostingView<AnyView> {
     /// Test-only Reduce Motion; nil follows macOS (or the chat acceptance override).
     var reduceMotionOverride: Bool?
     var reduceMotion: Bool { reduceMotionOverride ?? ChatSystemEnvironment.shared.accessibility.reduceMotion }
-    /// The visible part, above the composer: padding, the note line and up to three rows.
+    /// The visible part, above the composer: padding, the header and up to three rows.
     static func height(count: Int, paused: Bool, note: String = "") -> CGFloat {
         guard count > 0 else { return 0 }
         let lines = min(count, ComposerQueue.visibleRows) + (ComposerQueue.hasHeader(paused: paused, note: note) ? 1 : 0)
-        return 2 * ComposerQueue.padding + CGFloat(lines) * ComposerQueue.rowHeight + CGFloat(lines - 1) * ComposerQueue.spacing
+        return 2 * ComposerQueue.padding + CGFloat(lines) * ComposerQueue.rowHeight
     }
     init() {
         super.init(rootView: AnyView(EmptyView())); sizingOptions = []; isHidden = true
@@ -246,15 +268,25 @@ final class ComposerQueueHost: NSHostingView<AnyView> {
     /// `visible` is the part above the composer, and x values are in the superview's space.
     func inspect(composerTop: CGFloat) -> [String: Any] {
         func line(_ key: String) -> [String: Double]? {
-            frames[key].map { ["top": Double($0.minY), "bottom": Double($0.maxY), "midY": Double($0.midY), "minX": Double(frame.minX + $0.minX), "midX": Double(frame.minX + $0.midX)] }
+            frames[key].map { ["top": Double($0.minY), "bottom": Double($0.maxY), "midY": Double($0.midY), "minX": Double(frame.minX + $0.minX),
+                               "midX": Double(frame.minX + $0.midX), "maxX": Double(frame.minX + $0.maxX), "width": Double($0.width), "height": Double($0.height)] }
         }
         var rows: [[String: Any]] = []
         for index in 0..<count {
             guard let row = line("row-\(index)") else { continue }
-            rows.append(["row": row, "text": line("text-\(index)") ?? [:], "more": line("more-\(index)") ?? [:]])
+            var measured: [String: Any] = ["row": row]
+            for part in ["text", "glyph", "edit", "remove", "more", "separator"] { measured[part] = line("\(part)-\(index)") ?? NSNull() }
+            rows.append(measured)
         }
-        return ["visible": Double(frame.maxY - composerTop), "height": Double(frame.height), "header": line("header") ?? NSNull(), "rows": rows,
-                "cards": ["inset": Double(ComposerQueue.cardInset), "radius": Double(ComposerQueue.cardRadius)],
+        // LKM-302: one panel; its edges and columns in the superview's x, rows as measured.
+        let panel: [String: Any] = ["minX": Double(frame.minX), "maxX": Double(frame.maxX), "radius": Double(ComposerQueue.radius),
+                                    "textX": Double(frame.minX + ComposerQueue.textX), "ruleInset": Double(ComposerQueue.ruleInset), "rule": Double(ComposerQueue.rule)]
+        var header: Any = NSNull()
+        if let measured = line("header") {
+            header = ["frame": measured, "glyph": line("header-glyph") ?? NSNull(), "divider": line("divider") ?? NSNull(),
+                      "resume": line("resume") ?? NSNull(), "paused": model.paused]
+        }
+        return ["visible": Double(frame.maxY - composerTop), "height": Double(frame.height), "hidden": isHidden, "panel": panel, "header": header, "rows": rows,
                 "motion": model.motion.dictionary.merging(["insertions": insertions, "lastInserted": lastInserted, "lastInsertion": lastInsertion, "reduceMotion": reduceMotion]) { _, new in new }]
     }
     /// Test-only: waits for the insertion after `after`, then captures `view` `shots` times,

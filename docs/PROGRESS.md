@@ -45,6 +45,127 @@ Newest first. Append a dated entry when you finish a chunk of work.
   native run was skipped behind the `project-switching` failure above. Later preflight unit
   runs failed in unrelated timing-sensitive tests on a loaded machine, and the session's
   verification budget ran out. No captures or geometry from this change exist yet.
+## 2026-10-22 — LKM-312: the conversation's end marker is measured, so follows settle
+
+- **Report.** Build 1137: TreziHost at 100% of one core (2.4 GB). The main thread was in
+  `GraphHost.flushTransactions`, AttributeGraph updates and `LazyVStack` layout under
+  `ChatConversation.conversationScroll`. The UI stayed frozen after the turn ended and
+  ignored SIGTERM, whose handler runs on the main queue.
+- **Cause.** In `ChatConversation.body`, `.onPreferenceChange(BottomPosition.self)` came
+  after `.overlay { stickyRequest }`. Read there, the end marker's preference was the
+  overlay's default 0, so `model.bottomPosition` stayed 0.
+  - `ChatLatestSettle.step` requires `bottom > 0`, so it returned `.bottom` on every step
+    and never `.settled`.
+  - Every follow ran out all its attempts (20 per run, up to 4 runs). Each one mutated
+    `@State` (`pinRequest`, a `latestNudge` toggle every third step), which is a
+    transaction flush and a lazy-stack relayout. Each streamed frame (a full transcript
+    every 33 ms) and each pin that moved (`onMovedToEnd`) started or extended one.
+  - The existing `chat-latest-settle` fixture copies the view without the overlay, so it
+    never saw this.
+- **Reproduction** (offscreen host of the real chat sources, 120 rich messages):
+  - Pre-fix: the marker read 0. Settles took 20/40/80 attempts, and an 8 s stream at 30
+    frames/s ran 190 settle steps.
+  - With the reader above the overlay: the marker read 569.8–570 (the reading edge).
+    Settles took 2–8 attempts, and the same stream ran 0 steps.
+  - The unbounded main-queue backlog behind the 2.4 GB and the ignored SIGTERM was not
+    reproduced at this scale. The repeated relayout is the work that fell behind.
+- **Fix.** The `BottomPosition` reader now comes before the sticky-request overlay. Follow,
+  pin, latest-button and settle logic are unchanged.
+- **Test.** Unit `native-chat-bottom-marker` (`test/fixtures/chat-bottom-marker/main.swift`)
+  hosts the real `NativeChat` and samples after load, streaming and completion. It requires
+  the marker at the reading edge and fewer than 20 settle attempts.
+  - Against the pre-fix `Chat.swift` (`CHAT_SWIFT=<path>`) it fails: bottom 0, 80 attempts
+    while streaming.
+- **Separate defect, not changed here: the service restart loops in the product log.**
+  Lines like `Request hello refused: recoveryRequired`, `Backend exited status=36608/4352`
+  and `App connection lost` in `~/Library/Logs/Trezi` come from the unit test
+  `test/service-process.mjs`. It starts the real service without `TREZI_LOG_DIR`, so its
+  deliberate recovery and refusal cases write to the user's product log.
+  - That day they appear every 5–7 minutes from 00:15 (one per test run), with no host
+    lines around them.
+  - They are unrelated to the freeze.
+
+## 2026-10-22 — LKM-302: the composer queue is one frosted panel with flat rows
+
+- **Supersedes LKM-294's cards.** The owner asked for one subtle frosted panel instead of a grey
+  tray with a white card per message. `src/native/ComposerQueue.swift` now:
+  - Draws the panel once: `.thinMaterial` in a continuous 18 pt rounded rectangle with a faint
+    0.5 pt rim (`ComposerQueue.rim`). It is still 10 pt inside the composer's sides and tucked
+    24 pt under it.
+  - Draws rows flat on the panel, with no fill, border or shadow of their own. A 0.5 pt
+    `separatorColor` hairline sits above every row but the first, from the text to 12 pt
+    before the trailing edge.
+  - Adds a leading glyph in the + button's 30 pt column: `arrow.turn.down.right`, or `globe` for
+    a link. The text starts 4 pt after that column. The edit, remove and … controls stay in
+    Send's column.
+  - Gives the header a glyph (`pause.circle` when paused, `clock` for a waiting note) and a
+    12 pt-inset hairline divider. Paused keeps Send now (`queue-resume`, disabled when
+    `canSend` is false).
+- **Geometry.** Rows and the header are 28 pt with no gap between them, with 8 pt padding. The
+  totals stay 44 / 72 / 100 pt for 1 / 2 / 3+ rows (+28 with a header), so the composer's
+  heights, overlap and scroll behaviour are unchanged. Every control's hit target is 30 × 28.
+  The text no longer aligns with the placeholder (LKM-198), because the glyph now takes that
+  column.
+- **Unchanged.** The edit, remove, copy and menu actions; no reorder or steering actions exist,
+  and none were added. Also unchanged: `ComposerQueueModel` row identity, entrance motion
+  (`ComposerQueueEntrance`, bottom-to-top, Reduce Motion fade only) and the hidden empty state.
+- **Tests.**
+  - `queueGeometryProblems` (`src/native/smoke-queue.ts`) checks the following:
+    - flat adjacent rows, with hairlines at every boundary and none above row 0;
+    - the glyph over the + button's alignment rect (new `plusMidX` in `composerInspect`) and
+      the text after the glyph column;
+    - the … control over Send, and hit targets of at least 28 pt;
+    - the header's glyph, its divider, and Send now present if and only if the queue is
+      paused.
+  - `emptyQueueProblems` checks the panel after the last removal.
+  - The chat smoke adds a paused three-row state (the real controller's `paused`, as after
+    Stop), the resumed state and the empty state. The Resolve note at both widths now checks
+    the header's paused flag.
+  - Each geometry check now also writes a foreground `captureVisibleComposer` capture per
+    appearance (`-queue-<label>-{light,dark}-visible.png`), as well as the offscreen one.
+  - `test/composer-queue-panel.mjs` (unit) runs the checker against synthetic layouts and
+    rejects the LKM-294 cards. The composer-layout fixture checks the + and Send column
+    alignment and that rows have no gap.
+## 2026-10-22 — LKM-304: an accepted send clears exactly the draft it sent
+
+- **Cause.** Swift applies a snapshot's draft only when its revision is at least the
+  composer's own. Bun cleared the draft on an accepted send without a new revision. Any
+  composer edit emitted after Return and before that snapshot arrived had a newer revision:
+  - AppKit's smart quote curling the apostrophe (the report: bubble `'`, draft `’`), or a key
+    typed after Return.
+  - Swift then ignored the clear, and Bun accepted the edit's full text as the draft again.
+  - The message stayed in the composer while the turn ran, with Send instead of Stop, and
+    could be sent twice.
+  - `test/composer-sent-draft.mjs` reproduced it on the pre-fix controller:
+    `'Don’t stop' !== ''`.
+- **Fix.** `Chat.sent` (`count`, `revision`) names the last accepted send and the draft
+  revision it sent (`clearSentDraft`, `src/native/chat-state.ts`).
+  - Inputs carry the count the composer applied. Older ones were typed against a sent draft
+    and are ignored.
+  - `Composer.swift` keeps, per revision, the length of the text then. Edits inside it (smart
+    quotes, dashes, replacements) move that length, typing after it does not.
+  - On a newer count it removes exactly that prefix, keeps the rest (the caret too) and sends
+    it as the next input.
+  - `submit` names the revision captured before `initialize`, so text typed meanwhile stays.
+  - A refused send (not ready, switching, start hold) changes nothing.
+  - The Send button reports whether it showed Stop, so a second Send click emitted before the
+    snapshot no longer interrupts the turn the first one started.
+- **Tests.** Unit `composer-sent-draft`: smart quote, new text, double click and Stop,
+  queued send, refusal, typing during `initialize`. Native `composer-send` (composer group)
+  drives the real `NSTextView` in one main-thread turn per sequence through `composerPerform`
+  `steps`/`substitute`/`append`.
+- **Not changed.** A non-busy `agent:send` failure keeps the message as a transcript turn
+  ("Unable to send"), as before. Programmatic sends still clear the draft.
+- **Review repair: the planning chat's queued send.** `planningSend` queued a message sent
+  while its turn ran (`planningQueued`) and returned before clearing the draft, so the text
+  stayed in the composer and Enter queued it again.
+  - It now clears the draft (`clearSentDraft`) when it queues, and re-renders.
+  - Both planning paths clear only when the sent text is the composer's own draft. A queued
+    message sent when the turn ends no longer wipes what the user typed meanwhile.
+  - Unit case 7 in `composer-sent-draft`: one queue entry after a stale input and a second
+    Enter, `sent.count` raised, the later draft kept.
+  - The native `composer-send` check has still not run: this repair session had no native
+    calls. It needs `--only=composer` from the manager.
 ## 2026-10-22 — LKM-297 reconcile: reviewed selector patch onto main e3567469 (local, unpublished)
 
 Status: **locally ready, awaiting the coordinator's integrated gates and GitHub CI; not Done.** Details: `docs/TEST-CLEANUP-V2.md` "Reconcile onto main e3567469".
