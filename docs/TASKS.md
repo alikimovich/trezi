@@ -10,6 +10,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `test/toolbar-island-dividers.mjs` (pixels and layers, against a stock control); core `shell-layout` asserts `islandDividers` are zero on macOS 27.
 - [x] Review repair: KVO re-hides dividers AppKit adds or shows without a parent layout; unit covers press, click, reveal, insert; smoke `assertIslandDividers` after island use (shell-layout) and at every width (toolbar-address).
 - [ ] Native `core` group (`shell-layout`, `toolbar-address` with `smoke-toolbar-overflow.ts`) not yet run; read `islands-layers-open.png`, `islands-after-use.png` and `toolbar-*.png`.
+## Unit tier under parallel load: remaining findings (LKM-314, follow-up to LKM-313)
+
+- [x] repository-owner: per-suite parity limit 300 s (was 100 s, and killed suites failed every logged run since 2026-10-21); lease-deadlock race 60 s; budget 600 s.
+- [x] workflow-owner, workflow-durability: budget 420 s (logged TIMEOUTs were still making progress at 240 s).
+- [x] Operator procedure in `docs/TESTING.md` ("Parallel load check").
+- [ ] Operator: 5 consecutive rounds of `node test/run.mjs unit --timeout-ms=120000 --report` in 3 checkouts at once, all green; attach the summaries to the PR.
 ## Faster PR CI unit job (LKM-327)
 
 - [x] Typecheck on its own Linux job; unit tier in 3 macOS shards on a pull request (`--shard=i/n`, deterministic split), whole tier on one runner on `main`; `typecheck + unit tests` gate keeps the check name.

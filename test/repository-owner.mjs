@@ -157,6 +157,9 @@ try {
       'chat-ghost-park',
       'setup-worktree'
     ]
+    // A hung suite is killed here. LKM-314: 14 suites start at once, and under three parallel
+    // unit runs chat-worktrees and chat-landing were killed at 100 s with no output yet.
+    const suiteLimitMs = 300_000
     const results = await Promise.all(
       suites.map(
         (suite) =>
@@ -181,10 +184,15 @@ try {
             child.stderr.on('data', (data) => {
               output += data
             })
-            const timer = setTimeout(() => child.kill('SIGKILL'), 100_000)
+            let killed = false
+            const timer = setTimeout(() => {
+              killed = true
+              child.kill('SIGKILL')
+            }, suiteLimitMs)
             child.on('exit', (code, signal) => {
               clearTimeout(timer)
-              resolve({ suite, code, signal, output })
+              const limit = `${signal} at the ${suiteLimitMs / 1000} s suite limit`
+              resolve({ suite, code, signal: killed ? limit : signal, output })
             })
           })
       )
@@ -259,7 +267,8 @@ try {
           return (await commitLiveTurn(live, ['d.txt'], { title: 'inside the lease' })).committed
         })
       ),
-      sleep(10_000).then(() => 'deadlock')
+      // A deadlock never resolves; 60 s only keeps two commits under load from looking like one.
+      sleep(60_000).then(() => 'deadlock')
     ])
     assert.equal(inner, true)
 
