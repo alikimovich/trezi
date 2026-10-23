@@ -34,6 +34,19 @@ Newest first. Append a dated entry when you finish a chunk of work.
     recorded, not asserted.
 - **Verification.** Swift typecheck, typecheck, lint and the quick tier. No native
   run was available, so the check and the pre-fix reproduction are unrun.
+- **Native acceptance (operator step, foreground desktop).** Run core `toolbar-address`
+  twice and keep `toolbar-fullscreen.json`, `toolbar-fullscreen-*.png` and
+  `toolbar-overflow.json` from both runs.
+  1. Before: the fixture and the test-only hooks (`menu-bar`, `toolbar-window-move`,
+     `captureToolbarWindow`) with the Swift fix reverted (`ToolbarFullScreen.swift`'s
+     `mainFrame`/`toolbarFrames`/observers, and `ToolbarAddress.swift`'s measure).
+     Expect the `menu-bar` or `toolbar-window-move` stage to fail on `address` missing
+     from `visibleItems` or a non-empty `actionableOverflow`/`moreOverflowed`.
+  2. After: this tree. Expect it to pass, with the windowed `smoke-toolbar-overflow.ts`
+     (LKM-296) passing in the same run.
+  If `assertPublishLast`'s 24 pt inset limit or the 1 pt right-group tolerance is wrong
+  for the full-screen toolbar window, adjust only that threshold in
+  `smoke-toolbar-fullscreen.ts`.
 ## 2026-10-23 — LKM-327: PR CI unit tier in 3 shards
 
 - **Why.** "typecheck + unit tests" took 12 min on PR #300. It was one 3-core macOS
