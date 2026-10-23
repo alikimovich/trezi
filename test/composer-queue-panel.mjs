@@ -1,7 +1,8 @@
 // LKM-302: the native composer queue is one frosted panel with flat rows. The chat smoke's
 // geometry check (`src/native/smoke-queue.ts`) accepts that layout and rejects the LKM-294
-// per-message cards, a missing or misplaced hairline, a glyph off the + button, a missing
-// pause control, small hit targets and an empty queue that still shows its panel.
+// per-message cards, a missing, misplaced or inset (LKM-318) hairline, a glyph off the +
+// button, a missing pause control, small hit targets and an empty queue that still shows its
+// panel.
 import assert from 'node:assert/strict'
 import {
   emptyQueueProblems,
@@ -47,7 +48,7 @@ function inspected({ rows, header = false, paused = false, row = 28, gap = 0, pa
       edit: box(320, 350, top, bottom),
       remove: box(350, 380, top, bottom),
       more: box(380, 410, top, bottom),
-      separator: index > 0 ? box(44, 398, top, top + 0.5) : null
+      separator: index > 0 ? box(10, 410, top, top + 0.5) : null
     })
     y = bottom + gap
   }
@@ -110,12 +111,18 @@ unruled.queueGeometry.rows[1].separator = null
 fails(unruled, 2, false, false, /no separator above it/, 'missing hairline')
 
 const ruledFirst = inspected({ rows: 2 })
-ruledFirst.queueGeometry.rows[0].separator = box(44, 398, 8, 8.5)
+ruledFirst.queueGeometry.rows[0].separator = box(10, 410, 8, 8.5)
 fails(ruledFirst, 2, false, false, /row 0 has a separator/, 'hairline above the first row')
 
 const thick = inspected({ rows: 2 })
-thick.queueGeometry.rows[1].separator = box(44, 398, 36, 40)
+thick.queueGeometry.rows[1].separator = box(10, 410, 36, 40)
 fails(thick, 2, false, false, /wanted a hairline/, 'a thick separator')
+
+// LKM-318: the pre-318 separator, from the text to 12 pt before the trailing edge.
+const inset = inspected({ rows: 2 })
+inset.queueGeometry.rows[1].separator = box(44, 398, 36, 36.5)
+fails(inset, 2, false, false, /separator starts at the panel's leading edge/, 'inset start')
+fails(inset, 2, false, false, /separator ends at the panel's trailing edge/, 'inset end')
 
 const offGlyph = inspected({ rows: 1 })
 offGlyph.queueGeometry.rows[0].glyph = box(14, 26, 8, 36)
