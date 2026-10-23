@@ -155,9 +155,26 @@ Measured on the operator Mac (12 cores, 8 workers), 2026-10-05:
 `workflow-durability` no longer waits on client deadlines: its fixtures pass a manual
 clock that expires on the fixture's exit or a dropped reply (LKM-209). It and
 `workflow-owner` have a 240 s budget because CI compiles the workflow fixture cold.
+Since LKM-314 that budget is 420 s, because three unit runs sharing the Mac took them past 240 s.
 
 The remaining long tests are runtime, not compile: the composer and settings layout fixtures
 (run-loop turns), and the repository, platform and preferences owners.
+
+### Parallel load check (LKM-313, LKM-314)
+
+The manager runs quick verification for several worktrees at once. To prove the unit tier holds
+up under that load, run it in three checkouts of the same commit at once. The run lock is per
+checkout, so they must be separate worktrees, each with its own `bun install`:
+
+```sh
+node test/run.mjs unit --timeout-ms=120000 --report   # in all three at the same moment
+```
+
+Repeat for 5 rounds in a row. A round passes only when all three exit 0 (their `SUMMARY:` line
+lists only PASS and SKIP). Keep each run's `Report:` file (`summary.json`). Fix a test that fails here
+as the others were fixed: give a longer budget only where a real process starts, share no
+state, and keep every assertion. If it still fails, move it to `NATIVE` in `test/tiers.mjs`
+and add a note to `docs/PROGRESS.md`.
 
 ### Native build speed (LKM-175)
 

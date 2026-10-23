@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Unit tier under parallel load: remaining findings (LKM-314, follow-up to LKM-313)
+
+- [x] repository-owner: per-suite parity limit 300 s (was 100 s, and killed suites failed every logged run since 2026-10-21); lease-deadlock race 60 s; budget 600 s.
+- [x] workflow-owner, workflow-durability: budget 420 s (logged TIMEOUTs were still making progress at 240 s).
+- [x] Operator procedure in `docs/TESTING.md` ("Parallel load check").
+- [ ] Operator: 5 consecutive rounds of `node test/run.mjs unit --timeout-ms=120000 --report` in 3 checkouts at once, all green; attach the summaries to the PR.
+
 ## Native footer build badge alignment and development build identity (LKM-301)
 
 - [x] Dot drawn and pinned half the cap height above the identity's baseline; identity and context are separate labels (context truncates first, in the middle), no overlap or clipping at a 180 pt sidebar (`src/native/BuildBadge.swift`).
