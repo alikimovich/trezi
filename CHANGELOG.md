@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
 ### Added
 - The inspector's Custom tab has an "Ask for controls…" field: describe what to tune (Return sends, Shift-Return adds a line) and the agent wires a control panel to the selected element's source, shown in the tab with live controls while a progress line (with Cancel) or a clear error says how the request went; a request that cannot run never hangs the field. Each request adds a panel that stays with the element. Each panel and control has a menu to comment on it, which revises it in place and keeps the other controls and their values, or to remove it. Repair… and Create controls… now use the same field (LKM-323).
 - Gemini is an optional provider: turn it on in Settings → AI Providers to get its Pro, Flash and Flash-Lite models in the model picker, signed in with the Gemini CLI's Login with Google or a Gemini API key saved under Gemini… (encrypted with your Keychain). Off, the default, hides its models and never starts Gemini. The setting is kept across relaunches (LKM-315).
