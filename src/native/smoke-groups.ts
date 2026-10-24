@@ -70,6 +70,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'device-frame': ['core'],
   'selection-input': ['core', 'selection'],
   inspector: ['core'],
+  'inspector-custom': ['core'],
   'layers-island': ['core'],
   'movable-islands': ['core'],
   'preview-overlay': ['core'],

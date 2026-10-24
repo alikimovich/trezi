@@ -41,7 +41,7 @@ const STYLE_PROPS = new Set([
   'transition-timing-function'
 ])
 const MAX_PARAMS = 12
-const MAX_PANELS = 20
+export const MAX_PANELS = 20
 const MAX_LABEL = 80
 const MAX_MANIFEST_BYTES = 32 * 1024
 const MAX_STRING_VALUE = 500
@@ -162,6 +162,11 @@ export function validateManifest(input: unknown): ControlPanelManifest | { error
     return { error: 'unknown presentation' }
   if (m.replay !== undefined && (typeof m.replay !== 'boolean' || m.presentation !== 'animation'))
     return { error: 'replay is only supported for animation panels' }
+  if (
+    m.revision !== undefined &&
+    (!Number.isInteger(m.revision) || (m.revision as number) < 1 || (m.revision as number) > 1e6)
+  )
+    return { error: 'revision must be a positive integer' }
   const seen = new Set<string>()
   const params: ControlParam[] = []
   for (const raw of m.params) {
@@ -178,6 +183,7 @@ export function validateManifest(input: unknown): ControlPanelManifest | { error
     title: m.title,
     params,
     createdAt: m.createdAt,
+    ...(m.revision !== undefined ? { revision: m.revision as number } : {}),
     ...(m.presentation === 'animation'
       ? { presentation: 'animation' as const, replay: m.replay === true }
       : {})

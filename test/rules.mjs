@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 45, 'version bumped to 45')
+assert(TREZI_RULES_VERSION === 46, 'version bumped to 46')
 // LKM-281: a merge waits for the user's card; no model-supplied flag approves it.
 assert(!/confirmed: true/.test(r), 'no model-supplied merge confirmation')
 assert(/publish_merge first shows the user a card/.test(r), 'merge waits for the host card')
@@ -346,6 +346,11 @@ for (const rules of [withTools, codexControls]) {
   assert(
     /Never substitute a separate panel/.test(rules),
     'Chat is the required control destination'
+  )
+  // LKM-323: the inspector's Custom tab asks for a trezi-controls block instead.
+  assert(
+    /a message headed "Inspector Custom tab request"[\s\S]*trezi-controls block/.test(rules),
+    'Custom tab requests are the one exception'
   )
   // LKM-201: readiness and preview identity first, only the relevant code, define early.
   assert(
