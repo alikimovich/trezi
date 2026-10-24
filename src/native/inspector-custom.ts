@@ -24,8 +24,8 @@ export const selectionFiles = (element: SelectedElement | null) => [
   )
 ]
 
-const asks = (m: NativeChatMessage, id: string) =>
-  m.role === 'user' && m.text.includes(`${CONTROLS_REQUEST_HEADER} ${id}.`)
+const mentions = (text: string, id: string) => text.includes(`${CONTROLS_REQUEST_HEADER} ${id}.`)
+const asks = (m: NativeChatMessage, id: string) => m.role === 'user' && mentions(m.text, id)
 
 /** Whether request `id` is the chat's latest user message: the turn now beginning is its. */
 export function requestRunning(messages: NativeChatMessage[], id: string) {
@@ -49,31 +49,82 @@ export function requestAnswer(messages: NativeChatMessage[], id: string): string
 
 type Boundary = (key: string, kind: 'begin' | 'landed' | 'failed', turn: string | null) => void
 
+/** What a request needs to know of its chat: its messages, queued texts and activity. */
+export interface RequestChat {
+  messages: NativeChatMessage[]
+  /** The texts waiting in the chat's queue. */
+  queued: string[]
+  /** A turn is sending, streaming or landing. */
+  running: boolean
+  /** Stop held the queue: nothing queued sends until the user chooses. */
+  paused: boolean
+}
+
+export interface RequestChats {
+  chatFor(root: string): string | null
+  /** Null once the chat is closed. */
+  state(key: string): RequestChat | null
+  submit(key: string, text: string): Promise<unknown>
+  /** Takes request `id` out of the chat's queue. */
+  dequeue(key: string, id: string): void
+  boundaries: Set<Boundary>
+  /** Called with the chat's key whenever its state changed. */
+  changes: Set<(key: string) => void>
+}
+
 /**
  * Runs a request as a turn in the project's chat and resolves with its answer once that
  * turn ends: its sources reached the live checkout, so the panel can be checked against
  * them. The request may wait behind a running turn; only the turn that begins with it
- * counts, and one that does not land rejects.
+ * counts, and one that does not land rejects. A request whose turn can no longer begin
+ * (the send failed or was refused, it was stopped in the queue or discarded) rejects
+ * too, and aborting the signal withdraws it, so a request never waits forever.
  */
-export function chatRequests(
-  chatFor: (root: string) => string | null,
-  messages: (key: string) => NativeChatMessage[] | null,
-  submit: (key: string, text: string) => Promise<unknown>,
-  boundaries: Set<Boundary>
-) {
-  return (root: string, prompt: string, id: string) =>
+export function chatRequests(chats: RequestChats) {
+  return (root: string, prompt: string, id: string, signal?: AbortSignal) =>
     new Promise<string>((resolve, reject) => {
-      const key = chatFor(root)
+      const key = chats.chatFor(root)
       if (!key) return reject(new Error('No chat is open for this project.'))
-      let turn: string | null | undefined
+      let turn: string | null | undefined,
+        sent = false,
+        done = false
       const settle = (error: string | null, answer = '') => {
-        boundaries.delete(listen)
+        if (done) return
+        done = true
+        chats.boundaries.delete(onBoundary)
+        chats.changes.delete(onChange)
+        signal?.removeEventListener('abort', onAbort)
         if (error) reject(new Error(error))
         else resolve(answer)
       }
-      const listen: Boundary = (chat, kind, at) => {
+      // Settle first: dequeuing changes the chat, which would re-enter `onChange`.
+      const withdraw = (error: string) => {
+        settle(error)
+        chats.dequeue(key, id)
+      }
+      const onAbort = () => withdraw('The request was cancelled.')
+      // After the send was accepted, the request is queued or its message is in the chat;
+      // a chat that is neither running it nor holding it will never answer.
+      const onChange = (changed: string) => {
+        if (changed !== key || !sent || turn !== undefined) return
+        const chat = chats.state(key)
+        if (!chat) return settle('The chat closed before the agent answered.')
+        if (chat.messages.some((m) => asks(m, id))) {
+          if (chat.running) return
+          // A failed send or a Stop pauses the chat (chat-controller.ts run/stop).
+          if (chat.paused) return settle('The agent did not run this request. Try again.')
+          const answer = requestAnswer(chat.messages, id)
+          if (answer !== null) return settle(null, answer)
+          return settle('The agent did not start this request. Try again.')
+        }
+        if (!chat.queued.some((text) => mentions(text, id)))
+          return settle('The request was not sent to the agent.')
+        if (chat.paused && !chat.running)
+          withdraw('The chat is stopped, so the request was not sent.')
+      }
+      const onBoundary: Boundary = (chat, kind, at) => {
         if (chat !== key) return
-        const current = messages(key)
+        const current = chats.state(key)?.messages
         if (!current) return settle('The chat closed before the agent answered.')
         if (kind === 'begin') {
           if (turn === undefined && requestRunning(current, id)) turn = at
@@ -87,8 +138,17 @@ export function chatRequests(
           return settle("The agent's turn did not land, so its controls were not saved.")
         settle(null, requestAnswer(current, id) ?? '')
       }
-      boundaries.add(listen)
-      submit(key, prompt).catch((error) => settle(String(error?.message ?? error)))
+      if (signal?.aborted) return reject(new Error('The request was cancelled.'))
+      chats.boundaries.add(onBoundary)
+      chats.changes.add(onChange)
+      signal?.addEventListener('abort', onAbort)
+      chats.submit(key, prompt).then(
+        () => {
+          sent = true
+          onChange(key)
+        },
+        (error) => settle(String(error?.message ?? error))
+      )
     })
 }
 
@@ -101,13 +161,15 @@ export function chatRequests(
 export class InspectorCustom {
   /** What the next request comments on; null asks for a new panel. */
   target: { panel: string; param?: string } | null = null
-  pending: { root: string; label: string } | null = null
-  error: { root: string; message: string } | null = null
+  /** The request running in each project: one at a time per project, never across them. */
+  readonly pending = new Map<string, { label: string; abort: AbortController }>()
+  readonly errors = new Map<string, string>()
   focus = 0
   /** Runs the request turn and resolves with its answer; the runtime assigns the chat. */
-  generate: (root: string, prompt: string, id: string) => Promise<string> = async () => {
-    throw new Error('No chat is open for this project.')
-  }
+  generate: (root: string, prompt: string, id: string, signal?: AbortSignal) => Promise<string> =
+    async () => {
+      throw new Error('No chat is open for this project.')
+    }
   private sequence = 0
   constructor(private readonly host: CustomHost) {}
 
@@ -123,8 +185,8 @@ export class InspectorCustom {
   view(): NativeInspectorCustom {
     const root = this.host.state.root,
       target = this.targetPanel(),
-      pending = this.pending?.root === root ? this.pending.label : undefined,
-      error = this.error?.root === root ? this.error.message : undefined
+      pending = this.pending.get(root)?.label,
+      error = this.errors.get(root)
     const source = !!this.host.element?.source
     return {
       placeholder: !source
@@ -137,7 +199,7 @@ export class InspectorCustom {
       }),
       ...(pending && { pending }),
       ...(error && { error }),
-      enabled: source && !this.pending,
+      enabled: source && !pending,
       focus: this.focus
     }
   }
@@ -175,7 +237,7 @@ export class InspectorCustom {
             panel.manifest.id,
             param.id
           )
-          this.error = result && 'error' in result ? { root, message: result.error } : null
+          this.setError(root, result && 'error' in result ? result.error : null)
           if (this.target?.panel === panel.manifest.id && this.target.param === param.id)
             this.target = null
           await this.host.refresh()
@@ -183,14 +245,24 @@ export class InspectorCustom {
         }
   }
 
+  private setError(root: string, message: string | null) {
+    if (message) this.errors.set(root, message)
+    else this.errors.delete(root)
+  }
+
+  /** Withdraws the project's running request: it stops waiting and nothing is saved. */
+  cancel(root = this.host.state.root) {
+    this.pending.get(root)?.abort.abort()
+  }
+
   async request(text: string) {
     const host = this.host,
       root = host.state.root,
       element = host.element,
       words = text.trim()
-    if (!words || !root || this.pending) return
+    if (!words || !root || this.pending.has(root)) return
     if (!element?.source) {
-      this.error = { root, message: 'Select an element with source code to ask for controls.' }
+      this.setError(root, 'Select an element with source code to ask for controls.')
       host.publish()
       return
     }
@@ -203,15 +275,18 @@ export class InspectorCustom {
       ...(target && { panel: JSON.stringify(target.panel) }),
       ...(target?.param && { param: { id: target.param.id, label: target.param.label } })
     })
-    this.pending = {
-      root,
-      label: target ? `Revising ${target.param?.label ?? target.panel.title}…` : 'Making controls…'
-    }
-    this.error = null
+    const abort = new AbortController()
+    this.pending.set(root, {
+      label: target ? `Revising ${target.param?.label ?? target.panel.title}…` : 'Making controls…',
+      abort
+    })
+    this.setError(root, null)
     this.target = null
     host.publish()
     try {
-      const parsed = parseControlsAnswer(await this.generate(root, prompt, id), id)
+      const answer = await this.generate(root, prompt, id, abort.signal)
+      if (abort.signal.aborted) throw new Error('The request was cancelled.')
+      const parsed = parseControlsAnswer(answer, id)
       if ('error' in parsed) throw new Error(parsed.error)
       const saved = await host.invoke('controls:save', root, parsed.manifest, {
         files,
@@ -220,10 +295,13 @@ export class InspectorCustom {
       })
       if (saved && 'error' in saved) throw new Error(saved.error)
     } catch (error) {
-      this.error = { root, message: error instanceof Error ? error.message : String(error) }
+      // A request the user cancelled is not a failure.
+      if (!abort.signal.aborted)
+        this.setError(root, error instanceof Error ? error.message : String(error))
     } finally {
-      this.pending = null
+      this.pending.delete(root)
     }
     if (host.state.root === root) await host.refresh()
+    else host.publish()
   }
 }

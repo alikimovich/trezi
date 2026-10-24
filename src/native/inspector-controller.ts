@@ -723,6 +723,10 @@ export class NativeInspectorController {
           )
         return
       }
+      if (action.action === 'custom-cancel') {
+        this.custom.cancel(root)
+        return
+      }
       if (action.action === 'custom-target') {
         this.custom.clearTarget()
         return

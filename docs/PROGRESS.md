@@ -2,6 +2,31 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-323 repair: a Custom tab request can no longer hang
+
+- **Why.** Review found `chatRequests` settled only on a turn boundary or a rejected
+  submit. `NativeChatController.submit/run` often return normally with no agent event
+  (a refused send, a failed `agent:send`, a queued message the user then stopped or
+  discarded), so `pending` stayed set and, being one global value, locked the field in
+  every project until relaunch.
+- **Fix.** `chatRequests` now takes a `RequestChats` object and also watches the chat
+  itself (`NativeChatController.watchers`, called from `changed`). After the send was
+  accepted the request is either queued or its message is in the chat; it settles with
+  an error when it is neither (refused, discarded), when it is queued in a paused chat
+  (it is taken back out of the queue), or when its message is there but nothing runs
+  it (a failed send or Stop pauses the chat). A turn that ended without a recorded
+  begin settles with the answer found in the chat. `pending` and errors are keyed by
+  root, so one project cannot lock another, and the pending line has a Cancel
+  (`custom-cancel`, an `AbortSignal` into `generate`) that withdraws the request.
+- **Prompt.** The example `trezi-controls` line is built with `JSON.stringify` and the
+  page-sourced file goes through `oneLine`, so it cannot add prompt lines.
+- **Checks.** `test/control-requests.mjs` gained: a send that fails without
+  boundaries, a refused send, stop-while-queued, discard-while-queued, still waiting,
+  cancel, chat close, a missed begin, per-root pending, Cancel through the controller
+  and the hostile file name. The native `inspector-custom` smoke also checks a failed
+  request's error; it still has not been run (no native verification calls in this
+  session).
+
 ## 2026-10-23 — LKM-323: Custom tab requests, comments and removal
 
 - **Why.** The Custom tab was empty until a chat turn happened to define a panel.

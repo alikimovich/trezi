@@ -55,7 +55,7 @@ export function controlsPrompt(
   else
     lines.push(
       request.param
-        ? `Change only the control \`${request.param.id}\` ("${oneLine(request.param.label, 80)}") of this Custom tab panel. My comment: "${oneLine(text, 1000)}". Keep its id. The other controls are kept as they are.`
+        ? `Change only the control \`${oneLine(request.param.id, 64)}\` ("${oneLine(request.param.label, 80)}") of this Custom tab panel. My comment: "${oneLine(text, 1000)}". Keep its id. The other controls are kept as they are.`
         : `Revise this Custom tab panel. My comment: "${oneLine(text, 1000)}". Keep every control I did not mention, with its id and its source value.`,
       'The current panel:',
       '```json',
@@ -68,7 +68,27 @@ export function controlsPrompt(
     `2. If a value is not a tweakable literal yet, extract it to a named top-level constant in that file (e.g. \`const RADIUS_PX = 12\`). Keep runtime behavior identical.`,
     `3. Do not call chat_island: Trezi shows this panel in the inspector, not in the chat. End your answer with exactly one fenced block:`,
     '```trezi-controls',
-    `{"request":"${request.id}","manifest":{"file":"${request.files[0] ?? 'src/Card.tsx'}","component":"Card","title":"Card","params":[{"id":"radius","label":"Corner radius","kind":"number","unit":"px","min":0,"max":48,"step":1,"apply":{"strategy":"literal","anchor":"const RADIUS_PX = "}}]}}`,
+    // The file is page-sourced: collapsed and JSON-escaped, so it cannot add lines or break the example.
+    JSON.stringify({
+      request: request.id,
+      manifest: {
+        file: oneLine(request.files[0] ?? 'src/Card.tsx', 200),
+        component: 'Card',
+        title: 'Card',
+        params: [
+          {
+            id: 'radius',
+            label: 'Corner radius',
+            kind: 'number',
+            unit: 'px',
+            min: 0,
+            max: 48,
+            step: 1,
+            apply: { strategy: 'literal', anchor: 'const RADIUS_PX = ' }
+          }
+        ]
+      }
+    }),
     '```',
     `Manifest rules: \`file\` is ${files || 'the element source file'}; 1–12 params; ids match ^[a-z0-9][a-z0-9-]{0,40}$; labels up to 80 characters. Kinds: number, toggle, text, color, select, bezier. \`unit\`/\`min\`/\`max\`/\`step\` only on number; \`options\` (1–20 strings) only on select.`,
     `Strategies: \`literal\` (an \`anchor\` that occurs exactly once in the file and ends immediately before the value, e.g. \`const RADIUS_PX = \`), \`prop\` (\`propName\`, a prop of the inspected component), \`style\` (\`styleProp\`, one CSS longhand such as border-radius, opacity or box-shadow). Prefer literal.`,

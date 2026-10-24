@@ -67,7 +67,11 @@ struct CustomRequestBar: View {
                 }.font(.caption)
             }
             if let pending = custom.pending {
-                HStack(spacing: 6) { ProgressView().controlSize(.small); Text(pending).font(.caption).foregroundStyle(.secondary) }
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small); Text(pending).font(.caption).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Cancel") { model.send("custom-cancel") }.buttonStyle(.link).font(.caption).help("Stop waiting for the agent. A turn already running keeps going in the chat.")
+                }
             }
             if let error = custom.error { Text(error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             HStack(alignment: .bottom, spacing: 6) {

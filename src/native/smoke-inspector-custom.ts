@@ -155,6 +155,23 @@ export async function checkInspectorCustom(s: CustomSmoke) {
       10000,
       () => custom()
     )
+
+    // A request whose turn cannot run shows its error and leaves the field usable again.
+    inspector.custom.generate = async () => {
+      throw new Error('The chat is stopped, so the request was not sent.')
+    }
+    await perform('custom-request', { value: 'anything' })
+    const failed = await waitFor(
+      async () => {
+        const state = await custom()
+        return !state.pending && state.error && state
+      },
+      'failed request shows its error',
+      10000,
+      () => custom()
+    )
+    assert.match(failed.error, /request was not sent/)
+    assert.ok(failed.request.editable, 'the field is usable after a failed request')
   } finally {
     inspector.custom.generate = generate
   }
