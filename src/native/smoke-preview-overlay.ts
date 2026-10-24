@@ -109,7 +109,7 @@ export async function checkPreviewOverlay(
     assert.equal(
       image.magentaOutside,
       0,
-      `${label}: no grid colour outside viewport (window points, top-left: page ${image.pageTopLeft}, stray ${image.magentaOutsideBox}; ${image.magentaOutsideLoose} tinted, paint ${image.magentaPaint})`
+      `${label}: no grid colour outside viewport (window points, top-left: page ${image.pageTopLeft}, stray ${image.magentaOutsideBox}; toolbar band above the page, not counted: ${image.magentaToolbarBand} at ${image.magentaToolbarBandBox})`
     )
     return {
       frame: state.frame,
@@ -117,7 +117,10 @@ export async function checkPreviewOverlay(
       scale: state.scale,
       radius: state.cornerRadius,
       magentaInside: image.magentaInside,
-      magentaOutside: image.magentaOutside
+      magentaOutside: image.magentaOutside,
+      // Recorded, not asserted: the toolbar strip above the page (see captureOverlay).
+      magentaToolbarBand: image.magentaToolbarBand,
+      magentaToolbarBandBox: image.magentaToolbarBandBox
     }
   }
   const first = nativeWorkspace.active!

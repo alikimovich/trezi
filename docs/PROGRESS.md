@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-331 repair 2: strict preview-overlay count, comment-rows scroll that stays (unverified natively)
+
+- **preview-overlay.** The colour-matching rule below (±6 of the page's paint) is withdrawn:
+  it could miss a leak in another magenta and was a guess. The strict threshold is back for
+  everything outside the page except one named region: the strip above the page across its
+  width, i.e. the toolbar, where glass and the scroll-edge effect show the page's edge colour
+  and the overlay (clipped to the page) cannot reach. The nightly's 35602 samples fit that
+  strip (about 650 x 55 pt). The strip is counted and boxed (`magentaToolbarBand`,
+  `magentaToolbarBandBox`) and recorded in the clip evidence, not asserted. Failures still
+  name `magentaOutsideBox`. Still a guess until a native run reads those two values.
+- **comment-rows.** The reading area is read after the last settle, not before. Only the
+  capture that samples the bubble (`bubble: true`, the collapsed one) scrolls it into view,
+  because expanded rows may scroll it away and still need to fit. Before scrolling the chat
+  stops following the latest message the way a used control does (`controlInteraction`, which
+  sets `follows = false`), so the pin cannot return the bubble. The bubble's frame is read again
+  before the capture and the request fails with that frame if it is still outside the reading
+  area. Scrolling the bubble into view also clears the sticky header (its `maxY` is above 0).
+- **Still open.** No native call: the five checks are unrun, in either system appearance.
+
 ## 2026-10-23 — LKM-331 repair: preview-overlay, comment-rows, narrower OCR rule (unverified natively)
 
 - **Evidence used.** The nightly's `failure-preview-overlay.png` and the passing

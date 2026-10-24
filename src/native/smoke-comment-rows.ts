@@ -106,7 +106,9 @@ export async function checkCommentRows(host: NativeBridge, artifacts: string) {
           dark,
           toggle,
           messages: ids,
-          user
+          user,
+          // The first capture of a mode samples the bubble, so it must be in view.
+          bubble: state === 'collapsed'
         })
         writeFileSync(
           join(artifacts, `comment-rows-${mode}-${state}.png`),
