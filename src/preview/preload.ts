@@ -47,6 +47,7 @@ import {
   PREVIEW_PIN_CLICK as PIN_CLICK,
   PREVIEW_COVERED,
   PREVIEW_HIDE_SCROLLBARS,
+  PREVIEW_ISLAND_ENTERED,
   PREVIEW_MOVE_NODE,
   PREVIEW_OVERLAY_GEOMETRY,
   PREVIEW_OVERLAY_LINES,
@@ -73,6 +74,7 @@ import {
 import { coalesceHover } from './coalesce-hover'
 import { installDragReorder } from './drag-reorder'
 import { installHistoryKeys } from './history-keys'
+import { createHoverDrop } from './hover-drop'
 import { latinKey } from './latin-key'
 import {
   buildLayersSnapshot,
@@ -818,6 +820,17 @@ const hover = coalesceHover(({ el, at }: { el: Element; at: number }) => {
   }
 })
 
+// The pointer over our own UI or a native island: no hover box, label, guide or measure.
+const hoverDrop = createHoverDrop({
+  hover,
+  forget: () => {
+    lastHovered = null
+  },
+  hideBox: hideOverlay,
+  clearMeasure,
+  frozen: () => !!(editing || commenting)
+})
+
 // ---- Alt/Option spacing measurement ----------------------------------------
 
 // Figma's measurement red. Deliberately not the blue of select/hover — the
@@ -1357,10 +1370,7 @@ function onMove(e: MouseEvent): void {
     // Over our own UI (toolbar, composer, pins): drop the hover highlight —
     // leaving the last-crossed element lit under the toolbar reads as if IT
     // were selected. The persistent selection outlines are a separate layer.
-    lastHovered = null
-    hover.clear()
-    hideOverlay()
-    clearMeasure()
+    hoverDrop.drop()
     return
   }
   if (el === lastHovered && !altChanged) return
@@ -2055,6 +2065,8 @@ if (!IS_SIM_BRIDGE) {
   ) => threeD.action(action as ThreeDAction)
   // Main sends them on every load and whenever the host's layout changes them.
   ipcRenderer.on(PREVIEW_COVERED, (_e, rects: unknown) => nativeCover.set(rects))
+  // The pointer entered a native island: WebKit may not deliver the move the shield would clear on.
+  ipcRenderer.on(PREVIEW_ISLAND_ENTERED, () => hoverDrop.entered())
   ipcRenderer.on(PREVIEW_OVERLAY_LINES, (_e, lines: unknown) => overlayGuides.set(lines))
   // Pins track layout changes (hot-reload, async content) on a light cadence.
   const pinTimer = setInterval(() => {

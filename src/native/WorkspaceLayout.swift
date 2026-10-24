@@ -45,6 +45,7 @@ final class WorkspaceLayout {
         for island in [host.editingInspector, host.layers] as [FloatingIsland] {
             island.moved = { [weak self, weak island] frame, ended in if let island { self?.move(island, to: frame, ended: ended) } }
             island.reset = { [weak self, weak island] in if let island { self?.resetPosition(island) } }
+            island.entered = { emit(["event":"native-island-entered"]) }
         }
         host.layers.resized = { [weak self] frame, edges, ended in self?.resizeLayers(frame, edges: edges, ended: ended) }
         inspectorDivider.vertical = true

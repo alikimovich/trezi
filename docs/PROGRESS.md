@@ -2,6 +2,36 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-328: the islands tell the page when the pointer enters them
+
+- **Why.** After the macOS 27.0.1 upgrade (2026-10-23 08:17 UTC) core/inspector and
+  core/layers-island time out on "select-mode hover cleared over the island/Layers"; both
+  passed on 26.4.1 up to 2026-10-21. The nightly payload shows the cover connected at the
+  island's rect, picks 0 and one `WKMouseTrackingObserver` owner, and an offscreen probe showed
+  `elementFromPoint` at the island point is the cover host, so placement is fine and the page
+  code is consistent. The leading cause is that WebKit skips the move over the shield, so
+  `onMove` never clears the box. No native run was available (0 native calls), so this is
+  unconfirmed.
+- **Change.** `FloatingIsland` (`src/native/FloatingIsland.swift`) owns a `mouseEnteredAndExited`
+  tracking area; `mouseEntered` runs `entered`, which `WorkspaceLayout` wires to the
+  `native-island-entered` host event. Main forwards it on `trezi:preview:island-entered`.
+  The page's `createHoverDrop` (`src/preview/hover-drop.ts`) runs the same clear as a move onto
+  an overlay (`forget` the last element, `hover.clear()` which cancels a pending frame, hide the
+  box and measure), except while an edit or comment composer freezes the highlight. This is
+  right for real pointers too.
+- **Seams.** `movePointer` (`InspectorIslandVerification.swift`, shared by the Layers seam)
+  calls `enterIslands` on each synthetic step: crossing into an open island calls
+  `mouseEntered` on the owner of the island's own tracking area, as it already does for WebKit's
+  tracking owners. The waits are unchanged and both timeout reports keep `probe`.
+- **Tests.** `test/preview-hover-drop.mjs` (unit): the handler hides the box, forgets the
+  element, clears the measure and cancels a pending coalesced hover; a frozen highlight stays.
+  Its Swift fixture `test/fixtures/island-pointer` compiles `FloatingIsland.swift` windowless:
+  the island has one tracking area of its own, which reports entry once per crossing, also
+  after `updateTrackingAreas`.
+- **Not confirmed natively.** This fix and the LKM-325 build-badge, toolbar-address,
+  native-chat and composer-send fixes have had no native run. The native `core` and `islands`
+  groups on this macOS 27 host (manager or nightly) decide; if the wait still times out, read
+  `probe`.
 ## 2026-10-23 — LKM-321: toolbar in full screen with the menu bar revealed
 
 - **Symptom.** In full screen, revealing the menu bar hid the address block and "…".

@@ -38,6 +38,10 @@ and provider-seat rules are here.
   areas: that lost select-mode hover (LKM-173). Don't evaluate into the page
   straight from the host mid-navigation either: it crashed in WebKit's executor
   check. A new floating view over the page belongs in `previewCoverRects`.
+  macOS 27's WebKit can skip the move over a shield, so an island's own tracking area
+  also tells the page when the pointer enters it (`FloatingIsland.entered` →
+  `native-island-entered` → `trezi:preview:island-entered` → `createHoverDrop`,
+  `src/preview/hover-drop.ts`), which clears the hover like a move onto the shield.
 - **Inspect WebKit through its native Web Inspector.** There is no Electron CDP
   port. Use the native host test protocol for deterministic integration checks.
 - **In service mode the launcher reports the HOST's exit status**, and

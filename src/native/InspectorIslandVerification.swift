@@ -139,10 +139,12 @@ extension Host {
         // WebKit. A real pointer also enters WebKit's own tracking areas; use their owners
         // without replacing the areas or evaluating JavaScript inside this command.
         let owners = preview.trackingAreas.filter { $0.options.contains(.mouseMoved) }.compactMap { $0.owner as? NSObject }
+        var previous = from
         func moved(_ location: NSPoint) throws -> NSEvent {
             guard let event = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else {
                 throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "Could not make mouse move"])
             }
+            enterIslands(from: previous, to: location); previous = location
             window.sendEvent(event)
             preview.mouseMoved(with: event)
             for owner in owners where owner.responds(to: #selector(NSResponder.mouseMoved(with:))) {
@@ -158,6 +160,22 @@ extension Host {
             }
         }
         return (try moved(point), owners)
+    }
+    /// LKM-328: a window point crossing into an open island is delivered to the island's own
+    /// tracking area as `mouseEntered`, the way AppKit does for a real pointer. The page is then
+    /// told to drop its hover through the product's own path (`FloatingIsland.entered`), so the
+    /// smoke does not rely on WebKit handing the page a move over the shield.
+    func enterIslands(from: NSPoint?, to point: NSPoint) {
+        for island in [editingInspector, layers] as [FloatingIsland] where !island.isHidden && island.window === window {
+            func inside(_ p: NSPoint) -> Bool { island.bounds.contains(island.convert(p, from: nil)) }
+            guard inside(point), !(from.map(inside) ?? false) else { continue }
+            for area in island.trackingAreas where area.options.contains(.mouseEnteredAndExited) {
+                guard let owner = area.owner as? NSResponder,
+                      let event = NSEvent.enterExitEvent(with: .mouseEntered, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                         windowNumber: window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil) else { continue }
+                owner.mouseEntered(with: event)
+            }
+        }
     }
     private func descendants(of view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants(of: $0) } }
     private func rect(_ r: NSRect) -> [String: Double] { ["x":Double(r.minX), "y":Double(r.minY), "width":Double(r.width), "height":Double(r.height)] }
