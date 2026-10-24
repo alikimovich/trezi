@@ -52,6 +52,7 @@ export const pick = (state: Toolbar) => ({
   branchChevronGap: state.branchChevronGap,
   moreVisible: state.moreVisible,
   interactionSegments: state.interactionSegments,
+  islandDividers: state.islandDividers,
   publishVisible: state.publishVisible,
   publishMeasured: state.publishMeasured,
   publishLeading: state.publishLeading,
@@ -141,6 +142,19 @@ function assertToolbar(state: Toolbar, stage: string) {
   assert.equal(state.branchTruncation, 'tail', `Toolbar ${stage}: the branch truncates at the tail`)
 }
 
+/** LKM-319: on macOS 27 no divider draws between the buttons of a toolbar island (preview
+ *  interaction, preview tools, chat history/new chat); earlier systems keep theirs. Read in the
+ *  live toolbar after an island button was used or the window width changed a segment. */
+export async function assertIslandDividers(host: NativeBridge, stage: string, state?: Toolbar) {
+  const shell: Toolbar = state ?? (await host.request('shellInspect'))
+  if (!shell.islandHidesDividers) return
+  assert.deepEqual(
+    shell.islandDividers,
+    { chat: 0, interaction: 0, tools: 0 },
+    `Toolbar ${stage}: no divider inside an island: ${JSON.stringify(shell.islandDividers)}`
+  )
+}
+
 export async function capture(host: NativeBridge, artifacts: string, name: string) {
   let png: string,
     how = 'foreground window'
@@ -194,6 +208,8 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     }, `toolbar ${name} window width`)
     assertToolbar(live, `${name} (inside the resize)`)
     assertToolbar(settled, name)
+    // LKM-319: slow motion left or came back with this width; the islands still show no divider.
+    await assertIslandDividers(host, `${name} (${width} pt)`, settled)
     // The layout works from the pinned inset it measured, not from its startup guess.
     assert.ok(
       settled.rightInsetMeasured &&

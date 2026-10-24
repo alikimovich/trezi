@@ -65,16 +65,65 @@ final class ToolbarLayout {
     }
 }
 
+/// LKM-319: the segmented control of a toolbar island. On macOS 27 NSSegmentedControl draws a
+/// 1 pt divider layer at every segment boundary, in every style, with no API to turn it off;
+/// the island hides those layers so its buttons share one capsule. Segment widths, hit areas,
+/// order and the bezel are the system's. macOS 26 and earlier keep their look.
+final class IslandSegmentedControl: NSSegmentedControl {
+    static var hidesDividers: Bool { if #available(macOS 27.0, *) { return true } else { return false } }
+    override func layout() { super.layout(); hideDividers() }
+    override func updateLayer() { super.updateLayer(); hideDividers() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); hideDividers() }
+    /// Thin vertical layers inside the control, away from its ends: the segment dividers.
+    private var dividerLayers: [CALayer] {
+        var found: [CALayer] = []
+        for view in subviews {
+            guard let root = view.layer else { continue }
+            func walk(_ layer: CALayer) {
+                let frame = layer.superlayer.map { $0.convert(layer.frame, to: root) } ?? layer.frame
+                let minX = convert(NSRect(x: frame.minX, y: 0, width: 0, height: 0), from: view).minX
+                if frame.width <= 1.5, frame.height >= bounds.height / 3, minX > 4, minX < bounds.width - 4 { found.append(layer) }
+                layer.sublayers?.forEach(walk)
+            }
+            root.sublayers?.forEach(walk)
+        }
+        return found
+    }
+    private var observations: [NSKeyValueObservation] = []
+    private weak var observedRoot: CALayer?
+    private func hideDividers() {
+        guard Self.hidesDividers else { return }
+        let dividers = dividerLayers
+        for layer in dividers where !layer.isHidden { layer.isHidden = true }
+        watch(dividers)
+    }
+    /// AppKit updates the inner layers on its own (a segment pressed, enabled or selected, an
+    /// appearance change) without laying out this control again: a layer added to the hosted
+    /// view's layer, or a divider shown again, is hidden at once.
+    private func watch(_ dividers: [CALayer]) {
+        let root = subviews.first?.layer
+        guard observedRoot !== root || observations.count != dividers.count + (root == nil ? 0 : 1) else { return }
+        observations.forEach { $0.invalidate() }
+        observations = dividers.map { layer in
+            layer.observe(\.isHidden, options: [.new]) { layer, change in if change.newValue == false { layer.isHidden = true } }
+        }
+        observedRoot = root
+        if let root { observations.append(root.observe(\.sublayers, options: []) { [weak self] _, _ in self?.hideDividers() }) }
+    }
+    /// Dividers that draw (checks: none on macOS 27).
+    var visibleDividers: Int { dividerLayers.filter { !$0.isHidden && $0.opacity > 0 }.count }
+}
+
 /// Use an explicit momentary control: selectionMode on a group assembled from
 /// subitems does not configure AppKit's automatically created segmented view.
 final class MomentaryToolbarGroup: NSToolbarItemGroup {
-    private let control: NSSegmentedControl
+    private let control: IslandSegmentedControl
     /// Subitems without a segment (LKM-213: slow motion in a narrow window).
     private var hiddenSegments: Set<String> = []
     /// The subitems that have a segment, in segment order.
     var shown: [NSToolbarItem] { subitems.filter { !hiddenSegments.contains($0.itemIdentifier.rawValue) } }
     init(identifier: NSToolbarItem.Identifier, items: [NSToolbarItem]) {
-        control = NSSegmentedControl(images: items.map { $0.image ?? NSImage() }, trackingMode: .momentary, target: nil, action: nil)
+        control = IslandSegmentedControl(images: items.map { $0.image ?? NSImage() }, trackingMode: .momentary, target: nil, action: nil)
         super.init(itemIdentifier: identifier)
         subitems = items; selectionMode = .momentary
         control.segmentStyle = .texturedRounded
@@ -92,7 +141,10 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
             control.setEnabled(item.isEnabled, forSegment: index)
             control.setToolTip(item.toolTip ?? item.label, forSegment: index)
         }
+        // A new segment brings its divider; the next layout hides it (LKM-319).
+        control.needsLayout = true
     }
+    var visibleDividers: Int { control.visibleDividers }
     /// Removes or restores a subitem's segment; returns how much narrower the control got.
     func setSegment(_ identifier: String, hidden hide: Bool) -> CGFloat {
         guard hiddenSegments.contains(identifier) != hide else { return 0 }
@@ -152,7 +204,7 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
 
 /// Shared history/new-chat capsule inside the column-aligned chat header.
 final class ChatToolbarActions: NSView {
-    let control = NSSegmentedControl(images: [toolbarSymbol("clock.arrow.circlepath")!, toolbarSymbol("square.and.pencil")!], trackingMode: .momentary, target: nil, action: nil)
+    let control = IslandSegmentedControl(images: [toolbarSymbol("clock.arrow.circlepath")!, toolbarSymbol("square.and.pencil")!], trackingMode: .momentary, target: nil, action: nil)
     var onNewChat: (() -> Void)?
     var historyMenu: NSMenu?
     override init(frame: NSRect) {
