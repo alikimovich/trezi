@@ -115,4 +115,13 @@ class FloatingIsland: NSView {
     override func rightMouseDown(with event: NSEvent) {}
     override func otherMouseDown(with event: NSEvent) {}
     override func scrollWheel(with event: NSEvent) {}
+    /// The pointer crossed into the island (LKM-328). The page drops its select-mode hover at
+    /// once: WebKit's own move over the page's shield can be skipped (macOS 27 did).
+    var entered: (() -> Void)?
+    override func updateTrackingAreas() {
+        for area in trackingAreas { removeTrackingArea(area) }
+        super.updateTrackingAreas()
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { entered?() }
 }
