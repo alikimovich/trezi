@@ -15,6 +15,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Gemini is an optional provider: turn it on in Settings → AI Providers to get its Pro, Flash and Flash-Lite models in the model picker, signed in with the Gemini CLI's Login with Google or a Gemini API key saved under Gemini… (encrypted with your Keychain). Off, the default, hides its models and never starts Gemini. The setting is kept across relaunches (LKM-315).
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
+### Changed
+- Send Feedback now goes privately to the Trezi developer instead of opening a public GitHub issue. The first time, it asks for the invite code from your Trezi beta invite (kept encrypted with your Keychain; change or remove it in Settings → General), shows who you are sending as, attaches the real screenshot, and confirms with the report's reference. Errors show the feedback service's message, a rate limit says when to try again, and a lost connection keeps Retry (LKM-336).
+
 ### Fixed
 - On macOS 27, the build badge at the bottom of the projects sidebar no longer runs the build's commit into its branch or state ("1a2b3c4)· 3 behind"); they keep the same small gap as on earlier macOS (LKM-330).
 - In a narrow window, sending a very long message keeps the conversation following the newest message after the composer shrinks back (LKM-330).

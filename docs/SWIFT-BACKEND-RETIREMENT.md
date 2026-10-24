@@ -85,7 +85,8 @@ Moved in this step:
   never filed twice: the intent is journaled before `gh issue create`, and a retry
   after a crash or a `gh` failure looks for an issue with the same title and body
   before filing. Legacy twins: `feedback-legacy.ts` (no journal; it now also keeps the
-  body out of the error text) and `skills-install.ts`.
+  body out of the error text) and `skills-install.ts`. LKM-336 removed the `feedback`
+  workflow: Send Feedback now posts privately to the Trezi feedback endpoint from Bun.
 - Dead adapter code: `agent.ts` still imported a Git runner and fs writers it no
   longer used.
 

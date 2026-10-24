@@ -1169,3 +1169,24 @@ worktree, so there is no extra excluded folder (see `docs/WORKTREES.md`).
 `test/chat-attachments.mjs` covers each case through the controller; the
 `sent-attachments` native smoke check sends an SVG and an oversized PNG through the real
 composer.
+
+## Send Feedback invite code (LKM-336)
+
+Send Feedback posts privately to `https://trezi.app/api/feedback` with the tester's
+beta invite code as the Bearer; it never files a GitHub issue. The code is a secret
+like a seat token and follows the same rules:
+
+- The provider owner stores it encrypted with the Keychain helper in
+  `<profile>/trezi/feedback-code.json` (mode 0600, ciphertext only;
+  `src/service/ProviderData.swift`). Methods: `feedbackCodeSave` (empty removes),
+  `feedbackCodeStatus`, `feedbackCode` (the plaintext, read by Bun only to send it).
+- It is asked for the first time Send Feedback opens, checked against
+  `GET /api/feedback/me` before it is saved, and can be changed or removed in Settings →
+  General (`src/native/settings-feedback.ts`). No sheet, log line or provider helper ever
+  sees it.
+- `src/main/feedback-endpoint.ts` sends the report (`redirect: 'error'`, a timeout), then
+  PUTs the screenshot to the returned upload URL without the Bearer and attaches it. A
+  failed upload after the issue exists is a warning, never a second report.
+  `TREZI_FEEDBACK_URL` may point the app at a loopback mock; any other origin is ignored.
+  The `settings` smoke (`src/native/smoke-alerts.ts`) runs the real handlers against a
+  loopback mock endpoint and checks that no `gh` call is made.

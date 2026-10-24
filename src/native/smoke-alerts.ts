@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
+import { createServer, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
+import { feedbackHandlers } from '../main/feedback'
 import type { NativeSheetAction } from '../shared/native-sheet'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
@@ -12,7 +15,8 @@ import { nativeWorkspace } from './workspace-runtime'
 
 /** LKM-170: app alerts are NSAlert-style sheets attached to the main window, and sent
  *  feedback is a self-dismissing toast, never a titled window. The feedback path runs on
- *  its own controller with GitHub and the browser stubbed, so no issue is filed. */
+ *  its own controller against a loopback mock of the Trezi feedback endpoint (LKM-336),
+ *  with the invite code kept in memory, so nothing is sent and no Keychain is touched. */
 export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
   const until = async (method: string, check: (state: any) => boolean, label: string) => {
     let state: any
@@ -52,35 +56,72 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
   await host.request('sheetPerform', { action: 'cancel' })
   await until('sheetInspect', (s) => !s.visible, 'Updates alert did not close')
 
-  // Feedback: a failed post shows the standard error sheet, Retry posts it and shows the toast.
-  const posted: unknown[] = [],
-    opened: string[] = []
-  let fail = true
+  // Feedback (LKM-336): the real feedback logic against a local mock of the private Trezi
+  // endpoint. The first send asks for the invite code; a failed post shows the standard
+  // error sheet; Retry sends it, the screenshot is uploaded and attached, and the toast
+  // names the Linear key. Nothing goes to GitHub: the IPC stub refuses every other channel.
+  const mock = await feedbackMock()
+  let saved: string | null = null
+  const feedback = feedbackHandlers({
+    code: {
+      has: async () => saved !== null,
+      read: async () => saved,
+      save: async (code: string) => {
+        saved = code
+        return true
+      },
+      remove: async () => {
+        saved = null
+      }
+    },
+    endpoint: { origin: mock.origin, timeoutMs: 5000 },
+    appVersion: () => 'Trezi smoke',
+    macOS: () => 'macOS smoke'
+  })
+  const channels: string[] = []
   const sheets = new NativeSheetController(
     host,
     nativeWorkspace,
     nativeChat,
     async (channel, input) => {
+      channels.push(channel)
+      if (channel === 'feedback:account') return feedback.account()
+      if (channel === 'feedback:code') return feedback.saveCode(input)
       assert.equal(channel, 'feedback:submit')
-      posted.push(input)
-      return fail
-        ? { ok: false, error: 'gh: To get started with GitHub CLI, please run: gh auth login' }
-        : { ok: true, url: 'https://github.com/alikimovich/trezi/issues/170' }
+      return feedback.submit(input)
     }
   )
-  const support = new NativeSupportSheets(
-    sheets,
-    async () => null,
-    async (url) => opened.push(url)
-  )
+  const support = new NativeSupportSheets(sheets, async () => ({
+    contentType: 'image/png',
+    data: TINY_PNG,
+    preview: `data:image/png;base64,${TINY_PNG}`
+  }))
   const onSheet = (action: NativeSheetAction) => void sheets.action(action)
   const onToast = (action: { id: string; index?: number }) => void sheets.toastAction(action)
   host.on('sheet-action', onSheet)
   host.on('toast-action', onToast)
   try {
     await support.feedback()
-    await until('sheetInspect', (s) => s.visible && s.title === 'Send feedback', 'Feedback form')
-    await host.request('sheetPerform', { action: 'send', values: { body: 'Smoke feedback' } })
+    const prompt = await until(
+      'sheetInspect',
+      (s) => s.visible && s.title === 'Enter your invite code',
+      'Invite code prompt'
+    )
+    assert.match(prompt.detail, /invite code from your Trezi beta invite/)
+    await host.request('sheetPerform', { action: 'continue', values: { code: 'smoke-invite' } })
+    const form = await until(
+      'sheetInspect',
+      (s) => s.visible && s.title === 'Send feedback',
+      'Feedback form'
+    )
+    assert.match(form.detail, /Sending as Smoke Tester\./)
+    assert.match(form.detail, /privately to the Trezi developer/)
+    assert.equal(saved, 'smoke-invite', 'The checked code is saved')
+    await capture('captureSheet', 'feedback-form.png')
+    await host.request('sheetPerform', {
+      action: 'send',
+      values: { body: 'Smoke feedback', screenshot: 'yes', conversation: 'no', diagnostics: 'no' }
+    })
     await until(
       'sheetInspect',
       (s) => s.visible && s.title === 'Couldn’t send feedback' && !s.busy,
@@ -90,16 +131,44 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
     assert.deepEqual(failed.actions, ['copy', 'cancel', 'retry'])
     assert.equal(failed.defaultAction, 'retry', 'Return retries')
     assert.equal(failed.cancelAction, 'cancel', 'Esc cancels')
-    assert.match(failed.detail, /gh auth login/)
+    assert.match(failed.detail, /down for maintenance/, 'The endpoint’s own message')
     await capture('captureSheet', 'alert-feedback-error.png')
-    fail = false
+    mock.fail = false
     await host.request('sheetPerform', { action: 'retry' })
     await until('sheetInspect', (s) => !s.visible, 'Retry did not close the error sheet')
-    assert.equal(posted.length, 2, 'Retry posts the same feedback once more')
-    assert.deepEqual(posted[1], posted[0])
+    const posts = mock.seen.filter((r) => r.path === '/api/feedback')
+    assert.equal(posts.length, 2, 'Retry sends the same feedback once more')
+    assert.deepEqual(posts[1].body, posts[0].body)
+    assert.deepEqual(posts[0].body, {
+      body: 'Smoke feedback',
+      appVersion: 'Trezi smoke',
+      macOS: 'macOS smoke',
+      screenshot: { contentType: 'image/png', size: Buffer.from(TINY_PNG, 'base64').length }
+    })
+    assert.deepEqual(
+      mock.seen.map((r) => `${r.method} ${r.path} ${r.auth}`),
+      [
+        'GET /api/feedback/me Bearer smoke-invite',
+        'POST /api/feedback Bearer smoke-invite',
+        'POST /api/feedback Bearer smoke-invite',
+        'PUT /upload/shot.png ',
+        'POST /api/feedback/attach Bearer smoke-invite'
+      ],
+      'The code goes only to the endpoint; the upload carries no Bearer'
+    )
+    assert.deepEqual(mock.seen.at(-1)?.body, {
+      issue: 'LKM-170',
+      assetUrl: 'https://assets.trezi.test/shot.png'
+    })
+    assert.equal(mock.uploaded, Buffer.from(TINY_PNG, 'base64').length, 'The real PNG bytes')
+    assert.deepEqual(
+      [...new Set(channels)].sort(),
+      ['feedback:account', 'feedback:code', 'feedback:submit'],
+      'No GitHub channel is used'
+    )
     const toast = await until('toastInspect', (s) => s.visible, 'Feedback toast did not show')
-    assert.equal(toast.message, 'Feedback sent')
-    assert.equal(toast.action, 'View on GitHub')
+    assert.equal(toast.message, 'Feedback sent (LKM-170).')
+    assert.equal(toast.action, '', 'No public page to open')
     assert.ok(
       toast.inWindow && toast.pending,
       'The toast is in the main window and dismisses itself'
@@ -123,14 +192,16 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
         `toast shield ${key} matches its native frame`
       )
     await capture('captureToast', 'feedback-toast.png')
-    await host.request('toastPerform')
-    await until('toastInspect', (s) => !s.visible, 'The toast action did not dismiss it')
+    // No action to press: the toast dismisses itself (6 s).
+    await waitFor(
+      async () => !(await host.request('toastInspect')).visible,
+      'The feedback toast did not dismiss itself',
+      12_000
+    )
     await waitFor(
       async () => (await pageCover()).length === 0,
       'toast shield cleared after dismissal'
     )
-    await until('sheetInspect', () => opened.length === 1, 'View on GitHub did not open')
-    assert.deepEqual(opened, ['https://github.com/alikimovich/trezi/issues/170'])
 
     // LKM-177: the memory note after an automatic update offers View and Undo; Undo is
     // stubbed, so the profile's memory is untouched.
@@ -171,5 +242,68 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
     host.off('sheet-action', onSheet)
     host.off('toast-action', onToast)
     sheets.close()
+    mock.stop()
+  }
+}
+
+/** A 1×1 PNG. */
+const TINY_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+
+/**
+ * The private feedback endpoint's contract, on loopback: `/me` names the tester, the first
+ * report fails with a 503 until `fail` is cleared, then the report becomes `LKM-170` with
+ * an upload target on the same mock.
+ */
+async function feedbackMock() {
+  const seen: { method: string; path: string; auth: string; body: unknown }[] = []
+  const state = { fail: true, uploaded: 0 }
+  let origin = ''
+  const answer = (response: ServerResponse, status: number, value: unknown) => {
+    response.writeHead(status, { 'content-type': 'application/json' })
+    response.end(JSON.stringify(value))
+  }
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = []
+    for await (const chunk of request) chunks.push(chunk as Buffer)
+    const data = Buffer.concat(chunks)
+    const path = new URL(request.url ?? '/', origin).pathname
+    const auth = request.headers.authorization ?? ''
+    if (request.method === 'PUT') {
+      state.uploaded = data.length
+      seen.push({ method: 'PUT', path, auth, body: null })
+      return answer(response, 200, {})
+    }
+    const text = data.toString('utf8')
+    seen.push({ method: request.method ?? '', path, auth, body: text ? JSON.parse(text) : null })
+    if (auth !== 'Bearer smoke-invite')
+      return answer(response, 401, { ok: false, error: 'Unknown invite code.' })
+    if (path === '/api/feedback/me')
+      return answer(response, 200, { ok: true, name: 'Smoke Tester' })
+    if (path === '/api/feedback/attach') return answer(response, 200, { ok: true })
+    if (state.fail)
+      return answer(response, 503, { ok: false, error: 'Feedback is down for maintenance.' })
+    answer(response, 200, {
+      ok: true,
+      issue: 'LKM-170',
+      upload: {
+        url: `${origin}/upload/shot.png`,
+        headers: { 'x-smoke-upload': '1' },
+        assetUrl: 'https://assets.trezi.test/shot.png'
+      }
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  return {
+    origin,
+    seen,
+    get uploaded() {
+      return state.uploaded
+    },
+    set fail(value: boolean) {
+      state.fail = value
+    },
+    stop: () => server.close()
   }
 }

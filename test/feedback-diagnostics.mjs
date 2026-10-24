@@ -16,7 +16,7 @@ import {
   SYSTEM_LOG_PREDICATE,
   systemLogLines
 } from '../src/main/feedback-diagnostics.ts'
-import { buildFeedbackBody, SAFE_LIMIT } from '../src/shared/feedback-body.ts'
+import { buildFeedbackRequest, FEEDBACK_LIMITS } from '../src/shared/feedback-body.ts'
 
 const HOME = '/Users/someone'
 const SECRETS = [
@@ -178,10 +178,16 @@ assert.ok(hung.calls.some(([c]) => c === '/usr/bin/sample'))
 const huge = sources(BUSY_MS, { sample: 'x'.repeat(200_000), log: 'y'.repeat(200_000) })
 const big = await gatherDiagnostics(huge.value)
 assert.ok(big.length <= DIAGNOSTICS_LIMIT + 100, `bundle is ${big.length} characters`)
-const body = buildFeedbackBody({ body: 'The app is slow', diagnostics: big })
-assert.ok(body.length <= SAFE_LIMIT)
-assert.ok(body.includes('<summary>Diagnostics</summary>'))
-assert.ok(!buildFeedbackBody({ body: 'x' }).includes('Diagnostics'), 'nothing without consent')
+// LKM-336: the whole bundle fits the endpoint's diagnostics limit, so it is sent uncut.
+const stamps = { appVersion: 'Trezi', macOS: 'macOS' }
+const request = buildFeedbackRequest({ ...stamps, body: 'The app is slow', diagnostics: big })
+assert.ok(DIAGNOSTICS_LIMIT + 100 <= FEEDBACK_LIMITS.diagnostics)
+assert.equal(request.diagnostics, big.trim())
+assert.equal(
+  buildFeedbackRequest({ ...stamps, body: 'x' }).diagnostics,
+  undefined,
+  'nothing without consent'
+)
 console.log(
   'FEEDBACK DIAGNOSTICS OK — consented bundle redacted, paths shortened, busy host sampled'
 )

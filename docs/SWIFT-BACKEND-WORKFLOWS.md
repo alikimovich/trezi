@@ -23,9 +23,7 @@ coordinator's lane.
 - `src/service/WorkflowRemote.swift`: Connect to GitHub, remote status, pull and switch.
 - `src/service/WorkflowSetup.swift`: instrumentation helpers, their removal, new projects,
   Trezi's own update, and `WorkflowDiagnoses` (the diagnosis memory).
-- `src/service/WorkflowTools.swift` (S15): the in-app feedback issue (`gh issue create` in
-  Trezi's checkout; intent journaled first, a retry or a `gh` failure looks for an issue
-  with the same title and body before filing) and curated skill-pack installs
+- `src/service/WorkflowTools.swift` (S15): curated skill-pack installs
   (`npx skills add`, argv built by the owner from a GitHub `owner/name` and plain skill
   names). `src/service/WorkflowContext.swift` holds the outcome type and per-run context.
   `src/main/skills-install.ts` builds the install request.
@@ -49,7 +47,8 @@ coordinator's lane.
 | Diagnosis memory `<profile>/diagnostics.json` (unchanged `JSON.stringify(store, null, 2)`) | Swift | Bun (`diag-cache.ts`) |
 | Workflow records `<profile>/service/workflows/<id>.json` | Swift | (not read) |
 | PR descriptions (`publish-description.ts`), framework detection and helper sources, starter templates, diagnoses (rules or one tool-less model turn), `github:status`, `setup:detect`, update check | Bun JS helpers (propose only) | Bun |
-| Sheets and their routing, feedback issues (`feedback:submit`), the chat seed of a diagnosis | Bun (not moved, see TASKS) | Bun |
+| Sheets and their routing, the chat seed of a diagnosis | Bun (not moved, see TASKS) | Bun |
+| Send Feedback (`feedback:submit`): a private POST to the Trezi feedback endpoint, never a GitHub issue (LKM-336, `src/main/feedback-endpoint.ts`) | Bun (no workflow; the invite code is the provider owner's) | Bun |
 | Annotation storage `.trezi/annotations.json` | Bun (S05; publication only reads it) | Bun |
 
 ## Rules

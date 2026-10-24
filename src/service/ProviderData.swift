@@ -330,3 +330,50 @@ struct ProviderData {
         return "\(scheme)://\(host):\(port)"
     }
 }
+
+/// The Trezi beta invite code for Send Feedback (LKM-336), `<profile>/trezi/feedback-code.json`
+/// (`{"version":1,"code":"<base64 ciphertext>"}`, mode 0600): encrypted with the Keychain
+/// helper like a seat token, never in plain text on disk. Bun reads it back (`feedbackCode`)
+/// only to send it as the Bearer of a request to the Trezi feedback endpoint.
+extension ProviderData {
+    static let badFeedbackCode = "That does not look like an invite code: paste the code from your Trezi beta invite."
+    static let noFeedbackKeyring = "No OS credential store is available, so Trezi cannot store the invite code " +
+        "(it never writes it to disk in plain text)."
+
+    var feedbackCodeFile: String { directory + "/feedback-code.json" }
+
+    private func sealedFeedbackCode() -> String? {
+        guard let data = FileManager.default.contents(atPath: feedbackCodeFile), data.count <= 64 * 1024,
+              let parsed = try? JSValue.parse(data), let blob = parsed["code"]?.text?.string, !blob.isEmpty else { return nil }
+        return blob
+    }
+
+    func hasFeedbackCode() -> Bool { sealedFeedbackCode() != nil }
+
+    /// Saves (or, for an empty code, removes) the invite code; answers whether one is saved.
+    func saveFeedbackCode(_ raw: String) throws -> Bool {
+        let code = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if code.isEmpty {
+            guard unlink(feedbackCodeFile) == 0 || errno == ENOENT else {
+                throw ProviderRefusal(.ioFailure, "Could not remove the invite code: \(String(cString: strerror(errno)))")
+            }
+            return false
+        }
+        guard code.utf8.count <= 512, code.utf8.allSatisfy({ (0x21...0x7E).contains($0) }) else {
+            throw ProviderRefusal(.invalidRequest, Self.badFeedbackCode)
+        }
+        guard let crypto = tools.crypto, !crypto.isEmpty else { throw ProviderRefusal(.unavailable, Self.noFeedbackKeyring) }
+        guard let sealed = self.crypto("encrypt", Data(code.utf8)) else { throw ProviderRefusal(.unavailable, Self.keychain) }
+        try prepareDirectory()
+        let body = JSValue.object([(JSText("version"), .number(1)), (JSText("code"), .string(JSText(sealed.base64EncodedString())))])
+        try Self.replace(feedbackCodeFile, Data(JSValue.pretty(body).utf8), mode: 0o600)
+        return true
+    }
+
+    /// The plaintext code, or nil (none, or it cannot be decrypted here).
+    func feedbackCode() -> String? {
+        guard let blob = sealedFeedbackCode(), let plain = crypto("decrypt", Self.base64(blob)) else { return nil }
+        let code = String(decoding: plain, as: UTF8.self)
+        return code.isEmpty ? nil : code
+    }
+}

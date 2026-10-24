@@ -2,6 +2,37 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-336: Send Feedback posts privately to the Trezi feedback endpoint
+
+- **Why.** In-app feedback filed a public GitHub issue through `gh issue create` in Trezi's
+  checkout: testers needed `gh` logged in, and reports (screens, conversation, diagnostics)
+  were public. It now goes to `POST https://trezi.app/api/feedback`, which files a private
+  Linear issue and answers its key.
+- **Endpoint client.** `src/main/feedback-endpoint.ts`: Bearer invite code, `redirect: 'error'`,
+  timeouts; the screenshot is PUT to the returned upload URL (https, or the same loopback
+  origin) without the Bearer, then attached. Once the issue exists, a failed upload or attach is
+  a warning on the toast, never a resend (no duplicate reports). `TREZI_FEEDBACK_URL` is honored
+  only for loopback, so a stray variable cannot send the code elsewhere. The pure request builder
+  and error mapping are in `src/shared/feedback-body.ts` (limits 20,000 / 60,000 / 60,000
+  characters and 10 MB; 401 asks for a new code, 413/400 Close only, 429 names the Retry-After,
+  network and 5xx keep Retry; the endpoint's message is shown, stripped of control characters).
+- **Invite code.** Kept by the provider owner like a seat token: encrypted with the Keychain
+  helper into `<profile>/trezi/feedback-code.json` (0600, ciphertext only), so no new Keychain
+  item or approval prompt. Bun reads the plaintext only for the Bearer. It is asked for the first
+  time (checked with `/api/feedback/me` before saving), and Settings → General changes or removes
+  it (`src/native/settings-feedback.ts`, a status read with no network).
+- **Sheet.** "Sending as <name>" and "goes privately to the Trezi developer"; the opt-ins are
+  unchanged; the host now captures the full-size PNG (JPEG when over 10 MB) next to the small
+  preview. Success is a toast with the Linear key (no page to open).
+- **Removed.** The `feedback` workflow (`WorkflowTools.swift`, `WorkflowOwner.swift`,
+  `workflow-owner.ts`, `workflow-service.ts`), `feedback:capture` and the GitHub body limits;
+  `test/workflow-owner.mjs` now checks that the owner refuses a `feedback` request.
+- **Checks.** Unit: `feedback-body`, `feedback-endpoint` (injected fetch: the sandbox cannot
+  bind ports), `feedback-diagnostics`, `provider-feedback-code` (the real Swift owner with the
+  fake Keychain helper), `native-support-sheets`, `workflow-owner`. The `settings` native
+  smoke (`smoke-alerts.ts` against a loopback mock endpoint, `smoke-sheets.ts`) was written
+  but not run by the worker (no native run allowed), nor was a real send to trezi.app.
+
 ## 2026-10-23 — LKM-334 repair 3: native-chat-scroll's completion-footer reading must hold still
 
 - **Manager failure.** The `chat` group passed 14/14, and `native-chat-scroll` got through send

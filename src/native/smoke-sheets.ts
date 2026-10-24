@@ -152,16 +152,25 @@ export async function checkNativeSheets(host: NativeBridge, key: string, artifac
   await host.request('sheetPerform', { action: 'back' })
   await wait((state) => state.fields.includes('connections') && !state.fields.includes('key'))
   await host.request('settingsVerification', { section: 'general' })
-  await wait((state) => state.section === 'general')
+  // LKM-336: General carries the feedback invite code (Save, no Remove without a code).
+  await wait(
+    (state) =>
+      state.section === 'general' &&
+      state.fields.includes('feedbackCode') &&
+      state.actions.includes('feedback-code-save') &&
+      !state.actions.includes('feedback-code-remove')
+  )
   await host.request('sheetPerform', { action: 'cancel' })
   await wait((state) => !state.visible)
+  // The disposable profile has no invite code: Send Feedback asks for it first. The form
+  // after it is covered against a mock endpoint by smoke-alerts.ts.
   host.emit('menu', { action: 'feedback' })
   await wait(
     (state) =>
       state.visible &&
-      state.title === 'Send feedback' &&
-      state.fields.includes('body') &&
-      state.fields.includes('diagnostics')
+      state.title === 'Enter your invite code' &&
+      state.fields.includes('code') &&
+      /Trezi beta invite/.test(state.detail)
   )
   await new Promise((resolve) => setTimeout(resolve, 250))
   writeFileSync(
