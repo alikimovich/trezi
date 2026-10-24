@@ -2,6 +2,47 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-330: nightly native failures on main d1f851ea (partial)
+
+- **Why.** The nightly native run (macOS 27) failed five checks. The causes below come
+  from its log, its captures and a headless AppKit probe on this macOS 27 machine.
+- **build-badge (fixed, reproduced headlessly).** On macOS 27 an `NSTextField` label's
+  alignment rect leaves out its 2 pt text padding (`alignmentRectInsets` 0/2/0/2; on earlier
+  systems 0). Auto Layout chains alignment rects, so the identity and context frames
+  overlapped by 4 pt. The capture shows the drawn text touching: "d1f851e)· detac…".
+  `src/native/BuildBadge.swift` adds the insets to the dot gap, the identity → context
+  gap and the trailing edge. With zero insets the layout is unchanged; on macOS 27 the
+  frames abut again (probe: overlap 4.0 → 0.0). `truncated` now compares the intrinsic
+  width with the alignment-rect width.
+- **composer-send and start-composer (cascade).** `visible-composer` failed while its
+  stubbed turn was running and left it running. composer-send's Return then queued
+  "Don't stop" instead of sending it ("sent once": 0). Its `finally` ended that turn after
+  restoring the real `invoke`, so the queued draft went out as a real turn, which then
+  disturbed start-composer's model choice. `src/native/smoke-composer.ts` now ends a running
+  turn in `finally` while the stub still holds. `src/native/smoke-composer-send.ts` asserts
+  it starts with no turn running, so a future cascade shows as a single failure.
+- **Open: visible-composer 320-sending.** The newest row (the 71 pt assistant placeholder
+  after the 80-line prompt) sat at 1897–1968 with `pinned` true and a 570 pt reading height.
+  It passed at 440 in the same run and at both widths in the LKM-325 run, and nothing in the
+  chat changed in between, so it looks like a timing-dependent settle. The failure message
+  now also reports `scrollY`, `documentHeight`, `viewportHeight`, `bottomPosition` and
+  `settleAttempts`: next time it shows whether the clip or the stack's end is wrong and
+  whether `ChatLatestSettle` ran out of attempts. The scroll code is unchanged.
+- **Inspector hover over the island (defensive fix, unverified).** LKM-325's probe read
+  `hitIsShield` true, but neither the heading nor the shield `:hover`, and the hover box
+  still showed. That fits neither case LKM-325 expected: the page saw the island move on
+  something other than the shield, or saw none. `onMove` (`src/preview/preload.ts`) now also
+  treats a move whose client point is inside a covered rect as overlay
+  (`nativeCover.covers`, unit test `test/preview-native-cover.mjs`). That fixes the first
+  case. The probe (`src/native/smoke-hover-probe.ts`) now adds the innermost `:hover`
+  element, the hover box's rect and the last pointer events the preview world saw after the
+  island move (`hoverRecorderScript`, installed just before it in the inspector and Layers
+  checks). No events listed means WebKit dropped the move. Then the fix belongs in the host
+  (`InspectorIslandVerification.swift` or the island telling the page), not in the page.
+- **Verification.** Lint, both typechecks and the unit tier pass (quick tier, 257 pass).
+  No native run was available in this session (0 native calls), so none of the five checks
+  ran again.
+
 ## 2026-10-23 — LKM-321: toolbar in full screen with the menu bar revealed
 
 - **Symptom.** In full screen, revealing the menu bar hid the address block and "…".

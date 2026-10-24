@@ -30,6 +30,8 @@ export async function checkComposerSend(host: NativeBridge) {
     await wait(() => !chat.isRunning, 'the turn to finish')
   }
   try {
+    // A turn left running by an earlier check queues the Return below instead of sending it.
+    assert.ok(!chat.isRunning, 'Composer send starts with no turn running')
     // Return, then AppKit's smart quote curls the sent apostrophe (the user's report).
     await host.request('composerPerform', {
       steps: [{ text: "Don't stop" }, { key: 'Enter' }, { substitute: ["'", '’'] }]

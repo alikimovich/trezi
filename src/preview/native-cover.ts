@@ -83,6 +83,11 @@ export function createNativeCover() {
     contains(target: EventTarget | null): boolean {
       return !!host && target === host
     },
+    /** LKM-330: whether a viewport point is over a covered rect, whatever element WebKit
+     *  resolved for the event. A few rects, so cheap enough per move. */
+    covers(x: number, y: number): boolean {
+      return current.some((r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+    },
     /** Window capture listeners that keep the page's own handlers from seeing the
      *  pointer over a shield. Install after the preload's own listeners: those
      *  treat the shield as overlay and drop the hover box. */
