@@ -2,6 +2,32 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-331 repair: preview-overlay, comment-rows, narrower OCR rule (unverified natively)
+
+- **Evidence used.** The nightly's `failure-preview-overlay.png` and the passing
+  `preview-overlay-clip-normal-light.png` of the previous run: both have the Layers and
+  editing islands open, so the islands are not the difference. The composer and toolbar glass
+  tint the magenta beside them (a pink glow in the passing capture), and on a dark system more
+  strongly. The 35602 stray samples (about 35 600 pt² at 2x) are far more than the old rule
+  would expect from paint, and fit glass, not overpaint.
+- **preview-overlay.** Outside the page the check now counts only the page's own paint:
+  pixels within 6 levels of the commonest magenta inside the page. Tinted or refracted
+  near-magenta no longer counts, an opaque spill into the chat still does. The failure
+  message names the stray box, the page rect, the count of tinted pixels and the paint colour.
+- **comment-rows.** The reference bubble leads the five rows; a setup card or a taller
+  composer below them can push it above the reading area, where nothing is sampled
+  (`sample` returns empty, so the bubble contrast stays 0). `verifyCommentRows` now scrolls
+  the conversation until the bubble is in view when it is not, settles again, then lays out
+  and displays the new appearance before the capture. The failure message names the frame.
+- **settings OCR (review finding).** Language correction can complete a clipped word, so the
+  corrected reading alone no longer passes. It counts only when the plain reading holds every
+  required word whole (each plain word is the required word plus at most two trailing
+  letters). Off still needs the text absent from both readings. Unit cases: "metho" (clipped,
+  corrected "method") fails, "methodabc" fails, "methoda" passes.
+- **Not run.** No native call was available. Please run the `sheets`, `build-badge`,
+  `layers-island`, `preview-overlay` and `comment-rows` checks (`core`, `sidebar`, `settings`,
+  `chat` groups), once in Light and once in Dark system appearance, and read the captures.
+
 ## 2026-10-23 — LKM-331: nightly native failures on main bb2ca743 (partial)
 
 - **Why.** Five native checks failed in the nightly run. That run happened while the system

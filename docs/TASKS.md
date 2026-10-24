@@ -8,7 +8,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] build-badge: the whole-text states run at the widest sidebar (340 pt); the 180 pt case still checks designed truncation.
 - [x] layers-island: `inspector-custom` closes the editing island after a pass too; Layers closes it before measuring.
 - [x] sheets: Settings evidence also accepts Vision's language-corrected reading of the same pixels (unit `test/native-settings-evidence.mjs`).
-- [x] preview-overlay and comment-rows: failure messages now name the stray magenta's box and the bubble frame; the overlay clip PNG is written before asserting.
+- [x] preview-overlay: stray colour outside the page counts only within 6 levels of the page's own paint (glass tint no longer fails it); the failure names the box; the clip PNG is written before asserting.
+- [x] comment-rows: the reference bubble is scrolled into view when the rows push it out, and the new appearance is displayed before the capture; the failure names the bubble frame.
+- [x] settings OCR: the language-corrected reading only counts when the plain reading holds each required word whole (plus at most two trailing letters); clipped words still fail (unit `test/native-settings-evidence.mjs`).
 - [ ] Native run of `sheets`, `build-badge`, `layers-island`, `preview-overlay`, `comment-rows` (none was available to the worker); if preview-overlay or comment-rows still fail, fix from the new diagnostics.
 
 ## Remove dividers inside toolbar islands on macOS 27 (LKM-319)

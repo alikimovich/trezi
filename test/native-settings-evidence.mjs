@@ -362,6 +362,32 @@ assert.throws(() =>
     'agent'
   )
 )
+// A clipped word is not rescued by language correction: the plain reading "Ul layout metho"
+// is shorter than the required word, though the corrected reading completes it to "method".
+assert.throws(
+  () =>
+    assertSettingsEvidence(
+      { ...stray, text: strayText.map((t) => (t === 'Ul layout methoda' ? 'Ul layout metho' : t)) },
+      960,
+      true,
+      'agent'
+    ),
+  /Missing complete foreground text: UI layout method/
+)
+// Nor is a corrected reading on its own when the plain one has more than a stray pair.
+assert.throws(
+  () =>
+    assertSettingsEvidence(
+      {
+        ...stray,
+        text: strayText.map((t) => (t === 'Ul layout methoda' ? 'Ul layout methodabc' : t))
+      },
+      960,
+      true,
+      'agent'
+    ),
+  /Missing complete foreground text: UI layout method/
+)
 assert.throws(
   () =>
     assertSettingsEvidence(

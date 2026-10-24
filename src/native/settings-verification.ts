@@ -200,20 +200,36 @@ export function assertSettingsEvidence(
   ])
     assert.ok(reads(evidence, required), `Missing complete foreground text: ${required}`)
   if (!enabled) {
-    assert.ok(!reads(evidence, 'UI layout method'), 'Off hides engine label')
-    assert.ok(!reads(evidence, 'requires an AI Gateway API key'), 'Off hides engine help')
+    assert.ok(!shows(evidence, 'UI layout method'), 'Off hides engine label')
+    assert.ok(!shows(evidence, 'requires an AI Gateway API key'), 'Off hides engine help')
   }
 }
 
 /**
- * Whether the plain or the language-corrected Vision reading renders `text` whole. Both read
- * the same pixels, so clipped text fails both; a stray glyph Vision adds to one reading
- * ("Ul layout methoda" in a dark capture) does not (LKM-331). Absence needs both.
+ * Whether Vision's plain reading renders `text` whole. A dark capture can add a stray glyph
+ * to a word ("Ul layout methoda", LKM-331): then the language-corrected reading of the same
+ * pixels may stand in for it, but only if the plain reading still holds every required word
+ * whole (each plain word is the required word plus at most two trailing letters). Language
+ * correction completes a clipped word ("metho" to "method"), so a plain word shorter than
+ * the required one never passes through it. Absence needs both readings to lack the text.
  */
 function reads(evidence: SettingsEvidence, text: string): boolean {
-  return [evidence.text, evidence.corrected ?? []].some((lines) =>
-    rendersText(lines.map(words), words(text))
+  const sentence = words(text)
+  const plain = evidence.text.map(words)
+  if (rendersText(plain, sentence)) return true
+  const extended = plain.map((line) =>
+    line.map(
+      (word) => sentence.find((s) => word.startsWith(s) && word.length <= s.length + 2) ?? word
+    )
   )
+  return (
+    rendersText(extended, sentence) && rendersText((evidence.corrected ?? []).map(words), sentence)
+  )
+}
+
+/** Whether either reading shows `text` at all: what Off must not leave on screen. */
+function shows(evidence: SettingsEvidence, text: string): boolean {
+  return reads(evidence, text) || rendersText((evidence.corrected ?? []).map(words), words(text))
 }
 
 // Normalize typography only; every word is still required, in order.

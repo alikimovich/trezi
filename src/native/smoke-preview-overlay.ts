@@ -109,7 +109,7 @@ export async function checkPreviewOverlay(
     assert.equal(
       image.magentaOutside,
       0,
-      `${label}: no grid colour outside viewport (window points, top-left: page ${image.pageTopLeft}, stray ${image.magentaOutsideBox})`
+      `${label}: no grid colour outside viewport (window points, top-left: page ${image.pageTopLeft}, stray ${image.magentaOutsideBox}; ${image.magentaOutsideLoose} tinted, paint ${image.magentaPaint})`
     )
     return {
       frame: state.frame,

@@ -14,16 +14,34 @@ extension Host {
         if let dark = c["dark"] as? Bool { window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua) }
         for id in c["toggle"] as? [String] ?? [] { chat.model.toggleComment(id) }
         let ids = c["messages"] as? [String] ?? [], user = c["user"] as? String ?? ""
-        chat.model.pressLatest()
-        // Settled: every row is laid out and holds its frame across two samples.
-        var last: [CGRect] = []
-        for _ in 0..<60 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            let frames = (ids + [user]).map { chat.model.messageFrames[$0] ?? .zero }
-            if frames == last && !frames.contains(.zero) { break }
-            last = frames
-        }
         let reading = NSRect(x: 0, y: 0, width: chat.bounds.width, height: max(1, chat.bounds.height - chat.model.bottomInset))
+        // Settled: every row is laid out and holds its frame across two samples.
+        func settle() async throws {
+            var last: [CGRect] = []
+            for _ in 0..<60 {
+                try await Task.sleep(nanoseconds: 50_000_000)
+                let frames = (ids + [user]).map { chat.model.messageFrames[$0] ?? .zero }
+                if frames == last && !frames.contains(.zero) { break }
+                last = frames
+            }
+        }
+        chat.model.pressLatest()
+        try await settle()
+        // LKM-331: the reference bubble leads the rows, so what follows them (a setup card, a
+        // taller composer) can push it above the reading area, where there is nothing to sample.
+        // Bring it into view, then let the new appearance and position paint before the capture.
+        let lead = chat.model.messageFrames[user] ?? .zero
+        if (lead.minY < 8 || lead.maxY > reading.height), let scroll = chat.conversationScroll, let document = scroll.documentView {
+            let clip = scroll.contentView
+            var target = clip.bounds
+            let shift = lead.minY - 12
+            target.origin.y += document.isFlipped ? shift : -shift
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: clip.constrainBoundsRect(target).origin.y))
+            scroll.reflectScrolledClipView(clip)
+            try await settle()
+        }
+        chat.layoutSubtreeIfNeeded(); window.contentView?.displayIfNeeded()
+        try await Task.sleep(nanoseconds: 200_000_000)
         let captured = try await captureVisibleRegion(window: window, view: chat, region: reading, recognize: false)
         guard let data = Data(base64Encoded: captured["png"] as? String ?? ""), let bitmap = NSBitmapImageRep(data: data) else {
             throw NSError(domain: "CommentRows", code: 1, userInfo: [NSLocalizedDescriptionKey: "Comment rows capture unreadable"])
