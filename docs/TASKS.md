@@ -43,7 +43,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reproduce with per-frame passive toolbar traces and foreground captures; root cause in `docs/evidence/lkm-296/ROOT-CAUSE.md`.
 - [x] Size the address block and chat header for where the toolbar settles (expand, restore, split resize, inserted chat header).
 - [x] Regression `src/native/smoke-toolbar-overflow.ts` (core `toolbar-address`): no actionable control and no "…" in the overflow menu in any frame at 1320/1810 pt, expand/restore, rapid toggles, sidebar 340/180/230; real controls still overflow below the minimum width.
-- [ ] Full screen not exercised (the toolbar lives in a separate window there).
+- [ ] Full screen not exercised (the toolbar lives in a separate window there). Covered by LKM-321's check, not yet run.
+## Toolbar collapses in full screen when the menu bar is revealed (LKM-321)
+
+- [x] Cause, from the code: in full screen the toolbar lives in AppKit's own window. The address layout only measured views in the main window and nothing observed that window, so widths from before the menu bar reveal's relayout stayed and the address and "…" stayed in the overflow menu (`src/native/ToolbarFullScreen.swift`).
+- [x] Fix: toolbar frames go through the screen into main-window coordinates, the toolbar is measured in full screen too, and again when its window moves or resizes, on entering/exiting full screen and when the address view changes window.
+- [x] Regression `src/native/smoke-toolbar-fullscreen.ts` (core `toolbar-address`): full screen with the menu bar hidden, revealed (`NSMenu.setMenuBarVisible`) and moved by the menu bar's height, collapsed and expanded; toolbar-window captures.
+- [ ] Not run: run the native `core` group (needs a foreground desktop). Check that the bug reproduces before the fix, read `toolbar-fullscreen-*.png` and `toolbar-fullscreen.json`, and confirm `toolbar-overflow` still passes.
 ## Skills screen: replace explanatory paragraph copy (LKM-295)
 
 - [x] Settings → Skills reads "Manage skills here without changing your project or global files" (no final period); title, rows and skills behaviour unchanged.
