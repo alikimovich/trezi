@@ -11,11 +11,13 @@ Newest first. Append a dated entry when you finish a chunk of work.
   below the page top). The ruler and the gap count as `outside` again at the strict threshold.
   The band's limits are recorded as `toolbarBandLimits` (window points, top-left) in the
   capture and the clip evidence; the failure message is unchanged.
-- **Still open.** This session had no native verification allowance, so sheets, build-badge,
-  layers-island, preview-overlay and comment-rows are still unrun on this tree. The system
-  appearance, `magentaOutside`/`magentaToolbarBand`/`toolbarBandLimits` (preview-overlay) and
-  `userFrame`/`readingHeight` (comment-rows) still need to be read from a foreground
-  `bun run test:native` run and recorded here.
+- **Deferred native acceptance.** This session had no native verification allowance. By
+  operator decision option (b), native acceptance (sheets, build-badge, layers-island,
+  preview-overlay, comment-rows, plus the values system appearance, `magentaOutside`,
+  `magentaToolbarBand`, `toolbarBandLimits`, `userFrame`, `readingHeight`) is deferred to the
+  post-merge native suite run on main, which the steward queues. If that run fails on the same
+  check, the new ticket must reference LKM-325/328/330/331/332. No separate "native not
+  verified" follow-up is to be opened.
 
 ## 2026-10-23 — LKM-331 repair 2: strict preview-overlay count, comment-rows scroll that stays (unverified natively)
 
