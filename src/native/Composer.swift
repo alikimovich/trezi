@@ -109,7 +109,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         controls.detachesHiddenViews = false
         plus.addItem(withTitle: ""); plus.item(at: 0)?.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Attach or select")
         plus.isBordered = false; (plus.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow; plus.setAccessibilityLabel("Attachments and tools")
-        for (title, action) in [("Attach Files…", "attach"), ("Show Layers", "layers")] {
+        for (title, action) in [("Attach Files…", "attach")] {
             let item = NSMenuItem(title: title, action: #selector(menuAction(_:)), keyEquivalent: "")
             item.target = self; item.representedObject = ["action":action]; plus.menu?.addItem(item)
         }

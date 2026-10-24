@@ -10,7 +10,7 @@ export type NativeComposerAction = { chat: string } & (
   | { action: 'send'; stop?: boolean; attempt?: number }
   /** LKM-338: Stop on a send that has not left the composer; the draft stays as it is. */
   | { action: 'cancel-send'; attempt: number }
-  | { action: 'context' | 'layers' }
+  | { action: 'context' }
   | { action: 'choice'; label: string; value: string }
   | { action: 'suggestion' | 'remove' | 'unreference'; index: number }
   | {
