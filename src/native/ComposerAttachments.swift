@@ -11,6 +11,10 @@ final class ComposerAttachments: NSScrollView {
     private var tiles: [ComposerAttachmentTile] = []
     var remove: ((Int) -> Void)?
     var count: Int { tiles.count }
+    /// LKM-338: a draft being sent keeps its attachments; their remove buttons are off.
+    var locked = false {
+        didSet { if locked != oldValue { tiles.forEach { $0.removeButton.isEnabled = !locked } } }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -28,6 +32,7 @@ final class ComposerAttachments: NSScrollView {
         tiles = values.enumerated().map { index, value in
             let tile = ComposerAttachmentTile(value)
             tile.remove = { [weak self] in self?.remove?(index) }
+            tile.removeButton.isEnabled = !locked
             row.addSubview(tile)
             return tile
         }

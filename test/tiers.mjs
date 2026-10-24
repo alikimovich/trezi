@@ -100,6 +100,7 @@ export const UNIT = [
   'chat-send-queue',
   'composer-queue-panel',
   'composer-sent-draft',
+  'composer-sending',
   'chat-auto-resolve',
   'live-write-guard',
   'agent-file-access',

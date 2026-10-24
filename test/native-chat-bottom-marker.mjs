@@ -44,6 +44,7 @@ if (process.platform !== 'darwin') {
     'ComposerAttachments',
     'ComposerQueue',
     'ComposerBeam',
+    'ComposerSending',
     'ScrollerDrag'
   ].map((name) => `src/native/${name}.swift`)
   const scratch = mkdtempSync(join(tmpdir(), 'trezi-chat-bottom-marker-'))

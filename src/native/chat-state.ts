@@ -49,6 +49,10 @@ export interface Chat extends NativeChatMirror {
   /** LKM-304: accepted sends of the draft (`count`) and the composer revision of the last
    *  one. The composer removes exactly that text; inputs of an older count are stale. */
   sent: { count: number; revision: number }
+  /** LKM-338: the composer's last Send (or Return) this controller handled, and a send
+   *  of the draft still waiting before it leaves the composer (0: none). Stop cancels it. */
+  sendAttempt: number
+  submitting: number
   attachments: Attachment[]
   commands: SlashCommandItem[]
   menuIndex: number
@@ -135,6 +139,8 @@ export function newChat(chat: string): Chat {
     caret: 0,
     revision: 0,
     sent: { count: 0, revision: 0 },
+    sendAttempt: 0,
+    submitting: 0,
     attachments: [],
     commands: [],
     menuIndex: 0,

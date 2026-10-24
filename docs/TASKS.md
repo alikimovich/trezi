@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Composer sending state after 1.5 s (LKM-338)
+
+- [x] The chat controller holds a Send whose draft has not left (chat being prepared, home project opening) and reports it as `composer.sending` with the composer's attempt; `cancel-send` ends it with the draft untouched (`test/composer-sending.mjs`).
+- [x] `ComposerSending.swift`: after 1.5 s the Send beam, read-only content at 55%, locked attachment chips, and "Stop sending" (or "Sending…" without Stop) — unit fixture `test/fixtures/composer-sending`.
+- [ ] Native evidence of the look itself (no smoke check drives a slow send yet).
+
 ## Native suite failure on main a6ecd135 (LKM-334)
 
 - [x] comment-rows and chat-text sample colours from the window's own rendering (`renderRegion`), not the ScreenCaptureKit capture, which on macOS 27 is drawn smaller than the frames; the capture's geometry is returned and named in failures.
