@@ -4,6 +4,7 @@ import { previewShows } from '../main/preview-page'
 import type { LayersSnapshot, SelectedElement } from '../shared/api'
 import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
+import { CONTROLS_REQUEST_HEADER } from '../shared/controls-prompt'
 import { projectRelative } from '../shared/project-path'
 import { describeSelectionForPrompt, oneLine } from '../shared/selection-context'
 import type { NativeBridge } from './bridge'
@@ -11,6 +12,7 @@ import type { NativeChatController } from './chat-controller'
 import { turnBoundaries } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
 import { NativeInspectorController } from './inspector-controller'
+import { chatRequests } from './inspector-custom'
 import { NavigationController } from './navigation-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import type { NativeWorkspaceController } from './workspace-controller'
@@ -77,6 +79,30 @@ export function installNativeInspector(
     render(state)
     navigation.poke()
   }
+  // LKM-323: a Custom tab request is a turn in the project's active chat.
+  controller.custom.generate = chatRequests({
+    chatFor: (root) =>
+      workspace.state.projects.find((p) => p.root === root)?.activeSessionKey ?? null,
+    state: (key) => {
+      const c = chat.chats.get(key)
+      if (!c) return null
+      return {
+        messages: c.messages,
+        queued: c.queue.map((q) => q.text),
+        running: c.isRunning || c.sending,
+        paused: c.paused
+      }
+    },
+    submit: (key, text) => chat.command({ type: 'submit', chat: key, text }),
+    dequeue: (key, id) => {
+      const c = chat.chats.get(key)
+      if (!c) return
+      c.queue = c.queue.filter((q) => !q.text.includes(`${CONTROLS_REQUEST_HEADER} ${id}.`))
+      chat.changed(c)
+    },
+    boundaries: turnBoundaries,
+    changes: chat.watchers
+  })
   host.on('inspector-action', (action) => {
     void controller.action(action).catch(report)
   })

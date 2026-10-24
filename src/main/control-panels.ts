@@ -16,6 +16,13 @@ import {
   upsertPanel,
   validateManifest
 } from './control-manifest'
+import {
+  changedParams,
+  placePanel,
+  requestedPanel,
+  unresolvedLiterals,
+  withoutParam
+} from './control-requests'
 import { editingOwner } from './editing-owner'
 import { commitEdit, withinRoot } from './props'
 import { contentHash } from './source-owner'
@@ -148,6 +155,64 @@ export function saveManifest(
     if ('error' in next) return next
     await writeStore(root, next, store.preserved, store.hash)
     return manifest
+  })
+}
+
+/**
+ * LKM-323: save the panel an Inspector Custom tab request was answered with (see
+ * control-requests.ts): a new panel, or — with `panel` — that panel's next revision, or
+ * — with `panel` and `param` — that one control replaced. Every literal control the
+ * answer added or changed must resolve in the live file now; the others keep their state.
+ */
+export function savePanelAnswer(
+  root: string,
+  raw: unknown,
+  options: { files?: unknown; panel?: unknown; param?: unknown } = {}
+): Promise<ControlPanelManifest | { error: string }> {
+  return serialize(async () => {
+    const store = await readStore(root)
+    if (!store.writable)
+      return { error: '.trezi/control-panels.json is not a valid store — fix or delete it first' }
+    const files = Array.isArray(options.files)
+      ? options.files.filter((f): f is string => typeof f === 'string')
+      : []
+    const replace = typeof options.panel === 'string' ? options.panel : undefined
+    const old = replace === undefined ? undefined : store.panels.find((p) => p.id === replace)
+    if (replace !== undefined && !old) return { error: 'This panel was removed meanwhile.' }
+    const manifest = requestedPanel(
+      raw,
+      files,
+      store.panels.map((p) => p.id),
+      old && { panel: old, param: typeof options.param === 'string' ? options.param : undefined }
+    )
+    if ('error' in manifest) return manifest
+    const abs = resolveRepoFile(root, manifest.file)
+    if (!abs) return { error: 'The panel file escapes the project root.' }
+    const code = await readFile(abs, 'utf8').catch(() => null)
+    const problems = unresolvedLiterals(code, changedParams(manifest, old))
+    if (problems.length)
+      return { error: `Some controls do not match ${manifest.file}: ${problems.join('; ')}.` }
+    const next = placePanel(store.panels, manifest, replace)
+    if ('error' in next) return next
+    await writeStore(root, next, store.preserved, store.hash)
+    return manifest
+  })
+}
+
+/** LKM-323: remove one control from a panel (the last one removes the panel). */
+export function removeParam(
+  root: string,
+  panel: string,
+  param: string
+): Promise<ControlPanelManifest[] | { error: string }> {
+  return serialize(async () => {
+    const store = await readStore(root)
+    if (!store.writable)
+      return { error: '.trezi/control-panels.json is not a valid store — fix or delete it first' }
+    const next = withoutParam(store.panels, panel, param)
+    if ('error' in next) return next
+    await writeStore(root, next, store.preserved, store.hash)
+    return next
   })
 }
 
@@ -287,6 +352,18 @@ export function registerControlsIpc(): void {
       if (!w.webContents.isDestroyed()) w.webContents.send('controls:updated', { root })
     return panels
   })
+  ipcMain.handle(
+    'controls:save',
+    (
+      _e,
+      root: string,
+      manifest: unknown,
+      options?: { files?: unknown; panel?: unknown; param?: unknown }
+    ) => savePanelAnswer(root, manifest, options ?? {})
+  )
+  ipcMain.handle('controls:remove-param', (_e, root: string, panel: string, param: string) =>
+    removeParam(root, String(panel), String(param))
+  )
   ipcMain.handle(
     'controls:apply-literal',
     (_e, root: string, panelId: string, paramId: string, value: unknown) =>

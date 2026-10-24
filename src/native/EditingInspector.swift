@@ -5,13 +5,15 @@ struct InspectorToken: Decodable, Identifiable { let id: String; let label: Stri
 struct InspectorField: Decodable, Identifiable {
     let id: String, label: String, group: String, kind: String, value: String
     let disabled: Bool?, detail: String?, options: [String]?, optionLabels: [String: String]?, min: Double?, max: Double?, step: Double?, unit: String?, tokens: [InspectorToken]?, reset: Bool?
-    let layout: String?, axis: String?, mixed: Bool?, expanded: Bool?
+    let layout: String?, axis: String?, mixed: Bool?, expanded: Bool?, panel: String?
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
-struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int?; let edits: Int? }
+struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int?; let edits: Int?; let custom: InspectorCustom? }
 final class InspectorModel: ObservableObject {
     @Published var state: InspectorState?
+    /// The Custom tab's last focus request already handled (LKM-323).
+    var customFocus = 0
     /// LKM-216: a re-read after a source/CSS change altered the same selection's values;
     /// the island plays a brief "Updated" pulse instead of rebuilding its fields.
     @Published var pulse = false
@@ -352,15 +354,19 @@ struct EditingInspectorContent: View {
                         }
                         ForEach(Array(state.fields.filter { state.tab != "styles" || $0.layout == nil }.enumerated()), id: \.element.id) { index, field in
                             if index == 0 || field.group != state.fields.filter({ state.tab != "styles" || $0.layout == nil })[index - 1].group {
-                                if !field.group.isEmpty && !(state.tab == "styles" && field.group == "layout") {
+                                if let panel = field.panel { CustomPanelHeader(title: field.group, panel: panel, model: model) }
+                                else if !field.group.isEmpty && !(state.tab == "styles" && field.group == "layout") {
                                     Text(field.group == "appearance" ? "Color & Effects" : field.group.capitalized).font(.headline).padding(.top, 5)
                                 }
                             }
-                            InspectorFieldView(field: field, model: model)
+                            if field.panel != nil {
+                                HStack(alignment: .top, spacing: 4) { InspectorFieldView(field: field, model: model); CustomControlMenu(field: field, model: model) }
+                            } else { InspectorFieldView(field: field, model: model) }
                         }
                     // Trailing room keeps units and apply buttons clear of the overlay scroller.
                     }.id("\(state.root):\(state.generation)").padding(2).padding(.trailing, 10)
                 }.overlay(alignment: .topTrailing) { if model.pulse { UpdatedPulse().transition(.opacity) } }
+                if state.tab == "custom", let custom = state.custom { CustomRequestBar(custom: custom, model: model) }
             }.padding(.horizontal, FloatingIsland.padding).padding(.top, 4).padding(.bottom, FloatingIsland.padding).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

@@ -45,6 +45,78 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Verification.** Lint, both typechecks and the unit tier pass (quick tier, 257 pass).
   No native run was available in this session (0 native calls), so none of the five checks
   ran again.
+## 2026-10-23 — LKM-323: native evidence fixture
+
+- **Why.** Review found no artifact showing the Custom tab. The `inspector-custom` smoke
+  check (core group) now writes two files next to each other in the smoke artifacts folder:
+  `inspector-custom.png` (foreground shell capture after the stubbed answer rendered) and
+  `inspector-custom.json` (tab, placeholder, request field geometry, panels, control ids).
+- **Assertions.** Placeholder `Ask for controls…`; request field found, visible, editable,
+  height >= 30; after Return the field clears, no error, the prompt carries the request text
+  and the file; `controls` contains `custom:card:radius` and `custom:card:shadow`; the live
+  radius value is `12`. Later steps (comment → revision 2, remove control → revision 3,
+  remove panel, failed request keeps the field editable) are unchanged.
+- **Not covered.** No narrow-width capture (the inspector has no resize hook in the smoke);
+  NSSlider counts are recorded but not asserted because SwiftUI's Slider has no NSSlider on
+  this macOS. This session could not run the native suite: run
+  `node test/run.mjs native --only=core` and read the PNG and JSON.
+
+## 2026-10-23 — LKM-323 repair: a Custom tab request can no longer hang
+
+- **Why.** Review found `chatRequests` settled only on a turn boundary or a rejected
+  submit. `NativeChatController.submit/run` often return normally with no agent event
+  (a refused send, a failed `agent:send`, a queued message the user then stopped or
+  discarded), so `pending` stayed set and, being one global value, locked the field in
+  every project until relaunch.
+- **Fix.** `chatRequests` now takes a `RequestChats` object and also watches the chat
+  itself (`NativeChatController.watchers`, called from `changed`). After the send was
+  accepted the request is either queued or its message is in the chat; it settles with
+  an error when it is neither (refused, discarded), when it is queued in a paused chat
+  (it is taken back out of the queue), or when its message is there but nothing runs
+  it (a failed send or Stop pauses the chat). A turn that ended without a recorded
+  begin settles with the answer found in the chat. `pending` and errors are keyed by
+  root, so one project cannot lock another, and the pending line has a Cancel
+  (`custom-cancel`, an `AbortSignal` into `generate`) that withdraws the request.
+- **Prompt.** The example `trezi-controls` line is built with `JSON.stringify` and the
+  page-sourced file goes through `oneLine`, so it cannot add prompt lines.
+- **Checks.** `test/control-requests.mjs` gained: a send that fails without
+  boundaries, a refused send, stop-while-queued, discard-while-queued, still waiting,
+  cancel, chat close, a missed begin, per-root pending, Cancel through the controller
+  and the hostile file name. The native `inspector-custom` smoke also checks a failed
+  request's error; it still has not been run (no native verification calls in this
+  session).
+
+## 2026-10-23 — LKM-323: Custom tab requests, comments and removal
+
+- **Why.** The Custom tab was empty until a chat turn happened to define a panel.
+  Users had no way to ask for controls for the element in front of them, or to
+  change or drop part of a panel.
+- **Design.** A request is a normal turn in the project's active chat, so it gets the
+  same engine, worktree, landing and undo as any edit. The prompt is headed
+  "Inspector Custom tab request <id>." and the rules (v46) make that the one case
+  where the agent answers with a fenced `trezi-controls` JSON block instead of
+  `chat_island`. Once the turn lands (`turnBoundaries`), the controller reads the
+  answer and main's `controls:save` validates it, enforces the selection's file,
+  checks the changed literal anchors against the live file and merges it into
+  `.trezi/control-panels.json` (hash-bound, serialized). A turn that fails or never
+  lands saves nothing and shows an error. Only the turn that starts with the request
+  as the latest user message counts, so a request queued behind another turn waits.
+- **Revisions.** A comment on a panel or a control sends the current panel JSON. The
+  answer replaces the panel in place (same id, `revision` + 1); a control comment
+  replaces only that param, so the other controls and their source values stay.
+  `controls:remove-param` removes one control; removing the last removes the panel.
+  Repair… and Create controls… now go through the same field.
+- **Files.** `src/main/control-requests.ts` (pure rules), `control-panels.ts`
+  (save/remove-param IPC), `src/shared/controls-prompt.ts`, `src/main/rules.ts`,
+  `src/native/inspector-custom.ts`, `InspectorCustom.swift` (NSTextView field,
+  panel/control menus), `EditingInspector.swift`, `HostInspectCustom.swift` (test-only
+  probe, kept apart so the slider fixture builds without Host), `smoke-inspector-custom.ts`.
+  `docs/SWIFT-BACKEND-ROUTES.md` is a frozen 2026-09-27 census (count pinned by
+  `test/service-contract.mjs`), so the two new `controls:*` routes are not added there.
+- **Checks.** typecheck, typecheck:native, swiftc typecheck of the host, lint, unit
+  `control-requests`, `control-panels`, `rules`, `project-path`, `native-inspector`.
+  The native `inspector-custom` smoke (core group, stubbed agent) was written but
+  not run: the worker had no native verification calls.
 
 ## 2026-10-23 — LKM-328: the islands tell the page when the pointer enters them
 

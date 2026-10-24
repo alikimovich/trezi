@@ -52,7 +52,9 @@ routes the existing three-way resolver through Trezi's repository queue. It deli
 does not expose raw Git or discard/reset operations. Interactive tuning uses
 `chat_island`, scoped to the originating chat and assistant turn. The legacy
 `define_controls` and `open_controls` tools are no longer registered; the socket
-bridge rejects those actions. Islands validate source anchors in the agent's
+bridge rejects those actions. The one exception to `chat_island` is a turn headed
+"Inspector Custom tab request": the agent answers it with a fenced `trezi-controls`
+JSON block, which main validates and saves as a Custom tab panel. Islands validate source anchors in the agent's
 checkout and become editable after the source lands in the live project.
 Preview location and screenshot tools share the native capture implementation across
 Claude and Codex; screenshots are returned as MCP image content. Every preview answer

@@ -103,11 +103,15 @@ try {
   const svelteSource = at('Broken.svelte', 1, 0)
   const prompts = {
     selection: describeSelectionForPrompt(element, root),
-    controls: controlsPrompt(element, root, null, undefined, 'claude'),
-    'controls (gemini)': controlsPrompt(element, root, null, 'speed', 'gemini'),
-    'controls (regenerate)': controlsPrompt(element, root, null, undefined, 'claude', {
-      json: '{}',
-      brokenIds: ['a']
+    controls: controlsPrompt(element, root, null, 'speed', {
+      id: 'r1',
+      files: ['src/Button.tsx']
+    }),
+    'controls (comment)': controlsPrompt(element, root, null, 'faster', {
+      id: 'r2',
+      files: ['src/Button.tsx'],
+      panel: '{}',
+      param: { id: 'a', label: 'A' }
     }),
     animation: animationControlsPrompt(element, root, null, 'fade', 'claude'),
     props: agentPromptFor(
