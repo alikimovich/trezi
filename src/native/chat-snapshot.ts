@@ -255,6 +255,10 @@ export function snapshot(
       caret: chat.caret,
       revision: chat.revision,
       sent: chat.sent,
+      sending: {
+        attempt: chat.sendAttempt,
+        active: !!chat.submitting || !!flow?.opening(chat)
+      },
       stop,
       ready: ready && !chat.switching,
       running: chat.isRunning,

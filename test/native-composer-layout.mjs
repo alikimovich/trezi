@@ -16,7 +16,8 @@ if (process.platform !== 'darwin') {
       'ComposerAttachments',
       'AttachmentThumbnail',
       'ComposerQueue',
-      'ComposerBeam'
+      'ComposerBeam',
+      'ComposerSending'
     ].map((name) => `src/native/${name}.swift`)
   ])
   console.log(runFixture(binary).trim())

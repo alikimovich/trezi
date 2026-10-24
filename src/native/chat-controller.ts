@@ -87,6 +87,7 @@ export class NativeChatController {
   private beginningPlanning?: Promise<void>
   private planningGeneration = 0
   private planningQueued = new Map<string, string[]>()
+  private holds = 0
   constructor(readonly services: ChatServices) {}
   get(key: string) {
     let chat = this.chats.get(key)
@@ -548,6 +549,9 @@ export class NativeChatController {
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return
     const chat = this.get(action.chat)
+    // LKM-338: the snapshots after this one tell the composer it reached the controller.
+    if ((action.action === 'send' || action.action === 'key') && action.attempt)
+      chat.sendAttempt = Math.max(chat.sendAttempt, action.attempt)
     try {
       switch (action.action) {
         case 'input': {
@@ -590,6 +594,12 @@ export class NativeChatController {
           )
             await this.stop(chat)
           else await this.submit(chat)
+          break
+        case 'cancel-send':
+          // Only the send the composer shows; the draft was never cleared, so it is kept.
+          if (action.attempt !== chat.sendAttempt) break
+          chat.submitting = 0
+          if (this.start.opening(chat)) this.start.cancel(this)
           break
         case 'choice':
           await this.choice(chat, action.label, action.value)
@@ -643,7 +653,7 @@ export class NativeChatController {
     if (this.start.holds(this, chat)) return
     // The draft's revision when it was sent: inputs during `initialize` came after it.
     const revision = chat.revision
-    if (!chat.ready) await this.initialize(chat)
+    if (!chat.ready && !(await this.holdDraft(chat, this.initialize(chat)))) return
     if (!chat.ready || chat.switching || (!raw.trim() && !chat.attachments.length)) return
     const submission: Submission = {
       id: crypto.randomUUID(),
@@ -663,6 +673,21 @@ export class NativeChatController {
       void this.run(chat, submission)
     }
     this.changed(chat)
+  }
+  /** LKM-338: a send waits for `wait` with its draft still in the composer, which shows it
+   *  as sending after 1.5 s. False when Stop (`cancel-send`) or a newer send ended the wait. */
+  private async holdDraft(chat: Chat, wait: Promise<unknown>) {
+    const token = ++this.holds
+    let held = false
+    chat.submitting = token
+    this.changed(chat)
+    try {
+      await wait
+    } finally {
+      held = chat.submitting === token
+      if (held) chat.submitting = 0
+    }
+    return held
   }
   async run(chat: Chat, submission: Submission) {
     begin(chat)

@@ -141,6 +141,9 @@ export interface NativeChatState {
     revision: number
     /** LKM-304: accepted sends of the draft and the revision of the last sent draft. */
     sent: { count: number; revision: number }
+    /** LKM-338: the last Send `attempt` handled, and whether its draft is still waiting to
+     *  leave the composer (a chat being prepared, a project opening). Stop can cancel it. */
+    sending: { attempt: number; active: boolean }
     stop: boolean
     enabled: boolean
     sendLabel: string

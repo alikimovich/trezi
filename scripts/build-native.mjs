@@ -175,6 +175,7 @@ const host = compile(
     join(root, 'src/native/ChatAttachments.swift'),
     join(root, 'src/native/ComposerQueue.swift'),
     join(root, 'src/native/ComposerBeam.swift'),
+    join(root, 'src/native/ComposerSending.swift'),
     join(root, 'src/native/Chat.swift'),
     join(root, 'src/native/ChatCommentRow.swift'),
     join(root, 'src/native/ChatCommentCapture.swift'),
