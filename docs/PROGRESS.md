@@ -47,6 +47,44 @@ Newest first. Append a dated entry when you finish a chunk of work.
   If `assertPublishLast`'s 24 pt inset limit or the 1 pt right-group tolerance is wrong
   for the full-screen toolbar window, adjust only that threshold in
   `smoke-toolbar-fullscreen.ts`.
+## 2026-10-23 — LKM-319: no dividers inside toolbar islands on macOS 27
+
+- **Why.** On macOS 27 the toolbar islands showed a vertical line between every two
+  buttons: select | device | ruler | slow motion, code | layers | expand, and
+  history | new chat.
+- **Source: the system, not Trezi.** All three islands are `NSSegmentedControl`s
+  (`MomentaryToolbarGroup`, `ChatToolbarActions`). On macOS 27 the control is a hosted
+  view that adds two 1 pt layers at every segment boundary. This holds for every
+  `segmentStyle` and `borderShape`, and no API turns them off: a custom cell is not drawn.
+- **Change.** `IslandSegmentedControl` (`src/native/ToolbarLayout.swift`) hides those
+  thin interior layers after layout and layer updates, on macOS 27 only. Segment widths,
+  hit areas, order, the bezel, the momentary tracking and the LKM-213 slow-motion segment
+  are unchanged. macOS 26 and earlier keep the system dividers.
+- **Checks.**
+  - Unit `test/toolbar-island-dividers.mjs` renders the three islands offscreen next to
+    a stock control, which proves the probe sees a divider. It runs with all segments,
+    with slow motion removed and restored, with a disabled segment and in dark
+    appearance. Each segment boundary must be no darker than the bezel beside it, and
+    no thin layer may draw. Without the fix it fails (contrast 0.18).
+  - Core `shell-layout` asserts the shell's `islandDividers` are zero when
+    `islandHidesDividers`.
+- **Review repair (independent review).**
+  - `IslandSegmentedControl` also watches the hosted layer's sublayers and each divider's
+    `isHidden` (KVO), so a divider that AppKit adds or shows again without laying out the
+    control is hidden at once. The unit fixture covers a press, a click, a divider shown
+    again and a divider layer inserted, read straight after the change (the last two
+    fail without the observers: 12/8/4 and 14/10/6 visible).
+  - `assertIslandDividers` (`src/native/smoke-toolbar.ts`) reads the live shell's
+    `islandDividers` on macOS 27. Core `shell-layout` runs it at rest and after expand,
+    device (mobile and desktop) and layers (open and closed); `toolbar-address` runs it at
+    every width (850, 950 — slow motion removed — 1800 and the default — restored), before
+    the overflow check. `islandDividers` is part of the toolbar evidence JSON
+    (`toolbar-address.json`).
+  - Foreground captures for review: `test/artifacts/native/islands-layers-open.png`,
+    `islands-after-use.png` (shell-layout) and `toolbar-<minimum|narrow|wide|default>*.png`
+    (toolbar-address).
+- **Not run by the worker.** The native `core` group (this check, `toolbar-address` and
+  `smoke-toolbar-overflow.ts`) runs under the manager's desktop lock.
 ## 2026-10-23 — LKM-314: repository-owner and the workflow tests survive parallel unit runs
 
 - **Why.** LKM-313 left these three unchanged, saying their failures came from other tickets.

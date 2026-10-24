@@ -594,7 +594,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             .merging(branchInspect) { _, new in new }.merging(branchMenu.progressInspect) { _, new in new }
             .merging(toolbarInspect()) { _, new in new }.merging(historyInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
             .merging(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
-            .merging(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }
+            .merging(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }.merging(islandInspect()) { _, new in new }
     }
     func perform(_ action: String, id: String?) -> Bool {
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {

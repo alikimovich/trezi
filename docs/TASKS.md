@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Remove dividers inside toolbar islands on macOS 27 (LKM-319)
+
+- [x] Source: the system. On macOS 27 `NSSegmentedControl` (every style) adds a 1 pt divider layer per segment boundary; Trezi draws none.
+- [x] `IslandSegmentedControl` (`src/native/ToolbarLayout.swift`) hides them on macOS 27 for the interaction, tools and chat islands; macOS 26 and earlier unchanged.
+- [x] Unit `test/toolbar-island-dividers.mjs` (pixels and layers, against a stock control); core `shell-layout` asserts `islandDividers` are zero on macOS 27.
+- [x] Review repair: KVO re-hides dividers AppKit adds or shows without a parent layout; unit covers press, click, reveal, insert; smoke `assertIslandDividers` after island use (shell-layout) and at every width (toolbar-address).
+- [ ] Native `core` group (`shell-layout`, `toolbar-address` with `smoke-toolbar-overflow.ts`) not yet run; read `islands-layers-open.png`, `islands-after-use.png` and `toolbar-*.png`.
 ## Unit tier under parallel load: remaining findings (LKM-314, follow-up to LKM-313)
 
 - [x] repository-owner: per-suite parity limit 300 s (was 100 s, and killed suites failed every logged run since 2026-10-21); lease-deadlock race 60 s; budget 600 s.

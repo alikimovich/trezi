@@ -82,7 +82,12 @@ import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
 import { checkSwiftMacros, restoreSwiftMacros } from './smoke-swift-macros'
 import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
-import { checkToolbarAddress, restoreToolbarAddress } from './smoke-toolbar'
+import {
+  assertIslandDividers,
+  capture,
+  checkToolbarAddress,
+  restoreToolbarAddress
+} from './smoke-toolbar'
 import { checkToolbarFullScreen } from './smoke-toolbar-fullscreen'
 import { checkToolbarMore } from './smoke-toolbar-more'
 import { checkToolbarOverflow, observeFirstExpansion } from './smoke-toolbar-overflow'
@@ -584,6 +589,9 @@ export async function runNativeCoreSmoke(
         assert.equal(shell.outlineRows, shell.rows.filter((r: any) => r.kind === 'project').length)
         assert.deepEqual(shell.toolGroup, ['code', 'layers', 'expand'])
         assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay', 'speed'])
+        // LKM-319: no divider between the buttons of a toolbar island on macOS 27, at rest and
+        // after island buttons were used (read in the live toolbar; the capture is evidence).
+        await assertIslandDividers(host, 'shell-layout at rest', shell)
         assert.ok(
           shell.sidebarContainsTrafficLights && shell.chatTitlePlain && shell.publishStandard
         )
@@ -608,14 +616,21 @@ export async function runNativeCoreSmoke(
         await observeFirstExpansion(host, artifacts)
         await host.request('shellPerform', { action: 'expand' })
         await inspect('layoutInspect', (s) => s.fraction === 1)
+        await assertIslandDividers(host, 'after expand')
         await host.request('shellPerform', { action: 'device' })
         await wait(() => nativeWorkspace.active?.viewport === 'mobile', 'mobile viewport')
+        await assertIslandDividers(host, 'after device (mobile)')
         await host.request('shellPerform', { action: 'device' })
         await wait(() => nativeWorkspace.active?.viewport === 'desktop', 'desktop viewport')
+        await assertIslandDividers(host, 'after device (desktop)')
         await host.request('shellPerform', { action: 'layers' })
         await inspect('layersInspect', (s) => s.visible && s.count > 0)
+        await assertIslandDividers(host, 'after layers (open)')
+        await capture(host, artifacts, 'islands-layers-open')
         await host.request('shellPerform', { action: 'layers' })
         await inspect('layersInspect', (s) => !s.visible)
+        await assertIslandDividers(host, 'after layers (closed)')
+        await capture(host, artifacts, 'islands-after-use')
       },
       cleanup: async () => {
         await page(
