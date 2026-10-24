@@ -14,7 +14,7 @@ const MORE_MINIMUM_WINDOW = 1000
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** The fields of a passive toolbar read (`toolbarPassiveInspect`) that the evidence keeps per frame. */
-const slim = (state: Passive) => ({
+export const slim = (state: Passive) => ({
   ms: state.ms,
   windowWidth: state.windowWidth,
   visibleItems: state.visibleItems,
@@ -29,7 +29,12 @@ const slim = (state: Passive) => ({
   rightGroupInWindow: state.rightGroupInWindow,
   chatHeaderAttached: state.chatHeaderAttached,
   sidebarWidth: state.sidebarWidth,
-  sidebarCollapsed: state.sidebarCollapsed
+  sidebarCollapsed: state.sidebarCollapsed,
+  // LKM-321: where the toolbar lives in full screen, and what the menu bar reveal changes there.
+  toolbarInMainWindow: state.toolbarInMainWindow,
+  toolbarWindowFrame: state.toolbarWindowFrame,
+  menuBarVisible: state.menuBarVisible,
+  windowButtonsShown: state.windowButtonsShown
 })
 
 /** Foreground pixels before anything else touches the window (no layout pass, no focus repair). */
@@ -83,7 +88,7 @@ export async function observe(
   }
 }
 
-const expandedIs = (host: NativeBridge, want: boolean) => async () =>
+export const expandedIs = (host: NativeBridge, want: boolean) => async () =>
   ((await host.request('layoutInspect')).fraction === 0) === want
 
 let sessionFirst: Passive | undefined

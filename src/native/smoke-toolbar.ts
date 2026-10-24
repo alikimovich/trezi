@@ -65,7 +65,7 @@ export const pick = (state: Toolbar) => ({
 
 /** LKM-213: Publish and its chevron are the last toolbar group, never in the overflow menu,
  *  its trailing edge on the toolbar's trailing inset (`inset`: measured at the first width). */
-function assertPublishLast(state: Toolbar, stage: string, inset: number) {
+export function assertPublishLast(state: Toolbar, stage: string, inset: number) {
   const detail = JSON.stringify(pick(state))
   assert.ok(
     state.publishVisible,
@@ -113,7 +113,7 @@ function assertTitles(state: Toolbar, stage: string) {
 }
 
 /** LKM-148 frame assertions for one laid-out toolbar. */
-function assertToolbar(state: Toolbar, stage: string) {
+export function assertToolbar(state: Toolbar, stage: string) {
   const detail = JSON.stringify(pick(state))
   assert.ok(
     state.addressVisible,

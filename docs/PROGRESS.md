@@ -59,6 +59,51 @@ Newest first. Append a dated entry when you finish a chunk of work.
   The native `inspector-custom` smoke (core group, stubbed agent) was written but
   not run: the worker had no native verification calls.
 
+## 2026-10-23 — LKM-321: toolbar in full screen with the menu bar revealed
+
+- **Symptom.** In full screen, revealing the menu bar hid the address block and "…".
+  The islands slid left next to the chat island and a » chevron appeared.
+- **Cause (from the code, not reproduced natively).**
+  - In full screen the toolbar lives in AppKit's `NSToolbarFullScreenWindow` (LKM-229).
+  - `ToolbarAddressLayout.measure` skipped any block outside the main window. Item
+    frames were read only from the main window's theme frame. So in full screen the
+    layout never measured.
+  - Nothing observed the toolbar window, which slides down with the menu bar while
+    AppKit lays the toolbar out again. The widths from before that relayout stayed,
+    and the address and "…" stayed in the overflow menu with nothing to measure them
+    again.
+- **Fix.**
+  - `src/native/ToolbarFullScreen.swift`: `mainFrame`/`toolbarFrames` convert through
+    the screen into main-window coordinates, and `layoutToolbar` lays out both
+    windows.
+  - The toolbar is measured again when its window moves or resizes, on entering or
+    exiting full screen, and from the address view's `viewDidMoveToWindow`, which
+    catches overflow and reparenting.
+  - In a window the frames are unchanged, so the LKM-296 behaviour is the same.
+- **Check.** `src/native/smoke-toolbar-fullscreen.ts` runs after the overflow check
+  in core `toolbar-address`.
+  - It enters full screen, reveals the menu bar with `NSMenu.setMenuBarVisible`, and
+    separately moves the toolbar window by the menu bar's height (both via
+    `toolbarOverflow`). It does this collapsed and expanded.
+  - It asserts no overflow, the address visible, and the right groups and Publish at
+    the hidden-menu-bar position.
+  - It captures the toolbar window (`captureToolbarWindow`). Per-frame transients are
+    recorded, not asserted.
+- **Verification.** Swift typecheck, typecheck, lint and the quick tier. No native
+  run was available, so the check and the pre-fix reproduction are unrun.
+- **Native acceptance (operator step, foreground desktop).** Run core `toolbar-address`
+  twice and keep `toolbar-fullscreen.json`, `toolbar-fullscreen-*.png` and
+  `toolbar-overflow.json` from both runs.
+  1. Before: the fixture and the test-only hooks (`menu-bar`, `toolbar-window-move`,
+     `captureToolbarWindow`) with the Swift fix reverted (`ToolbarFullScreen.swift`'s
+     `mainFrame`/`toolbarFrames`/observers, and `ToolbarAddress.swift`'s measure).
+     Expect the `menu-bar` or `toolbar-window-move` stage to fail on `address` missing
+     from `visibleItems` or a non-empty `actionableOverflow`/`moreOverflowed`.
+  2. After: this tree. Expect it to pass, with the windowed `smoke-toolbar-overflow.ts`
+     (LKM-296) passing in the same run.
+  If `assertPublishLast`'s 24 pt inset limit or the 1 pt right-group tolerance is wrong
+  for the full-screen toolbar window, adjust only that threshold in
+  `smoke-toolbar-fullscreen.ts`.
 ## 2026-10-23 — LKM-319: no dividers inside toolbar islands on macOS 27
 
 - **Why.** On macOS 27 the toolbar islands showed a vertical line between every two

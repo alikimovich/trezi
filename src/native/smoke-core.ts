@@ -93,6 +93,7 @@ import {
   checkToolbarAddress,
   restoreToolbarAddress
 } from './smoke-toolbar'
+import { checkToolbarFullScreen } from './smoke-toolbar-fullscreen'
 import { checkToolbarMore } from './smoke-toolbar-more'
 import { checkToolbarOverflow, observeFirstExpansion } from './smoke-toolbar-overflow'
 import { inspectUntil, waitFor } from './smoke-wait'
@@ -682,6 +683,7 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkToolbarAddress(host, artifacts)
         await checkToolbarOverflow(host, artifacts)
+        await checkToolbarFullScreen(host, artifacts)
       },
       cleanup: async () => {
         await restoreToolbarAddress(host)
