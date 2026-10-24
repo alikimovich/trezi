@@ -32,6 +32,14 @@ Newest first. Append a dated entry when you finish a chunk of work.
   fake Keychain helper), `native-support-sheets`, `workflow-owner`. The `settings` native
   smoke (`smoke-alerts.ts` against a loopback mock endpoint, `smoke-sheets.ts`) was written
   but not run by the worker (no native run allowed), nor was a real send to trezi.app.
+## 2026-10-24 — LKM-337: the composer + menu drops Show Layers
+
+- `src/native/Composer.swift` builds the + menu from Attach Files… alone; the toolbar's Layers
+  button (`src/native/Shell.swift`) remains the way to show Layers. The button still opens a
+  one-item menu.
+- The composer path only that item used is gone: the `layers` composer action
+  (`src/shared/native-composer.ts`, `src/native/chat-controller.ts`) and the `layers` chat effect
+  (`src/shared/native-chat-controller.ts`, `src/native/index.ts`). No test or smoke check used them.
 
 ## 2026-10-23 — LKM-334 repair 3: native-chat-scroll's completion-footer reading must hold still
 

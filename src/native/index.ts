@@ -649,8 +649,7 @@ async function main() {
   const projectEffect = chatController.services.effect
   chatController.services.effect = (effect) => {
     void contextController.effect(effect).catch((error) => workspaceController.reportError(error))
-    if (effect.type === 'layers') void layersController.toggle()
-    else if (effect.type === 'source') openSource(effect.source)
+    if (effect.type === 'source') openSource(effect.source)
     else if (effect.type === 'preview') {
       // The preview sits under the docked editor; a popped-out editor leaves it in view.
       const root = workspaceController.active?.root
