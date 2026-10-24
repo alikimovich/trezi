@@ -2,6 +2,28 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-338: composer sending state after 1.5 s
+
+- **Where a send waits.** `submit` clears the draft synchronously once the chat is ready, so the
+  draft stays in the composer only while the controller waits before that: `initialize` of a chat
+  not yet ready, or the home draft's project opening (`StartFlow.pending`). Anything later
+  (attachment saving, `agent:send`) runs after the draft left and cannot be undone from here.
+  The snapshot-to-AppKit lag of a large draft is the third wait; the controller has no part in it.
+- **Contract.** The composer numbers each Send (and a Return that may send) with an increasing
+  `attempt`; the controller stores the last one handled (`Chat.sendAttempt`) and holds the draft
+  in `holdDraft` (`Chat.submitting`). `composer.sending = { attempt, active }`. The composer's
+  send is over once a snapshot has handled its attempt and is not active, which covers sent,
+  refused (`holds`, empty draft), failed (the existing error card) and cancelled sends alike.
+  `cancel-send` clears the hold (and cancels the home project open, the card's Cancel); the
+  waiting `submit` then returns without touching the draft, so Stop restores it exactly.
+- **Swift.** `ComposerSending.swift` (AppKit-free, unit fixture) runs the 1.5 s timer from the
+  press. Shown: `buttonBeam` (Reduce Motion already makes it static), text read-only, text and
+  attachments at 55%, chip remove buttons, the + menu and paste/drop off. Stop only when the
+  controller holds this attempt ("Stop sending"); before the controller has it, a disabled
+  "Sending…" arrow with the beam. A chat switch resets it.
+- **Not covered.** No native smoke step drives a slow send yet; the look is checked by the
+  Swift fixture and the controller test, and `composer.inspect()` reports `sending` for a later
+  native check.
 ## 2026-10-24 — LKM-337: the composer + menu drops Show Layers
 
 - `src/native/Composer.swift` builds the + menu from Attach Files… alone; the toolbar's Layers
