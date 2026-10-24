@@ -15,6 +15,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
 ### Fixed
+- On macOS 27, the select-mode hover outline on the page now clears as soon as the pointer enters the editing or Layers island, instead of staying lit under it (LKM-328).
 - In full screen, revealing the menu bar no longer collapses the toolbar: the address block and "…" stay in the toolbar, the right-hand controls stay at the right edge, and no » overflow chevron appears at ample width (LKM-321).
 - On macOS 27, VoiceOver announces the build badge at the bottom of the projects sidebar as a button again, instead of an unknown element (LKM-325).
 - The divider lines between stacked queued messages above the composer now run across the full width of the queue panel, under the reply arrow and the edit, delete and more buttons too (LKM-318).

@@ -44,6 +44,9 @@ export const PREVIEW_SET_STATUS = 'trezi:preview:set-status' // → preload (lau
 // Viewport rects native views float over (LKM-173): the host reports them on layout
 // (`native-cover`), main forwards them and re-sends them after every load.
 export const PREVIEW_COVERED = 'trezi:preview:covered' // → preload ({x,y,width,height}[])
+// The pointer entered a native island (LKM-328): the host's `native-island-entered`, forwarded
+// so the page drops its select-mode hover even when WebKit skips the move over the shield.
+export const PREVIEW_ISLAND_ENTERED = 'trezi:preview:island-entered' // → preload (no payload)
 // Rulers, guides and layout grids (LKM-205), drawn natively over the page. Main forwards
 // the host's lines (re-sent after every load); while they ask for it, the page reports
 // its scroll, viewport and selection extent, which the host takes without main.
