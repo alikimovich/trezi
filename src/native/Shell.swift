@@ -36,12 +36,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     /// A toolbar button's frame in the main window's coordinates, e.g. to hang the Layers
     /// island under it. In full screen the toolbar is another window: convert via the screen.
-    func toolbarButtonFrame(_ key: String) -> NSRect? {
-        guard let (view, rect) = toolbarButtonAnchor(key), let source = view.window else { return nil }
-        let frame = view.convert(rect, to: nil)
-        guard let window, source !== window else { return frame }
-        return window.convertFromScreen(source.convertToScreen(frame))
-    }
+    func toolbarButtonFrame(_ key: String) -> NSRect? { toolbarButtonAnchor(key).flatMap { mainFrame($0.view, rect: $0.rect) } }
     var toolbar: NSToolbar!
     private var toolbarLayout: ToolbarLayout!
     weak var window: NSWindow?
@@ -184,6 +179,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         // Window resizes set the toolbar widths synchronously, in the same layout pass.
         NotificationCenter.default.addObserver(self, selector: #selector(windowResized(_:)), name: NSWindow.didResizeNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(splitResized(_:)), name: NSWindow.didEndLiveResizeNotification, object: window)
+        observeToolbarWindow(window)
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.titleVisibility = .hidden
@@ -193,7 +189,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     @objc private func splitResized(_ notification: Notification) {
         // LKM-296: lay the toolbar out for the new split first; measured before it, the stale
         // frames left the block overflowed with nothing to measure it again.
-        DispatchQueue.main.async { [weak self] in self?.window?.contentView?.superview?.layoutSubtreeIfNeeded(); self?.measureToolbar() }
+        DispatchQueue.main.async { [weak self] in self?.layoutToolbar(); self?.measureToolbar() }
     }
     func updatePreviewColor(_ color: NSColor) {
         guard let rgb = color.usingColorSpace(.sRGB) else { return }
@@ -489,7 +485,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                 guard let self else { return }
                 // The toolbar items still lag the split by a layout: lay them out at the destination
                 // before the widths stop reserving for it and the offsets are learned again.
-                self.window?.contentView?.superview?.layoutSubtreeIfNeeded()
+                self.layoutToolbar()
                 self.addressLayout.sidebarAnimations = max(0, self.addressLayout.sidebarAnimations - 1)
                 self.alignChatHeader()
             })
@@ -504,7 +500,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier("chat"), at: index)
             // LKM-296: narrow the block and lay the toolbar out now: with the block still wide, the
             // inserted chat header went to the overflow menu until the next layout pass.
-            alignChatHeader(); window?.contentView?.superview?.layoutSubtreeIfNeeded()
+            alignChatHeader(); layoutToolbar()
         }
 
         if rowsChanged || projectChanged { outline.reloadData() }

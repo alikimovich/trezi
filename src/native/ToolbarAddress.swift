@@ -7,6 +7,12 @@ final class ToolbarAddressView: NSStackView {
         super.layout()
         DispatchQueue.main.async { [weak self] in self?.measure?() }
     }
+    /// LKM-321: AppKit moved the block into or out of a window: the overflow menu, or the
+    /// full-screen toolbar window. Its size did not change, so `layout` would not measure.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DispatchQueue.main.async { [weak self] in self?.measure?() }
+    }
 }
 
 /// LKM-184: the branch pull-down under the address. The borderless cell starts its title
@@ -173,7 +179,7 @@ extension NativeShell {
     func measureToolbar() {
         guard let window, !window.inLiveResize, let constant = addressWidth?.constant else { return alignChatHeader() }
         if toolbar.visibleItems?.contains(where: { $0.itemIdentifier.rawValue == "address" }) == true {
-            addressLayout.measure(window: window, block: addressHeader, constant: constant, chat: chatHeader.window == nil ? nil : chatHeader, right: rightGroup)
+            addressLayout.measure(windowWidth: window.frame.width, block: mainFrame(addressHeader), constant: constant, chat: mainFrame(chatHeader), right: mainFrame(rightGroup))
         } else if toolbar.isVisible, addressLayout.backOff() {
             // Overflowed: the inset was underestimated. Narrow the block until the
             // toolbar shows it again, then measure the pinned position.
@@ -189,17 +195,14 @@ extension NativeShell {
         addressLayout.rightInset += max(0, width(title) - width(publishTitle))
         publishTitle = title
         alignChatHeader()
-        DispatchQueue.main.async { [weak self] in self?.window?.contentView?.superview?.layoutSubtreeIfNeeded(); self?.measureToolbar() }
+        DispatchQueue.main.async { [weak self] in self?.layoutToolbar(); self?.measureToolbar() }
     }
     /// The first right action group (select/device).
     var rightGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" }?.view }
     /// LKM-296: where the first item after the sidebar starts in the last toolbar layout. While the
     /// sidebar closes (expanding the preview) it is still right of the measured `leading`; sizing the
     /// block from `leading` overflowed it and "…" into AppKit's overflow menu until `backOff`.
-    var blockSlot: CGFloat {
-        let laidOut = addressHeader.window === window ? addressHeader.convert(addressHeader.bounds, to: nil).minX : 0
-        return max(addressLayout.leading, laidOut)
-    }
+    var blockSlot: CGFloat { max(addressLayout.leading, mainFrame(addressHeader)?.minX ?? 0) }
     /// LKM-296: how far an opening sidebar (restoring the preview) still moves the toolbar items
     /// after it. Their frames are read a layout behind, so the widths reserve the rest of the travel.
     /// Only while `update` animates the sidebar: at rest the frames are final, and the inset is
@@ -219,7 +222,7 @@ extension NativeShell {
     /// settled; sized from it, the header ran past the settled column and pushed "…" into the
     /// overflow menu. It keeps the offset seen with the sidebar open and at rest.
     func chatHeaderLeading(detail: CGFloat, opening: CGFloat) -> CGFloat {
-        let laidOut = chatHeader.convert(NSPoint.zero, to: nil).x
+        let laidOut = mainFrame(chatHeader)?.minX ?? 0
         guard addressLayout.sidebarAnimations > 0, !sidebarItem.isCollapsed else {
             if !sidebarItem.isCollapsed { addressLayout.chatLead = min(16, max(0, laidOut - detail)) }
             return laidOut
@@ -228,13 +231,13 @@ extension NativeShell {
     }
     /// The address block's frame against the first right group, laid out now.
     func toolbarInspect() -> [String: Any] {
-        window?.contentView?.superview?.layoutSubtreeIfNeeded()
-        return addressLayout.inspect(block: addressHeader, right: rightGroup, address: address, branch: branchMenu)
+        layoutToolbar()
+        return addressLayout.inspect(block: mainFrame(addressHeader) ?? .zero, right: mainFrame(rightGroup) ?? .zero, address: address, branch: branchMenu)
             .merging(["windowWidth":window?.frame.width ?? 0, "addressConstant":addressWidth?.constant ?? 0,
-                      "toolbarItemFrames":toolbarItemFrames(window).mapValues { NSStringFromRect($0) },
+                      "toolbarItemFrames":toolbarFrames.mapValues { NSStringFromRect($0) },
                       "chatHeaderAttached":chatHeader.window === window, "addressExtra":addressLayout.extra,
                       "sidebarInset":addressLayout.sidebarInset, "chatLead":addressLayout.chatLead,
-                      "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
+                      "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":mainFrame(chatHeader)?.maxX ?? chatHeader.bounds.maxX,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
             .merging(titleAlignment()) { _, new in new }
             .merging(publishTrailingInspect()) { _, new in new }
@@ -288,19 +291,19 @@ struct ToolbarAddressLayout {
         else { rightInset = shownInset ?? rightInset + shift; shownInset = nil }
     }
 
-    /// Reads the offsets from laid-out frames (window coordinates). While the right
-    /// groups are pushed their position is not the pinned one, so the inset only
-    /// grows by the missing gap until a pinned layout can be measured.
-    mutating func measure(window: NSWindow, block: NSView, constant: CGFloat, chat: NSView?, right: NSView?) {
-        guard block.window === window, let right, right.window === window else { return }
-        let frame = block.convert(block.bounds, to: nil), rightFrame = right.convert(right.bounds, to: nil)
-        guard frame.width > 0, rightFrame.width > 0 else { return }
+    /// Reads the offsets from laid-out frames (main-window coordinates, nil while not in a
+    /// window). While the right groups are pushed their position is not the pinned one, so
+    /// the inset only grows by the missing gap until a pinned layout can be measured.
+    /// LKM-321: in full screen the frames come from AppKit's toolbar window through the screen;
+    /// the check for the main window skipped every measure there.
+    mutating func measure(windowWidth: CGFloat, block: NSRect?, constant: CGFloat, chat: NSRect?, right: NSRect?) {
+        guard let frame = block, let rightFrame = right, frame.width > 0, rightFrame.width > 0 else { return }
         // Never negative: a frame laid out before the constant last grew (mid-animation) would widen the block.
         if abs(frame.width - constant) <= 8 { extra = max(0, frame.width - constant) }
-        if let chat, chat.window === window { chatOffset = frame.minX - chat.convert(chat.bounds, to: nil).maxX } else { leading = frame.minX }
+        if let chat { chatOffset = frame.minX - chat.maxX } else { leading = frame.minX }
         let actual = rightFrame.minX - frame.maxX
-        if actual >= Self.gap - 1 { rightInset = window.frame.width - rightFrame.minX; measured = true }
-        else { rightInset = min(window.frame.width, rightInset + Self.gap - actual); measured = false }
+        if actual >= Self.gap - 1 { rightInset = windowWidth - rightFrame.minX; measured = true }
+        else { rightInset = min(windowWidth, rightInset + Self.gap - actual); measured = false }
     }
     /// Widens the reserved inset after the toolbar overflowed the block; false once
     /// the inset is already larger than any right-group layout.
@@ -320,11 +323,9 @@ struct ToolbarAddressLayout {
     func chatLimit(windowWidth: CGFloat, chatLeading: CGFloat) -> CGFloat {
         windowWidth - rightInset - Self.gap - extra - Self.minimum - chatOffset - chatLeading
     }
-    /// Frames and truncation state for the shell inspector (window coordinates).
-    func inspect(block: NSView, right: NSView?, address: NSTextField, branch: NSPopUpButton) -> [String: Any] {
+    /// Frames (main-window coordinates, zero outside a window) and truncation state for the shell inspector.
+    func inspect(block frame: NSRect, right rightFrame: NSRect, address: NSTextField, branch: NSPopUpButton) -> [String: Any] {
         let gap = Self.gap, minimum = Self.minimum
-        let frame = block.window == nil ? .zero : block.convert(block.bounds, to: nil)
-        let rightFrame = right.flatMap { $0.window == nil ? nil : $0.convert($0.bounds, to: nil) } ?? .zero
         // The field truncates when narrower than its cell's full-content size; the pop-up
         // (low compression resistance) when squeezed below its intrinsic width, since its
         // borderless cell size includes padding it never draws.
