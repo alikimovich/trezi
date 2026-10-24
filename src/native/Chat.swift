@@ -417,8 +417,11 @@ struct ChatConversation: View {
                     }
                     // Metric-only changes: the probe pins from settled AppKit bounds.
                     .onAppear { viewportHeight = viewport.size.height }
-                    .onChange(of: viewport.size) { size in viewportHeight = size.height; if follows { pinRequest += 1 } }
-                    .onChange(of: layout.composerHeight) { _ in if follows { pinRequest += 1 } }
+                    // A new inset moves the end marker, and in a tall stack (a long message at
+                    // 320 pt) the realized rows with it, so these settle rather than only pin
+                    // (LKM-330): the send's settle can end before the composer shrinks back.
+                    .onChange(of: viewport.size) { size in viewportHeight = size.height; if follows { pinRequest += 1; settle() } }
+                    .onChange(of: layout.composerHeight) { _ in if follows { pinRequest += 1; settle() } }
                     .onChange(of: model.revealRevision) { _ in
                         follows = false; sticky = nil
                         reveal(proxy, readingHeight: readingHeight, viewportHeight: viewport.size.height)

@@ -69,8 +69,11 @@ async function checkComposerAtWidth(
       })
     } catch (cause) {
       const { latestID, latestTop, latestBottom, readingHeight, pinned } = state
+      // Where the clip and the stack's end marker were, and whether the settle ran out.
+      const { scrollY, documentHeight, viewportHeight, bottomPosition, settleAttempts } = state
+      const scroll = { scrollY, documentHeight, viewportHeight, bottomPosition, settleAttempts }
       throw new Error(
-        `Composer capture ${width}-${name}: latest message did not end above the composer: ${JSON.stringify({ latestID, latestTop, latestBottom, readingHeight, pinned })}`,
+        `Composer capture ${width}-${name}: latest message did not end above the composer: ${JSON.stringify({ latestID, latestTop, latestBottom, readingHeight, pinned, ...scroll })}`,
         { cause }
       )
     }
@@ -277,6 +280,12 @@ async function checkComposerAtWidth(
       'Visible composer: foreground captures, containment/hit targets, attachment dialog/file, model, Auto, AppKit typing and submission passed.'
     )
   } finally {
+    // LKM-330: a failure while sending left the stubbed turn running, so the next checks'
+    // Return queued their drafts instead of sending. End it while the stub still holds.
+    if (chat.isRunning) {
+      nativeChat.event({ type: 'done', projectKey: chat.chat, landingPending: false })
+      await wait(() => !chat.isRunning).catch(() => undefined)
+    }
     nativeChat.services.invoke = invoke
     nativeChat.choices = choices
     chat.settings = settings
