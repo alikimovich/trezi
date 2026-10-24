@@ -2,6 +2,21 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-332: preview-overlay's uncounted band is the toolbar strip only (unverified natively)
+
+- **preview-overlay.** The uncounted band had no lower bound: every pixel above the page top
+  across its width, so it also hid the top ruler and any gap between the toolbar and the page,
+  where an upward grid leak lands first. It now ends at the toolbar's bottom edge
+  (`window.contentLayoutRect.maxY`, converted to the capture's top-left coordinates, and never
+  below the page top). The ruler and the gap count as `outside` again at the strict threshold.
+  The band's limits are recorded as `toolbarBandLimits` (window points, top-left) in the
+  capture and the clip evidence; the failure message is unchanged.
+- **Still open.** This session had no native verification allowance, so sheets, build-badge,
+  layers-island, preview-overlay and comment-rows are still unrun on this tree. The system
+  appearance, `magentaOutside`/`magentaToolbarBand`/`toolbarBandLimits` (preview-overlay) and
+  `userFrame`/`readingHeight` (comment-rows) still need to be read from a foreground
+  `bun run test:native` run and recorded here.
+
 ## 2026-10-23 — LKM-331 repair 2: strict preview-overlay count, comment-rows scroll that stays (unverified natively)
 
 - **preview-overlay.** The colour-matching rule below (±6 of the page's paint) is withdrawn:

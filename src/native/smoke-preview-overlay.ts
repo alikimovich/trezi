@@ -120,7 +120,8 @@ export async function checkPreviewOverlay(
       magentaOutside: image.magentaOutside,
       // Recorded, not asserted: the toolbar strip above the page (see captureOverlay).
       magentaToolbarBand: image.magentaToolbarBand,
-      magentaToolbarBandBox: image.magentaToolbarBandBox
+      magentaToolbarBandBox: image.magentaToolbarBandBox,
+      toolbarBandLimits: image.toolbarBandLimits
     }
   }
   const first = nativeWorkspace.active!
