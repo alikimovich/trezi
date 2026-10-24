@@ -21,13 +21,20 @@ Newest first. Append a dated entry when you finish a chunk of work.
   disturbed start-composer's model choice. `src/native/smoke-composer.ts` now ends a running
   turn in `finally` while the stub still holds. `src/native/smoke-composer-send.ts` asserts
   it starts with no turn running, so a future cascade shows as a single failure.
-- **Open: visible-composer 320-sending.** The newest row (the 71 pt assistant placeholder
-  after the 80-line prompt) sat at 1897–1968 with `pinned` true and a 570 pt reading height.
-  It passed at 440 in the same run and at both widths in the LKM-325 run, and nothing in the
-  chat changed in between, so it looks like a timing-dependent settle. The failure message
-  now also reports `scrollY`, `documentHeight`, `viewportHeight`, `bottomPosition` and
-  `settleAttempts`: next time it shows whether the clip or the stack's end is wrong and
-  whether `ChatLatestSettle` ran out of attempts. The scroll code is unchanged.
+- **visible-composer 320-sending (fixed in the scroll path, unverified natively).** The
+  newest row (the 71 pt assistant placeholder after the 80-line prompt) sat at 1897–1968
+  with `pinned` true and a 570 pt reading height: the clip sat near the end of the prompt
+  bubble, not at the document end. It passed at 440 (short prompt) in the same run. The
+  80-line draft makes the composer 368 pt tall; sending shrinks it back. A composer height
+  or viewport change only requested an AppKit pin (`pinRequest`), never a settle. At 320 pt
+  the stack is ~2000 pt tall and its unrealized end moves with the inset, so a send's settle
+  (20 frames, started by `followRevision`) could finish before the composer resized, and
+  the lone pin then landed on a stale document end with no realized row to re-measure. Now
+  `Chat.swift` runs `settle()` next to the pin on `composerHeight` and `viewport.size`
+  changes while following. That is bounded (the settle is 20 frames, extended at most four
+  runs, and the settle itself changes neither value, so LKM-312's loop cannot recur). The
+  failure message also reports `scrollY`, `documentHeight`, `viewportHeight`,
+  `bottomPosition` and `settleAttempts` in case it still fails.
 - **Inspector hover over the island (defensive fix, unverified).** LKM-325's probe read
   `hitIsShield` true, but neither the heading nor the shield `:hover`, and the hover box
   still showed. That fits neither case LKM-325 expected: the page saw the island move on
@@ -45,6 +52,7 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Verification.** Lint, both typechecks and the unit tier pass (quick tier, 257 pass).
   No native run was available in this session (0 native calls), so none of the five checks
   ran again.
+
 ## 2026-10-23 — LKM-323: native evidence fixture
 
 - **Why.** Review found no artifact showing the Custom tab. The `inspector-custom` smoke
