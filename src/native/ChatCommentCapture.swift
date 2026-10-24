@@ -14,16 +14,51 @@ extension Host {
         if let dark = c["dark"] as? Bool { window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua) }
         for id in c["toggle"] as? [String] ?? [] { chat.model.toggleComment(id) }
         let ids = c["messages"] as? [String] ?? [], user = c["user"] as? String ?? ""
-        chat.model.pressLatest()
+        // Read live: the composer's height can still change while the rows settle.
+        func readingArea() -> NSRect { NSRect(x: 0, y: 0, width: chat.bounds.width, height: max(1, chat.bounds.height - chat.model.bottomInset)) }
         // Settled: every row is laid out and holds its frame across two samples.
-        var last: [CGRect] = []
-        for _ in 0..<60 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            let frames = (ids + [user]).map { chat.model.messageFrames[$0] ?? .zero }
-            if frames == last && !frames.contains(.zero) { break }
-            last = frames
+        func settle() async throws {
+            var last: [CGRect] = []
+            for _ in 0..<60 {
+                try await Task.sleep(nanoseconds: 50_000_000)
+                let frames = (ids + [user]).map { chat.model.messageFrames[$0] ?? .zero }
+                if frames == last && !frames.contains(.zero) { break }
+                last = frames
+            }
         }
-        let reading = NSRect(x: 0, y: 0, width: chat.bounds.width, height: max(1, chat.bounds.height - chat.model.bottomInset))
+        chat.model.pressLatest()
+        try await settle()
+        // LKM-331: the reference bubble leads the rows, so what follows them (a setup card, a
+        // taller composer) can push it above the reading area, where there is nothing to sample.
+        // Bring it into view, then let the new appearance and position paint before the capture.
+        func inView() -> Bool {
+            let frame = chat.model.messageFrames[user] ?? .zero, area = readingArea()
+            return frame != .zero && frame.minY >= 0 && frame.maxY <= area.height
+        }
+        // Only the capture that samples the bubble needs it in view; expanded rows can scroll it away.
+        let needsBubble = c["bubble"] as? Bool == true
+        if needsBubble, !inView(), let scroll = chat.conversationScroll, let document = scroll.documentView {
+            // Stop following the latest message first, as scrolling by hand does (the chat ends
+            // its follow when a control is used), or the pin returns the bubble to where it was.
+            chat.model.controlInteraction += 1
+            try await Task.sleep(nanoseconds: 200_000_000)
+            let clip = scroll.contentView
+            var target = clip.bounds
+            let shift = (chat.model.messageFrames[user] ?? .zero).minY - 12
+            target.origin.y += document.isFlipped ? shift : -shift
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: clip.constrainBoundsRect(target).origin.y))
+            scroll.reflectScrolledClipView(clip)
+            try await settle()
+        }
+        chat.layoutSubtreeIfNeeded(); window.contentView?.displayIfNeeded()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        // Measured after the last settle, so the rows and the bubble are judged against the
+        // composer clearance the capture really has.
+        let reading = readingArea()
+        guard !needsBubble || inView() else {
+            throw NSError(domain: "CommentRows", code: 2, userInfo: [NSLocalizedDescriptionKey:
+                "The reference bubble is outside the reading area: frame \(NSStringFromRect(chat.model.messageFrames[user] ?? .zero)), reading height \(reading.height)"])
+        }
         let captured = try await captureVisibleRegion(window: window, view: chat, region: reading, recognize: false)
         guard let data = Data(base64Encoded: captured["png"] as? String ?? ""), let bitmap = NSBitmapImageRep(data: data) else {
             throw NSError(domain: "CommentRows", code: 1, userInfo: [NSLocalizedDescriptionKey: "Comment rows capture unreadable"])
@@ -44,7 +79,7 @@ extension Host {
         // The user bubble trails its row: its fill at the right edge, background at the left.
         let bubble = chat.model.messageFrames[user] ?? .zero
         return ["png": captured["png"] ?? "", "appearance": window.effectiveAppearance.name.rawValue,
-                "readingHeight": Double(reading.height), "rows": rows,
+                "readingHeight": Double(reading.height), "rows": rows, "userFrame": NSStringFromRect(bubble),
                 "user": sample(bubble.maxX - 5, bubble.midY), "userBackground": sample(bubble.minX + 5, bubble.midY)]
     }
 }

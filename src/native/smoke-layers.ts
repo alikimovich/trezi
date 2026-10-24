@@ -75,6 +75,8 @@ export async function checkLayersIsland(host: NativeBridge, artifacts: string, s
     const heading = (await nodes()).find((n) => n.id === 'native-title')
     assert.ok(heading, 'the fixture heading is a Layers row')
     await select(heading)
+    // "Alone" means without the editing island, whatever an earlier check left open (LKM-331).
+    await setProps(false)
     for (const [name, width] of [
       ['wide', 1280],
       ['narrow', 900]

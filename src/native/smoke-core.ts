@@ -1224,7 +1224,11 @@ export async function runNativeCoreSmoke(
     {
       name: 'inspector-custom',
       dependsOn: ['open-project'],
-      run: () => checkInspectorCustom(customSmoke),
+      run: async () => {
+        await checkInspectorCustom(customSmoke)
+        // The runner's cleanup only runs after a failure: a pass closes the island itself.
+        await restoreInspectorCustom(customSmoke)
+      },
       cleanup: () => restoreInspectorCustom(customSmoke)
     },
     {

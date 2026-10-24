@@ -98,12 +98,18 @@ export async function checkPreviewOverlay(
     const state = await inspect()
     bounded(state, label, rounded)
     const image = await test({ action: 'capture', dark })
+    // Written before the checks: a failure's capture shows where the colour went (LKM-331).
+    if (image.png)
+      writeFileSync(
+        join(artifacts, `preview-overlay-clip-${label}.png`),
+        Buffer.from(image.png, 'base64')
+      )
     assert.ok(image.width > 0 && image.dark === dark, `${label}: foreground capture`)
     assert.ok(image.magentaInside > 0, `${label}: extreme grid paints in preview`)
-    assert.equal(image.magentaOutside, 0, `${label}: no grid colour outside viewport`)
-    writeFileSync(
-      join(artifacts, `preview-overlay-clip-${label}.png`),
-      Buffer.from(image.png, 'base64')
+    assert.equal(
+      image.magentaOutside,
+      0,
+      `${label}: no grid colour outside viewport (window points, top-left: page ${image.pageTopLeft}, stray ${image.magentaOutsideBox}; toolbar band above the page, not counted: ${image.magentaToolbarBand} at ${image.magentaToolbarBandBox})`
     )
     return {
       frame: state.frame,
@@ -111,7 +117,10 @@ export async function checkPreviewOverlay(
       scale: state.scale,
       radius: state.cornerRadius,
       magentaInside: image.magentaInside,
-      magentaOutside: image.magentaOutside
+      magentaOutside: image.magentaOutside,
+      // Recorded, not asserted: the toolbar strip above the page (see captureOverlay).
+      magentaToolbarBand: image.magentaToolbarBand,
+      magentaToolbarBandBox: image.magentaToolbarBandBox
     }
   }
   const first = nativeWorkspace.active!

@@ -2,6 +2,75 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-331 repair 2: strict preview-overlay count, comment-rows scroll that stays (unverified natively)
+
+- **preview-overlay.** The colour-matching rule below (±6 of the page's paint) is withdrawn:
+  it could miss a leak in another magenta and was a guess. The strict threshold is back for
+  everything outside the page except one named region: the strip above the page across its
+  width, i.e. the toolbar, where glass and the scroll-edge effect show the page's edge colour
+  and the overlay (clipped to the page) cannot reach. The nightly's 35602 samples fit that
+  strip (about 650 x 55 pt). The strip is counted and boxed (`magentaToolbarBand`,
+  `magentaToolbarBandBox`) and recorded in the clip evidence, not asserted. Failures still
+  name `magentaOutsideBox`. Still a guess until a native run reads those two values.
+- **comment-rows.** The reading area is read after the last settle, not before. Only the
+  capture that samples the bubble (`bubble: true`, the collapsed one) scrolls it into view,
+  because expanded rows may scroll it away and still need to fit. Before scrolling the chat
+  stops following the latest message the way a used control does (`controlInteraction`, which
+  sets `follows = false`), so the pin cannot return the bubble. The bubble's frame is read again
+  before the capture and the request fails with that frame if it is still outside the reading
+  area. Scrolling the bubble into view also clears the sticky header (its `maxY` is above 0).
+- **Still open.** No native call: the five checks are unrun, in either system appearance.
+
+## 2026-10-23 — LKM-331 repair: preview-overlay, comment-rows, narrower OCR rule (unverified natively)
+
+- **Evidence used.** The nightly's `failure-preview-overlay.png` and the passing
+  `preview-overlay-clip-normal-light.png` of the previous run: both have the Layers and
+  editing islands open, so the islands are not the difference. The composer and toolbar glass
+  tint the magenta beside them (a pink glow in the passing capture), and on a dark system more
+  strongly. The 35602 stray samples (about 35 600 pt² at 2x) are far more than the old rule
+  would expect from paint, and fit glass, not overpaint.
+- **preview-overlay.** Outside the page the check now counts only the page's own paint:
+  pixels within 6 levels of the commonest magenta inside the page. Tinted or refracted
+  near-magenta no longer counts, an opaque spill into the chat still does. The failure
+  message names the stray box, the page rect, the count of tinted pixels and the paint colour.
+- **comment-rows.** The reference bubble leads the five rows; a setup card or a taller
+  composer below them can push it above the reading area, where nothing is sampled
+  (`sample` returns empty, so the bubble contrast stays 0). `verifyCommentRows` now scrolls
+  the conversation until the bubble is in view when it is not, settles again, then lays out
+  and displays the new appearance before the capture. The failure message names the frame.
+- **settings OCR (review finding).** Language correction can complete a clipped word, so the
+  corrected reading alone no longer passes. It counts only when the plain reading holds every
+  required word whole (each plain word is the required word plus at most two trailing
+  letters). Off still needs the text absent from both readings. Unit cases: "metho" (clipped,
+  corrected "method") fails, "methodabc" fails, "methoda" passes.
+- **Not run.** No native call was available. Please run the `sheets`, `build-badge`,
+  `layers-island`, `preview-overlay` and `comment-rows` checks (`core`, `sidebar`, `settings`,
+  `chat` groups), once in Light and once in Dark system appearance, and read the captures.
+
+## 2026-10-23 — LKM-331: nightly native failures on main bb2ca743 (partial)
+
+- **Why.** Five native checks failed in the nightly run. That run happened while the system
+  appearance (on Auto) was Dark; earlier runs were in Light. No native run was available for
+  this change, so it is unverified there.
+- **build-badge.** A branch name plus "modified" needs about 246 pt on macOS 27, but the
+  default sidebar gives the badge 202 pt, so the context truncated as designed. The
+  whole-text states now run at the widest sidebar (340 pt). The 180 pt case still checks the
+  designed truncation.
+- **layers-island.** `inspector-custom` left the editing island open when it passed, because
+  the runner's cleanup only runs after a failure. Layers then measured itself beside the
+  island instead of centred under its button. Now the check restores Styles and closes the
+  island after a pass, and Layers closes the island before it measures.
+- **sheets.** Uncorrected Vision OCR read the dark capture's "UI layout method" as "Ul layout
+  methoda" (reproduced on the artifact). Settings captures now also return a
+  language-corrected reading of the same pixels. Evidence passes if either reading holds the
+  whole phrase, and the Off checks reject the label if it appears in either reading. The
+  strict word matching is unchanged.
+- **preview-overlay and comment-rows (diagnostics only).** The root causes are not confirmed.
+  The overlay clip PNG is now written before the assertions, and the failure names the page
+  rect and the bounding box of the stray magenta. The comment-rows failure names the user
+  bubble's frame and the reading height, which tells an unlaid bubble from one scrolled out
+  of view.
+
 ## 2026-10-23 — LKM-330: nightly native failures on main d1f851ea (partial)
 
 - **Why.** The nightly native run (macOS 27) failed five checks. The causes below come
