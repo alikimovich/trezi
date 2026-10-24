@@ -6,7 +6,7 @@ export type NativeComposerAction = { chat: string } & (
   | { action: 'key'; key: string }
   /** `stop`: whether the clicked button showed Stop (absent: either). */
   | { action: 'send'; stop?: boolean }
-  | { action: 'context' | 'layers' }
+  | { action: 'context' }
   | { action: 'choice'; label: string; value: string }
   | { action: 'suggestion' | 'remove' | 'unreference'; index: number }
   | {

@@ -611,9 +611,6 @@ export class NativeChatController {
         case 'context':
           this.clearSelection(chat)
           break
-        case 'layers':
-          this.services.effect({ type: 'layers' })
-          break
       }
     } catch (error) {
       this.fail(chat, error)
