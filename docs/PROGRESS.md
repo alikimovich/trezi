@@ -2,6 +2,23 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-332: preview-overlay's uncounted band is the toolbar strip only (unverified natively)
+
+- **preview-overlay.** The uncounted band had no lower bound: every pixel above the page top
+  across its width, so it also hid the top ruler and any gap between the toolbar and the page,
+  where an upward grid leak lands first. It now ends at the toolbar's bottom edge
+  (`window.contentLayoutRect.maxY`, converted to the capture's top-left coordinates, and never
+  below the page top). The ruler and the gap count as `outside` again at the strict threshold.
+  The band's limits are recorded as `toolbarBandLimits` (window points, top-left) in the
+  capture and the clip evidence; the failure message is unchanged.
+- **Deferred native acceptance.** This session had no native verification allowance. By
+  operator decision option (b), native acceptance (sheets, build-badge, layers-island,
+  preview-overlay, comment-rows, plus the values system appearance, `magentaOutside`,
+  `magentaToolbarBand`, `toolbarBandLimits`, `userFrame`, `readingHeight`) is deferred to the
+  post-merge native suite run on main, which the steward queues. If that run fails on the same
+  check, the new ticket must reference LKM-325/328/330/331/332. No separate "native not
+  verified" follow-up is to be opened.
+
 ## 2026-10-23 — LKM-331 repair 2: strict preview-overlay count, comment-rows scroll that stays (unverified natively)
 
 - **preview-overlay.** The colour-matching rule below (±6 of the page's paint) is withdrawn:
