@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+- A message still in the composer 1.5 s after you press Send (the chat is still being prepared, or its project is still opening) shows that it is sending: a shimmer on the Send button (a steady glow with Reduce Motion), the text and attachments faded and read-only, and Stop ("Stop sending") while the send can still be cancelled, which puts the composer back with the exact text and attachments. A quicker send shows no change (LKM-338).
+
 ## [0.2.0] - 2026-10-24
 
 ### Added

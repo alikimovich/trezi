@@ -212,6 +212,19 @@ export class StartFlow {
     } else void controller.beginPlanning(true)
   }
 
+  /** LKM-338: the no-project draft was sent and waits for its project to open. */
+  opening(chat: Chat) {
+    return this.pending && chat.chat === HOME
+  }
+
+  /** Stop on that send, or on its card: the draft stays in the start composer. */
+  cancel(controller: NativeChatController) {
+    controller.invalidatePlanningStart()
+    this.pending = false
+    this.carry = null
+    this.reroute = null
+  }
+
   /** A home or planning chat whose selected provider cannot answer keeps its draft unsent.
    *  Ordinary project chats are never held: their own sign-in cards handle a lost provider. */
   holds(controller: NativeChatController, chat: Chat) {
@@ -246,10 +259,7 @@ export class StartFlow {
         })
         return true
       case 'start-cancel':
-        controller.invalidatePlanningStart()
-        this.pending = false
-        this.carry = null
-        this.reroute = null
+        this.cancel(controller)
         return true
       case 'start-provider':
         if (action.value) await controller.choice(chat, 'Provider', action.value)

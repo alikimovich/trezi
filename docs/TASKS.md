@@ -10,6 +10,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Endpoint errors (401 asks for a new code, 413/400 no Retry, 429 says when, network/5xx keep Retry); unit `feedback-body`, `feedback-endpoint`, `provider-feedback-code`, `native-support-sheets`.
 - [ ] Native `settings` group (`smoke-alerts.ts` against the loopback mock, `smoke-sheets.ts`, the host's `captureFeedback`) not yet run.
 - [ ] Operator: send one report from a real build against trezi.app with a real invite code (real Keychain).
+## Composer sending state after 1.5 s (LKM-338)
+
+- [x] The chat controller holds a Send whose draft has not left (chat being prepared, home project opening) and reports it as `composer.sending` with the composer's attempt; `cancel-send` ends it with the draft untouched (`test/composer-sending.mjs`).
+- [x] `ComposerSending.swift`: after 1.5 s the Send beam, read-only content at 55%, locked attachment chips, and "Stop sending" (or "Sending…" without Stop) — unit fixture `test/fixtures/composer-sending`.
+- [ ] Native evidence of the look itself (no smoke check drives a slow send yet).
 
 ## Native suite failure on main a6ecd135 (LKM-334)
 

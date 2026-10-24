@@ -60,6 +60,8 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     /// length of the text then, moved by later edits inside it: what a send removes.
     var sent = 0
     var sentLengths: [Int: Int] = [:]
+    /// LKM-338: a send still in the composer 1.5 s after the press (ComposerSending.swift).
+    let sending = ComposerSending()
     var applying = false
     var glass = false
     var choicesSignature = Data()
@@ -164,6 +166,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             controls.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10), controls.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -10), controls.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -8), controls.heightAnchor.constraint(equalToConstant: 30)
         ])
         for overlay in [readyBeam, buttonBeam] { addSubview(overlay) }
+        sending.changed = { [weak self] in self?.renderSending() }
         isHidden = true
     }
     /// Measure using the same TextKit wrapping, padding and font as the editor.
@@ -253,13 +256,39 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         if text.hasMarkedText() { return false }
         let commands = ["insertNewline:":"Enter", "insertTab:":"Tab", "moveUp:":"ArrowUp", "moveDown:":"ArrowDown", "cancelOperation:":"Escape"]
         guard let key = commands[NSStringFromSelector(selector)] else { return false }
+        if sending.shown { return key == "Enter" }
         let hasSuggestions = !(state["suggestions"] as? [Any] ?? []).isEmpty
-        if key == "Enter" && !(NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false) || hasSuggestions {
-            emitAction("key", ["key":key]); return true
+        let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+        if key == "Enter" && !shift || hasSuggestions {
+            var action: [String: Any] = ["key":key]
+            if key == "Enter" && !shift && !hasSuggestions { action["attempt"] = sending.begin() }
+            emitAction("key", action); return true
         }
         return false
     }
-    @objc func send(_ sender: Any?) { if sendButton.isEnabled { emitAction("send", ["stop":state["stop"] as? Bool ?? false]) } }
+    @objc func send(_ sender: Any?) {
+        guard sendButton.isEnabled else { return }
+        if sending.shown {
+            if sending.cancellable, let attempt = sending.pending { emitAction("cancel-send", ["attempt":attempt]) }
+            return
+        }
+        let stop = state["stop"] as? Bool ?? false
+        emitAction("send", stop ? ["stop":true] : ["stop":false, "attempt":sending.begin()])
+    }
+    /// LKM-338: the sending look over the snapshot's Send button, beam and editable content.
+    func renderSending() {
+        let look = sending.look
+        buttonBeam.show(!isHidden && (state["thinking"] as? Bool == true || look != nil), radius: 15)
+        text.isEditable = look == nil
+        for view in [scroll, attachments] as [NSView] { view.alphaValue = CGFloat(look?.contentAlpha ?? 1) }
+        attachments.locked = look != nil
+        plus.isEnabled = look == nil
+        let label = look?.label ?? state["sendLabel"] as? String ?? "Send"
+        sendButton.isEnabled = look.map(\.stop) ?? (state["enabled"] as? Bool ?? false)
+        let symbol = look?.symbol ?? (state["stop"] as? Bool == true ? "stop.fill" : "arrow.up")
+        sendButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        sendButton.setAccessibilityLabel(label)
+    }
     @objc func clearContext(_ sender: Any?) { emitAction("context") }
     /// LKM-181: island references from Copy reference, one chip each beside the element chip.
     private func updateReferences(_ names: [String]) {
@@ -303,6 +332,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         for file in files { emitAction("files", ["files":[file]]) }
     }
     func readPasteboard(_ board: NSPasteboard) -> Bool {
+        if sending.shown { return true }
         if let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly:true]) as? [URL], !urls.isEmpty { attach(urls); return true }
         let data = board.data(forType: .png) ?? board.data(forType: .tiff).flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) }
         if let data {
@@ -352,8 +382,9 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             buttonBeam.show(false, radius: 15)
             text.undoManager?.removeAllActions(); chat = nextChat; revision = next["revision"] as? Int ?? 0
             sent = (next["sent"] as? [String: Any])?["count"] as? Int ?? 0; sentLengths = [:]
+            sending.reset()
         }
-        buttonBeam.show(!isHidden && next["thinking"] as? Bool == true, radius: 15)
+        sending.update(next["sending"] as? [String: Any])
         if isHidden { readyBeam.show(false, radius: 24) }
         else if next["ready"] as? Bool == true && !chat.isEmpty && welcomedChats.insert(chat).inserted {
             readyBeam.show(true, radius: 24, once: true)
@@ -369,10 +400,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
                 sentLengths = [revision: (value as NSString).length]
             }
         }
-        sendButton.isEnabled = next["enabled"] as? Bool ?? false
-        let stop = next["stop"] as? Bool ?? false
-        sendButton.image = NSImage(systemSymbolName: stop ? "stop.fill" : "arrow.up", accessibilityDescription: next["sendLabel"] as? String)
-        sendButton.setAccessibilityLabel(next["sendLabel"] as? String ?? "Send")
+        renderSending()
         let choices = next["choices"] as? [[String: Any]] ?? []
         let signature = (try? JSONSerialization.data(withJSONObject: choices, options: [.sortedKeys])) ?? Data()
         if signature != choicesSignature {
@@ -448,7 +476,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             item.target = self; item.representedObject = payload; popup.menu?.addItem(item)
         }
     }
-    func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.item(at: 0)?.image != nil && (plus.cell as? NSPopUpButtonCell)?.arrowPosition == .noArrow, "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
+    func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "sending":["pending":sending.pending ?? 0, "shown":sending.shown, "cancellable":sending.cancellable, "editable":text.isEditable, "contentAlpha":scroll.alphaValue, "attachmentsLocked":attachments.locked, "sendLabel":sendButton.accessibilityLabel() ?? ""], "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.item(at: 0)?.image != nil && (plus.cell as? NSPopUpButtonCell)?.arrowPosition == .noArrow, "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
     func perform(_ c: [String: Any]) {
         // Ordered steps in one main-thread turn: no snapshot can arrive between them.
         (c["steps"] as? [[String: Any]])?.forEach(perform)
