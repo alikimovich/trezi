@@ -121,15 +121,29 @@ extension Host {
             let sy = CGFloat(bitmap.pixelsHigh) / content.bounds.height
             let left = Int((page.minX - content.bounds.minX) * sx), right = Int((page.maxX - content.bounds.minX) * sx)
             let top = Int((content.bounds.maxY - page.maxY) * sy), bottom = Int((content.bounds.maxY - page.minY) * sy)
-            var inside = 0, outside = 0
+            // LKM-331: one region is not the page and is not counted: the strip above the page,
+            // across the page's width, which is the toolbar. The system's glass and scroll-edge
+            // effect there show the page's edge colour behind the toolbar (the nightly's stray
+            // count fits that strip: about 650 x 55 pt). The overlay itself is clipped to the
+            // page, so it cannot reach it. Everything else outside the page (the chat, the
+            // sidebar, beside or below the page) is counted at the strict colour threshold.
+            var inside = 0, outside = 0, band = 0
+            // Where stray paint lies (window points, top-left origin), so a failure names it.
+            var stray = CGRect.null, bandBox = CGRect.null
             for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
                 for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
                     guard let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                           c.redComponent > 0.82, c.greenComponent < 0.35, c.blueComponent > 0.75 else { continue }
-                    if x >= left - 1 && x < right + 1 && y >= top - 1 && y < bottom + 1 { inside += 1 } else { outside += 1 }
+                    let spot = CGRect(x: CGFloat(x) / sx, y: CGFloat(y) / sy, width: 2 / sx, height: 2 / sy)
+                    if x >= left - 1 && x < right + 1 && y >= top - 1 && y < bottom + 1 { inside += 1 }
+                    else if x >= left - 1 && x < right + 1 && y < top - 1 { band += 1; bandBox = bandBox.union(spot) }
+                    else { outside += 1; stray = stray.union(spot) }
                 }
             }
-            image["magentaInside"] = inside; image["magentaOutside"] = outside
+            image["magentaInside"] = inside; image["magentaOutside"] = outside; image["magentaToolbarBand"] = band
+            if !bandBox.isNull { image["magentaToolbarBandBox"] = NSStringFromRect(bandBox.integral) }
+            image["pageTopLeft"] = NSStringFromRect(NSRect(x: page.minX - content.bounds.minX, y: content.bounds.maxY - page.maxY, width: page.width, height: page.height))
+            if !stray.isNull { image["magentaOutsideBox"] = NSStringFromRect(stray.integral) }
             image["pixelScale"] = ["x":Double(sx), "y":Double(sy)]
         }
         return image

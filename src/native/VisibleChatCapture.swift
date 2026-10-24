@@ -11,7 +11,7 @@ func captureVisibleChat(window: NSWindow, chat: NativeChat) async throws -> [Str
 }
 
 @MainActor
-func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recognize: Bool = true) async throws -> [String: Any] {
+func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recognize: Bool = true, corrected: Bool = false) async throws -> [String: Any] {
     guard window.isVisible, window.isKeyWindow, NSApp.isActive, !view.isHidden else {
         throw NSError(domain: "VisibleChatCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: "Chat window is not in the foreground"])
     }
@@ -43,10 +43,16 @@ func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recogn
     }
     // Whole-window state evidence needs pixels only.
     guard recognize else { return ["png": png.base64EncodedString(), "text": [String](), "width": pixels.width, "height": pixels.height] }
-    let request = VNRecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.usesLanguageCorrection = false
-    try VNImageRequestHandler(cgImage: pixels).perform([request])
-    return ["png": png.base64EncodedString(), "text": (request.results ?? []).compactMap { $0.topCandidates(1).first?.string },
-            "width": pixels.width, "height": pixels.height]
+    func read(correcting: Bool) throws -> [String] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = correcting
+        try VNImageRequestHandler(cgImage: pixels).perform([request])
+        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+    }
+    var result: [String: Any] = ["png": png.base64EncodedString(), "text": try read(correcting: false), "width": pixels.width, "height": pixels.height]
+    // LKM-331: a second reading of the same pixels with language correction. Uncorrected Vision
+    // read a dark Settings capture's whole "UI layout method" as "Ul layout methoda".
+    if corrected { result["corrected"] = try read(correcting: true) }
+    return result
 }

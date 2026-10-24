@@ -90,6 +90,7 @@ export async function checkVisibleSettings(
     const evidence = {
       ...layout,
       text: image.text,
+      corrected: image.corrected ?? [],
       captureWidth: image.width,
       captureHeight: image.height
     }
