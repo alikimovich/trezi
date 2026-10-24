@@ -39,6 +39,9 @@ Newest first. Append a dated entry when you finish a chunk of work.
   island move (`hoverRecorderScript`, installed just before it in the inspector and Layers
   checks). No events listed means WebKit dropped the move. Then the fix belongs in the host
   (`InspectorIslandVerification.swift` or the island telling the page), not in the page.
+- **Merge with LKM-328.** origin/main's `hover-drop` (the host's island-entered signal,
+  `hoverDrop.entered()`) lands on the same symptom from another side. Both stay: the covered
+  rect check shares `onMove`'s overlay branch, which now calls `hoverDrop.drop()`.
 - **Verification.** Lint, both typechecks and the unit tier pass (quick tier, 257 pass).
   No native run was available in this session (0 native calls), so none of the five checks
   ran again.
