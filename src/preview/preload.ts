@@ -1366,7 +1366,9 @@ function onMove(e: MouseEvent): void {
   const altChanged = altHeld !== e.altKey
   altHeld = e.altKey
   const el = e.target as Element | null
-  if (!el || isOverlay(el)) {
+  // A move over a native island is never a page hover, even if WebKit resolved it to an
+  // element other than the island's shield (LKM-330).
+  if (!el || isOverlay(el) || nativeCover.covers(e.clientX, e.clientY)) {
     // Over our own UI (toolbar, composer, pins): drop the hover highlight —
     // leaving the last-crossed element lit under the toolbar reads as if IT
     // were selected. The persistent selection outlines are a separate layer.

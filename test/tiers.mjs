@@ -91,6 +91,7 @@ export const UNIT = [
   'project-planning',
   'native-long-chat-perf',
   'preview-hover-coalesce',
+  'preview-native-cover',
   'preview-hover-drop',
   'preview-edit-lifecycle',
   'chat-attachments',

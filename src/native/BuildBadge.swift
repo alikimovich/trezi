@@ -48,16 +48,20 @@ final class BuildBadge: NSObject {
         identity.lineBreakMode = .byTruncatingTail; context.lineBreakMode = .byTruncatingMiddle
         identity.identifier = NSUserInterfaceItemIdentifier("build-badge-identity")
         context.identifier = NSUserInterfaceItemIdentifier("build-badge-context")
+        // LKM-330: on macOS 27 a label's alignment rect leaves out its 2 pt text padding, so
+        // chained alignment rects overlapped the frames and ran the two texts together. Space
+        // the frames as on earlier systems (zero insets there).
+        let identityInsets = identity.alignmentRectInsets, contextInsets = context.alignmentRectInsets
         NSLayoutConstraint.activate([
             dot.leadingAnchor.constraint(equalTo: button.leadingAnchor),
             dot.widthAnchor.constraint(equalToConstant: Self.dotSize), dot.heightAnchor.constraint(equalToConstant: Self.dotSize),
             // The digits' optical centre: half the cap height above the baseline.
             dot.centerYAnchor.constraint(equalTo: identity.firstBaselineAnchor, constant: -font.capHeight / 2),
-            identity.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: Self.dotGap),
+            identity.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: Self.dotGap + identityInsets.left),
             identity.topAnchor.constraint(equalTo: button.topAnchor), identity.bottomAnchor.constraint(equalTo: button.bottomAnchor),
-            context.leadingAnchor.constraint(equalTo: identity.trailingAnchor),
+            context.leadingAnchor.constraint(equalTo: identity.trailingAnchor, constant: identityInsets.right + contextInsets.left),
             context.firstBaselineAnchor.constraint(equalTo: identity.firstBaselineAnchor),
-            context.trailingAnchor.constraint(equalTo: button.trailingAnchor)
+            context.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -contextInsets.right)
         ])
         let menu = NSMenu()
         copyItem.target = self; menu.addItem(copyItem)
@@ -133,7 +137,8 @@ final class BuildBadge: NSObject {
         let rect = { (view: NSView) in placed && !view.isHidden ? view.convert(view.bounds, to: nil) : NSRect.zero }
         let frame = rect(button), dotFrame = rect(dot), identityFrame = rect(identity), contextFrame = rect(context)
         let baseline = identityFrame.maxY - identity.firstBaselineOffsetFromTop
-        let truncated = { (label: NSTextField) in !label.stringValue.isEmpty && label.intrinsicContentSize.width > label.bounds.width + 0.5 }
+        // The intrinsic width is the alignment rect's (without macOS 27's text padding).
+        let truncated = { (label: NSTextField) in !label.stringValue.isEmpty && label.intrinsicContentSize.width > label.alignmentRect(forFrame: label.frame).width + 0.5 }
         let shown = contextCollapsed.isActive ? identity.stringValue : "\(identity.stringValue) \(context.stringValue)"
         return ["badgeText":shown, "badgeIdentity":identity.stringValue, "badgeContext":context.stringValue,
                 "badgeTone":status["tone"] as? String ?? "", "badgeState":status["state"] as? String ?? "",
