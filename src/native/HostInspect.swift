@@ -264,7 +264,7 @@ extension Host {
                         reply(id, error: "Island reveal superseded; revision=\(request.revision), newer=\(newer)"); return
                     }
                 }
-                reply(id, error: "Island reveal did not settle at \(bottom ? "bottom" : "top"); revision=\(request.revision), applied=\(chat.model.revealAppliedRevision), attempts=\(chat.model.revealAttempt), frame=\(lastFrame.map { NSStringFromRect($0) } ?? "missing")")
+                reply(id, error: "Island reveal did not settle at \(bottom ? "bottom" : "top"); revision=\(request.revision), applied=\(chat.model.revealAppliedRevision), attempts=\(chat.model.revealAttempt), frame=\(lastFrame.map { NSStringFromRect($0) } ?? "missing"), scroll=\(chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]), realizedRows=\(chat.model.messageFrames.count)")
             }
         case "captureVisibleChat":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

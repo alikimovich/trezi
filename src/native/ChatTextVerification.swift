@@ -50,7 +50,9 @@ extension Host {
         view.displayIfNeeded()
         let reading = NSRect(x: 0, y: 0, width: chat.bounds.width, height: max(1, chat.bounds.height - chat.model.bottomInset))
         let captured = try await captureVisibleRegion(window: window, view: chat, region: reading, recognize: false)
-        guard let data = Data(base64Encoded: captured["png"] as? String ?? ""), let bitmap = NSBitmapImageRep(data: data) else { throw fail("Capture unreadable") }
+        // LKM-334: the code background is sampled from the window's own rendering, which maps
+        // onto the frames; the capture, drawn smaller than the window, stays the evidence.
+        let bitmap = try renderRegion(window: window, view: chat, region: reading)
         func top(_ rect: NSRect) -> NSRect {
             let inChat = view.convert(rect, to: chat)
             return chat.isFlipped ? inChat : NSRect(x: inChat.minX, y: chat.bounds.height - inChat.maxY, width: inChat.width, height: inChat.height)
@@ -80,7 +82,7 @@ extension Host {
         }
         let firstResponder = window.firstResponder === view
         view.setSelectedRange(NSRange(location: 0, length: 0))
-        return ["png": captured["png"] ?? "", "appearance": window.effectiveAppearance.name.rawValue, "views": views,
+        return ["png": captured["png"] ?? "", "capture": captured["geometry"] ?? [:], "appearance": window.effectiveAppearance.name.rawValue, "views": views,
                 "length": text.length, "from": from, "to": to, "selected": selected, "copied": copied ?? NSNull(),
                 "selectAll": NSStringFromRange(all), "copiedAll": copiedAll ?? NSNull(), "copiedCode": copiedCode ?? NSNull(),
                 "codeText": view.code(at: view.copyButtons.count - 1) ?? "", "copyButtons": view.copyButtons.count,

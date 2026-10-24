@@ -61,6 +61,16 @@ require(islandRevealScroll(bottom, positions: ["end-shadow": CGRect(x: 36, y: 71
         "An anchor behind the composer is targeted directly")
 require(islandRevealScroll(top, positions: ["start-shadow": CGRect(x: 0, y: viewport, width: 1, height: 16)], viewportHeight: viewport) == row(.top),
         "An anchor starting at the viewport's bottom edge is offscreen")
+// The recorded stall: the anchor sits 3305pt above the viewport and `scrollTo` the row moves
+// nothing. Every fourth stalled attempt goes to the first row, then back to the message.
+let stuck: [String: CGRect] = ["start-shadow": CGRect(x: 32, y: -3305.7, width: 376, height: 16)]
+let jogs = (1...8).map { islandRevealScroll(top, positions: stuck, viewportHeight: viewport, stalled: $0, first: "first") }
+require(jogs.map(\.id) == ["panel", "panel", "first", "panel", "panel", "panel", "first", "panel"], "A stalled reveal jogs through the first row every fourth attempt")
+require(islandRevealScroll(top, positions: stuck, viewportHeight: viewport, stalled: 3, first: "panel") == row(.top), "A reveal whose row is the first row has nowhere to jog")
+require(islandRevealScroll(top, positions: stuck, viewportHeight: viewport, stalled: 3, first: nil) == row(.top), "No first row, no jog")
+require(islandRevealScroll(top, positions: staleTopAtEdge, viewportHeight: viewport, stalled: 3, first: "first").id == "island-start-shadow", "A visible anchor never jogs")
+require(!islandRevealOnScreen(top, positions: stuck, viewportHeight: viewport) && !islandRevealOnScreen(top, positions: [:], viewportHeight: viewport)
+        && islandRevealOnScreen(top, positions: staleTopAtEdge, viewportHeight: viewport), "On screen means the anchor's frame meets the viewport")
 require(islandRevealUnitY(.readingBottom, readingHeight: 580, viewportHeight: 776) == 580 / 776 && islandRevealUnitY(.bottom, readingHeight: 580, viewportHeight: 776) == 1,
         "Only anchors use the reading-edge unit point")
 
