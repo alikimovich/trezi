@@ -60,10 +60,10 @@ extension Host {
                 "The reference bubble is outside the reading area: frame \(NSStringFromRect(chat.model.messageFrames[user] ?? .zero)), reading height \(reading.height)"])
         }
         let captured = try await captureVisibleRegion(window: window, view: chat, region: reading, recognize: false)
-        guard let data = Data(base64Encoded: captured["png"] as? String ?? ""), let bitmap = NSBitmapImageRep(data: data) else {
-            throw NSError(domain: "CommentRows", code: 1, userInfo: [NSLocalizedDescriptionKey: "Comment rows capture unreadable"])
-        }
-        // Frames are in the conversation's top-left space, which the capture starts at.
+        // LKM-334: colours come from the window's own rendering, which maps exactly onto the
+        // frames; the capture showed rows at x 8–389 for frames at 18–422. It stays the evidence.
+        let bitmap = try renderRegion(window: window, view: chat, region: reading)
+        // Frames are in the conversation's top-left space, which the rendering starts at.
         let scale = CGFloat(bitmap.pixelsWide) / reading.width
         func sample(_ x: CGFloat, _ y: CGFloat) -> [Double] {
             let px = Int(x * scale), py = Int(y * scale)
@@ -78,7 +78,8 @@ extension Host {
         }
         // The user bubble trails its row: its fill at the right edge, background at the left.
         let bubble = chat.model.messageFrames[user] ?? .zero
-        return ["png": captured["png"] ?? "", "appearance": window.effectiveAppearance.name.rawValue,
+        return ["png": captured["png"] ?? "", "sampled": bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "",
+                "capture": captured["geometry"] ?? [:], "appearance": window.effectiveAppearance.name.rawValue,
                 "readingHeight": Double(reading.height), "rows": rows, "userFrame": NSStringFromRect(bubble),
                 "user": sample(bubble.maxX - 5, bubble.midY), "userBackground": sample(bubble.minX + 5, bubble.midY)]
     }

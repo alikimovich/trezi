@@ -10,6 +10,22 @@ func captureVisibleChat(window: NSWindow, chat: NativeChat) async throws -> [Str
     return try await captureVisibleRegion(window: window, view: chat, region: reading)
 }
 
+/// LKM-334: the window's own rendering of `region`, first row at its top, for colour
+/// samples at view frames. The capture below can't serve: on macOS 27 it drew the window
+/// 2–6 % smaller than its frame (varying per capture), so frames read the wrong pixels.
+@MainActor
+func renderRegion(window: NSWindow, view: NSView, region: NSRect) throws -> NSBitmapImageRep {
+    guard let root = window.contentView?.superview ?? window.contentView else {
+        throw NSError(domain: "VisibleChatCapture", code: 5, userInfo: [NSLocalizedDescriptionKey: "Window has no content to render"])
+    }
+    let area = view.convert(region, to: root)
+    guard let bitmap = root.bitmapImageRepForCachingDisplay(in: area) else {
+        throw NSError(domain: "VisibleChatCapture", code: 5, userInfo: [NSLocalizedDescriptionKey: "Window rendering unavailable"])
+    }
+    root.cacheDisplay(in: area, to: bitmap)
+    return bitmap
+}
+
 @MainActor
 func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recognize: Bool = true, corrected: Bool = false) async throws -> [String: Any] {
     guard window.isVisible, window.isKeyWindow, NSApp.isActive, !view.isHidden else {
@@ -41,8 +57,12 @@ func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recogn
     guard let pixels = image.cropping(to: crop), let png = NSBitmapImageRep(cgImage: pixels).representation(using: .png, properties: [:]) else {
         throw NSError(domain: "VisibleChatCapture", code: 3, userInfo: [NSLocalizedDescriptionKey: "Chat screenshot crop failed"])
     }
+    // LKM-334: how the capture maps onto the window, for checks that compare it with frames.
+    let geometry: [String: Any] = ["image": "\(image.width)x\(image.height)", "contentRect": NSStringFromRect(filter.contentRect),
+                                   "pointPixelScale": Double(filter.pointPixelScale), "scWindow": NSStringFromRect(ownWindow.frame),
+                                   "window": NSStringFromRect(window.frame), "crop": NSStringFromRect(crop)]
     // Whole-window state evidence needs pixels only.
-    guard recognize else { return ["png": png.base64EncodedString(), "text": [String](), "width": pixels.width, "height": pixels.height] }
+    guard recognize else { return ["png": png.base64EncodedString(), "text": [String](), "width": pixels.width, "height": pixels.height, "geometry": geometry] }
     func read(correcting: Bool) throws -> [String] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
@@ -50,7 +70,7 @@ func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recogn
         try VNImageRequestHandler(cgImage: pixels).perform([request])
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
     }
-    var result: [String: Any] = ["png": png.base64EncodedString(), "text": try read(correcting: false), "width": pixels.width, "height": pixels.height]
+    var result: [String: Any] = ["png": png.base64EncodedString(), "text": try read(correcting: false), "width": pixels.width, "height": pixels.height, "geometry": geometry]
     // LKM-331: a second reading of the same pixels with language correction. Uncorrected Vision
     // read a dark Settings capture's whole "UI layout method" as "Ul layout methoda".
     if corrected { result["corrected"] = try read(correcting: true) }

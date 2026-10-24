@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main a6ecd135 (LKM-334)
+
+- [x] comment-rows and chat-text sample colours from the window's own rendering (`renderRegion`), not the ScreenCaptureKit capture, which on macOS 27 is drawn smaller than the frames; the capture's geometry is returned and named in failures.
+- [x] The manager's native run passed the whole `chat` group (14/14), including chat-text.
+- [x] native-chat-scroll's first island reveal: a stalled reveal jogs through the first row every fourth offscreen attempt (`islandRevealScroll`, unit fixture `test/fixtures/chat-reveal`), and a failure reports the scroll metrics.
+- [x] native-chat-scroll passes on the merge tree (review native run: `SEND VISIBILITY PASS`, `CHAT ACCEPTANCE PASS`, `chat` 14/14). The worker's own runs had stopped at send visibility (`440-fixed loaded: no visible transcript rows`, the first load's settle still running), so the helper re-reads the `loaded` sample for up to 4 s; the wait is recorded (`blankRereads`, `blankWaitMs` in `send-visibility.json`) and printed as a `SEND VISIBILITY NOTE`, so a blank-on-load flash shows in the evidence.
+- [ ] Watch: if a later run prints a `SEND VISIBILITY NOTE` with a long wait, or a persistent 1 pt completion-footer shift, bisect LKM-330's two `settle()` calls on viewport/composer changes (`Chat.swift`); read `scroll=`, `composerInset` and `realizedRows=` from the failure.
+
 ## Native suite failure on main bb2ca743 (LKM-331)
 
 - [x] build-badge: the whole-text states run at the widest sidebar (340 pt); the 180 pt case still checks designed truncation.

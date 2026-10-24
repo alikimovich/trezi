@@ -36,11 +36,23 @@ export async function checkSendVisibility(host, artifacts) {
   const samples = [],
     failures = []
   const inspect = () => host.request('chatInspect')
-  const sample = async (condition, phase) => {
-    const state = await inspect()
+  // `waitForRows`: a load's own settle can still be realizing rows when the sample lands (the
+  // first load reads 0 rows, settle attempts 0, until the settle ends, LKM-334). A transcript
+  // that is blank for the whole wait still fails; only the transient is waited out, and its
+  // length is recorded (`blankRereads`, `blankWaitMs` in send-visibility.json) and printed, so a
+  // transcript that flashes blank is in the evidence instead of passing silently.
+  const sample = async (condition, phase, waitForRows = false) => {
+    let state = await inspect()
+    const started = Date.now()
+    let blankRereads = 0
+    for (; waitForRows && blankRereads < 40 && !state.visibleMessageIDs?.length; blankRereads++) {
+      await delay(100)
+      state = await inspect()
+    }
     const entry = {
       condition,
       phase,
+      ...(waitForRows && { blankRereads, blankWaitMs: blankRereads ? Date.now() - started : 0 }),
       visibleRows: state.visibleMessageIDs?.length ?? 0,
       realizedRows: state.realizedRows,
       latestSettleAttempts: state.latestSettleAttempts,
@@ -104,7 +116,7 @@ export async function checkSendVisibility(host, artifacts) {
         // Foreground for the captures (the chat is shown by the first chatState).
         if (condition === '440-fixed') await host.request('chatAcceptance', { prepare: true })
         await delay(300)
-        const loaded = await sample(condition, 'loaded')
+        const loaded = await sample(condition, 'loaded', true)
         if (composer === 'growing')
           for (const lines of [3, 8, 14]) {
             state.composer = {
@@ -196,6 +208,10 @@ export async function checkSendVisibility(host, artifacts) {
     `LKM-139 send visibility (see ${join(artifacts, 'send-visibility.json')})`
   )
   const worst = Math.max(...samples.map((entry) => entry.offset - entry.maxOffset))
+  for (const entry of samples.filter((entry) => entry.blankRereads))
+    console.log(
+      `SEND VISIBILITY NOTE — ${entry.condition} ${entry.phase}: transcript blank for ${entry.blankWaitMs} ms (${entry.blankRereads} re-reads) before rows showed.`
+    )
   console.log(
     `SEND VISIBILITY PASS — ${samples.length} samples at 440/320pt with a fixed and a growing composer: rows visible after send, mid-stream and after completion; offset - maxOffset ≤ ${worst.toFixed(1)}pt; same scroll document throughout.`
   )

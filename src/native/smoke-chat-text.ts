@@ -113,7 +113,7 @@ export async function checkChatText(host: NativeBridge, artifacts: string) {
       const fill = contrast(result.codeFill, result.background)
       assert.ok(
         fill >= 2,
-        `${mode}: code background ${result.codeFill} shows on ${result.background}`
+        `${mode}: code background ${result.codeFill} shows on ${result.background} (code ${result.codeFrame}, capture ${JSON.stringify(result.capture)})`
       )
     }
     console.log(

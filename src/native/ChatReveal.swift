@@ -38,11 +38,26 @@ func islandRevealUnitY(_ edge: IslandRevealEdge, readingHeight: CGFloat, viewpor
 /// composer counts), bring the containing row (a direct lazy-stack child) in by
 /// its own near edge — aligning a tall row's reading-edge unit point instead
 /// left a bottom anchor parked behind the composer on every attempt.
-func islandRevealScroll(_ request: IslandRevealRequest, positions: [String: CGRect], viewportHeight: CGFloat) -> IslandRevealScroll {
+///
+/// An AppKit pin to the end moves the clip outside SwiftUI's scroll machinery, so
+/// `scrollTo` the same row can keep resolving to the offset SwiftUI already believes
+/// it holds and move nothing (the recorded `revision=1, applied=0, attempts=80,
+/// frame={{32, -3305.7}, {376, 16}}`: 80 attempts, one frame). After `stalled`
+/// offscreen attempts in a row, every fourth one scrolls to the first row, whose place
+/// SwiftUI knows exactly, and the next comes back from there (as
+/// `ChatLatestSettle.realizeTarget` does for the latest row).
+func islandRevealScroll(_ request: IslandRevealRequest, positions: [String: CGRect], viewportHeight: CGFloat,
+                        stalled: Int = 0, first: String? = nil) -> IslandRevealScroll {
     guard let frame = positions[request.position], frame.maxY > 0, frame.minY < viewportHeight else {
+        if stalled % 4 == 3, let first, first != request.message { return IslandRevealScroll(id: first, edge: .top) }
         return IslandRevealScroll(id: request.message, edge: request.bottom ? .bottom : .top)
     }
     return IslandRevealScroll(id: request.anchor, edge: request.bottom ? .readingBottom : .top)
+}
+/// Whether the anchor's measured frame is inside the viewport (behind the composer counts).
+func islandRevealOnScreen(_ request: IslandRevealRequest, positions: [String: CGRect], viewportHeight: CGFloat) -> Bool {
+    guard let frame = positions[request.position] else { return false }
+    return frame.maxY > 0 && frame.minY < viewportHeight
 }
 
 /// Consecutive on-edge measurements a reveal needs before it counts as applied.

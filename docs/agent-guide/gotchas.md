@@ -20,6 +20,11 @@ and provider-seat rules are here.
   `KeyShortcut.matches(…)`, never `charactersIgnoringModifiers`; in-page preview keys
   compare `latinKey(e)` (`src/preview/latin-key.ts`), never `e.key` for letters,
   digits or punctuation. Test with synthetic non-Latin events (`test/key-shortcuts.mjs`).
+- **A foreground capture does not map onto view frames (LKM-334).** On macOS 27 the
+  ScreenCaptureKit window image from `captureVisibleRegion` drew the window 2–6 % smaller
+  than its frame, varying per capture, so a pixel read at a view frame lands on the wrong
+  content. Keep that capture as visual evidence; sample colours at frames from
+  `renderRegion` (`src/native/VisibleChatCapture.swift`), the window's own rendering.
 - **The preview is the only WebKit view.** Do not reintroduce an application
   renderer. AppKit owns geometry and native inspectors reserve their own space.
 - **Preview instrumentation is isolated.** Keep the WKContentWorld and restricted
