@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main bb2ca743 (LKM-331)
+
+- [x] build-badge: the whole-text states run at the widest sidebar (340 pt); the 180 pt case still checks designed truncation.
+- [x] layers-island: `inspector-custom` closes the editing island after a pass too; Layers closes it before measuring.
+- [x] sheets: Settings evidence also accepts Vision's language-corrected reading of the same pixels (unit `test/native-settings-evidence.mjs`).
+- [x] preview-overlay and comment-rows: failure messages now name the stray magenta's box and the bubble frame; the overlay clip PNG is written before asserting.
+- [ ] Native run of `sheets`, `build-badge`, `layers-island`, `preview-overlay`, `comment-rows` (none was available to the worker); if preview-overlay or comment-rows still fail, fix from the new diagnostics.
+
 ## Remove dividers inside toolbar islands on macOS 27 (LKM-319)
 
 - [x] Source: the system. On macOS 27 `NSSegmentedControl` (every style) adds a 1 pt divider layer per segment boundary; Trezi draws none.

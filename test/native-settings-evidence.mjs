@@ -319,6 +319,65 @@ for (const line of ['Ullayout', 'Ullayout methods', 'Ul method'])
       'agent'
     )
   )
+// Verbatim OCR from the nightly 960-point reopened On/Chat capture (LKM-331, dark): the
+// pixels show "UI layout method"; plain Vision returned "Ul layout methoda", the
+// language-corrected reading of the same pixels "Ul layout method". Either whole reading
+// passes; the stray letter alone still fails, and Off needs the label absent from both.
+const strayText = [
+  'Experimental',
+  'General',
+  'Al Providers',
+  'Skills',
+  'Experimental',
+  '(* Dreamer',
+  '• Browser Checks',
+  'Experimental',
+  'Changes save automatically. Ul generation options apply to your next message.',
+  'Gen UI',
+  "Generate Ul using your project's existing components and styles. Experimental; supports React and Svelte.",
+  'Ul layout methoda',
+  'Chat model uses your selected chat model to arrange components. Jev uses a separate',
+  'layout model and requires an Al Gateway API key.',
+  'Chat model',
+  'On'
+]
+const stray = {
+  ...structuredClone(outOfOrder),
+  text: strayText,
+  corrected: strayText.map((t) => (t === 'Ul layout methoda' ? 'Ul layout method' : t))
+}
+assertSettingsEvidence(stray, 960, true, 'agent')
+assert.throws(
+  () => assertSettingsEvidence({ ...stray, corrected: undefined }, 960, true, 'agent'),
+  /Missing complete foreground text: UI layout method/
+)
+assert.throws(() =>
+  assertSettingsEvidence(
+    {
+      ...stray,
+      corrected: stray.corrected.map((t) => (t === 'Ul layout method' ? 'Ul layout met…' : t))
+    },
+    960,
+    true,
+    'agent'
+  )
+)
+assert.throws(
+  () =>
+    assertSettingsEvidence(
+      {
+        ...stray,
+        values: { ...stray.values, projectUi: 'false' },
+        controls: [control('projectUi', 'Off')],
+        text: stray.text.filter((t) => !t.startsWith('Ul layout')),
+        corrected: stray.corrected
+      },
+      960,
+      false,
+      'agent'
+    ),
+  /Off hides engine label/
+)
 const rejectWrapped = (mutate, enabled = true) => {
   const bad = structuredClone(outOfOrder)
   bad.values.projectUi = String(enabled)

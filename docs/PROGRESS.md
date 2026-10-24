@@ -2,6 +2,30 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-331: nightly native failures on main bb2ca743 (partial)
+
+- **Why.** Five native checks failed in the nightly run. That run happened while the system
+  appearance (on Auto) was Dark; earlier runs were in Light. No native run was available for
+  this change, so it is unverified there.
+- **build-badge.** A branch name plus "modified" needs about 246 pt on macOS 27, but the
+  default sidebar gives the badge 202 pt, so the context truncated as designed. The
+  whole-text states now run at the widest sidebar (340 pt). The 180 pt case still checks the
+  designed truncation.
+- **layers-island.** `inspector-custom` left the editing island open when it passed, because
+  the runner's cleanup only runs after a failure. Layers then measured itself beside the
+  island instead of centred under its button. Now the check restores Styles and closes the
+  island after a pass, and Layers closes the island before it measures.
+- **sheets.** Uncorrected Vision OCR read the dark capture's "UI layout method" as "Ul layout
+  methoda" (reproduced on the artifact). Settings captures now also return a
+  language-corrected reading of the same pixels. Evidence passes if either reading holds the
+  whole phrase, and the Off checks reject the label if it appears in either reading. The
+  strict word matching is unchanged.
+- **preview-overlay and comment-rows (diagnostics only).** The root causes are not confirmed.
+  The overlay clip PNG is now written before the assertions, and the failure names the page
+  rect and the bounding box of the stray magenta. The comment-rows failure names the user
+  bubble's frame and the reading height, which tells an unlaid bubble from one scrolled out
+  of view.
+
 ## 2026-10-23 — LKM-330: nightly native failures on main d1f851ea (partial)
 
 - **Why.** The nightly native run (macOS 27) failed five checks. The causes below come

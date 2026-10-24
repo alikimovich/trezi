@@ -198,15 +198,25 @@ export async function checkInspectorCustom(s: CustomSmoke) {
   }
 }
 
+/** Back to Styles with the editing island closed, as the `inspector` check leaves it: Layers
+ *  and the preview overlay measure the preview without it (LKM-331). */
 export async function restoreInspectorCustom(s: CustomSmoke) {
   for (const p of (await s
     .invoke('controls:list', s.fixture)
     .catch(() => [])) as ControlPanelManifest[])
     if (p.file === FILE) await s.invoke('controls:remove', s.fixture, p.id)
   rmSync(join(s.fixture, FILE), { force: true })
-  const state = await s.host.request('inspectorInspect')
-  if (state.visible)
-    await s.host.request('inspectorPerform', {
-      action: { root: s.fixture, generation: state.generation, action: 'tab', value: 'styles' }
-    })
+  const perform = async (action: string, value?: string) => {
+    const state = await s.host.request('inspectorInspect')
+    if (state.visible)
+      await s.host.request('inspectorPerform', {
+        action: { root: s.fixture, generation: state.generation, action, value }
+      })
+  }
+  await perform('tab', 'styles')
+  await perform('close')
+  await waitFor(
+    async () => !(await s.host.request('inspectorInspect')).visible,
+    'editing island closed'
+  )
 }

@@ -122,14 +122,20 @@ extension Host {
             let left = Int((page.minX - content.bounds.minX) * sx), right = Int((page.maxX - content.bounds.minX) * sx)
             let top = Int((content.bounds.maxY - page.maxY) * sy), bottom = Int((content.bounds.maxY - page.minY) * sy)
             var inside = 0, outside = 0
+            // LKM-331: where stray colour lies (window points, top-left origin), so a failure names it.
+            var stray = CGRect.null
             for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
                 for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
                     guard let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                           c.redComponent > 0.82, c.greenComponent < 0.35, c.blueComponent > 0.75 else { continue }
-                    if x >= left - 1 && x < right + 1 && y >= top - 1 && y < bottom + 1 { inside += 1 } else { outside += 1 }
+                    if x >= left - 1 && x < right + 1 && y >= top - 1 && y < bottom + 1 { inside += 1 } else {
+                        outside += 1; stray = stray.union(CGRect(x: CGFloat(x) / sx, y: CGFloat(y) / sy, width: 2 / sx, height: 2 / sy))
+                    }
                 }
             }
             image["magentaInside"] = inside; image["magentaOutside"] = outside
+            image["pageTopLeft"] = NSStringFromRect(NSRect(x: page.minX - content.bounds.minX, y: content.bounds.maxY - page.maxY, width: page.width, height: page.height))
+            if !stray.isNull { image["magentaOutsideBox"] = NSStringFromRect(stray.integral) }
             image["pixelScale"] = ["x":Double(sx), "y":Double(sy)]
         }
         return image

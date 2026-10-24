@@ -25,6 +25,8 @@ export interface SettingsEvidence {
     hitTarget: boolean
   }[]
   text: string[]
+  /** The same pixels read with Vision's language correction (LKM-331). */
+  corrected?: string[]
 }
 /** The shared source-list setup as `SourceList.inspect` reports it, for either sidebar. */
 export interface SourceListEvidence {
@@ -141,14 +143,13 @@ export function assertSectionEvidence(
     // LKM-315: the Gemini toggle is a picker laid out like the other provider rows.
     assert.ok(ids.includes('geminiEnabled'), 'AI Providers shows the Gemini On/Off picker')
   }
-  const lines = evidence.text.map(words)
   for (const required of [
     ...SETTINGS_SECTIONS.map((s) => s.label),
     ...(section === 'general'
       ? ['Default model', 'New chats start with this model.']
       : ['Claude and Codex use your existing sign-ins.'])
   ])
-    assert.ok(rendersText(lines, words(required)), `Missing complete foreground text: ${required}`)
+    assert.ok(reads(evidence, required), `Missing complete foreground text: ${required}`)
 }
 
 /** Experimental pane: fail closed on missing pixels, clipped help, stale choices or hidden controls. */
@@ -185,7 +186,6 @@ export function assertSettingsEvidence(
       evidence.controls.find((c) => c.id === 'engine')?.selected,
       engine === 'agent' ? 'Chat model' : 'Jev layout engine'
     )
-  const lines = evidence.text.map(words)
   for (const required of [
     'Experimental',
     'Gen UI',
@@ -198,11 +198,22 @@ export function assertSettingsEvidence(
         ]
       : [])
   ])
-    assert.ok(rendersText(lines, words(required)), `Missing complete foreground text: ${required}`)
+    assert.ok(reads(evidence, required), `Missing complete foreground text: ${required}`)
   if (!enabled) {
-    assert.ok(!rendersText(lines, words('UI layout method')), 'Off hides engine label')
-    assert.ok(!rendersText(lines, words('requires an AI Gateway API key')), 'Off hides engine help')
+    assert.ok(!reads(evidence, 'UI layout method'), 'Off hides engine label')
+    assert.ok(!reads(evidence, 'requires an AI Gateway API key'), 'Off hides engine help')
   }
+}
+
+/**
+ * Whether the plain or the language-corrected Vision reading renders `text` whole. Both read
+ * the same pixels, so clipped text fails both; a stray glyph Vision adds to one reading
+ * ("Ul layout methoda" in a dark capture) does not (LKM-331). Absence needs both.
+ */
+function reads(evidence: SettingsEvidence, text: string): boolean {
+  return [evidence.text, evidence.corrected ?? []].some((lines) =>
+    rendersText(lines.map(words), words(text))
+  )
 }
 
 // Normalize typography only; every word is still required, in order.

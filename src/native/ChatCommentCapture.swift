@@ -44,7 +44,7 @@ extension Host {
         // The user bubble trails its row: its fill at the right edge, background at the left.
         let bubble = chat.model.messageFrames[user] ?? .zero
         return ["png": captured["png"] ?? "", "appearance": window.effectiveAppearance.name.rawValue,
-                "readingHeight": Double(reading.height), "rows": rows,
+                "readingHeight": Double(reading.height), "rows": rows, "userFrame": NSStringFromRect(bubble),
                 "user": sample(bubble.maxX - 5, bubble.midY), "userBackground": sample(bubble.minX + 5, bubble.midY)]
     }
 }

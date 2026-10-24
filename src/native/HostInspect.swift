@@ -113,7 +113,7 @@ extension Host {
             guard ephemeral, let panel = sheets.panel, let content = panel.contentView,
                   sheets.model.state?.title == "Settings" else { reply(id, error: "Test Settings window required"); return true }
             Task { @MainActor in
-                do { reply(id, try await captureVisibleRegion(window: panel, view: content, region: content.bounds)) }
+                do { reply(id, try await captureVisibleRegion(window: panel, view: content, region: content.bounds, corrected: true)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "captureVisibleSheet":

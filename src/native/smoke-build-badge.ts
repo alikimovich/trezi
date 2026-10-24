@@ -17,6 +17,8 @@ const SHA = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
 const NEXT = '5e6f708192a3b4c5d6e7f8091a2b3c4d1a2b3c4d'
 const MAIN = '9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6'
 const LONG_BRANCH = 'agent-os/lkm-301-footer-alignment-and-development-build-identity'
+/** The widest sidebar `sidebar-width` allows (`Shell.swift`: 180–340). */
+const WIDE = 340
 const stamp = (over: Partial<BuildStamp> = {}): BuildStamp => ({
   version: '0.1.0',
   build: '1234',
@@ -213,6 +215,14 @@ export async function checkBuildBadge(host: NativeBridge, artifacts: string) {
   const evidence: Record<string, unknown> = {}
   const initialWidth = (await host.request('buildBadgeInspect')).sidebarWidth as number
   try {
+    // LKM-331: whole text needs room. The default sidebar leaves the badge 202 pt; a branch
+    // and "modified" need ~246 on macOS 27, so there the context truncates as designed (the
+    // narrow case below). The widest sidebar shows every state whole.
+    await host.request('shellPerform', { action: 'sidebar-width', row: String(WIDE) })
+    await waitFor(async () => {
+      const value = await host.request('buildBadgeInspect')
+      return Math.abs(value.sidebarWidth - WIDE) <= 1 && value
+    }, `sidebar at ${WIDE} for the whole-text states`)
     for (const { name, status, text, tone } of STATES) {
       const badge = await showState(host, name, status, text, tone)
       assert.ok(!badge.badgeTruncated, `${name} badge text truncated: ${badge.badgeFrame}`)

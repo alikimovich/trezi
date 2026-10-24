@@ -118,7 +118,11 @@ export async function checkCommentRows(host: NativeBridge, artifacts: string) {
           bubble = contrast(result.user, result.userBackground)
           bubbleColours = `${result.user} on ${result.userBackground}`
         }
-        assert.ok(bubble > 0, `${mode} ${state}: the user bubble was sampled`)
+        // The frame says whether the bubble was unlaid (zero) or outside the reading area (LKM-331).
+        assert.ok(
+          bubble > 0,
+          `${mode} ${state}: the user bubble was sampled (frame ${result.userFrame}, reading height ${result.readingHeight})`
+        )
         for (const row of rows) {
           assert.ok(
             row.frame.height > 0 && row.frame.y >= 0 && row.frame.y < result.readingHeight,
