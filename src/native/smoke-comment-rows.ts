@@ -114,6 +114,11 @@ export async function checkCommentRows(host: NativeBridge, artifacts: string) {
           join(artifacts, `comment-rows-${mode}-${state}.png`),
           Buffer.from(result.png, 'base64')
         )
+        // LKM-334: the colours come from the window's own rendering, which maps onto the frames.
+        writeFileSync(
+          join(artifacts, `comment-rows-${mode}-${state}-sampled.png`),
+          Buffer.from(result.sampled, 'base64')
+        )
         assert.equal(/dark/i.test(result.appearance), dark, `Appearance ${result.appearance}`)
         const rows = result.rows.map((row: any) => ({ ...row, frame: rect(row.frame) }))
         if (result.user.length && result.userBackground.length) {
@@ -134,7 +139,7 @@ export async function checkCommentRows(host: NativeBridge, artifacts: string) {
           const fill = contrast(row.fill, row.background)
           assert.ok(
             fill >= 2 && fill < bubble,
-            `${mode} ${state}: row fill ${row.fill} on ${row.background} must be lighter than the user bubble ${bubbleColours}`
+            `${mode} ${state}: row fill ${row.fill} on ${row.background} must be lighter than the user bubble ${bubbleColours} (row ${JSON.stringify(row.frame)}, bubble ${result.userFrame}, capture ${JSON.stringify(result.capture)})`
           )
         }
         return rows

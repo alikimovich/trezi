@@ -358,7 +358,7 @@ try {
       composer: { enabled: true, text: '', thinking: true, stop: true, revision: 1 }
     }
     const footer = async (label, ready, settled = () => true) => {
-      let last
+      let last, previous
       for (let i = 0; i < 60; i++) {
         last = await host.request('chatInspect')
         const frames = last.footerFrames ?? {}
@@ -380,10 +380,18 @@ try {
             ),
             ...(frames[`${answer.id}-tokens`]
               ? { tokens: rect(frames[`${answer.id}-tokens`]) }
-              : {})
+              : {}),
+            // Evidence for a failure: where the clip sat and how much the composer covers.
+            scroll: last.scroll,
+            composerInset: last.composerInset
           }
-          if (i > 2 && settled(result)) return result
-        }
+          // A pin or settle can still be moving the rows by a point: a reading counts only
+          // when the next poll finds the same frames (the 1 pt completion shift, LKM-334).
+          const stable = JSON.stringify([result.footer, result.message, result.question])
+          const held = stable === previous
+          previous = stable
+          if (i > 2 && held && settled(result)) return result
+        } else previous = undefined
         await delay(50)
       }
       await capture(`failure-${stage}`)
@@ -480,8 +488,10 @@ try {
     })
     Object.assign(answer, { workedMs: 42000, at: Date.now(), revertGroup: 'progress-group' })
     host.send('chatState', { state: turn })
+    // The wait holds out for the position the assertions below demand (0.5 pt): a pin that
+    // is still a point short right after completion is not the completed state yet.
     const done = await footer(
-      `${width}pt completed footer keeps its place`,
+      `${width}pt completed footer keeps its place (running footer ${JSON.stringify(running.footer)}, message ${JSON.stringify(running.message)}, scroll ${JSON.stringify(running.scroll)}, inset ${running.composerInset})`,
       (state, frames) =>
         state.activity === '' &&
         !frames[`${answer.id}-tokens`] &&
@@ -490,7 +500,7 @@ try {
       (result) =>
         Math.abs(
           result.footer.y + result.footer.height - (running.footer.y + running.footer.height)
-        ) <= 1
+        ) <= 0.5 && Math.abs(result.message.y - running.message.y) <= 0.5
     )
     await foreground(`progress-done-${width}`)
     assert.equal(done.tokens, undefined, `${width}pt: no counter once the turn ends`)

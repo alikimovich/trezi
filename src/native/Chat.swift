@@ -264,11 +264,13 @@ struct ChatConversation: View {
         // offscreen row is scrolled in first; see islandRevealScroll.
         Task { @MainActor in
             await Task.yield()
-            var streak = 0
+            var streak = 0, stalled = 0
             for attempt in 1...80 {
                 guard revealGeneration == generation, model.revealRevision == request.revision else { return }
                 model.revealAttempt = attempt
-                let target = islandRevealScroll(request, positions: model.islandPositions, viewportHeight: viewportHeight)
+                stalled = islandRevealOnScreen(request, positions: model.islandPositions, viewportHeight: viewportHeight) ? 0 : stalled + 1
+                let target = islandRevealScroll(request, positions: model.islandPositions, viewportHeight: viewportHeight,
+                                                stalled: stalled, first: model.snapshot?.messages.first?.id)
                 proxy.scrollTo(target.id, anchor: UnitPoint(x: 0.5, y: islandRevealUnitY(target.edge, readingHeight: readingHeight, viewportHeight: viewportHeight)))
                 try? await Task.sleep(nanoseconds: 20_000_000)
                 guard revealGeneration == generation, model.revealRevision == request.revision else { return }

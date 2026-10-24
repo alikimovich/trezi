@@ -2,6 +2,97 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-334 repair 3: native-chat-scroll's completion-footer reading must hold still
+
+- **Manager failure.** The `chat` group passed 14/14, and `native-chat-scroll` got through send
+  visibility, both reveal widths (the island jog below was in that build) and the 440 pt
+  progress stage, then failed at 320 pt: `footer position and height unchanged on completion`.
+  Running footer y 504.5, message 387.5; done footer y 505.5, message 388.5: the whole
+  transcript (question, history footer too) sat exactly 1 pt lower, the heights equal.
+- **Reading.** A uniform 1 pt shift is the clip's offset, not a row or the composer (same text,
+  same 128 pt minimum). The helper's wait for the completed state accepted a footer bottom
+  within 1 pt of the running one and returned on the first such poll, while the assertions
+  after it demand 0.5 pt; the running reading was also taken on the first matching poll.
+  Three runs of this step have now failed in three different places right after a load or
+  state change (reveal, first send-visibility sample, this), so these readings race a settle
+  or pin that is still moving the rows. Not reproduced here.
+- **Change (test helper only).** `footer()` in `test/helpers/native-chat-scroll.mjs` returns a
+  reading only when the next poll finds the same footer, message and question frames; the
+  completion wait now requires the 0.5 pt the assertions use (footer bottom and message y); each
+  reading also carries `scroll` and `composerInset`, and the wait's failure message names the
+  running reading. The assertions themselves are unchanged. If a native run still shows a
+  persistent 1 pt shift, the failure now shows the clip offset and inset for both states.
+- **Native (worker, one run: failed earlier).** The worker's run stopped at send visibility, as
+  the previous worker run did: `440-fixed loaded: no visible transcript rows` (0 rows,
+  `offset` = `maxOffset`, `latestSettleAttempts` 0; the next samples after the send show 3 rows
+  and attempts 2). The load's own settle was still running when the sample landed, so the
+  reading came mid-realize. The manager's run passes this stage. `chat-send-visibility.mjs`
+  now re-reads the `loaded` sample for up to 4 s until rows are visible; a transcript that is
+  blank for the whole wait still fails, and every later sample is unchanged. The progress
+  change above was not reached in the worker's run, so it is confirmed only by the manager's.
+- **Open.** If the manager's native run still fails, bisect LKM-330's two `settle()` calls on
+  viewport and composer height changes (`Chat.swift`): they lengthen the load's settle.
+
+## 2026-10-23 — LKM-334 repair: a stalled island reveal jogs through the first row (unverified natively)
+
+- **Manager failure.** The `chat` group passed 14/14 (the `renderRegion` fix below), then
+  `native-chat-scroll` failed its first reveal (440 pt, top): `revision=1, applied=0,
+  attempts=80, frame={{32, -3305.7}, {376, 16}}`. 80 attempts of `scrollTo` the island's row
+  left the anchor at one place, 3305 pt above the viewport, so the clip stayed at the end.
+- **Why this was not seen before.** The nightly stopped at comment-rows and never reached
+  this step. LKM-330 (settle on viewport/composer changes, no native run) and LKM-312 (the
+  AppKit pin) have not been through it since; the reveal code itself is untouched by them.
+- **Cause (reasoned, not reproduced).** The AppKit pin moves the clip outside SwiftUI's
+  scroll machinery, so SwiftUI can keep believing it holds the offset it left and
+  `scrollTo` the same row resolves to a no-op. The latest-settle already knows this
+  (`ChatLatestSettle.realizeTarget` goes to the first row every fourth stuck step); the reveal
+  loop had no such step.
+- **Fix.** `reveal()` counts consecutive attempts whose anchor is not on screen
+  (`islandRevealOnScreen`); `islandRevealScroll` sends every fourth of them to the first row
+  (top) and the next back to the island's row. A visible anchor never jogs, and the loop is
+  still bounded by 80 attempts and the 3-check streak. Unit fixture
+  `test/fixtures/chat-reveal/main.swift` covers the sequence (`panel, panel, first, panel,
+  panel, panel, first, panel`) and the no-jog cases. The host's "did not settle" message now
+  adds `scroll=` (offset, document and viewport heights) and `realizedRows=`, so a repeat
+  shows whether the clip moved at all.
+- **Native (one run, not a pass).** The `chat` group passed 14/14 again, but
+  `native-chat-scroll` stopped earlier than the manager's run did, at LKM-139 send visibility:
+  `440-fixed loaded: no visible transcript rows` (`send-visibility.json`: 0 visible and 0
+  realized rows, `offset` = `maxOffset` = 17449 in an 18225 pt document, `latestSettleAttempts`
+  0, so no settle had finished 300 ms after the latest row first showed; the 24-row history is
+  laid out at estimated heights, 743 pt taller than the same history in the next condition).
+  Every later sample was healthy. The manager's run passed that stage and failed later, so
+  the first load of the 440 fixture is a race, not one deterministic failure, and the reveal
+  jog was never reached to confirm. This change touches neither path.
+- **Suspect, not proven.** LKM-330 (bb2ca743) made every viewport or composer height change
+  while following start a settle, and it never had a native run. Both failures sit right after
+  the first `layoutWidth` + `chatState`, where those changes happen. The next attempt should
+  first run `native-chat-scroll` twice on the tip with and without those two `settle()` calls
+  (`Chat.swift`, the `viewport.size` and `composerHeight` handlers) before changing anything
+  else; the 320 pt visible-composer case LKM-330 fixed has to be rechecked if they go.
+
+## 2026-10-23 — LKM-334: frame samples read the window's own rendering (comment-rows passes natively)
+
+- **Cause.** comment-rows sampled the ScreenCaptureKit crop at the rows' and bubble's frames.
+  The crop is drawn smaller than the window: in the nightly's light capture the rows sit at
+  x 8–389 pt for frames at 18–422 (about 0.943), pixel-identical in the LKM-331 run, and
+  about 0.98 in this session's run. So both row samples fell inside a row (245 on 245) and
+  both bubble samples beside it (white on white). The pixels themselves were right: row
+  243 and bubble 230 on 255. The `captureShell` (cacheDisplay) image of the same window is
+  not scaled, and neither are whole-window SCK captures of other checks, so the cause inside
+  ScreenCaptureKit is still unknown.
+- **Fix.** `renderRegion` (`src/native/VisibleChatCapture.swift`) renders the region through
+  the window's theme frame (`cacheDisplay`), which maps exactly onto view frames. comment-rows
+  and chat-text sample colours there; the SCK capture stays the PNG evidence. comment-rows
+  also writes `comment-rows-<mode>-<state>-sampled.png`. `captureVisibleRegion` now returns
+  `geometry` (image size, `contentRect`, `pointPixelScale`, SCWindow and NSWindow frames,
+  crop), and both failures name it, so the next run can show where the scale comes from.
+- **Native.** One `chat` run: comment-rows passed in light and dark (rendering: rows 242 on
+  255 / 40 on 28). chat-text, which runs later, then failed the same way ("code background
+  236 on 235"; its capture shows cards ending at 405 pt instead of 422) and got the same fix
+  without a second native call. chat-ui, quit-alert, final-shell and native-chat-scroll were
+  skipped there and are unverified.
+
 ## 2026-10-23 — LKM-332: preview-overlay's uncounted band is the toolbar strip only (unverified natively)
 
 - **preview-overlay.** The uncounted band had no lower bound: every pixel above the page top

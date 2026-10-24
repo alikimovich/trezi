@@ -36,8 +36,15 @@ export async function checkSendVisibility(host, artifacts) {
   const samples = [],
     failures = []
   const inspect = () => host.request('chatInspect')
-  const sample = async (condition, phase) => {
-    const state = await inspect()
+  // `waitForRows`: a load's own settle can still be realizing rows when the sample lands (the
+  // first load reads 0 rows, settle attempts 0, until the settle ends, LKM-334). A transcript
+  // that is blank for the whole wait still fails; only the transient is waited out.
+  const sample = async (condition, phase, waitForRows = false) => {
+    let state = await inspect()
+    for (let i = 0; waitForRows && i < 40 && !state.visibleMessageIDs?.length; i++) {
+      await delay(100)
+      state = await inspect()
+    }
     const entry = {
       condition,
       phase,
@@ -104,7 +111,7 @@ export async function checkSendVisibility(host, artifacts) {
         // Foreground for the captures (the chat is shown by the first chatState).
         if (condition === '440-fixed') await host.request('chatAcceptance', { prepare: true })
         await delay(300)
-        const loaded = await sample(condition, 'loaded')
+        const loaded = await sample(condition, 'loaded', true)
         if (composer === 'growing')
           for (const lines of [3, 8, 14]) {
             state.composer = {
