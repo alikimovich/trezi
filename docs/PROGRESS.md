@@ -32,6 +32,12 @@ Newest first. Append a dated entry when you finish a chunk of work.
   fake Keychain helper), `native-support-sheets`, `workflow-owner`. The `settings` native
   smoke (`smoke-alerts.ts` against a loopback mock endpoint, `smoke-sheets.ts`) was written
   but not run by the worker (no native run allowed), nor was a real send to trezi.app.
+- **Review repair.** Opening Send Feedback waits for the "Sending as <name>" lookup, which
+  inherited the endpoint's 30 s timeout: a hanging network left the command doing nothing
+  visible. `account()` (`src/main/feedback.ts`) now caps that lookup at 5 s; a timeout is a
+  network failure, so the form opens without a name and the saved code is kept. Unit case in
+  `test/feedback-endpoint.mjs` (a fetch that never resolves). The `settings` native smoke is
+  still the manager's to run; this repair did not touch any native source.
 ## 2026-10-24 — LKM-337: the composer + menu drops Show Layers
 
 - `src/native/Composer.swift` builds the + menu from Attach Files… alone; the toolbar's Layers

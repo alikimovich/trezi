@@ -267,6 +267,34 @@ assert.deepEqual(await feedback.saveCode('  invite-3 '), { ok: true, name: 'Test
 assert.equal(saved, 'invite-3')
 assert.deepEqual(await feedback.account(), { hasCode: true, name: 'Tester Three' })
 
+// A hanging network must not hold the sheet closed: the name lookup gives up after 5 s at
+// most (even when the endpoint's own timeout is 30 s) and the form opens without a name.
+const hang = (_url, init) =>
+  new Promise((_resolve, reject) =>
+    init.signal.addEventListener('abort', () => reject(new Error('aborted')))
+  )
+const asked = []
+const realTimeout = AbortSignal.timeout.bind(AbortSignal)
+AbortSignal.timeout = (ms) => {
+  asked.push(ms)
+  return realTimeout(Math.min(ms, 50))
+}
+try {
+  const slow = feedbackHandlers({
+    code: memory,
+    endpoint: { origin: 'http://127.0.0.1:1', fetch: hang, timeoutMs: 30_000 },
+    ...stamps
+  })
+  const slowAccount = await slow.account()
+  assert.equal(slowAccount.hasCode, true)
+  assert.equal(slowAccount.name, null)
+  assert.equal(slowAccount.invalid, undefined, 'A timeout does not invalidate the code')
+  assert.match(slowAccount.error, /could not reach/)
+  assert.deepEqual(asked, [5000])
+} finally {
+  AbortSignal.timeout = realTimeout
+}
+
 // A send with every opt-in: the PNG goes as bytes, the conversation as text.
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 e.calls.length = 0

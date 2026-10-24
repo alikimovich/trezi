@@ -59,6 +59,9 @@ function screenshotBytes(
   return bytes.length ? { contentType: input.contentType, bytes } : null
 }
 
+/** Longest the "Sending as <name>" lookup may hold the sheet closed. */
+const LOOKUP_TIMEOUT = 5_000
+
 /** The three feedback operations behind the IPC; the native smoke runs them on a mock endpoint. */
 export function feedbackHandlers(deps: FeedbackDeps) {
   const endpoint = deps.endpoint ?? {}
@@ -67,7 +70,12 @@ export function feedbackHandlers(deps: FeedbackDeps) {
     async account(): Promise<FeedbackAccount> {
       const code = await deps.code.read()
       if (!code) return { hasCode: false }
-      const tester = await feedbackTester(code, endpoint)
+      // The sheet waits for this, so a slow network must not hold Send Feedback closed: past
+      // the short limit the form opens without a name (a network failure is not `invalid`).
+      const tester = await feedbackTester(code, {
+        ...endpoint,
+        timeoutMs: Math.min(endpoint.timeoutMs ?? LOOKUP_TIMEOUT, LOOKUP_TIMEOUT)
+      })
       if (tester.ok) return { hasCode: true, name: tester.name }
       return {
         hasCode: true,
