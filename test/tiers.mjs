@@ -92,6 +92,7 @@ export const UNIT = [
   'native-long-chat-perf',
   'preview-hover-coalesce',
   'preview-native-cover',
+  'preview-hover-drop',
   'preview-edit-lifecycle',
   'chat-attachments',
   'stop-recovery-ui',

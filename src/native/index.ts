@@ -464,6 +464,10 @@ async function main() {
     previewCover = Array.isArray(rects) ? rects : []
     previewView.webContents.send(channels.PREVIEW_COVERED, previewCover)
   })
+  // LKM-328: the pointer entered an island (its own tracking area); the page drops its hover.
+  host.on('native-island-entered', () => {
+    previewView.webContents.send(channels.PREVIEW_ISLAND_ENTERED)
+  })
   host.on('three-d-action', (action) => {
     if (typeof action?.session !== 'string' || !Number.isInteger(action?.revision)) return
     // Camera and separation are native; atlas paints go straight from the host to the preview.
