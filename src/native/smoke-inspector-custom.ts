@@ -107,6 +107,27 @@ export async function checkInspectorCustom(s: CustomSmoke) {
       join(s.artifacts, 'inspector-custom.png'),
       Buffer.from((await host.request('captureShell')) as string, 'base64')
     )
+    // The state behind the capture: the request field's geometry and the Card panel's controls.
+    writeFileSync(
+      join(s.artifacts, 'inspector-custom.json'),
+      `${JSON.stringify(
+        {
+          tab: shown.tab,
+          placeholder: shown.placeholder,
+          request: shown.request,
+          panels: shown.panels,
+          controls: shown.controls,
+          sliders: shown.sliders,
+          checkboxes: shown.checkboxes,
+          radius: shown.controls.includes('custom:card:radius'),
+          shadow: shown.controls.includes('custom:card:shadow')
+        },
+        null,
+        2
+      )}\n`
+    )
+    assert.equal(shown.placeholder, 'Ask for controls…')
+    assert.ok(shown.request.found && shown.request.visible, JSON.stringify(shown.request))
 
     // A comment on one control revises only it; the other control stays.
     await perform('comment-control', { field: 'custom:card:radius' })

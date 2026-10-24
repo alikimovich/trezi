@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-23 — LKM-323: native evidence fixture
+
+- **Why.** Review found no artifact showing the Custom tab. The `inspector-custom` smoke
+  check (core group) now writes two files next to each other in the smoke artifacts folder:
+  `inspector-custom.png` (foreground shell capture after the stubbed answer rendered) and
+  `inspector-custom.json` (tab, placeholder, request field geometry, panels, control ids).
+- **Assertions.** Placeholder `Ask for controls…`; request field found, visible, editable,
+  height >= 30; after Return the field clears, no error, the prompt carries the request text
+  and the file; `controls` contains `custom:card:radius` and `custom:card:shadow`; the live
+  radius value is `12`. Later steps (comment → revision 2, remove control → revision 3,
+  remove panel, failed request keeps the field editable) are unchanged.
+- **Not covered.** No narrow-width capture (the inspector has no resize hook in the smoke);
+  NSSlider counts are recorded but not asserted because SwiftUI's Slider has no NSSlider on
+  this macOS. This session could not run the native suite: run
+  `node test/run.mjs native --only=core` and read the PNG and JSON.
+
 ## 2026-10-23 — LKM-323 repair: a Custom tab request can no longer hang
 
 - **Why.** Review found `chatRequests` settled only on a turn boundary or a rejected
