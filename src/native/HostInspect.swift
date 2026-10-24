@@ -19,6 +19,9 @@ extension Host {
             if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await captureInspectorIsland()) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["pointer"] as? Bool == true { Task { @MainActor in do { reply(id, try await verifyInspectorPointer(c)) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, verifyInspectorIsland(c)) }
+        case "inspectorCustom":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, verifyInspectorCustom(c))
         case "previewOverlayInspect": reply(id, previewOverlayInspect())
         case "previewOverlayTest":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

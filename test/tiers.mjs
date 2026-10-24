@@ -241,6 +241,7 @@ export const UNIT = [
   'css-values',
   'style-provenance',
   'control-panels',
+  'control-requests',
   'svelte-instance',
   'docs-links',
   'spring',

@@ -96,8 +96,11 @@ export class NativeChatController {
     }
     return chat
   }
+  /** Called with a chat's key whenever it changed (LKM-323: Custom tab requests watch their chat). */
+  readonly watchers = new Set<(key: string) => void>()
   changed(chat = this.get(this.active)) {
     if (this.chats.get(chat.chat) !== chat) return
+    for (const watcher of [...this.watchers]) watcher(chat.chat)
     clearTimeout(this.streamUpdates.get(chat.chat))
     this.streamUpdates.delete(chat.chat)
     const state = mirror(chat),
