@@ -30,8 +30,17 @@ Newest first. Append a dated entry when you finish a chunk of work.
   now re-reads the `loaded` sample for up to 4 s until rows are visible; a transcript that is
   blank for the whole wait still fails, and every later sample is unchanged. The progress
   change above was not reached in the worker's run, so it is confirmed only by the manager's.
-- **Open.** If the manager's native run still fails, bisect LKM-330's two `settle()` calls on
-  viewport and composer height changes (`Chat.swift`): they lengthen the load's settle.
+- **Native (manager, merge tree: passed).** `chat` 14/14, then `native-chat-scroll` passed send
+  visibility (`SEND VISIBILITY PASS`) and chat acceptance (`CHAT ACCEPTANCE PASS`), including the
+  320 pt completion footer. The earlier "Open" bisect of LKM-330's `settle()` calls is not needed
+  for this ticket; it stays a watch note in TASKS.
+- **Review follow-up.** The `loaded` re-read could hide a transcript that went blank after
+  showing rows. `sample(..., waitForRows)` in `chat-send-visibility.mjs` now records
+  `blankRereads` and `blankWaitMs` in each `loaded` entry of `send-visibility.json` and the run
+  prints a `SEND VISIBILITY NOTE` for any wait. The 4 s bound is kept: no run has recorded the
+  race's length, so there is no shorter bound to justify; the first recorded wait sets it.
+  The worker's native run after this change passed (`chat` 14/14, `SEND VISIBILITY PASS` with 44
+  samples and no NOTE line, `CHAT ACCEPTANCE PASS`): no blank wait occurred in that run.
 
 ## 2026-10-23 — LKM-334 repair: a stalled island reveal jogs through the first row (unverified natively)
 
