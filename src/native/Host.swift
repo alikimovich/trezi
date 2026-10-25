@@ -6,7 +6,14 @@ let serviceMode = HostLaunch.arguments.contains("--service")
 /// Service mode: setup-time events wait for the client instead of reaching the terminal.
 var earlyServiceFrames: [Data] = []
 func emit(_ value: [String: Any]) {
+    let trace = value["event"] as? String
+    if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
+        ProductLog.debug("send-path", "host action=\(value["action"] as? String ?? "?") stage=pressed uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+    }
     guard let data = try? JSONSerialization.data(withJSONObject: value), let line = String(data: data, encoding: .utf8) else { return }
+    if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
+        ProductLog.debug("send-path", "host action=\(value["action"] as? String ?? "?") stage=frame-written bytes=\(data.count) uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+    }
     if let serviceClient { serviceClient.send(data); return }
     if serviceMode { earlyServiceFrames.append(data); return }
     print(line); fflush(stdout)
@@ -261,10 +268,14 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "securitySession": reply(id, SecuritySessionProbe.report())
         case "chatState":
             let state = c["state"] as? [String: Any] ?? [:]
+            let hadMessages = state["messages"] != nil
             nativeLayout.chatState = state
             let start = state["start"] as? [String: Any] ?? [:]
             shell.setPlanning(start["planning"] as? Bool == true, centered: start["centered"] as? Bool == true)
             chat.update(nativeLayout.nativeChatState(), composer: composer); nativeLayout.layout()
+            if hadMessages, let messages = state["messages"] as? [[String: Any]], messages.last?["role"] as? String == "user" {
+                ProductLog.debug("send-path", "host action=send stage=row-rendered uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+            }
         case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:])
         case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout()
         case "inspectorState": editingInspector.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout()
@@ -278,6 +289,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             let state = c["state"] as? [String: Any] ?? [:], root = state["root"] as? String ?? ""
             let editor = sourceEditors[root] ?? NativeSourceEditor(); sourceEditors[root] = editor
             editor.update(state)
+            if state["visible"] as? Bool == true { ProductLog.debug("send-path", "host action=code stage=panel-shown uptimeNs=\(DispatchTime.now().uptimeNanoseconds)") }
             if state["popped"] as? Bool == true {
                 if editor.popout == nil { let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false); panel.isReleasedWhenClosed = false; panel.delegate = editor; panel.title = "Trezi · Code"; panel.contentMinSize = NSSize(width: 760, height: 420); panel.center(); editor.popout = panel }
                 if let container = editor.popout?.contentView, editor.superview !== container {

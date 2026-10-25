@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { sendPathStages, summarizeSendPath } from './send-path-timing'
 
 /** LKM-304: the real composer edits its draft after Return and before the cleared snapshot
  *  arrives, each sequence in one main-thread turn. The sent draft must not come back, text
@@ -32,6 +35,59 @@ export async function checkComposerSend(host: NativeBridge) {
   try {
     // A turn left running by an earlier check queues the Return below instead of sending it.
     assert.ok(!chat.isRunning, 'Composer send starts with no turn running')
+    // Keep the provider pending while the real Swift composer and toolbar cross the
+    // host/service/Bun bridge. A blocked bridge delays both the optimistic row and Code.
+    if ((await host.request('sourceInspect')).visible) {
+      assert.equal(await host.request('shellPerform', { action: 'code' }), true)
+      await wait(async () => !(await host.request('sourceInspect')).visible, 'Code to close')
+    }
+    await host.request('composerPerform', { text: 'Send latency probe' })
+    await wait(async () => (await inspect()).enabled === true, 'latency probe enabled')
+    const logSince = Date.now()
+    const sentAt = performance.now()
+    await host.request('composerPerform', { action: 'send' })
+    let rowAt = 0
+    while (performance.now() - sentAt < 300) {
+      const state = await host.request('chatInspect')
+      if (
+        state.messages.some(
+          (message: { role: string; text: string }) =>
+            message.role === 'user' && message.text === 'Send latency probe'
+        )
+      ) {
+        rowAt = performance.now()
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    const codeAt = performance.now()
+    const clicked = await host.request('shellPerform', { action: 'code' })
+    let openedAt = 0
+    while (performance.now() - codeAt < 500) {
+      if ((await host.request('sourceInspect')).visible) {
+        openedAt = performance.now()
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    console.log(
+      `SEND PATH rowMs=${rowAt ? Math.round(rowAt - sentAt) : 'timeout'} codeMs=${openedAt ? Math.round(openedAt - codeAt) : 'timeout'} running=${chat.isRunning}`
+    )
+    if (process.env.TREZI_LOG_DIR) {
+      const day = new Date().toISOString().slice(0, 10)
+      try {
+        const log = readFileSync(join(process.env.TREZI_LOG_DIR, `trezi-${day}.log`), 'utf8')
+        console.log(`SEND HOPS ${summarizeSendPath(sendPathStages(log), logSince)}`)
+      } catch {
+        console.log('SEND HOPS product log unavailable')
+      }
+    }
+    assert.ok(rowAt && rowAt - sentAt <= 300, 'user row visible within 300 ms of Send')
+    assert.equal(clicked, true, 'Code toolbar click accepted while provider pending')
+    assert.ok(openedAt && openedAt - codeAt <= 500, 'Code visible within 500 ms of click')
+    assert.equal(chat.isRunning, true, 'provider still pending when Code opens')
+    await host.request('shellPerform', { action: 'code' })
+    await finish()
     // Return, then AppKit's smart quote curls the sent apostrophe (the user's report).
     await host.request('composerPerform', {
       steps: [{ text: "Don't stop" }, { key: 'Enter' }, { substitute: ["'", '’'] }]

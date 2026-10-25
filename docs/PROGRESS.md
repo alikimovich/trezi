@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-339 verification follow-up
+
+- The second manager quick run passed: 261 unit checks, 3 skips, typechecks and lint all exit 0.
+  The first run's unchanged-file lint failure did not recur. Native calls remain unavailable in this
+  session, so no end-to-end timing or root-cause fix is claimed by this worker.
+
+## 2026-10-24 — LKM-339: send and Code latency probes (root cause still open)
+
+- Added debug `send-path` timing stages from the Swift Send/Code actions through the service queue,
+  Bun handlers, the `agent:send` acknowledgment, and the host's user row/Code panel updates. They
+  record sizes, queue time and monotonic uptime, never message text or attachment contents.
+- The `composer-send` native check now sends with a stub provider, clicks Code while the turn is
+  pending, and requires the user row within 300 ms and the Code panel within 500 ms. It prints
+  the measured latencies and available product-log hops. It runs in the `chat` group too.
+- No native run is available in this worker session (native call allowance 0), so the before/after
+  latency and root cause are not measured yet. The manager's native chat/core run must supply them
+  before a fix can be claimed. Quick verification passed typechecks and 259 unit checks but lint
+  failed on unchanged `src/main/chat-island-bindings.ts` optional-chain formatting.
+
 ## 2026-10-24 — LKM-338: composer sending state after 1.5 s
 
 - **Where a send waits.** `submit` clears the draft synchronously once the chat is ready, so the

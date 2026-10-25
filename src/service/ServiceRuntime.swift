@@ -81,7 +81,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         return true
     }
 
-    func handle(_ frame: ServiceControl, session: ServiceSession, reply: @escaping (Data) -> Void) {
+    func handle(_ frame: ServiceControl, session: ServiceSession, reply: @escaping (Data) -> Void, queuedAt: UInt64 = 0) {
         func answer(_ failure: ServiceContractFailure? = nil, hello: ServiceHelloAck? = nil) {
             reply((try? ServiceXPC.encode(ServiceControlReply(requestID: frame.requestID, failure: failure, hello: hello))) ?? Data())
         }
@@ -223,6 +223,11 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                 guard let payload = frame.payload,
                       var object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
                       object["event"] is String else { throw ServiceContractFailure.invalidRequest }
+                let event = object["event"] as? String, action = object["action"] as? String
+                if event == "composer-action" && action == "send" || event == "shell-action" && action == "code" {
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    ProductLog.debug("send-path", "service action=\(action ?? "?") stage=dequeued queueMs=\(queuedAt == 0 ? 0 : (now - queuedAt) / 1_000_000) uptimeNs=\(now)")
+                }
                 var forward = payload
                 if object["event"] as? String == "ipc", var message = object["message"] as? [String: Any],
                    message["channel"] as? String == "trezi:preview:element-picked", var trace = message["trace"] as? [String: Any] {
@@ -234,6 +239,9 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                 guard let input = child?.input else { throw ServiceContractFailure.unavailable }
                 // Accepted in order; exit/EOF (not a write error) decides the lifecycle.
                 writer.async { try? input.write(contentsOf: line) }
+                if event == "composer-action" && action == "send" || event == "shell-action" && action == "code" {
+                    ProductLog.debug("send-path", "service action=\(action ?? "?") stage=writer-enqueued uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+                }
                 answer()
             case .wait:
                 guard session.waits.count < 128 else { throw ServiceContractFailure.busy }
@@ -410,8 +418,9 @@ final class ServiceSession: NSObject, TreziServiceRemote {
     }
     func exchange(_ data: Data, withReply reply: @escaping (Data) -> Void) {
         guard let owner else { reply(Data()); return }
+        let queuedAt = DispatchTime.now().uptimeNanoseconds
         owner.queue.async {
-            do { owner.handle(try ServiceXPC.decode(data), session: self, reply: reply) }
+            do { owner.handle(try ServiceXPC.decode(data), session: self, reply: reply, queuedAt: queuedAt) }
             catch { reply((try? ServiceXPC.encode(ServiceControlReply(requestID: "", failure: error as? ServiceContractFailure ?? .invalidRequest))) ?? Data()) }
         }
     }

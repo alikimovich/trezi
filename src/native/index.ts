@@ -608,6 +608,9 @@ async function main() {
   })
   host.on('shell-action', (action) => {
     if (action.action !== 'code') return
+    productLog.debug('send-path', 'bun action=code stage=received', {
+      uptimeNs: process.hrtime.bigint().toString()
+    })
     const root = workspaceController.active?.root
     if (!root) return
     if (editorController.session(root).state.visible) editorAction({ root, action: 'hide' })
