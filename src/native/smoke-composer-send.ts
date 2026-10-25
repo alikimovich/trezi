@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { stubAgentSendForSmoke } from '../main/agent'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { sendPathStages, summarizeSendPath } from './send-path-timing'
+import { nativeWorkspace } from './workspace-runtime'
 
 /** LKM-304: the real composer edits its draft after Return and before the cleared snapshot
  *  arrives, each sequence in one main-thread turn. The sent draft must not come back, text
@@ -11,27 +13,40 @@ import { sendPathStages, summarizeSendPath } from './send-path-timing'
 export async function checkComposerSend(host: NativeBridge) {
   const chat = nativeChat.get(nativeChat.active)
   const invoke = nativeChat.services.invoke
+  let providerSends = 0
+  const provider = stubAgentSendForSmoke(chat.chat, () => {
+    providerSends++
+  })
+  const previewStatus = nativeWorkspace.state.status
+  let changedPreviewStatus = false
   const calls: { channel: string; args: any[] }[] = []
   nativeChat.services.invoke = async (channel, ...args) => {
     if (channel === 'agent:send' || channel === 'agent:interrupt') {
       calls.push({ channel, args })
-      return { ok: true }
+      if (channel === 'agent:interrupt') return { ok: true }
     }
     return invoke(channel, ...args)
   }
   const sends = () => calls.filter((c) => c.channel === 'agent:send').map((c) => c.args[0])
   const inspect = () => host.request('composerInspect')
-  const wait = async (check: () => Promise<boolean> | boolean, what: string) => {
-    for (let i = 0; i < 100; i++) {
+  const wait = async (check: () => Promise<boolean> | boolean, what: string, attempts = 100) => {
+    for (let i = 0; i < attempts; i++) {
       if (await check()) return
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     throw new Error(`Composer send: timed out waiting for ${what}`)
   }
   const finish = async () => {
-    nativeChat.event({ type: 'done', projectKey: chat.chat, landingPending: false })
+    await wait(
+      () => providerSends > finishedSends,
+      'the real agent send to reach the provider',
+      400
+    )
+    provider.emit({ type: 'done', projectKey: chat.chat, landingPending: false })
     await wait(() => !chat.isRunning, 'the turn to finish')
+    finishedSends = providerSends
   }
+  let finishedSends = 0
   try {
     // A turn left running by an earlier check queues the Return below instead of sending it.
     assert.ok(!chat.isRunning, 'Composer send starts with no turn running')
@@ -60,7 +75,18 @@ export async function checkComposerSend(host: NativeBridge) {
       }
       await new Promise((resolve) => setTimeout(resolve, 10))
     }
+    // A Send may overlap a stopped or starting dev server. Code reads source
+    // from the project and must remain clickable in that state.
+    nativeWorkspace.state.status = { kind: 'busy', label: 'Starting preview…' }
+    changedPreviewStatus = true
+    nativeWorkspace.changed()
+    await wait(
+      async () => (await host.request('shellInspect')).enabled['select-object'] === false,
+      'preview controls to reflect the non-running state'
+    )
     const codeAt = performance.now()
+    const shell = await host.request('shellInspect')
+    assert.equal(shell.enabled.code, true, 'Code enabled during a pending send')
     const clicked = await host.request('shellPerform', { action: 'code' })
     let openedAt = 0
     while (performance.now() - codeAt < 500) {
@@ -73,6 +99,8 @@ export async function checkComposerSend(host: NativeBridge) {
     console.log(
       `SEND PATH rowMs=${rowAt ? Math.round(rowAt - sentAt) : 'timeout'} codeMs=${openedAt ? Math.round(openedAt - codeAt) : 'timeout'} running=${chat.isRunning}`
     )
+    await wait(() => providerSends > 0, 'the real send path to reach the provider', 400)
+    await new Promise((resolve) => setTimeout(resolve, 100))
     if (process.env.TREZI_LOG_DIR) {
       const day = new Date().toISOString().slice(0, 10)
       try {
@@ -85,12 +113,13 @@ export async function checkComposerSend(host: NativeBridge) {
     assert.ok(rowAt && rowAt - sentAt <= 300, 'user row visible within 300 ms of Send')
     assert.equal(clicked, true, 'Code toolbar click accepted while provider pending')
     assert.ok(openedAt && openedAt - codeAt <= 500, 'Code visible within 500 ms of click')
+    nativeWorkspace.state.status = previewStatus
+    changedPreviewStatus = false
+    nativeWorkspace.changed()
     assert.equal(chat.isRunning, true, 'provider still pending when Code opens')
     await host.request('shellPerform', { action: 'code' })
-    await wait(async () => !(await host.request('sourceInspect')).visible, 'Code to close')
     await finish()
-    // The probe's send is not one of the sequences counted below.
-    calls.length = 0
+    const earlierSends = sends().length
     // Return, then AppKit's smart quote curls the sent apostrophe (the user's report).
     await host.request('composerPerform', {
       steps: [{ text: "Don't stop" }, { key: 'Enter' }, { substitute: ["'", '’'] }]
@@ -99,8 +128,8 @@ export async function checkComposerSend(host: NativeBridge) {
     // One more round trip: a late stale input would have restored it by now.
     assert.equal((await inspect()).text, '', 'the smart-quoted sent draft stays cleared')
     assert.equal(chat.text, '', 'the controller has no draft')
-    assert.equal(sends().length, 1, 'sent once')
-    assert.ok(sends()[0].includes("Don't stop"), 'the submitted text is sent')
+    assert.equal(sends().length - earlierSends, 1, 'sent once')
+    assert.ok(sends()[earlierSends].includes("Don't stop"), 'the submitted text is sent')
     assert.ok(chat.isRunning && !chat.text.trim(), 'Stop replaces Send while the turn runs')
     await finish()
 
@@ -116,15 +145,32 @@ export async function checkComposerSend(host: NativeBridge) {
       steps: [{ action: 'send' }, { action: 'send' }, { append: 'Next' }]
     })
     await wait(async () => (await inspect()).text === 'Next' && chat.text === 'Next', 'Next')
-    assert.equal(sends().length, 2, 'the second click sent nothing')
-    assert.ok(sends()[1].includes('Ship it') && !sends()[1].includes('Next'))
+    assert.equal(sends().length - earlierSends, 2, 'the second click sent nothing')
+    assert.ok(
+      sends()[earlierSends + 1].includes('Ship it') && !sends()[earlierSends + 1].includes('Next')
+    )
     assert.equal(calls.filter((c) => c.channel === 'agent:interrupt').length, 0, 'not stopped')
     assert.ok(chat.isRunning && !chat.stopping, 'the turn still runs')
     await finish()
     console.log('Composer send: smart quote after Return, double Send and new text passed.')
   } finally {
-    nativeChat.services.invoke = invoke
-    if (chat.isRunning) await finish()
-    await host.request('composerPerform', { text: '' })
+    try {
+      if (changedPreviewStatus) {
+        nativeWorkspace.state.status = previewStatus
+        nativeWorkspace.changed()
+      }
+      nativeChat.services.invoke = invoke
+      // Best effort: a failed assertion may leave a turn whose provider send was never
+      // reached, and that must not replace the original error or leak the stub.
+      if (chat.isRunning) {
+        try {
+          provider.emit({ type: 'done', projectKey: chat.chat, landingPending: false })
+          await wait(() => !chat.isRunning, 'the turn to finish', 100)
+        } catch {}
+      }
+    } finally {
+      provider.restore()
+    }
+    await host.request('composerPerform', { text: '' }).catch(() => {})
   }
 }

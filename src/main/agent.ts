@@ -1802,7 +1802,7 @@ export function registerAgentIpc(
     ) => {
       const receivedAt = Date.now()
       const key = requestedKey ?? activeKey
-      productLog.debug('send-path', 'bun action=send stage=agent-handler-start', {
+      productLog.info('send-path', 'bun action=send stage=agent-handler-start', {
         chat: key,
         turn: turnId,
         uptimeNs: process.hrtime.bigint().toString()
@@ -1928,7 +1928,7 @@ export function registerAgentIpc(
           ),
           images
         )
-        productLog.debug('send-path', 'bun action=send stage=agent-handler-end', {
+        productLog.info('send-path', 'bun action=send stage=agent-handler-end', {
           chat: key,
           turn: id,
           uptimeNs: process.hrtime.bigint().toString()

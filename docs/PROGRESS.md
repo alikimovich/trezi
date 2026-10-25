@@ -5,9 +5,29 @@ Newest first. Append a dated entry when you finish a chunk of work.
 ## 2026-10-24 — LKM-341: composer-send counted the LKM-339 latency probe
 
 - The nightly native suite failed `composer-send` with "sent once (expected 1, actual 2)": the
-  LKM-339 latency probe sends through the same stubbed `agent:send`, so the later LKM-304 counts
-  included it. The check now waits for Code to close after the probe, finishes its turn and
-  clears the recorded calls before the counted sequences. Test-only; no CHANGELOG line.
+  LKM-339 latency probe sends through the same `agent:send` recorder, so the later LKM-304 counts
+  included it. origin/main's LKM-340 (`earlierSends` offset in `src/native/smoke-composer-send.ts`)
+  fixes that; on merging it this worker dropped its own equivalent reset. Test-only; no CHANGELOG
+  line. A full native run of that earlier fix passed `composer-send` (65 of 66; the other failure,
+  `editor-freshness`, was a page-load timeout in an earlier check); the manager's run confirms the merge.
+
+## 2026-10-24 — LKM-340: Code availability and Send-path payloads
+
+- Code is enabled whenever an active project exists, independent of preview readiness. The
+  `composer-send` check now drives a non-running preview status during a real `agent:send` RPC,
+  stubbing only the provider send, and offsets the probe's send count before the older assertions.
+- Send/Code hop records now use info level in the host, service and Bun so the manager's native
+  `chat,core` run can report rowMs, codeMs, queue time and the agent preparation hops. This
+  worker has zero native calls, so before/after timings and the slowest native hop are still
+  unmeasured here; the manager's run must evaluate the 300/500 ms limits. The earlier LKM-341
+  saved run reported rowMs=25 and codeMs=26 with queue=0 ms, but stubbed `agent:send`, so those
+  are baseline timings for only the shorter path and cannot establish the real-path latency.
+- `chatFrames` compares message content without serializing inline image bytes, sends each image
+  URL once per chat, and later sends an attachment ID that Swift restores from its prior
+  snapshot. This targets service/host frame size when a transcript update follows Send.
+  The SwiftUI latest-row settle yields before its first scroll correction so a Send's composer
+  height and viewport changes coalesce before it starts. Neither is claimed as a measured
+  latency root cause until the native hop data arrives.
 
 ## 2026-10-24 — LKM-339 repair: stale Send timing, suspects ruled out offline (root cause still open)
 

@@ -550,7 +550,7 @@ export class NativeChatController {
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return
     if (action.action === 'send')
-      productLog.debug('send-path', 'bun action=send stage=handler-start', {
+      productLog.info('send-path', 'bun action=send stage=handler-start', {
         chat: action.chat,
         uptimeNs: process.hrtime.bigint().toString()
       })
@@ -731,7 +731,7 @@ export class NativeChatController {
       append(chat, notice, true)
     }
     this.changed(chat)
-    productLog.debug('send-path', 'bun action=send stage=row-published', {
+    productLog.info('send-path', 'bun action=send stage=row-published', {
       chat: chat.chat,
       turn: submission.id,
       uptimeNs: process.hrtime.bigint().toString()
@@ -751,7 +751,7 @@ export class NativeChatController {
         turn,
         submission.id
       )
-      productLog.debug('send-path', 'bun action=send stage=agent-ack', {
+      productLog.info('send-path', 'bun action=send stage=agent-ack', {
         chat: chat.chat,
         turn: submission.id,
         uptimeNs: process.hrtime.bigint().toString()
