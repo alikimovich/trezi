@@ -1,3 +1,4 @@
+import { productLog } from '../main/product-log'
 import type { AgentEvent, ModelChoice, WorkspaceSnapshot } from '../shared/api'
 import { isChatBusy, isResolveNeeded } from '../shared/chat-busy'
 import {
@@ -548,6 +549,11 @@ export class NativeChatController {
   }
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return
+    if (action.action === 'send')
+      productLog.debug('send-path', 'bun action=send stage=handler-start', {
+        chat: action.chat,
+        uptimeNs: process.hrtime.bigint().toString()
+      })
     const chat = this.get(action.chat)
     // LKM-338: the snapshots after this one tell the composer it reached the controller.
     if ((action.action === 'send' || action.action === 'key') && action.attempt)
@@ -725,6 +731,11 @@ export class NativeChatController {
       append(chat, notice, true)
     }
     this.changed(chat)
+    productLog.debug('send-path', 'bun action=send stage=row-published', {
+      chat: chat.chat,
+      turn: submission.id,
+      uptimeNs: process.hrtime.bigint().toString()
+    })
     try {
       const plan = await planAttachments(attachments, (a) =>
         this.services.invoke('attachments:save', { mediaType: a.type, data: a.data }, a.name)
@@ -740,6 +751,11 @@ export class NativeChatController {
         turn,
         submission.id
       )
+      productLog.debug('send-path', 'bun action=send stage=agent-ack', {
+        chat: chat.chat,
+        turn: submission.id,
+        uptimeNs: process.hrtime.bigint().toString()
+      })
       if (submission.chatUiId)
         await this.services
           .invoke('agent:chat-ui-delivery', chat.chat, submission.chatUiId, 'delivered')

@@ -77,6 +77,7 @@ export const UNIT = [
   'native-workspace-controller',
   'chat-new-instant',
   'smoke-timing',
+  'send-path-timing',
   'preview-supervisor',
   'native-support',
   'activity-attention',
