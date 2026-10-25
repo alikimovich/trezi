@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-339 review repair: one row timing per Send
+
+- The host now records the current user-row ID when Send is pressed and emits `row-rendered` only
+  when that chat shows a different user-row ID. Later chat snapshots cannot duplicate the stage.
+- Quick verification passed again (261 unit checks, 3 skips, typecheck and lint). The requested
+  native `chat,core` verification returned `limit_reached`: this worker session allows 0 native
+  calls. There is still no Send/Code timing from the real app and no measured root cause or fix;
+  the manager's native run must gather the hop evidence before a CHANGELOG Fixed line is valid.
+
 ## 2026-10-24 — LKM-339 verification follow-up
 
 - The second manager quick run passed: 261 unit checks, 3 skips, typechecks and lint all exit 0.

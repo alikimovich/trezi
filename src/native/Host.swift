@@ -7,6 +7,10 @@ let serviceMode = HostLaunch.arguments.contains("--service")
 var earlyServiceFrames: [Data] = []
 func emit(_ value: [String: Any]) {
     let trace = value["event"] as? String
+    if trace == "composer-action", value["action"] as? String == "send",
+       let key = value["chat"] as? String, let host = NSApp.delegate as? Host {
+        host.pendingSendRows[key] = host.lastUserRows[key] ?? ""
+    }
     if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
         ProductLog.debug("send-path", "host action=\(value["action"] as? String ?? "?") stage=pressed uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
     }
@@ -42,6 +46,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var shell: NativeShell!
     var composer: NativeComposer!
     var chat: NativeChat!
+    /// A Send waits for a different final user-row ID; status snapshots cannot log it twice.
+    var pendingSendRows: [String: String] = [:]
+    var lastUserRows: [String: String] = [:]
     var welcome: NativeWelcome!
     var previewStatus: NativePreviewStatus!
     var sheets: NativeSheets!
@@ -268,13 +275,17 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "securitySession": reply(id, SecuritySessionProbe.report())
         case "chatState":
             let state = c["state"] as? [String: Any] ?? [:]
-            let hadMessages = state["messages"] != nil
             nativeLayout.chatState = state
             let start = state["start"] as? [String: Any] ?? [:]
             shell.setPlanning(start["planning"] as? Bool == true, centered: start["centered"] as? Bool == true)
             chat.update(nativeLayout.nativeChatState(), composer: composer); nativeLayout.layout()
-            if hadMessages, let messages = state["messages"] as? [[String: Any]], messages.last?["role"] as? String == "user" {
-                ProductLog.debug("send-path", "host action=send stage=row-rendered uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+            if let snapshot = chat.model.snapshot,
+               let user = snapshot.messages.last(where: { $0.role == "user" }) {
+                lastUserRows[snapshot.chat] = user.id
+                if let previous = pendingSendRows[snapshot.chat], previous != user.id {
+                    pendingSendRows.removeValue(forKey: snapshot.chat)
+                    ProductLog.debug("send-path", "host action=send stage=row-rendered uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+                }
             }
         case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:])
         case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout()
