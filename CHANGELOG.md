@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+- A message sent from the home composer keeps the model chosen there when the project reopens its previous conversation and the message goes to a new chat beside it (LKM-341).
+
 ## [0.3.1] - 2026-10-24
 
 ### Fixed
