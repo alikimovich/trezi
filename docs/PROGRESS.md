@@ -2,6 +2,24 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-340: Code availability and Send-path payloads
+
+- Code is enabled whenever an active project exists, independent of preview readiness. The
+  `composer-send` check now drives a non-running preview status during a real `agent:send` RPC,
+  stubbing only the provider send, and offsets the probe's send count before the older assertions.
+- Send/Code hop records now use info level in the host, service and Bun so the manager's native
+  `chat,core` run can report rowMs, codeMs, queue time and the agent preparation hops. This
+  worker has zero native calls, so before/after timings and the slowest native hop are still
+  unmeasured here; the manager's run must evaluate the 300/500 ms limits. The earlier LKM-341
+  saved run reported rowMs=25 and codeMs=26 with queue=0 ms, but stubbed `agent:send`, so those
+  are baseline timings for only the shorter path and cannot establish the real-path latency.
+- `chatFrames` compares message content without serializing inline image bytes, sends each image
+  URL once per chat, and later sends an attachment ID that Swift restores from its prior
+  snapshot. This targets service/host frame size when a transcript update follows Send.
+  The SwiftUI latest-row settle yields before its first scroll correction so a Send's composer
+  height and viewport changes coalesce before it starts. Neither is claimed as a measured
+  latency root cause until the native hop data arrives.
+
 ## 2026-10-24 — LKM-339 repair: stale Send timing, suspects ruled out offline (root cause still open)
 
 - `row-rendered` is timed only when the new user row appears within 10 s of the Send that

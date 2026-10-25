@@ -226,7 +226,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                 let event = object["event"] as? String, action = object["action"] as? String
                 if event == "composer-action" && action == "send" || event == "shell-action" && action == "code" {
                     let now = DispatchTime.now().uptimeNanoseconds
-                    ProductLog.debug("send-path", "service action=\(action ?? "?") stage=dequeued queueMs=\(queuedAt == 0 ? 0 : (now - queuedAt) / 1_000_000) uptimeNs=\(now)")
+                    ProductLog.info("send-path", "service action=\(action ?? "?") stage=dequeued queueMs=\(queuedAt == 0 ? 0 : (now - queuedAt) / 1_000_000) uptimeNs=\(now)")
                 }
                 var forward = payload
                 if object["event"] as? String == "ipc", var message = object["message"] as? [String: Any],
@@ -240,7 +240,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                 // Accepted in order; exit/EOF (not a write error) decides the lifecycle.
                 writer.async { try? input.write(contentsOf: line) }
                 if event == "composer-action" && action == "send" || event == "shell-action" && action == "code" {
-                    ProductLog.debug("send-path", "service action=\(action ?? "?") stage=writer-enqueued uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+                    ProductLog.info("send-path", "service action=\(action ?? "?") stage=writer-enqueued uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
                 }
                 answer()
             case .wait:
