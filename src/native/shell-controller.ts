@@ -15,6 +15,8 @@ export class NativeShellController {
   selecting = false
   codeOpen = false
   location: string | null = null
+  /** The user turned the select tool off: the page selection goes with it (LKM-344). */
+  selectOff: () => void = () => {}
   readonly icons = new Map<string, string | undefined>()
   private signature = ''
   private timer?: ReturnType<typeof setTimeout>
@@ -147,6 +149,7 @@ export class NativeShellController {
       this.selecting = !this.selecting
       // The toolbar shows the new mode at once, not after the preview round trip.
       this.render()
+      if (!this.selecting) this.selectOff()
       await invoke('preview:set-select-mode', this.selecting)
     } else if (action.action === 'device' && entry.previewKind !== 'simulator') {
       entry.viewport = entry.viewport === 'mobile' ? 'desktop' : 'mobile'

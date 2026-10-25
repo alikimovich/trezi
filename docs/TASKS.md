@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Selection cleared when the select tool is turned off (LKM-344)
+
+- [x] Turning the select tool off (toolbar button or S) drops the page selection, size badge, element toolbar, editing island, chat chip and the saved element, so a reload restores nothing (`selectToolOff` in `src/native/inspector-runtime.ts`, `NativeShellController.selectOff`); unit `native-shell-controller`.
+- [x] Tool on + reload keeps the selection (LKM-216 reattach unchanged); native `select-off` check in the `core` group (`src/native/smoke-select-off.ts`).
+- [ ] Native `core` group not yet run (runs on origin/main after merge).
+
 ## Send Feedback posts privately to the Trezi feedback endpoint (LKM-336)
 
 - [x] `feedback:submit` posts to `https://trezi.design/api/feedback` with the invite code as Bearer, then uploads and attaches the real screenshot (PNG; JPEG over 10 MB); no `gh issue create` (the `feedback` workflow is gone from `WorkflowTools.swift`).
