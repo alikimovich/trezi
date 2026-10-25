@@ -119,6 +119,44 @@ try {
   )
   assert(events.indexOf('end:a') < events.indexOf('start:exclusive'))
   assert(events.indexOf('end:exclusive') < events.indexOf('start:c'))
+  // LKM-345: one group never overlaps itself; the other tests fill the free workers.
+  const grouped = ['p1', 'p2', 'x', 'p3', 'y', 'z'].map((name) => ({
+    name,
+    group: name.startsWith('p') ? 'swift-preview' : undefined
+  }))
+  let previews = 0
+  let groupPeak = 0
+  active = 0
+  peak = 0
+  events.length = 0
+  const groupedResults = await runQueue(grouped, 3, async (item) => {
+    if (item.group) previews++
+    groupPeak = Math.max(previews, groupPeak)
+    active++
+    peak = Math.max(active, peak)
+    events.push(`start:${item.name}`)
+    await new Promise((resolve) => setTimeout(resolve, item.group ? 30 : 5))
+    active--
+    if (item.group) previews--
+    events.push(`end:${item.name}`)
+    return { name: item.name }
+  })
+  assert.equal(groupPeak, 1, 'one swift-preview test at a time')
+  assert.equal(peak, 3, 'the rest of the queue runs beside it')
+  assert.deepEqual(
+    groupedResults.map((r) => r.name),
+    grouped.map((r) => r.name),
+    'stable report order with groups'
+  )
+  assert(events.indexOf('end:p1') < events.indexOf('start:p2'))
+  assert(events.indexOf('end:p2') < events.indexOf('start:p3'))
+  assert(events.indexOf('start:x') < events.indexOf('end:p1'), 'x skips ahead of p2')
+  // Only grouped tests left, more workers than one group can use: no deadlock.
+  const onlyGroup = ['q1', 'q2', 'q3'].map((name) => ({ name, group: 'g' }))
+  assert.deepEqual(
+    (await runQueue(onlyGroup, 3, async ({ name }) => ({ name }))).map((r) => r.name),
+    ['q1', 'q2', 'q3']
+  )
   await assert.rejects(
     runQueue([], 0, () => {}),
     /positive integer/

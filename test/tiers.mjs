@@ -285,8 +285,24 @@ export const NATIVE = [
 ]
 export const LIVE = ['native-runtime-live', 'provider-live-parity']
 export const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
-// Unit tests share workers: every swiftc compile goes through the 2-wide swiftc lane in
-// test/helpers/swift-build.mjs (LKM-167), so no unit test needs to run alone. These
+// Unit tests in one group never run at the same time; the other workers keep running the
+// rest (`runQueue` in test/helpers/test-runner.mjs). LKM-345: these build through a real
+// PreviewSession, outside the swiftc lane: every installed Xcode's metadata, a #Preview
+// probe with an empty module cache, xcodebuild, SwiftPM, actool, swiftc and a preview
+// host, under tool limits of 20–120 s sized for one build on an idle Mac. Longest-first
+// ordering started them together, and on the 3-vCPU, 7 GB hosted runner they starved each
+// other past those limits and their own budgets (docs/TESTING.md "GitHub CI").
+export const UNIT_GROUPS = {
+  'swift-preview': [
+    'swift-preview',
+    'swift-preview-target',
+    'swift-preview-toolchain',
+    'swift-preview-build',
+    'swift-preview-generate'
+  ]
+}
+// Unit tests share workers: every fixture swiftc compile goes through the 2-wide swiftc
+// lane in test/helpers/swift-build.mjs (LKM-167), so no unit test needs to run alone. These
 // still get a longer budget for a cold Swift cache.
 export const UNIT_TIMEOUT_MS = {
   'service-process': 240_000,

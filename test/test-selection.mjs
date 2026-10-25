@@ -31,7 +31,7 @@ import {
   typecheckPlan,
   UI_SOURCES
 } from './helpers/test-plan.mjs'
-import { TIERS, UNIT, UNIT_TIMEOUT_MS } from './tiers.mjs'
+import { TIERS, UNIT, UNIT_GROUPS, UNIT_TIMEOUT_MS } from './tiers.mjs'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const ctx = repoContext(ROOT)
@@ -330,6 +330,11 @@ assert.ok(
 )
 for (const shard of shardTests(UNIT, 3))
   assert.ok(shard.filter((name) => slow.includes(name)).length >= Math.floor(slow.length / 3) - 1)
+// LKM-345: every grouped test is a unit test, in one group only.
+const groupedNames = Object.values(UNIT_GROUPS).flat()
+assert.ok(groupedNames.length > 0)
+assert.equal(new Set(groupedNames).size, groupedNames.length, 'a test is in one group')
+for (const name of groupedNames) assert.ok(UNIT.includes(name), `${name} is a unit test`)
 
 // Typecheck plan: the real configs are one program (and tsc resolves them alike);
 // anything divergent or unreadable runs both.
