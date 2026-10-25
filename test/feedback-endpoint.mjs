@@ -47,16 +47,16 @@ const offline = () => {
   throw new TypeError('fetch failed')
 }
 
-// --- The origin: trezi.app, or a loopback mock; never another host from the environment. ---
-assert.equal(FEEDBACK_ORIGIN, 'https://trezi.app')
-assert.equal(feedbackOrigin({}), 'https://trezi.app')
+// --- The origin: trezi.design, or a loopback mock; never another host from the environment. ---
+assert.equal(FEEDBACK_ORIGIN, 'https://trezi.design')
+assert.equal(feedbackOrigin({}), 'https://trezi.design')
 assert.equal(
   feedbackOrigin({ TREZI_FEEDBACK_URL: 'http://127.0.0.1:4555/x' }),
   'http://127.0.0.1:4555'
 )
 assert.equal(feedbackOrigin({ TREZI_FEEDBACK_URL: 'http://localhost:9' }), 'http://localhost:9')
 for (const bad of ['https://evil.example', 'http://127.0.0.1.evil.example', 'file:///tmp', 'nope'])
-  assert.equal(feedbackOrigin({ TREZI_FEEDBACK_URL: bad }), 'https://trezi.app', bad)
+  assert.equal(feedbackOrigin({ TREZI_FEEDBACK_URL: bad }), 'https://trezi.design', bad)
 
 // --- GET /me: the tester's name, with the code as the Bearer. ---
 let e = endpoint(() => json({ ok: true, name: '  Ada Lovelace ' }))

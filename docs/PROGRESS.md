@@ -4,6 +4,15 @@ Newest first. Append a dated entry when you finish a chunk of work.
 
 ## 2026-10-24 — LKM-336: Send Feedback posts privately to the Trezi feedback endpoint
 
+- **Origin (recorded decision, latest).** The endpoint is `https://trezi.design`: LKM-335
+  (trezi-website, 98da9f4) serves `/api/feedback` on that Vercel project, whose only domain is
+  trezi.design; trezi.app is not in the user's Vercel account and its DNS points to a parking
+  host, so the `trezi.app` named in the entry below was wrong. `FEEDBACK_ORIGIN`
+  (`src/main/feedback-endpoint.ts`), the contract comment in `src/shared/feedback-body.ts`, the
+  origin assertions in `test/feedback-endpoint.mjs`, `docs/PROVIDERS.md` and TASKS now say
+  trezi.design. Nothing else changed: the loopback-only `TREZI_FEEDBACK_URL` override still
+  ignores every other host.
+
 - **Why.** In-app feedback filed a public GitHub issue through `gh issue create` in Trezi's
   checkout: testers needed `gh` logged in, and reports (screens, conversation, diagnostics)
   were public. It now goes to `POST https://trezi.app/api/feedback`, which files a private

@@ -1172,7 +1172,7 @@ composer.
 
 ## Send Feedback invite code (LKM-336)
 
-Send Feedback posts privately to `https://trezi.app/api/feedback` with the tester's
+Send Feedback posts privately to `https://trezi.design/api/feedback` with the tester's
 beta invite code as the Bearer; it never files a GitHub issue. The code is a secret
 like a seat token and follows the same rules:
 

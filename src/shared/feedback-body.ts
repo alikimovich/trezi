@@ -3,7 +3,7 @@
  * Trezi feedback endpoint since LKM-336 (`main/feedback-endpoint.ts` does the HTTP). Kept
  * free of Bun and the platform so it unit-tests without a build.
  *
- * The contract: `POST https://trezi.app/api/feedback` with `Authorization: Bearer <invite
+ * The contract: `POST https://trezi.design/api/feedback` with `Authorization: Bearer <invite
  * code>` and `{ body, conversation?, diagnostics?, appVersion, macOS, screenshot? }`; the
  * screenshot's bytes go separately to the signed upload URL the reply carries. The limits
  * below are the endpoint's; this module enforces them before anything is sent, and maps

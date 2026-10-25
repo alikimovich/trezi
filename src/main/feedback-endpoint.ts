@@ -17,7 +17,7 @@ import {
  *
  * `fetch` is injectable so the unit tier runs without a network or a listening port.
  */
-export const FEEDBACK_ORIGIN = 'https://trezi.app'
+export const FEEDBACK_ORIGIN = 'https://trezi.design'
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
