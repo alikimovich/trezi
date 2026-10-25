@@ -154,13 +154,23 @@ export async function checkComposerSend(host: NativeBridge) {
     await finish()
     console.log('Composer send: smart quote after Return, double Send and new text passed.')
   } finally {
-    if (changedPreviewStatus) {
-      nativeWorkspace.state.status = previewStatus
-      nativeWorkspace.changed()
+    try {
+      if (changedPreviewStatus) {
+        nativeWorkspace.state.status = previewStatus
+        nativeWorkspace.changed()
+      }
+      nativeChat.services.invoke = invoke
+      // Best effort: a failed assertion may leave a turn whose provider send was never
+      // reached, and that must not replace the original error or leak the stub.
+      if (chat.isRunning) {
+        try {
+          provider.emit({ type: 'done', projectKey: chat.chat, landingPending: false })
+          await wait(() => !chat.isRunning, 'the turn to finish', 100)
+        } catch {}
+      }
+    } finally {
+      provider.restore()
     }
-    nativeChat.services.invoke = invoke
-    if (chat.isRunning) await finish()
-    provider.restore()
-    await host.request('composerPerform', { text: '' })
+    await host.request('composerPerform', { text: '' }).catch(() => {})
   }
 }
