@@ -2,7 +2,8 @@
 
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
 bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
-no exclusive barriers: Swift compiles share a cache and a 2-wide lane, see
+no exclusive barriers: Swift compiles share a cache and a 2-wide lane, and the
+real-toolchain `swift-preview` tests run one at a time beside the rest, see
 [Unit tier speed](#unit-tier-speed-lkm-167). `service-process` keeps a 240 s budget
 and `keychain-rebuild` (LKM-144) 300 s for a cold cache. Keychain tests use only password-made
 temporary keychains and calls that cannot prompt. Native desktop and live provider checks are serial. Logs and JSON summaries are written to `test/artifacts/runs/`;
@@ -118,6 +119,17 @@ fixtures and groups after checking every reader of it.
 - **Order.** `--report` prints the 20 slowest tests and merges each PASS duration into
   `.local/test-times.json`. The next run starts the slowest tests first. Without the
   file, tests run in list order.
+- **Groups (LKM-345).** Unit tests in one `UNIT_GROUPS` group (`test/tiers.mjs`) never
+  run at the same time. A free worker takes the first waiting test whose group is not
+  running, so the other workers keep running the rest of the tier. The `swift-preview`
+  group is the five tests that build through a real `PreviewSession` (`swift-preview`,
+  `-target`, `-toolchain`, `-build`, `-generate`). Their builds run outside the swiftc
+  lane: Xcode metadata queries, a `#Preview` probe with an empty module cache,
+  xcodebuild, SwiftPM, actool, swiftc and a preview host, each under a product tool
+  limit of 20–120 s. Longest-first ordering started them together. On the 3-vCPU
+  hosted runner they then starved each other past those limits and their own budgets.
+  One at a time, each sees the load it was sized for. `test/test-runner.mjs` checks
+  the rule.
 - **Typecheck.** `--typecheck` runs `bun run typecheck` next to the tier and counts it
   as a result (`[typecheck]`). `bun run test:quick` is `unit --typecheck --report`.
   It also runs `bun run typecheck:native` unless that checks the same program as
@@ -628,7 +640,10 @@ Superseded runs for the same PR or branch are cancelled.
   proven cause; the typechecks later moved to a step before the unit tier, and now
   to their own job. `test/dependency-audit.mjs` pins the jobs, the gate and the unit
   command. `test/swift-preview-target.mjs` prints `[elapsed] start|done <stage>`
-  lines, so the last finished stage is in the log if it times out again.
+  lines, so the last finished stage is in the log if it times out again;
+  `swift-preview` and `swift-preview-build` print the same lines (LKM-345). Since
+  LKM-345 the real-toolchain `swift-preview` tests also run one at a time (see
+  "Groups" under [Unit tier speed](#unit-tier-speed-lkm-167)).
   The `Typecheck` step calls both scripts directly, so the `typecheckPlan` skip of
   an equivalent `typecheck-native` applies only to `--typecheck` runs, never to CI.
 

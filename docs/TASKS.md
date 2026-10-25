@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## swift-preview unit tests reliable on GitHub-hosted CI (LKM-345)
+
+- [x] The five real-toolchain swift-preview tests run one at a time beside the rest of the unit tier (`UNIT_GROUPS` in `test/tiers.mjs`, `runQueue` groups in `test/helpers/test-runner.mjs`); unit `test-runner`, `test-selection`.
+- [x] `swift-preview` and `swift-preview-build` print elapsed stage lines, as `swift-preview-target` does.
+- [ ] Root-cause comment on the ticket with the failing CI log lines (the worker sandbox could not read GitHub).
+- [ ] Three consecutive green CI runs with the swift-preview tests passing (linked on the ticket).
+
 ## Selection cleared when the select tool is turned off (LKM-344)
 
 - [x] Turning the select tool off (toolbar button or S) drops the page selection, size badge, element toolbar, editing island, chat chip and the saved element, so a reload restores nothing (`selectToolOff` in `src/native/inspector-runtime.ts`, `NativeShellController.selectOff`); unit `native-shell-controller`.

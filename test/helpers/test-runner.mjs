@@ -134,19 +134,41 @@ export async function runCommand({
 }
 
 // Exclusive tests are barriers: neither their predecessors nor successors overlap.
+// Tests with the same `group` never overlap each other; a free worker takes the first
+// waiting test whose group is not running, so the rest of the queue fills it (LKM-345).
 export async function runQueue(items, jobs, run, signal) {
   if (!Number.isSafeInteger(jobs) || jobs < 1) throw new Error('jobs must be a positive integer')
   const results = new Array(items.length)
   let cursor = 0
   async function batch(indices) {
-    let next = 0
+    const waiting = [...indices]
+    const running = new Set()
+    let wakers = []
+    const take = () => {
+      const at = waiting.findIndex((i) => !items[i].group || !running.has(items[i].group))
+      return at < 0 ? undefined : waiting.splice(at, 1)[0]
+    }
     await Promise.all(
       Array.from({ length: Math.min(jobs, indices.length) }, async () => {
-        while (next < indices.length) {
-          const index = indices[next++]
-          results[index] = signal?.aborted
-            ? { name: items[index].name, outcome: 'CANCELLED', duration: 0 }
-            : await run(items[index])
+        while (waiting.length) {
+          const index = take()
+          if (index === undefined) {
+            // Every waiting test's group is running on another worker, which wakes this one.
+            await new Promise((resolve) => wakers.push(resolve))
+            continue
+          }
+          const { group } = items[index]
+          if (group) running.add(group)
+          try {
+            results[index] = signal?.aborted
+              ? { name: items[index].name, outcome: 'CANCELLED', duration: 0 }
+              : await run(items[index])
+          } finally {
+            if (group) running.delete(group)
+            const woken = wakers
+            wakers = []
+            for (const wake of woken) wake()
+          }
         }
       })
     )

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describePlan, planFromGit, shardTests, typecheckPlan } from './helpers/test-plan.mjs'
 import { acquireRunLock, runCommand, runQueue } from './helpers/test-runner.mjs'
-import { TIERS, TYPECHECKS, UNIT_TIMEOUT_MS } from './tiers.mjs'
+import { TIERS, TYPECHECKS, UNIT_GROUPS, UNIT_TIMEOUT_MS } from './tiers.mjs'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT = dirname(TEST_DIR)
@@ -14,6 +14,9 @@ const ROOT = dirname(TEST_DIR)
 // Tier membership, timeouts and typechecks live in test/tiers.mjs.
 // Durations from the last `--report` run; the slowest tests start first.
 const TIMES = join(ROOT, '.local/test-times.json')
+const groupOf = new Map(
+  Object.entries(UNIT_GROUPS).flatMap(([group, names]) => names.map((name) => [name, group]))
+)
 const selected = new Set()
 const options = {
   // Unit tests are mostly CPU-light processes; swiftc is bounded by its own lane.
@@ -190,7 +193,11 @@ for (const [tier, members] of Object.entries(TIERS)) {
   console.log(`\n${tier}: ${tests.length} tests, at most ${jobs} workers`)
   // Longest first, so a slow test never starts last; unknown tests keep their order.
   if (tier === 'unit') tests.sort((a, b) => (previous[b] ?? 0) - (previous[a] ?? 0))
-  const items = tests.map((name) => ({ name, exclusive: tier !== 'unit' }))
+  const items = tests.map((name) => ({
+    name,
+    exclusive: tier !== 'unit',
+    group: tier === 'unit' ? groupOf.get(name) : undefined
+  }))
   const tierResults = await runQueue(
     items,
     jobs,
