@@ -4,6 +4,7 @@ import { ChatIslands, installChatIslands } from '../main/chat-islands'
 import { IslandOverrides } from '../main/island-overrides'
 import { agentSawRevision, forgetLandingContext } from '../main/landing-context'
 import { previewServers } from '../main/preview-evidence'
+import { productLog } from '../main/product-log'
 import type { AgentEvent } from '../shared/api'
 import { chatAgentSettingsFromOptions } from '../shared/chat-settings'
 import type { NativeLandingCheck } from '../shared/native-chat'
@@ -171,6 +172,11 @@ export function installNativeChat(
     close(key)
   }
   host.on('composer-action', (action) => {
+    if (action.action === 'send')
+      productLog.debug('send-path', 'bun action=send stage=received', {
+        chat: action.chat,
+        uptimeNs: process.hrtime.bigint().toString()
+      })
     void nativeChat.composer(action)
   })
   host.on('chat-action', (action) => {

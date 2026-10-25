@@ -2,6 +2,53 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-339 repair: stale Send timing, suspects ruled out offline (root cause still open)
+
+- `row-rendered` is timed only when the new user row appears within 10 s of the Send that
+  armed it (`Host.pendingSendRows` holds the row ID and press time), so a Send the controller
+  ignores cannot skew a later send's hops. The next press replaces the entry.
+- Measured without the desktop (this session has no native calls): on the Bun side the whole
+  `composer(send)` to `row-published` path takes 1–2 ms with a 300-message, 1.4 MB transcript and
+  32 ms with three 3 MB attachments (stubbed services). The host's `chatState` decode (parse,
+  re-serialize, `JSONDecoder`) of the same frames takes 5 ms and 45 ms. Neither is a 100 ms block.
+- Read and ruled out: `watchers` in `changed()` (empty unless a Custom-tab request is open),
+  `control-requests.ts` (pure), `beginLiveWatch` (full-access Codex only, not awaited), the
+  `ServiceClient` send, `chat-attachments`. The LKM-330 `settle()` is two 16 ms sleeps and reads
+  when the stack is already settled; it scrolls only when the end is off, as the pin did before.
+  The LKM-334 reveal loop starts only from a reveal request, never from Send.
+- Still unmeasured: SwiftUI layout on the main actor after the row lands, and `agent:send`
+  (`waitForChat`, `beforeTurn`, the repository lane) that the Code panel's source reads can queue
+  behind. The `SEND HOPS` output of the manager's native `chat,core` run decides which; no
+  CHANGELOG Fixed line is added until a fix is measured.
+
+## 2026-10-24 — LKM-339 review repair: one row timing per Send
+
+- The host now records the current user-row ID when Send is pressed and emits `row-rendered` only
+  when that chat shows a different user-row ID. Later chat snapshots cannot duplicate the stage.
+- Quick verification passed again (261 unit checks, 3 skips, typecheck and lint). The requested
+  native `chat,core` verification returned `limit_reached`: this worker session allows 0 native
+  calls. There is still no Send/Code timing from the real app and no measured root cause or fix;
+  the manager's native run must gather the hop evidence before a CHANGELOG Fixed line is valid.
+
+## 2026-10-24 — LKM-339 verification follow-up
+
+- The second manager quick run passed: 261 unit checks, 3 skips, typechecks and lint all exit 0.
+  The first run's unchanged-file lint failure did not recur. Native calls remain unavailable in this
+  session, so no end-to-end timing or root-cause fix is claimed by this worker.
+
+## 2026-10-24 — LKM-339: send and Code latency probes (root cause still open)
+
+- Added debug `send-path` timing stages from the Swift Send/Code actions through the service queue,
+  Bun handlers, the `agent:send` acknowledgment, and the host's user row/Code panel updates. They
+  record sizes, queue time and monotonic uptime, never message text or attachment contents.
+- The `composer-send` native check now sends with a stub provider, clicks Code while the turn is
+  pending, and requires the user row within 300 ms and the Code panel within 500 ms. It prints
+  the measured latencies and available product-log hops. It runs in the `chat` group too.
+- No native run is available in this worker session (native call allowance 0), so the before/after
+  latency and root cause are not measured yet. The manager's native chat/core run must supply them
+  before a fix can be claimed. Quick verification passed typechecks and 259 unit checks but lint
+  failed on unchanged `src/main/chat-island-bindings.ts` optional-chain formatting.
+
 ## 2026-10-24 — LKM-338: composer sending state after 1.5 s
 
 - **Where a send waits.** `submit` clears the draft synchronously once the chat is ready, so the

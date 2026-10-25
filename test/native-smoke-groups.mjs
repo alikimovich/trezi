@@ -122,6 +122,7 @@ assert.deepEqual(
     'startup',
     'open-project',
     'chat-ready',
+    'composer-send',
     'native-chat',
     'history-menu',
     'sent-attachments',
@@ -151,7 +152,7 @@ assert.deepEqual(notices, [], 'A full run prints no filter notice')
 selectSmokeChecks(names, parseSmokeGroups(['--only=chat']), (line) => notices.push(line))
 assert.match(
   notices.join(),
-  /^NATIVE SMOKE FILTERED \(--only=chat\): running 14 of \d+ checks.*not full-suite acceptance/
+  /^NATIVE SMOKE FILTERED \(--only=chat\): running 15 of \d+ checks.*not full-suite acceptance/
 )
 console.log(
   'Native smoke check selection: every check classified, prelude kept, dependencies satisfied for each group.'
