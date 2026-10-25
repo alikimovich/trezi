@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-24
+
 ### Fixed
 - Turning the select tool off clears the selected element from the page (outline, size badge, element toolbar), closes its editing island and removes its chat chip; reloading the page no longer brings the selection back (LKM-344).
 
