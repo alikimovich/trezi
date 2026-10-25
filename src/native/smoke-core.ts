@@ -73,6 +73,7 @@ import {
 } from './smoke-runner'
 import { checkScraibOpen, restoreScraibOpen } from './smoke-scraib-open'
 import { checkScraibXcode, restoreScraibXcode } from './smoke-scraib-xcode'
+import { checkSelectOff, restoreSelectOff } from './smoke-select-off'
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
@@ -1230,6 +1231,15 @@ export async function runNativeCoreSmoke(
         await restoreInspectorCustom(customSmoke)
       },
       cleanup: () => restoreInspectorCustom(customSmoke)
+    },
+    {
+      name: 'select-off',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkSelectOff(host, artifacts, inspector)
+        await restoreSelectOff(host)
+      },
+      cleanup: () => restoreSelectOff(host)
     },
     {
       name: 'layers-island',

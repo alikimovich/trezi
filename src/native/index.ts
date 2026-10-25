@@ -692,7 +692,7 @@ async function main() {
       void contextController.notes(args[0]).catch((error) => workspaceController.reportError(error))
     if (channel === 'agent:close-project') contextController.projects.delete(args[0])
   })
-  const { inspector: inspectorController } = installNativeInspector(
+  const { inspector: inspectorController, selectToolOff } = installNativeInspector(
     host!,
     workspaceController,
     chatController,
@@ -737,6 +737,7 @@ async function main() {
       previewView.webContents.send(channels.PREVIEW_HIDE_SCROLLBARS, viewport === 'mobile')
     }
   )
+  shellController.selectOff = selectToolOff
   installPreviewLoads(host, workspaceController, shellController)
   installPreviewRefresh(
     host,

@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-344: turning the select tool off clears the selection
+
+- **Bug.** After the select tool went off, the picked element stayed in the inspector controller
+  (island, chat chip), and a reload re-picked it through LKM-216's `reattachSelection`, so the
+  outline, size badge and island came back on the page.
+- **Fix.** The shell's `select-object` action calls `selectOff` when the tool turns off (the
+  toolbar button and the page's S key both go through it); `installNativeInspector` supplies it
+  as `selectToolOff`: `dropSelection()` (saved element, picked page, chip, island, pending
+  restore) plus `preview:clear-selected` for the page's outline, badge and element toolbar.
+  With nothing left, `restoreSelection` and `reattachSelection` have nothing to bring back.
+- **Why not gate restore on select mode.** `preview:set-select-mode false` is also sent by
+  project switches (`workspace.switching`, project open) and the restore after a switch is
+  LKM-172's per-project selection; Layers-panel picks (and the smokes) select with the tool
+  off and keep LKM-216's live-reload reattach. Only the user's own tool-off drops the selection;
+  a message already sent keeps its chip.
+- **Evidence.** Unit `native-shell-controller` (selectOff runs on off, not on on, before the
+  page disarms). Native `select-off` check (`core`) asserts both acceptance paths; not run
+  before merge.
+
 ## 2026-10-24 — LKM-341 repair: home model lost when the project's conversation is restored
 
 - The manager's native run failed `start-composer` (sent chat had model `default`, not the one
