@@ -278,6 +278,9 @@ export class StartFlow {
     const origin = rerouted ? HOME : from
     const source = controller.chats.get(origin)
     const carrying = rerouted || origin === this.carry
+    // A project's restored conversation relays the home draft to a new chat beside it
+    // (`settle`): the model chosen at home is still ours, the relaying chat's is not.
+    const relayed = origin !== HOME && origin === this.carry ? this.settings : undefined
     this.carry = null
     if (!carrying || !source || source === chat) return
     if (!this.hasDraft(source) && !this.pending) return
@@ -302,7 +305,7 @@ export class StartFlow {
     source.caret = 0
     source.attachments = []
     source.revision++
-    this.settings = source.settings
+    this.settings = relayed ?? source.settings
     this.target = chat.chat
   }
 

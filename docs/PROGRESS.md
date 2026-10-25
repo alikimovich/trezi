@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-341 repair: home model lost when the project's conversation is restored
+
+- The manager's native run failed `start-composer` (sent chat had model `default`, not the one
+  picked at home) on the merged tree. Cause: LKM-340's `composer-send` now uses the real
+  `agent:send`, so the fixture chat's transcript is persisted and the project reopens it. A
+  home draft sent into a chat with history is relayed to a new chat beside it (`StartFlow.settle`),
+  and `arrive` then replaced the saved home settings with the relaying chat's own, so
+  `changeModel` never ran. `arrive` now keeps the settings it already holds when the draft comes
+  from a relaying chat (`src/native/chat-start.ts`). Not reproduced offline (no native call
+  before this entry); the manager's native run confirms it.
+
 ## 2026-10-24 — LKM-341: composer-send counted the LKM-339 latency probe
 
 - The nightly native suite failed `composer-send` with "sent once (expected 1, actual 2)": the
