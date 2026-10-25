@@ -9,7 +9,9 @@ func emit(_ value: [String: Any]) {
     let trace = value["event"] as? String
     if trace == "composer-action", value["action"] as? String == "send",
        let key = value["chat"] as? String, let host = NSApp.delegate as? Host {
-        host.pendingSendRows[key] = host.lastUserRows[key] ?? ""
+        // A Send the controller ignores adds no row: the next press replaces this, and
+        // `pendingSendWindowNs` keeps a late, unrelated row from being timed against it.
+        host.pendingSendRows[key] = (row: host.lastUserRows[key] ?? "", at: DispatchTime.now().uptimeNanoseconds)
     }
     if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
         ProductLog.debug("send-path", "host action=\(value["action"] as? String ?? "?") stage=pressed uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
@@ -47,8 +49,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var composer: NativeComposer!
     var chat: NativeChat!
     /// A Send waits for a different final user-row ID; status snapshots cannot log it twice.
-    var pendingSendRows: [String: String] = [:]
+    var pendingSendRows: [String: (row: String, at: UInt64)] = [:]
     var lastUserRows: [String: String] = [:]
+    /// A user row later than this after Send belongs to a queued turn or a newer send, not to it.
+    let pendingSendWindowNs: UInt64 = 10_000_000_000
     var welcome: NativeWelcome!
     var previewStatus: NativePreviewStatus!
     var sheets: NativeSheets!
@@ -282,9 +286,12 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             if let snapshot = chat.model.snapshot,
                let user = snapshot.messages.last(where: { $0.role == "user" }) {
                 lastUserRows[snapshot.chat] = user.id
-                if let previous = pendingSendRows[snapshot.chat], previous != user.id {
+                if let pending = pendingSendRows[snapshot.chat], pending.row != user.id {
                     pendingSendRows.removeValue(forKey: snapshot.chat)
-                    ProductLog.debug("send-path", "host action=send stage=row-rendered uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    if now - pending.at <= pendingSendWindowNs {
+                        ProductLog.debug("send-path", "host action=send stage=row-rendered uptimeNs=\(now)")
+                    }
                 }
             }
         case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:])

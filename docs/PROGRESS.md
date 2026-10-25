@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-339 repair: stale Send timing, suspects ruled out offline (root cause still open)
+
+- `row-rendered` is timed only when the new user row appears within 10 s of the Send that
+  armed it (`Host.pendingSendRows` holds the row ID and press time), so a Send the controller
+  ignores cannot skew a later send's hops. The next press replaces the entry.
+- Measured without the desktop (this session has no native calls): on the Bun side the whole
+  `composer(send)` to `row-published` path takes 1–2 ms with a 300-message, 1.4 MB transcript and
+  32 ms with three 3 MB attachments (stubbed services). The host's `chatState` decode (parse,
+  re-serialize, `JSONDecoder`) of the same frames takes 5 ms and 45 ms. Neither is a 100 ms block.
+- Read and ruled out: `watchers` in `changed()` (empty unless a Custom-tab request is open),
+  `control-requests.ts` (pure), `beginLiveWatch` (full-access Codex only, not awaited), the
+  `ServiceClient` send, `chat-attachments`. The LKM-330 `settle()` is two 16 ms sleeps and reads
+  when the stack is already settled; it scrolls only when the end is off, as the pin did before.
+  The LKM-334 reveal loop starts only from a reveal request, never from Send.
+- Still unmeasured: SwiftUI layout on the main actor after the row lands, and `agent:send`
+  (`waitForChat`, `beforeTurn`, the repository lane) that the Code panel's source reads can queue
+  behind. The `SEND HOPS` output of the manager's native `chat,core` run decides which; no
+  CHANGELOG Fixed line is added until a fix is measured.
+
 ## 2026-10-24 — LKM-339 review repair: one row timing per Send
 
 - The host now records the current user-row ID when Send is pressed and emits `row-rendered` only
