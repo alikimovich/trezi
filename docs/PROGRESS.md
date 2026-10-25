@@ -2,6 +2,26 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-341 repair: home model lost when the project's conversation is restored
+
+- The manager's native run failed `start-composer` (sent chat had model `default`, not the one
+  picked at home) on the merged tree. Cause: LKM-340's `composer-send` now uses the real
+  `agent:send`, so the fixture chat's transcript is persisted and the project reopens it. A
+  home draft sent into a chat with history is relayed to a new chat beside it (`StartFlow.settle`),
+  and `arrive` then replaced the saved home settings with the relaying chat's own, so
+  `changeModel` never ran. `arrive` now keeps the settings it already holds when the draft comes
+  from a relaying chat (`src/native/chat-start.ts`). Not reproduced offline (no native call
+  before this entry); the manager's native run confirms it.
+
+## 2026-10-24 — LKM-341: composer-send counted the LKM-339 latency probe
+
+- The nightly native suite failed `composer-send` with "sent once (expected 1, actual 2)": the
+  LKM-339 latency probe sends through the same `agent:send` recorder, so the later LKM-304 counts
+  included it. origin/main's LKM-340 (`earlierSends` offset in `src/native/smoke-composer-send.ts`)
+  fixes that; on merging it this worker dropped its own equivalent reset. Test-only; no CHANGELOG
+  line. A full native run of that earlier fix passed `composer-send` (65 of 66; the other failure,
+  `editor-freshness`, was a page-load timeout in an earlier check); the manager's run confirms the merge.
+
 ## 2026-10-24 — LKM-340: Code availability and Send-path payloads
 
 - Code is enabled whenever an active project exists, independent of preview readiness. The
