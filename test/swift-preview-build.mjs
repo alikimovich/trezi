@@ -80,7 +80,12 @@ function changes(before, after) {
     .map((path) => `${!(path in before) ? '+' : !(path in after) ? '-' : '~'} ${path}`)
 }
 
-async function run(options) {
+// Elapsed seconds on each session's start and end, so a CI log shows which build was slow
+// (LKM-345). Static names only.
+const startedAt = Date.now()
+const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+
+async function run(name, options) {
   const logs = []
   const session = new PreviewSession({
     hostSource: join(ROOT, 'src/swift-preview/PreviewHost.swift'),
@@ -89,10 +94,15 @@ async function run(options) {
     pollMs: 150,
     ...options
   })
+  const begun = Date.now()
+  console.log(`swift-preview-build: [${elapsed()}] start ${name}`)
   session.start()
   const end = Date.now() + 360_000
   while (Date.now() < end && !['ready', 'failed', 'error'].includes(session.state.status))
     await new Promise((resolve) => setTimeout(resolve, 200))
+  console.log(
+    `swift-preview-build: [${elapsed()}] ${name} ${session.state.status} (${((Date.now() - begun) / 1000).toFixed(1)}s)`
+  )
   return { session, logs, state: session.state }
 }
 
@@ -126,7 +136,7 @@ async function fixture() {
   cpSync(join(ROOT, 'test/fixtures/swift-package-app'), project, { recursive: true })
   const before = tree(project)
   const cacheDir = join(temp, 'DerivedData/gallery')
-  const gallery = await run({ root: project, cacheDir })
+  const gallery = await run('fixture build', { root: project, cacheDir })
   try {
     const reason = environment(gallery.state)
     if (reason) {
@@ -220,7 +230,11 @@ async function scraib() {
   const check = join(temp, 'scraib-check')
   cpSync(copy, check, { recursive: true })
   const copied = tree(copy)
-  const built = await run({ root: copy, cacheDir: join(temp, 'DerivedData/scraib'), manifestDir })
+  const built = await run('Scraib build', {
+    root: copy,
+    cacheDir: join(temp, 'DerivedData/scraib'),
+    manifestDir
+  })
   try {
     const s = built.state
     const reason = environment(s)

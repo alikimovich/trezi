@@ -2,6 +2,47 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-345: the real-toolchain swift-preview tests run one at a time
+
+- **Failures.** 4 of the last 5 CI runs failed only on swift-preview tests:
+  - `swift-preview-build` FAIL at 159.9 s (adc32fb7) and 208 s (eb8d722a), against a
+    600 s budget;
+  - `swift-preview-target` TIMEOUT at 300 s (9358f32a);
+  - `swift-preview` TIMEOUT at 240 s (PR #318, passed on rerun).
+
+  Locally the target fixture reaches its driver stage in 31.7 s.
+- **Cause (from code and earlier CI timings).** The swiftc lane (LKM-167) bounds fixture
+  compiles to 2. The `swift-preview`, `-target`, `-toolchain`, `-build` and `-generate`
+  tests build through a real `PreviewSession`, outside that lane. Each session runs
+  metadata queries for every installed Xcode (20 s cap, LKM-300 retry), a `#Preview` probe
+  with an empty module cache (120 s; 2.2 s cold here), `xcodebuild` (45/90 s), SwiftPM,
+  actool (120 s), swiftc and a preview host (20 s to ready). `.local/test-times.json` comes
+  back with the CI cache and starts the slowest tests first, so these tests started
+  together on the 3-vCPU runner. Earlier CI showed the starvation:
+  - `xcrun swiftc --version` past 20 s (the LOCAL-CI-PROBE-RELIABILITY entry);
+  - the same tree's target taking 142 s on one run and over 300 s on another (LKM-300).
+
+  A FAIL long before the 600 s budget is a product tool limit firing. The failing logs
+  were not readable here: the sandbox denied `gh` and `api.github.com`. Which limit fired
+  in which run is therefore not confirmed from the logs.
+- **Fix (test harness only).**
+  - `UNIT_GROUPS` (`test/tiers.mjs`) puts those five tests in one `swift-preview` group,
+    and `runQueue` never runs two tests of one group at once. A free worker takes the
+    first waiting test whose group is idle, so the other workers keep running the rest of
+    the tier.
+  - Nothing is skipped, retried or given a longer limit. The product tool limits stay as
+    they are.
+  - Cost: the five tests run in sequence on one worker. Their CI time is roughly what the
+    longest of them used to take, plus the others.
+- **Diagnostics.** `swift-preview` and `swift-preview-build` now print elapsed
+  `start|done` lines per stage or session, as `swift-preview-target` does. A failure then
+  shows which build was slow.
+- **Evidence.** Unit `test-runner`: the group never overlaps itself, the rest fills the
+  workers, report order is stable, and a queue of only grouped tests does not deadlock.
+  `test-selection` checks that every grouped test is a unit test in one group.
+  Not shown here: 3 consecutive green CI runs and the root-cause comment with log lines.
+  Both are on the manager.
+
 ## 2026-10-24 — LKM-344: turning the select tool off clears the selection
 
 - **Bug.** After the select tool went off, the picked element stayed in the inspector controller

@@ -152,11 +152,24 @@ assert.equal(detected.previewKind, 'web')
 
 // --- The build, render, interact, edit, error and recover loop ---
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// Stage lines with elapsed seconds (as in swift-preview-target), so the runner's log
+// shows the stage that was still waiting when the outer timeout killed this process
+// (LKM-345). The stage name is the label without its parenthesised logs.
+const startedAt = Date.now()
+const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
 async function until(check, label, timeout = 180_000) {
-  const end = Date.now() + timeout
+  const name = label.replace(/ \(.*$/s, '')
+  const begun = Date.now()
+  const end = begun + timeout
+  console.log(`swift-preview: [${elapsed()}] start ${name}`)
   for (;;) {
     const value = await check()
-    if (value) return value
+    if (value) {
+      console.log(
+        `swift-preview: [${elapsed()}] done ${name} (${((Date.now() - begun) / 1000).toFixed(1)}s)`
+      )
+      return value
+    }
     if (Date.now() > end) throw new Error(`Timed out: ${label}`)
     await sleep(100)
   }
