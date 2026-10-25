@@ -231,6 +231,10 @@ export function serviceProvider(
       saveSeatToken: async (provider, token) =>
         (await call('seatTokenSave', { provider, token })).hasToken === true,
       seatTokenStatus: () => call('seatTokenStatus', {}, 'read'),
+      // LKM-336: the Send Feedback invite code, encrypted by the service like a seat token.
+      feedbackCodeStatus: () => call('feedbackCodeStatus', {}, 'read'),
+      saveFeedbackCode: async (code) => (await call('feedbackCodeSave', { code })).hasCode === true,
+      feedbackCode: async () => (await call('feedbackCode', {}, 'read')).code ?? null,
       checkLogin: async (provider, root) =>
         (await call('diagnose', { provider, root }, 'read')).report
     }

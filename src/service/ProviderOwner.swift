@@ -142,9 +142,10 @@ final class ProviderOwner: @unchecked Sendable {
         }
     }
 
-    static let reads: Set<String> = ["recover", "snapshot", "status", "connectionSecret", "codexModels", "seatTokenStatus", "diagnose"]
+    static let reads: Set<String> = ["recover", "snapshot", "status", "connectionSecret", "codexModels", "seatTokenStatus", "diagnose",
+                                     "feedbackCodeStatus", "feedbackCode"]
     static let dataMethods: Set<String> = ["connectionSave", "connectionRemove", "connectionSecret", "catalogSave", "codexModels"]
-    static let loginMethods: Set<String> = ["seatTokenSave", "seatTokenStatus", "diagnose"]
+    static let loginMethods: Set<String> = ["seatTokenSave", "seatTokenStatus", "diagnose", "feedbackCodeSave", "feedbackCodeStatus", "feedbackCode"]
     static let methods: [String: (required: Set<String>, optional: Set<String>)] = [
         "open": (["session", "chat", "provider", "root", "liveRoot", "background"], []),
         "openHelper": (["session", "chat", "provider", "root", "liveRoot", "background", "options", "context"], []),
@@ -157,6 +158,7 @@ final class ProviderOwner: @unchecked Sendable {
         "connectionSave": (["input"], []), "connectionRemove": (["id"], []), "connectionSecret": (["id"], []),
         "catalogSave": (["backend", "models"], ["harness"]), "codexModels": ([], []),
         "seatTokenSave": (["provider", "token"], []), "seatTokenStatus": ([], []), "diagnose": (["provider", "root"], []),
+        "feedbackCodeSave": (["code"], []), "feedbackCodeStatus": ([], []), "feedbackCode": ([], []),
     ]
 
     /// Provider data requests, answered off the session queue.

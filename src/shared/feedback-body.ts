@@ -1,93 +1,173 @@
 /**
- * Pure builders for the in-app "Send feedback" GitHub issue (LKM-27). Kept
- * electron-free so it unit-tests without a build, mirroring pr-body.ts. The main
- * process (feedback.ts) captures the screenshot + gathers the transcript and
- * hands the finished strings here; this module only assembles Markdown and
- * enforces GitHub's hard limits.
+ * Pure builders for the in-app "Send feedback" report (LKM-27), sent privately to the
+ * Trezi feedback endpoint since LKM-336 (`main/feedback-endpoint.ts` does the HTTP). Kept
+ * free of Bun and the platform so it unit-tests without a build.
  *
- * GitHub caps an issue body at 65536 characters and its Markdown sanitizer
- * strips `data:` URIs from <img> (so a screenshot can't render inline) — the
- * screenshot is therefore attached as a copy-into-a-browser data-URI inside a
- * collapsed <details>, and any section that would blow the cap is dropped with a
- * visible note rather than failing the whole post.
+ * The contract: `POST https://trezi.design/api/feedback` with `Authorization: Bearer <invite
+ * code>` and `{ body, conversation?, diagnostics?, appVersion, macOS, screenshot? }`; the
+ * screenshot's bytes go separately to the signed upload URL the reply carries. The limits
+ * below are the endpoint's; this module enforces them before anything is sent, and maps
+ * the endpoint's answers (401, 413, 429, 400, 5xx) to a plain message for the tester.
  */
 
-/** GitHub's hard issue-body limit; stay safely under it. */
-export const BODY_LIMIT = 65536
-export const SAFE_LIMIT = 60000
+/** The endpoint's limits: characters (UTF-16 units) for text, bytes for the screenshot. */
+export const FEEDBACK_LIMITS = {
+  body: 20_000,
+  conversation: 60_000,
+  diagnostics: 60_000,
+  screenshot: 10 * 1024 * 1024
+} as const
 
-/** Collapse the feedback's first non-empty line into a concise issue title. */
-export function buildFeedbackTitle(body: string): string {
-  const firstLine = body
-    .split('\n')
-    .map((l) => l.trim())
-    .find(Boolean)
-  const base = (firstLine || 'App feedback').replace(/\s+/g, ' ').trim()
-  const title = base.length > 70 ? `${base.slice(0, 69)}…` : base
-  return `Feedback: ${title}`
+export type ScreenshotType = 'image/png' | 'image/jpeg'
+
+/** The JSON body of `POST /api/feedback`. */
+export interface FeedbackRequest {
+  body: string
+  conversation?: string
+  diagnostics?: string
+  appVersion: string
+  macOS: string
+  screenshot?: { contentType: ScreenshotType; size: number }
 }
 
-export interface FeedbackBodyParts {
+export interface FeedbackRequestParts {
   /** The user's typed feedback (required). */
   body: string
   /** Rendered chat transcript, when the user opted to attach the conversation. */
   conversation?: string | null
-  /** A screenshot as a `data:image/...;base64,…` URI, when opted in. */
-  screenshot?: string | null
   /** Redacted diagnostics (LKM-165), when the user consented to attach them. */
   diagnostics?: string | null
+  appVersion: string
+  macOS: string
+  /** The screenshot's type and byte size, when opted in. */
+  screenshot?: { contentType: ScreenshotType; size: number } | null
+}
+
+export const CONVERSATION_CUT = '…(earlier messages left out: the conversation was too long)\n\n'
+export const DIAGNOSTICS_CUT = '\n\n…(diagnostics cut short: too long)'
+
+/** A report the endpoint could never accept; the message is for the tester. */
+export class FeedbackInputError extends Error {}
+
+/**
+ * The request body. The feedback text is never cut: a report over the limit is refused
+ * with a plain message. A long conversation keeps its latest messages and long diagnostics
+ * their start; a screenshot over the limit (or of an unknown type) is left out.
+ */
+export function buildFeedbackRequest(parts: FeedbackRequestParts): FeedbackRequest {
+  const body = parts.body.trim()
+  if (!body) throw new FeedbackInputError('Please describe your feedback first.')
+  if (body.length > FEEDBACK_LIMITS.body)
+    throw new FeedbackInputError(
+      `Your feedback is ${body.length.toLocaleString('en-US')} characters long; the limit is ${FEEDBACK_LIMITS.body.toLocaleString('en-US')}. Shorten it and send again.`
+    )
+  const request: FeedbackRequest = {
+    body,
+    appVersion: parts.appVersion.slice(0, 200),
+    macOS: parts.macOS.slice(0, 100)
+  }
+  const conversation = parts.conversation?.trim()
+  if (conversation)
+    request.conversation =
+      conversation.length > FEEDBACK_LIMITS.conversation
+        ? CONVERSATION_CUT +
+          conversation.slice(-(FEEDBACK_LIMITS.conversation - CONVERSATION_CUT.length))
+        : conversation
+  const diagnostics = parts.diagnostics?.trim()
+  if (diagnostics)
+    request.diagnostics =
+      diagnostics.length > FEEDBACK_LIMITS.diagnostics
+        ? diagnostics.slice(0, FEEDBACK_LIMITS.diagnostics - DIAGNOSTICS_CUT.length) +
+          DIAGNOSTICS_CUT
+        : diagnostics
+  const shot = parts.screenshot
+  if (
+    shot &&
+    (shot.contentType === 'image/png' || shot.contentType === 'image/jpeg') &&
+    Number.isInteger(shot.size) &&
+    shot.size > 0 &&
+    shot.size <= FEEDBACK_LIMITS.screenshot
+  )
+    request.screenshot = { contentType: shot.contentType, size: shot.size }
+  return request
+}
+
+/** What a failed request means for the tester and the sheet. */
+export interface FeedbackFailure {
+  error: string
+  /** The same report can be sent again (network, server, rate limit). */
+  retry: boolean
+  /** The invite code was refused: ask for a new one. */
+  code?: boolean
+}
+
+/** The endpoint's own `error`, bounded and on one paragraph; null when it sent none. */
+export function endpointMessage(payload: unknown): string | null {
+  const raw =
+    payload && typeof payload === 'object' ? (payload as { error?: unknown }).error : undefined
+  if (typeof raw !== 'string') return null
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: strips control characters from a server message
+  const text = raw.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()
+  return text ? (text.length > 500 ? `${text.slice(0, 499)}…` : text) : null
+}
+
+/** "in 30 seconds", "in 5 minutes", "in 2 hours", from a `Retry-After` header. */
+export function retryWhen(retryAfter: string | null | undefined, now = Date.now()): string | null {
+  const raw = retryAfter?.trim()
+  if (!raw) return null
+  let seconds = /^\d+$/.test(raw) ? Number(raw) : (Date.parse(raw) - now) / 1000
+  if (!Number.isFinite(seconds)) return null
+  seconds = Math.max(1, Math.ceil(seconds))
+  if (seconds < 90) return `in ${seconds} second${seconds === 1 ? '' : 's'}`
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 90) return `in ${minutes} minutes`
+  return `in ${Math.ceil(minutes / 60)} hours`
 }
 
 /**
- * Assemble the issue body: the feedback text, then optional (collapsed)
- * conversation and screenshot sections, then a provenance footer. Optional
- * sections are dropped (with a note) if they'd exceed GitHub's body limit;
- * the feedback text itself is always kept (hard-truncated only as a last resort).
+ * An HTTP answer that is not a success, as the tester reads it: the endpoint's own plain
+ * message when it sent one, else ours; a rate limit says when to try again.
  */
-export function buildFeedbackBody(parts: FeedbackBodyParts): string {
-  const feedback = parts.body.trim() || '_(no description provided)_'
-  const sections: string[] = [feedback]
-
-  const footer = '\n\n---\n_Sent from Trezi via the in-app feedback button._'
-
-  // Budget remaining after the feedback text + footer, for the optional blocks.
-  const used = (): number => sections.join('\n\n').length + footer.length
-
-  const conversation = parts.conversation?.trim()
-  if (conversation) {
-    const block =
-      `<details>\n<summary>Conversation transcript</summary>\n\n` +
-      '```\n' +
-      conversation +
-      '\n```\n\n</details>'
-    if (used() + block.length + 2 <= SAFE_LIMIT) sections.push(block)
-    else sections.push('_Conversation transcript omitted — too large to attach._')
+export function feedbackError(
+  status: number,
+  payload: unknown,
+  retryAfter?: string | null,
+  now = Date.now()
+): FeedbackFailure {
+  const own = endpointMessage(payload)
+  if (status === 401)
+    return {
+      error:
+        own ??
+        'Your invite code was not accepted. Enter the code from your Trezi beta invite again.',
+      retry: false,
+      code: true
+    }
+  if (status === 413)
+    return {
+      error:
+        own ??
+        'This report is too large to send. Leave out the screenshot or the conversation and try again.',
+      retry: false
+    }
+  if (status === 429) {
+    const when = retryWhen(retryAfter, now)
+    const base = own ?? 'Too many reports were sent in a short time.'
+    return { error: `${base} ${when ? `Try again ${when}.` : 'Try again later.'}`, retry: true }
   }
+  if (status === 400)
+    return { error: own ?? 'The feedback service did not accept this report.', retry: false }
+  if (status >= 500)
+    return {
+      error:
+        own ?? `The feedback service is not working right now (HTTP ${status}). Try again soon.`,
+      retry: true
+    }
+  return { error: own ?? `The feedback service answered HTTP ${status}.`, retry: false }
+}
 
-  const diagnostics = parts.diagnostics?.trim()
-  if (diagnostics) {
-    // A four-backtick fence, so a fence inside a log line cannot close it.
-    const block =
-      `<details>\n<summary>Diagnostics</summary>\n\n` +
-      '````\n' +
-      diagnostics +
-      '\n````\n\n</details>'
-    if (used() + block.length + 2 <= SAFE_LIMIT) sections.push(block)
-    else sections.push('_Diagnostics omitted — too large to attach._')
-  }
-
-  if (parts.screenshot) {
-    const block =
-      `<details>\n<summary>Screenshot (base64 PNG/JPEG — paste the data URI below into a browser to view)</summary>\n\n` +
-      '```\n' +
-      parts.screenshot +
-      '\n```\n\n</details>'
-    if (used() + block.length + 2 <= SAFE_LIMIT) sections.push(block)
-    else sections.push('_Screenshot omitted — too large to attach._')
-  }
-
-  let out = sections.join('\n\n') + footer
-  // Absolute backstop: never hand gh a body it will reject.
-  if (out.length > BODY_LIMIT) out = out.slice(0, BODY_LIMIT - 1)
-  return out
+/** No answer at all (offline, DNS, TLS, timeout): the Retry sheet. */
+export const NETWORK_ERROR: FeedbackFailure = {
+  error: 'Trezi could not reach the feedback service. Check your internet connection, then retry.',
+  retry: true
 }

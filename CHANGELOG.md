@@ -33,6 +33,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Settings → Browser Checks shows that built-in WebKit previews always work, and whether the optional agent-browser CLI and Chromium headless shell for cross-browser checks are installed, partly installed, ready or unsupported, with versions, paths, copyable commands, official links, Install buttons with progress and Cancel, and Check Again. Nothing installs unless you press Install, and Ready only follows a check that launched a fresh headless browser. The managed browser launcher now ships inside Trezi.app (LOCAL-WEBKIT-4).
 
 ### Changed
+- Send Feedback now goes privately to the Trezi developer instead of opening a public GitHub issue. The first time, it asks for the invite code from your Trezi beta invite (kept encrypted with your Keychain; change or remove it in Settings → General), shows who you are sending as, attaches the real screenshot, and confirms with the report's reference. Errors show the feedback service's message, a rate limit says when to try again, and a lost connection keeps Retry (LKM-336).
 - The chat composer's + menu now offers only Attach Files…; Show Layers stays on the toolbar's Layers button (LKM-337).
 
 ### Fixed

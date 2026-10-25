@@ -4,7 +4,7 @@
 // network, no GitHub, no real user repository.
 // - scenarios: publish (merge, PR only, reuse, conflict, nothing), handoff, a saved
 //   run's PR, Connect, remote status/pull/switch, instrumentation helpers, a new project,
-//   the Trezi update, the diagnosis memory, skill packs and feedback, with the Git and
+//   the Trezi update, the diagnosis memory and skill packs, with the Git and
 //   GitHub state each leaves (the TS twin these once matched was removed in LKM-111);
 // - durability (run by test/workflow-durability.mjs): a reply lost after a remote
 //   effect, a crash after the PR, the merge, the repository or the pull, GitHub failing
@@ -1048,21 +1048,6 @@ try {
     assert.equal(skills.failed.ok, false)
     assert.match(skills.refused.message, /not in the curated skill-pack allowlist/)
     assert.equal(skills.calls.length, 2)
-
-    const feedback = await owned('feedback', async (owner, w) => {
-      const title = 'Sidebar focus'
-      const body = 'Steps to reproduce…'
-      const result = await owner.feedback(w.local, title, body)
-      const issue = w.gh().issues[0]
-      return {
-        result,
-        issue: issue ? { title: issue.title, body: issue.body } : null,
-        create: w.gh().counts?.issueCreate
-      }
-    })
-    assert.equal(feedback.result.ok, true)
-    assert.deepEqual(feedback.issue, { title: 'Sidebar focus', body: 'Steps to reproduce…' })
-    assert.equal(feedback.create, 1)
     console.log('WORKFLOW OWNER OK — scenarios (durability: test/workflow-durability.mjs)')
   } else {
     // ───────────── durability (Swift owner) ─────────────

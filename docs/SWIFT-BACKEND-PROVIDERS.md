@@ -211,6 +211,7 @@ Bun ↔ service: private pipe, S01 frames, no revision, empty scope:
 | `snapshot` / `status` (read) | `{}` | `{sessions}` / `{recovered, violations}` |
 | `seatTokenSave` / `seatTokenStatus` (read) | `{provider: "claude", token}` (empty removes) / `{}` | `{hasToken}` / `{claude: {hasToken}}` |
 | `diagnose` (read) | `{provider, root}` | `{report}` (`ProviderLoginReport`, never containing the token) |
+| `feedbackCodeSave` / `feedbackCodeStatus` (read) / `feedbackCode` (read) | `{code}` (empty removes) / `{}` / `{}` | `{hasCode}` / `{hasCode}` / `{code}` (the plaintext, only for Bun's feedback request; LKM-336) |
 
 For helper sessions the service pushes
 `{"event":"service-event","service":"provider","kind":"event"|"record"|"tool"|"exit","session",…}`.

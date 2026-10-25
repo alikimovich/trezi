@@ -409,6 +409,7 @@ const TEMP_WALKERS = [
   'browser-tools-install',
   'syntax-bundle',
   'product-log',
+  'feedback-endpoint',
   'legacy-names-migrate',
   'annotation-store',
   'native-build-cache',

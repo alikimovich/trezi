@@ -1,6 +1,5 @@
 import type {
   Diagnosis,
-  FeedbackResult,
   GithubConnectOptions,
   GithubConnectResult,
   GitRemoteAction,
@@ -20,7 +19,8 @@ import type { InstallInput, InstallResult } from './skills-install'
  * - remote Git actions: Connect to GitHub, fetch, pull, switch to a remote branch;
  * - project setup: the `.trezi/` instrumentation helpers, their removal, new projects;
  * - Trezi's own update (pull, install, build) and the diagnosis memory;
- * - the in-app feedback issue (`gh issue create`) and curated skill-pack installs.
+ * - curated skill-pack installs and CI reruns. (In-app feedback left in LKM-336: it goes
+ *   privately to the Trezi feedback endpoint, `feedback-endpoint.ts`.)
  * A reply lost after a remote effect, a crash or a retry therefore never repeats a PR,
  * a merge or an update: the owner answers from its receipt, or reconciles an uncertain
  * step from what GitHub and Git hold. Bun keeps the helpers that only propose bounded
@@ -79,7 +79,6 @@ export type WorkflowKind =
   | 'uninstall'
   | 'createProject'
   | 'update'
-  | 'feedback'
   | 'skills'
   | 'ciRerun'
 
@@ -123,8 +122,6 @@ export interface WorkflowOwner {
   updateCheck(root: string): Promise<UpdateStatus>
   /** Trezi's own update: pull (fast-forward), install, build. Restart stays the caller's. */
   update(root: string, progress?: (text: string) => void): Promise<{ ok: boolean; error?: string }>
-  /** Files the in-app feedback issue on Trezi's own repository (`root` is its checkout). */
-  feedback(root: string, title: string, body: string): Promise<FeedbackResult>
   ciRerun(root: string, commit: string): Promise<{ ok: boolean; rerun?: boolean; error?: string }>
   /** Installs a curated skill pack (`npx skills add`); never throws for an install failure. */
   installSkills(input: InstallInput): Promise<InstallResult>
