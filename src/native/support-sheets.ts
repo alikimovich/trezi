@@ -1,29 +1,88 @@
-import type { Diagnosis, FeedbackInput, FeedbackResult } from '../shared/api'
+import type {
+  Diagnosis,
+  FeedbackAccount,
+  FeedbackInput,
+  FeedbackResult,
+  FeedbackScreenshot
+} from '../shared/api'
 import type { NativeSheetController } from './sheets-runtime'
 /** What the diagnostics consent covers (gathered by src/main/feedback-diagnostics.ts). */
 export const DIAGNOSTICS_CONSENT =
   'The last 30 minutes of Trezi’s logs (Help → Show Logs in Finder), the system log from the last hour, this chat’s landing state, the git status of its worktree, and a 3-second sample of the app if it is busy. Secrets are removed and your home folder is shortened to ~.'
+/** LKM-336: where feedback goes, said on the sheet. */
+export const FEEDBACK_PRIVACY =
+  'Your feedback goes privately to the Trezi developer. It is not posted on a public page.'
+export const INVITE_PROMPT = 'Enter the invite code from your Trezi beta invite.'
+type Failure = Extract<FeedbackResult, { ok: false }>
 export class NativeSupportSheets {
   constructor(
     readonly sheets: NativeSheetController,
-    readonly capture: () => Promise<string | null>,
-    readonly openExternal: (url: string) => Promise<unknown>
+    readonly capture: () => Promise<FeedbackScreenshot | null>
   ) {}
   async feedback() {
     const generation = this.sheets.generation
+    // Captured before any sheet is up, so the screenshot shows the window as the user saw it.
+    const [screenshot, account] = await Promise.all([
+      this.capture().catch(() => null),
+      this.sheets
+        .invoke('feedback:account')
+        .catch((): FeedbackAccount => ({ hasCode: false })) as Promise<FeedbackAccount>
+    ])
+    if (generation !== this.sheets.generation) return
+    const valid = account.hasCode && !account.invalid
+    if (!valid)
+      return this.inviteCode(account.hasCode ? account.error : undefined, (name) =>
+        this.compose(screenshot, name)
+      )
+    this.compose(screenshot, account.name)
+  }
+  /** Asks for the invite code once; the code is checked and saved before `then` runs. */
+  private inviteCode(
+    message: string | undefined,
+    then: (name: string | null, sheet: string) => void | Promise<void>
+  ) {
+    this.sheets.present(
+      {
+        title: 'Enter your invite code',
+        detail: `${INVITE_PROMPT} Trezi keeps it encrypted with your Keychain and sends it only to the Trezi feedback service. You can change or remove it in Settings → General.`,
+        fields: [
+          {
+            id: 'code',
+            label: 'Invite code',
+            kind: 'secure',
+            value: '',
+            placeholder: 'Paste invite code'
+          }
+        ],
+        message,
+        actions: [
+          { id: 'cancel', label: 'Cancel' },
+          { id: 'continue', label: 'Continue', primary: true }
+        ]
+      },
+      async (action) => {
+        const code = action.values.code?.trim() ?? ''
+        if (!code) throw new Error(INVITE_PROMPT)
+        const result = await this.sheets.invoke('feedback:code', code)
+        if (!result?.ok) throw new Error(result?.error ?? 'Could not save the invite code.')
+        if (this.sheets.current?.state.id !== action.id) return
+        await then(result.name ?? null, action.id)
+      }
+    )
+  }
+  private compose(screenshot: FeedbackScreenshot | null, name: string | null) {
     const chat = this.sheets.chat.chats.get(this.sheets.chat.active)
     const conversation =
       chat?.messages
         .filter((m) => m.text.trim())
         .map((m) => `${m.role === 'user' ? 'You' : 'Trezi'}: ${m.text.trim()}`)
         .join('\n\n') ?? ''
-    const screenshot = await this.capture().catch(() => null)
-    if (generation !== this.sheets.generation) return
     this.sheets.present(
       {
         title: 'Send feedback',
         detail:
-          'Post feedback as an issue on the Trezi GitHub repository.' +
+          (name ? `Sending as ${name}. ` : '') +
+          FEEDBACK_PRIVACY +
           (screenshot || conversation
             ? ' Review the attachments below before including them.'
             : ''),
@@ -40,7 +99,7 @@ export class NativeSupportSheets {
                   id: 'preview',
                   label: 'Screenshot preview',
                   kind: 'image' as const,
-                  value: screenshot
+                  value: screenshot.preview
                 },
                 {
                   id: 'screenshot',
@@ -94,14 +153,17 @@ export class NativeSupportSheets {
         ],
         actions: [
           { id: 'cancel', label: 'Cancel' },
-          { id: 'send', label: 'Post feedback', primary: true }
+          { id: 'send', label: 'Send feedback', primary: true }
         ]
       },
       async (action) => {
-        if (!action.values.body?.trim()) throw new Error('Write your feedback before posting.')
-        const input = {
+        if (!action.values.body?.trim()) throw new Error('Write your feedback before sending.')
+        const input: FeedbackInput = {
           body: action.values.body,
-          screenshot: action.values.screenshot === 'yes' ? screenshot : null,
+          screenshot:
+            action.values.screenshot === 'yes' && screenshot
+              ? { contentType: screenshot.contentType, data: screenshot.data }
+              : null,
           conversation: action.values.conversation === 'yes' ? conversation : null,
           diagnostics: action.values.diagnostics === 'yes',
           chat:
@@ -109,42 +171,49 @@ export class NativeSupportSheets {
               ? { key: this.sheets.chat.active, root: chat.root }
               : null
         }
-        const error = await this.submit(input, action.id)
+        const failure = await this.submit(input, action.id)
         if (this.sheets.current?.state.id !== action.id) return
-        if (error) this.failed(input, error)
+        if (failure) this.failed(input, failure)
       }
     )
   }
-  /** Posts the issue; on success closes the sheet and shows the toast, else returns the error. */
-  private async submit(input: FeedbackInput, sheet: string): Promise<string | null> {
+  /** Sends the report; on success closes the sheet and shows the toast, else returns the failure. */
+  private async submit(input: FeedbackInput, sheet: string): Promise<Failure | null> {
     const result: FeedbackResult = await this.sheets
       .invoke('feedback:submit', input)
       .catch((error: unknown) => ({
         ok: false,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        retry: true
       }))
-    if (!result.ok) return result.error || 'Could not send feedback.'
+    if (!result.ok) return { ...result, error: result.error || 'Could not send feedback.' }
     if (this.sheets.current?.state.id === sheet) this.sheets.close()
-    const url = result.url
     this.sheets.toast(
-      'Feedback sent',
-      url ? { label: 'View on GitHub', run: () => this.openExternal(url) } : undefined
+      `Feedback sent (${result.issue}).${result.warning ? ` ${result.warning}` : ''}`
     )
     return null
   }
-  /** The standard error sheet: Retry posts the same feedback again, Esc cancels. */
-  private failed(input: FeedbackInput, error: string) {
+  /**
+   * The standard error sheet. Retry sends the same report again when that can help (no
+   * network, a server error, a rate limit); a refused invite code offers a new one.
+   */
+  private failed(input: FeedbackInput, failure: Failure) {
     const details = (message: string) =>
-      `Trezi could not post this feedback to GitHub.\nError: ${message}\n\nFeedback:\n${input.body.trim()}`
+      `Trezi could not send this feedback.\nError: ${message}\n\nFeedback:\n${input.body.trim()}`
+    const primary = failure.code
+      ? [{ id: 'code', label: 'Enter invite code…', primary: true }]
+      : failure.retry
+        ? [{ id: 'retry', label: 'Retry', primary: true }]
+        : []
     this.sheets.present(
       {
         title: 'Couldn’t send feedback',
-        detail: error,
+        detail: failure.error,
         fields: [],
         actions: [
-          { id: 'copy', label: 'Copy details', copy: details(error) },
-          { id: 'cancel', label: 'Cancel' },
-          { id: 'retry', label: 'Retry', primary: true }
+          { id: 'copy', label: 'Copy details', copy: details(failure.error) },
+          { id: 'cancel', label: primary.length ? 'Cancel' : 'Close' },
+          ...primary
         ]
       },
       async (action) => {
@@ -154,11 +223,18 @@ export class NativeSupportSheets {
             sheet.state.message = 'Details copied to the clipboard.'
           return
         }
+        // The new code's sheet stays busy while the same report is sent again.
+        if (action.action === 'code')
+          return this.inviteCode(undefined, async (_name, id) => {
+            const again = await this.submit(input, id)
+            if (again && this.sheets.current?.state.id === id) this.failed(input, again)
+          })
         const next = await this.submit(input, action.id)
         if (!next || !sheet || sheet !== this.sheets.current) return
-        sheet.state.detail = next
+        if (next.code || !next.retry) return this.failed(input, next)
+        sheet.state.detail = next.error
         const copy = sheet.state.actions.find((a) => a.id === 'copy')
-        if (copy) copy.copy = details(next)
+        if (copy) copy.copy = details(next.error)
       }
     )
   }

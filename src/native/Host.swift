@@ -356,7 +356,10 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             let size = NSSize(width: 900, height: 900 * content.bounds.height / max(1, content.bounds.width))
             let scaled = NSImage(size: size)
             scaled.lockFocus(); image.draw(in: NSRect(origin: .zero, size: size)); scaled.unlockFocus()
-            if let tiff = scaled.tiffRepresentation, let result = NSBitmapImageRep(data: tiff)?.representation(using: .jpeg, properties: [.compressionFactor:0.6]) { reply(id, "data:image/jpeg;base64," + result.base64EncodedString()) }
+            // LKM-336: the full-size PNG goes to the feedback endpoint (a JPEG over its 10 MB); the small JPEG is the sheet's preview.
+            var full = bitmap.representation(using: .png, properties: [:]), type = "image/png"
+            if (full?.count ?? 0) > 10 << 20 { full = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.8]); type = "image/jpeg" }
+            if let full, let tiff = scaled.tiffRepresentation, let preview = NSBitmapImageRep(data: tiff)?.representation(using: .jpeg, properties: [.compressionFactor:0.6]) { reply(id, ["preview": "data:image/jpeg;base64," + preview.base64EncodedString(), "data": full.base64EncodedString(), "contentType": type]) }
             else { reply(id, NSNull()) }
         case "recents": updateRecents(c["recents"] as? [[String: String]] ?? [])
         case "load":

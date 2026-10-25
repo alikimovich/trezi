@@ -266,6 +266,17 @@ extension ProviderOwner {
             return nil
         case "seatTokenStatus":
             return Self.object(ProviderData.seatProviders.sorted().map { ($0, Self.object([("hasToken", .bool(data.hasSeatToken($0)))])) })
+        // LKM-336: the Send Feedback invite code; only `feedbackCode` answers it, and only to Bun.
+        case "feedbackCodeSave":
+            let code = try body.string("code", max: 8192, empty: true)
+            dataWrites.async { self.settle(frame) { Self.object([("hasCode", .bool(try self.data.saveFeedbackCode(code)))]) } }
+            return nil
+        case "feedbackCodeStatus":
+            return Self.object([("hasCode", .bool(data.hasFeedbackCode()))])
+        case "feedbackCode":
+            // Decrypting can wait on a Keychain prompt: off the owner queue.
+            work.async { self.settle(frame) { Self.object([("code", self.data.feedbackCode().map { .string(JSText($0)) } ?? .null)]) } }
+            return nil
         default:
             let provider = try body.string("provider", max: 32), root = try body.path("root")
             guard let command = options.helper else { throw ProviderRefusal(.unavailable, "Provider helpers are not available in this service.") }

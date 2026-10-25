@@ -33,6 +33,7 @@ import { registerDiagnoseIpc } from '../main/diagnose'
 import { registerDreamerIpc } from '../main/dreamer'
 import { setEditingOwner } from '../main/editing-owner'
 import { registerFeedbackIpc } from '../main/feedback'
+import { setFeedbackCodeOwner } from '../main/feedback-code'
 import { createProjectFile, deleteProjectFile, renameProjectFile } from '../main/file-ops'
 import { listProjectFiles } from '../main/file-tree'
 import { GEMINI_ENABLED_KEY, setGeminiEnabledSource } from '../main/gemini-setting'
@@ -113,6 +114,7 @@ import { withBuildCheckSetting } from './settings-build-check'
 import { withClaudePane } from './settings-claude'
 import { NativeSettingsController } from './settings-controller'
 import { withDreamerPane } from './settings-dreamer'
+import { withFeedbackCodeSetting } from './settings-feedback'
 import { withGeminiPane } from './settings-gemini'
 import { withProviderFallbackSetting } from './settings-provider-fallback'
 import { nativeSkills, withSkillsPane } from './settings-skills'
@@ -248,6 +250,8 @@ async function main() {
   const provider = serviceProvider(host)
   setProviderOwner(provider)
   setProviderDataOwner(provider.data)
+  // LKM-336: the Send Feedback invite code lives with the provider owner's credentials.
+  setFeedbackCodeOwner(provider.data)
   // Editing workflows (S12): island history and activation, the controls sidecars
   // (hash-bound, in the repository lane) and deferred navigation.
   setEditingOwner(serviceEditing(host, leases))
@@ -326,9 +330,8 @@ async function main() {
   registerSetupIpc()
   registerDiagnoseIpc()
   registerSimulatorIpc(() => window)
-  registerFeedbackIpc(
-    () => window,
-    () => (host ? { pid: hostPid, ping: () => host!.request('webViews', {}, 2000) } : null)
+  registerFeedbackIpc(() =>
+    host ? { pid: hostPid, ping: () => host!.request('webViews', {}, 2000) } : null
   )
   registerDreamerIpc({ sessions: dreamerSessions, completion: dreamerCompletion })
   registerGitRemoteIpc(ipcMain, projectHasRunningAgents)
@@ -908,10 +911,8 @@ async function main() {
     activityController.append(`Download failed: ${message}`, 'error')
   )
   host.on('download-finished', () => activityController.append('Download finished.', 'success'))
-  const supportSheets = new NativeSupportSheets(
-    sheetController,
-    () => host!.request('captureFeedback'),
-    (url) => shell.openExternal(url)
+  const supportSheets = new NativeSupportSheets(sheetController, () =>
+    host!.request('captureFeedback')
   )
   const previewRecovery = new NativePreviewRecovery(
     sheetController,
@@ -931,31 +932,34 @@ async function main() {
   nativeSkills.current = serviceSkills(host)
   // LKM-287: every chat session pins and projects the library through the same owner.
   setSessionSkillsSource(() => nativeSkills.current)
-  const settingsController = withBrowserPane(
-    withProviderFallbackSetting(
-      withBuildCheckSetting(
-        withDreamerPane(
-          withSkillsPane(
-            withGeminiPane(
-              withClaudePane(
-                new NativeSettingsController(sheetController, preferences, refreshPreferences)
+  // LKM-336: Settings → General → Feedback invite code, outermost so it runs last.
+  const settingsController = withFeedbackCodeSetting(
+    withBrowserPane(
+      withProviderFallbackSetting(
+        withBuildCheckSetting(
+          withDreamerPane(
+            withSkillsPane(
+              withGeminiPane(
+                withClaudePane(
+                  new NativeSettingsController(sheetController, preferences, refreshPreferences)
+                ),
+                preferences,
+                () => void chatController.refreshChoices()
               ),
-              preferences,
-              () => void chatController.refreshChoices()
+              nativeSkills.current,
+              () => host!.request('pick', {}, 0x7fffffff)
             ),
-            nativeSkills.current,
-            () => host!.request('pick', {}, 0x7fffffff)
+            preferences
           ),
-          preferences
+          preferences,
+          () => void buildStatus.check()
         ),
-        preferences,
-        () => void buildStatus.check()
+        preferences
       ),
-      preferences
-    ),
-    // LOCAL-WEBKIT-4: Settings → Browser Checks; installs and checks only on a press there.
-    browserSetup,
-    (url) => platform.openLink(url)
+      // LOCAL-WEBKIT-4: Settings → Browser Checks; installs and checks only on a press there.
+      browserSetup,
+      (url) => platform.openLink(url)
+    )
   )
   const dreamerController = new NativeDreamerController(sheetController, preferences, {
     pickExport: async (name) => {

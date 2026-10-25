@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Send Feedback posts privately to the Trezi feedback endpoint (LKM-336)
+
+- [x] `feedback:submit` posts to `https://trezi.design/api/feedback` with the invite code as Bearer, then uploads and attaches the real screenshot (PNG; JPEG over 10 MB); no `gh issue create` (the `feedback` workflow is gone from `WorkflowTools.swift`).
+- [x] Invite code asked once, checked with `/api/feedback/me`, kept encrypted by the provider owner (`<profile>/trezi/feedback-code.json`); Settings → General changes or removes it; the form says "Sending as <name>" and that feedback goes privately to the developer.
+- [x] Endpoint errors (401 asks for a new code, 413/400 no Retry, 429 says when, network/5xx keep Retry); unit `feedback-body`, `feedback-endpoint`, `provider-feedback-code`, `native-support-sheets`.
+- [ ] Native `settings` group (`smoke-alerts.ts` against the loopback mock, `smoke-sheets.ts`, the host's `captureFeedback`) not yet run.
+- [ ] Operator: send one report from a real build against trezi.design with a real invite code (real Keychain).
 ## Composer sending state after 1.5 s (LKM-338)
 
 - [x] The chat controller holds a Send whose draft has not left (chat being prepared, home project opening) and reports it as `composer.sending` with the composer's attempt; `cancel-send` ends it with the draft untouched (`test/composer-sending.mjs`).
@@ -1321,7 +1328,7 @@ Root cause of the reported "not logged in" is open (Keychain/service context, se
 - [x] Connect (repository creation adopted only when this run asked for it), remote status/pull/switch in the repository lane.
 - [x] Setup helpers (create-only, plain `.trezi`), removal (fixed list, no linked folders), new projects (install resumed), Trezi update (retry never pulls twice), diagnoses (same file; damaged file kept).
 - [x] `test/workflow-owner.mjs` (unit tier): 12 parity scenarios, lost replies, crashes after PR/merge/repository/pull, GitHub failing after acting, install/build failures, cancellation, busy, restart, rollback both ways, redaction, drain, schema. Scripted `gh`/package manager only.
-- [ ] S13 sub-boundary: feedback issues (`feedback:submit`, a remote creation in Trezi's own repository) stay in Bun without a receipt; move with S15 or give them a journal entry.
+- [x] S13 sub-boundary: feedback issues (`feedback:submit`, a remote creation in Trezi's own repository) stay in Bun without a receipt; move with S15 or give them a journal entry. Obsolete since LKM-336: feedback no longer creates a GitHub issue.
 - [ ] S13 sub-boundary: shared sheet routing and autosave, and the read-only probes (`github:status`, `setup:detect`, update check) stay in Bun.
 - [ ] Follow-up: surface interrupted workflows (`workflows()`) in the UI with Resume/Dismiss; today the next explicit request resumes them.
 - [x] Worker native verification (staged, full): 138 unit checks, typechecks, native smoke 20/20, chat acceptance and chat scroll pass (read from the run log; the tool call timed out client-side).

@@ -22,6 +22,60 @@ Newest first. Append a dated entry when you finish a chunk of work.
   line. A full native run of that earlier fix passed `composer-send` (65 of 66; the other failure,
   `editor-freshness`, was a page-load timeout in an earlier check); the manager's run confirms the merge.
 
+## 2026-10-24 — LKM-336: Send Feedback posts privately to the Trezi feedback endpoint
+
+- **Origin (recorded decision, latest).** The endpoint is `https://trezi.design`: LKM-335
+  (trezi-website, 98da9f4) serves `/api/feedback` on that Vercel project, whose only domain is
+  trezi.design; trezi.app is not in the user's Vercel account and its DNS points to a parking
+  host, so the `trezi.app` named in the entry below was wrong. `FEEDBACK_ORIGIN`
+  (`src/main/feedback-endpoint.ts`), the contract comment in `src/shared/feedback-body.ts`, the
+  origin assertions in `test/feedback-endpoint.mjs`, `docs/PROVIDERS.md` and TASKS now say
+  trezi.design. Nothing else changed: the loopback-only `TREZI_FEEDBACK_URL` override still
+  ignores every other host.
+
+- **Why.** In-app feedback filed a public GitHub issue through `gh issue create` in Trezi's
+  checkout: testers needed `gh` logged in, and reports (screens, conversation, diagnostics)
+  were public. It now goes to `POST https://trezi.app/api/feedback`, which files a private
+  Linear issue and answers its key.
+- **Endpoint client.** `src/main/feedback-endpoint.ts`: Bearer invite code, `redirect: 'error'`,
+  timeouts; the screenshot is PUT to the returned upload URL (https, or the same loopback
+  origin) without the Bearer, then attached. Once the issue exists, a failed upload or attach is
+  a warning on the toast, never a resend (no duplicate reports). `TREZI_FEEDBACK_URL` is honored
+  only for loopback, so a stray variable cannot send the code elsewhere. The pure request builder
+  and error mapping are in `src/shared/feedback-body.ts` (limits 20,000 / 60,000 / 60,000
+  characters and 10 MB; 401 asks for a new code, 413/400 Close only, 429 names the Retry-After,
+  network and 5xx keep Retry; the endpoint's message is shown, stripped of control characters).
+- **Invite code.** Kept by the provider owner like a seat token: encrypted with the Keychain
+  helper into `<profile>/trezi/feedback-code.json` (0600, ciphertext only), so no new Keychain
+  item or approval prompt. Bun reads the plaintext only for the Bearer. It is asked for the first
+  time (checked with `/api/feedback/me` before saving), and Settings → General changes or removes
+  it (`src/native/settings-feedback.ts`, a status read with no network).
+- **Sheet.** "Sending as <name>" and "goes privately to the Trezi developer"; the opt-ins are
+  unchanged; the host now captures the full-size PNG (JPEG when over 10 MB) next to the small
+  preview. Success is a toast with the Linear key (no page to open).
+- **Removed.** The `feedback` workflow (`WorkflowTools.swift`, `WorkflowOwner.swift`,
+  `workflow-owner.ts`, `workflow-service.ts`), `feedback:capture` and the GitHub body limits;
+  `test/workflow-owner.mjs` now checks that the owner refuses a `feedback` request.
+- **Checks.** Unit: `feedback-body`, `feedback-endpoint` (injected fetch: the sandbox cannot
+  bind ports), `feedback-diagnostics`, `provider-feedback-code` (the real Swift owner with the
+  fake Keychain helper), `native-support-sheets`, `workflow-owner`. The `settings` native
+  smoke (`smoke-alerts.ts` against a loopback mock endpoint, `smoke-sheets.ts`) was written
+  but not run by the worker (no native run allowed), nor was a real send to trezi.app.
+- **Review repair.** Opening Send Feedback waits for the "Sending as <name>" lookup, which
+  inherited the endpoint's 30 s timeout: a hanging network left the command doing nothing
+  visible. `account()` (`src/main/feedback.ts`) now caps that lookup at 5 s; a timeout is a
+  network failure, so the form opens without a name and the saved code is kept. Unit case in
+  `test/feedback-endpoint.mjs` (a fetch that never resolves). The `settings` native smoke is
+  still the manager's to run; this repair did not touch any native source.
+- **Review repair 2 (native evidence).** The smoke replaced the host capture with a 1×1 PNG, so
+  nothing ran the changed `captureFeedback` in Host.swift. `checkNativeAlerts`
+  (`src/native/smoke-alerts.ts`) now calls the real `captureFeedback` first and asserts: the
+  type is `image/png` or `image/jpeg` with the matching signature (89 50 4E 47 / FF D8), the raw
+  base64 (not a data URI) decodes to 1 byte–10 MB, and `preview` starts with
+  `data:image/jpeg;base64,`. The image is written to `feedback-capture.png` (or `.jpg`) next to
+  `feedback-form.png`, `alert-feedback-error.png` and `feedback-toast.png` in the `settings`
+  group's artifacts. The send flow itself keeps the stub so the mock's byte counts stay exact.
+  Not run by the worker (0 native calls); the manager's `settings` run produces the evidence.
 ## 2026-10-24 — LKM-340: Code availability and Send-path payloads
 
 - Code is enabled whenever an active project exists, independent of preview readiness. The

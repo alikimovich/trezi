@@ -151,8 +151,10 @@ src/main/
                   turn detector) behind "already running is never a dead end" (LKM-165)
   backends/claude-resume.ts  canonical cwd, resume-failure detection and the chat summary that
                   seeds a recovered Claude session (LKM-165)
-  feedback.ts, feedback-diagnostics.ts
-                  in-app feedback issue; the opt-in, redacted diagnostics bundle (LKM-165)
+  feedback.ts, feedback-endpoint.ts, feedback-code.ts, feedback-diagnostics.ts
+                  Send Feedback, posted privately to the Trezi feedback endpoint with the
+                  tester's invite code (LKM-336; the service keeps the code encrypted); the
+                  opt-in, redacted diagnostics bundle (LKM-165)
                   Their mutating functions dispatch to the Swift repository owner
                   (repository-owner.ts; without the service they throw);
                   repo-write-queue.ts likewise

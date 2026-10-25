@@ -5,6 +5,7 @@ import type {
   ProviderConnectionInput,
   ProviderLoginReport
 } from '../shared/api'
+import type { FeedbackCodeOwner } from './feedback-code'
 import {
   type CatalogBackend,
   type CatalogModel,
@@ -25,7 +26,7 @@ import { createProviderStore, type ProviderStore } from './providers-store'
  * KEY DISCIPLINE is unchanged: a plaintext key only ever comes back from `secretFor`,
  * in main, for a catalog probe, a chat turn or Jev.
  */
-export interface ProviderDataOwner {
+export interface ProviderDataOwner extends FeedbackCodeOwner {
   readonly kind: 'swift'
   /** Throws a user-readable message for a bad draft or an un-storable key. */
   save(input: ProviderConnectionInput): Promise<ProviderConnection>

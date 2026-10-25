@@ -6,6 +6,11 @@ Task IDs and future-owner meanings are defined in the [15-step roadmap](SWIFT-BA
 
 **LKM-101 reconciliation (2026-09-29):** `simulator:*` and `attachments:save` keep their Bun registrations but, under the Swift launch, are answered by the Swift platform owner (`platform` pipe service); the legacy handlers remain the rollback owner. See [platform](SWIFT-BACKEND-PLATFORM.md).
 
+**LKM-336 reconciliation (2026-10-24):** `feedback:capture` is gone (the host captures the
+screenshot itself); `feedback:submit` posts to the private Trezi feedback endpoint, and
+`feedback:account`, `feedback:code-status` and `feedback:code` were added, all in
+`src/main/feedback.ts`.
+
 | Route/event | Kind; proposed domain | Registration / handler | Input → output handler signature | External literal references | Migration task | Future owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | project:pick | handle; Projects | [src/native/index.ts:171](../src/native/index.ts#L171) | (): string &#124; Promise<any> | [src/native/workspace-controller.ts:77](../src/native/workspace-controller.ts#L77) | S04 | Swift workspace coordinator |

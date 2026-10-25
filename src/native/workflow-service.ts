@@ -244,9 +244,6 @@ export function serviceWorkflows(
         await watcher
       }
     },
-    async feedback(root, title, body) {
-      return (await call('feedback', { root, title, body, intent: 'feedback', ...leases() })).result
-    },
     async installSkills(input) {
       const pack = findPack(input.packId)
       const targetDir =

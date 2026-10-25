@@ -47,8 +47,8 @@ and serializes every Trezi Git effect in user repositories, commits every Trezi 
 edit, Undo and file-tree operation from hash-bound parser proposals, owns chat records,
 live-chat checkpoints and turn transitions, holds every provider session's grant,
 permission answers, tool authorization, Stop's deadline and resume ids, owns chat island
-histories and activation, the project sidecars and deferred preview navigation, runs publication, remote Git actions, setup, new projects, Trezi's update, the
-feedback issue, skill-pack installs and the diagnosis memory as journaled workflows, and
+histories and activation, the project sidecars and deferred preview navigation, runs publication, remote Git actions, setup, new projects, Trezi's update,
+skill-pack installs and the diagnosis memory as journaled workflows, and
 runs the iOS Simulator preview, issues the source editor's media grants, writes pasted
 attachments and performs the running-servers recovery. Since LKM-102 it also writes the
 provider data (connections, model catalog), opens links, files and the editor, makes the
@@ -194,7 +194,7 @@ src/service/      separate Swift XPC service (S02 of docs/SWIFT-BACKEND-PLAN.md)
                   the workflow owner (LKM-100): Publish
                   (merge / PR only), handoff and saved-run PRs, Connect to GitHub, remote
                   fetch/pull/switch, `.trezi/` setup helpers, new projects, Trezi's own
-                  update, the in-app feedback issue, curated skill-pack installs (LKM-102)
+                  update, curated skill-pack installs (LKM-102; the feedback issue went in LKM-336)
                   and the diagnosis memory, each a durable record (intent before
                   the effect, receipt after, operation-ID dedupe) reconciled from GitHub
                   and Git instead of repeated. Bun's helpers only propose (PR

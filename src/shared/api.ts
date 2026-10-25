@@ -1346,17 +1346,28 @@ export interface PublishResult {
   cancelled?: boolean
 }
 
+/** The app window for feedback (LKM-336): the image the endpoint gets, and a small preview. */
+export interface FeedbackScreenshot {
+  /** PNG, or JPEG when the PNG is over the endpoint's 10 MB. */
+  contentType: 'image/png' | 'image/jpeg'
+  /** The image bytes, base64. */
+  data: string
+  /** A small `data:image/jpeg;base64,…` for the sheet's preview. */
+  preview: string
+}
+
 /**
- * In-app feedback (LKM-27) posted as a GitHub issue on Trezi's OWN repo (the
- * app's git checkout, `app.getAppPath()`), not the opened target project. The
- * screenshot + conversation are opt-in attachments — the renderer only sends
- * them when the corresponding toggle is on, so a bare report carries neither.
+ * In-app feedback (LKM-27), sent privately to the Trezi feedback endpoint (LKM-336,
+ * `main/feedback-endpoint.ts`) with the tester's invite code; it becomes a private issue
+ * for the Trezi developer, never a public page. The screenshot + conversation are opt-in
+ * attachments: the sheet only sends them when the corresponding choice is on, so a bare
+ * report carries neither.
  */
 export interface FeedbackInput {
   /** The user's typed feedback. */
   body: string
-  /** A `data:image/…;base64,…` app screenshot, present only when opted in. */
-  screenshot?: string | null
+  /** The app screenshot, present only when opted in. */
+  screenshot?: Pick<FeedbackScreenshot, 'contentType' | 'data'> | null
   /** The rendered chat transcript, present only when opted in. */
   conversation?: string | null
   /** Attach redacted logs, landing state and git status (LKM-165), only when opted in. */
@@ -1365,12 +1376,28 @@ export interface FeedbackInput {
   chat?: { key: string; root?: string } | null
 }
 
-export interface FeedbackResult {
-  ok: boolean
-  /** The created issue URL on success. */
-  url?: string
-  error?: string
-}
+export type FeedbackResult =
+  | {
+      ok: true
+      /** The private issue's key, e.g. `LKM-123`. */
+      issue: string
+      /** The report arrived but something optional did not (the screenshot upload). */
+      warning?: string
+    }
+  | {
+      ok: false
+      /** A plain message for the tester (the endpoint's own, when it sent one). */
+      error: string
+      /** Retrying the same report can work: a network failure, the server, a rate limit. */
+      retry: boolean
+      /** The invite code was refused (401): ask for a new one. */
+      code?: boolean
+    }
+
+/** Who the invite code belongs to (`GET /api/feedback/me`), for "Sending as <name>". */
+export type FeedbackAccount =
+  | { hasCode: false }
+  | { hasCode: true; name: string | null; error?: string; invalid?: boolean }
 
 /** Result of scaffolding source-stamping into an unprepared project. */
 export type Frontend = 'next' | 'react' | 'react-native' | 'svelte' | 'vue' | 'solid' | 'unknown'
