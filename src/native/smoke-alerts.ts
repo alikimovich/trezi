@@ -101,6 +101,29 @@ export async function checkNativeAlerts(host: NativeBridge, artifacts: string) {
   host.on('sheet-action', onSheet)
   host.on('toast-action', onToast)
   try {
+    // LKM-336: the real host capture (Host.swift `captureFeedback`) is what the form attaches in
+    // the app: a real image for the endpoint, not a data URI, plus the small JPEG preview.
+    const shot = await host.request('captureFeedback')
+    assert.ok(shot && typeof shot === 'object', 'The host captured the window')
+    const image = Buffer.from(String(shot.data), 'base64')
+    assert.ok(image.length > 0 && image.length <= 10 * 1024 * 1024, `Image size ${image.length}`)
+    if (shot.contentType === 'image/png')
+      assert.deepEqual([...image.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47], 'PNG signature')
+    else if (shot.contentType === 'image/jpeg')
+      assert.deepEqual([...image.subarray(0, 2)], [0xff, 0xd8], 'JPEG start-of-image marker')
+    else assert.fail(`Unexpected capture type ${shot.contentType}`)
+    assert.ok(!String(shot.data).startsWith('data:'), 'The image is raw base64, not a data URI')
+    assert.ok(
+      String(shot.preview).startsWith('data:image/jpeg;base64,'),
+      'The preview is a small JPEG data URI'
+    )
+    writeFileSync(
+      join(
+        artifacts,
+        shot.contentType === 'image/png' ? 'feedback-capture.png' : 'feedback-capture.jpg'
+      ),
+      image
+    )
     await support.feedback()
     const prompt = await until(
       'sheetInspect',

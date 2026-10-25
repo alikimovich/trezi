@@ -38,6 +38,15 @@ Newest first. Append a dated entry when you finish a chunk of work.
   network failure, so the form opens without a name and the saved code is kept. Unit case in
   `test/feedback-endpoint.mjs` (a fetch that never resolves). The `settings` native smoke is
   still the manager's to run; this repair did not touch any native source.
+- **Review repair 2 (native evidence).** The smoke replaced the host capture with a 1×1 PNG, so
+  nothing ran the changed `captureFeedback` in Host.swift. `checkNativeAlerts`
+  (`src/native/smoke-alerts.ts`) now calls the real `captureFeedback` first and asserts: the
+  type is `image/png` or `image/jpeg` with the matching signature (89 50 4E 47 / FF D8), the raw
+  base64 (not a data URI) decodes to 1 byte–10 MB, and `preview` starts with
+  `data:image/jpeg;base64,`. The image is written to `feedback-capture.png` (or `.jpg`) next to
+  `feedback-form.png`, `alert-feedback-error.png` and `feedback-toast.png` in the `settings`
+  group's artifacts. The send flow itself keeps the stub so the mock's byte counts stay exact.
+  Not run by the worker (0 native calls); the manager's `settings` run produces the evidence.
 ## 2026-10-24 — LKM-338: composer sending state after 1.5 s
 
 - **Where a send waits.** `submit` clears the draft synchronously once the chat is ready, so the
