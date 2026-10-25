@@ -367,7 +367,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func updateToolbar() {
         defer { for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() } }
         for (key, item) in toolbarItems {
-            item.isEnabled = key == "chat" ? true : key == "branch" ? previewState["branch"] is String : ready
+            item.isEnabled = key == "chat" ? true : key == "code" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
         chatTitle.stringValue = allRows.first(where: { $0.id == selectedID })?.title ?? "Chat"
         chatTitle.toolTip = chatTitle.stringValue

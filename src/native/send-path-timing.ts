@@ -11,7 +11,7 @@ export interface SendPathStage {
 export function sendPathStages(lines: string): SendPathStage[] {
   const stages: SendPathStage[] = []
   for (const line of lines.split('\n')) {
-    const header = /^(\S+) debug (app|service|backend) send-path (.*)$/.exec(line)
+    const header = /^(\S+) (?:info|debug) (app|service|backend) send-path (.*)$/.exec(line)
     if (!header) continue
     const [, timestamp, process, details] = header
     const action = /\baction=(send|code)\b/.exec(details)?.[1]

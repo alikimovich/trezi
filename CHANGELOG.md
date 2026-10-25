@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+- Code opens while a Send is waiting even when the project preview is starting or stopped; Send and Code keep responding as the conversation updates, including chats with image attachments (LKM-340).
+
 ## [0.3.0] - 2026-10-24
 
 ### Added
