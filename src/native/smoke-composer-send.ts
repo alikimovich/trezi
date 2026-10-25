@@ -87,7 +87,10 @@ export async function checkComposerSend(host: NativeBridge) {
     assert.ok(openedAt && openedAt - codeAt <= 500, 'Code visible within 500 ms of click')
     assert.equal(chat.isRunning, true, 'provider still pending when Code opens')
     await host.request('shellPerform', { action: 'code' })
+    await wait(async () => !(await host.request('sourceInspect')).visible, 'Code to close')
     await finish()
+    // The probe's send is not one of the sequences counted below.
+    calls.length = 0
     // Return, then AppKit's smart quote curls the sent apostrophe (the user's report).
     await host.request('composerPerform', {
       steps: [{ text: "Don't stop" }, { key: 'Enter' }, { substitute: ["'", '’'] }]

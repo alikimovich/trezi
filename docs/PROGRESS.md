@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-24 — LKM-341: composer-send counted the LKM-339 latency probe
+
+- The nightly native suite failed `composer-send` with "sent once (expected 1, actual 2)": the
+  LKM-339 latency probe sends through the same stubbed `agent:send`, so the later LKM-304 counts
+  included it. The check now waits for Code to close after the probe, finishes its turn and
+  clears the recorded calls before the counted sequences. Test-only; no CHANGELOG line.
+
 ## 2026-10-24 — LKM-339 repair: stale Send timing, suspects ruled out offline (root cause still open)
 
 - `row-rendered` is timed only when the new user row appears within 10 s of the Send that
