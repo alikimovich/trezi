@@ -6,7 +6,20 @@ let serviceMode = HostLaunch.arguments.contains("--service")
 /// Service mode: setup-time events wait for the client instead of reaching the terminal.
 var earlyServiceFrames: [Data] = []
 func emit(_ value: [String: Any]) {
+    let trace = value["event"] as? String
+    if trace == "composer-action", value["action"] as? String == "send",
+       let key = value["chat"] as? String, let host = NSApp.delegate as? Host {
+        // A Send the controller ignores adds no row: the next press replaces this, and
+        // `pendingSendWindowNs` keeps a late, unrelated row from being timed against it.
+        host.pendingSendRows[key] = (row: host.lastUserRows[key] ?? "", at: DispatchTime.now().uptimeNanoseconds)
+    }
+    if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
+        ProductLog.info("send-path", "host action=\(value["action"] as? String ?? "?") stage=pressed uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+    }
     guard let data = try? JSONSerialization.data(withJSONObject: value), let line = String(data: data, encoding: .utf8) else { return }
+    if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
+        ProductLog.info("send-path", "host action=\(value["action"] as? String ?? "?") stage=frame-written bytes=\(data.count) uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+    }
     if let serviceClient { serviceClient.send(data); return }
     if serviceMode { earlyServiceFrames.append(data); return }
     print(line); fflush(stdout)
@@ -35,6 +48,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var shell: NativeShell!
     var composer: NativeComposer!
     var chat: NativeChat!
+    /// A Send waits for a different final user-row ID; status snapshots cannot log it twice.
+    var pendingSendRows: [String: (row: String, at: UInt64)] = [:]
+    var lastUserRows: [String: String] = [:]
+    /// A user row later than this after Send belongs to a queued turn or a newer send, not to it.
+    let pendingSendWindowNs: UInt64 = 10_000_000_000
     var welcome: NativeWelcome!
     var previewStatus: NativePreviewStatus!
     var sheets: NativeSheets!
@@ -265,6 +283,17 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             let start = state["start"] as? [String: Any] ?? [:]
             shell.setPlanning(start["planning"] as? Bool == true, centered: start["centered"] as? Bool == true)
             chat.update(nativeLayout.nativeChatState(), composer: composer); nativeLayout.layout()
+            if let snapshot = chat.model.snapshot,
+               let user = snapshot.messages.last(where: { $0.role == "user" }) {
+                lastUserRows[snapshot.chat] = user.id
+                if let pending = pendingSendRows[snapshot.chat], pending.row != user.id {
+                    pendingSendRows.removeValue(forKey: snapshot.chat)
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    if now - pending.at <= pendingSendWindowNs {
+                        ProductLog.info("send-path", "host action=send stage=row-rendered uptimeNs=\(now)")
+                    }
+                }
+            }
         case "layoutSizes": nativeLayout.restoreSizes(c["sizes"] as? [String: Double] ?? [:])
         case "layoutWidth": nativeLayout.desiredWidth = CGFloat(c["width"] as? Double ?? 440); nativeLayout.layout()
         case "inspectorState": editingInspector.update(c["state"] as? [String: Any] ?? [:]); nativeLayout.layout()
@@ -278,6 +307,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             let state = c["state"] as? [String: Any] ?? [:], root = state["root"] as? String ?? ""
             let editor = sourceEditors[root] ?? NativeSourceEditor(); sourceEditors[root] = editor
             editor.update(state)
+            if state["visible"] as? Bool == true { ProductLog.info("send-path", "host action=code stage=panel-shown uptimeNs=\(DispatchTime.now().uptimeNanoseconds)") }
             if state["popped"] as? Bool == true {
                 if editor.popout == nil { let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false); panel.isReleasedWhenClosed = false; panel.delegate = editor; panel.title = "Trezi · Code"; panel.contentMinSize = NSSize(width: 760, height: 420); panel.center(); editor.popout = panel }
                 if let container = editor.popout?.contentView, editor.superview !== container {

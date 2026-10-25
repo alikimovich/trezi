@@ -13,13 +13,38 @@ export type NativeChatFrame = Omit<NativeChatSnapshot, 'messages'> &
  */
 export function chatFrames(): (state: NativeChatSnapshot) => NativeChatFrame {
   let sent: { chat: string; messages: string } | null = null
+  let imageIds = new Set<string>()
   return (state) => {
-    const messages = JSON.stringify(state.messages)
+    if (sent?.chat !== state.chat) imageIds = new Set()
+    // Image bytes are immutable for an attachment ID. Compare the transcript
+    // without repeatedly stringifying them, then send each URL once per chat.
+    const messages = JSON.stringify(state.messages, (key, value) =>
+      key === 'url' && typeof value === 'string' && value.startsWith('data:image/')
+        ? '[image data]'
+        : value
+    )
     if (sent?.chat === state.chat && sent.messages === messages) {
       const { messages: _, ...frame } = state
       return frame
     }
     sent = { chat: state.chat, messages }
-    return state
+    const priorImageIds = imageIds
+    const nextImageIds = new Set<string>()
+    const frame: NativeChatFrame = {
+      ...state,
+      messages: state.messages.map((message) => ({
+        ...message,
+        attachments: message.attachments?.map((attachment) => {
+          if (!attachment.url?.startsWith('data:image/')) return attachment
+          const known = priorImageIds.has(attachment.id)
+          nextImageIds.add(attachment.id)
+          if (!known) return attachment
+          const { url: _, ...reference } = attachment
+          return reference
+        })
+      }))
+    }
+    imageIds = nextImageIds
+    return frame
   }
 }

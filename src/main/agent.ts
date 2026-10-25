@@ -1802,6 +1802,11 @@ export function registerAgentIpc(
     ) => {
       const receivedAt = Date.now()
       const key = requestedKey ?? activeKey
+      productLog.info('send-path', 'bun action=send stage=agent-handler-start', {
+        chat: key,
+        turn: turnId,
+        uptimeNs: process.hrtime.bigint().toString()
+      })
       if (key && (pending.has(key) || firstSends.has(key))) await waitForChat(key)
       const session = key ? sessions.get(key) : null
       if (requestedKey && !session) throw new Error('This chat is closed.')
@@ -1923,6 +1928,11 @@ export function registerAgentIpc(
           ),
           images
         )
+        productLog.info('send-path', 'bun action=send stage=agent-handler-end', {
+          chat: key,
+          turn: id,
+          uptimeNs: process.hrtime.bigint().toString()
+        })
       } catch (error) {
         logTurnNotSent(key, id, error)
         runningKeys.delete(key)

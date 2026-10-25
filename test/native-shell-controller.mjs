@@ -58,6 +58,8 @@ workspace.state.loadedKey = null
 workspace.state.status = { kind: 'busy', label: 'Opening Project…' }
 shell.render()
 assert.equal(renders.at(-1).chatReady, false)
+assert.equal(renders.at(-1).previewReady, false, 'preview can be unavailable during project work')
+assert.equal(renders.at(-1).project, 'a', 'Code still has an active source project')
 workspace.state.loadedKey = 'a'
 // Later in-project navigation/reload may be busy without hiding chat.
 shell.render()

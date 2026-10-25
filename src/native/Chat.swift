@@ -164,7 +164,33 @@ final class NativeChat: NSHostingView<ChatConversation> {
         let kept = state["messages"] == nil && previous?.chat == state["chat"] as? String
         if kept, NSDictionary(dictionary: conversation).isEqual(to: lastConversation) {
             // Nothing the conversation shows changed.
-        } else if let data = try? JSONSerialization.data(withJSONObject: state), let frame = try? JSONDecoder().decode(ChatFrame.self, from: data) {
+        } else {
+            // The bridge sends image bytes only on the first transcript frame
+            // for a chat. Restore them from the preceding decoded snapshot when
+            // a changed message later carries an attachment reference.
+            var hydrated = state
+            if previous?.chat == state["chat"] as? String,
+               let old = previous,
+               var messages = state["messages"] as? [[String: Any]] {
+                var urls: [String: String] = [:]
+                for message in old.messages {
+                    for attachment in message.attachments ?? [] {
+                        if let url = attachment.url { urls[attachment.id] = url }
+                    }
+                }
+                for index in messages.indices {
+                    guard var attachments = messages[index]["attachments"] as? [[String: Any]] else { continue }
+                    for item in attachments.indices {
+                        if attachments[item]["url"] == nil,
+                           let id = attachments[item]["id"] as? String,
+                           let url = urls[id] { attachments[item]["url"] = url }
+                    }
+                    messages[index]["attachments"] = attachments
+                }
+                hydrated["messages"] = messages
+            }
+            guard let data = try? JSONSerialization.data(withJSONObject: hydrated),
+                  let frame = try? JSONDecoder().decode(ChatFrame.self, from: data) else { place(state, composer: composer); return }
             lastConversation = conversation
             let messages = frame.messages ?? (kept ? previous?.messages : nil) ?? []
             let snapshot = ChatSnapshot(ready: frame.ready, activity: frame.activity, streamingId: frame.streamingId, chat: frame.chat, messages: messages, running: frame.running, cards: frame.cards, questions: frame.questions)
@@ -339,6 +365,9 @@ struct ChatConversation: View {
         guard !settlingLatest else { return }
         settlingLatest = true
         Task { @MainActor in
+            // Composer height and viewport often change in the same Send layout
+            // pass. Let both requests land before the first scroll correction.
+            await Task.yield()
             let readingHeight = { max(1, viewportHeight - model.bottomInset) }
             var stuck = 0, unresolved = 0
             model.latestSettleAttempts = await ChatLatestSettle.follow(request: { latestGeneration }, current: { follows }, step: {
