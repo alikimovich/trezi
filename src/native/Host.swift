@@ -14,11 +14,11 @@ func emit(_ value: [String: Any]) {
         host.pendingSendRows[key] = (row: host.lastUserRows[key] ?? "", at: DispatchTime.now().uptimeNanoseconds)
     }
     if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
-        ProductLog.debug("send-path", "host action=\(value["action"] as? String ?? "?") stage=pressed uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+        ProductLog.info("send-path", "host action=\(value["action"] as? String ?? "?") stage=pressed uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
     }
     guard let data = try? JSONSerialization.data(withJSONObject: value), let line = String(data: data, encoding: .utf8) else { return }
     if trace == "composer-action" && value["action"] as? String == "send" || trace == "shell-action" && value["action"] as? String == "code" {
-        ProductLog.debug("send-path", "host action=\(value["action"] as? String ?? "?") stage=frame-written bytes=\(data.count) uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
+        ProductLog.info("send-path", "host action=\(value["action"] as? String ?? "?") stage=frame-written bytes=\(data.count) uptimeNs=\(DispatchTime.now().uptimeNanoseconds)")
     }
     if let serviceClient { serviceClient.send(data); return }
     if serviceMode { earlyServiceFrames.append(data); return }
@@ -290,7 +290,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                     pendingSendRows.removeValue(forKey: snapshot.chat)
                     let now = DispatchTime.now().uptimeNanoseconds
                     if now - pending.at <= pendingSendWindowNs {
-                        ProductLog.debug("send-path", "host action=send stage=row-rendered uptimeNs=\(now)")
+                        ProductLog.info("send-path", "host action=send stage=row-rendered uptimeNs=\(now)")
                     }
                 }
             }
@@ -307,7 +307,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             let state = c["state"] as? [String: Any] ?? [:], root = state["root"] as? String ?? ""
             let editor = sourceEditors[root] ?? NativeSourceEditor(); sourceEditors[root] = editor
             editor.update(state)
-            if state["visible"] as? Bool == true { ProductLog.debug("send-path", "host action=code stage=panel-shown uptimeNs=\(DispatchTime.now().uptimeNanoseconds)") }
+            if state["visible"] as? Bool == true { ProductLog.info("send-path", "host action=code stage=panel-shown uptimeNs=\(DispatchTime.now().uptimeNanoseconds)") }
             if state["popped"] as? Bool == true {
                 if editor.popout == nil { let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false); panel.isReleasedWhenClosed = false; panel.delegate = editor; panel.title = "Trezi · Code"; panel.contentMinSize = NSSize(width: 760, height: 420); panel.center(); editor.popout = panel }
                 if let container = editor.popout?.contentView, editor.superview !== container {

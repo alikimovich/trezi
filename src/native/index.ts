@@ -608,7 +608,7 @@ async function main() {
   })
   host.on('shell-action', (action) => {
     if (action.action !== 'code') return
-    productLog.debug('send-path', 'bun action=code stage=received', {
+    productLog.info('send-path', 'bun action=code stage=received', {
       uptimeNs: process.hrtime.bigint().toString()
     })
     const root = workspaceController.active?.root
