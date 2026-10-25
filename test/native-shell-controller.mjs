@@ -83,6 +83,20 @@ await assert.rejects(
   shell.action({ action: 'address', value: 'https://example.com/' }),
   /stay within/
 )
+let selectOffs = 0
+shell.selectOff = () => {
+  selectOffs++
+  assert.equal(shell.selecting, false, 'The selection is dropped after the mode flips off')
+  assert.notDeepEqual(calls.at(-1), ['preview:set-select-mode', false], 'before the page disarms')
+}
+await shell.action({ action: 'select-object' })
+assert.equal(shell.selecting, true)
+assert.equal(selectOffs, 0, 'Turning the select tool on keeps the selection')
+// LKM-344: turning the select tool off drops the page selection, island and chip.
+await shell.action({ action: 'select-object' })
+assert.equal(shell.selecting, false)
+assert.equal(selectOffs, 1, 'Turning the select tool off drops the selection')
+assert.deepEqual(calls.at(-1), ['preview:set-select-mode', false])
 await shell.action({ action: 'select-object' })
 assert.equal(shell.selecting, true)
 shell.location = 'http://127.0.0.1:7784/new'

@@ -265,6 +265,19 @@ export function installNativeInspector(
       reattaching = false
     }
   }
+  // LKM-344: turning the select tool off drops the page selection with its island, chip and
+  // saved element, so neither restoreSelection nor reattachSelection brings it back on a reload.
+  const selectToolOff = () => {
+    const root = workspace.active?.root
+    if (
+      !controller.element &&
+      !(root && (controller.savedElement(root) || context.projects.get(root)?.selection))
+    )
+      return
+    reattachPick = null
+    dropSelection()
+    void send('preview:clear-selected').catch(report)
+  }
   workspace.switching = () => {
     cancelMissing()
     restorePick = null
@@ -443,5 +456,5 @@ export function installNativeInspector(
       void controller.refresh().catch(report)
     }
   })
-  return { inspector: controller, navigation }
+  return { inspector: controller, navigation, selectToolOff }
 }
