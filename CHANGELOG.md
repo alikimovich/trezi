@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-10-26
+
 ### Fixed
 - After Send, the chat no longer gets stuck jumping between the top and the end of the conversation, with the scrollbar shaking, while the turn runs. When cards or questions after the reply fill the view, it stays at the end. A follow that cannot settle now stops instead of restarting itself (LKM-354).
 
