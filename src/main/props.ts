@@ -25,6 +25,7 @@ import {
 import { typescriptProps } from './props-typescript'
 import { proposeEdit } from './source-commit'
 import { contentHash, sourceOwner } from './source-owner'
+import { TEXT_EDIT_MAX, textEditTooLong } from './text-edit-check'
 
 /**
  * Hand a source-edit engine's result to the source owner (v8 F3b Undo included).
@@ -736,9 +737,20 @@ export function agentPromptFor(edit: PropEdit, root: string): string {
   return `In ${projectRelative(edit.source, root)}, set the \`${edit.name}\` prop of the selected element to ${val}.`
 }
 
+// LKM-352: the whole text, in a fence longer than any backtick run in it, so quotes
+// and backticks survive and the agent copies it exactly.
 export function textAgentPrompt(source: string, text: string, root: string): string {
-  return `In ${projectRelative(source, root)}, change only the selected element's rendered text to “${text.slice(0, 200)}”. Make the smallest source edit needed. Do not update matching copy elsewhere unless this exact element is driven by a shared value that must change.`
+  const fence = '`'.repeat(Math.max(3, ...(text.match(/`+/g) ?? []).map((run) => run.length + 1)))
+  return `In ${projectRelative(source, root)}, change only the selected element's rendered text to the text in the block below (${text.length} characters). Copy it exactly and in full: do not shorten, rephrase or re-quote it. Make the smallest source edit needed. Do not update matching copy elsewhere unless this exact element is driven by a shared value that must change.\n\n${fence}text\n${text}\n${fence}`
 }
+
+/** The agent fallback of an inline text edit; `expectText` lets the landing check it. */
+export const textAgentFallback = (source: string, text: string, root: string): PropEditResult => ({
+  applied: false,
+  needsAgent: true,
+  agentPrompt: textAgentPrompt(source, text, root),
+  expectText: text
+})
 
 /**
  * Inline text edit: rewrite a stamped element's text content in source. Only
@@ -750,9 +762,12 @@ export async function applyTextEdit(
   root: string,
   edit: { source: string; text: string }
 ): Promise<PropEditResult> {
+  const newText = edit.text.replace(/\s+/g, ' ').trim()
+  // Refused, never cut (LKM-352): `refused` keeps the caller from asking the agent.
+  if (newText.length > TEXT_EDIT_MAX)
+    return { applied: false, refused: true, error: textEditTooLong(newText.length) }
   const loc = resolveSource(root, edit.source)
   if (!loc) return { applied: false, error: 'Could not resolve the source location.' }
-  const newText = edit.text.replace(/\s+/g, ' ').trim()
   // `.svelte` → the Svelte adapter splices via svelte/compiler (agent-fallback for
   // expression/mixed content), mirroring the JSX path below.
   if (loc.file.endsWith('.svelte')) {
@@ -769,13 +784,7 @@ export async function applyTextEdit(
     }
     const next =
       loc.column != null ? await spliceHtmlText(html, loc.line, loc.column, newText) : null
-    if (next == null) {
-      return {
-        applied: false,
-        needsAgent: true,
-        agentPrompt: textAgentPrompt(edit.source, newText, root)
-      }
-    }
+    if (next == null) return textAgentFallback(edit.source, newText, root)
     return commitEdit(root, loc.file, html, next, `${edit.source}:text`)
   }
   let code: string
@@ -784,11 +793,7 @@ export async function applyTextEdit(
   } catch {
     return { applied: false, error: 'Could not read the source file.' }
   }
-  const agentFallback = (): PropEditResult => ({
-    applied: false,
-    needsAgent: true,
-    agentPrompt: textAgentPrompt(edit.source, newText, root)
-  })
+  const agentFallback = (): PropEditResult => textAgentFallback(edit.source, newText, root)
   if (!/\.[cm]?[jt]sx?$/i.test(loc.file)) return agentFallback()
   let found: Awaited<ReturnType<typeof findElementAtLine>>
   try {

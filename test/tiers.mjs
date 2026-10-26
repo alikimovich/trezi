@@ -109,6 +109,7 @@ export const UNIT = [
   'agent-file-access',
   'live-change-watch',
   'project-path',
+  'text-edit-agent',
   'network-volume-note',
   'native-composer-layout',
   'native-chat-latest-settle',

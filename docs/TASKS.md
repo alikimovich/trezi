@@ -8,6 +8,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a pin's move stops restarting the settle after `ChatLatestSettle.unresolvedRestarts` unresolved settles in a row (`settleLatest(afterPin:)`); streamed chunks keep that count and, past it, only pin (`settleLatest(content:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
 - [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
 - [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
+## Inline text edit keeps long text in the agent fallback (LKM-352)
+
+- [x] `textAgentPrompt` carries the whole whitespace-normalised text in a fence longer than any backtick run in it (`src/main/props.ts`); unit `text-edit-agent` (1000 characters, quotes, backticks).
+- [x] A text over `TEXT_EDIT_MAX` (20 000) is refused with a message (`refused`), never cut or handed to the agent (`applyTextEdit`, `inspector-runtime.ts`); unit `text-edit-agent`.
+- [x] The fallback carries `expectText` to the text-edit spawn; once it lands, `textEditLanded` checks the edited files and a miss sets `mismatch` on `spawn-finished` (`src/main/text-edit-check.ts`, `finalizeSpawn`); unit `comment-agents` (mock agent: full copy clean, 200-character copy reported).
+- [x] The chat shows a "Text edit incomplete" row with the edit's revert group (`chat-controller.ts`); unit `native-chat-controller`.
+- [ ] The check reads source, not the rendered DOM: an edit that put the full text in the wrong place passes it. A DOM read after HMR would need a host request.
 ## Comment rows sample the rendering, not stale SwiftUI frames (LKM-351)
 
 - [x] When the reported frames would sample nothing, `verifyCommentRows` moves them by the one shift that lines the rows (fill plus the gap above them) and the bubble up with the window's rendering, and reports `frameShift` / `reportedUserFrame` (`src/native/ChatCommentCapture.swift`, `src/native/smoke-comment-rows.ts`). Checked offline on the failing run's rendering: frames reported at 73/74 pt move by 82/81 pt onto the drawn bubble, light and dark; fresh frames stay unshifted.

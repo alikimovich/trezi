@@ -12,6 +12,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 - After Send, the chat no longer gets stuck jumping between the top and the end of the conversation, with the scrollbar shaking, while the turn runs. When cards or questions after the reply fill the view, it stays at the end. A follow that cannot settle now stops instead of restarting itself (LKM-354).
+## [0.3.6] - 2026-10-26
+
+### Fixed
+- An inline text edit that Trezi hands to the background agent (text from an array, a prop or other expression) keeps the whole text instead of the first 200 characters. A text over 20 000 characters is refused with a message, and if the landed edit does not contain the full text, the chat says so (LKM-352).
 
 ## [0.3.5] - 2026-10-25
 
