@@ -79,11 +79,15 @@ export async function checkSendVisibility(host, artifacts) {
   // own settle is still stepping (LKM-350: on the first 440 load it still ran 0.6 s later, the
   // clip at offset 18 after a first-row realize, so sent+60 sampled the jump from the top). Wait
   // until no settle runs on two reads in a row (a settle's closing pin can start the next one),
-  // at most 5 s. The wait is recorded (`loadSettleMs`, `loadSettleTimedOut`) and printed.
+  // at most 20 s. The wait is recorded (`loadSettleMs`, `loadSettleTimedOut`) and printed.
+  // LKM-351: the first, cold load's settle ran past 5 s (80 attempts: every pin set off a
+  // re-measure of the 20k pt estimate, which set off the next settle) and the send landed in
+  // it, so sent+60 and sent+200 read 0 rows; the later loads settled in ~55 ms. A load that
+  // never settles still fails: the send then lands in it and reads no rows, as before.
   const loadSettled = async () => {
     const started = Date.now()
     let idle = 0
-    while (idle < 2 && Date.now() - started < 5000) {
+    while (idle < 2 && Date.now() - started < 20000) {
       idle = (await inspect()).latestSettling ? 0 : idle + 1
       if (idle < 2) await delay(50)
     }

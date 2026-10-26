@@ -8,6 +8,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a pin's move stops restarting the settle after `ChatLatestSettle.unresolvedRestarts` unresolved settles in a row (`settleLatest(afterPin:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
 - [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
 - [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
+## Comment rows sample the rendering, not stale SwiftUI frames (LKM-351)
+
+- [x] When the reported frames would sample nothing, `verifyCommentRows` moves them by the one shift that lines the rows (fill plus the gap above them) and the bubble up with the window's rendering, and reports `frameShift` / `reportedUserFrame` (`src/native/ChatCommentCapture.swift`, `src/native/smoke-comment-rows.ts`). Checked offline on the failing run's rendering: frames reported at 73/74 pt move by 82/81 pt onto the drawn bubble, light and dark; fresh frames stay unshifted.
+- [x] `test/conversation-owner.mjs` exits explicitly after its sections pass (it printed every PASS, then idled past the 120 s unit limit in the manager's full run), like `runtime-owner`.
+- [x] Native `chat` group (15 checks) and `native-chat-scroll` pass on the fix; `comment-rows` printed `COMMENT ROWS NOTE light collapsed: reported frames were 82 pt off the rendering (bubble reported {{18, 73}, {404, 40}})`, so the shift was used exactly as predicted.
+- [x] `checkSendVisibility` waits up to 20 s (was 5 s) for the first load's settle (`test/helpers/chat-send-visibility.mjs`); the manager's run had the cold 440 load settling for over 5 s (80 attempts), so the send landed in it.
+- [ ] Open: why the cold first load's settle can run past 5 s (pin → re-measure → next settle loop on the ~20k pt estimate). A `SEND VISIBILITY NOTE` over 5 s in a native log shows it recurs.
+- [ ] Open: why SwiftUI's `MessagePositions` keep an earlier layout while the end marker is current. A `COMMENT ROWS NOTE` line in a native log means the shift was used.
 
 ## Send visibility waits out the load's own settle (LKM-350)
 
