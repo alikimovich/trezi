@@ -8,7 +8,15 @@ import { swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-139: following the latest row never leaves the transcript blank. The
 // fixture hosts the conversation's lazy stack, AppKit pin and ChatLatestSettle
-// offscreen; `--no-settle` is the pre-fix negative control.
+// offscreen.
+//
+// LKM-353: the `--no-settle` negative control is not run. Its one blank sample
+// (the first load, pinned at the lazy stack's estimated end with no realized
+// row) depends on how SwiftUI's estimate and AppKit's display cycle interleave
+// with the main queue, which the fixture cannot control. It was the same in
+// every local run, under CPU load too, and absent on some GitHub runners.
+// The positive assertions cannot pass vacuously: every sample must show the
+// latest row at the reading edge. `--no-settle` stays for manual reproduction.
 if (process.platform !== 'darwin') {
   console.log('NATIVE-CHAT-LATEST-SETTLE SKIP — macOS AppKit required')
 } else {
@@ -85,11 +93,6 @@ if (process.platform !== 'darwin') {
       { history: 28, latestDone: 44, running: 44, runningNotLast: 44 },
       'history footers are one 28 pt row; the running turn and the latest response keep the counter line'
     )
-    const before = JSON.parse(run([binary, '--no-settle']))
-    assert.ok(
-      before.blanks > 0,
-      `negative control: the AppKit pin alone should leave the transcript blank (${describe(before)})`
-    )
     const after = JSON.parse(run([binary]))
     assert.equal(after.blanks, 0, `transcript blank while following (${describe(after)})`)
     assert.equal(after.overs, 0, `offset past the end (${describe(after)})`)
@@ -115,7 +118,7 @@ if (process.platform !== 'darwin') {
     }
     const worst = Math.max(...after.samples.map((entry) => entry.offset - entry.maxOffset))
     console.log(
-      `NATIVE-CHAT-LATEST-SETTLE PASS — without the settle ${before.blanks}/${before.samples.length} samples blank; with it ${after.samples.length} samples show rows and the latest row after load, send, mid-stream and streamed (offset - maxOffset ≤ ${worst.toFixed(1)}pt)`
+      `NATIVE-CHAT-LATEST-SETTLE PASS — ${after.samples.length} samples show rows and the latest row after load, send, mid-stream and streamed (offset - maxOffset ≤ ${worst.toFixed(1)}pt)`
     )
   } finally {
     rmSync(scratch, { recursive: true, force: true })
