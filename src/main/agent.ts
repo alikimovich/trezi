@@ -121,6 +121,7 @@ import { incidents } from './self-heal/incidents'
 import { releaseSessionSkills } from './session-skills'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
+import { TEXT_EDIT_MAX, textEditLanded, textEditMismatch } from './text-edit-check'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
 import { turnTimings } from './turn-timing'
 import { receiptSession, releaseSessionReceipts } from './verification-receipts'
@@ -537,6 +538,8 @@ interface Spawn {
   text: string
   origin: BackgroundSpawnOrigin
   label?: string
+  /** A text edit's requested text, checked once the edit lands (LKM-352). */
+  expectText?: string
   cancelled?: boolean
   finalizing?: boolean
   error?: string
@@ -573,6 +576,7 @@ interface QueuedSpawn {
   origin: BackgroundSpawnOrigin
   /** The comment's own text, one line, for the parent chat's result row (LKM-178). */
   label?: string
+  expectText?: string
 }
 const queuedSpawns = new Map<string, QueuedSpawn>()
 // Admitted by the owner but still creating their worktree + session (not yet in `spawns`).
@@ -784,6 +788,15 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         } catch {
           /* history is non-critical */
         }
+        // LKM-352: a text edit that landed without the full text is reported, not kept silently.
+        const mismatch =
+          spawn.expectText != null &&
+          !textEditLanded(
+            auto.edits.map((e) => e.after),
+            spawn.expectText
+          )
+            ? textEditMismatch(spawn.expectText)
+            : undefined
         safeSend(getWindow_, 'agent:event', {
           type: 'spawn-finished',
           projectKey: parentSessionKey,
@@ -792,6 +805,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           origin,
           ...(summary ? { summary } : {}),
           ...label,
+          ...(mismatch ? { mismatch } : {}),
           outcome: 'applied',
           files: auto.edits.map((e) => basename(e.file))
         } satisfies AgentEvent)
@@ -931,7 +945,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       parentRoot: q.root,
       text: q.text,
       origin: q.origin,
-      label: q.label
+      label: q.label,
+      expectText: q.expectText
     })
     releaseSlot()
     // LKM-163/LKM-215: a Full access Codex spawn can write the live tree too.
@@ -1997,7 +2012,8 @@ export function registerAgentIpc(
       requestedParentSessionKey: string,
       options: AgentOptions = {},
       requestedOrigin: BackgroundSpawnOrigin = 'comment',
-      requestedLabel?: string
+      requestedLabel?: string,
+      requestedExpectText?: string
     ) => {
       // Worktrees need a repo TOP LEVEL — a non-repo (or subdir) falls back to chat.
       if (!(await isRepoRoot(root))) return { ok: false, reason: 'not-a-repo' }
@@ -2017,6 +2033,12 @@ export function registerAgentIpc(
         requestedOrigin === 'text-edit' ? 'text-edit' : 'comment'
       const label =
         typeof requestedLabel === 'string' ? oneLine(requestedLabel, 300) || undefined : undefined
+      const expectText =
+        origin === 'text-edit' &&
+        typeof requestedExpectText === 'string' &&
+        requestedExpectText.length <= TEXT_EDIT_MAX
+          ? requestedExpectText
+          : undefined
       // Stable id assigned up front so the rail row survives a queued→running flip.
       const id = randomUUID().slice(0, 8)
       const q: QueuedSpawn = {
@@ -2027,7 +2049,8 @@ export function registerAgentIpc(
         text,
         options: backgroundAgentOptions(options, origin),
         origin,
-        label
+        label,
+        expectText
       }
       // Held before the owner answers, so a slot freed meanwhile can start it.
       queuedSpawns.set(id, q)

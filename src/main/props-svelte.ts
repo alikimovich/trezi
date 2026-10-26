@@ -8,7 +8,7 @@ import {
   isValidAttrName,
   mergeFields,
   type ResolvedSource,
-  textAgentPrompt,
+  textAgentFallback,
   withinRoot
 } from './props'
 import { pickInstance, type SvelteUsage } from './svelte-instance'
@@ -641,11 +641,7 @@ export async function applySvelteTextEdit(
   edit: { source: string; text: string },
   loc: ResolvedSource
 ): Promise<PropEditResult> {
-  const fallback = (): PropEditResult => ({
-    applied: false,
-    needsAgent: true,
-    agentPrompt: textAgentPrompt(edit.source, edit.text, root)
-  })
+  const fallback = (): PropEditResult => textAgentFallback(edit.source, edit.text, root)
   let code: string
   try {
     code = await readFile(loc.file, 'utf8')

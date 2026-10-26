@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Inline text edit keeps long text in the agent fallback (LKM-352)
+
+- [x] `textAgentPrompt` carries the whole whitespace-normalised text in a fence longer than any backtick run in it (`src/main/props.ts`); unit `text-edit-agent` (1000 characters, quotes, backticks).
+- [x] A text over `TEXT_EDIT_MAX` (20 000) is refused with a message (`refused`), never cut or handed to the agent (`applyTextEdit`, `inspector-runtime.ts`); unit `text-edit-agent`.
+- [x] The fallback carries `expectText` to the text-edit spawn; once it lands, `textEditLanded` checks the edited files and a miss sets `mismatch` on `spawn-finished` (`src/main/text-edit-check.ts`, `finalizeSpawn`); unit `comment-agents` (mock agent: full copy clean, 200-character copy reported).
+- [x] The chat shows a "Text edit incomplete" row with the edit's revert group (`chat-controller.ts`); unit `native-chat-controller`.
+- [ ] The check reads source, not the rendered DOM: an edit that put the full text in the wrong place passes it. A DOM read after HMR would need a host request.
+
 ## Send visibility waits out the load's own settle (LKM-350)
 
 - [x] The chat inspect reports `latestSettling` while a latest-settle runs (`Chat.swift`, diagnostics only); `checkSendVisibility` waits for two idle reads (at most 5 s) before the `loaded` sample and the send, and records `loadSettleMs` / `loadSettleTimedOut` (`test/helpers/chat-send-visibility.mjs`).

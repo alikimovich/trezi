@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-352: inline text edits keep long text when the agent makes them
+
+- **Bug.** An inline edit of a paragraph from a `paragraphs` array, rendered through `{children}`, left the page with the first 200 characters. `applyTextEdit` cannot splice expression children, so it falls back to the background agent, and `textAgentPrompt` quoted `text.slice(0, 200)`. Every text fallback (JSX expression or mixed content, Svelte, HTML) cut the same way.
+- **Fix.**
+  - The prompt carries the whole text, with its length, in a fenced block. The fence is longer than any backtick run in the text, so quotes and backticks reach the agent unchanged.
+  - Text over 20 000 characters (`TEXT_EDIT_MAX`) is refused before anything else. The result is `refused`, so the inspector reports the message and does not fall back to its own prompt.
+  - Each fallback returns `expectText`. `visualEdit` passes it as a new last argument of `agent:spawn-comment`. Main accepts it only for a `text-edit` origin at or under the limit.
+  - When the spawn lands (`applied`), `textEditLanded` looks for the text in the edited files' new content. It decodes JS escapes, HTML entities and JSX `{' '}` spacers, collapses whitespace and ignores case, because WebKit's `innerText` applies `text-transform`. On a miss, `spawn-finished` carries `mismatch`. The chat then shows a "Text edit incomplete" row with the `text-edit:<id>` revert group. A clean text edit still posts no row.
+- **Limit.** The check reads source, not the page's DOM. A full text written into the wrong element passes it. Reading the rendered element after HMR would need a new host request, which this ticket does not add.
+- **Verification.** New unit `text-edit-agent`. Extended `comment-agents`: a mock agent copies the prompt's fenced text through a real spawn and landing; a 200-character copy is reported. Extended `native-chat-controller`.
+
 ## 2026-10-25 — LKM-350: send visibility sends only after the load's settle ended
 
 - **Failure.** Nightly native on `00e3d931`: `native-chat-scroll` send visibility, `440-fixed sent+60: no visible transcript rows`. All 67 smoke checks passed, and every other sample in that run was healthy, including sent+200 and the `send-after-send` capture.
