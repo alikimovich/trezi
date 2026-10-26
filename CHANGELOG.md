@@ -10,8 +10,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-25
+
 ### Fixed
 - Trezi no longer quits silently when its background service stops. It restarts the service and keeps the window open, and a turn that was running shows as interrupted. If the restart fails, an alert gives the reason and a Relaunch Trezi button. The cause (exit status or signal, memory and the service's last log lines) is written to the product log (LKM-347).
+
 ## [0.3.4] - 2026-10-25
 
 ### Fixed
