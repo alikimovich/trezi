@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { installFakes } from './helpers/workflow-fixture.mjs'
+import { compileWorkflowFixture, installFakes } from './helpers/workflow-fixture.mjs'
 
 const repo = fileURLToPath(new URL('..', import.meta.url))
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-live-publish-test-')))
@@ -37,6 +37,15 @@ function world(name) {
   return { base, origin, clone, gh: join(base, 'gh.json') }
 }
 
+// LKM-355: the script compiles the workflow fixture, a cold compile of most service
+// sources that queues behind other tests' swiftc runs in the 2-wide lane. Build it here
+// first, so its time is logged apart from the script's runs, and bound each run: a hung
+// run fails with its output instead of reaching the runner's limit with none.
+const compileStart = Date.now()
+compileWorkflowFixture()
+console.log(`live-publish-attribution: workflow fixture ready in ${Date.now() - compileStart} ms`)
+const RUN_LIMIT_MS = 120_000
+
 function run(w, ...extra) {
   const child = spawnSync(
     process.execPath,
@@ -52,10 +61,27 @@ function run(w, ...extra) {
     {
       cwd: repo,
       encoding: 'utf8',
-      env: { ...env, PATH: `${join(scratch, 'fakes')}:${process.env.PATH}`, FAKE_GH_STATE: w.gh }
+      env: { ...env, PATH: `${join(scratch, 'fakes')}:${process.env.PATH}`, FAKE_GH_STATE: w.gh },
+      timeout: RUN_LIMIT_MS
     }
   )
   return child
+}
+const ran = (child) =>
+  `status ${child.status}, signal ${child.signal}${child.error ? `, ${child.error.message}` : ''}\nstdout: ${child.stdout}\nstderr: ${child.stderr}`
+// Every check names itself; assert adds actual and expected.
+const equal = (actual, expected, check) =>
+  assert.equal(
+    actual,
+    expected,
+    `${check}: actual ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`
+  )
+const refused = (w, pattern, check) => {
+  const child = run(w)
+  assert.ok(
+    child.status === 1 && pattern.test(child.stderr),
+    `${check}: expected exit 1 and ${pattern}, got ${ran(child)}`
+  )
 }
 
 try {
@@ -63,43 +89,58 @@ try {
   const w = world('publish')
   const mainBefore = git(w.origin, 'rev-parse', 'refs/heads/main')
   const ok = run(w)
-  assert.equal(ok.status, 0, ok.stderr + ok.stdout)
+  assert.equal(ok.status, 0, `publish run exits 0: ${ran(ok)}`)
   const report = JSON.parse(ok.stdout)
-  assert.equal(report.result.ok, true)
-  assert.equal(report.finalRemote, report.finalLocal)
-  assert.equal(report.remoteBase, mainBefore)
-  assert.equal(git(w.origin, 'rev-parse', 'refs/heads/main'), mainBefore)
-  assert.equal(git(w.origin, 'rev-parse', `refs/heads/${branch}`), report.finalLocal)
-  assert.equal(report.final[1], 'Site Owner <owner@example.com>')
-  assert.equal(report.final[2], 'Site Owner <owner@example.com>')
-  assert.equal(report.parent[1], 'Trezi <trezi@local>')
-  assert.equal(report.parent[2], 'Trezi <trezi@local>')
-  assert.equal(git(w.clone, 'rev-parse', `${report.finalLocal}^^`), mainBefore)
-  assert.equal(
-    git(w.clone, 'diff', '--name-only', mainBefore, report.finalLocal),
-    '.trezi-publish-verify.txt'
+  equal(report.result.ok, true, 'Publish result ok')
+  equal(report.finalRemote, report.finalLocal, 'origin branch is the local tip')
+  equal(report.remoteBase, mainBefore, 'reported origin main is unchanged')
+  equal(git(w.origin, 'rev-parse', 'refs/heads/main'), mainBefore, 'origin main is unchanged')
+  equal(
+    git(w.origin, 'rev-parse', `refs/heads/${branch}`),
+    report.finalLocal,
+    'origin test branch is the final commit'
   )
-  assert.match(readFileSync(join(w.clone, '.trezi-publish-verify.txt'), 'utf8'), /LKM-255/)
+  equal(report.final[1], 'Site Owner <owner@example.com>', 'publication commit author')
+  equal(report.final[2], 'Site Owner <owner@example.com>', 'publication commit committer')
+  equal(report.parent[1], 'Trezi <trezi@local>', 'throwaway commit author')
+  equal(report.parent[2], 'Trezi <trezi@local>', 'throwaway commit committer')
+  equal(
+    git(w.clone, 'rev-parse', `${report.finalLocal}^^`),
+    mainBefore,
+    'the two commits sit on origin main'
+  )
+  equal(
+    git(w.clone, 'diff', '--name-only', mainBefore, report.finalLocal),
+    '.trezi-publish-verify.txt',
+    'only the throwaway file changed'
+  )
+  const throwaway = readFileSync(join(w.clone, '.trezi-publish-verify.txt'), 'utf8')
+  assert.match(
+    throwaway,
+    /LKM-255/,
+    `throwaway file names LKM-255: actual ${JSON.stringify(throwaway)}`
+  )
   const calls = JSON.parse(readFileSync(w.gh, 'utf8')).calls
   assert.deepEqual(
     calls.filter((call) => call !== '--version'),
-    ['pr view', 'pr create']
+    ['pr view', 'pr create'],
+    `gh calls: actual ${JSON.stringify(calls)}, expected pr view and pr create (and --version)`
   )
 
   // Guards: the default branch, a wrong origin, an internal identity and a seeded branch.
   const guarded = world('guards')
   git(guarded.clone, 'checkout', '-q', 'main')
-  assert.match(run(guarded).stderr, /refusing to publish from main/)
+  refused(guarded, /refusing to publish from main/, 'refuses the default branch')
   git(guarded.clone, 'checkout', '-q', branch)
   git(guarded.clone, 'remote', 'set-url', 'origin', join(scratch, 'guards', 'elsewhere.git'))
-  assert.match(run(guarded).stderr, /is not alikimovich\/lkmv\.ch/)
+  refused(guarded, /is not alikimovich\/lkmv\.ch/, 'refuses another origin')
   git(guarded.clone, 'remote', 'set-url', 'origin', guarded.origin)
   git(guarded.clone, 'config', 'user.email', 'trezi@local')
-  assert.match(run(guarded).stderr, /set the user Git identity first/)
+  refused(guarded, /set the user Git identity first/, 'refuses the internal identity')
   git(guarded.clone, 'config', 'user.email', 'owner@example.com')
   git(guarded.clone, 'push', '-q', 'origin', `${branch}:refs/heads/${branch}`)
-  assert.match(run(guarded).stderr, /origin already has/)
-  assert.equal(JSON.parse(readFileSync(guarded.gh, 'utf8')).calls?.length ?? 0, 0)
+  refused(guarded, /origin already has/, 'refuses a branch already on origin')
+  equal(JSON.parse(readFileSync(guarded.gh, 'utf8')).calls?.length ?? 0, 0, 'guards call no gh')
   console.log('live-publish-attribution: ok')
 } finally {
   rmSync(scratch, { recursive: true, force: true })

@@ -44,29 +44,41 @@ func state(running: Bool = false) -> [String: Any] {
     return value
 }
 var samples: [[String: Any]] = []
-// The checks stay in the test. On a loaded runner the settle can still be running after a
-// fixed wait, so keep spinning (up to 10 s) until the marker is read at the reading edge and
-// the settle is under its 20-attempt run; a pre-fix chat never gets there and is recorded as is.
-func sample(_ phase: String) {
-    spin(1.5)
+// The checks stay in the test. A sample waits for the settle's own end signals, not for a
+// time (LKM-355: a fixed 1.5 s wait, then up to 10 s for an attempt sum under 20, failed on
+// loaded CI runners): a settle started for this phase has ended (`latestSettles` grew) and
+// no settle ran and no pin moved for 30 run-loop turns and 0.5 s. `ended` is false when that
+// never happened within 60 s; a pre-fix chat is recorded as is.
+func sample(_ phase: String, settlesBefore: Int) {
     let model = chat.model
-    let deadline = Date(timeIntervalSinceNow: 10)
-    func settled() -> Bool {
-        model.bottomPosition > 0 && abs(model.bottomPosition - max(1, chat.bounds.height - model.bottomInset)) <= 2 && model.latestSettleAttempts < 20
+    let deadline = Date(timeIntervalSinceNow: 60)
+    var quietTurns = 0, quietSince = Date(), pins = probe()?.pinCount ?? 0, ended = false
+    while Date() < deadline {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.016))
+        let now = probe()?.pinCount ?? 0
+        if model.latestSettling || now != pins || model.latestSettles <= settlesBefore {
+            quietTurns = 0; quietSince = Date(); pins = now
+        } else {
+            quietTurns += 1
+        }
+        if quietTurns >= 30 && Date().timeIntervalSince(quietSince) >= 0.5 { ended = true; break }
     }
-    while !settled() && Date() < deadline { spin(0.25) }
-    samples.append(["phase": phase, "bottom": model.bottomPosition, "reading": max(1, chat.bounds.height - model.bottomInset),
+    samples.append(["phase": phase, "ended": ended, "settling": model.latestSettling, "settles": model.latestSettles - settlesBefore,
+                    "settled": model.latestSettled, "bottom": model.bottomPosition, "reading": max(1, chat.bounds.height - model.bottomInset),
                     "settleAttempts": model.latestSettleAttempts, "pins": probe()?.pinCount ?? 0])
 }
+var settles = chat.model.latestSettles
 chat.update(state(), composer: composer)
-sample("load")
+sample("load", settlesBefore: settles)
+settles = chat.model.latestSettles
 messages.append(message(40, text: "Next request")); messages.append(message(41, text: "Starting"))
 chat.update(state(running: true), composer: composer)
 for chunk in 1...20 {
     messages[messages.count - 1] = message(41, text: String(repeating: paragraph, count: chunk))
     chat.update(state(running: true), composer: composer); spin(0.033)
 }
-sample("streamed")
+sample("streamed", settlesBefore: settles)
+settles = chat.model.latestSettles
 chat.update(state(), composer: composer)
-sample("completed")
+sample("completed", settlesBefore: settles)
 print(String(data: try! JSONSerialization.data(withJSONObject: ["samples": samples], options: [.sortedKeys]), encoding: .utf8)!)

@@ -32,8 +32,12 @@ setEditingOwner(editing)
 fixture.child.unref()
 for (const stream of [fixture.child.stdin, fixture.child.stdout, fixture.child.stderr])
   stream.unref?.()
-process.on('exit', () => {
+process.on('exit', (code) => {
   console.log(`REPOSITORY-PARITY frames=${frames}`)
+  // LKM-355: a failed suite also shows the service's log (the fixture's stderr): effects
+  // like the live commit report a Git failure only as a refusal.
+  if (code && fixture.stderr)
+    console.log(`REPOSITORY-PARITY service log (tail):\n${fixture.stderr.slice(-3000)}`)
   try {
     fixture.child.kill('SIGKILL')
   } catch {}
