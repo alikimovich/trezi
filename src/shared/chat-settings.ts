@@ -149,9 +149,9 @@ export const chatAgentSettingsFromOptions = (options: AgentOptions = {}): ChatAg
 })
 
 /**
- * Settings for a chat resumed from a history record. Resume is Claude-only (the
- * record's `sdkSessionId` is both the resume id and the "this was Claude" marker),
- * so a resumed chat always runs on Claude — and a model alias picked for another
+ * Settings for a chat resumed from a history record. History's resume runs on Claude
+ * (a Codex record's thread id fails over to the chat's summary, LKM-346), so a
+ * resumed chat always runs on Claude — and a model alias picked for another
  * backend ("gpt-5") means nothing to it, hence the account default. Everything
  * else (effort, permission posture) carries over from the visible chat.
  *

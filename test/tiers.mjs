@@ -216,6 +216,7 @@ export const UNIT = [
   'codex-retry-cause',
   'codex-stream',
   'codex-terminal-stream',
+  'codex-resume',
   'interrupt-escalation',
   'turn-terminal',
   'chat-title',

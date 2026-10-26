@@ -7,6 +7,7 @@ import {
   onProjectMemoryUpdated,
   projectHasRunningAgents,
   registerAgentIpc,
+  runningAgentWork,
   setProjectMemoryOwner,
   undoProjectMemoryUpdate
 } from '../main/agent'
@@ -179,6 +180,13 @@ async function main() {
     if (cleaning) return cleaning
     // Publish the promise before emitting quit: the host can close during cleanup.
     cleaning = Promise.resolve().then(async () => {
+      // LKM-346: what a quit cut off. A chat restored as interrupted with no such line
+      // before the next start was ended by a crash or a kill.
+      const work = runningAgentWork()
+      productLog.info('lifecycle', 'Backend stopping', {
+        chats: work.filter((w) => w.kind !== 'background').length,
+        background: work.filter((w) => w.kind === 'background').length
+      })
       app.emit('before-quit')
       // Chats are saved by the conversation owner; bounded, and a chat cut short keeps
       // its checkpoint for the next launch.
