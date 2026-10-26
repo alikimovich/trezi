@@ -56,6 +56,7 @@ export async function checkSendVisibility(host, artifacts) {
       visibleRows: state.visibleMessageIDs?.length ?? 0,
       realizedRows: state.realizedRows,
       latestSettleAttempts: state.latestSettleAttempts,
+      latestSettling: state.latestSettling,
       ...state.scroll,
       tailFrames: state.tailFrames,
       composerInset: state.composerInset,
@@ -73,6 +74,20 @@ export async function checkSendVisibility(host, artifacts) {
       await delay(50)
     }
     failures.push(`${condition} ${phase}: latest row ${id} never settled into view`)
+  }
+  // The send is checked from a loaded transcript, but the latest row can show while the load's
+  // own settle is still stepping (LKM-350: on the first 440 load it still ran 0.6 s later, the
+  // clip at offset 18 after a first-row realize, so sent+60 sampled the jump from the top). Wait
+  // until no settle runs on two reads in a row (a settle's closing pin can start the next one),
+  // at most 5 s. The wait is recorded (`loadSettleMs`, `loadSettleTimedOut`) and printed.
+  const loadSettled = async () => {
+    const started = Date.now()
+    let idle = 0
+    while (idle < 2 && Date.now() - started < 5000) {
+      idle = (await inspect()).latestSettling ? 0 : idle + 1
+      if (idle < 2) await delay(50)
+    }
+    return { loadSettleMs: Date.now() - started, loadSettleTimedOut: idle < 2 }
   }
   const capture = async (name, marker) => {
     const { image, ...geometry } = await host.request('chatAcceptance', { capture: true })
@@ -116,7 +131,8 @@ export async function checkSendVisibility(host, artifacts) {
         // Foreground for the captures (the chat is shown by the first chatState).
         if (condition === '440-fixed') await host.request('chatAcceptance', { prepare: true })
         await delay(300)
-        const loaded = await sample(condition, 'loaded', true)
+        const waited = await loadSettled()
+        const loaded = Object.assign(await sample(condition, 'loaded', true), waited)
         if (composer === 'growing')
           for (const lines of [3, 8, 14]) {
             state.composer = {
@@ -208,6 +224,10 @@ export async function checkSendVisibility(host, artifacts) {
     `LKM-139 send visibility (see ${join(artifacts, 'send-visibility.json')})`
   )
   const worst = Math.max(...samples.map((entry) => entry.offset - entry.maxOffset))
+  for (const entry of samples.filter((entry) => entry.loadSettleMs > 100))
+    console.log(
+      `SEND VISIBILITY NOTE — ${entry.condition} load: settle ${entry.loadSettleTimedOut ? 'still running' : 'ended'} after ${entry.loadSettleMs} ms (${entry.latestSettleAttempts} attempts).`
+    )
   for (const entry of samples.filter((entry) => entry.blankRereads))
     console.log(
       `SEND VISIBILITY NOTE — ${entry.condition} ${entry.phase}: transcript blank for ${entry.blankWaitMs} ms (${entry.blankRereads} re-reads) before rows showed.`

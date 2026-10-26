@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Send visibility waits out the load's own settle (LKM-350)
+
+- [x] The chat inspect reports `latestSettling` while a latest-settle runs (`Chat.swift`, diagnostics only); `checkSendVisibility` waits for two idle reads (at most 5 s) before the `loaded` sample and the send, and records `loadSettleMs` / `loadSettleTimedOut` (`test/helpers/chat-send-visibility.mjs`).
+- [ ] Full native suite pass on the fix. The worker's single run stopped at `comment-rows` (the stale bubble frame `{{18, 74}, {404, 40}}`, as in LKM-349's worker run), before `native-chat-scroll`, so send visibility is unverified natively.
+- [ ] Watch: the first 440 load's settle ran to 32–62 attempts in both runs on LKM-349's tree (≤ 10 in the runs before it). If `SEND VISIBILITY NOTE … load: settle` lines keep showing multi-second waits, look at the LKM-349 relayout → realize escalation on a first load.
+
 ## Chat acceptance wheel survives a lazy-stack re-measure (LKM-349)
 
 - [x] A history wheel is sent once more only when the stack's own re-measure left less than the wheel's distance above the corrected end and the probe re-attached there (`wheelOutranRemeasure`, `wheelIntoHistory` in `test/helpers/chat-acceptance.mjs`); unit `native-smoke-runner`.
