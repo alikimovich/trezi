@@ -10,6 +10,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-10-26
+
+### Fixed
+- When the sidebar width changes, the address bar no longer flashes into the toolbar's overflow menu for a frame (LKM-356).
+
 ## [0.3.7] - 2026-10-26
 
 ### Fixed

@@ -138,6 +138,7 @@ export const UNIT = [
   'native-shell-controller',
   'sidebar-evidence',
   'sidebar-sizing',
+  'toolbar-chat-lead',
   'preview-overlay',
   'key-shortcuts',
   'agent-load-routing',
