@@ -60,10 +60,16 @@ enum ChatLatestSettle: Equatable {
     /// pin moved the clip. The marker alone is not enough either (LKM-149): it
     /// can be measured before the latest row's own layout (its footer) lands,
     /// so settled also needs the latest row to end at the reading edge.
-    static func step(latest: String?, frames: [String: CGRect], bottom: CGFloat, readingHeight: CGFloat, viewportHeight: CGFloat) -> ChatLatestSettle {
-        if let latest, !frames.values.contains(where: { $0.maxY > 0 && $0.minY < viewportHeight }) { return .realize(latest) }
+    /// `trailing`: cards, questions or a live footer follow the latest message.
+    /// They report no frame, so a view they fill had no row in view and every
+    /// step realized, jumping between the first row and the end until the user
+    /// scrolled (LKM-354). There the realized marker in view is the end itself,
+    /// and the latest message need not end at the reading edge.
+    static func step(latest: String?, frames: [String: CGRect], bottom: CGFloat, readingHeight: CGFloat, viewportHeight: CGFloat, trailing: Bool = false) -> ChatLatestSettle {
+        let endInView = trailing && bottom > 0 && bottom <= viewportHeight
+        if let latest, !endInView, !frames.values.contains(where: { $0.maxY > 0 && $0.minY < viewportHeight }) { return .realize(latest) }
         guard bottom > 0 && bottom <= readingHeight + 1 else { return .bottom }
-        if let latest, (frames[latest]?.maxY ?? .infinity) > readingHeight + 1 { return .relayout }
+        if let latest, !trailing, (frames[latest]?.maxY ?? .infinity) > readingHeight + 1 { return .relayout }
         return .settled
     }
     /// The action for a step after `unresolved` consecutive `.bottom` steps. A
@@ -88,6 +94,24 @@ enum ChatLatestSettle: Equatable {
         guard step == .relayout else { return 0 }
         if let end, let previous, abs(end - previous) <= 0.5 { return count + 1 }
         return 1
+    }
+    /// The settles in a row that ended unresolved (`unresolved(after:)`) after which a pin's or clamp's own move no longer starts the
+    /// next one. Each ends with a pin, which gives a slow layout another try;
+    /// with nothing able to resolve (no row measured in view, LKM-354) that
+    /// repeated forever. A viewport, composer, chat or latest-button request
+    /// starts the count again, a streamed chunk keeps it: past the limit its
+    /// settle only pins and no longer realizes through SwiftUI, which jumped
+    /// the clip with every chunk for the whole turn.
+    static let unresolvedRestarts = 2
+    /// The count after a settle ended with `last`. `realized`: one of its steps
+    /// needed a realize. That settle is unresolved too, whatever it read last:
+    /// the realize moved the stack and the next layout can measure rows that are
+    /// lost again a frame later, and resetting there restarted the jumps through
+    /// the first row mid-turn (LKM-354). Only a settle that settled with no
+    /// realize, or a reader who left, starts the count again.
+    static func unresolved(after count: Int, follows: Bool, last: ChatLatestSettle, realized: Bool) -> Int {
+        guard follows else { return 0 }
+        return last == .settled && !realized ? 0 : count + 1
     }
     /// The SwiftUI scroll for the `stuck`-th consecutive realize step. A stack
     /// whose estimates are far off can stay empty at the latest row; every

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## The latest-row settle ends; cards after the reply keep the end (LKM-354)
+
+- [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a pin's move stops restarting the settle after `ChatLatestSettle.unresolvedRestarts` unresolved settles in a row (`settleLatest(afterPin:)`); streamed chunks keep that count and, past it, only pin (`settleLatest(content:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
+- [x] A settle that realized counts as unresolved even when it read settled last (`ChatLatestSettle.unresolved(after:)`): a transient settled reading reset the count and restarted the jumps mid-turn (the CI failure of `native-chat-send-follow` on PR #326); the fixture's forced state drops frames in the model (`messageFramesFilter`) and checks realize scrolls exactly (`latestRealizes`); unit `native-chat-latest-settle --cases` (`unresolvedCounts`), `native-chat-send-follow` (`realizesLate`, `leak-stream`).
+- [x] A new message (Send) resets the unresolved count, a streamed chunk keeps it (`ChatModel.sendRevision`); unit `native-chat-send-follow` (`realizedOnSend` for every forced case).
+- [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
+- [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
 ## Inline text edit keeps long text in the agent fallback (LKM-352)
 
 - [x] `textAgentPrompt` carries the whole whitespace-normalised text in a fence longer than any backtick run in it (`src/main/props.ts`); unit `text-edit-agent` (1000 characters, quotes, backticks).
