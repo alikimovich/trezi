@@ -40,7 +40,7 @@ capabilities instead of assuming Claude, Codex, gateways, and Gemini are interch
 | Answer components in chat (`chat_ui` options and form) | Yes | Yes | Yes, through Codex | No |
 | Trezi approve/deny cards | Yes | No SDK approval event | No SDK approval event | No |
 | Image input | Yes | Not wired | Not wired | Not wired |
-| Resume provider thread | Yes | Not wired | Not wired | No |
+| Resume provider thread | Yes | Yes (LKM-346) | Yes, through Codex | No (summary seed) |
 | Detached background agents (comments + visual edits) | Yes | Yes | Yes, through Codex | Disabled |
 | Custom endpoint | No | Built-in ChatGPT seat | Yes (`/responses`) | No |
 
@@ -1096,6 +1096,18 @@ recovered only from the provider owner after a crash carries no stored cwd.
 A session that was not resuming, or one that already completed a turn, still reports
 its errors. Sessions started under a non-canonical cwd by an older build go through the
 same recovery once. `test/claude-resume.mjs`, `test/claude-cwd.mjs`.
+
+## Codex thread resume (LKM-346)
+
+Codex records its thread id as `sdkSessionId` off `thread.started`, and a reopened chat
+continues it with `resumeThread(resumeSessionId)` (`codex.ts` `openThread`). If the CLI
+cannot resume ("no rollout found" and similar, `isCodexResumeFailure` in
+`src/main/backends/codex-resume.ts`) or silently starts a different thread
+(`resumedElsewhere`), the adapter recovers once like Claude: a new thread, the turn seeded
+with `resumeSummary`, one status note, and the new id recorded. Any restored chat that
+opens without a resume id (Gemini, a failed Claude start) gets the same summary on its
+first send (`agent.ts` `restoredSummaries`). `test/codex-resume.mjs`,
+`test/conversation-owner.mjs`.
 
 ## Agent Git access (LKM-188)
 

@@ -2,6 +2,58 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-346: Codex chats resume their thread; restored chats get the summary
+
+- **Report.** A Codex chat restored with "Trezi stopped before this turn finished" was
+  sent "continue". The model asked what to continue: it had no earlier context.
+- **Cause 1 (code).** `codex.ts` ignored `resumeSessionId` and always called
+  `startThread`. It also never recorded the thread id, so `sdkSessionId` stayed empty.
+  On reopen `agent.ts` then passed no resume id and no summary (`startChat` builds the
+  summary only with a resume id). Every relaunch gave a Codex chat an empty thread.
+- **Fix.**
+  - `codex.ts` opens `resumeThread(resumeSessionId)` and records every
+    `thread.started` id with `setSdkSessionId`. The helper sends it to the owner as for
+    Claude, so the next open resumes it.
+  - A lost resume falls back to a new thread. The first prompt of that thread is the
+    rules, then `seedPrompt(resumeSummary, text)`, with `RESUME_NOTE` as status. The
+    adapter treats a resume as lost in two cases, before any output:
+    - the CLI reports a different thread id (`codex exec resume` starts a new, empty
+      thread for an unknown id);
+    - the CLI fails with "no rollout found", "thread not found" or similar
+      (`codex-resume.ts`).
+  - Any provider: `agent:open-project` keeps the summary when the new session did not
+    resume (no id, or the start with the id threw). The next send wraps its prompt in
+    `seedPrompt` once (`restoredSummaries`). A model-switch handoff already carries the
+    whole conversation and takes precedence.
+  - `sdkSessionId` now also holds Codex thread ids. History's "Continue chat" therefore
+    shows for Codex records. It still runs on Claude: the Codex id fails Claude's resume
+    and the session starts from the summary (LKM-165 path). Comments updated.
+- **Cause 2 (why the turn stopped).** Not confirmed from data.
+  - Trezi's own restart paths do not end a running turn. The in-app update refuses
+    while a chat runs (`canRestart` in `src/native/index.ts`). A user quit asks first
+    (LKM-221 quit guard), unless "don't ask again" is set.
+  - This machine's `~/Library/Logs/Trezi` has no backend `Turn started` lines in its
+    7 days. Its profile (`Trezi Native`) was last written on Oct 17, and neither has
+    the chat. The report's run was on another profile or machine.
+  - `DiagnosticReports` has no Trezi, TreziService or Bun crash.
+  - The log had no quit line, so a quit could not be told apart from a crash or kill.
+    The backend now logs `Backend stopping chats=<n> background=<n>` when a quit
+    begins. An interrupted chat without that line before the next `App started` was
+    ended by a crash or a kill (for example a rebuild/relaunch from a terminal).
+- **Evidence.** Unit `codex-resume`:
+  - a new chat records its thread id and resumes it on the next turn;
+  - a saved id is resumed with no summary;
+  - both lost-resume shapes start one new thread whose first prompt has the rules, the
+    summary with the last user request and the message;
+  - no error is shown, and the next turn resumes the new id.
+
+  Unit `conversation-owner` (agent section):
+  - a restored chat with no id sends `Earlier context…User: four…continue` once;
+  - a recorded id is passed as `resumeSessionId` with the summary, and that turn is not
+    seeded.
+- **Not run.** The live check of the ticket (kill the service mid-turn, relaunch,
+  "continue") needs a real Codex login and a native run, so the worker did not run it.
+
 ## 2026-10-24 — LKM-345: the real-toolchain swift-preview tests run one at a time
 
 - **Failures.** 4 of the last 5 CI runs failed only on swift-preview tests:

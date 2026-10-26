@@ -582,6 +582,40 @@ try {
       titles: events.filter((e) => e.type === 'title').map((e) => e.title),
       stale: events.filter((e) => e.stale).length
     }
+    // LKM-346: the restored chat's provider had no thread to continue, so its first turn
+    // carries the saved conversation's summary (once).
+    const p4 = providers.at(-1)
+    assert.equal(p4.context.resumeSessionId, undefined)
+    const turnDone = async (provider, label) => {
+      const done = events.filter((e) => e.type === 'done' && e.projectKey === key).length
+      provider.done()
+      await until(
+        () => events.filter((e) => e.type === 'done' && e.projectKey === key).length > done,
+        label
+      )
+      await until(() => !chat.isRunning, `${label} landed`)
+    }
+    await submit('continue')
+    await until(() => p4.sent.length === 1, 'restored send')
+    assert.ok(p4.sent[0].startsWith('Earlier context'), p4.sent[0])
+    assert.ok(p4.sent[0].includes('User: four') && p4.sent[0].endsWith('continue'))
+    await turnDone(p4, 'restored turn')
+    await submit('next')
+    await until(() => p4.sent.length === 2, 'second restored send')
+    assert.ok(!p4.sent[1].includes('Earlier context'))
+    await turnDone(p4, 'second restored turn')
+    // A thread id the provider reported is the next restore's resume id; that session
+    // continues its own thread, so the turn is not seeded.
+    p4.session.record.sdkSessionId = 'thread-saved'
+    await invoke('agent:close-project', repo)
+    await invoke('agent:open-project', repo, { provider: 'codex' })
+    const p5 = providers.at(-1)
+    assert.equal(p5.context.resumeSessionId, 'thread-saved')
+    assert.ok(p5.context.resumeSummary.includes('User: next'))
+    await submit('go on')
+    await until(() => p5.sent.length === 1, 'resumed send')
+    assert.ok(!p5.sent[0].includes('Earlier context'), p5.sent[0])
+    await turnDone(p5, 'resumed turn')
     await invoke('agent:close-project', repo)
     window = () => {}
     return summary

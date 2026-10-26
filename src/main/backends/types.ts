@@ -54,8 +54,8 @@ export interface PendingQuestion {
  *   is left unset so events keep flowing into the normal chat pipeline, just
  *   tagged with `emitKey` = that session's own `sessionKey` (not the bare
  *   `projectKey`) so the renderer's `byKey` gives it its own slice. `resumeSessionId`
- *   asks the backend to resume a past SDK session instead of starting fresh
- *   (Claude-only; other backends accept and ignore it).
+ *   asks the backend to resume a past SDK session or Codex thread instead of starting
+ *   fresh (Gemini accepts and ignores it).
  */
 export interface SpawnContext {
   /** Stable id for a detached comment spawn — stamped on every event so the
@@ -68,8 +68,8 @@ export interface SpawnContext {
   emitKey: string
   /** In-process choke point agent.ts listens on for the terminal event (spawns only). */
   onEvent?: (e: AgentEvent) => void
-  /** Resume a past SDK session instead of starting fresh (v9 resume). Claude-only —
-   *  other backends accept and ignore this. */
+  /** Resume a past SDK session (Claude) or thread (Codex, LKM-346) instead of starting
+   *  fresh (v9 resume). Gemini accepts and ignores this. */
   resumeSessionId?: string
   /** A compact summary of the chat being resumed (LKM-165): if the resume fails, the new
    *  session starts from it instead of the lost one. */

@@ -66,6 +66,9 @@ Lifecycle facts only:
   (`src/main/turn-timing.ts`). The agent reads the same timing in `workspace_state`;
   tool arguments and answers are never logged;
 - provider helper start, exit and crash with status, and backend start and exit;
+  `Backend stopping chats=<n> background=<n>` when a quit begins counts the agent work
+  it cuts off (LKM-346): a chat restored as interrupted with no such line before the
+  next start was ended by a crash or a kill;
 - target dev server output category and length (the raw line stays in Activity);
 - preview load, reload, load failure and web-content crash;
 - host commands that hold the main thread for more than 250 ms;
