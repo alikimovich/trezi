@@ -29,13 +29,64 @@ extension Host {
                     guard let command = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
                     self?.dispatch(command)
                 }, onFailure: { [weak self] message in
-                    fputs("\(message)\n", stderr); self?.serviceFailed = true; self?.terminateHost()
-                })
+                    fputs("\(message)\n", stderr); self?.serviceUnrecoverable(message)
+                }, onRestarting: { [weak self] reason in self?.serviceRestarting(reason) },
+                   onRestarted: { [weak self] in self?.serviceRestarted() })
             } catch {
                 fputs("Service launch failed: \(error)\n", stderr); ProductLog.error("xpc", "Service launch failed: \(error)")
                 serviceFailed = true; terminateHost()
             }
 
+    }
+    /// The smoke suite's failures exit with their status (`scripts/start-native.mjs`):
+    /// no restart and no alert there.
+    var serviceRecovers: Bool { HostLaunch.environment["TREZI_NATIVE_TEST_DIR"] == nil }
+    /// LKM-347: Bun or the service stopped on its own (`serviceStopped`, non-zero).
+    /// Restart it and keep the window, unless the host itself is quitting.
+    func serviceStoppedUnexpectedly(status: Int) -> Bool {
+        guard serviceRecovers, !serviceTerminating, !quitForced, !restartRequested, let client = serviceClient else { return false }
+        client.restart("Trezi's background service stopped (status \(status))")
+        return true
+    }
+    /// The service died: the window stays while the client restarts it. What belonged to
+    /// the old Bun goes; the new one rebuilds the rest after `ready`.
+    func serviceRestarting(_ reason: String) {
+        // A quit that was asking the old Bun goes ahead: there is nothing left to ask.
+        if quit.phase != .idle { quitProceed(); if quit.phase == .confirmed { return } }
+        dismissQuitUI()
+        for key in views.keys where key.hasPrefix("agent:") {
+            views.removeValue(forKey: key)?.removeFromSuperview()
+            urlObservers.removeValue(forKey: key); targets.removeValue(forKey: key); agentRoutes.removeValue(forKey: key)
+        }
+        agentBrowsers.removeAll(); agentBrowserStatuses.removeAll(); agentBrowserLoads.removeAll()
+        sheets.close(sheets.model.state?.id ?? "")
+        for editor in sourceEditors.values { editor.isHidden = true; editor.popout?.orderOut(nil) }
+        nativeLayout.layout()
+        toast.show(["id": "service-restart", "message": "\(reason). Restarting it…", "seconds": 30.0], in: canvas)
+    }
+    func serviceRestarted() {
+        toast.show(["id": "service-restart", "message": "Trezi restarted its background service. A turn that was running stopped; send it again to continue.",
+                    "seconds": 8.0], in: canvas)
+        emit(["event": "ready", "pid": Int(getpid())])
+    }
+    /// Never a silent exit: the service could not be restarted, so say why and offer a relaunch.
+    func serviceUnrecoverable(_ message: String) {
+        serviceFailed = true
+        guard serviceRecovers, !serviceTerminating, !quitForced else { terminateHost(); return }
+        dismissQuitUI(); toast.hide()
+        if let sheet = window.attachedSheet { window.endSheet(sheet); sheet.orderOut(nil) }
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Trezi's background service stopped"
+        alert.informativeText = "\(message)\n\nYour chats are saved. Relaunch Trezi to continue. A turn that was running will show as interrupted."
+        alert.addButton(withTitle: "Relaunch Trezi")
+        alert.addButton(withTitle: "Quit")
+        NSApp.requestUserAttention(.criticalRequest)
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            if response == .alertFirstButtonReturn { self.restartRequested = true; self.restartProject = nil; self.serviceFailed = false }
+            self.terminateHost()
+        }
     }
     // `open -a Trezi <folder>`, `trezi <folder>`, or a folder dropped on the Dock icon:
     // Bun opens it as a project once attached (queued until then, like every early frame).

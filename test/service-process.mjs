@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
+import { restartCases } from './fixtures/service-process/restart-cases.mjs'
 import { swiftBuild } from './helpers/swift-build.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -341,6 +342,7 @@ try {
         'src/service/SimulatorOwner.swift',
         'src/service/BrowserTools.swift',
         'src/service/PlatformOwner.swift',
+        'src/service/ProcessMemory.swift',
         'src/service/ServiceRuntime.swift',
         'src/service/ProcessGuardian.swift',
         'src/service/ProfilePaths.swift',
@@ -354,7 +356,9 @@ try {
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
         'src/service/ProductLog.swift',
+        'src/service/ProcessMemory.swift',
         'src/native/ServiceClient.swift',
+        'src/native/ServiceExitReport.swift',
         'test/fixtures/service-process/XPCFixture.swift'
       ],
       host
@@ -377,7 +381,9 @@ try {
         'src/service/ServiceContract.swift',
         'src/service/ServiceXPC.swift',
         'src/service/ProductLog.swift',
+        'src/service/ProcessMemory.swift',
         'src/native/ServiceClient.swift',
+        'src/native/ServiceExitReport.swift',
         'test/fixtures/service-process/XPCFixture.swift'
       ],
       intruder
@@ -390,12 +396,14 @@ try {
       console.log('SERVICE-PROCESS supervision-only PASS — XPC coverage requires the full fixture')
     } else {
       const backendPID = join(scratch, 'xpc-child.pid')
+      // The product log goes to the scratch folder, never the account's ~/Library/Logs.
+      const logs = join(scratch, 'logs')
       const launch = {
         bun,
         backend,
         profile,
         arguments: [],
-        environment: { FIXTURE_PID: backendPID }
+        environment: { FIXTURE_PID: backendPID, TREZI_LOG_DIR: logs }
       }
       const rejectedPeer = processFixture(intruder)
       rejectedPeer.send(hello(randomUUID(), launch))
@@ -733,8 +741,21 @@ try {
       await dead(crashedPID)
       groups.delete(crashedPID)
       assert.ok(!existsSync(backendPID), 'no replacement backend was launched for the stale client')
+      await pause(300)
+      await restartCases({
+        host,
+        executable,
+        launch,
+        backendPID,
+        scratch,
+        logs,
+        processFixture,
+        pidFile,
+        dead,
+        groups
+      })
       console.log(
-        'SERVICE-PROCESS PASS — real XPC handshake, peer rejection, closed negotiation, cancellation, reconnection, backend death and process cleanup'
+        'SERVICE-PROCESS PASS — real XPC handshake, peer rejection, closed negotiation, cancellation, reconnection, backend death, service restart and process cleanup'
       )
     }
   }

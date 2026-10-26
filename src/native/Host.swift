@@ -211,7 +211,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             restartProject = c["project"] as? String
             terminateHost()
         case "serviceStopped":
-            if let status = c["status"] as? Int, status != 0 { exitStatus = 1 }
+            let status = c["status"] as? Int ?? 0
+            if status != 0, serviceStoppedUnexpectedly(status: status) { return }
+            if status != 0 { exitStatus = 1 }
             terminateHost()
         case "preferences":
             preferences = c["values"] as? [String: Any] ?? [:]
