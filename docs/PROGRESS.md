@@ -2,6 +2,35 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-347: a dead service is restarted, reported, and never quits Trezi silently
+
+- **The 2026-10-24 logs.** `~/Library/Logs/Trezi` has no real-session lines at
+  16:11 or 16:43 PDT (23:11Z, 23:43Z). The service lines near those times came from
+  `test/service-process.mjs`, which wrote to the real product log. The unified log
+  held only test-fixture lines. The cause is therefore not in the logs.
+- **Likely cause (from code).** The service never held an XPC transaction. The
+  SDK says a service with none "may automatically exit due to inactivity", and
+  between host requests it was idle. macOS could end it (SIGKILL, no crash
+  report), the guardian then stopped Bun, and the host got an interruption plus
+  `recoveryRequired` and exited 1 with nothing on screen.
+  - Fix: `ServiceRuntime` calls `xpc_transaction_begin()` once Bun runs.
+- **Restart.**
+  - `ServiceClient` treats a lost service (a refused `resume`, three failed reconnects, or a non-zero `serviceStopped` passed on by the host) as a restart.
+  - A restart drops the epoch and sends first-launch hellos 1/2/4 s apart. These wait out launchd's respawn throttle and take the profile lock once the old guardian released it.
+  - Limits: at most 3 restarts in 60 s, and 3 tries per restart.
+  - Frames in flight are dropped, never replayed. The outbox is cleared.
+  - The host keeps the window, closes the old Bun's agent browsers, sheet and source editors, and shows a toast. It re-emits `ready` so the new Bun rebuilds the shell. The new Bun's conversation recovery marks the running turn interrupted (`interruptedNote`).
+- **Failure.** The host shows a critical alert sheet with the reason and Relaunch Trezi / Quit (`serviceUnrecoverable`). Under `TREZI_NATIVE_TEST_DIR` it still exits 1, so smoke runs fail loudly.
+- **Why it died, in the product log.**
+  - Every service stop logs its reason.
+  - Bun's end is decoded (`code=N` or `signal=N (NAME)`) with its memory footprint and peak, sampled every 30 s through the guardian's child.
+  - A loss with no announcement logs: exit state (a zombie counts as exited), memory, recent memory-pressure events and the service's last three lines.
+  - 10 s later it logs the matching TreziService/Jetsam report names, or that there were none.
+- **Tests.**
+  - `restart-cases.mjs` under `service-process`: SIGKILL → restart → fresh Bun → echo; `serviceStopped` → restart; missing Bun → failure after 3 tries. Each case checks its log lines.
+  - The XPC fixture's product log now goes to the scratch folder.
+  - Not run: the native kill-mid-turn check and a visual check of the alert. The worker had no native verify run.
+
 ## 2026-10-24 — LKM-345: the real-toolchain swift-preview tests run one at a time
 
 - **Failures.** 4 of the last 5 CI runs failed only on swift-preview tests:

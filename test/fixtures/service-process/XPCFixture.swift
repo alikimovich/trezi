@@ -76,21 +76,26 @@ final class FixtureEvents: NSObject, TreziServiceEvents {
         if CommandLine.arguments.count == 4 {
             do {
                 let launch = try JSONDecoder().decode(ServiceLaunch.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2])))
+                // The host's product log, in the launch's folder (exit reports, LKM-347).
+                ProductLog.configure(process: "app", environment: launch.environment)
                 let instance = try ServiceClient(launch: launch, serviceExecutable: CommandLine.arguments[3])
                 client = instance
-                instance.start(onReady: { print("READY"); fflush(stdout) }, onMessage: { data in
+                instance.start(onReady: { print("READY\nSERVICE \(instance.servicePID)"); fflush(stdout) }, onMessage: { data in
                     print("EVENT \(data.base64EncodedString())"); fflush(stdout)
-                }, onFailure: { message in print("FAILURE \(message)"); fflush(stdout); exit(3) })
+                }, onFailure: { message in print("FAILURE \(message)"); ProductLog.flush(); fflush(stdout); exit(3) },
+                   onRestarting: { reason in print("RESTARTING \(reason)"); fflush(stdout) },
+                   onRestarted: { print("RESTARTED\nSERVICE \(instance.servicePID)"); fflush(stdout) })
                 DispatchQueue.global().async {
                     while let line = readLine() {
                         DispatchQueue.main.async {
                             if line == "reconnect" { instance.disconnectAndReconnect(); awaitReady(instance, deadline: Date().addingTimeInterval(5)) }
+                            else if line == "restart" { instance.restart("fixture restart after serviceStopped") }
                             else if line == "shutdown" {
                                 var completed = 0
                                 for _ in 0..<3 {
                                     instance.shutdown {
                                         completed += 1
-                                        if completed == 3 { instance.shutdown { print("STOPPED"); fflush(stdout); exit(0) } }
+                                        if completed == 3 { instance.shutdown { print("STOPPED"); ProductLog.flush(); fflush(stdout); exit(0) } }
                                     }
                                 }
                             } else if let data = Data(base64Encoded: line) { instance.send(data) }

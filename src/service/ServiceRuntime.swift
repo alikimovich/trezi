@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import XPC
 
 final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
     let queue = DispatchQueue(label: "dev.trezi.service.owner")
@@ -45,6 +46,8 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
     /// grants, pasted attachments, the running-servers recovery), on the same pipe.
     var platform: PlatformOwner?
     var child: BackendChild?
+    /// Bun's last sampled memory, for its exit line (LKM-347).
+    var backendMemory: MemorySampler?
     var launch: ServiceLaunch?
     var peerPID: pid_t?
     var active: ServiceSession?
@@ -60,7 +63,8 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         for sig in [SIGTERM, SIGINT, SIGHUP] {
             signal(sig, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: sig, queue: queue)
-            source.setEventHandler { [weak self] in self?.stop() }
+            // launchd replacing or unloading the service sends TERM first.
+            source.setEventHandler { [weak self] in self?.stop(reason: "received \(String(cString: strsignal(sig)))") }
             source.resume(); signals.append(source)
         }
     }
@@ -137,11 +141,19 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                             profileDescriptor: exclusion?.guardDescriptor, guardianExecutable: CommandLine.arguments[0],
                             diagnostics: session.diagnostics?.fileDescriptor) { [weak self] status in
                             guard let self else { return }
-                            if status == 0 { ProductLog.info("backend", "Backend exited status=0") }
-                            else { ProductLog.error("backend", "Backend exited status=\(status)") }
-                            self.queue.async { self.stop(backendStatus: status == 0 ? 0 : 1) }
+                            // LKM-347: how Bun ended and the memory it last held.
+                            let ended = MemorySampler.describe(status: status, guarded: true)
+                            if status == 0 { ProductLog.info("backend", "Backend exited code=0") }
+                            else { ProductLog.error("backend", "Backend exited \(ended) \(self.backendMemory?.summary() ?? "")") }
+                            self.queue.async { self.stop(backendStatus: status == 0 ? 0 : 1, reason: "backend exited \(ended)") }
                         }
-                        ProductLog.info("backend", "Backend started pid=\(child?.pid ?? 0)")
+                        let guardian = child?.pid ?? 0
+                        backendMemory = MemorySampler { MemorySampler.firstChild(of: guardian) }
+                        ProductLog.info("backend", "Backend started pid=\(guardian)")
+                        // LKM-347: an XPC service with no open transaction counts as idle between
+                        // host requests, and macOS may end an idle service (SIGKILL, no crash
+                        // report), taking Bun and a running turn with it. Held until exit.
+                        xpc_transaction_begin()
                     } catch {
                         ProductLog.error("backend", "Backend failed to start: \(error)")
                         launch = nil; ledger = nil; exclusion?.release(); exclusion = nil
@@ -258,7 +270,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                 completion(try ServiceXPC.encode(ServiceControlReply(requestID: target, failure: .cancelled)))
                 answer()
             case .shutdown:
-                stop { answer() }
+                stop(reason: "the app quit") { answer() }
             case .hello: break
             }
         } catch {
@@ -287,6 +299,7 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         let platformPrefix = Data("{\"service\":\"platform\"".utf8)
         DispatchQueue.global().async { [weak self] in
             var pending = Data()
+            var reason = "backend output closed"
             do {
                 while true {
                     let bytes = try output.readAvailable(upTo: 64 * 1024)
@@ -312,9 +325,13 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
                     }
                     guard pending.count <= ServiceXPC.maxLegacyBytes else { throw ServiceContractFailure.invalidRequest }
                 }
-            } catch { /* A malformed/oversized private bridge fails closed. */ }
+            } catch {
+                // A malformed/oversized private bridge fails closed.
+                reason = "backend line over the \(ServiceXPC.maxLegacyBytes / 1_048_576) MB bridge limit"
+                ProductLog.error("backend", "Backend bridge closed: \(reason)")
+            }
             // EOF normally accompanies exit; let the reaped status win before failing closed.
-            self?.queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.stop() }
+            self?.queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.stop(reason: reason) }
         }
     }
 
@@ -322,7 +339,9 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         guard !stopping else { return }
         if let active { active.deliver(data) }
         else {
-            guard bufferedBytes + data.count <= ServiceXPC.maxLegacyBytes * 2 else { stop(); return }
+            guard bufferedBytes + data.count <= ServiceXPC.maxLegacyBytes * 2 else {
+                stop(reason: "too many backend events buffered while the app was away"); return
+            }
             buffered.append(data); bufferedBytes += data.count
         }
     }
@@ -338,15 +357,16 @@ final class ServiceRuntime: NSObject, NSXPCListenerDelegate {
         let expected = generation
         queue.asyncAfter(deadline: .now() + 5) { [weak self] in
             guard let self, self.generation == expected, self.active == nil else { return }
-            self.stop()
+            self.stop(reason: "the app did not reconnect within 5 s")
         }
     }
 
     /// backendStatus: 0 for a clean Bun exit; any failure (or a lost private bridge) reports 1.
-    func stop(backendStatus: Int32 = 1, completion: (() -> Void)? = nil) {
+    /// `reason` goes to the product log (LKM-347), so a stop is never unexplained.
+    func stop(backendStatus: Int32 = 1, reason: String, completion: (() -> Void)? = nil) {
         guard !stopping else { completion?(); return }
         stopping = true
-        ProductLog.info("lifecycle", "Service stopping backendStatus=\(backendStatus)")
+        ProductLog.info("lifecycle", "Service stopping backendStatus=\(backendStatus) reason=\(reason)")
         // No owner switch: retain every store and let Bun finish its existing shutdown.
         // Let accepted host frames (final persisted state) reach Bun before EOF; bounded.
         let drained = DispatchSemaphore(value: 0)
