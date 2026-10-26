@@ -11,6 +11,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Watch: the `repository-owner` 'subject is the prompt' failure (job 121411614148) did not reproduce locally (live-commit 24/24 under load, the 14 parity suites 4×). The next failure prints the commit result, `git status`, `index.lock` and the service log; read the cause from them.
 - [ ] Watch: the `live-publish-attribution` failure (job 121433226386) did not reproduce (24/24 under load); the CI log was not readable by the worker. The next failure shows the fixture compile time and the failing run's output.
 - [ ] Full native suite pass, and CI green on the PR. No native run was available to the worker.
+## The chat header ignores a frame the split has not moved yet (LKM-356)
+
+- [x] At rest, a chat header frame that has not moved with the detail column (a sidebar width set without animation, before AppKit lays the toolbar out again) is not used: the header starts at the column plus the learned offset, and the offset is not learned from that frame (`ToolbarChatLead`, `chatHeaderLeading`); unit `toolbar-chat-lead` (the failure's 180 → 230 pt numbers).
+- [x] Native core `toolbar-address` passes on the fix: worker run, 190 traced frames at ≥ 1000 pt, none with a control or "…" in the overflow menu; `sidebar-230` keeps the chat item at 440 pt from its first frame.
+- [ ] Full core group green: the worker's run failed `inspector` (select-mode hover), `preview-inspector` (Web Inspector docked), `three-d` (layer click opens the inspector) and `preview-overlay` (narrow-light grid stray at {{511, 23}, {39, 223}}). The first three are recurring timeouts in earlier native logs. The overlay stray was not seen before in this form.
 
 ## The latest-row settle ends; cards after the reply keep the end (LKM-354)
 
