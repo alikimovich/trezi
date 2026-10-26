@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## `native-chat-send-follow` stream cases bounded in realize scrolls, not seconds (LKM-359)
+
+- [x] Root cause: the streaming forced cases (`stream-long`, `stream-short`, `leak-stream`) had to end within a fixed 25 s, while their bound (240 realize steps, then 150 quiet turns) is in main-thread turns, which a loaded runner stretches. LKM-358's `ChatLatestSettle.step` rule cannot reach these cases (frames always dropped, `trailing` false).
+- [x] `blankFrames(bound:)` (`test/fixtures/chat-send-follow/main.swift`): a streaming run stops unended once more than 240 realize scrolls ran; the 90 s `cap` only stops a hung run. The failure text also lists the settles run.
+- [x] Checks: with 60 and 100 ms main-thread stalls per harness turn, every stream case ends with the bound held (25.8–42.6 s, beyond the old cap). A `CHAT_SWIFT` copy whose streamed chunks reset the count fails (`stream-long: the settle never ended`, 241 realize scrolls). `native-chat-latest-settle` passes.
+- [ ] Watch: main push CI green on the merge.
+
 ## A latest frame below the end marker is stale with trailing rows too (LKM-358)
 
 - [x] With a live footer, cards or questions after the latest message, `ChatLatestSettle.step` relayouts when the latest row's frame ends below the end marker (an earlier clip offset), so the LKM-349 escalation to realize applies again; unit `native-chat-latest-settle` cases `trailingStaleLatest` (the failure's numbers) and `trailingLatestAboveFooter`.

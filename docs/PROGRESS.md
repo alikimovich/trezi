@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-359: `native-chat-send-follow` stream cases bounded in realize scrolls, not a fixed 25 s
+
+- **Failure.** Main CI after LKM-358: `native-chat-send-follow` failed with `stream-short: the settle never ended`. The settles never ended within the fixture's 25 s cap.
+- **Not LKM-358.** Its new `.relayout` rule needs `trailing` and a measured latest frame. The forced cases drop every message frame (`messageFramesFilter` → `[:]`), and a streamed reply is never `trailing`, so every step reads as before. The product bound is unchanged: once more than 2 unresolved settles have run, realize is suppressed, which allows at most 3 × 4 runs × 20 steps = 240 realize scrolls.
+- **Cause (test timing).** "Ended" means no realize for 1.5 s and 150 quiet turns. The settle sleeps 16 ms per step. Once a main-thread turn takes longer than that, every step and every quiet turn needs a turn of its own. So the bounded work (240 steps, then 150 turns) grows with turn length, while the cap was a fixed time. On push, main runs the whole unit tier on one shard with 3 workers on a 3-vCPU runner, which is the loaded case. Locally, injecting 60 ms stalls per harness turn reproduced it: stream-long ran about 28.7 s with the bound held, past the 25 s cap.
+- **Fix.** `blankFrames(bound:)` (`test/fixtures/chat-send-follow/main.swift`): a streaming run counts as unended once more than 240 realize scrolls ran, which is the bug (realize restarted by each chunk). It no longer fails on a time. `cap` is 90 s for the stream cases and only stops a hung run. The non-streaming cases keep the 20 s cap. The failure text now also lists the settles. Every assertion is unchanged, including the 240-realize bound and the late checks.
+- **Checks.** The real fixture passes: stream-long ended after 10.1 s with 240 realize scrolls, stream-short 8.4 s with 240, leak-stream 2.0 s with 3. With 60 ms stalls, the three cases ended at 28.7, 25.8 and 12.9 s; with 100 ms stalls, at 42.6, 41.3 and 19.6 s. Every run had 0 late realizes, rows back and 0 pt from the end. Negative control: a `CHAT_SWIFT` copy with `if !afterPin { unresolvedSettles = 0 }` (chunks reset the count) fails `stream-long: the settle never ended … (241 realize scrolls, 3 settles)`. `native-chat-latest-settle` passes (LKM-358 cases).
+- **Limits.** No CI log was available, so CI's realize count and settle times are inferred, not read. No native run was made (none allowed this session; the fixture is unit tier).
 ## 2026-10-26 — LKM-358: composer `visible-composer` 320-sending, a stale latest frame with a live footer
 
 - **Failure.** Nightly native on `9ac19da5`: `Composer capture 320-sending: latest message did not end above the composer`. The latest row read 1897–1968 pt with the end marker at 569 pt, `scrollY` 2525 in a 3301 pt document, after 5 settle attempts.

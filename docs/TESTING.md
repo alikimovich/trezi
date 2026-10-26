@@ -393,7 +393,10 @@ row measured in view: the bounded settles (at most 240 realize scrolls) must end
 the frames are measured again the sent rows are in the reading area, the clip at
 the end. Two further cases do the same while the reply streams a chunk every 0.1 s
 (each chunk is a content request): the settles have ended once no realize scroll
-ran for 1.5 s within 25 s, then none may run and the clip make no move up of over
+ran for 1.5 s and 150 run-loop turns. They must end before more than 240 realize
+scrolls run, not within a time (LKM-359): the bound is in settle steps, and a
+loaded runner stretches each step and quiet turn, so the old fixed 25 s cap failed
+with the bound holding. A 90 s cap only stops a hung run. Then none may run and the clip make no move up of over
 40 pt in the 3 s after, with the chunks still arriving. `leak-stream` also lets
 the frames measured in the 60 ms after each realize scroll through, then loses
 them again. Every forced case ends by sending a second prompt with the frames
