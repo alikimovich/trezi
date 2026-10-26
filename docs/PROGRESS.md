@@ -2,6 +2,24 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-348: runtime-owner and native-chat-latest-settle no longer race
+
+- **runtime-owner (`opened.clients` was 0, expected 1).**
+  - Cause, in production code: `StaticServer.serve` wrote the event-stream opening (`retry: 1000`), then called `site.attach(client)`.
+  - The fixture's `open-stream` returns as soon as it reads the opening. It could read `clientCount` before the serving thread attached the stream.
+  - In the product, a change broadcast in that gap skipped the new stream.
+  - Fix: `EventClient.start` attaches, then writes the opening, both under the client's lock. A peer that read the opening is always counted. A broadcast that sees the stream waits for its opening, never writing ahead of the HTTP head.
+  - Lock order is client → site only: `broadcast`, `drop` and `close` release the site lock before they touch a client.
+- **native-chat-latest-settle ("latest row ends below the reading edge").**
+  - Cause, in the fixture: each sample read the layout after a fixed `spin(0.6)`. A settle steps once per frame for up to 80 attempts, and its last pin starts another one three main-loop hops later.
+  - Measured locally, settles ended 77–653 ms after they started, and a main-loop pass of this stack takes about 140 ms. A slower runner therefore sampled mid-settle, before the latest row reached the edge.
+  - Fix: the fixture tracks `settling` and samples only after 5 main-loop passes with no settle running (`settleIdle`, a 30 s hang bound reported as `settleIdle: false`). The test asserts it for every sample.
+  - The `--no-settle` control keeps its old timing: its blank sample (1/13) was the same in all of 10 runs, old and new.
+- **Evidence.**
+  - 10 consecutive local runs of each test passed: `bun test/runtime-owner.mjs` (21–22 s each; the sandbox skipped its port and FSEvents sections, `static http` passed) and `bun test/native-chat-latest-settle.mjs` (30–33 s each).
+  - Under `taskpolicy -c background`, the new settle fixture had no bad samples in 3 runs.
+  - No sleeps or timeouts were raised. The settle test takes about 20 s longer because it now waits for real settles.
+
 ## 2026-10-25 — LKM-347: a dead service is restarted, reported, and never quits Trezi silently
 
 - **The 2026-10-24 logs.** `~/Library/Logs/Trezi` has no real-session lines at
