@@ -613,6 +613,36 @@ assert.equal(
   controller.get('a').messages.at(-1).text,
   'Comment finished without changes.\n\n\n  The button is already blue.  \nNothing changed.'
 )
+// LKM-352: a background text edit posts no row, unless its landed source lacks the
+// text the user typed: then the chat says so, with the edit's revert group.
+const rows = controller.get('a').messages.length
+controller.event({
+  type: 'spawn-finished',
+  projectKey: 'a',
+  sessionId: 'text-full',
+  outcome: 'applied',
+  branch: null,
+  origin: 'text-edit'
+})
+assert.equal(controller.get('a').messages.length, rows, 'a clean text edit is silent')
+controller.event({
+  type: 'spawn-finished',
+  projectKey: 'a',
+  sessionId: 'text-cut',
+  outcome: 'applied',
+  branch: null,
+  origin: 'text-edit',
+  mismatch: 'The source does not contain the full text.'
+})
+const mismatch = controller.get('a').messages.at(-1)
+assert.equal(controller.get('a').messages.length, rows + 1)
+assert.equal(mismatch.text, 'Text edit incomplete.\n\nThe source does not contain the full text.')
+assert.deepEqual(mismatch.comment, {
+  title: 'Text edit incomplete',
+  line: 'The source does not contain the full text.',
+  detail: ''
+})
+assert.equal(mismatch.revertGroup, 'text-edit:text-cut')
 
 // Timing belongs to a turn, not the lifetime of a chat; waits/landing are included.
 const {

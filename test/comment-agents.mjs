@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
+import { textEditMismatch } from '../src/main/text-edit-check.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { passCheck } from './helpers/gate-checks.mjs'
 
@@ -30,6 +31,7 @@ mock.module('../src/main/backends/index.ts', () => ({
     supportsSpawn: true,
     startSession: async (root, options, window, context) => {
       const cap = createRecordCapture(root, 'fixture')
+      const sent = []
       const session = {
         record: cap.record,
         pending: new Map(),
@@ -38,15 +40,16 @@ mock.module('../src/main/backends/index.ts', () => ({
         finalize: cap.finalize,
         dispose() {},
         shutdown() {},
-        send() {},
+        send: (text) => sent.push(text),
         interrupt: async () => context.onEvent({ type: 'done' })
       }
-      providers.push({ root, context, session, options })
+      providers.push({ root, context, session, options, sent })
       return session
     }
   })
 }))
 const { registerAgentIpc, projectHasRunningAgents } = await import('../src/main/agent.ts')
+const { applyTextEdit } = await import('../src/main/props.ts')
 registerAgentIpc(
   () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } }),
   { handle: (name, fn) => handlers.set(name, fn) }
@@ -158,6 +161,51 @@ try {
   assert.deepEqual(settled.at(-1), null, 'Cancel dismisses the waiting question')
   await wait(() => finished(asking.spawnId))
   assert.equal(finished(asking.spawnId).outcome, 'cancelled')
+  // LKM-352: an inline text edit's spawn gets the whole text; a mock agent copies what
+  // the prompt carries into source. A full copy lands clean; a cut one lands reported.
+  const typed =
+    'I have a knack for finding and fixing unnecessary friction in processes and experiences. ' +
+    'Before Remitly, I applied these qualities at Swiftly, building a cross-platform design ' +
+    'system, and automating the "handoff" between design and engineering.'
+  assert.ok(typed.length > 200)
+  writeFileSync(join(repo, 'SelectedWork.tsx'), "const paragraphs = ['Old paragraph text.']\n")
+  git('add', 'SelectedWork.tsx')
+  git('commit', '-qm', 'Paragraphs')
+  const textEdit = async (agent) => {
+    const edit = await applyTextEdit(repo, { source: 'SelectedWork.tsx:1:20', text: typed })
+    assert.equal(edit.needsAgent, true)
+    const started = await invoke(
+      'agent:spawn-comment',
+      repo,
+      edit.agentPrompt,
+      'parent',
+      { provider: 'codex' },
+      'text-edit',
+      undefined,
+      edit.expectText
+    )
+    const p = providers.at(-1)
+    const copied = /\n(`{3,})text\n([\s\S]*?)\n\1$/.exec(p.sent.at(-1))[2]
+    writeFileSync(
+      join(p.root, 'SelectedWork.tsx'),
+      `const paragraphs = [${JSON.stringify(agent(copied))}]\n`
+    )
+    await passCheck(parent, p.root)
+    p.context.onEvent({ type: 'done' })
+    await wait(() => finished(started.spawnId))
+    return finished(started.spawnId)
+  }
+  const full = await textEdit((text) => text)
+  assert.equal(full.outcome, 'applied')
+  assert.equal(full.origin, 'text-edit')
+  assert.equal(full.mismatch, undefined, 'the full text landed')
+  assert.equal(
+    readFileSync(join(repo, 'SelectedWork.tsx'), 'utf8'),
+    `const paragraphs = [${JSON.stringify(typed)}]\n`
+  )
+  const cut = await textEdit((text) => text.slice(0, 200))
+  assert.equal(cut.outcome, 'applied')
+  assert.equal(cut.mismatch, textEditMismatch(typed), 'a cut text is reported')
   const broken = await start(),
     c = providers.at(-1)
   rmSync(c.root, { recursive: true, force: true })

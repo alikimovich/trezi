@@ -459,6 +459,23 @@ export class NativeChatController {
           })
           if (chat.chat !== this.active) chat.needsReview = true
           this.changed(chat)
+        } else if (event.mismatch && event.projectKey && !this.closed.has(event.projectKey)) {
+          // LKM-352: a text edit posts a row only when its landed source lacks the text.
+          const chat = this.get(event.projectKey)
+          const title = 'Text edit incomplete'
+          const text = `${title}.\n\n${event.mismatch}`
+          chat.messages.push({
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            at: Date.now(),
+            text,
+            statuses: [],
+            segments: [{ kind: 'text', text }],
+            comment: { title, line: event.mismatch, detail: event.summary ?? '' },
+            revertGroup: `text-edit:${event.sessionId}`
+          })
+          if (chat.chat !== this.active) chat.needsReview = true
+          this.changed(chat)
         }
       }
       return
