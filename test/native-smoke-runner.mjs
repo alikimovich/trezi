@@ -647,6 +647,75 @@ assert.throws(
   assert.equal(sent.filter(([method]) => method === 'captureShell').length, 2)
 }
 
+{
+  // LKM-349: a history wheel is sent once more only when the lazy stack's re-measure left less
+  // than the wheel's distance above the corrected end and the probe re-attached there.
+  const { wheelOutranRemeasure } = await import('./helpers/chat-acceptance.mjs')
+  // The failing main run: idle on a stale 307 pt estimate, then the wheel's re-measure.
+  const idle = {
+    scrollY: 7042,
+    documentHeight: 7790,
+    viewportHeight: 748,
+    scrollWheelEvents: 2,
+    userScrollCount: 6,
+    pinned: true
+  }
+  const remeasured = {
+    ...idle,
+    scrollY: 5915,
+    documentHeight: 6663,
+    scrollWheelEvents: 3,
+    userScrollCount: 9
+  }
+  assert.equal(
+    wheelOutranRemeasure(idle, remeasured, 700),
+    true,
+    'correction larger than the wheel'
+  )
+  assert.equal(
+    wheelOutranRemeasure(idle, { ...remeasured, pinned: false }, 700),
+    false,
+    'not before the probe re-attached'
+  )
+  assert.equal(
+    wheelOutranRemeasure(idle, remeasured, 1200),
+    false,
+    'a wheel that still fits above the corrected end must scroll'
+  )
+  assert.equal(
+    wheelOutranRemeasure(idle, { ...idle, scrollWheelEvents: 3, userScrollCount: 9 }, 700),
+    false,
+    'an unchanged document is a wheel that did not scroll'
+  )
+  assert.equal(
+    wheelOutranRemeasure(idle, { ...remeasured, userScrollCount: 6 }, 700),
+    false,
+    'a wheel the probe rejected is never resent'
+  )
+  assert.equal(
+    wheelOutranRemeasure(idle, { ...remeasured, scrollWheelEvents: 2 }, 700),
+    false,
+    'not before the wheel arrived'
+  )
+  // A passing run: re-measured before the wheel, which moved 700 pt and detached.
+  const passing = { ...idle, scrollY: 5141, documentHeight: 5889 }
+  assert.equal(
+    wheelOutranRemeasure(
+      passing,
+      {
+        ...passing,
+        scrollY: 4441,
+        documentHeight: 5958,
+        scrollWheelEvents: 3,
+        userScrollCount: 9,
+        pinned: false
+      },
+      700
+    ),
+    false
+  )
+}
+
 console.log(
-  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once, Settings restored to General, chat acceptance reactivated and retried once.'
+  'Native smoke runner: failures collected, dependents skipped with reasons, independent checks continue, summary format fixed, focus restored and retried once, Settings restored to General, chat acceptance reactivated and retried once, a history wheel resent only when a re-measure outran it.'
 )

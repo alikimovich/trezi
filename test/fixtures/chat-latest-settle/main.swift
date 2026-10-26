@@ -47,13 +47,18 @@ struct Conversation: View {
         Task { @MainActor in
             defer { model.settling = false }
             let readingHeight = { max(1, viewportHeight - model.inset) }
-            var stuck = 0, unresolved = 0
+            var stuck = 0, unresolved = 0, relayouts = 0
+            var relayoutEnd: CGFloat?
             model.settleAttempts = await ChatLatestSettle.follow(request: { latestGeneration }, current: { follows }, step: {
                 ChatLatestSettle.step(latest: model.rows.last?.id, frames: model.frames, bottom: model.bottom,
                                       readingHeight: readingHeight(), viewportHeight: viewportHeight)
             }) { step in
                 unresolved = step == .bottom ? unresolved + 1 : 0
-                let action = ChatLatestSettle.escalated(step, unresolved: unresolved)
+                let latestEnd = model.rows.last.flatMap { model.frames[$0.id]?.maxY }
+                relayouts = ChatLatestSettle.relayouts(after: step, count: relayouts, end: latestEnd, previous: relayoutEnd)
+                relayoutEnd = step == .relayout ? latestEnd : nil
+                let action = ChatLatestSettle.escalated(step, unresolved: unresolved, relayouts: relayouts, latest: model.rows.last?.id)
+                if case .realize = action { relayouts = 0 }
                 if case .realize(let id) = action {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1
                     let target = ChatLatestSettle.realizeTarget(latest: id, first: model.rows.first?.id, stuck: stuck)
@@ -124,6 +129,22 @@ if CommandLine.arguments.contains("--cases") {
         "noRowInView": step(["old": CGRect(x: 0, y: 900, width: 400, height: 154)], bottom: 0),
         "escalations": escalations,
         "settledEscalates": ChatLatestSettle.escalated(.settled, unresolved: 3) == .settled,
+        // LKM-349: the first three relayouts stay relayouts; the fourth realizes the latest row.
+        "relayouts": (1...5).map { count -> String in
+            switch ChatLatestSettle.escalated(.relayout, unresolved: 0, relayouts: count, latest: "latest") {
+            case .realize(let id): return "realize:\(id)"
+            case .relayout: return "relayout"
+            default: return "other"
+            }
+        },
+        // A relayout that moved the latest row's frame is converging and counts again from 1.
+        "relayoutCounts": ([(nil, nil), (1000, nil), (1000, 1000), (1000.4, 1000), (1000, 1000), (900, 1000)] as [(CGFloat?, CGFloat?)]).reduce(into: (count: 0, counts: [Int]())) { state, pair in
+            state.count = ChatLatestSettle.relayouts(after: .relayout, count: state.count, end: pair.0, previous: pair.1)
+            state.counts.append(state.count)
+        }.counts,
+        "relayoutCountResets": ChatLatestSettle.relayouts(after: .bottom, count: 3, end: 1000, previous: 1000),
+        "relayoutsWithoutRows": ChatLatestSettle.escalated(.relayout, unresolved: 0, relayouts: 9, latest: nil) == .relayout,
+        "bottomNeverRealizes": ChatLatestSettle.escalated(.bottom, unresolved: 0, relayouts: 9, latest: "latest") == .bottom,
         "footer": ["history": ChatLayout.footerHeight(running: false, latest: false), "latestDone": ChatLayout.footerHeight(running: false, latest: true),
                    "running": ChatLayout.footerHeight(running: true, latest: true), "runningNotLast": ChatLayout.footerHeight(running: true, latest: false)]
     ]

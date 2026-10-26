@@ -68,6 +68,19 @@ if (process.platform !== 'darwin') {
     ])
     assert.equal(cases.settledEscalates, true, 'settled never escalates')
     assert.deepEqual(
+      cases.relayouts,
+      ['relayout', 'relayout', 'relayout', 'realize:latest', 'realize:latest'],
+      'a relayout that keeps failing realizes the latest row (LKM-349)'
+    )
+    assert.deepEqual(
+      cases.relayoutCounts,
+      [1, 1, 2, 3, 4, 1],
+      'only relayouts that leave the latest frame in place add up; one that moved it starts again'
+    )
+    assert.equal(cases.relayoutCountResets, 0, 'a non-relayout step resets the count')
+    assert.equal(cases.relayoutsWithoutRows, true, 'no latest row: nothing to realize')
+    assert.equal(cases.bottomNeverRealizes, true, 'only a relayout escalates to realize')
+    assert.deepEqual(
       cases.footer,
       { history: 28, latestDone: 44, running: 44, runningNotLast: 44 },
       'history footers are one 28 pt row; the running turn and the latest response keep the counter line'

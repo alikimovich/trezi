@@ -2,6 +2,31 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-349: chat acceptance wheel and the lazy stack's re-measure
+
+- **Failure.** Nightly native on `77875f84`: "Wheel scrolls history and reveals latest button" (first WhenScrolling pass) ended pinned at the end, `scrollY` 5915 = `documentHeight` 6663 − viewport 748.
+- **Cause, from that run's artifacts.**
+  - The width loop ran with the Always (legacy) scroller, so the document was 307 pt wide. Switching to WhenScrolling widened it to 320 pt.
+  - The idle capture still reported the 307 pt estimate (document 7790, `scrollY` 7042).
+  - The wheel was taken as user input (`scrollWheelEvents` 2 → 3, `userScrollCount` 6 → 9: monitor plus live-scroll start/end) and moved 700 pt. It then set off the lazy stack's re-measure: document 7790 → 6663 (−1127 pt). The wheel's target, 6342, now lay past the new end, so the clip was clamped there and the probe re-attached once the input rested. The product behaved as designed.
+  - In the 12 passing runs found in other worktrees' artifacts, the stack had already re-measured before the wheel (idle 6118 → 5889). The wheel then moved exactly 700 pt.
+- **Fix (test only).**
+  - `wheelIntoHistory` posts each history wheel (the width loop, scroller modes, accessibility) and waits for its predicate as before.
+  - It sends the wheel once more only when `wheelOutranRemeasure` holds: the probe took the wheel as user input, the document height changed, the probe is pinned again, and the target lies at or past the corrected end.
+  - Any other miss, and a second miss, fails with the same label and `acceptance-failure.json`. Thresholds and the product are unchanged.
+- **Tests.** Unit `native-smoke-runner` checks the predicate with the failing run's numbers and a passing run's, plus a not-yet-re-attached case, a wheel that still fits, an unchanged document, a rejected wheel and a wheel that has not arrived.
+- **Manager native run: `visible-composer` "320-sending" (a second, separate failure).** It failed in both of the worker's and the manager's full runs with identical numbers, so it is not timing noise (the nightly run on `77875f84` passed it).
+  - State at the failure: `scrollY` 2525 + viewport 776 = document 3301, so the clip was at the end; the end marker read 569 (at the 570 pt reading edge); the latest row was reported at 1897–1968. That is 1514 pt below its 383 pt place in the passing nightly capture, and past the document's end, so the row's frame belongs to an earlier clip offset. The failure capture shows the row above the composer.
+  - Cause: `ChatLatestSettle.step` answers `.relayout` for "marker at the edge, latest row below it" (LKM-149). Its marker nudge did not re-measure the row's frame here, so all 20 attempts ended in relayouts (`settleAttempts` 20) and nothing else ran.
+  - Fix (`ChatScrollStyle.swift`, `Chat.swift`): `escalated` turns the fourth consecutive `.relayout` into `.realize(latest)`, the existing SwiftUI scroll to the latest row, which measures it where it now is. The first three relayouts are unchanged, and the count restarts after a realize.
+  - Tests: `native-chat-latest-settle --cases` gains `relayouts` (relayout ×3, then realize), no latest row, and bottom never realizes. The fixture's own settle uses the same escalation.
+  - Verified (first worker run): the full native suite passed (`visible-composer` and 66 other smoke checks, then `native-chat-scroll`). Its log shows the wheel resend firing with the nightly failure's numbers (document 7790 → 6663), which confirms that diagnosis.
+- **Manager native run 3: `native-chat-scroll` send visibility failed** (`440-fixed sent+60: no visible transcript rows`, then `send-after-send: capture does not show "BLANK CHECK PROMPT"`; the smoke checks all passed).
+  - `send-visibility.json`: at sent+200 and sent+500 the prompt (y 645) and reply (bottom 776) sat at the viewport's bottom edge, 206 pt under the 570 pt reading edge, while the document had re-measured by −3800 pt. A row parked at the viewport bottom is what `.realize` leaves (`realizeTarget` anchors `.bottom`), so the realize I added was re-parking the latest row under the composer and holding the pin (`realizingLatest`) every fifth step while the relayout/pin loop was still converging. An earlier attempt at this (see the "row below" note in this file) blanked send visibility the same way.
+  - Fix (`ChatLatestSettle.relayouts`, used by `settleLatest` in `Chat.swift` and the fixture): a relayout counts toward the escalation only when it left the latest row's maxY where it was (±0.5 pt). A relayout that moved the frame is converging and restarts the count at 1. LKM-349's stale frame (1897 pt in a 3301 pt document, the same value on every attempt) still reaches `.realize` on the fourth relayout.
+  - Tests: `native-chat-latest-settle --cases` gains `relayoutCounts` (`[1, 1, 2, 3, 4, 1]`) and `relayoutCountResets`.
+- **Worker native run (the single call of this session): failed at `comment-rows`, before `native-chat-scroll`.** `light collapsed: the user bubble was sampled (frame {{18, 74}, {404, 40}}, reading height 570)`. The captured rendering (`comment-rows-light-collapsed-sampled.png`) shows the reference bubble at y≈155, so `messageFrames` was ~80 pt stale and the colour samples both landed on the chat background (contrast 0). The 29 later smoke checks were skipped. This check also failed in the first worker run of this ticket, when the tree held no product change (test helpers only), and the last two full runs passed it; it is the same stale-frame-after-AppKit-pin class as above, in `verifyCommentRows` (`ChatCommentCapture.swift`), and was not changed. The send-visibility fix above is therefore unverified natively.
+
 ## 2026-10-25 — LKM-348: runtime-owner and native-chat-latest-settle no longer race
 
 - **runtime-owner (`opened.clients` was 0, expected 1).**

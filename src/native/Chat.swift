@@ -369,7 +369,8 @@ struct ChatConversation: View {
             // pass. Let both requests land before the first scroll correction.
             await Task.yield()
             let readingHeight = { max(1, viewportHeight - model.bottomInset) }
-            var stuck = 0, unresolved = 0
+            var stuck = 0, unresolved = 0, relayouts = 0
+            var relayoutEnd: CGFloat?
             model.latestSettleAttempts = await ChatLatestSettle.follow(request: { latestGeneration }, current: { follows }, step: {
                 ChatLatestSettle.step(latest: model.snapshot?.messages.last?.id, frames: model.messageFrames, bottom: model.bottomPosition,
                                       readingHeight: readingHeight(), viewportHeight: viewportHeight)
@@ -377,9 +378,14 @@ struct ChatConversation: View {
                 // No row in view: hold the AppKit pin, relayout the stack (a
                 // 1pt marker change) and scroll to the latest through SwiftUI.
                 // Rows in view: the pin's short jump lands on the end exactly.
-                // Relayout: the same marker change in place, then the pin.
+                // Relayout: the same marker change in place, then the pin; a
+                // relayout that keeps failing scrolls to the latest like the first.
                 unresolved = step == .bottom ? unresolved + 1 : 0
-                let action = ChatLatestSettle.escalated(step, unresolved: unresolved)
+                let latestEnd = model.snapshot?.messages.last.flatMap { model.messageFrames[$0.id]?.maxY }
+                relayouts = ChatLatestSettle.relayouts(after: step, count: relayouts, end: latestEnd, previous: relayoutEnd)
+                relayoutEnd = step == .relayout ? latestEnd : nil
+                let action = ChatLatestSettle.escalated(step, unresolved: unresolved, relayouts: relayouts, latest: model.snapshot?.messages.last?.id)
+                if case .realize = action { relayouts = 0 }
                 if case .realize(let id) = action {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1
                     let target = ChatLatestSettle.realizeTarget(latest: id, first: model.snapshot?.messages.first?.id, stuck: stuck)

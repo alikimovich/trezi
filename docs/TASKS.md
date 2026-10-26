@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat acceptance wheel survives a lazy-stack re-measure (LKM-349)
+
+- [x] A history wheel is sent once more only when the stack's own re-measure left less than the wheel's distance above the corrected end and the probe re-attached there (`wheelOutranRemeasure`, `wheelIntoHistory` in `test/helpers/chat-acceptance.mjs`); unit `native-smoke-runner`.
+- [x] A relayout that keeps failing to re-measure the latest row escalates to realizing it (`ChatLatestSettle.escalated`, `relayouts`); unit `native-chat-latest-settle --cases`.
+- [x] The relayout count restarts when the latest row's frame moved (`ChatLatestSettle.relayouts`), so a converging pin is not interrupted by a realize that parks the row under the composer (send visibility); unit `native-chat-latest-settle --cases` (`relayoutCounts`).
+- [ ] Full native suite pass on the fix: the first worker run passed (67 smoke checks and `native-chat-scroll`); the later runs failed at `native-chat-scroll` send visibility (manager) and at `comment-rows` with a stale bubble frame (worker, unrelated flake), so send visibility with the count change is still unverified natively.
+
 ## runtime-owner and native-chat-latest-settle deterministic on CI (LKM-348)
 
 - [x] A live-reload stream is registered before its opening is written (`EventClient.start`, `StaticServer.serve`), so a peer that read the opening is always counted; unit `runtime-owner` (`opened.clients == 1`).

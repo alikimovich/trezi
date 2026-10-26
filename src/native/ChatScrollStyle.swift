@@ -70,8 +70,24 @@ enum ChatLatestSettle: Equatable {
     /// pin unresolved after three tries means SwiftUI's layout disagrees with
     /// AppKit's end: the clip is already there, so another pin moves nothing.
     /// Every third one relayouts instead, like `.relayout`.
-    static func escalated(_ step: ChatLatestSettle, unresolved: Int) -> ChatLatestSettle {
-        step == .bottom && unresolved > 0 && unresolved % 3 == 0 ? .relayout : step
+    /// A relayout that leaves the latest row's frame unmeasured after three tries
+    /// (`relayouts` counts the consecutive ones, this step included) means the
+    /// stack's frames still belong to an earlier clip offset (LKM-349: the row
+    /// reported at 1897 pt in a 3301 pt document, ended). The next one realizes
+    /// the latest row through SwiftUI, which measures it where it now is.
+    static func escalated(_ step: ChatLatestSettle, unresolved: Int, relayouts: Int = 0, latest: String? = nil) -> ChatLatestSettle {
+        if step == .relayout, relayouts > 3, let latest { return .realize(latest) }
+        return step == .bottom && unresolved > 0 && unresolved % 3 == 0 ? .relayout : step
+    }
+    /// The consecutive relayouts that left the latest row's frame where it was
+    /// (`end` is its maxY now, `previous` at the last relayout). A relayout whose
+    /// frame moved is converging (the pin is working through a re-measure), so it
+    /// starts the count again: realizing then would park the row at the viewport
+    /// bottom, under the composer, and hold the pin (LKM-349, send visibility).
+    static func relayouts(after step: ChatLatestSettle, count: Int, end: CGFloat?, previous: CGFloat?) -> Int {
+        guard step == .relayout else { return 0 }
+        if let end, let previous, abs(end - previous) <= 0.5 { return count + 1 }
+        return 1
     }
     /// The SwiftUI scroll for the `stuck`-th consecutive realize step. A stack
     /// whose estimates are far off can stay empty at the latest row; every

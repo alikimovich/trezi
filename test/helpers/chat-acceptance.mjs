@@ -5,21 +5,63 @@ import { join } from 'node:path'
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const message = (id, text) => ({ id, role: 'assistant', text, segments: [{ kind: 'text', text }] })
 
+/**
+ * LKM-349: the conversation's lazy stack reports an estimated document height. After a width
+ * change (440 → 320 pt, or a legacy scroller giving way to an overlay one) it can keep the old
+ * width's estimate until the next scroll re-measures it. A wheel that sets off a correction larger
+ * than its own distance ends at the corrected end, where the probe rightly re-attaches. True when
+ * the probe took the wheel as user input, the document height changed, the probe is pinned again
+ * and the wheel's target (`scrollY` counts from the top of the flipped document) no longer lies
+ * above the corrected end.
+ */
+export function wheelOutranRemeasure(start, state, delta) {
+  return (
+    state.scrollWheelEvents > start.scrollWheelEvents &&
+    state.userScrollCount > start.userScrollCount &&
+    state.pinned === true &&
+    state.documentHeight !== start.documentHeight &&
+    start.scrollY - delta >= state.documentHeight - state.viewportHeight - 1
+  )
+}
+
 /** Invoked by native-runtime -> native-chat-scroll under the manager desktop lock. */
 export async function checkChatAcceptance(host, artifacts) {
   const inspect = (args) => host.request('chatAcceptance', args)
-  const wait = async (predicate, label) => {
+  const poll = async (predicate) => {
     let last
     for (let i = 0; i < 60; i++) {
       last = await inspect({})
-      if (predicate(last)) return last
+      if (predicate(last)) return { met: true, last }
       await delay(50)
     }
+    return { met: false, last }
+  }
+  const fail = (label, last) => {
     writeFileSync(
       join(artifacts, 'acceptance-failure.json'),
       JSON.stringify({ label, last }, null, 2)
     )
     assert.fail(`${label}: ${JSON.stringify(last)}`)
+  }
+  const wait = async (predicate, label) => {
+    const { met, last } = await poll(predicate)
+    return met ? last : fail(label, last)
+  }
+  // Wheel into history until `predicate(state, start)` holds. A wheel the stack's own
+  // re-measure outran (see wheelOutranRemeasure) is sent once more on the corrected
+  // document; any other miss, and a second one, fails with `label`.
+  const wheelIntoHistory = async (delta, predicate, label) => {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const start = await inspect({})
+      await inspect({ input: 'wheel', delta })
+      const outran = (s) => attempt === 1 && wheelOutranRemeasure(start, s, delta)
+      const { met, last } = await poll((s) => predicate(s, start) || outran(s))
+      if (met && predicate(last, start)) return last
+      if (!met) fail(label, last)
+      console.warn(
+        `${label}: the wheel set off a re-measure (document ${start.documentHeight} → ${last.documentHeight}pt) that left less than ${delta}pt above the end; wheeling once more`
+      )
+    }
   }
   const capture = async (name) => {
     const state = await inspect({ capture: true })
@@ -271,8 +313,8 @@ export async function checkChatAcceptance(host, artifacts) {
       // Scrolled up with a one-line draft: the centered button above the composer.
       await setDraft(1)
       await latestCapture(`acceptance-${width}-before-scroll-up`)
-      await inspect({ input: 'wheel', delta: 700 })
-      await wait(
+      await wheelIntoHistory(
+        700,
         (s) => s.latestButton && !s.latestVisible,
         `${width}pt wheel scrolls history and reveals latest button`
       )
@@ -325,10 +367,9 @@ export async function checkChatAcceptance(host, artifacts) {
       if (expected === 'legacy')
         assert.equal(idle.scrollerHidden, false, 'Always scroller stays visible while idle')
       // Wheel activity reveals the native overlay thumb before pointer hover.
-      const wheelStart = await inspect({})
-      await inspect({ input: 'wheel', delta: 700 })
-      await wait(
-        (s) => Math.abs(s.scrollY - wheelStart.scrollY) > 40 && s.latestButton,
+      await wheelIntoHistory(
+        700,
+        (s, start) => Math.abs(s.scrollY - start.scrollY) > 40 && s.latestButton,
         'Wheel scrolls history and reveals latest button'
       )
       await capture(`${prefix}-active`)
@@ -377,8 +418,7 @@ export async function checkChatAcceptance(host, artifacts) {
       )
       const before = await inspect({})
       const contrast = await latestCapture(`acceptance-accessibility-${enabled}`)
-      await inspect({ input: 'wheel', delta: 500 })
-      await wait((s) => s.latestButton, 'Accessibility scroll remains usable')
+      await wheelIntoHistory(500, (s) => s.latestButton, 'Accessibility scroll remains usable')
       await clickLatest(`acceptance-accessibility-${enabled}-latest`)
       const after = await latestCapture(`acceptance-accessibility-${enabled}-latest`)
       assert.equal(
