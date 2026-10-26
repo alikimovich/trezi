@@ -44,9 +44,17 @@ func state(running: Bool = false) -> [String: Any] {
     return value
 }
 var samples: [[String: Any]] = []
+// The checks stay in the test. On a loaded runner the settle can still be running after a
+// fixed wait, so keep spinning (up to 10 s) until the marker is read at the reading edge and
+// the settle is under its 20-attempt run; a pre-fix chat never gets there and is recorded as is.
 func sample(_ phase: String) {
     spin(1.5)
     let model = chat.model
+    let deadline = Date(timeIntervalSinceNow: 10)
+    func settled() -> Bool {
+        model.bottomPosition > 0 && abs(model.bottomPosition - max(1, chat.bounds.height - model.bottomInset)) <= 2 && model.latestSettleAttempts < 20
+    }
+    while !settled() && Date() < deadline { spin(0.25) }
     samples.append(["phase": phase, "bottom": model.bottomPosition, "reading": max(1, chat.bounds.height - model.bottomInset),
                     "settleAttempts": model.latestSettleAttempts, "pins": probe()?.pinCount ?? 0])
 }
