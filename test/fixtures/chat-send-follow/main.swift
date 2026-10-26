@@ -79,27 +79,33 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
                     "upJump": jump, "settlingAfterTurn": settling, "cards": cardsAt != nil])
 }
 /// The reporter's state (LKM-354): after a send in a long chat, no message row is measured in view
-/// (no cards, questions or footer), for `hold` seconds, as when the stack's frames belong to an
-/// earlier clip offset. The model's frames are cleared every 4 ms, as each layout would restore
-/// them. The first bounded settle (about 1.3 s) may jump to the first row; past `window` the
-/// settle must have ended and the clip stay put. Then the frames are released with the next
-/// streamed chunk: the sent rows must be back in the reading area, the clip at the end.
+/// (no cards, questions or footer), as when the stack's frames belong to an earlier clip offset.
+/// The model's frames are cleared every 4 ms, as each layout would restore them. The bounded
+/// settles (3 of about 1.3 s each, jumping through the first row) must end: no settle for 0.3 s
+/// within `cap` seconds (not a fixed time, so a slow runner only waits longer). For `after` more
+/// seconds the settle must then stay ended and the clip put. Then the frames are released with
+/// the next streamed chunk: the sent rows must be back in the reading area, the clip at the end.
 var forcedResults: [[String: Any]] = []
-func blankFrames(_ name: String, hold: Double = 4, window: Double = 2.5) {
+func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5) {
     let prompt = "\(name)-prompt", reply = "\(name)-reply"
     messages += [message(prompt, "user", "Please review the text on the home page"), message(reply, "assistant", "")]
     running = true; push()
     let start = Date()
     var late = 0, settlingLate = 0, highest = -CGFloat.infinity, upJump: CGFloat = 0, upJumpAll: CGFloat = 0, highestAll = -CGFloat.infinity, next = 0.0
-    while Date().timeIntervalSince(start) < hold {
+    var idleSince: Double?, endedAt: Double?
+    while true {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
         chat.model.messageFrames = [:]
         let t = Date().timeIntervalSince(start)
+        if let endedAt, t >= endedAt + after { break }
+        if endedAt == nil && t >= cap { break }
         guard t >= next else { continue }
         next = t + 0.03
         let now = offset()
-        highestAll = max(highestAll, now); upJumpAll = max(upJumpAll, highestAll - now)
-        if t >= window {
+        if endedAt == nil {
+            highestAll = max(highestAll, now); upJumpAll = max(upJumpAll, highestAll - now)
+            if chat.model.latestSettling { idleSince = nil } else if let since = idleSince { if t - since >= 0.3 { endedAt = t } } else { idleSince = t }
+        } else {
             late += 1
             if chat.model.latestSettling { settlingLate += 1 }
             highest = max(highest, now); upJump = max(upJump, highest - now)
@@ -112,7 +118,7 @@ func blankFrames(_ name: String, hold: Double = 4, window: Double = 2.5) {
     let metrics = chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]
     let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
     running = false; push(); spin(0.5)
-    forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringFirstSettle": upJumpAll,
+    forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1,
                           "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow])
 }
 open("new", []); spin(1); send("new")

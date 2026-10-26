@@ -278,7 +278,7 @@ struct ChatConversation: View {
     @State private var settlingLatest = false
     @State private var realizingLatest = false
     @State private var latestNudge = false
-    @State private var settleUnresolved = false
+    @State private var unresolvedSettles = 0
     @State private var viewportHeight: CGFloat = 0
     private func reveal(_ proxy: ScrollViewProxy, readingHeight: CGFloat, viewportHeight: CGFloat) {
         revealGeneration += 1
@@ -362,11 +362,13 @@ struct ChatConversation: View {
     /// See ChatLatestSettle. Requests while settling extend the running one;
     /// the user scrolling away ends it. Metrics are read live at each step.
     /// `afterPin`: a pin or clamp moved the clip. A settle that ran out unresolved
-    /// ends with a pin, so that move must not start the next one: it repeated
-    /// forever, the clip jumping every frame (LKM-354). Any other request does.
+    /// ends with a pin whose move starts the next one, which gives a slow layout
+    /// time to converge. That repeated forever when nothing could resolve, the
+    /// clip jumping every frame (LKM-354): after `ChatLatestSettle.unresolvedRestarts`
+    /// in a row the pin's move stops. Any other request starts again.
     private func settleLatest(_ proxy: ScrollViewProxy, afterPin: Bool = false) {
-        if afterPin && settleUnresolved { return }
-        settleUnresolved = false
+        if afterPin && unresolvedSettles > ChatLatestSettle.unresolvedRestarts { return }
+        if !afterPin { unresolvedSettles = 0 }
         latestGeneration += 1
         guard !settlingLatest else { return }
         settlingLatest = true; model.latestSettling = true
@@ -407,7 +409,7 @@ struct ChatConversation: View {
                 }
             }
             settlingLatest = false; realizingLatest = false; model.latestSettling = false
-            settleUnresolved = follows && last != .settled
+            unresolvedSettles = follows && last != .settled ? unresolvedSettles + 1 : 0
             // Rest at the marker's 1pt height, so the nudges leave no offset behind.
             if latestNudge { latestNudge = false }
             if follows { pinRequest += 1 }

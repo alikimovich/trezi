@@ -65,7 +65,7 @@ if (process.platform !== 'darwin') {
     const describeForced = forced
       .map(
         (entry) =>
-          `${entry.case}: settling ${entry.settlingLate}/${entry.lateSamples} after the first bounded settle, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringFirstSettle.toFixed(0)} pt during it), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+          `${entry.case}: settles ended after ${entry.endedAfter.toFixed(1)} s, then settling ${entry.settlingLate}/${entry.lateSamples}, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
     const describe = cases
@@ -95,13 +95,15 @@ if (process.platform !== 'darwin') {
       )
     }
     // The reporter's state (blank chat, scrollbar between offsets 0 and 18): no message row is
-    // measured in view, with no cards, questions or footer. The frames stay missing for 4 s.
+    // measured in view, with no cards, questions or footer. The frames stay missing.
     for (const entry of forced) {
-      // One bounded settle (about 1.3 s) may realize through the first row; it must then end
-      // and leave the clip alone, instead of restarting from its own closing pin.
+      // The bounded settles (each about 1.3 s, jumping through the first row) must end within the
+      // fixture's 20 s cap, then stay ended and leave the clip alone instead of restarting from
+      // their own closing pin.
+      assert.ok(entry.endedAfter >= 0, `${entry.case}: the settle never ended (${describeForced})`)
       assert.ok(
         entry.lateSamples > 20 && entry.settlingLate <= 3,
-        `${entry.case}: the settle never ended with no row in view (${describeForced})`
+        `${entry.case}: the settle restarted after it ended (${describeForced})`
       )
       assert.ok(
         entry.upJump <= 40,
