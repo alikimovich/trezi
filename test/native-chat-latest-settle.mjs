@@ -68,6 +68,17 @@ if (process.platform !== 'darwin') {
     // LKM-354: rows after the latest message report no frame; the marker in view is the end.
     assert.equal(cases.trailingFillsView, true, 'cards filling the view at the end must settle')
     assert.equal(cases.trailingNotRealized, true, 'an unrealized end with cards must still realize')
+    // LKM-358: the latest row still ends above the marker after it; a frame below it is stale.
+    assert.equal(
+      cases.trailingStaleLatest,
+      true,
+      'a latest frame below the end marker must relayout'
+    )
+    assert.equal(
+      cases.trailingLatestAboveFooter,
+      true,
+      'the latest row above a live footer settles'
+    )
     assert.deepEqual(
       cases.unresolvedCounts,
       [4, 4, 4, 0, 0],

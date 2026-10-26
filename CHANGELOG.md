@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+- While a turn runs, the conversation no longer stops following before your sent message is measured in view (LKM-358).
+
 ## [0.3.8] - 2026-10-26
 
 ### Fixed

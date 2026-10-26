@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## A latest frame below the end marker is stale with trailing rows too (LKM-358)
+
+- [x] With a live footer, cards or questions after the latest message, `ChatLatestSettle.step` relayouts when the latest row's frame ends below the end marker (an earlier clip offset), so the LKM-349 escalation to realize applies again; unit `native-chat-latest-settle` cases `trailingStaleLatest` (the failure's numbers) and `trailingLatestAboveFooter`.
+- [x] Native composer group green on the worker's run (9/9, `visible-composer` 440 and 320 pt).
+- [ ] `native-chat-scroll` send visibility: the worker's run hit the recurring `440-fixed loaded` first-load blank (no trailing rows there, so the changed rule does not apply); the manager's run should show it pass.
+
 ## Loaded-runner flakes: bottom marker, repository-owner, live-publish-attribution (LKM-355)
 
 - [x] `native-chat-bottom-marker` waits on explicit signals: each phase samples once a new settle ended (`latestSettles`), none runs (`latestSettling`) and nothing pinned for 30 run-loop turns, bounded at 60 s (`test/fixtures/chat-bottom-marker/main.swift`); it asserts the last settle's own result (`latestSettled`, `src/native/Chat.swift` diagnostics) instead of a summed attempt count against a one-run limit. 24/24 under load (PROGRESS).
