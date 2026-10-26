@@ -2,6 +2,28 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-350: send visibility sends only after the load's settle ended
+
+- **Failure.** Nightly native on `00e3d931`: `native-chat-scroll` send visibility, `440-fixed sent+60: no visible transcript rows`. All 67 smoke checks passed, and every other sample in that run was healthy, including sent+200 and the `send-after-send` capture.
+- **Cause, from that run's `send-visibility.json`.**
+  - The `loaded` sample is not at the end. It reads `offset` 18 in a 19509 pt document, 2 rows, tail rows unrealized, `latestSettleAttempts` 0. The first chat's settle had not finished, and offset 18 is where `realizeTarget`'s first-row step (`.top`) puts the clip.
+  - The test had seen the latest row (`settle()`), sent `prepare`, then waited 300 ms. So the load's settle was still stepping when the send arrived.
+  - sent+60: clip at the estimated end (offset = `maxOffset` 19426), 0 realized rows, attempts still 0. This is the jump from the top of an estimated document.
+  - sent+200: 3 rows at the end of the corrected 11677 pt document; the settle had finished (32 attempts).
+  - The same unfinished load shows in the LKM-349 manager's passing run (attempts 0 at `loaded`, clip 1042 pt short of the end, 62 at sent+200). LKM-334's notes record the same first-load race (`440-fixed loaded`, attempts 0). Every send that started from a settled transcript, in all the earlier artifacts, showed rows at sent+60.
+- **Fix (diagnostic plus test).**
+  - `ChatModel.latestSettling` is true while `settleLatest` runs, and the chat inspect reports it. Diagnostics only: no behaviour change.
+  - `checkSendVisibility` waits for the load's settle after `settle()`/`prepare`: two idle reads in a row (a settle's closing pin can start the next one), at most 5 s. Only then does it take the `loaded` sample and send.
+  - The `loaded` entry records `loadSettleMs` and `loadSettleTimedOut`. A wait over 100 ms prints a `SEND VISIBILITY NOTE`.
+  - Every assertion and threshold is unchanged. A send that blanks from a settled transcript still fails, and so does a load that is still blank after its settle.
+- **Not changed (watch).** On LKM-349's tree, the first load's settle took 32–62 attempts in both runs, against ≤ 10 before. One possible cause is the relayout → realize escalation. Two runs are not enough to act on, so the TASKS watch item and the new NOTE line will show whether it persists.
+- **Verification.** The quick tier passed: typecheck, `typecheck:native`, unit 265 PASS / 3 SKIP, lint.
+- **Worker native run (one call): failed before `native-chat-scroll`.** It stopped at `comment-rows`: `light collapsed: the user bubble was sampled (frame {{18, 74}, {404, 40}}, reading height 570)`, then skipped 28 later checks.
+  - The sampled capture shows the reference bubble at y≈155, so `messageFrames` was about 80 pt stale.
+  - This is the same failure, with the same frame, as LKM-349's worker run on a tree with no product change. The nightly on `00e3d931` passed it.
+  - This change does not touch that path: `latestSettling` is a plain, unpublished diagnostic.
+  - Send visibility is therefore unverified natively.
+
 ## 2026-10-25 — LKM-349: chat acceptance wheel and the lazy stack's re-measure
 
 - **Failure.** Nightly native on `77875f84`: "Wheel scrolls history and reveals latest button" (first WhenScrolling pass) ended pinned at the end, `scrollY` 5915 = `documentHeight` 6663 − viewport 748.

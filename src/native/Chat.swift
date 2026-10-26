@@ -63,7 +63,7 @@ final class ChatModel: ObservableObject {
     var revealRequest: IslandRevealRequest { IslandRevealRequest(revision: revealRevision, island: revealIsland, bottom: revealBottom, message: revealMessage) }
     var revealAppliedRevision = 0
     var revealAttempt = 0
-    var latestSettleAttempts = 0  // diagnostics (ChatLatestSettle)
+    var latestSettleAttempts = 0, latestSettling = false  // diagnostics (ChatLatestSettle)
     @Published var visible = false
     let layout = ChatLayoutModel()
     var composerHeight: CGFloat {
@@ -234,7 +234,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
     }
     func inspect() -> [String: Any] {
         let tail = model.snapshot?.messages.suffix(3).map { ["id":$0.id, "frame":NSStringFromRect(model.messageFrames[$0.id] ?? .zero)] } ?? []
-        let state: [String: Any] = ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "tailFrames":tail,
+        let state: [String: Any] = ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "latestSettling":model.latestSettling, "tailFrames":tail,
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
          "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
          "comments":model.snapshot?.messages.compactMap { m in m.comment.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
@@ -363,7 +363,7 @@ struct ChatConversation: View {
     private func settleLatest(_ proxy: ScrollViewProxy) {
         latestGeneration += 1
         guard !settlingLatest else { return }
-        settlingLatest = true
+        settlingLatest = true; model.latestSettling = true
         Task { @MainActor in
             // Composer height and viewport often change in the same Send layout
             // pass. Let both requests land before the first scroll correction.
@@ -396,7 +396,7 @@ struct ChatConversation: View {
                     pinRequest += 1
                 }
             }
-            settlingLatest = false; realizingLatest = false
+            settlingLatest = false; realizingLatest = false; model.latestSettling = false
             // Rest at the marker's 1pt height, so the nudges leave no offset behind.
             if latestNudge { latestNudge = false }
             if follows { pinRequest += 1 }
