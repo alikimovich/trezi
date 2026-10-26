@@ -518,7 +518,8 @@ async function main() {
   runtimeOwner.onLog((root, line) => contextController.devServerLog(root, line))
   // LKM-157: a connected project whose restarted preview stays unstamped is offered Reconnect.
   workspaceController.restarted = (root) => contextController.restarted(root)
-  const visualEdit = async (root: string, prompt: string) => {
+  // `expectText`: an inline text edit's text, checked once the edit lands (LKM-352).
+  const visualEdit = async (root: string, prompt: string, expectText?: string) => {
     const entry = workspaceController.state.projects.find((p) => p.root === root)
     if (!entry || !prompt.trim()) return
     const chat = chatController.chats.get(entry.activeSessionKey)
@@ -529,7 +530,9 @@ async function main() {
         prompt,
         entry.activeSessionKey,
         chat ? agentOptionsFor(chat.settings) : {},
-        'text-edit'
+        'text-edit',
+        undefined,
+        expectText
       )
       .catch(() => null)
     if (!result?.ok) {

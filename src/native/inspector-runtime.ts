@@ -21,7 +21,7 @@ export function installNativeInspector(
   workspace: NativeWorkspaceController,
   chat: NativeChatController,
   context: NativeContextController,
-  visualEdit: (root: string, prompt: string) => Promise<void>,
+  visualEdit: (root: string, prompt: string, expectText?: string) => Promise<void>,
   openSource: (source?: string) => void,
   report: (error: unknown) => void
 ) {
@@ -404,11 +404,14 @@ export function installNativeInspector(
       void workspace.services
         .invoke('text:apply', entry.root, value)
         .then((result) => {
+          // Over the inline limit: say so, never hand the agent a cut text (LKM-352).
+          if (result.refused) return report(result.error)
           if (!result.applied)
             return visualEdit(
               entry.root,
               result.agentPrompt ??
-                `In ${projectRelative(value.source, entry.root)}, change only the selected element's text to ${JSON.stringify(value.text)}.`
+                `In ${projectRelative(value.source, entry.root)}, change only the selected element's text to ${JSON.stringify(value.text)}.`,
+              result.expectText
             )
         })
         .catch(report)

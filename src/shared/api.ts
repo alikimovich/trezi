@@ -483,6 +483,8 @@ export type AgentEvent = (
       summary?: string
       files?: string[]
       label?: string
+      /** A landed text edit whose source lacks the requested text (LKM-352). */
+      mismatch?: string
     }
   /** Main starts one bounded reconciliation turn in the originating chat. */
   | { type: 'reconciliation-started' }
@@ -1109,6 +1111,10 @@ export interface PropEditResult {
   needsAgent?: boolean
   /** A ready-to-send prompt describing the change, when `needsAgent`. */
   agentPrompt?: string
+  /** A text edit's agent fallback: the text the landed edit must contain (LKM-352). */
+  expectText?: string
+  /** Not applied and not for the agent either (a text over the inline limit). */
+  refused?: boolean
   error?: string
 }
 
