@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## `native-chat-send-follow` timed from the app's Send (LKM-357)
+
+- [x] Rows-in-view latency runs from the app's Send moment (`sendRevision`) to the first reported frames with a sent row in view, not from harness sampling (`test/fixtures/chat-send-follow/main.swift`); locally still 1 s (`test/native-chat-send-follow.mjs`).
+- [x] On CI (`CI`/`GITHUB_ACTIONS` true) the limit is 2 s, about twice the observed 1.04 s failure (179b3cd3); a failure lists each case's Send time, shown time, delta and the limit.
+- [x] Negative controls: a `CHAT_SWIFT` copy that applies the snapshot 1.2 s late fails locally (1.28 s), one 2.5 s late fails with `CI=true` (2.62 s).
+- [ ] Watch: CI green on the PR and on main. The 1.04 s stall did not reproduce locally (10/10 under 12–36 busy loops).
+
 ## Loaded-runner flakes: bottom marker, repository-owner, live-publish-attribution (LKM-355)
 
 - [x] `native-chat-bottom-marker` waits on explicit signals: each phase samples once a new settle ended (`latestSettles`), none runs (`latestSettling`) and nothing pinned for 30 run-loop turns, bounded at 60 s (`test/fixtures/chat-bottom-marker/main.swift`); it asserts the last settle's own result (`latestSettled`, `src/native/Chat.swift` diagnostics) instead of a summed attempt count against a one-run limit. 24/24 under load (PROGRESS).

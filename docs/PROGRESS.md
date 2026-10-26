@@ -2,6 +2,21 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-357: `native-chat-send-follow` timed from the app's Send, with a CI margin
+
+- **Failure.** Main push CI on 179b3cd3: `long: sent rows not in view within 1 s (shown after 1.04 s)`. The same code passed on d9793a01 and bb1b04d8.
+- **What the old number measured.** The harness started its clock after `push()` returned, and only noticed the rows at its next 30 ms run-loop sample. Locally that read 0.05–0.10 s for a layout that reported the rows after 0.003–0.017 s.
+- **Fix (test only).**
+  - The fixture records the app's own Send moment: a Combine sink on `ChatModel.$sendRevision`, which `NativeChat.update` raises for the new message.
+  - The shown moment is the first `onPreferenceChange` frames with a sent row in the reading area, read through a pass-through `messageFramesFilter`.
+  - "Stays in view" now counts samples after the limit, timed from the Send.
+- **CI margin.** The limit stays 1 s locally. With `CI=true` or `GITHUB_ACTIONS=true` it is 2 s, about twice the worst reading seen on a runner (1.04 s), so a stall of more than ten times the local value no longer flakes. Rows that never show (-1) or take seconds still fail.
+- **Failure output.** Every case prints the Send time, the shown time (both after the harness's push), the delta, the harness sample for comparison and the limit used.
+- **Checks.**
+  - Under load (12 and 36 `for(;;){}` loops, 4 and 6 runs at once) 10/10 runs passed; app-measured at most 0.014 s, harness-sampled at most 0.11 s. The CI stall did not reproduce.
+  - Negative controls (`CHAT_SWIFT` copies that apply the snapshot late): 1.2 s late fails locally at 1.28 s; 2.5 s late fails with `CI=true` at 2.62 s.
+- **Limits.** No product change and no native suite run. CI not observed.
+
 ## 2026-10-26 — LKM-355: loaded-runner flakes in native-chat-bottom-marker, repository-owner, live-publish-attribution
 
 - **No CI logs.** The worker sandbox cannot read the GitHub API, so the failing jobs' assertion text was unavailable. The causes below come from the code and the reported run times (14–18 s).
