@@ -1,7 +1,7 @@
 {
   "name": "trezi",
   "productName": "Trezi",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "AI design & prototyping tool — chat on the left, live preview of your repo on the right",
   "main": "./out/native/Trezi.app/Contents/Resources/backend/index.cjs",
   "license": "MIT",
