@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-353: native-chat-latest-settle no longer asserts its timing-dependent negative control
+
+- **Failure.** Main push CI on `ded6e264`: `negative control: the AppKit pin alone should leave the transcript blank` (`blanks` 0). The same tree passed on PR #324. This was the third failure of this test (LKM-346, LKM-348).
+- **Cause (fixture, not product).** Without the settle, the fixture's only blank sample is the first load. The AppKit pin parks the clip at the lazy stack's estimated end (offset = `maxOffset` 59403) with no realized row. That state is stable: waiting 0.2 s or 2 s before the sample gives the same result. Whether it happens at all depends on how SwiftUI's first layouts and estimate interleave with the probe's main-queue pin. One 0.1 s spin before the first load moved the pin to 45410 and the blanks to 2. So the outcome is set by SwiftUI's layout scheduling and the runner's display cycle, which the fixture cannot control. Locally it gave 1/13 in every run, also under 16 busy processes. Some GitHub runners give 0. The worker could not read the CI log, so their ordering is not known, and forcing one ordering would test SwiftUI's estimator, not Trezi.
+- **Fix (test only).** The test no longer runs or asserts `--no-settle`. The fixture keeps the flag for manual reproduction. The comments in the test and the fixture, and `docs/TESTING.md`, say why. Every positive assertion is unchanged: `--cases` (LKM-149/LKM-349 decisions and footers), and for each sample `blanks == 0`, `overs == 0`, `settleIdle` (LKM-348), `latestVisible`, `latestAboveEdge` and under 80 attempts. They cannot pass vacuously, because each sample must show the latest row at the reading edge. No product code changed, and no product race was found.
+- **Evidence.** 58 consecutive passes of `bun test/native-chat-latest-settle.mjs`: 38 unloaded, and 20 beside 16–24 busy-loop processes (load average 32). Zero failures.
+
 ## 2026-10-25 — LKM-352: inline text edits keep long text when the agent makes them
 
 - **Bug.** An inline edit of a paragraph from a `paragraphs` array, rendered through `{children}`, left the page with the first 200 characters. `applyTextEdit` cannot splice expression children, so it falls back to the background agent, and `textAgentPrompt` quoted `text.slice(0, 200)`. Every text fallback (JSX expression or mixed content, Svelte, HTML) cut the same way.

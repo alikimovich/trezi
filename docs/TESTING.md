@@ -374,7 +374,9 @@ LKM-139: after the shell send, the `send-visibility` stage
 send, mid-stream and done: visible rows > 0, offset ≤ maxOffset and an unchanged
 scroll view/document. It writes `send-after-send.png`, `send-mid-stream.png` and
 `send-visibility.json`. The windowless unit test `test/native-chat-latest-settle.mjs`
-covers the same follow path with a `--no-settle` negative control.
+covers the same follow path. Its fixture's `--no-settle` mode (the pre-fix
+view) is for manual reproduction only: whether it blanks depends on SwiftUI's
+layout timing, so the test does not assert it (LKM-353).
 LKM-312: `test/native-chat-bottom-marker.mjs` hosts the real `NativeChat` (its
 sticky-request overlay included) offscreen and requires the end marker measured
 at the reading edge and each follow settled within one run, after load, streaming
