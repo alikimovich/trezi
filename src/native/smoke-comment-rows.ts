@@ -125,11 +125,16 @@ export async function checkCommentRows(host: NativeBridge, artifacts: string) {
           bubble = contrast(result.user, result.userBackground)
           bubbleColours = `${result.user} on ${result.userBackground}`
         }
-        // The frame says whether the bubble was unlaid (zero) or outside the reading area (LKM-331).
+        // The frame says whether the bubble was unlaid (zero) or outside the reading area (LKM-331);
+        // the shift, how far SwiftUI's reported frames were moved onto the rendering (LKM-351).
         assert.ok(
           bubble > 0,
-          `${mode} ${state}: the user bubble was sampled (frame ${result.userFrame}, reading height ${result.readingHeight})`
+          `${mode} ${state}: the user bubble was sampled (frame ${result.userFrame}, reported ${result.reportedUserFrame}, shift ${result.frameShift}, reading height ${result.readingHeight})`
         )
+        if (result.frameShift)
+          console.log(
+            `COMMENT ROWS NOTE ${mode} ${state}: reported frames were ${result.frameShift} pt off the rendering (bubble reported ${result.reportedUserFrame})`
+          )
         for (const row of rows) {
           assert.ok(
             row.frame.height > 0 && row.frame.y >= 0 && row.frame.y < result.readingHeight,
