@@ -74,7 +74,7 @@ if (process.platform !== 'darwin') {
     const describeForced = forced
       .map(
         (entry) =>
-          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls), then settling ${entry.settlingLate}/${entry.lateSamples}, ${entry.realizesLate} realize scrolls, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls, ${entry.settles} settles), then settling ${entry.settlingLate}/${entry.lateSamples}, ${entry.realizesLate} realize scrolls, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
     const missing = (entry) => entry.missingTimes.filter((t) => t > limit).length
@@ -111,7 +111,8 @@ if (process.platform !== 'darwin') {
     for (const entry of forced) {
       // The bounded settles (each about 1.3 s, jumping through the first row) must end within the
       // fixture's 20 s cap, then stay ended and leave the clip alone instead of restarting from
-      // their own closing pin.
+      // their own closing pin. Streaming (LKM-359): unended means more than 240 realize scrolls
+      // ran, not a time; the bound is in steps, which a loaded runner only makes slower.
       assert.ok(entry.endedAfter >= 0, `${entry.case}: the settle never ended (${describeForced})`)
       // Three unresolved settles realize, each at most 4 runs of 20 steps (ChatLatestSettle).
       assert.ok(
