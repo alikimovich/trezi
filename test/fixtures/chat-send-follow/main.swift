@@ -85,18 +85,29 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
 /// within `cap` seconds (not a fixed time, so a slow runner only waits longer). For `after` more
 /// seconds the settle must then stay ended and the clip put. Then the frames are released with
 /// the next streamed chunk: the sent rows must be back in the reading area, the clip at the end.
+/// `stream`: the reply also keeps streaming a chunk every 0.1 s, as `send` does, so every chunk is
+/// a content request for the settle (the whole turn, in the reporter's video). The settles cannot
+/// be idle then, so they have ended once the clip made no move up of over 40 pt for 1.5 s (a
+/// move up is the realize jump through the first row), and `settlingLate` is not counted.
 var forcedResults: [[String: Any]] = []
-func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5) {
+func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: Bool = false) {
     let prompt = "\(name)-prompt", reply = "\(name)-reply"
     messages += [message(prompt, "user", "Please review the text on the home page"), message(reply, "assistant", "")]
     running = true; push()
     let start = Date()
     var late = 0, settlingLate = 0, highest = -CGFloat.infinity, upJump: CGFloat = 0, upJumpAll: CGFloat = 0, highestAll = -CGFloat.infinity, next = 0.0
-    var idleSince: Double?, endedAt: Double?
+    var idleSince: Double?, endedAt: Double?, chunk = 0, peak = -CGFloat.infinity, lastJump = 0.0, jumps = 0
+    func streamChunk(_ t: Double) {
+        guard stream, t >= Double(chunk + 1) * 0.1 else { return }
+        chunk += 1
+        messages[messages.count - 1] = message(reply, "assistant", String(repeating: paragraph, count: 1 + min(chunk, 10)) + "(\(chunk))")
+        push()
+    }
     while true {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
         chat.model.messageFrames = [:]
         let t = Date().timeIntervalSince(start)
+        streamChunk(t)
         if let endedAt, t >= endedAt + after { break }
         if endedAt == nil && t >= cap { break }
         guard t >= next else { continue }
@@ -104,10 +115,14 @@ func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5) {
         let now = offset()
         if endedAt == nil {
             highestAll = max(highestAll, now); upJumpAll = max(upJumpAll, highestAll - now)
-            if chat.model.latestSettling { idleSince = nil } else if let since = idleSince { if t - since >= 0.3 { endedAt = t } } else { idleSince = t }
+            if stream {
+                peak = max(peak, now)
+                if peak - now > 40 { lastJump = t; peak = now; jumps += 1 }
+                if t - lastJump >= 1.5 { endedAt = t; highest = -CGFloat.infinity }
+            } else if chat.model.latestSettling { idleSince = nil } else if let since = idleSince { if t - since >= 0.3 { endedAt = t } } else { idleSince = t }
         } else {
             late += 1
-            if chat.model.latestSettling { settlingLate += 1 }
+            if chat.model.latestSettling && !stream { settlingLate += 1 }
             highest = max(highest, now); upJump = max(upJump, highest - now)
         }
     }
@@ -118,7 +133,7 @@ func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5) {
     let metrics = chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]
     let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
     running = false; push(); spin(0.5)
-    forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1,
+    forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream, "jumps": jumps,
                           "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow])
 }
 open("new", []); spin(1); send("new")
@@ -134,5 +149,8 @@ open("cards", history("cards", 2)); spin(1); send("cards", cardsAt: 3)
 // The reporter's state: no row measured in view after a send, in a long chat and a short one.
 open("blank-long", history("blank-long", 40)); spin(1.5); blankFrames("blank-long")
 open("blank-short", history("blank-short", 2)); spin(1); blankFrames("blank-short")
+// The same while the reply streams: every chunk is a content request for the settle.
+open("stream-long", history("stream-long", 40)); spin(1.5); blankFrames("stream-long", cap: 25, after: 3, stream: true)
+open("stream-short", history("stream-short", 2)); spin(1); blankFrames("stream-short", cap: 25, after: 3, stream: true)
 print(String(data: try! JSONSerialization.data(withJSONObject: ["cases": results, "forced": forcedResults], options: [.sortedKeys]), encoding: .utf8)!)
 exit(0)

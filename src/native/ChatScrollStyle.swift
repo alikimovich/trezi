@@ -99,8 +99,10 @@ enum ChatLatestSettle: Equatable {
     /// `.settled`) after which a pin's or clamp's own move no longer starts the
     /// next one. Each ends with a pin, which gives a slow layout another try;
     /// with nothing able to resolve (no row measured in view, LKM-354) that
-    /// repeated forever. A content, viewport, composer, chat or latest-button
-    /// request starts the count again.
+    /// repeated forever. A viewport, composer, chat or latest-button request
+    /// starts the count again, a streamed chunk keeps it: past the limit its
+    /// settle only pins and no longer realizes through SwiftUI, which jumped
+    /// the clip with every chunk for the whole turn.
     static let unresolvedRestarts = 2
     /// The SwiftUI scroll for the `stuck`-th consecutive realize step. A stack
     /// whose estimates are far off can stay empty at the latest row; every

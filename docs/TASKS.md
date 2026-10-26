@@ -5,7 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## The latest-row settle ends; cards after the reply keep the end (LKM-354)
 
-- [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a pin's move stops restarting the settle after `ChatLatestSettle.unresolvedRestarts` unresolved settles in a row (`settleLatest(afterPin:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
+- [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a pin's move stops restarting the settle after `ChatLatestSettle.unresolvedRestarts` unresolved settles in a row (`settleLatest(afterPin:)`); streamed chunks keep that count and, past it, only pin (`settleLatest(content:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
 - [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
 - [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
 ## Comment rows sample the rendering, not stale SwiftUI frames (LKM-351)

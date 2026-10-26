@@ -388,7 +388,10 @@ Two more cases (long and short chat) hold the model's message frames empty
 after a send, the reporter's state of no row measured in view: the bounded
 settles must end (within 20 s) and then stay ended with the clip put, and once the
 frames are measured again the sent rows are in the reading area, the clip at the
-end. It takes `CHAT_SWIFT` too.
+end. Two further cases do the same while the reply streams a chunk every 0.1 s
+(each chunk is a content request): the clip must make no move up of over 40 pt
+for 1.5 s within 25 s, and none in the 3 s after, with the chunks still arriving.
+It takes `CHAT_SWIFT` too.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there

@@ -65,7 +65,7 @@ if (process.platform !== 'darwin') {
     const describeForced = forced
       .map(
         (entry) =>
-          `${entry.case}: settles ended after ${entry.endedAfter.toFixed(1)} s, then settling ${entry.settlingLate}/${entry.lateSamples}, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s${entry.streamed ? ` (${entry.jumps} jumps up)` : ''}, then settling ${entry.settlingLate}/${entry.lateSamples}, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
     const describe = cases
@@ -101,8 +101,11 @@ if (process.platform !== 'darwin') {
       // fixture's 20 s cap, then stay ended and leave the clip alone instead of restarting from
       // their own closing pin.
       assert.ok(entry.endedAfter >= 0, `${entry.case}: the settle never ended (${describeForced})`)
+      // Streaming: every chunk is a content request, which keeps the unresolved count. Past the
+      // limit it only scrolls to the latest, so the jumps through the first row stop within the
+      // cap while the chunks keep arriving; a count reset by each chunk jumps for the whole turn.
       assert.ok(
-        entry.lateSamples > 20 && entry.settlingLate <= 3,
+        entry.lateSamples > (entry.streamed ? 10 : 20) && entry.settlingLate <= 3,
         `${entry.case}: the settle restarted after it ended (${describeForced})`
       )
       assert.ok(

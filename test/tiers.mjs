@@ -356,8 +356,9 @@ export const UNIT_TIMEOUT_MS = {
   // cache), then 5 s of samples.
   'native-chat-bottom-marker': 240_000,
   // LKM-354: the same compile, then seven sends sampled for ~4 s each and two forced cases that
-  // wait for the bounded settles to end (up to 20 s each); 90 s in a loaded unit run.
-  'native-chat-send-follow': 240_000,
+  // wait for the bounded settles to end (up to 20 s each), two more while the reply streams (up
+  // to 25 s each); 90 s in a loaded unit run before those, 140 s alone after.
+  'native-chat-send-follow': 360_000,
   // LKM-287: a cold compile of 19 service sources (26 s alone), then 248 creates through
   // the real SkillsOwner, each F_FULLFSYNC'd objects plus a ledger-backed manifest
   // replace (~88-190 ms each, growing with the library), for the 128 × 64 regression.

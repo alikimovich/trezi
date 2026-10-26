@@ -365,10 +365,14 @@ struct ChatConversation: View {
     /// ends with a pin whose move starts the next one, which gives a slow layout
     /// time to converge. That repeated forever when nothing could resolve, the
     /// clip jumping every frame (LKM-354): after `ChatLatestSettle.unresolvedRestarts`
-    /// in a row the pin's move stops. Any other request starts again.
-    private func settleLatest(_ proxy: ScrollViewProxy, afterPin: Bool = false) {
+    /// in a row the pin's move stops. `content`: a streamed chunk. It keeps the
+    /// count, or every chunk would start a new loop for the whole turn; past the
+    /// limit its settle only pins, it no longer realizes through SwiftUI. A
+    /// user, chat, viewport, composer or latest-button request starts again, as
+    /// does a settle that ends `.settled`.
+    private func settleLatest(_ proxy: ScrollViewProxy, afterPin: Bool = false, content: Bool = false) {
         if afterPin && unresolvedSettles > ChatLatestSettle.unresolvedRestarts { return }
-        if !afterPin { unresolvedSettles = 0 }
+        if !afterPin && !content { unresolvedSettles = 0 }
         latestGeneration += 1
         guard !settlingLatest else { return }
         settlingLatest = true; model.latestSettling = true
@@ -398,7 +402,10 @@ struct ChatConversation: View {
                 relayoutEnd = step == .relayout ? latestEnd : nil
                 let action = ChatLatestSettle.escalated(step, unresolved: unresolved, relayouts: relayouts, latest: model.snapshot?.messages.last?.id)
                 if case .realize = action { relayouts = 0 }
-                if case .realize(let id) = action {
+                // Past the limit nothing scrolls through SwiftUI any more: every realize,
+                // to the first row or to the latest (parked under the composer), moves
+                // the clip off the end and the next chunk's pin moves it back.
+                if case .realize(let id) = action, unresolvedSettles <= ChatLatestSettle.unresolvedRestarts {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1
                     let target = ChatLatestSettle.realizeTarget(latest: id, first: model.snapshot?.messages.first?.id, stuck: stuck)
                     proxy.scrollTo(target.id, anchor: target.anchor)
@@ -440,6 +447,7 @@ struct ChatConversation: View {
                     let readingHeight = max(1, viewport.size.height - model.bottomInset)
                     let bottomAnchor = UnitPoint(x: 0.5, y: readingHeight / max(1, viewport.size.height))
                     let settle = { settleLatest(proxy) }
+                    let settleContent = { settleLatest(proxy, content: true) }
                     // Unmasked: history scrolls on under the composer and the latest
                     // button, which bring their own glass (LKM-190).
                     conversationScroll(onMovedToEnd: { if follows { settleLatest(proxy, afterPin: true) } })
@@ -477,7 +485,7 @@ struct ChatConversation: View {
                         reveal(proxy, readingHeight: readingHeight, viewportHeight: viewport.size.height)
                     }
                     .onChange(of: model.controlInteraction) { _ in follows = false }
-                    .onChange(of: model.followRevision) { _ in if follows { proxy.scrollTo("bottom", anchor: bottomAnchor); pinRequest += 1; settle() } }
+                    .onChange(of: model.followRevision) { _ in if follows { proxy.scrollTo("bottom", anchor: bottomAnchor); pinRequest += 1; settleContent() } }
                     .onChange(of: model.snapshot?.chat) { _ in follows = true; sticky = nil; proxy.scrollTo("bottom", anchor: bottomAnchor); attachRequest += 1; settle() }
                     // The latest button itself is native (NativeChat.latestButton).
                     .onChange(of: model.latestRequest) { _ in follows = true; proxy.scrollTo("bottom", anchor: bottomAnchor); attachRequest += 1; settle() }
