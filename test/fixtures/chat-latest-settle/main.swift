@@ -18,6 +18,8 @@ final class Model: ObservableObject {
     var frames: [String: CGRect] = [:]
     var bottom: CGFloat = 0
     var settleAttempts = 0
+    /// A settle task is running (LKM-348): samples wait for it to finish.
+    var settling = false
 }
 struct Frames: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
@@ -41,8 +43,9 @@ struct Conversation: View {
         guard settles else { return }
         latestGeneration += 1
         guard !settlingLatest else { return }
-        settlingLatest = true
+        settlingLatest = true; model.settling = true
         Task { @MainActor in
+            defer { model.settling = false }
             let readingHeight = { max(1, viewportHeight - model.inset) }
             var stuck = 0, unresolved = 0
             model.settleAttempts = await ChatLatestSettle.follow(request: { latestGeneration }, current: { follows }, step: {
@@ -145,9 +148,25 @@ func scrollView() -> NSScrollView? {
 }
 var samples: [[String: Any]] = []
 var scenario = ""
+/// Runs the main loop until no settle has run for `passes` consecutive turns
+/// (LKM-348). A settle steps once per frame for up to 80 attempts, and its final pin
+/// reaches the probe three main-loop hops later (state update, requestPin,
+/// movedToEnd) and may start another one, so a fixed wait sampled a slow runner
+/// mid-settle. The deadline only bounds a hang; false is reported in the sample.
+func settleIdle(passes: Int = 5, deadline: Double = 30) -> Bool {
+    let end = Date(timeIntervalSinceNow: deadline)
+    var quiet = 0
+    while quiet < passes {
+        guard Date() < end else { return false }
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.016))
+        quiet = model.settling ? 0 : quiet + 1
+    }
+    return true
+}
 func sample(_ phase: String) {
     spin(0.6)
-    guard let scroll = scrollView() else { samples.append(["scenario": scenario, "phase": phase, "visibleRows": 0]); return }
+    let idle = settles ? settleIdle() : true
+    guard let scroll = scrollView() else { samples.append(["scenario": scenario, "phase": phase, "visibleRows": 0, "settleIdle": idle]); return }
     // Leaf layers in the viewport: what is drawn, independent of preferences.
     var drawnLayers = 0
     if let layer = scroll.documentView?.layer, let clip = scroll.contentView.layer {
@@ -163,7 +182,7 @@ func sample(_ phase: String) {
     let metrics = ChatScrollStyleProbe.metrics(scroll)
     let reading = host.bounds.height - model.inset
     let visible = model.frames.filter { $0.value.maxY > 0 && $0.value.minY < reading }.map(\.key)
-    samples.append(["scenario": scenario, "phase": phase, "visibleRows": visible.count, "drawnLayers": drawnLayers, "settleAttempts": model.settleAttempts,
+    samples.append(["scenario": scenario, "phase": phase, "visibleRows": visible.count, "drawnLayers": drawnLayers, "settleAttempts": model.settleAttempts, "settleIdle": idle,
                     "latestVisible": model.rows.last.map { visible.contains($0.id) } ?? false,
                     // LKM-149: settled means the latest row ends at the reading edge, not below it.
                     "latestAboveEdge": model.rows.last.flatMap { model.frames[$0.id] }.map { $0.maxY <= reading + 1 } ?? false,

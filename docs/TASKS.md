@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## runtime-owner and native-chat-latest-settle deterministic on CI (LKM-348)
+
+- [x] A live-reload stream is registered before its opening is written (`EventClient.start`, `StaticServer.serve`), so a peer that read the opening is always counted; unit `runtime-owner` (`opened.clients == 1`).
+- [x] The settle fixture samples only once no settle has run for 5 main-loop passes (`settleIdle`), never mid-settle after a fixed wait; every sample must report `settleIdle`. Unit `native-chat-latest-settle`.
+- [x] 10 consecutive local passes of each test (PROGRESS).
+- [ ] Root-cause comment on the ticket with the failing CI log lines (the worker could not read GitHub run logs).
+
 ## Service death restarts the service and never quits silently (LKM-347)
 
 - [x] A lost service (or a non-zero `serviceStopped`) restarts it with a fresh epoch: at most 3 restarts a minute, each with 3 hellos 1/2/4 s apart (`ServiceClient.beginRestart`). The window stays open, and the host clears the old Bun's views and re-emits `ready` (`HostService.serviceRestarting/serviceRestarted`). Unit `service-process` restart cases.

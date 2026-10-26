@@ -273,6 +273,13 @@ final class EventClient: @unchecked Sendable {
     private let lock = NSLock()
     private var open = true
     init(_ fd: Int32) { self.fd = fd }
+    /// Registers the stream, then writes its opening, both under this lock (LKM-348):
+    /// a peer that has read the opening is always counted, and a broadcast that
+    /// already sees the stream waits for the opening instead of writing ahead of it.
+    func start(_ opening: Data, attach: () -> Bool) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return open && attach() && StaticServer.writeAll(fd, opening)
+    }
     func send(_ data: Data) -> Bool { lock.lock(); defer { lock.unlock() }; return open && StaticServer.writeAll(fd, data) }
     func end() { lock.lock(); if open { shutdown(fd, SHUT_RDWR) }; lock.unlock() }
     func release() { lock.lock(); if open { open = false; close(fd) }; lock.unlock() }

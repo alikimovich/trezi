@@ -31,7 +31,7 @@ if (process.platform !== 'darwin') {
     summary.samples
       .map(
         (entry) =>
-          `${entry.scenario} ${entry.phase}: ${entry.visibleRows} rows, ${entry.drawnLayers} layers${entry.latestVisible ? ', latest' : ''}`
+          `${entry.scenario} ${entry.phase}: ${entry.visibleRows} rows, ${entry.drawnLayers} layers${entry.latestVisible ? ', latest' : ''}, ${entry.settleAttempts} attempts${entry.settleIdle ? '' : ', settle still running'}`
       )
       .join('; ')
   try {
@@ -81,6 +81,11 @@ if (process.platform !== 'darwin') {
     assert.equal(after.blanks, 0, `transcript blank while following (${describe(after)})`)
     assert.equal(after.overs, 0, `offset past the end (${describe(after)})`)
     for (const entry of after.samples) {
+      // LKM-348: every sample is taken once the settle finished, never mid-settle.
+      assert.ok(
+        entry.settleIdle,
+        `${entry.scenario} ${entry.phase}: settle never went idle (${describe(after)})`
+      )
       assert.ok(
         entry.latestVisible,
         `${entry.scenario} ${entry.phase}: latest row not in view (${describe(after)})`
