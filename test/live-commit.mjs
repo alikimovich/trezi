@@ -20,7 +20,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -91,10 +91,21 @@ try {
       title: 'make the header blue',
       body: 'Trezi turn 1 (trezi/chat-abc).'
     })
-    ok(res.committed, 'turn commits')
-    ok(res.sha && res.sha.length >= 7, 'returns the new HEAD sha')
-    ok(res.sha === g(repo, 'rev-parse', 'HEAD').trim(), 'sha is HEAD')
-    ok(log(repo)[0] === 'make the header blue', `subject is the prompt (got ${log(repo)[0]})`)
+    // LKM-355: commitLiveTurn reports any service or Git failure as `committed: false`, so
+    // a failure here prints the repository's state to say which step did not happen.
+    const state = () =>
+      `result ${JSON.stringify(res)}; log ${JSON.stringify(log(repo))}; status ${JSON.stringify(porcelain(repo))}; index.lock ${existsSync(join(repo, '.git', 'index.lock'))}`
+    ok(res.committed, `turn commits: actual ${res.committed}, expected true (${state()})`)
+    ok(
+      res.sha && res.sha.length >= 7,
+      `returns the new HEAD sha: actual ${JSON.stringify(res.sha)}, expected a sha`
+    )
+    const head = g(repo, 'rev-parse', 'HEAD').trim()
+    ok(res.sha === head, `sha is HEAD: actual ${res.sha}, expected ${head}`)
+    ok(
+      log(repo)[0] === 'make the header blue',
+      `subject is the prompt: actual ${JSON.stringify(log(repo)[0])}, expected "make the header blue" (${state()})`
+    )
     ok(
       g(repo, 'log', '-1', '--pretty=%b').includes('Trezi turn 1 (trezi/chat-abc).'),
       'body carries the turn/branch trailer'

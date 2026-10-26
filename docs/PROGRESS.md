@@ -2,6 +2,34 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-355: loaded-runner flakes in native-chat-bottom-marker, repository-owner, live-publish-attribution
+
+- **No CI logs.** The worker sandbox cannot read the GitHub API, so the failing jobs' assertion text was unavailable. The causes below come from the code and the reported run times (14–18 s).
+- **`native-chat-bottom-marker`: cause.**
+  - Each phase spun 1.5 s, then waited up to 10 s of wall clock for `bottom at edge && latestSettleAttempts < 20`.
+  - `latestSettleAttempts` is written only when a settle ends, and it sums up to four `ChatLatestSettle.run`s (`follow(runs: 4)`, 20 attempts each). On a slow runner a settle that did settle can need more than 20, or still be in progress with the previous value showing. The test then waited out its 10 s and failed with no assertion text: 1.5 s × 3 + 10 s plus the run matches 14–18 s.
+- **`native-chat-bottom-marker`: fix.**
+  - Diagnostics in `src/native/Chat.swift`: `latestSettles` counts the settles that ended, and `latestSettled` says whether the last one ended on a settled reading.
+  - The fixture's `sample` waits until a settle ended for this phase, none runs and `pinCount` has not changed for 30 run-loop turns (and at least 0.5 s), bounded at 60 s. It records whether it ended.
+  - The test checks each phase by name, printing actual vs expected and every sample: settle ended, at least one settle, last settle settled, end marker measured and at the reading edge (±2 pt), attempts below the real bound of 80.
+- **`repository-owner` ('subject is the prompt', job 121411614148).**
+  - Not reproduced: `live-commit` with the parity preload passed 24/24, and the whole 14-suite section passed 4 times (3 at once, under load).
+  - Load-sensitive mechanisms in the path:
+    - `commitLiveTurn` turns every error into `{committed:false}`, as does the Swift `commitLive` catch. A Git run past `RepositoryGit`'s 60 s limit under CPU starvation therefore shows only as "not committed", and so would an index lock still held by a concurrent Git.
+    - `gitRunning` counts a `git` process whose cwd cannot be read as running. A probe showed a zombie `git` has no `proc_name`, so it is skipped; only a narrow exit race remains. No product change.
+  - Diagnostics: the live-commit checks print the commit result, the service log, `git status --porcelain` and whether `.git/index.lock` exists. The preload prints the service log tail when a suite fails. `repository-owner` prints the suite's FAIL/AssertionError lines and its output tail.
+- **`live-publish-attribution` (job 121433226386).**
+  - Not reproduced: 24/24 under load, about 3.3 s each with a warm cache.
+  - Likely cause: the script compiles the workflow-owner fixture, the same cold compile that `workflow-owner` and `workflow-durability` budget 420 s for, queued in the 2-wide swiftc lane, inside this test's 240 s. The fixture's ready line also has a 30 s deadline.
+  - Fix: the test precompiles the fixture and logs its time. Each script run is bounded at 120 s and prints its status, stdout and stderr on failure. Every assertion is named with actual vs expected. The budget is now 420 s (`test/tiers.mjs`).
+- **Stress method.** A scratch runner spawned N `for(;;){}` busy loops on the 12-core Mac and ran the test M times, P at once. Results:
+  - `native-chat-bottom-marker`: 24/24 (12 at once, 12 burners), 12.9–15.1 s each.
+  - `live-commit` with the preload: 24/24 (12 at once, 12 burners).
+  - `live-publish-attribution`: 24/24 (12 at once, 12 burners).
+  - The pre-change bottom-marker also passed 24/24 at 12 at once with 24 burners, so the CI failure itself did not reproduce on this machine.
+- **Not weakened.** No retries and no skips. Every check from before is kept, and the bottom-marker adds the per-settle result.
+- **Limits.** No native suite run. CI not observed. The repository-owner and live-publish causes are inferred, not seen.
+
 ## 2026-10-26 — LKM-354: a Send resets the unresolved count (review finding)
 
 - **Defect.** `NativeChat.update` raised `followRevision` for a new message as for a streamed chunk, and that handler calls `settleLatest(content: true)`, which keeps `unresolvedSettles`. After a stuck turn had spent the bound (no row measured in view), the next Send in the same chat got pins only and no realize step, so it could stay blank.

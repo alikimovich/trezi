@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Loaded-runner flakes: bottom marker, repository-owner, live-publish-attribution (LKM-355)
+
+- [x] `native-chat-bottom-marker` waits on explicit signals: each phase samples once a new settle ended (`latestSettles`), none runs (`latestSettling`) and nothing pinned for 30 run-loop turns, bounded at 60 s (`test/fixtures/chat-bottom-marker/main.swift`); it asserts the last settle's own result (`latestSettled`, `src/native/Chat.swift` diagnostics) instead of a summed attempt count against a one-run limit. 24/24 under load (PROGRESS).
+- [x] Every check in the three tests names itself and prints actual vs expected (`test/native-chat-bottom-marker.mjs`, `test/live-commit.mjs`, `test/live-publish-attribution.mjs`); a failed parity suite lists its FAIL lines plus the service log tail (`test/repository-owner.mjs`, `test/helpers/repository-owner-preload.mjs`).
+- [x] `live-publish-attribution` precompiles the workflow fixture (time logged), bounds each script run (120 s, output on failure), and has the same 420 s budget as the other tests that compile that fixture (`test/tiers.mjs`).
+- [ ] Watch: the `repository-owner` 'subject is the prompt' failure (job 121411614148) did not reproduce locally (live-commit 24/24 under load, the 14 parity suites 4×). The next failure prints the commit result, `git status`, `index.lock` and the service log; read the cause from them.
+- [ ] Watch: the `live-publish-attribution` failure (job 121433226386) did not reproduce (24/24 under load); the CI log was not readable by the worker. The next failure shows the fixture compile time and the failing run's output.
+- [ ] Full native suite pass, and CI green on the PR. No native run was available to the worker.
+
 ## The latest-row settle ends; cards after the reply keep the end (LKM-354)
 
 - [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a pin's move stops restarting the settle after `ChatLatestSettle.unresolvedRestarts` unresolved settles in a row (`settleLatest(afterPin:)`); streamed chunks keep that count and, past it, only pin (`settleLatest(content:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
