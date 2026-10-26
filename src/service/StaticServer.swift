@@ -84,8 +84,8 @@ final class StaticServer: @unchecked Sendable {
         switch reply.body {
         case .events(let opening):
             let client = EventClient(fd)
-            guard client.send(response(status: reply.status, headers: reply.headers, length: nil) + opening), site.attach(client) else {
-                client.release(); return
+            guard client.start(response(status: reply.status, headers: reply.headers, length: nil) + opening, attach: { site.attach(client) }) else {
+                site.drop(client); client.release(); return
             }
             hold(client, fd, site: site)
         case .bytes(let data):
