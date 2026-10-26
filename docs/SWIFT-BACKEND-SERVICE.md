@@ -78,18 +78,39 @@ No filesystem, provider or preview selectors are exported.
   launch (absolute Bun, backend and profile paths); later hellos must repeat it
   and name the negotiated epoch in `resume`. A fresh instance (launchd restarts
   a lost service on demand) refuses `resume` with `recoveryRequired` and starts
-  no Bun; the host then exits instead of adopting a new epoch.
+  no Bun; the host then restarts it (LKM-347): it drops the old epoch and
+  sends a first-launch hello, which takes the profile lock once the old
+  guardian released it and starts a fresh Bun. The window stays open. The new
+  Bun's conversation recovery marks a turn that was running interrupted, and
+  the host re-emits `ready` so Bun rebuilds the shell. Restarts are limited to
+  3 per minute, each with 3 hellos 1/2/4 s apart (launchd throttles respawns
+  for ~10 s). Past that, the host shows an alert with the reason and a
+  "Relaunch Trezi" button, so it never exits silently. Under
+  `TREZI_NATIVE_TEST_DIR` the host still exits 1 and does not restart.
 - Request IDs are unique per connection and never replayed. A send whose
-  outcome is uncertain (no reply, failure, disconnect while pending) terminates
-  the host fail-closed. Frames produced before the handshake or while
-  reconnecting were never submitted and wait in a bounded outbox.
+  outcome is uncertain (no reply, disconnect while pending) is dropped and
+  counts as a lost service. A refused send is reported as an unrecoverable
+  failure. Frames produced before the handshake or while
+  reconnecting were never submitted and wait in a bounded outbox. A restart
+  clears the outbox: its frames belonged to the old Bun's session.
+- The service holds an XPC transaction (`xpc_transaction_begin`) while Bun
+  runs. Without one, an idle service can be ended by macOS (SIGKILL, no crash
+  report), which killed Bun and, before LKM-347, quit the host silently.
+- Why it died: the service logs `Service stopping … reason=…` and
+  `Backend exited code=N|signal=N (NAME) footprint=… peak=…` (the Bun memory
+  is sampled every 30 s). For a loss with no stop announcement, the host logs
+  `Service lost without a stop announcement pid=… exited=… footprint=…
+  lastServiceLines: …`, any recent memory-pressure event, and 10 s later the
+  names of matching crash or jetsam reports, or that there were none
+  (`src/native/ServiceExitReport.swift`, `src/service/ProcessMemory.swift`).
 - `wait`/`cancel` prove request-scoped cancellation (30 s bound, 128 per peer).
   Disconnect answers outstanding waits `unavailable`.
 - Disconnect leaves Bun running for a 5 s same-process reattach window, then
   drains. Up to three reconnect attempts are made by the host.
-- `serviceStopped` is final: the service has drained Bun and released the
-  profile, so the client invalidates, never reconnects, and completes shutdown
-  locally. (Reconnecting would wait on launchd's ~10 s respawn throttle.)
+- `serviceStopped` ends that service instance: it has drained Bun and
+  released the profile, so the client invalidates and never reconnects to it.
+  A zero status completes shutdown locally. A non-zero status, when the host
+  is not quitting, asks the client to restart the service (see above).
 - Bridge pipes are read with `FileHandle.readAvailable(upTo:)` (POSIX `read`).
   `read(upToCount:)` blocks on a pipe until the full count or EOF, which held
   every short JSON line from Bun indefinitely. Writes to Bun run on their own
@@ -169,7 +190,11 @@ launched is gone since LKM-111), the control codec, signed-peer rejection, close
 schema / capability / role negotiation, startup failure over XPC, legacy frame
 relay, cancellation, same-epoch reattach, refused stale/duplicate hellos,
 reconnect with a queued frame, and backend death → `serviceStopped {status: 1}`
-→ prompt local shutdown with no replacement Bun.
+→ prompt local shutdown with no replacement Bun. Its restart cases
+(`test/fixtures/service-process/restart-cases.mjs`) SIGKILL the service and
+expect a fresh service, a fresh Bun and a working echo. They also restart after
+`serviceStopped`, and expect a reported failure after 3 tries when Bun is
+missing. Each case checks the product-log cause lines.
 
 The XPC half requires launchd service lookup; a Seatbelt-sandboxed runner gets
 `Connection init failed at lookup … Sandbox restriction` and cannot pass it.

@@ -56,8 +56,11 @@ and provider-seat rules are here.
   smoke exits 0. Reconnect after a lost XPC connection must name the prior
   epoch (`resume`): launchd silently starts a FRESH service instance, which
   refuses (`recoveryRequired`) rather than launching a second Bun, but only
-  after launchd's ~10 s respawn throttle, so `serviceStopped` is final (no
-  reconnect, local shutdown). Frames are never replayed after an uncertain
+  after launchd's ~10 s respawn throttle, so `serviceStopped` never reconnects.
+  A lost service or a non-zero `serviceStopped` restarts it with a fresh
+  epoch instead (LKM-347, at most 3 per minute, then a Relaunch alert). The
+  service holds an XPC transaction while Bun runs, or macOS may idle-exit it.
+  Frames are never replayed after an uncertain
   send; only never-submitted frames queue. Never read a bridge pipe with
   `FileHandle.read(upToCount:)`: it waits for the full count, so short lines
   never arrive — use `readAvailable(upTo:)`. Never answer quit with

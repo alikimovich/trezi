@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Service death restarts the service and never quits silently (LKM-347)
+
+- [x] A lost service (or a non-zero `serviceStopped`) restarts it with a fresh epoch: at most 3 restarts a minute, each with 3 hellos 1/2/4 s apart (`ServiceClient.beginRestart`). The window stays open, and the host clears the old Bun's views and re-emits `ready` (`HostService.serviceRestarting/serviceRestarted`). Unit `service-process` restart cases.
+- [x] Recovery failure shows a critical alert with the reason and Relaunch Trezi / Quit, never a silent exit (`HostService.serviceUnrecoverable`). The test mode still exits 1.
+- [x] Cause in the product log: service stop reasons, decoded Bun status with its memory, and the host's loss report (memory, pressure, last service lines, crash/jetsam reports) (`src/native/ServiceExitReport.swift`, `src/service/ProcessMemory.swift`).
+- [x] The service holds an XPC transaction while Bun runs (the likely idle-exit kill). The 2026-10-24 16:11/16:43 logs held no real-session lines, so the cause is not confirmed from them.
+- [x] `test/service-process.mjs` writes its product log to its scratch folder, not `~/Library/Logs/Trezi`.
+- [ ] Native kill-mid-turn check and a visual check of the alert and toast (the worker had no native verify run).
+
 ## swift-preview unit tests reliable on GitHub-hosted CI (LKM-345)
 
 - [x] The five real-toolchain swift-preview tests run one at a time beside the rest of the unit tier (`UNIT_GROUPS` in `test/tiers.mjs`, `runQueue` groups in `test/helpers/test-runner.mjs`); unit `test-runner`, `test-selection`.
