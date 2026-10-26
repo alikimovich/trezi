@@ -56,6 +56,7 @@ final class ChatModel: ObservableObject {
     @Published var revision = 0
     @Published var controlInteraction = 0
     @Published var followRevision = 0
+    @Published var sendRevision = 0
     @Published var revealRevision = 0
     var revealMessage = ""
     var revealIsland = ""
@@ -202,6 +203,8 @@ final class NativeChat: NSHostingView<ChatConversation> {
             model.revealAgentQuestions(snapshot.cards)
             let follow = kept ? previous?.followHead != snapshot.followHead : previous?.followContent != snapshot.followContent
             if follow { model.followRevision += 1 }
+            // A new message (a Send) starts the follow again; a chunk of the streaming row does not.
+            if previous?.chat == snapshot.chat && snapshot.messages.count > (previous?.messages.count ?? 0) { model.sendRevision += 1 }
             model.snapshot = snapshot; model.revision += 1
         }
         model.cat.show(!isHidden)
@@ -489,6 +492,9 @@ struct ChatConversation: View {
                     }
                     .onChange(of: model.controlInteraction) { _ in follows = false }
                     .onChange(of: model.followRevision) { _ in if follows { proxy.scrollTo("bottom", anchor: bottomAnchor); pinRequest += 1; settleContent() } }
+                    // A new message is not a streamed chunk: a count exhausted by an earlier stuck turn would
+                    // leave the Send with pins only and no realize step (LKM-354).
+                    .onChange(of: model.sendRevision) { _ in if follows { unresolvedSettles = 0 } }
                     .onChange(of: model.snapshot?.chat) { _ in follows = true; sticky = nil; proxy.scrollTo("bottom", anchor: bottomAnchor); attachRequest += 1; settle() }
                     // The latest button itself is native (NativeChat.latestButton).
                     .onChange(of: model.latestRequest) { _ in follows = true; proxy.scrollTo("bottom", anchor: bottomAnchor); attachRequest += 1; settle() }

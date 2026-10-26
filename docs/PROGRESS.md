@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-354: a Send resets the unresolved count (review finding)
+
+- **Defect.** `NativeChat.update` raised `followRevision` for a new message as for a streamed chunk, and that handler calls `settleLatest(content: true)`, which keeps `unresolvedSettles`. After a stuck turn had spent the bound (no row measured in view), the next Send in the same chat got pins only and no realize step, so it could stay blank.
+- **Fix.** `ChatModel.sendRevision` (`src/native/Chat.swift`) is raised when a snapshot of the same chat has more messages than the previous one. Its `onChange` sets `unresolvedSettles = 0` while following. Streamed updates of the last row still keep the count.
+- **Test.** `blankFrames` (`test/fixtures/chat-send-follow/main.swift`) sends a second prompt and an empty reply once the settles ended, with the frames still dropped, and reports `realizedOnSend` (seconds to the first realize scroll, -1: none in 1 s). `test/native-chat-send-follow.mjs` asserts it for every forced case (blank-long, blank-short, stream-long, stream-short, leak-stream). With the fix it is 0.02–0.07 s; with the handler removed (`CHAT_SWIFT` copy) the test fails with -1.
+- **Changelog.** Blank line before the `## [0.3.6]` heading restored.
+
 ## 2026-10-26 — LKM-354: CI failure of `native-chat-send-follow`, a settled reading that reset the bound
 
 - **Failure.** PR #326 (e72e0236), unit shard 2/3: `native-chat-send-follow` FAIL after 93.8 s. The CI excerpt has no assertion text, and the worker sandbox cannot reach the GitHub API.

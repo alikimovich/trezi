@@ -93,6 +93,8 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
 /// be idle then, so they have ended once no realize scroll (`latestRealizes`) ran for 1.5 s and
 /// 150 turns of the run loop (a stalled runner cannot fake the quiet), and `settlingLate` is not
 /// counted. Moves up are read at every turn, so a jump of a few frames is not missed.
+/// Last the frames are still dropped when a second message is sent: `realizedOnSend` is the time
+/// until the first realize scroll after it (-1: none within 1 s).
 var forcedResults: [[String: Any]] = []
 func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: Bool = false, leaks: Bool = false) {
     let prompt = "\(name)-prompt", reply = "\(name)-reply"
@@ -138,16 +140,27 @@ func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: 
         }
     }
     let realizesLate = chat.model.latestRealizes - realizes
+    // Send again while the frames are still dropped and the bound is spent: a new message is not a
+    // streamed chunk, so the follow must be allowed to realize again (the count starts over).
+    let again = "\(name)-again", againReply = "\(name)-again-reply", realizesBeforeAgain = chat.model.latestRealizes
+    messages += [message(again, "user", "Please review the text on the home page again"), message(againReply, "assistant", "")]
+    push()
+    var realizedOnSend = -1.0
+    let sentAt = Date()
+    while Date().timeIntervalSince(sentAt) < 1 {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
+        if realizedOnSend < 0 && chat.model.latestRealizes != realizesBeforeAgain { realizedOnSend = Date().timeIntervalSince(sentAt) }
+    }
     chat.model.messageFramesFilter = nil
-    messages[messages.count - 1] = message(reply, "assistant", String(repeating: paragraph, count: 3))
+    messages[messages.count - 1] = message(againReply, "assistant", String(repeating: paragraph, count: 3))
     push(); spin(1.5)
     let reading = chat.bounds.height - chat.model.bottomInset
-    let shown = [prompt, reply].contains { chat.model.messageFrames[$0].map { $0.maxY > 0 && $0.minY < reading } ?? false }
+    let shown = [prompt, reply, again, againReply].contains { chat.model.messageFrames[$0].map { $0.maxY > 0 && $0.minY < reading } ?? false }
     let metrics = chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]
     let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
     running = false; push(); spin(0.5)
     forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream,
-                          "realizes": realizes - realizesBefore, "realizesLate": realizesLate,
+                          "realizes": realizes - realizesBefore, "realizesLate": realizesLate, "realizedOnSend": realizedOnSend,
                           "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow])
 }
 open("new", []); spin(1); send("new")

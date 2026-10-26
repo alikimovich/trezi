@@ -66,7 +66,7 @@ if (process.platform !== 'darwin') {
     const describeForced = forced
       .map(
         (entry) =>
-          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls), then settling ${entry.settlingLate}/${entry.lateSamples}, ${entry.realizesLate} realize scrolls, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls), then settling ${entry.settlingLate}/${entry.lateSamples}, ${entry.realizesLate} realize scrolls, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
     const describe = cases
@@ -119,6 +119,11 @@ if (process.platform !== 'darwin') {
         entry.realizesLate,
         0,
         `${entry.case}: the realize scrolls restarted after they ended (${describeForced})`
+      )
+      // A new Send is not a streamed chunk: with the bound spent it must realize again.
+      assert.ok(
+        entry.realizedOnSend >= 0,
+        `${entry.case}: a Send after the bound was spent got no realize scroll within 1 s (${describeForced})`
       )
       assert.ok(
         entry.upJump <= 40,

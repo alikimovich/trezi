@@ -396,7 +396,10 @@ the end. Two further cases do the same while the reply streams a chunk every 0.1
 ran for 1.5 s within 25 s, then none may run and the clip make no move up of over
 40 pt in the 3 s after, with the chunks still arriving. `leak-stream` also lets
 the frames measured in the 60 ms after each realize scroll through, then loses
-them again. It takes `CHAT_SWIFT` too.
+them again. Every forced case ends by sending a second prompt with the frames
+still dropped and the bound spent: a realize scroll must follow within 1 s
+(`realizedOnSend`), because a new message restarts the count. It takes
+`CHAT_SWIFT` too.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there
