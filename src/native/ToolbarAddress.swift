@@ -224,10 +224,10 @@ extension NativeShell {
     func chatHeaderLeading(detail: CGFloat, opening: CGFloat) -> CGFloat {
         let laidOut = mainFrame(chatHeader)?.minX ?? 0
         guard addressLayout.sidebarAnimations > 0, !sidebarItem.isCollapsed else {
-            if !sidebarItem.isCollapsed { addressLayout.chatLead = min(16, max(0, laidOut - detail)) }
-            return laidOut
+            // LKM-356: a frame not yet moved with the split is not used (`ToolbarChatLead`).
+            return sidebarItem.isCollapsed ? laidOut : addressLayout.chatLead.leading(header: laidOut, detail: detail)
         }
-        return max(laidOut + opening, detail + addressLayout.chatLead)
+        return max(laidOut + opening, detail + addressLayout.chatLead.offset)
     }
     /// The address block's frame against the first right group, laid out now.
     func toolbarInspect() -> [String: Any] {
@@ -236,7 +236,7 @@ extension NativeShell {
             .merging(["windowWidth":window?.frame.width ?? 0, "addressConstant":addressWidth?.constant ?? 0,
                       "toolbarItemFrames":toolbarFrames.mapValues { NSStringFromRect($0) },
                       "chatHeaderAttached":chatHeader.window === window, "addressExtra":addressLayout.extra,
-                      "sidebarInset":addressLayout.sidebarInset, "chatLead":addressLayout.chatLead,
+                      "sidebarInset":addressLayout.sidebarInset, "chatLead":addressLayout.chatLead.offset,
                       "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":mainFrame(chatHeader)?.maxX ?? chatHeader.bounds.maxX,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
             .merging(titleAlignment()) { _, new in new }
@@ -279,8 +279,8 @@ struct ToolbarAddressLayout {
     var shownInset: CGFloat?
     /// The detail column's settled leading edge minus the sidebar's width (`sidebarOpening`).
     var sidebarInset: CGFloat = 0
-    /// The chat header's leading edge minus the detail column's, at rest (`chatHeaderLeading`).
-    var chatLead: CGFloat = 0
+    /// The chat header's leading edge against the detail column's, at rest (`chatHeaderLeading`).
+    var chatLead = ToolbarChatLead()
     /// Sidebar animations `update` started and AppKit has not finished (`sidebarOpening`).
     var sidebarAnimations = 0
 
