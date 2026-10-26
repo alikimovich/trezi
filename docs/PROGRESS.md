@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-358: composer `visible-composer` 320-sending, a stale latest frame with a live footer
+
+- **Failure.** Nightly native on `9ac19da5`: `Composer capture 320-sending: latest message did not end above the composer`. The latest row read 1897–1968 pt with the end marker at 569 pt, `scrollY` 2525 in a 3301 pt document, after 5 settle attempts.
+- **Cause.** The row precedes the marker in the stack, so a frame below the marker belongs to an earlier clip offset. These are LKM-349's numbers. There a `.relayout` that left the frame in place escalated to a realize. LKM-354 skipped the latest-row check whenever rows follow the latest message (`trailing`). In the sending state the live footer is such a row, so the settle read `.settled` at the first marker reading and the stale frame stayed for the whole 8 s wait.
+- **Fix.** `ChatLatestSettle.step` (`src/native/ChatScrollStyle.swift`): with `trailing`, a measured latest frame that ends more than 1 pt below the marker is a `.relayout`. The LKM-354 case still settles: cards filling the view leave the latest row above the marker, or unmeasured.
+- **Test.** `native-chat-latest-settle --cases`: `trailingStaleLatest` (the failure's frame and marker → relayout) and `trailingLatestAboveFooter` (the 440 pass's frames → settled). `native-chat-latest-settle` and `native-chat-send-follow` pass.
+- **Native (worker, one run).** The `composer` group passed 9/9, `visible-composer` at 440 and 320 pt included. The `native-chat-scroll` step after it failed send visibility: `440-fixed loaded/sent+60/sent+500: no visible transcript rows` (0 realized rows, 80 settle attempts) and `send-after-send` without its prompt. This is the first-load race recorded under LKM-334, LKM-349 and the `00e3d931` nightly. The changed rule cannot reach it: that fixture has no cards, questions or live footer (`trailing` is false), so every step reads as before. There was no native call left to rerun it.
 ## 2026-10-26 — LKM-357: `native-chat-send-follow` timed from the app's Send, with a CI margin
 
 - **Failure.** Main push CI on 179b3cd3: `long: sent rows not in view within 1 s (shown after 1.04 s)`. The same code passed on d9793a01 and bb1b04d8.

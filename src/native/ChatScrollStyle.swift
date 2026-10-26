@@ -64,12 +64,16 @@ enum ChatLatestSettle: Equatable {
     /// They report no frame, so a view they fill had no row in view and every
     /// step realized, jumping between the first row and the end until the user
     /// scrolled (LKM-354). There the realized marker in view is the end itself,
-    /// and the latest message need not end at the reading edge.
+    /// and the latest message need not end at the reading edge. It still ends
+    /// above the marker that follows it: a frame below the marker is from an
+    /// earlier clip offset (LKM-358: the row at 1897 pt, the marker at 569 pt,
+    /// as in LKM-349) and relayouts like an unmeasured one.
     static func step(latest: String?, frames: [String: CGRect], bottom: CGFloat, readingHeight: CGFloat, viewportHeight: CGFloat, trailing: Bool = false) -> ChatLatestSettle {
         let endInView = trailing && bottom > 0 && bottom <= viewportHeight
         if let latest, !endInView, !frames.values.contains(where: { $0.maxY > 0 && $0.minY < viewportHeight }) { return .realize(latest) }
         guard bottom > 0 && bottom <= readingHeight + 1 else { return .bottom }
         if let latest, !trailing, (frames[latest]?.maxY ?? .infinity) > readingHeight + 1 { return .relayout }
+        if let latest, trailing, let end = frames[latest]?.maxY, end > bottom + 1 { return .relayout }
         return .settled
     }
     /// The action for a step after `unresolved` consecutive `.bottom` steps. A
