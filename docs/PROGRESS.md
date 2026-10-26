@@ -17,6 +17,10 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - Requirements: the prompt or reply is shown within 1 s and stays shown; no jump back up of more than 40 pt; at most 3 of 30 samples still settling after the turn.
   - It fails with main's `Chat.swift` (`CHAT_SWIFT`) on the cards case and passes with the fix.
   - `native-chat-latest-settle --cases` pins both trailing step conditions.
+- **Review follow-up: the reporter's state, asserted.** `blankFrames` (`test/fixtures/chat-send-follow/main.swift`) sends in a long and a short chat with no cards, questions or footer and clears `model.messageFrames` every 4 ms for 4 s, so no message row is measured in view.
+  - Past the first bounded settle (2.5 s) the test requires at most 3 of ~35 samples settling and no up-jump over 40 pt. After releasing the frames with the next streamed chunk, the prompt or reply must be in the reading area and the clip at the end.
+  - Fix: settling 0/37 and 0/35, up jump 0 pt, rows back, 0 pt from the end. The first bounded settle still jumps (7265 pt long, 79 pt short) before it ends.
+  - Main's `Chat.swift`: settling 24/25 and 29/30, up jump 7257 pt (long), so the loop is asserted and fails there. On main the rows also come back once the frames are measured, so the new fix does not change the recovery, only the endless loop.
 
 ## 2026-10-25 — LKM-350: send visibility sends only after the load's settle ended
 

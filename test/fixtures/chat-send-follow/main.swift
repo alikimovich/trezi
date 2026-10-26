@@ -78,6 +78,43 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
     results.append(["case": name, "samples": samples, "shownAfter": shownAfter, "missingAfter1s": missingAfter1s, "lowestOffset": lowest,
                     "upJump": jump, "settlingAfterTurn": settling, "cards": cardsAt != nil])
 }
+/// The reporter's state (LKM-354): after a send in a long chat, no message row is measured in view
+/// (no cards, questions or footer), for `hold` seconds, as when the stack's frames belong to an
+/// earlier clip offset. The model's frames are cleared every 4 ms, as each layout would restore
+/// them. The first bounded settle (about 1.3 s) may jump to the first row; past `window` the
+/// settle must have ended and the clip stay put. Then the frames are released with the next
+/// streamed chunk: the sent rows must be back in the reading area, the clip at the end.
+var forcedResults: [[String: Any]] = []
+func blankFrames(_ name: String, hold: Double = 4, window: Double = 2.5) {
+    let prompt = "\(name)-prompt", reply = "\(name)-reply"
+    messages += [message(prompt, "user", "Please review the text on the home page"), message(reply, "assistant", "")]
+    running = true; push()
+    let start = Date()
+    var late = 0, settlingLate = 0, highest = -CGFloat.infinity, upJump: CGFloat = 0, upJumpAll: CGFloat = 0, highestAll = -CGFloat.infinity, next = 0.0
+    while Date().timeIntervalSince(start) < hold {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
+        chat.model.messageFrames = [:]
+        let t = Date().timeIntervalSince(start)
+        guard t >= next else { continue }
+        next = t + 0.03
+        let now = offset()
+        highestAll = max(highestAll, now); upJumpAll = max(upJumpAll, highestAll - now)
+        if t >= window {
+            late += 1
+            if chat.model.latestSettling { settlingLate += 1 }
+            highest = max(highest, now); upJump = max(upJump, highest - now)
+        }
+    }
+    messages[messages.count - 1] = message(reply, "assistant", String(repeating: paragraph, count: 3))
+    push(); spin(1.5)
+    let reading = chat.bounds.height - chat.model.bottomInset
+    let shown = [prompt, reply].contains { chat.model.messageFrames[$0].map { $0.maxY > 0 && $0.minY < reading } ?? false }
+    let metrics = chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]
+    let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
+    running = false; push(); spin(0.5)
+    forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringFirstSettle": upJumpAll,
+                          "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow])
+}
 open("new", []); spin(1); send("new")
 open("short", history("short", 2)); spin(1); send("short")
 open("long", history("long", 40)); spin(1.5); send("long")
@@ -88,5 +125,8 @@ open("long", history("long", 40)); spin(0.5); send("restore")
 open("running", history("running", 6)); spin(1); send("running-first", chunks: 5, end: false); send("running")
 // LKM-354: cards that fill the view after the reply report no message frame.
 open("cards", history("cards", 2)); spin(1); send("cards", cardsAt: 3)
-print(String(data: try! JSONSerialization.data(withJSONObject: ["cases": results], options: [.sortedKeys]), encoding: .utf8)!)
+// The reporter's state: no row measured in view after a send, in a long chat and a short one.
+open("blank-long", history("blank-long", 40)); spin(1.5); blankFrames("blank-long")
+open("blank-short", history("blank-short", 2)); spin(1); blankFrames("blank-short")
+print(String(data: try! JSONSerialization.data(withJSONObject: ["cases": results, "forced": forcedResults], options: [.sortedKeys]), encoding: .utf8)!)
 exit(0)

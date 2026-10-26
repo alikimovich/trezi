@@ -384,7 +384,11 @@ way and samples each send every ~30 ms: the prompt or reply in the reading area
 within 1 s and throughout the turn (new, short and long chats, a chat switch and
 restore, a send while the previous turn runs), no jump back up, and no settle
 still running after the turn, also when cards after the reply fill the view.
-It takes `CHAT_SWIFT` too.
+Two more cases (long and short chat) hold the model's message frames empty for 4 s
+after a send, the reporter's state of no row measured in view: past the first
+bounded settle the settle must have ended and the clip stay put, and once the
+frames are measured again the sent rows are in the reading area, the clip at the
+end. It takes `CHAT_SWIFT` too.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there

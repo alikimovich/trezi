@@ -61,7 +61,13 @@ if (process.platform !== 'darwin') {
       ],
       { out: join(scratch, 'chat-send-follow') }
     )
-    const { cases } = JSON.parse(runFixture(binary))
+    const { cases, forced } = JSON.parse(runFixture(binary))
+    const describeForced = forced
+      .map(
+        (entry) =>
+          `${entry.case}: settling ${entry.settlingLate}/${entry.lateSamples} after the first bounded settle, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringFirstSettle.toFixed(0)} pt during it), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+      )
+      .join('; ')
     const describe = cases
       .map(
         (entry) =>
@@ -88,7 +94,30 @@ if (process.platform !== 'darwin') {
         `${entry.case}: the settle still runs after the turn (${describe})`
       )
     }
-    console.log(`NATIVE-CHAT-SEND-FOLLOW PASS — ${describe}`)
+    // The reporter's state (blank chat, scrollbar between offsets 0 and 18): no message row is
+    // measured in view, with no cards, questions or footer. The frames stay missing for 4 s.
+    for (const entry of forced) {
+      // One bounded settle (about 1.3 s) may realize through the first row; it must then end
+      // and leave the clip alone, instead of restarting from its own closing pin.
+      assert.ok(
+        entry.lateSamples > 20 && entry.settlingLate <= 3,
+        `${entry.case}: the settle never ended with no row in view (${describeForced})`
+      )
+      assert.ok(
+        entry.upJump <= 40,
+        `${entry.case}: the view kept jumping with no row in view (${describeForced})`
+      )
+      // Frames measured again: the sent rows are in the reading area, the clip at the end.
+      assert.ok(
+        entry.shownAfterRelease,
+        `${entry.case}: rows did not come back (${describeForced})`
+      )
+      assert.ok(
+        entry.offsetFromEnd <= 2,
+        `${entry.case}: the view did not return to the end (${describeForced})`
+      )
+    }
+    console.log(`NATIVE-CHAT-SEND-FOLLOW PASS — ${describe}; no row in view: ${describeForced}`)
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }
