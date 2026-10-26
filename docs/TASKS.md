@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## The latest-row settle ends; cards after the reply keep the end (LKM-354)
+
+- [x] With cards, questions or a live footer after the latest message, the realized end marker in view is the end (`ChatLatestSettle.step(trailing:)`); a settle that ended unresolved is not restarted by its own closing pin (`settleLatest(afterPin:)`); unit `native-chat-send-follow`, `native-chat-latest-settle --cases`.
+- [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
+- [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
+
 ## Send visibility waits out the load's own settle (LKM-350)
 
 - [x] The chat inspect reports `latestSettling` while a latest-settle runs (`Chat.swift`, diagnostics only); `checkSendVisibility` waits for two idle reads (at most 5 s) before the `loaded` sample and the send, and records `loadSettleMs` / `loadSettleTimedOut` (`test/helpers/chat-send-visibility.mjs`).

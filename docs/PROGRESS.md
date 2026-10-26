@@ -2,6 +2,22 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-25 — LKM-354: the latest-row settle that never ends (blank chat, shaking scrollbar after Send)
+
+- **Report.** Trezi v0.3.5: after Send, the chat shows nothing while the turn runs, the latest chevron is up, and the scrollbar shakes. The video's frames show the thumb flipping every few frames between offset ≈ 0 and ≈ 18 pt, with the document height changing by 20 pt (one stack spacing). Offset 18 is where `realizeTarget`'s first-row step (`.top`) puts the clip (LKM-350), so `settleLatest` was stepping `.realize` every frame without end.
+- **Cause.**
+  - A step that finds no message row in view always realizes. The settle then runs out its 4 × 20 attempts.
+  - The settle's closing pin moves the clip, `onMovedToEnd` starts the next settle, and that one ends with a pin again. So an unresolvable state never stops: every 16 ms it scrolls through SwiftUI (alternating between the latest and the first row) and relayouts the stack.
+  - One natural unresolvable state reproduces offscreen: cards, questions or the live footer after the reply report no `MessagePositions` frame. Once they fill the view, no message row is in view, even though the stack shows its end. On main the real `NativeChat` jumped 1581 pt up to the top and was still settling on 30 of 30 samples after the turn.
+  - The user's exact trigger was not reproduced. Their transcript reported no row in view at offsets 0 and 18; 15 scenarios on the real view (new, long prompt, start-composer handover, switch, restore, send again) never blanked. Forcing `.realize` on every step reproduced the endless loop and its 0/18 jumps.
+- **Fix.**
+  - `ChatLatestSettle.step(trailing:)`: when cards, questions or the live footer follow the latest message, the realized end marker in view counts as the end. The latest message then need not end at the reading edge.
+  - `settleLatest(afterPin:)`: a settle that ended unresolved (its last step was not `.settled`) does not restart from a pin's or clamp's move. Content, viewport, composer, chat and latest-button requests still start one.
+- **Test.** New unit test `test/native-chat-send-follow.mjs`, which uses the real `NativeChat` offscreen and samples every 30 ms. It runs new, short, long, switch, restore and send-while-running cases, plus the cards case.
+  - Requirements: the prompt or reply is shown within 1 s and stays shown; no jump back up of more than 40 pt; at most 3 of 30 samples still settling after the turn.
+  - It fails with main's `Chat.swift` (`CHAT_SWIFT`) on the cards case and passes with the fix.
+  - `native-chat-latest-settle --cases` pins both trailing step conditions.
+
 ## 2026-10-25 — LKM-350: send visibility sends only after the load's settle ended
 
 - **Failure.** Nightly native on `00e3d931`: `native-chat-scroll` send visibility, `440-fixed sent+60: no visible transcript rows`. All 67 smoke checks passed, and every other sample in that run was healthy, including sent+200 and the `send-after-send` capture.

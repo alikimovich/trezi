@@ -379,6 +379,12 @@ LKM-312: `test/native-chat-bottom-marker.mjs` hosts the real `NativeChat` (its
 sticky-request overlay included) offscreen and requires the end marker measured
 at the reading edge and each follow settled within one run, after load, streaming
 and completion. `CHAT_SWIFT=<path>` builds it against another `Chat.swift`.
+LKM-354: `test/native-chat-send-follow.mjs` hosts the real `NativeChat` the same
+way and samples each send every ~30 ms: the prompt or reply in the reading area
+within 1 s and throughout the turn (new, short and long chats, a chat switch and
+restore, a send while the previous turn runs), no jump back up, and no settle
+still running after the turn, also when cards after the reply fill the view.
+It takes `CHAT_SWIFT` too.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there

@@ -113,6 +113,7 @@ export const UNIT = [
   'native-composer-layout',
   'native-chat-latest-settle',
   'native-chat-bottom-marker',
+  'native-chat-send-follow',
   'native-smoke-wait',
   'native-chat-reveal',
   'native-chat-text',
@@ -350,6 +351,8 @@ export const UNIT_TIMEOUT_MS = {
   // LKM-312: a compile of the 33 real chat and composer sources (24 s with a warm module
   // cache), then 5 s of samples.
   'native-chat-bottom-marker': 240_000,
+  // LKM-354: the same compile, then seven sends sampled for ~4 s each.
+  'native-chat-send-follow': 240_000,
   // LKM-287: a cold compile of 19 service sources (26 s alone), then 248 creates through
   // the real SkillsOwner, each F_FULLFSYNC'd objects plus a ledger-backed manifest
   // replace (~88-190 ms each, growing with the library), for the 128 × 64 regression.

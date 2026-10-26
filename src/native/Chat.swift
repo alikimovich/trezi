@@ -278,6 +278,7 @@ struct ChatConversation: View {
     @State private var settlingLatest = false
     @State private var realizingLatest = false
     @State private var latestNudge = false
+    @State private var settleUnresolved = false
     @State private var viewportHeight: CGFloat = 0
     private func reveal(_ proxy: ScrollViewProxy, readingHeight: CGFloat, viewportHeight: CGFloat) {
         revealGeneration += 1
@@ -360,7 +361,12 @@ struct ChatConversation: View {
     }
     /// See ChatLatestSettle. Requests while settling extend the running one;
     /// the user scrolling away ends it. Metrics are read live at each step.
-    private func settleLatest(_ proxy: ScrollViewProxy) {
+    /// `afterPin`: a pin or clamp moved the clip. A settle that ran out unresolved
+    /// ends with a pin, so that move must not start the next one: it repeated
+    /// forever, the clip jumping every frame (LKM-354). Any other request does.
+    private func settleLatest(_ proxy: ScrollViewProxy, afterPin: Bool = false) {
+        if afterPin && settleUnresolved { return }
+        settleUnresolved = false
         latestGeneration += 1
         guard !settlingLatest else { return }
         settlingLatest = true; model.latestSettling = true
@@ -371,9 +377,13 @@ struct ChatConversation: View {
             let readingHeight = { max(1, viewportHeight - model.bottomInset) }
             var stuck = 0, unresolved = 0, relayouts = 0
             var relayoutEnd: CGFloat?
+            var last = ChatLatestSettle.settled
             model.latestSettleAttempts = await ChatLatestSettle.follow(request: { latestGeneration }, current: { follows }, step: {
-                ChatLatestSettle.step(latest: model.snapshot?.messages.last?.id, frames: model.messageFrames, bottom: model.bottomPosition,
-                                      readingHeight: readingHeight(), viewportHeight: viewportHeight)
+                let snapshot = model.snapshot
+                let trailing = snapshot.map { shown in !shown.cards.isEmpty || !shown.questions.isEmpty || shown.activity != nil && !shown.messages.contains { $0.id == shown.streamingId } } ?? false
+                last = ChatLatestSettle.step(latest: snapshot?.messages.last?.id, frames: model.messageFrames, bottom: model.bottomPosition,
+                                             readingHeight: readingHeight(), viewportHeight: viewportHeight, trailing: trailing)
+                return last
             }) { step in
                 // No row in view: hold the AppKit pin, relayout the stack (a
                 // 1pt marker change) and scroll to the latest through SwiftUI.
@@ -397,6 +407,7 @@ struct ChatConversation: View {
                 }
             }
             settlingLatest = false; realizingLatest = false; model.latestSettling = false
+            settleUnresolved = follows && last != .settled
             // Rest at the marker's 1pt height, so the nudges leave no offset behind.
             if latestNudge { latestNudge = false }
             if follows { pinRequest += 1 }
@@ -429,7 +440,7 @@ struct ChatConversation: View {
                     let settle = { settleLatest(proxy) }
                     // Unmasked: history scrolls on under the composer and the latest
                     // button, which bring their own glass (LKM-190).
-                    conversationScroll(onMovedToEnd: { if follows { settle() } })
+                    conversationScroll(onMovedToEnd: { if follows { settleLatest(proxy, afterPin: true) } })
                     .coordinateSpace(name: "chatScroll")
                     .onPreferenceChange(MessagePositions.self) { positions in
                         model.messageFrames = positions
