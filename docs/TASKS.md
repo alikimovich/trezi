@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Codex chats keep their context after an interrupted turn (LKM-346)
+
+- [x] Codex resumes the saved thread (`resumeThread(resumeSessionId)`) and records each thread id as `sdkSessionId`; unit `codex-resume`.
+- [x] A thread the CLI cannot resume (a new thread id, or "no rollout found") is replaced by a new thread whose first prompt carries `resumeSummary`; unit `codex-resume`.
+- [x] Any provider: a restored chat started without a resume id gets the summary with its next turn (`restoredSummaries` in `src/main/agent.ts`); unit `conversation-owner` (agent section).
+- [x] Cause 2 explained (PROGRESS); `Backend stopping chats= background=` product-log line at quit.
+- [ ] Live check: kill the service during a Codex turn, relaunch, send "continue" (needs a real Codex login; not run by the worker).
+
 ## swift-preview unit tests reliable on GitHub-hosted CI (LKM-345)
 
 - [x] The five real-toolchain swift-preview tests run one at a time beside the rest of the unit tier (`UNIT_GROUPS` in `test/tiers.mjs`, `runQueue` groups in `test/helpers/test-runner.mjs`); unit `test-runner`, `test-selection`.

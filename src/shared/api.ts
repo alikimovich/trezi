@@ -742,10 +742,11 @@ export interface SessionRecord {
    */
   slot?: 'current' | 'main'
   /**
-   * The Claude Agent SDK's own resumable session id (v9 resume), captured off
-   * the `system`/init message. Only the Claude backend sets this (Codex/Gemini
-   * have no equivalent primitive wired up) — its presence is what the "Resume"
-   * affordance gates on, since it doubles as a Claude-backend marker.
+   * The provider's own resumable session id (v9 resume): the Claude Agent SDK's
+   * session id, captured off the `system`/init message, or the Codex thread id from
+   * `thread.started` (LKM-346). Gemini sets none. History's "Continue chat" gates on
+   * it and resumes on Claude; a Codex id fails that resume, so the new Claude session
+   * starts from the chat's summary (LKM-165).
    */
   sdkSessionId?: string
   /** The resolved directory `sdkSessionId` was started in; a resume uses it (LKM-165). */
