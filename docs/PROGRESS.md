@@ -12,6 +12,7 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - When the spawn lands (`applied`), `textEditLanded` looks for the text in the edited files' new content. It decodes JS escapes, HTML entities and JSX `{' '}` spacers, collapses whitespace and ignores case, because WebKit's `innerText` applies `text-transform`. On a miss, `spawn-finished` carries `mismatch`. The chat then shows a "Text edit incomplete" row with the `text-edit:<id>` revert group. A clean text edit still posts no row.
 - **Limit.** The check reads source, not the page's DOM. A full text written into the wrong element passes it. Reading the rendered element after HMR would need a new host request, which this ticket does not add.
 - **Verification.** New unit `text-edit-agent`. Extended `comment-agents`: a mock agent copies the prompt's fenced text through a real spawn and landing; a 200-character copy is reported. Extended `native-chat-controller`.
+- **Manager run: `conversation-owner` TIMEOUT 120 s.** Its log shows every section PASS and the closing line, so it was slow, not failing; alone it takes 13 s. It compiles Swift fixtures through the 2-wide swiftc lane like `runtime-owner` and `platform-owner`, which already have 240 s budgets in `UNIT_TIMEOUT_MS`; it had none and hit 120 s in two 8-worker runs. This change adds nothing to its path (a few lines in `agent.ts`'s spawn code, no timers or handles). Fix: the same 240 s budget, no assertion changed.
 
 ## 2026-10-25 — LKM-350: send visibility sends only after the load's settle ended
 
