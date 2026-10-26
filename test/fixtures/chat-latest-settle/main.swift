@@ -132,6 +132,11 @@ if CommandLine.arguments.contains("--cases") {
         "trailingFillsView": ChatLatestSettle.step(latest: "latest", frames: ["latest": CGRect(x: 0, y: -400, width: 400, height: 74)], bottom: 569,
                                                    readingHeight: 570, viewportHeight: 776, trailing: true) == .settled,
         "trailingNotRealized": ChatLatestSettle.step(latest: "latest", frames: [:], bottom: 0, readingHeight: 570, viewportHeight: 776, trailing: true) == .realize("latest"),
+        // LKM-358: with a live footer the latest row read below the marker after it, a frame from an earlier clip offset.
+        "trailingStaleLatest": ChatLatestSettle.step(latest: "latest", frames: ["latest": CGRect(x: 0, y: 1897.47, width: 284, height: 71)], bottom: 569.47,
+                                                     readingHeight: 570, viewportHeight: 776, trailing: true) == .relayout,
+        "trailingLatestAboveFooter": ChatLatestSettle.step(latest: "latest", frames: ["latest": CGRect(x: 0, y: 137, width: 404, height: 317)], bottom: 569.47,
+                                                           readingHeight: 570, viewportHeight: 776, trailing: true) == .settled,
         // LKM-354: a settle that realized adds to the unresolved count, even if it read settled last.
         "unresolvedCounts": [ChatLatestSettle.unresolved(after: 3, follows: true, last: .realize("latest"), realized: true),
                              ChatLatestSettle.unresolved(after: 3, follows: true, last: .bottom, realized: false),
