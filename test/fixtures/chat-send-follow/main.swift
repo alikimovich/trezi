@@ -113,10 +113,15 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
 /// be idle then, so they have ended once no realize scroll (`latestRealizes`) ran for 1.5 s and
 /// 150 turns of the run loop (a stalled runner cannot fake the quiet), and `settlingLate` is not
 /// counted. Moves up are read at every turn, so a jump of a few frames is not missed.
+/// `bound` (LKM-359): with `stream`, the run stops unended once more realize scrolls than this ran,
+/// instead of at a fixed time. The bound is in settle steps (3 settles of 80 realize), and once a turn
+/// of the main thread takes longer than a step's 16 ms, every step and each of the 150 quiet turns
+/// needs a turn of its own. A loaded runner stretched them past a fixed 25 s with the bound holding
+/// (stream-short ended -1). `cap` then only stops a run that hangs.
 /// Last the frames are still dropped when a second message is sent: `realizedOnSend` is the time
 /// until the first realize scroll after it (-1: none within 1 s).
 var forcedResults: [[String: Any]] = []
-func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: Bool = false, leaks: Bool = false) {
+func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: Bool = false, leaks: Bool = false, bound: Int? = nil) {
     let prompt = "\(name)-prompt", reply = "\(name)-reply"
     var seen = chat.model.latestRealizes, leakUntil = Date.distantPast
     chat.model.messageFramesFilter = { frames in
@@ -126,9 +131,9 @@ func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: 
     chat.model.messageFrames = [:]
     messages += [message(prompt, "user", "Please review the text on the home page"), message(reply, "assistant", "")]
     running = true; push()
-    let start = Date(), realizesBefore = chat.model.latestRealizes
+    let start = Date(), realizesBefore = chat.model.latestRealizes, settlesBefore = chat.model.latestSettles
     var late = 0, settlingLate = 0, highest = -CGFloat.infinity, upJump: CGFloat = 0, upJumpAll: CGFloat = 0, highestAll = -CGFloat.infinity, next = 0.0
-    var idleSince: Double?, endedAt: Double?, chunk = 0, realizes = realizesBefore, realizedAt = 0.0, quietTurns = 0
+    var idleSince: Double?, endedAt: Double?, chunk = 0, realizes = realizesBefore, realizedAt = 0.0, quietTurns = 0, settlesRun = 0
     func streamChunk(_ t: Double) {
         guard stream, t >= Double(chunk + 1) * 0.1 else { return }
         chunk += 1
@@ -143,8 +148,10 @@ func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: 
         if endedAt == nil && t >= cap { break }
         let now = offset()
         if endedAt == nil {
+            settlesRun = chat.model.latestSettles - settlesBefore
             highestAll = max(highestAll, now); upJumpAll = max(upJumpAll, highestAll - now)
             if chat.model.latestRealizes != realizes { realizes = chat.model.latestRealizes; realizedAt = t; quietTurns = 0 } else { quietTurns += 1 }
+            if let bound, realizes - realizesBefore > bound { break }
         } else {
             highest = max(highest, now); upJump = max(upJump, highest - now)
         }
@@ -180,7 +187,7 @@ func blankFrames(_ name: String, cap: Double = 20, after: Double = 1.5, stream: 
     let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
     running = false; push(); spin(0.5)
     forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream,
-                          "realizes": realizes - realizesBefore, "realizesLate": realizesLate, "realizedOnSend": realizedOnSend,
+                          "realizes": realizes - realizesBefore, "settles": settlesRun, "realizesLate": realizesLate, "realizedOnSend": realizedOnSend,
                           "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow])
 }
 open("new", []); spin(1); send("new")
@@ -196,10 +203,11 @@ open("cards", history("cards", 2)); spin(1); send("cards", cardsAt: 3)
 // The reporter's state: no row measured in view after a send, in a long chat and a short one.
 open("blank-long", history("blank-long", 40)); spin(1.5); blankFrames("blank-long")
 open("blank-short", history("blank-short", 2)); spin(1); blankFrames("blank-short")
-// The same while the reply streams: every chunk is a content request for the settle.
-open("stream-long", history("stream-long", 40)); spin(1.5); blankFrames("stream-long", cap: 25, after: 3, stream: true)
-open("stream-short", history("stream-short", 2)); spin(1); blankFrames("stream-short", cap: 25, after: 3, stream: true)
+// The same while the reply streams: every chunk is a content request for the settle. 240 realize scrolls
+// at most (the test's bound): more stop the run unended; fewer must end however slow the runner.
+open("stream-long", history("stream-long", 40)); spin(1.5); blankFrames("stream-long", cap: 90, after: 3, stream: true, bound: 240)
+open("stream-short", history("stream-short", 2)); spin(1); blankFrames("stream-short", cap: 90, after: 3, stream: true, bound: 240)
 // Rows measured for a moment after each realize, then lost again: those settled readings must not restart the settles.
-open("leak-stream", history("leak-stream", 40)); spin(1.5); blankFrames("leak-stream", cap: 25, after: 3, stream: true, leaks: true)
+open("leak-stream", history("leak-stream", 40)); spin(1.5); blankFrames("leak-stream", cap: 90, after: 3, stream: true, leaks: true, bound: 240)
 print(String(data: try! JSONSerialization.data(withJSONObject: ["cases": results, "forced": forcedResults], options: [.sortedKeys]), encoding: .utf8)!)
 exit(0)
