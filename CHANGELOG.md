@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-25
+
 ### Fixed
 - A Codex chat continues its own thread after Trezi restarts, so "continue" after an interrupted turn picks up the same task; if the thread cannot be resumed, or a restored chat has no thread to resume, the next message carries a summary of the conversation (LKM-346).
 
