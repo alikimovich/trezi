@@ -26,7 +26,7 @@ import { projectKey } from '../shared/projectKey'
 import { oneLine } from '../shared/selection-context'
 import { releaseAgentBrowsersFor } from './agent-browser'
 import { type ProviderSession, pickProvider } from './backends'
-import { resumeSummary } from './backends/claude-resume'
+import { RESUME_NOTE, resumeSummary, seedPrompt } from './backends/claude-resume'
 import { handoffPrompt } from './backends/conversation-handoff'
 import { seedFromRecord } from './backends/record'
 import type { SpawnContext } from './backends/types'
@@ -312,6 +312,9 @@ const trackers = new WeakMap<ProviderSession, TurnTracker>()
 // A model switch's recorded conversation, sent once with the next turn when the owner
 // says the handoff is due.
 const handoffHistory = new Map<string, SessionTranscriptEntry[]>()
+// LKM-346: a restored chat whose new provider session did not continue the saved one (no
+// resumable id, or the start with it failed): its next turn carries the chat's summary.
+const restoredSummaries = new Map<string, string>()
 const reconciliation = new ReconciliationCoordinator({
   running: runningKeys,
   preparations: preparingTurns,
@@ -663,6 +666,7 @@ async function closeChat(sessionKey: string, s: ProviderSession, persist: Persis
   clearTimeout(checkpointTimers.get(sessionKey))
   checkpointTimers.delete(sessionKey)
   handoffHistory.delete(sessionKey)
+  restoredSummaries.delete(sessionKey)
   forgetChatUi(sessionKey)
   revokeMergeApprovals(sessionKey)
   try {
@@ -1133,6 +1137,7 @@ export function registerAgentIpc(
   const forgetChat = (sessionKey: string): void => {
     memoryInjection.forget(sessionKey)
     firstSends.delete(sessionKey)
+    restoredSummaries.delete(sessionKey)
     setProjectUiEnabled(sessionKey, false)
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
@@ -1185,12 +1190,14 @@ export function registerAgentIpc(
       // back to the live project so history/reattach see it under the real root.
       const cwd = await isolatedCwd(root, key)
       let s: ProviderSession
+      let resumed = !!resumeSessionId
       try {
         s = await startChat(root, key, options, cwd, resumeSessionId, priorCurrent ?? undefined)
       } catch (err) {
         // A stale Claude resume id shouldn't block opening the project — fall
         // back to a fresh provider thread and still paint the saved transcript.
         if (!resumeSessionId) throw err
+        resumed = false
         s = await startChat(root, key, options, cwd, undefined, priorCurrent ?? undefined)
       }
       adoptSession(key, s.record, root)
@@ -1201,6 +1208,10 @@ export function registerAgentIpc(
       // A later open/set-active for a different project moved `intendedKey` on, and
       // that project's own turn is what should stream.
       await installChat(key, key, s, options, intendedKey === key)
+      // A resumed provider session has the conversation, or seeds itself if the resume
+      // fails; a fresh one learns it from the summary with the next turn (LKM-346).
+      const restored = resumed ? '' : resumeSummary(priorCurrent ?? undefined)
+      if (restored) restoredSummaries.set(key, restored)
       if (intendedKey === key) {
         activeKey = key
         activeSessionKeyByProject.set(key, key)
@@ -1490,8 +1501,8 @@ export function registerAgentIpc(
   )
 
   // v9 resume — hand a past ("previous agent") SessionRecord back to a LIVE SDK
-  // query via `options.resume` (Claude-only: the record's `sdkSessionId` doubles
-  // as the "this backend supports resume" marker, since only claude.ts sets it).
+  // query via `options.resume` (on Claude: a Codex thread id in `sdkSessionId`
+  // (LKM-346) fails that resume, and the new session starts from the summary).
   // Registered under a sessionKey derived from the SDK's OWN session id, so a
   // repeat resume of the same record reattaches to the same slot instead of
   // spawning a second live query against it.
@@ -1524,8 +1535,8 @@ export function registerAgentIpc(
         // Resumed chats get a FRESH worktree (their past edits already live in the
         // repo); isolatedCwd falls back to the live root for non-repo projects.
         const cwd = await isolatedCwd(root, sessionKey)
-        // Resume is Claude-only (`sdkSessionId` is both the resume id and the
-        // "this was Claude" marker), so pin the backend — but keep the caller's
+        // History's resume runs on Claude (a Codex record's thread id fails over to
+        // the summary), so pin the backend — but keep the caller's
         // model/effort/permission posture. Starting with `{}` here silently ran the
         // resumed chat under main's defaults ('default' = ask for every edit) while
         // the renderer's toolbar still showed the chat's own mode.
@@ -1917,17 +1928,13 @@ export function registerAgentIpc(
         logTurnStart(key, id, session.options)
         // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
         void beginLiveWatch(key, session)
-        session.send(
-          handoffPrompt(
-            history,
-            projectUiInstructions(useUi, uiEngine) +
-              uiNotice +
-              installNotice +
-              islandContext +
-              prompt
-          ),
-          images
-        )
+        const body =
+          projectUiInstructions(useUi, uiEngine) + uiNotice + installNotice + islandContext + prompt
+        // A handoff already carries the whole conversation.
+        const restored = history.length ? '' : (restoredSummaries.get(key) ?? '')
+        restoredSummaries.delete(key)
+        if (restored) session.emit({ type: 'status', text: RESUME_NOTE })
+        session.send(handoffPrompt(history, seedPrompt(restored, body)), images)
         productLog.info('send-path', 'bun action=send stage=agent-handler-end', {
           chat: key,
           turn: id,

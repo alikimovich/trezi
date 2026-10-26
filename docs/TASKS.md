@@ -11,6 +11,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The service holds an XPC transaction while Bun runs (the likely idle-exit kill). The 2026-10-24 16:11/16:43 logs held no real-session lines, so the cause is not confirmed from them.
 - [x] `test/service-process.mjs` writes its product log to its scratch folder, not `~/Library/Logs/Trezi`.
 - [ ] Native kill-mid-turn check and a visual check of the alert and toast (the worker had no native verify run).
+## Codex chats keep their context after an interrupted turn (LKM-346)
+
+- [x] Codex resumes the saved thread (`resumeThread(resumeSessionId)`) and records each thread id as `sdkSessionId`; unit `codex-resume`.
+- [x] A thread the CLI cannot resume (a new thread id, or "no rollout found") is replaced by a new thread whose first prompt carries `resumeSummary`; unit `codex-resume`.
+- [x] Any provider: a restored chat started without a resume id gets the summary with its next turn (`restoredSummaries` in `src/main/agent.ts`); unit `conversation-owner` (agent section).
+- [x] Cause 2 explained (PROGRESS); `Backend stopping chats= background=` product-log line at quit.
+- [ ] Live check: kill the service during a Codex turn, relaunch, send "continue" (needs a real Codex login; not run by the worker).
 
 ## swift-preview unit tests reliable on GitHub-hosted CI (LKM-345)
 

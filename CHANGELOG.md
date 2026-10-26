@@ -12,6 +12,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 - Trezi no longer quits silently when its background service stops. It restarts the service and keeps the window open, and a turn that was running shows as interrupted. If the restart fails, an alert gives the reason and a Relaunch Trezi button. The cause (exit status or signal, memory and the service's last log lines) is written to the product log (LKM-347).
+## [0.3.4] - 2026-10-25
+
+### Fixed
+- A Codex chat continues its own thread after Trezi restarts, so "continue" after an interrupted turn picks up the same task; if the thread cannot be resumed, or a restored chat has no thread to resume, the next message carries a summary of the conversation (LKM-346).
 
 ## [0.3.3] - 2026-10-24
 

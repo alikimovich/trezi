@@ -30,6 +30,7 @@ import { RECOVERED_STATUS, reconnectingStatus } from '../self-heal/status'
 import { compatibilityCatalog } from '../session-skills'
 import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
+import { RESUME_NOTE, seedPrompt } from './claude-resume'
 import { codexSeatAuthFailure } from './codex-auth'
 import { gitAccessHook, isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
 import {
@@ -41,6 +42,7 @@ import {
   supportedCodexModel,
   unsupportedCodexModel
 } from './codex-model'
+import { isCodexResumeFailure, resumedElsewhere } from './codex-resume'
 import { createRetryCause } from './codex-retry'
 import { codexSandbox } from './codex-sandbox'
 import { codexItemWarning, createItemTracker } from './codex-stream'
@@ -261,6 +263,12 @@ async function drainAfterTerminal(
   clearTimeout(settle)
   return false
 }
+/** How one run of a turn ended: a rejected model, a network failure, or a lost resume. */
+interface Attempt {
+  rejected: string | null
+  network: string | null
+  lostResume: boolean
+}
 /** Items that are the model's own output; after one, a failed turn is not retried. */
 const OUTPUT_ITEMS = new Set<string>([
   'agent_message',
@@ -276,10 +284,9 @@ async function startSession(
   root: string,
   options: AgentOptions,
   getWindow: () => NativeView | null,
-  // v9 resume/multi-chat: Codex has no confirmed resume primitive — accept the
-  // context (for the shared ModelProvider signature) and no-op it. `emitKey`
-  // (used for an additional live chat) is honored so its events still route to
-  // the right renderer chat slice; `resumeSessionId` is ignored.
+  // `emitKey` routes an additional chat's events to its own chat. `resumeSessionId`
+  // continues a saved Codex thread (LKM-346); if the CLI cannot, a new thread starts
+  // from `resumeSummary`.
   ctx?: SpawnContext
 ): Promise<ProviderSession> {
   const key = projectKey(root)
@@ -301,6 +308,8 @@ async function startSession(
   let turnAbort: AbortController | null = null // cancels the in-flight turn only
   // trezi rules (v8 R): no system-prompt arg here, so prepend them to the first turn.
   let firstTurn = true
+  // A saved thread this session continues, until the CLI confirms it (LKM-346).
+  let resuming = !!ctx?.resumeSessionId
   // LKM-287: the session's pinned library skills as Trezi's labelled compatibility
   // catalog (metadata and read-only paths; bodies are read on demand).
   const skillsCatalog = compatibilityCatalog(ctx?.skills, 'codex')
@@ -432,7 +441,7 @@ async function startSession(
       })
       return id ? codex.resumeThread(id, threadOptions) : codex.startThread(threadOptions)
     }
-    thread = openThread(null)
+    thread = openThread(ctx?.resumeSessionId ?? null)
   } catch (err) {
     treziTools?.dispose()
     treziTools = null
@@ -531,7 +540,9 @@ async function startSession(
 
   // Serialize turns: each send() runs to completion before the next starts.
   let chain: Promise<void> = Promise.resolve()
-  const runTurn = async (text: string): Promise<void> => {
+  // `seeded` is the same turn for a new thread that replaces a saved one the CLI could
+  // not continue: the chat's summary ahead of the message (LKM-346).
+  const runTurn = async (text: string, seeded: string): Promise<void> => {
     if (aborted || disposed) return
     if (!thread) {
       // Startup failed. Missing CLI / not logged in is deliberately auth-shaped
@@ -542,17 +553,30 @@ async function startSession(
       emit({ type: 'done' })
       return
     }
-    const resumeId = thread.id
+    let resumeId = thread.id
     if (thread.id && openThread) thread = openThread(thread.id)
     turnAbort = new AbortController()
     // On turn 2+ the thread id is already known, so the tail starts with the turn;
     // on turn 1 it starts at `thread.started`, a moment later.
     if (thread.id) startUsageWatch(thread.id)
+    let prompt = text
+    const run = async (current: Thread): Promise<Attempt> => {
+      const result = await attempt(current, prompt)
+      if (!result.lostResume || !openThread || disposed || aborted || turnAbort?.signal.aborted)
+        return result
+      emit({ type: 'status', text: RESUME_NOTE })
+      stopUsageWatch()
+      prompt = seeded
+      thread = openThread(null)
+      const fresh = await attempt(thread, prompt)
+      resumeId = thread.id
+      return fresh
+    }
     // A model this ChatGPT login cannot use fails the turn before any output. Try the
     // next listed model on a fresh copy of the thread, say so, and keep it for later
     // turns; main reads the notice (`provider-sessions.ts`). Connections never do this.
     const wasDefault = !threadOptions.model
-    let result = await attempt(thread, text)
+    let result = await run(thread)
     // A routing-discovery failure occurs before the model has produced output.
     // Recreate the CLI process, preserving the thread id and the original prompt.
     let networkRetries = 0
@@ -569,7 +593,7 @@ async function startSession(
       if (disposed || aborted || turnAbort.signal.aborted) break
       stopUsageWatch()
       thread = openThread(resumeId)
-      result = await attempt(thread, text)
+      result = await run(thread)
     }
     // Main's incident tracker logs the outcome from these two lines (self-heal/status.ts).
     if (networkRetries && !result.network && !result.rejected && !turnAbort.signal.aborted)
@@ -590,7 +614,7 @@ async function startSession(
       stopUsageWatch()
       thread = openThread(resumeId)
       if (thread.id) startUsageWatch(thread.id)
-      result = await attempt(thread, text)
+      result = await run(thread)
       rejected = result.rejected
     }
     if (rejected && !aborted && !turnAbort.signal.aborted)
@@ -607,10 +631,7 @@ async function startSession(
   }
 
   /** One run of the turn's prompt: the model this login rejected, or null. */
-  const attempt = async (
-    thread: Thread,
-    text: string
-  ): Promise<{ rejected: string | null; network: string | null }> => {
+  const attempt = async (thread: Thread, text: string): Promise<Attempt> => {
     const signal = turnAbort?.signal
     // Per turn, not per session: a retry cause from an earlier turn must not be
     // grafted onto a later, unrelated failure.
@@ -622,6 +643,13 @@ async function startSession(
     let rejected: string | null = null
     let network: string | null = null
     let produced = false
+    // A saved thread the CLI could not continue, before any output (LKM-346).
+    const expected = resuming ? thread.id : null
+    let lostResume = false
+    const resumeLost = (message: string): boolean => {
+      if (expected && !produced && isCodexResumeFailure(message)) lostResume = true
+      return lostResume
+    }
     // The seat's "not supported with a ChatGPT account" 400, before any output: in a
     // stream `error` or `turn.failed` event (the real CLI's JSON body) or the exec error.
     const rejection = (payload: unknown): boolean => {
@@ -655,6 +683,14 @@ async function startSession(
         let terminal = false
         switch (ev.type) {
           case 'thread.started':
+            // The CLI starts a new, empty thread for an id it cannot find.
+            if (resumedElsewhere(expected, ev.thread_id)) {
+              lostResume = true
+              break
+            }
+            resuming = false
+            // The chat's resumable id, persisted with its record like Claude's.
+            cap.setSdkSessionId(ev.thread_id)
             startUsageWatch(ev.thread_id)
             break
           // A warning item (e.g. the skills-budget note the CLI prints before the
@@ -676,7 +712,7 @@ async function startSession(
             terminal = true
             break
           case 'turn.failed':
-            if (!rejection(ev.error)) {
+            if (!rejection(ev.error) && !resumeLost(errorText(ev.error ?? ev))) {
               const message = retryCause.explain(errorText(ev.error ?? ev))
               if (classifyError(message).class === 'provider-network' && !produced)
                 network = message
@@ -685,7 +721,7 @@ async function startSession(
             terminal = true
             break
           case 'error': {
-            if (rejection(ev)) break
+            if (rejection(ev) || resumeLost(errorText(ev))) break
             const message = errorText(ev)
             // The CLI retries a failed request up to five times and emits EACH
             // attempt as its own `error` event ("Reconnecting... 3/5 (…)"). Left
@@ -707,6 +743,8 @@ async function startSession(
           }
           // turn.started needs no extra handling.
         }
+        // The replacement thread takes the turn; this run's stream is closed below.
+        if (lostResume) break
         // CLI stdout can stay open after its terminal turn event, which would keep
         // Writing and Stop up and hold a queued answer. Give the CLI a short grace to
         // exit on its own (closing the iterator SIGTERMs it mid-flush), then cut the
@@ -719,7 +757,7 @@ async function startSession(
       }
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
-      if (!aborted && !signal?.aborted && !rejection(raw)) {
+      if (!aborted && !signal?.aborted && !rejection(raw) && !resumeLost(raw)) {
         const m = retryCause.explain(raw)
         // A missing/unauthenticated `codex` CLI surfaces here (e.g. spawn ENOENT).
         if (classifyError(m).class === 'provider-network' && !produced) network = m
@@ -736,7 +774,7 @@ async function startSession(
       // A break out of the loop (teardown) must still close the iterator and its CLI.
       if (it && !closed) await it.return?.()?.catch(() => {})
     }
-    return { rejected, network }
+    return { rejected, network, lostResume }
   }
 
   return {
@@ -745,11 +783,13 @@ async function startSession(
     options,
     // Composer image attachments are not wired yet; MCP screenshot results are images.
     send: (text, _images) => {
-      const prompt = firstTurn
-        ? `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n${text}`
-        : text
+      const rules = (): string =>
+        `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n`
+      const prompt = firstTurn ? `${rules()}${text}` : text
+      // A thread that replaces a lost saved one is new: it needs the rules too.
+      const seeded = resuming ? `${rules()}${seedPrompt(ctx?.resumeSummary ?? '', text)}` : prompt
       firstTurn = false
-      chain = chain.then(() => runTurn(prompt))
+      chain = chain.then(() => runTurn(prompt, seeded))
     },
     pending,
     emit,
