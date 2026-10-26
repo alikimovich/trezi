@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-354: CI failure of `native-chat-send-follow`, a settled reading that reset the bound
+
+- **Failure.** PR #326 (e72e0236), unit shard 2/3: `native-chat-send-follow` FAIL after 93.8 s. The CI excerpt has no assertion text, and the worker sandbox cannot reach the GitHub API.
+- **Reproduced locally under load.** Of 8 parallel runs, 1 failed: `stream-long` moved 7841 pt up *after* the settles had ended. With logging, 5 of 8 runs showed a late restart.
+  - The log: `unresolvedSettles` reached 4, then a settle ended `.settled` and reset it to 0. The next pin restarted the settles, with realize steps and jumps through the first row, mid-turn.
+  - The settled reading was transient. The fixture cleared `model.messageFrames` every 4 ms, so now and then a layout's frames reached two consecutive settle steps.
+  - The product has the same exposure. A realize scroll moves the stack, and the next layout can measure rows that are lost again a frame later.
+- **Fix.** `ChatLatestSettle.unresolved(after:follows:last:realized:)` (`src/native/ChatScrollStyle.swift`) counts a settle that needed a realize step as unresolved, whatever it read last. Only a settle that settled with no realize step resets the count, or a reader who left. A user, chat, viewport, composer or latest-button request still resets it.
+  - A first version only kept the count after a realized settle. In a scratch fixture, frames leaked for 60 ms after each realize, and that showed every settle could end that way, so the count never grew. The +1 rule bounds that too.
+- **Test hardening.**
+  - The forced state now drops frames in the model through the verification hook `messageFramesFilter`, instead of racing the layout from the fixture.
+  - Realize scrolls are counted exactly (`latestRealizes`): at most 240 in all, and none after the settles ended (`realizesLate`). A streaming case counts as ended when no realize scroll has run for 1.5 s and 150 run-loop turns.
+  - The new `leak-stream` case lets the frames measured in the 60 ms after each realize through, then loses them again.
+  - `native-chat-latest-settle --cases` pins the rule: `unresolvedCounts` is `[4, 4, 4, 0, 0]`. The CI rule gives `[4, 4, 0, 0, 0]`.
+- **Limits.**
+  - The hardened end-to-end fixture also passes with the CI rule, because its frames no longer leak. Only the unit case fails on that rule deterministically. In 6 parallel runs, the 60 ms leak caught the CI rule once out of 7 tries.
+  - Results with the fix: 8 of 8 parallel runs of `native-chat-send-follow` pass. Blank cases end after about 2.3 s (60 realize scrolls); streaming cases end after 8–9.5 s (240); `leak-stream` ends after 2–3 s (4–9). After the end: 0 realize scrolls and at most 1 pt up.
+  - No native suite run was available to the worker.
+
 ## 2026-10-25 — LKM-354: the latest-row settle that never ends (blank chat, shaking scrollbar after Send)
 
 - **Report.** Trezi v0.3.5: after Send, the chat shows nothing while the turn runs, the latest chevron is up, and the scrollbar shakes. The video's frames show the thumb flipping every few frames between offset ≈ 0 and ≈ 18 pt, with the document height changing by 20 pt (one stack spacing). Offset 18 is where `realizeTarget`'s first-row step (`.top`) puts the clip (LKM-350), so `settleLatest` was stepping `.realize` every frame without end.

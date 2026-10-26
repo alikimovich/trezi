@@ -131,6 +131,12 @@ if CommandLine.arguments.contains("--cases") {
         "trailingFillsView": ChatLatestSettle.step(latest: "latest", frames: ["latest": CGRect(x: 0, y: -400, width: 400, height: 74)], bottom: 569,
                                                    readingHeight: 570, viewportHeight: 776, trailing: true) == .settled,
         "trailingNotRealized": ChatLatestSettle.step(latest: "latest", frames: [:], bottom: 0, readingHeight: 570, viewportHeight: 776, trailing: true) == .realize("latest"),
+        // LKM-354: a settle that realized adds to the unresolved count, even if it read settled last.
+        "unresolvedCounts": [ChatLatestSettle.unresolved(after: 3, follows: true, last: .realize("latest"), realized: true),
+                             ChatLatestSettle.unresolved(after: 3, follows: true, last: .bottom, realized: false),
+                             ChatLatestSettle.unresolved(after: 3, follows: true, last: .settled, realized: true),
+                             ChatLatestSettle.unresolved(after: 3, follows: true, last: .settled, realized: false),
+                             ChatLatestSettle.unresolved(after: 3, follows: false, last: .realize("latest"), realized: true)],
         "escalations": escalations,
         "settledEscalates": ChatLatestSettle.escalated(.settled, unresolved: 3) == .settled,
         // LKM-349: the first three relayouts stay relayouts; the fourth realizes the latest row.

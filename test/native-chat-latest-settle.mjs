@@ -60,6 +60,11 @@ if (process.platform !== 'darwin') {
     // LKM-354: rows after the latest message report no frame; the marker in view is the end.
     assert.equal(cases.trailingFillsView, true, 'cards filling the view at the end must settle')
     assert.equal(cases.trailingNotRealized, true, 'an unrealized end with cards must still realize')
+    assert.deepEqual(
+      cases.unresolvedCounts,
+      [4, 4, 4, 0, 0],
+      'a settle that realized is unresolved; only one that settled with no realize step, or a reader who left, resets the count'
+    )
     assert.deepEqual(cases.escalations, [
       'bottom',
       'bottom',

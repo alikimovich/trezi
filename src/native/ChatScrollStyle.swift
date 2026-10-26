@@ -95,8 +95,7 @@ enum ChatLatestSettle: Equatable {
         if let end, let previous, abs(end - previous) <= 0.5 { return count + 1 }
         return 1
     }
-    /// The settles in a row that ended unresolved (their last step was not
-    /// `.settled`) after which a pin's or clamp's own move no longer starts the
+    /// The settles in a row that ended unresolved (`unresolved(after:)`) after which a pin's or clamp's own move no longer starts the
     /// next one. Each ends with a pin, which gives a slow layout another try;
     /// with nothing able to resolve (no row measured in view, LKM-354) that
     /// repeated forever. A viewport, composer, chat or latest-button request
@@ -104,6 +103,16 @@ enum ChatLatestSettle: Equatable {
     /// settle only pins and no longer realizes through SwiftUI, which jumped
     /// the clip with every chunk for the whole turn.
     static let unresolvedRestarts = 2
+    /// The count after a settle ended with `last`. `realized`: one of its steps
+    /// needed a realize. That settle is unresolved too, whatever it read last:
+    /// the realize moved the stack and the next layout can measure rows that are
+    /// lost again a frame later, and resetting there restarted the jumps through
+    /// the first row mid-turn (LKM-354). Only a settle that settled with no
+    /// realize, or a reader who left, starts the count again.
+    static func unresolved(after count: Int, follows: Bool, last: ChatLatestSettle, realized: Bool) -> Int {
+        guard follows else { return 0 }
+        return last == .settled && !realized ? 0 : count + 1
+    }
     /// The SwiftUI scroll for the `stuck`-th consecutive realize step. A stack
     /// whose estimates are far off can stay empty at the latest row; every
     /// fourth step goes to the first row, whose position it knows exactly, and

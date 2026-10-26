@@ -384,14 +384,17 @@ way and samples each send every ~30 ms: the prompt or reply in the reading area
 within 1 s and throughout the turn (new, short and long chats, a chat switch and
 restore, a send while the previous turn runs), no jump back up, and no settle
 still running after the turn, also when cards after the reply fill the view.
-Two more cases (long and short chat) hold the model's message frames empty
-after a send, the reporter's state of no row measured in view: the bounded
-settles must end (within 20 s) and then stay ended with the clip put, and once the
-frames are measured again the sent rows are in the reading area, the clip at the
-end. Two further cases do the same while the reply streams a chunk every 0.1 s
-(each chunk is a content request): the clip must make no move up of over 40 pt
-for 1.5 s within 25 s, and none in the 3 s after, with the chunks still arriving.
-It takes `CHAT_SWIFT` too.
+Two more cases (long and short chat) drop the model's message frames after a
+send (the verification hook `messageFramesFilter`), the reporter's state of no
+row measured in view: the bounded settles (at most 240 realize scrolls) must end
+(within 20 s) and then stay ended with no realize scroll and the clip put, and once
+the frames are measured again the sent rows are in the reading area, the clip at
+the end. Two further cases do the same while the reply streams a chunk every 0.1 s
+(each chunk is a content request): the settles have ended once no realize scroll
+ran for 1.5 s within 25 s, then none may run and the clip make no move up of over
+40 pt in the 3 s after, with the chunks still arriving. `leak-stream` also lets
+the frames measured in the 60 ms after each realize scroll through, then loses
+them again. It takes `CHAT_SWIFT` too.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there
