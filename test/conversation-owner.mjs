@@ -980,7 +980,7 @@ try {
   for (const started of fixtures) await started.kill().catch(() => {})
   rmSync(scratch, { recursive: true, force: true })
 }
-// LKM-352: under the 8-worker unit run the process printed every section's PASS and the
-// closing line, then stayed alive until the runner's timeout (three runs, 120–240 s; 14 s
-// alone). A failure above throws before this line and still fails the test.
+// Requests to fixtures killed on purpose (crash sections) still hold client timers; under a
+// loaded full tier they outlived the 120 s limit after every section had passed (LKM-351).
+// A failed section throws above, so this is reached only on success.
 process.exit(0)
