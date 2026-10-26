@@ -400,6 +400,13 @@ them again. Every forced case ends by sending a second prompt with the frames
 still dropped and the bound spent: a realize scroll must follow within 1 s
 (`realizedOnSend`), because a new message restarts the count. It takes
 `CHAT_SWIFT` too.
+LKM-357: the 1 s runs from the app's own Send moment (`sendRevision` raised in
+`NativeChat.update`) to the first frames the conversation reports with a sent row
+in the reading area (read through a pass-through `messageFramesFilter`), not from
+the harness's push to its next sample. Locally the limit is 1 s; with `CI=true`
+or `GITHUB_ACTIONS=true` it is 2 s, about twice the 1.04 s a loaded GitHub runner
+once read (locally 0.003–0.017 s). A failure lists every case's Send and shown
+times, the delta and the limit used.
 
 LKM-103 acceptance runs at the end of native-chat-scroll, which `bun run test:native`
 invokes with `--require-build` after native-runtime (a missing host fails there

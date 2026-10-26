@@ -8,6 +8,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] With a live footer, cards or questions after the latest message, `ChatLatestSettle.step` relayouts when the latest row's frame ends below the end marker (an earlier clip offset), so the LKM-349 escalation to realize applies again; unit `native-chat-latest-settle` cases `trailingStaleLatest` (the failure's numbers) and `trailingLatestAboveFooter`.
 - [x] Native composer group green on the worker's run (9/9, `visible-composer` 440 and 320 pt).
 - [ ] `native-chat-scroll` send visibility: the worker's run hit the recurring `440-fixed loaded` first-load blank (no trailing rows there, so the changed rule does not apply); the manager's run should show it pass.
+## `native-chat-send-follow` timed from the app's Send (LKM-357)
+
+- [x] Rows-in-view latency runs from the app's Send moment (`sendRevision`) to the first reported frames with a sent row in view, not from harness sampling (`test/fixtures/chat-send-follow/main.swift`); locally still 1 s (`test/native-chat-send-follow.mjs`).
+- [x] On CI (`CI`/`GITHUB_ACTIONS` true) the limit is 2 s, about twice the observed 1.04 s failure (179b3cd3); a failure lists each case's Send time, shown time, delta and the limit.
+- [x] Negative controls: a `CHAT_SWIFT` copy that applies the snapshot 1.2 s late fails locally (1.28 s), one 2.5 s late fails with `CI=true` (2.62 s).
+- [ ] Watch: CI green on the PR and on main. The 1.04 s stall did not reproduce locally (10/10 under 12–36 busy loops).
 
 ## Loaded-runner flakes: bottom marker, repository-owner, live-publish-attribution (LKM-355)
 

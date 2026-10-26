@@ -9,6 +9,20 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Fix.** `ChatLatestSettle.step` (`src/native/ChatScrollStyle.swift`): with `trailing`, a measured latest frame that ends more than 1 pt below the marker is a `.relayout`. The LKM-354 case still settles: cards filling the view leave the latest row above the marker, or unmeasured.
 - **Test.** `native-chat-latest-settle --cases`: `trailingStaleLatest` (the failure's frame and marker → relayout) and `trailingLatestAboveFooter` (the 440 pass's frames → settled). `native-chat-latest-settle` and `native-chat-send-follow` pass.
 - **Native (worker, one run).** The `composer` group passed 9/9, `visible-composer` at 440 and 320 pt included. The `native-chat-scroll` step after it failed send visibility: `440-fixed loaded/sent+60/sent+500: no visible transcript rows` (0 realized rows, 80 settle attempts) and `send-after-send` without its prompt. This is the first-load race recorded under LKM-334, LKM-349 and the `00e3d931` nightly. The changed rule cannot reach it: that fixture has no cards, questions or live footer (`trailing` is false), so every step reads as before. There was no native call left to rerun it.
+## 2026-10-26 — LKM-357: `native-chat-send-follow` timed from the app's Send, with a CI margin
+
+- **Failure.** Main push CI on 179b3cd3: `long: sent rows not in view within 1 s (shown after 1.04 s)`. The same code passed on d9793a01 and bb1b04d8.
+- **What the old number measured.** The harness started its clock after `push()` returned, and only noticed the rows at its next 30 ms run-loop sample. Locally that read 0.05–0.10 s for a layout that reported the rows after 0.003–0.017 s.
+- **Fix (test only).**
+  - The fixture records the app's own Send moment: a Combine sink on `ChatModel.$sendRevision`, which `NativeChat.update` raises for the new message.
+  - The shown moment is the first `onPreferenceChange` frames with a sent row in the reading area, read through a pass-through `messageFramesFilter`.
+  - "Stays in view" now counts samples after the limit, timed from the Send.
+- **CI margin.** The limit stays 1 s locally. With `CI=true` or `GITHUB_ACTIONS=true` it is 2 s, about twice the worst reading seen on a runner (1.04 s), so a stall of more than ten times the local value no longer flakes. Rows that never show (-1) or take seconds still fail.
+- **Failure output.** Every case prints the Send time, the shown time (both after the harness's push), the delta, the harness sample for comparison and the limit used.
+- **Checks.**
+  - Under load (12 and 36 `for(;;){}` loops, 4 and 6 runs at once) 10/10 runs passed; app-measured at most 0.014 s, harness-sampled at most 0.11 s. The CI stall did not reproduce.
+  - Negative controls (`CHAT_SWIFT` copies that apply the snapshot late): 1.2 s late fails locally at 1.28 s; 2.5 s late fails with `CI=true` at 2.62 s.
+- **Limits.** No product change and no native suite run. CI not observed.
 
 ## 2026-10-26 — LKM-355: loaded-runner flakes in native-chat-bottom-marker, repository-owner, live-publish-attribution
 

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 // LKM-354: the real ChatConversation (NativeChat) offscreen. Each case loads a
@@ -44,15 +45,32 @@ func push() {
 func open(_ id: String, _ list: [[String: Any]]) { chatID = id; messages = list; cards = []; push() }
 func offset() -> CGFloat { chat.conversationScroll.flatMap { ChatScrollStyleProbe.metrics($0)["offset"] as? CGFloat } ?? 0 }
 var results: [[String: Any]] = []
+/// LKM-357: the app's own Send moment, when `NativeChat.update` raises `sendRevision` for the new
+/// message (`@Published` fires as it is set), so the harness's push and sampling are not timed.
+var appSentAt: Date?
+let sendWatch = chat.model.$sendRevision.dropFirst().sink { _ in appSentAt = Date() }
 /// Sends while `running` may still be true (the previous turn), streams `chunks`
 /// every 0.1 s, then ends the turn. `cardsAt`: the chunk at which cards that fill
-/// the view arrive after the reply.
+/// the view arrive after the reply. Timing (LKM-357): `shownAfter` runs from the app's Send moment
+/// to the first frames the conversation reports (`onPreferenceChange`, read through the
+/// pass-through `messageFramesFilter`) with a sent row in the reading area, not to the harness's
+/// next 30 ms sample (`sampledAfter`, from after the push). `sentAt` and `shownAt` are seconds after
+/// the harness began the push. `missingTimes`: the samples, in seconds after the Send, with no sent row in view.
 func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = true) {
     let prompt = "\(name)-prompt", reply = "\(name)-reply"
+    let reading = { chat.bounds.height - chat.model.bottomInset }
+    let inView = { (frames: [String: CGRect]) in [prompt, reply].contains { frames[$0].map { $0.maxY > 0 && $0.minY < reading() } ?? false } }
+    var shownAt: Date?
+    chat.model.messageFramesFilter = { frames in
+        if shownAt == nil && inView(frames) { shownAt = Date() }
+        return frames
+    }
     messages += [message(prompt, "user", "Please review the text on the home page"), message(reply, "assistant", "")]
+    appSentAt = nil
+    let pushedAt = Date()
     running = true; push()
-    let start = Date()
-    var samples = 0, shownAfter = -1.0, missingAfter1s = 0, lowest = CGFloat.infinity, highest = -CGFloat.infinity, jump: CGFloat = 0, chunk = 0
+    let start = Date(), sentAt = appSentAt ?? pushedAt
+    var samples = 0, sampledAfter = -1.0, missingTimes: [Double] = [], lowest = CGFloat.infinity, highest = -CGFloat.infinity, jump: CGFloat = 0, chunk = 0
     while Date().timeIntervalSince(start) < Double(chunks) * 0.1 + 1 {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.03))
         let t = Date().timeIntervalSince(start)
@@ -62,20 +80,22 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
             if chunk == cardsAt { cards = (0..<6).map { ["id": "\(name)-card-\($0)", "title": "Card \($0)", "detail": String(repeating: "Card detail that wraps. ", count: 12), "actions": []] } }
             push()
         }
-        let reading = chat.bounds.height - chat.model.bottomInset
-        let shown = [prompt, reply].contains { chat.model.messageFrames[$0].map { $0.maxY > 0 && $0.minY < reading } ?? false }
-        if shown && shownAfter < 0 { shownAfter = t }
-        if t > 1 && !shown { missingAfter1s += 1 }
+        let shown = inView(chat.model.messageFrames)
+        if shown && sampledAfter < 0 { sampledAfter = t }
+        if !shown { missingTimes.append(Date().timeIntervalSince(sentAt)) }
         // Following only moves down: the largest move back up from the furthest offset so far.
         let now = offset()
         highest = max(highest, now); lowest = min(lowest, now); jump = max(jump, highest - now)
         samples += 1
     }
+    chat.model.messageFramesFilter = nil
     if end { running = false; push() }
     spin(1.5)
     var settling = 0
     for _ in 0..<30 { spin(0.03); if chat.model.latestSettling { settling += 1 } }
-    results.append(["case": name, "samples": samples, "shownAfter": shownAfter, "missingAfter1s": missingAfter1s, "lowestOffset": lowest,
+    results.append(["case": name, "samples": samples, "appSend": appSentAt != nil, "sentAt": sentAt.timeIntervalSince(pushedAt),
+                    "shownAt": shownAt.map { $0.timeIntervalSince(pushedAt) } ?? -1, "shownAfter": shownAt.map { $0.timeIntervalSince(sentAt) } ?? -1,
+                    "sampledAfter": sampledAfter, "missingTimes": missingTimes, "lowestOffset": lowest,
                     "upJump": jump, "settlingAfterTurn": settling, "cards": cardsAt != nil])
 }
 /// The reporter's state (LKM-354): after a send in a long chat, no message row is measured in view
