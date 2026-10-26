@@ -71,16 +71,52 @@ extension Host {
                   let color = bitmap.colorAt(x: px, y: py)?.usingColorSpace(.sRGB) else { return [] }
             return [color.redComponent, color.greenComponent, color.blueComponent].map { Double(($0 * 255).rounded()) }
         }
+        // LKM-351: SwiftUI can keep every row's frame from an earlier offset after the AppKit pin
+        // (the bubble read 74 pt where the identical rendering of a passing run drew it at ~155),
+        // while the end marker is current. One pass reported them all, so they share one shift.
+        // Only when the frames would sample nothing, find the shift that puts each row's fill and
+        // the gap above it, and the bubble beside the chat background, on the rendering.
+        let reported = (ids + [user]).compactMap { id in chat.model.messageFrames[id].map { (id, $0) } }
+        let frames = Dictionary(reported, uniquingKeysWith: { $1 })
+        func differs(_ a: [Double], _ b: [Double]) -> Double { a.isEmpty || b.isEmpty ? 0 : zip(a, b).map { abs($0 - $1) }.max() ?? 0 }
+        func filled(_ x: CGFloat, _ y: CGFloat) -> Bool { differs(sample(x, y), sample(5, y)) >= 2 }
+        func blank(_ d: CGFloat) -> Bool {
+            let bubble = frames[user].map { $0.offsetBy(dx: 0, dy: d) }
+            if needsBubble, let bubble, differs(sample(bubble.maxX - 5, bubble.midY), sample(bubble.minX + 5, bubble.midY)) == 0 { return true }
+            return ids.contains { id in
+                guard let f = frames[id]?.offsetBy(dx: 0, dy: d) else { return false }
+                return differs(sample(f.minX + 5, f.midY), sample(f.minX + 5, f.minY - 10)) < 2
+            }
+        }
+        func aligned(_ d: CGFloat) -> Bool {
+            guard let bubble = frames[user]?.offsetBy(dx: 0, dy: d) else { return false }
+            let rowsFit = ids.allSatisfy { id in
+                guard let f = frames[id]?.offsetBy(dx: 0, dy: d) else { return false }
+                return [f.minX + 5, f.maxX - 5].allSatisfy { filled($0, f.midY) && !filled($0, f.minY - 10) }
+            }
+            return rowsFit && (!needsBubble || filled(bubble.maxX - 5, bubble.midY) && !filled(bubble.minX + 5, bubble.midY))
+        }
+        // The shifts that fit form one band (26 pt wide on the failing run's rendering); its middle
+        // samples clear of the rounded corners its edges reach.
+        var shift: CGFloat = 0
+        if blank(0), let first = (1...300).lazy.flatMap({ [CGFloat($0), -CGFloat($0)] }).first(where: aligned) {
+            let step: CGFloat = first > 0 ? 1 : -1
+            var last = first
+            while abs(last + step) <= 300, aligned(last + step) { last += step }
+            shift = ((first + last) / 2).rounded()
+        }
+        func shifted(_ id: String) -> CGRect { frames[id]?.offsetBy(dx: 0, dy: shift) ?? .zero }
         let rows = ids.map { id -> [String: Any] in
-            let frame = chat.model.messageFrames[id] ?? .zero
+            let frame = shifted(id)
             return ["id": id, "frame": NSStringFromRect(frame), "expanded": chat.model.expandedComments.contains(id),
                     "fill": sample(frame.minX + 5, frame.midY), "background": sample(frame.minX + 5, frame.minY - 10)]
         }
         // The user bubble trails its row: its fill at the right edge, background at the left.
-        let bubble = chat.model.messageFrames[user] ?? .zero
+        let bubble = shifted(user)
         return ["png": captured["png"] ?? "", "sampled": bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "",
                 "capture": captured["geometry"] ?? [:], "appearance": window.effectiveAppearance.name.rawValue,
                 "readingHeight": Double(reading.height), "rows": rows, "userFrame": NSStringFromRect(bubble),
+                "frameShift": Double(shift), "reportedUserFrame": NSStringFromRect(frames[user] ?? .zero),
                 "user": sample(bubble.maxX - 5, bubble.midY), "userBackground": sample(bubble.minX + 5, bubble.midY)]
     }
 }
