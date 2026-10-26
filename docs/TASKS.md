@@ -38,6 +38,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The relayout count restarts when the latest row's frame moved (`ChatLatestSettle.relayouts`), so a converging pin is not interrupted by a realize that parks the row under the composer (send visibility); unit `native-chat-latest-settle --cases` (`relayoutCounts`).
 - [ ] Full native suite pass on the fix: the first worker run passed (67 smoke checks and `native-chat-scroll`); the later runs failed at `native-chat-scroll` send visibility (manager) and at `comment-rows` with a stale bubble frame (worker, unrelated flake), so send visibility with the count change is still unverified natively.
 
+## native-chat-latest-settle negative control removed (LKM-353)
+
+- [x] Cause: the `--no-settle` blank (first load pinned at the lazy stack's estimated end) depends on SwiftUI's layout timing against the probe's main-queue pin, not on Trezi code (PROGRESS).
+- [x] The test no longer asserts it; the fixture keeps `--no-settle` for manual reproduction; every positive assertion is unchanged. Unit `native-chat-latest-settle`.
+- [x] 58 consecutive local passes, 20 of them under CPU load (PROGRESS).
+
 ## runtime-owner and native-chat-latest-settle deterministic on CI (LKM-348)
 
 - [x] A live-reload stream is registered before its opening is written (`EventClient.start`, `StaticServer.serve`), so a peer that read the opening is always counted; unit `runtime-owner` (`opened.clients == 1`).

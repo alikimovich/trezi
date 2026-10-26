@@ -7,7 +7,8 @@ import SwiftUI
 // long answers with a short tail (and a send inserting short rows) make the
 // estimates far off, so the AppKit pin's long jump leaves the viewport with no
 // realized rows. `--no-settle` runs the same view without the settle (the
-// pre-fix behaviour) as the negative control. Prints one JSON summary.
+// pre-fix behaviour) for manual reproduction; the unit test does not assert it
+// (LKM-353). Prints one JSON summary.
 let settles = !CommandLine.arguments.contains("--no-settle")
 struct Row: Identifiable, Equatable { let id: String; var height: CGFloat }
 final class Model: ObservableObject {
