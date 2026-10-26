@@ -2,6 +2,56 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-354: a Send resets the unresolved count (review finding)
+
+- **Defect.** `NativeChat.update` raised `followRevision` for a new message as for a streamed chunk, and that handler calls `settleLatest(content: true)`, which keeps `unresolvedSettles`. After a stuck turn had spent the bound (no row measured in view), the next Send in the same chat got pins only and no realize step, so it could stay blank.
+- **Fix.** `ChatModel.sendRevision` (`src/native/Chat.swift`) is raised when a snapshot of the same chat has more messages than the previous one. Its `onChange` sets `unresolvedSettles = 0` while following. Streamed updates of the last row still keep the count.
+- **Test.** `blankFrames` (`test/fixtures/chat-send-follow/main.swift`) sends a second prompt and an empty reply once the settles ended, with the frames still dropped, and reports `realizedOnSend` (seconds to the first realize scroll, -1: none in 1 s). `test/native-chat-send-follow.mjs` asserts it for every forced case (blank-long, blank-short, stream-long, stream-short, leak-stream). With the fix it is 0.02–0.07 s; with the handler removed (`CHAT_SWIFT` copy) the test fails with -1.
+- **Changelog.** Blank line before the `## [0.3.6]` heading restored.
+
+## 2026-10-26 — LKM-354: CI failure of `native-chat-send-follow`, a settled reading that reset the bound
+
+- **Failure.** PR #326 (e72e0236), unit shard 2/3: `native-chat-send-follow` FAIL after 93.8 s. The CI excerpt has no assertion text, and the worker sandbox cannot reach the GitHub API.
+- **Reproduced locally under load.** Of 8 parallel runs, 1 failed: `stream-long` moved 7841 pt up *after* the settles had ended. With logging, 5 of 8 runs showed a late restart.
+  - The log: `unresolvedSettles` reached 4, then a settle ended `.settled` and reset it to 0. The next pin restarted the settles, with realize steps and jumps through the first row, mid-turn.
+  - The settled reading was transient. The fixture cleared `model.messageFrames` every 4 ms, so now and then a layout's frames reached two consecutive settle steps.
+  - The product has the same exposure. A realize scroll moves the stack, and the next layout can measure rows that are lost again a frame later.
+- **Fix.** `ChatLatestSettle.unresolved(after:follows:last:realized:)` (`src/native/ChatScrollStyle.swift`) counts a settle that needed a realize step as unresolved, whatever it read last. Only a settle that settled with no realize step resets the count, or a reader who left. A user, chat, viewport, composer or latest-button request still resets it.
+  - A first version only kept the count after a realized settle. In a scratch fixture, frames leaked for 60 ms after each realize, and that showed every settle could end that way, so the count never grew. The +1 rule bounds that too.
+- **Test hardening.**
+  - The forced state now drops frames in the model through the verification hook `messageFramesFilter`, instead of racing the layout from the fixture.
+  - Realize scrolls are counted exactly (`latestRealizes`): at most 240 in all, and none after the settles ended (`realizesLate`). A streaming case counts as ended when no realize scroll has run for 1.5 s and 150 run-loop turns.
+  - The new `leak-stream` case lets the frames measured in the 60 ms after each realize through, then loses them again.
+  - `native-chat-latest-settle --cases` pins the rule: `unresolvedCounts` is `[4, 4, 4, 0, 0]`. The CI rule gives `[4, 4, 0, 0, 0]`.
+- **Limits.**
+  - The hardened end-to-end fixture also passes with the CI rule, because its frames no longer leak. Only the unit case fails on that rule deterministically. In 6 parallel runs, the 60 ms leak caught the CI rule once out of 7 tries.
+  - Results with the fix: 8 of 8 parallel runs of `native-chat-send-follow` pass. Blank cases end after about 2.3 s (60 realize scrolls); streaming cases end after 8–9.5 s (240); `leak-stream` ends after 2–3 s (4–9). After the end: 0 realize scrolls and at most 1 pt up.
+  - No native suite run was available to the worker.
+
+## 2026-10-25 — LKM-354: the latest-row settle that never ends (blank chat, shaking scrollbar after Send)
+
+- **Report.** Trezi v0.3.5: after Send, the chat shows nothing while the turn runs, the latest chevron is up, and the scrollbar shakes. The video's frames show the thumb flipping every few frames between offset ≈ 0 and ≈ 18 pt, with the document height changing by 20 pt (one stack spacing). Offset 18 is where `realizeTarget`'s first-row step (`.top`) puts the clip (LKM-350), so `settleLatest` was stepping `.realize` every frame without end.
+- **Cause.**
+  - A step that finds no message row in view always realizes. The settle then runs out its 4 × 20 attempts.
+  - The settle's closing pin moves the clip, `onMovedToEnd` starts the next settle, and that one ends with a pin again. So an unresolvable state never stops: every 16 ms it scrolls through SwiftUI (alternating between the latest and the first row) and relayouts the stack.
+  - One natural unresolvable state reproduces offscreen: cards, questions or the live footer after the reply report no `MessagePositions` frame. Once they fill the view, no message row is in view, even though the stack shows its end. On main the real `NativeChat` jumped 1581 pt up to the top and was still settling on 30 of 30 samples after the turn.
+  - The user's exact trigger was not reproduced. Their transcript reported no row in view at offsets 0 and 18; 15 scenarios on the real view (new, long prompt, start-composer handover, switch, restore, send again) never blanked. Forcing `.realize` on every step reproduced the endless loop and its 0/18 jumps.
+- **Fix.**
+  - `ChatLatestSettle.step(trailing:)`: when cards, questions or the live footer follow the latest message, the realized end marker in view counts as the end. The latest message then need not end at the reading edge.
+  - `settleLatest(afterPin:)`: a pin's or clamp's move no longer starts another settle once `ChatLatestSettle.unresolvedRestarts` (2) settles in a row ended unresolved (their last step was not `.settled`), so 3 settles of about 1.3 s at most. Content, viewport, composer, chat and latest-button requests still start one and reset the count.
+  - CI failure of the first version: `native-chat-bottom-marker` failed on the GitHub runner (14.0 s; the log gives no assertion text) and passed locally on every run, also under 14 busy loops. The first version stopped every restart after one unresolved settle, so a slow layout that needed a second settle stayed short of the end. The bounded count keeps that retry. This is the likely cause, not a reproduced one.
+- **Test.** New unit test `test/native-chat-send-follow.mjs`, which uses the real `NativeChat` offscreen and samples every 30 ms. It runs new, short, long, switch, restore and send-while-running cases, plus the cards case.
+  - Requirements: the prompt or reply is shown within 1 s and stays shown; no jump back up of more than 40 pt; at most 3 of 30 samples still settling after the turn.
+  - It fails with main's `Chat.swift` (`CHAT_SWIFT`) on the cards case and passes with the fix.
+  - `native-chat-latest-settle --cases` pins both trailing step conditions.
+- **Review follow-up: the reporter's state, asserted.** `blankFrames` (`test/fixtures/chat-send-follow/main.swift`) sends in a long and a short chat with no cards, questions or footer and clears `model.messageFrames` every 4 ms for 4 s, so no message row is measured in view.
+  - The test waits for the settles to end (no settle for 0.3 s, at most 20 s; a state wait, not a fixed time, so a slow runner only waits longer). For the next 1.5 s it requires at most 3 of ~35 samples settling and no up-jump over 40 pt. After releasing the frames with the next streamed chunk, the prompt or reply must be in the reading area and the clip at the end.
+  - Fix: settles end after 2.2 s (long) and 3.5 s (short), then settling 0/37 and 0/40, up jump 0 pt, rows back, 0 pt from the end. The bounded settles still jump (7291 pt long, 79 pt short) before they end. Main's `Chat.swift`: the settle never ends within the 20 s cap.
+  - Main's `Chat.swift`: settling 24/25 and 29/30, up jump 7257 pt (long), so the loop is asserted and fails there. On main the rows also come back once the frames are measured, so the new fix does not change the recovery, only the endless loop.
+- **Independent review: the bound was reset by every streamed chunk.** `settleLatest` reset `unresolvedSettles` for any request but a pin's, and `followRevision` (every content delta) is one, so with no row measured in view and the streaming row present (`trailing` false) each chunk started a fresh realize loop for the whole turn: the reporter's symptom.
+  - Fix: `settleLatest(content:)` (the `followRevision` call) keeps the count; only user, chat, viewport, composer and latest-button requests, or a settle that ends `.settled`, reset it. Past `unresolvedRestarts` a settle no longer realizes through SwiftUI at all, it pins. A first version that only dropped the first-row jump still moved the clip 228 pt (the composer inset) with each chunk: realizing the latest row parks it at the viewport bottom and the next pin returns it.
+  - Test: `blankFrames(stream: true)` also streams a chunk every 0.1 s while the frames are held empty (cases `stream-long`, `stream-short`). Settles cannot be idle while chunks arrive, so the end is "no move up of over 40 pt for 1.5 s" within 25 s, then no move up of over 40 pt in the next 3 s, rows back, clip at the end. The previous version fails it (220 and 225 jumps up, never quiet in 25 s); the fix is quiet after 9.2 s (long, 75 jumps) and 7.8 s (short, 58), then 0 pt. The jumps before that are the 3 bounded settles, as in the non-streaming cases.
+- **Verification repair (unit tier).** Two full unit runs of the manager timed out only `conversation-owner` at the default 120 s, after all its sections printed PASS (13.5 s alone; the new `native-chat-send-follow` adds about 90 s of load and a swiftc compile to the shared lane). `test/tiers.mjs` gives it 240 s like the other swiftc-queued tests (a budget, no check changed).
 ## 2026-10-26 — LKM-353: native-chat-latest-settle no longer asserts its timing-dependent negative control
 
 - **Failure.** Main push CI on `ded6e264`: `negative control: the AppKit pin alone should leave the transcript blank` (`blanks` 0). The same tree passed on PR #324. This was the third failure of this test (LKM-346, LKM-348).
