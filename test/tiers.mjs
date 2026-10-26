@@ -314,6 +314,10 @@ export const UNIT_TIMEOUT_MS = {
   // LKM-314: its parity suites may now take 300 s under three parallel unit runs, then the
   // sections; passes already took up to 232 s.
   'repository-owner': 600_000,
+  // LKM-354: every section passed and the summary line printed, but only after the 120 s limit
+  // in two full unit runs of 8 workers (13.5 s alone): its Swift fixtures queue behind the
+  // swiftc lane like repository-owner's, now with the chat fixtures' compiles ahead of it.
+  'conversation-owner': 240_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
@@ -351,7 +355,8 @@ export const UNIT_TIMEOUT_MS = {
   // LKM-312: a compile of the 33 real chat and composer sources (24 s with a warm module
   // cache), then 5 s of samples.
   'native-chat-bottom-marker': 240_000,
-  // LKM-354: the same compile, then seven sends sampled for ~4 s each.
+  // LKM-354: the same compile, then seven sends sampled for ~4 s each and two forced cases that
+  // wait for the bounded settles to end (up to 20 s each); 90 s in a loaded unit run.
   'native-chat-send-follow': 240_000,
   // LKM-287: a cold compile of 19 service sources (26 s alone), then 248 creates through
   // the real SkillsOwner, each F_FULLFSYNC'd objects plus a ledger-backed manifest
