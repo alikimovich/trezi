@@ -205,7 +205,12 @@ try {
       failed
         .map(
           ({ suite, code, signal, output }) =>
-            `--- ${suite} against the Swift owner exited ${code ?? signal}:\n${output.slice(-3000)}`
+            // Every failed check first (LKM-355): the tail can be the service log alone.
+            `--- ${suite} against the Swift owner exited ${code ?? signal}:\n${output
+              .split('\n')
+              .filter((line) => /\bFAIL\b|AssertionError/.test(line))
+              .slice(0, 30)
+              .join('\n')}\n--- ${suite} output tail:\n${output.slice(-3000)}`
         )
         .join('\n')
     )

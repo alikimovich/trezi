@@ -327,8 +327,9 @@ export const UNIT_TIMEOUT_MS = {
   // at 240 s, and passes took up to 239 s.
   'workflow-durability': 420_000,
   'workflow-owner': 420_000,
-  // Compiles the same workflow fixture through the LKM-255 operator script.
-  'live-publish-attribution': 240_000,
+  // Compiles the same workflow fixture (LKM-355: now first, in the test, then through the
+  // LKM-255 operator script); queued in the swiftc lane it can take as long as theirs.
+  'live-publish-attribution': 420_000,
   // Runs Next and Vite dev servers in turn: 52 s alone, over 120 s at load average 35. Now in
   // the native tier (LKM-313); the budget applies there too (`test/run.mjs`).
   'island-flicker-frameworks': 240_000,

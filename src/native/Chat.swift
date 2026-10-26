@@ -65,6 +65,9 @@ final class ChatModel: ObservableObject {
     var revealAppliedRevision = 0
     var revealAttempt = 0
     var latestSettleAttempts = 0, latestSettling = false, latestRealizes = 0  // diagnostics (ChatLatestSettle)
+    /// Diagnostics (LKM-355): settles ended so far, and whether the last one ended on a
+    /// settled reading. `latestSettleAttempts` sums up to four runs, so it cannot tell.
+    var latestSettles = 0, latestSettled = false
     /// Verification only (LKM-354): rewrites the measured message frames, to hold
     /// the state with no row measured in view.
     var messageFramesFilter: (([String: CGRect]) -> [String: CGRect])?
@@ -422,6 +425,7 @@ struct ChatConversation: View {
                 }
             }
             settlingLatest = false; realizingLatest = false; model.latestSettling = false
+            model.latestSettles += 1; model.latestSettled = last == .settled
             unresolvedSettles = ChatLatestSettle.unresolved(after: unresolvedSettles, follows: follows, last: last, realized: realized)
             // Rest at the marker's 1pt height, so the nudges leave no offset behind.
             if latestNudge { latestNudge = false }
