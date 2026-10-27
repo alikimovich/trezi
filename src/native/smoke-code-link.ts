@@ -112,6 +112,9 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
       'code link message shown'
     )
     await host.request('chatAcceptance', { prepare: true })
+    // An earlier check's message (chat-ui's refused submit) must not stand in for a refusal.
+    await host.request('chatPerform', { action: 'error-dismiss', card: 'error' })
+    await waitFor(async () => !(await cards()).some((c) => c.id === 'error'), 'no earlier error')
 
     // A draft in the editor before any link is followed.
     await perform({ action: 'open', source: 'index.html' })
@@ -283,6 +286,14 @@ export async function restoreCodeLinkClick(host: NativeBridge, fixture: string) 
     await host.request('sourcePerform', { action: { root: fixture, action: 'reload' } })
   if ((await host.request('sourceInspect', { root: fixture })).visible)
     await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+  // Switching back restarts the first project's preview; the next checks drive it.
+  await waitFor(
+    async () =>
+      nativeWorkspace.state.status.kind === 'running' &&
+      !(await host.request('layoutInspect')).previewHidden,
+    'first project preview shown',
+    30_000
+  )
   rmSync(join(fixture, 'code-link-escape.css'), { force: true })
   rmSync(join(fixture, '../outside.css'), { force: true })
   rmSync(join(fixture, OTHER), { recursive: true, force: true })
