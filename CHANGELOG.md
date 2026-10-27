@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-26
+
 ### Added
 - When the agent lists several possible code locations, each is a clickable filename and line range that opens Trezi's editor there, and the editor sidebar has a read-only Changes list: this branch's committed changes since the merge-base, then staged, unstaged and untracked files, with +/− counts and hunks that open in the editor (LKM-364).
 
