@@ -660,6 +660,9 @@ async function main() {
       activityController.append(String(error), 'error')
     )
     host!.send('sourceActive', { root: entry?.root ?? '' })
+    // LKM-364: a project's Changes list is re-read when it comes back to the front.
+    if (entry && editorController.session(entry.root).state.panel === 'changes')
+      void editorController.action({ root: entry.root, action: 'diff-refresh' })
     void layersController.activate(entry?.root ?? '')
     if (shellController) {
       shellController.codeOpen = entry ? editorController.session(entry.root).state.visible : false
@@ -671,7 +674,11 @@ async function main() {
   chatController.services.effect = (effect) => {
     void contextController.effect(effect).catch((error) => workspaceController.reportError(error))
     if (effect.type === 'source') openSource(effect.source)
-    else if (effect.type === 'preview') {
+    // LKM-364: a code link from chat, already checked; only its own project's editor opens.
+    else if (effect.type === 'code') {
+      if (effect.root === workspaceController.active?.root)
+        void editorController.open(effect.root, effect.source, undefined, false, effect.range)
+    } else if (effect.type === 'preview') {
       // The preview sits under the docked editor; a popped-out editor leaves it in view.
       const root = workspaceController.active?.root
       const editor = root ? editorController.session(root).state : null

@@ -552,7 +552,7 @@ private struct NativeMessageRow: View {
                         }
                     } else if let text = segment.text {
                         if message.role == "user" { Text(text).textSelection(.enabled).font(ChatTypography.body).lineSpacing(ChatTypography.lineSpacing).fixedSize(horizontal: false, vertical: true) }
-                        else { ChatMarkdown(source: text, streaming: running, identity: "\(message.id)#\(index)").help(messageTime(segment.at ?? message.at)) }
+                        else { ChatMarkdown(source: text, streaming: running, identity: "\(message.id)#\(index)", onLink: { model.action("code-link", id: message.id, value: $0) }).help(messageTime(segment.at ?? message.at)) }
                     }
                 }
                 if message.role == "assistant" && (activity != nil || !running) {

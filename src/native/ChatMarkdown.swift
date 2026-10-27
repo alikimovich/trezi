@@ -10,15 +10,16 @@ enum ChatTypography {
 
 /// An assistant text segment as one selectable text view (LKM-186): SwiftUI selection
 /// stops at each Text, so paragraphs, lists, headings, tables and code blocks share one
-/// `ChatTextView`. `identity` names it for verification.
+/// `ChatTextView`. `identity` names it for verification; `onLink` takes its code links.
 struct ChatMarkdown: NSViewRepresentable {
     let source: String
     var streaming = false
     var identity: String? = nil
+    var onLink: ((String) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeNSView(context: Context) -> ChatTextView { ChatTextView.make() }
     func updateNSView(_ view: ChatTextView, context: Context) {
-        view.reduceMotion = reduceMotion; view.identity = identity
+        view.reduceMotion = reduceMotion; view.identity = identity; view.onLink = onLink
         view.show(source, streaming: streaming)
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: ChatTextView, context: Context) -> CGSize? {

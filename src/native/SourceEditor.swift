@@ -81,6 +81,9 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     let image = NSImageView(), player = AVPlayerView(), binary = NSTextField(labelWithString: "")
     let header = NSStackView(), spacer = NSView(), split = NSSplitView()
     let topSeparator = SourceEditorSeparator(), toolbarSeparator = SourceEditorSeparator()
+    /// The sidebar shows the file tree or the read-only Changes list (LKM-364, `SourceDiffList.swift`).
+    let panel = NSSegmentedControl(labels: ["Files", "Changes"], trackingMode: .selectOne, target: nil, action: nil)
+    let changes = SourceDiffList(), treeScroll = NSScrollView(), operations = NSStackView()
     var popout: NSWindow?, updating = false
     /// Grammar highlighting (`SourceSyntax.swift`): the last applied revision, the
     /// reported visible lines and a test-only main-thread timing hook.
@@ -109,10 +112,18 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         split.isVertical = true; split.dividerStyle = .thin
         let sidebar = NSView(), content = NSView(); split.addArrangedSubview(sidebar); split.addArrangedSubview(content)
         search.placeholderString = "Filter files"; search.delegate = self
-        let treeScroll = NSScrollView(); treeScroll.hasVerticalScroller = true; treeScroll.autohidesScrollers = true
+        treeScroll.hasVerticalScroller = true; treeScroll.autohidesScrollers = true
         tree.open = { [weak self] source in self?.send("open", ["source":source]) }
         treeScroll.documentView = tree
-        let operations = NSStackView(); operations.spacing = 6
+        panel.selectedSegment = 0; panel.controlSize = .small; panel.segmentDistribution = .fillEqually; panel.target = self; panel.action = #selector(panelAction)
+        panel.setToolTip("Project files", forSegment: 0); panel.setToolTip("This branch's changes, read-only", forSegment: 1)
+        changes.isHidden = true
+        changes.open = { [weak self] section, path, hunk in
+            var target: [String: Any] = ["source": path, "section": section]; if let hunk { target["hunk"] = hunk }
+            self?.send("diff-open", target)
+        }
+        changes.reload = { [weak self] in self?.send("diff-refresh") }
+        operations.spacing = 6
         for (name, label) in [("create", "+"), ("rename", "Rename"), ("delete", "Trash")] { let b = NSButton(title: label, target: self, action: #selector(buttonAction(_:))); b.identifier = NSUserInterfaceItemIdentifier(name); b.controlSize = .small; operations.addArrangedSubview(b) }
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true
         code.isRichText = false; code.isEditable = true; code.isSelectable = true; code.allowsUndo = true; code.usesFindBar = true; code.isIncrementalSearchingEnabled = true
@@ -133,7 +144,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         binary.alignment = .center; binary.textColor = .secondaryLabelColor
         status.lineBreakMode = .byTruncatingMiddle; status.font = .systemFont(ofSize: 11); status.textColor = .secondaryLabelColor
         for view in [header, split, status, topSeparator, toolbarSeparator] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
-        for view in [search, treeScroll, operations] { view.translatesAutoresizingMaskIntoConstraints = false; sidebar.addSubview(view) }
+        for view in [panel, search, treeScroll, operations, changes] { view.translatesAutoresizingMaskIntoConstraints = false; sidebar.addSubview(view) }
         for view in [scroll, image, player, binary] { view.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(view); NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo: content.leadingAnchor), view.trailingAnchor.constraint(equalTo: content.trailingAnchor), view.topAnchor.constraint(equalTo: content.topAnchor), view.bottomAnchor.constraint(equalTo: content.bottomAnchor)]) }
         // These alternative viewers fill the editor even while hidden. Their
         // intrinsic sizes must not constrain the containing window's resize range.
@@ -150,7 +161,9 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
             split.leadingAnchor.constraint(equalTo: leadingAnchor), split.trailingAnchor.constraint(equalTo: trailingAnchor), split.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6), split.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -4),
             status.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10), status.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10), status.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5), status.heightAnchor.constraint(equalToConstant: 16),
             sidebar.widthAnchor.constraint(greaterThanOrEqualToConstant: 180), sidebar.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
-            search.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 6), search.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -6), search.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 4),
+            panel.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 6), panel.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -6), panel.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 4),
+            changes.topAnchor.constraint(equalTo: panel.bottomAnchor, constant: 4), changes.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor), changes.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor), changes.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -4),
+            search.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 6), search.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -6), search.topAnchor.constraint(equalTo: panel.bottomAnchor, constant: 4),
             treeScroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 4), treeScroll.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor), treeScroll.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor), treeScroll.bottomAnchor.constraint(equalTo: operations.topAnchor, constant: -4),
             operations.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 6), operations.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -4)
         ])
@@ -181,6 +194,7 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         default: return super.performKeyEquivalent(with: event)
         }
     }
+    @objc func panelAction() { send("panel", ["panel": panel.selectedSegment == 1 ? "changes" : "files"]) }
     @objc func buttonAction(_ sender: NSButton) { if sender.identifier?.rawValue == "more" { showMore(sender) } else { perform(sender.identifier?.rawValue ?? "") } }
     func perform(_ action: String) {
         if action == "popout" { send(state["popped"] as? Bool == true ? "dock" : "popout"); return }
@@ -226,6 +240,10 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         binary.stringValue = "Binary file · \(document["bytes"] as? Int ?? 0) bytes"
         if let path = value["mediaPath"] as? String, let media { if media["kind"] as? String == "image" { image.isHidden = false; image.image = NSImage(contentsOfFile: path) } else { player.isHidden = false; if changed { player.player?.pause(); player.player = AVPlayer(url: URL(fileURLWithPath: path)) } } } else { player.player?.pause() }
         tree.selectFile(source)
+        let showsChanges = value["panel"] as? String == "changes"
+        panel.selectedSegment = showsChanges ? 1 : 0; changes.isHidden = !showsChanges
+        for view in [search, treeScroll, operations] { view.isHidden = showsChanges }
+        if showsChanges { changes.update(value["diff"] as? [String: Any], busy: value["diffBusy"] as? Bool == true) }
         // A replaced text shows plain until the backend's highlight for this revision lands.
         if replaced { resetHighlight(nextRevision); applyIndent() }
         measure?("update", nextRevision, started.elapsed())

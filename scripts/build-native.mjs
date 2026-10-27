@@ -221,6 +221,7 @@ const host = compile(
     join(root, 'src/native/SourceWrap.swift'),
     join(root, 'src/native/SourceWrapVerification.swift'),
     join(root, 'src/native/SourceFileTree.swift'),
+    join(root, 'src/native/SourceDiffList.swift'),
     join(root, 'src/native/FloatingIsland.swift'),
     join(root, 'src/native/IslandLayout.swift'),
     join(root, 'src/native/IslandVerification.swift'),

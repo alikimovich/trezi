@@ -1,6 +1,13 @@
+import { branchDiff } from '../main/branch-diff'
 import type { SourceDraft } from '../main/source-owner'
 import type { CodeRevealRequest, SourceView, SourceWriteResult } from '../shared/api'
-import type { NativeEditorAction, NativeEditorState, SourceRange } from '../shared/native-editor'
+import type {
+  BranchDiff,
+  NativeEditorAction,
+  NativeEditorState,
+  SourceRange
+} from '../shared/native-editor'
+import { openDiff, refreshDiff } from './editor-diff'
 import type { NativePreferences } from './preferences'
 
 /** Soft wrap in the code editor (LKM-192): on unless the user turned it off ('0'). */
@@ -19,11 +26,14 @@ type Session = {
   state: NativeEditorState
   documents: Map<string, Document>
   generation: number
+  /** The latest Changes read (LKM-364, `editor-diff.ts`). */
+  diffGeneration: number
   saving: Set<string>
   history: string[]
   cursor: number
   restored?: Promise<Map<string, SourceDraft>>
 }
+export type EditorSession = Session
 /** An agent's `open_code` (LKM-363) opens only in the project and chat that asked: a
  *  request from another project or a chat not in front is dropped, never shown later. */
 export function codeRevealTarget(
@@ -97,7 +107,8 @@ export class NativeEditorController {
   constructor(
     readonly invoke: (channel: string, ...args: any[]) => Promise<any>,
     readonly render: (state: NativeEditorState) => void,
-    readonly preferences?: Pick<NativePreferences, 'get' | 'set'>
+    readonly preferences?: Pick<NativePreferences, 'get' | 'set'>,
+    readonly diffs: (root: string) => Promise<BranchDiff> = branchDiff
   ) {}
   session(root: string) {
     let session = this.sessions.get(root)
@@ -115,10 +126,14 @@ export class NativeEditorController {
           dirty: false,
           busy: false,
           error: '',
-          conflict: false
+          conflict: false,
+          panel: 'files',
+          diff: null,
+          diffBusy: false
         },
         documents: new Map(),
         generation: 0,
+        diffGeneration: 0,
         saving: new Set(),
         history: [],
         cursor: -1
@@ -350,6 +365,18 @@ export class NativeEditorController {
         }
         case 'save':
           await this.save(session)
+          if (session.state.panel === 'changes') await refreshDiff(this, session)
+          return
+        // The Changes list (LKM-364, `editor-diff.ts`): read-only, per project.
+        case 'panel':
+          session.state.panel = action.panel === 'changes' ? 'changes' : 'files'
+          if (session.state.panel === 'changes') await refreshDiff(this, session)
+          break
+        case 'diff-refresh':
+          await refreshDiff(this, session)
+          return
+        case 'diff-open':
+          await openDiff(this, session, action)
           return
         case 'reload':
           await this.read(session, session.state.source, ++session.generation, true)
@@ -410,6 +437,7 @@ export class NativeEditorController {
             this.persist(session, from, true)
           }
           await this.open(action.root, result.path || undefined)
+          if (session.state.panel === 'changes') await refreshDiff(this, session)
           return
         }
       }

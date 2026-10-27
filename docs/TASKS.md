@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Clickable code candidates and a read-only branch Changes list (LKM-364)
+
+- [x] `open_code` candidates carry a `link` (`trezi-code:` Markdown, `src/shared/code-link.ts`) the agent shows with provenance; one schema for Claude and Codex, the rules say so.
+- [x] A chat link click goes `ChatTextView` → `code-link` action → `codeLinkTarget` (LKM-363 realpath checks) → `NativeEditorController.open` with the range; refusals show in chat; only http/https/mailto reach AppKit, nothing opens outside Trezi.
+- [x] `src/main/branch-diff.ts`: read-only Git (allowlisted verbs, `--no-optional-locks`), merge-base base labelled with ref and short SHA, committed vs staged/unstaged/untracked, +/− counts, rename/delete/binary, bounded, non-Git/detached/unborn/no-upstream labels.
+- [x] Editor sidebar Files | Changes (`src/native/SourceDiffList.swift`, `src/native/editor-diff.ts`): per-project, refresh on project switch and after editor file operations, file/hunk click opens the editor through the same path, drafts kept, only a Refresh control.
+- [x] Tests: `code-links`, `branch-diff`, `native-diff-list` (new, unit), `native-chat-text`, `provider-helper-tools` (Claude and Codex candidate links); census row in `docs/SWIFT-BACKEND-RETIREMENT.md`.
+- [ ] Native: no smoke run of the Changes panel or a candidate click in the app (0 native calls).
+
 ## `native-chat-send-follow` forced cases end on the app's bound, not a quiet window (LKM-365)
 
 - [x] Root cause: the streaming cases read "ended" from 1.5 s and 150 turns with no realize scroll. A pause mid-bound (on the loaded 1-shard main CI, 4e232f86) passed that, so the rest of the 240 realize scrolls counted as a restart. Reproduced by a `CHAT_SWIFT` copy that starts one settle 2 s late: the old fixture fails `stream-long: the realize scrolls restarted after they ended` (80 realizes, then 86, up jump 7121 pt); the new one passes (240 realizes, 3 settles). No app bug: the product bound held.

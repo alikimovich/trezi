@@ -22,14 +22,14 @@ const git = async (root: string, args: string[]): Promise<string> => {
   return stdout.trim()
 }
 
-/** The repo's default branch (main/master) from origin/HEAD; `main` when it isn't set. */
-export async function defaultBase(root: string): Promise<string> {
+/** The repo's default branch (main/master) from origin/HEAD; `main` when it isn't set.
+ *  `read` lets a caller with its own read-only runner (`branch-diff.ts`) ask the same. */
+export async function defaultBase(root: string, read = git): Promise<string> {
   try {
     return (
-      (await git(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])).replace(
-        /^origin\//,
-        ''
-      ) || 'main'
+      (await read(root, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']))
+        .trim()
+        .replace(/^origin\//, '') || 'main'
     )
   } catch {
     return 'main' // origin/HEAD not set — assume main

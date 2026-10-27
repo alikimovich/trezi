@@ -397,6 +397,8 @@ for (const entry of Object.values(UI_SOURCES)) {
 // Walk only temp folders, caches, build output or their own fixture output.
 const TEMP_WALKERS = [
   'code-navigation',
+  'code-links',
+  'branch-diff',
   'operation-ledger',
   'memory-owner',
   'skills-registry',
