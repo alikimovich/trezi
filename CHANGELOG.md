@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-26
+
 ### Added
 - Ask Claude or Codex to show the selected object's code or styles and Trezi's code editor opens with the exact range selected and highlighted; when the styles come from several places or the mapping is uncertain, the agent lists the candidates and where each came from instead of guessing (LKM-363).
 
