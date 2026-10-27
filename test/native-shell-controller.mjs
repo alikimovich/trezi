@@ -105,6 +105,83 @@ assert.equal(renders.at(-1).previewURL, shell.location)
 shell.location = 'https://example.com/'
 shell.render()
 assert.equal(renders.at(-1).previewURL, active.url)
+
+// LKM-372: favicon loads in flight while projects switch, reorder, close and open. Each
+// row's icon comes from its own root's result; a late result never lands on another row.
+{
+  const pending = new Map()
+  const requested = []
+  const project = (key) => ({
+    key,
+    root: `/${key}`,
+    name: key.toUpperCase(),
+    url: null,
+    activeSessionKey: key,
+    sessionKeys: [],
+    previewKind: 'web'
+  })
+  const [a, b, c] = ['a', 'b', 'c'].map(project)
+  const iconWorkspace = {
+    active: a,
+    state: {
+      projects: [a, b],
+      status: { kind: 'running' },
+      loadedKey: 'a',
+      recents: [],
+      history: {}
+    },
+    services: {
+      invoke: (channel, root) => {
+        assert.equal(channel, 'project:icon')
+        requested.push(root)
+        return new Promise((resolve, reject) => pending.set(root, { resolve, reject }))
+      }
+    },
+    changed() {}
+  }
+  const states = []
+  const iconShell = new NativeShellController(
+    iconWorkspace,
+    { chats: new Map() },
+    { mode: 'merge', decorate: (s) => s },
+    { get: () => undefined, set() {} },
+    (s) => states.push(s),
+    () => {}
+  )
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 40))
+  const icons = () => Object.fromEntries(states.at(-1).rows.map((r) => [r.project, r.icon]))
+  iconShell.render()
+  assert.deepEqual(icons(), { a: undefined, b: undefined }, 'Rows keep the folder while loads run')
+  // Switch to B and reorder while both loads are in flight, then B's answer lands first.
+  iconWorkspace.active = b
+  iconWorkspace.state.projects = [b, a]
+  iconShell.render()
+  pending.get('/b').resolve({ path: 'favicon.svg', dataUrl: 'data:image/svg+xml;base64,Qg==' })
+  await settle()
+  assert.deepEqual(icons(), { b: 'data:image/svg+xml;base64,Qg==', a: undefined })
+  // A third project opens and A closes while A's load is still running.
+  iconWorkspace.state.projects = [b, c]
+  iconWorkspace.active = c
+  iconShell.render()
+  pending.get('/a').resolve({ path: 'favicon.png', dataUrl: 'data:image/png;base64,QQ==' })
+  await settle()
+  assert.deepEqual(
+    icons(),
+    { b: 'data:image/svg+xml;base64,Qg==', c: undefined },
+    "A's late answer lands on no row"
+  )
+  // A failed lookup leaves C on the folder; reopening A shows A's own icon on A's row only.
+  pending.get('/c').reject(new Error('unreadable'))
+  iconWorkspace.state.projects = [c, a, b]
+  await settle()
+  iconShell.render()
+  assert.deepEqual(icons(), {
+    c: undefined,
+    a: 'data:image/png;base64,QQ==',
+    b: 'data:image/svg+xml;base64,Qg=='
+  })
+  assert.deepEqual(requested, ['/a', '/b', '/c'], 'One lookup per project root, never a second')
+}
 console.log(
-  'Native shell: project/history state, viewport, expand persistence and scoped navigation passed'
+  'Native shell: project/history state, viewport, expand persistence, scoped navigation and per-row favicon loads passed'
 )

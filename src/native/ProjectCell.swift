@@ -28,6 +28,9 @@ final class ShellRow: NSObject {
     let id: String, title: String, kind: String, project: String
     let running: Bool
     let unread: Bool
+    /// Bun sent favicon data for this row, decodable or not.
+    let offeredIcon: Bool
+    /// The decoded favicon; nil keeps the folder.
     let icon: NSImage?
     let children: [ShellRow]
     init(_ data: [String: Any]) {
@@ -35,11 +38,9 @@ final class ShellRow: NSObject {
         kind = data["kind"] as? String ?? "chat"; project = data["project"] as? String ?? ""
         running = data["running"] as? Bool ?? false
         unread = data["unread"] as? Bool ?? false
-        if let uri = data["icon"] as? String, uri.hasPrefix("data:image/"), let comma = uri.firstIndex(of: ",") {
-            let body = String(uri[uri.index(after: comma)...])
-            let bytes = uri[..<comma].contains(";base64") ? Data(base64Encoded: body) : body.removingPercentEncoding?.data(using: .utf8)
-            icon = bytes.flatMap { NSImage(data: $0) }
-        } else { icon = nil }
+        // Decoded from this row's own snapshot entry, never from a later load: no icon can land on another row.
+        offeredIcon = data["icon"] is String
+        icon = SidebarFavicon.image(dataURL: data["icon"] as? String)
         children = (data["children"] as? [[String: Any]] ?? []).map(ShellRow.init)
     }
 }

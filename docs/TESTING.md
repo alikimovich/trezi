@@ -543,12 +543,16 @@ Read screenshots in `test/artifacts/native/` for UI verification. Offscreen
 AppKit captures do not faithfully paint Liquid Glass; visible inspection may be
 necessary. Never start the target project server manually alongside Trezi.
 
-Sidebar folder acceptance runs inside the normal native project-switching fixture.
+Sidebar icon acceptance runs inside the normal native project-switching fixture.
 `sidebar-{260,180}-{0,1}-{rest,hover}.png` captures only the foreground sidebar
 through ScreenCaptureKit, with matching JSON containing OCR and row geometry.
-Both projects must be visible, one with stored raster artwork and one without;
-each is selected in turn. Assertions require the folder image, template tint,
-exact 16×16 icon frame at an integral origin, a seven-point gap to the label's
+Three projects must be visible (LKM-372): Folder Alpha with a 16×16 PNG favicon,
+Folder Beta with none, and Folder Invalid Icon (not `chat-gate`'s Folder Gamma),
+opened for this check and closed and removed in teardown, whose `favicon.png` has a PNG signature but a corrupt body. Alpha and
+Beta are selected in turn. The favicon row must show its decoded favicon (not a
+template, fitted to 16 points, painted, centre pixel near #F06A1C); the other two
+must show the template folder with selection tint. Every row needs a painted slot,
+icon and label centres within a point, the exact 16×16 icon frame at an integral origin, a seven-point gap to the label's
 alignment rect (its frame adds AppKit's 2-point cell padding), icon and label
 x equal to Open Project's, containment, accessibility action label and correct
 More visibility. Blank captures or missing project labels fail.
@@ -577,6 +581,12 @@ that requested content widths account for sidebar wrapper insets after reveal.
 `test/sidebar-icon.mjs` lays out a windowless source list and Open Project button
 with `SidebarIconView` across symbol scales at 260/180 points: each folder frame
 must be exactly 16×16, integral, pixel aligned and free of symbol alignment insets.
+`test/sidebar-favicon.mjs` decodes PNG (including 1×1 and 32×16), SVG (base64 and
+percent-encoded) and ICO favicons through `SidebarFavicon`. Each must keep its colours
+and aspect and fill the 16-point slot. Missing, non-image, bad-base64, truncated and
+corrupt data must return nil, so the row keeps its folder. Favicon and folder rows
+must then share the slot, label gap and vertical centre, selected and unselected, with
+painted pixels.
 
 New tests belong in the appropriate array in `test/tiers.mjs`. Pure tests must own
 their temporary directories/ports and clean up processes. Use injected service

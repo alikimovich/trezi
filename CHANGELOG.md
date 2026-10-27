@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+- Sidebar project rows now show the project's own favicon (SVG, PNG, ICO and other image types) in place of the folder icon. The folder remains when a project has no favicon or its file is not a readable image (LKM-372).
+
 ## [0.5.0] - 2026-10-26
 
 ### Added

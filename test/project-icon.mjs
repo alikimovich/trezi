@@ -2,8 +2,8 @@
  * project-icon unit test (pure — no Electron). The rail's per-project favicon:
  * which files count as an icon, how a declared `<link rel="icon">` is lexed and
  * resolved, and the end-to-end pick over a real temp tree (declared href beats
- * convention, conventional order, escapes refused, size cap, mtime
- * revalidation). Run with: bun run test:project-icon
+ * convention, conventional order, escapes refused, size cap, non-images
+ * skipped by their bytes, mtime revalidation). Run with: bun run test:project-icon
  */
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,7 +14,8 @@ import {
   iconHrefCandidates,
   iconMediaType,
   parseHtmlIconHrefs,
-  readProjectIcon
+  readProjectIcon,
+  sniffIconType
 } from '../src/main/project-icon.ts'
 
 let failed = 0
@@ -141,6 +142,30 @@ const put = (root, rel, body = 'x') => {
   writeFileSync(abs, body)
   return abs
 }
+// Real image headers: the lookup sniffs bytes, so a placeholder 'x' is not an icon.
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+const ICO = Buffer.concat([Buffer.from([0, 0, 1, 0, 1, 0]), Buffer.alloc(16)])
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"/>'
+
+// --- sniffIconType: the bytes, not the name, decide (LKM-372) ---
+
+eq(sniffIconType(PNG), 'image/png', 'PNG signature')
+eq(sniffIconType(ICO), 'image/x-icon', 'ICO header with one directory entry')
+eq(sniffIconType(Buffer.from(SVG)), 'image/svg+xml', 'SVG markup')
+eq(
+  sniffIconType(Buffer.from('<?xml version="1.0"?>\n<!-- logo -->\n<SVG viewBox="0 0 1 1"></SVG>')),
+  'image/svg+xml',
+  'SVG after a prolog and comment, any case'
+)
+eq(sniffIconType(Buffer.from('GIF89a')), 'image/gif', 'GIF signature')
+eq(sniffIconType(Buffer.from([0xff, 0xd8, 0xff, 0xe0])), 'image/jpeg', 'JPEG signature')
+eq(sniffIconType(Buffer.from('RIFF\0\0\0\0WEBPVP8 ')), 'image/webp', 'WebP signature')
+eq(sniffIconType(Buffer.from('\0\0\0\x1cftypavif')), 'image/avif', 'AVIF brand')
+eq(sniffIconType(Buffer.from('this is not an image')), null, 'text named favicon.png')
+eq(sniffIconType(Buffer.from('<html><body>404</body></html>')), null, 'an HTML error page')
+eq(sniffIconType(Buffer.from([0, 0, 1, 0, 0, 0])), null, 'an ICO header without entries')
+eq(sniffIconType(PNG.subarray(0, 4)), null, 'a truncated PNG signature')
+eq(sniffIconType(Buffer.alloc(0)), null, 'no bytes')
 
 // Nothing to find.
 const empty = makeRoot()
@@ -150,8 +175,8 @@ eq(await readProjectIcon(empty), null, 'readProjectIcon is null for an iconless 
 
 // Conventional locations, no HTML entry.
 const conventional = makeRoot()
-put(conventional, 'public/favicon.ico')
-put(conventional, 'public/favicon.svg')
+put(conventional, 'public/favicon.ico', ICO)
+put(conventional, 'public/favicon.svg', SVG)
 eq(
   (await findProjectIconFile(conventional)).path,
   'public/favicon.svg',
@@ -160,8 +185,8 @@ eq(
 
 // A declared <link> beats the conventional file, even a "better" one.
 const declared = makeRoot()
-put(declared, 'public/favicon.svg')
-put(declared, 'public/brand.png')
+put(declared, 'public/favicon.svg', SVG)
+put(declared, 'public/brand.png', PNG)
 put(declared, 'index.html', '<html><head><link rel="icon" href="/brand.png"></head></html>')
 eq(
   (await findProjectIconFile(declared)).path,
@@ -172,7 +197,7 @@ eq(
 // A declared href pointing at nothing falls through to the conventions rather
 // than leaving the project iconless.
 const stale = makeRoot()
-put(stale, 'public/favicon.svg')
+put(stale, 'public/favicon.svg', SVG)
 put(stale, 'index.html', '<link rel="icon" href="/gone.png">')
 eq(
   (await findProjectIconFile(stale)).path,
@@ -184,15 +209,15 @@ eq(
 // content, so it's untrusted input, not a path to join blindly. The escape
 // target is created for real, so the refusal is the only reason this is null.
 const enclosing = makeRoot()
-put(enclosing, 'secret.png')
+put(enclosing, 'secret.png', PNG)
 const escaping = join(enclosing, 'app')
 put(escaping, 'index.html', '<link rel="icon" href="../secret.png">')
 eq(await findProjectIconFile(escaping), null, 'an href escaping the project root is refused')
 
 // Size cap: an oversized "favicon" is skipped, not inlined.
 const huge = makeRoot()
-put(huge, 'public/favicon.png', Buffer.alloc(600 * 1024))
-put(huge, 'public/favicon.ico', 'small')
+put(huge, 'public/favicon.png', Buffer.concat([PNG, Buffer.alloc(600 * 1024)]))
+put(huge, 'public/favicon.ico', ICO)
 eq(
   (await findProjectIconFile(huge)).path,
   'public/favicon.ico',
@@ -203,6 +228,35 @@ eq(
 const blank = makeRoot()
 put(blank, 'favicon.svg', '')
 eq(await findProjectIconFile(blank), null, 'a zero-byte icon file is not an icon')
+
+// A non-image under an icon name never shadows a real icon behind it, and alone
+// it leaves the project on the folder (LKM-372).
+const bogus = makeRoot()
+put(bogus, 'public/favicon.png', 'this is not an image')
+eq(await findProjectIconFile(bogus), null, 'a text file named favicon.png is not an icon')
+eq(await readProjectIcon(bogus), null, 'readProjectIcon keeps the folder for a non-image')
+put(bogus, 'public/favicon.ico', ICO)
+eq(
+  (await findProjectIconFile(bogus)).path,
+  'public/favicon.ico',
+  'a non-image candidate falls through to the next real icon'
+)
+const declaredBogus = makeRoot()
+put(declaredBogus, 'public/brand.png', '<html>404</html>')
+put(declaredBogus, 'public/favicon.svg', SVG)
+put(declaredBogus, 'index.html', '<link rel="icon" href="/brand.png">')
+eq(
+  (await findProjectIconFile(declaredBogus)).path,
+  'public/favicon.svg',
+  'a declared non-image falls through to the conventions'
+)
+// A PNG saved as favicon.ico is inlined as the PNG it is.
+const mislabelled = makeRoot()
+put(mislabelled, 'favicon.ico', PNG)
+ok(
+  (await readProjectIcon(mislabelled)).dataUrl.startsWith('data:image/png;base64,'),
+  'the media type follows the bytes, not the extension'
+)
 
 // data: URL declared inline needs no file at all.
 const inline = makeRoot()

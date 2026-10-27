@@ -2,6 +2,24 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-27 — LKM-372: native sidebar project rows show the project favicon
+
+- **Why.** The user asked for each project's favicon in place of the generic folder. This replaces LKM-105's folder-only choice for native project rows; nothing else from LKM-105 changes. Bun already sent each project's favicon as a `data:` URL in the sidebar snapshot (`NativeShellController.icons`, from the existing `project:icon` lookup), and `Shell.swift` ignored it for project rows. No second lookup was added.
+- **Swift.** `SidebarFavicon` (`src/native/SidebarIcon.swift`):
+  - Decodes the data URL and refuses an image that is invalid, has no representations or a non-positive size, or does not render to a `CGImage`. This catches truncated and corrupt bodies, which `NSImage` decodes lazily.
+  - Fits the image into the 16-point slot with its aspect ratio kept, as a non-template image, so it keeps its own colours and gets no selection tint.
+  - Caches the result per data URL, so snapshot churn does not decode again.
+  - `ShellRow` decodes from its own snapshot entry and `viewFor` builds a fresh cell per row, so there is no asynchronous path in Swift. `offeredIcon` records that Bun sent data, even when it was refused.
+- **Async safety.** Bun keys results by project root and rebuilds every row from that map, so a late result can only fill its own root's row. `test/native-shell-controller.mjs` covers this with out-of-order resolution across a switch, a reorder, a close during an in-flight load, a rejected load and a reopen, and checks there is one lookup per root.
+- **Lookup.** `sniffIconType` checks a candidate's bytes: PNG, ICO with at least one entry, GIF, JPEG, WebP, AVIF, or SVG markup. A text file named `favicon.png` falls through to the next candidate, and a PNG saved as `favicon.ico` is inlined as `image/png`.
+- **Native fixture.**
+  - Folder Alpha's favicon is now a visible 16×16 orange PNG. The old 1×1 white pixel would have looked like a blank slot.
+  - `checkVisibleSidebar` opens Folder Invalid Icon for the check and closes and removes it in teardown. It has its own folder name because `chat-gate` runs next and expects a never-opened "Folder Gamma". Its `favicon.png` has a PNG signature and a corrupt body.
+  - `sidebarVerification` reports `favicon`, `offeredIcon`, the image size, the painted fraction and centre colour (`SidebarFaviconInk`), and the icon and label centres.
+  - `assertFaviconRows` requires the favicon on Alpha and the folder on Beta (no favicon) and Folder Invalid Icon (offered but undecodable), all in one slot. `assertSidebarCapture` now checks hover per row id.
+- **(a) Unit/fixture evidence:** `sidebar-favicon` (new), `project-icon`, `native-shell-controller` and `sidebar-evidence` pass locally.
+- **(b) Running-app GUI evidence: NOT RUN.** The worker had 0 native calls. The favicon, no-favicon and invalid-favicon captures stay open until a manager or CI `--only=sidebar` run, whose `sidebar-*.png` must be read.
+
 ## 2026-10-27 — LKM-371: isolate native-chat-send-follow under 1-shard load
 
 - The fourth main CI failure (`restore: the settle still runs after the turn`, 4/30 samples) came from a fixed 1.5 s delay and 30 further run-loop observations. A loaded runner can stretch those observations across a settle; their count is not a settle completion signal. The forced cases also retain time/sample observation windows, so the whole fixture now runs as an exclusive unit queue barrier. Other unit tests still run concurrently with one another.
