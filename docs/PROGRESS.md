@@ -14,9 +14,9 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - **Lookup.** `sniffIconType` checks a candidate's bytes: PNG, ICO with at least one entry, GIF, JPEG, WebP, AVIF, or SVG markup. A text file named `favicon.png` falls through to the next candidate, and a PNG saved as `favicon.ico` is inlined as `image/png`.
 - **Native fixture.**
   - Folder Alpha's favicon is now a visible 16×16 orange PNG. The old 1×1 white pixel would have looked like a blank slot.
-  - `checkVisibleSidebar` opens Folder Gamma for the check and closes it in teardown. Gamma's `favicon.png` has a PNG signature and a corrupt body.
+  - `checkVisibleSidebar` opens Folder Invalid Icon for the check and closes and removes it in teardown. It has its own folder name because `chat-gate` runs next and expects a never-opened "Folder Gamma". Its `favicon.png` has a PNG signature and a corrupt body.
   - `sidebarVerification` reports `favicon`, `offeredIcon`, the image size, the painted fraction and centre colour (`SidebarFaviconInk`), and the icon and label centres.
-  - `assertFaviconRows` requires the favicon on Alpha and the folder on Beta (no favicon) and Gamma (offered but undecodable), all in one slot. `assertSidebarCapture` now checks hover per row id.
+  - `assertFaviconRows` requires the favicon on Alpha and the folder on Beta (no favicon) and Folder Invalid Icon (offered but undecodable), all in one slot. `assertSidebarCapture` now checks hover per row id.
 - **(a) Unit/fixture evidence:** `sidebar-favicon` (new), `project-icon`, `native-shell-controller` and `sidebar-evidence` pass locally.
 - **(b) Running-app GUI evidence: NOT RUN.** The worker had 0 native calls. The favicon, no-favicon and invalid-favicon captures stay open until a manager or CI `--only=sidebar` run, whose `sidebar-*.png` must be read.
 

@@ -547,8 +547,8 @@ Sidebar icon acceptance runs inside the normal native project-switching fixture.
 `sidebar-{260,180}-{0,1}-{rest,hover}.png` captures only the foreground sidebar
 through ScreenCaptureKit, with matching JSON containing OCR and row geometry.
 Three projects must be visible (LKM-372): Folder Alpha with a 16×16 PNG favicon,
-Folder Beta with none, and Folder Gamma, opened for this check and closed in
-teardown, whose `favicon.png` has a PNG signature but a corrupt body. Alpha and
+Folder Beta with none, and Folder Invalid Icon (not `chat-gate`'s Folder Gamma),
+opened for this check and closed and removed in teardown, whose `favicon.png` has a PNG signature but a corrupt body. Alpha and
 Beta are selected in turn. The favicon row must show its decoded favicon (not a
 template, fitted to 16 points, painted, centre pixel near #F06A1C); the other two
 must show the template folder with selection tint. Every row needs a painted slot,

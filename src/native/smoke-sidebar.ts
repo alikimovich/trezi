@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { preparePreviewInput } from './smoke-input'
@@ -64,8 +64,11 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
   const entries = [...nativeWorkspace.state.projects]
   assert.equal(entries.length, 2, 'Sidebar fixture requires two projects')
   // LKM-372: a third project whose favicon.png passes the lookup's byte sniff but cannot be
-  // decoded; the sidebar must keep its folder. It stays unselected and closes in teardown.
-  const invalidRoot = join(dirname(entries[0].root), 'Folder Gamma')
+  // decoded; the sidebar must keep its folder. Opening it makes it the active project until the
+  // loop selects the other rows. Its own folder name keeps it apart from checkChatGate's
+  // 'Folder Gamma', which expects a never-opened root; teardown closes and removes it.
+  const invalidRoot = join(dirname(entries[0].root), 'Folder Invalid Icon')
+  rmSync(invalidRoot, { recursive: true, force: true })
   mkdirSync(invalidRoot, { recursive: true })
   writeFileSync(join(invalidRoot, 'index.html'), '<h1 id="third-project">Third project</h1>')
   writeFileSync(
@@ -220,6 +223,7 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
     },
     async () => {
       await nativeWorkspace.command({ type: 'close', key: invalid.key })
+      rmSync(invalidRoot, { recursive: true, force: true })
       await host.request('shellPerform', {
         action: 'sidebar-width',
         row: String(initial.sidebarWidth)
