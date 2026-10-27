@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Running-app checks for chat code links and the Changes list (LKM-366)
+
+- [x] `code-link-click` (`chat`, `src/native/smoke-code-link.ts`): link clicks through `ChatTextView`'s link entry point open the exact range selected/banded/visible; no AppKit handoff (`ChatTextView.appKitLinks`, frontmost); `..`/symlink/absolute refused in chat; repeat/alternate re-reveal; stale links after a conversation or project switch reveal nothing; draft kept, nothing written.
+- [x] `changes-panel` (new `changes` group, `src/native/smoke-changes-panel.ts`, fixture `src/native/smoke-changes-fixture.ts`): merge-base label, committed vs staged/unstaged/untracked with exact rows and +/− counts, file/hunk opens at the exact range over a kept draft, Refresh only, Git state unchanged, project switch refreshes without leaking.
+- [x] Harness: `sourceNavigation` host request (`src/native/SourceNavigationVerification.swift`), both checks in `SMOKE_CHECK_GROUPS`, `changes` in `NATIVE_SMOKE_GROUPS`, `test/native-smoke-groups.mjs`, unit `native-changes-fixture`, docs/TESTING.md, census rows.
+- [ ] Native: run `bun test/native-runtime.mjs --only=chat,changes` and read the `code-link-*` / `changes-panel-*` captures (NOT RUN: 0 native calls for the worker).
+
 ## Clickable code candidates and a read-only branch Changes list (LKM-364)
 
 - [x] `open_code` candidates carry a `link` (`trezi-code:` Markdown, `src/shared/code-link.ts`) the agent shows with provenance; one schema for Claude and Codex, the rules say so.

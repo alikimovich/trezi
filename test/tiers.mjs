@@ -119,6 +119,7 @@ export const UNIT = [
   'native-chat-reveal',
   'native-chat-text',
   'native-diff-list',
+  'native-changes-fixture',
   'native-island-editing',
   'no-system-preferences',
   'chat-islands',

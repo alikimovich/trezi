@@ -284,6 +284,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-chat-gate.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-text.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-ui.ts` | test | — | smoke fixture |
+| `src/native/smoke-code-link.ts` | test | — | chat code-link click fixture (escape files and a second project beside the test folder, LKM-366) |
 | `src/native/smoke-comment-rows.ts` | test | — | smoke fixture |
 | `src/native/smoke-landing-check.ts` | test | — | smoke fixture |
 | `src/native/smoke-agent-question.ts` | test | — | smoke fixture |
@@ -326,6 +327,8 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-source-editor.ts` | test | — | smoke fixture |
 | `src/native/smoke-source-syntax.ts` | test | — | smoke fixture |
 | `src/native/smoke-source-wrap.ts` | test | — | smoke fixture |
+| `src/native/smoke-changes-panel.ts` | test | — | Changes list smoke (LKM-366) |
+| `src/native/smoke-changes-fixture.ts` | test | — | temporary Git project of the Changes list smoke (LKM-366) |
 | `src/native/smoke-scraib.ts` | test | — | smoke fixture |
 | `src/native/smoke-scraib-open.ts` | test | — | smoke fixture |
 | `src/native/smoke-scraib-xcode.ts` | test | — | smoke fixture |
