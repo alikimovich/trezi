@@ -124,7 +124,10 @@ final class ExternalOpenProbe: NSObject, NSTextViewDelegate {
 let probe = ExternalOpenProbe()
 var routed: [String] = []
 view.delegate = probe
-view.onLink = { routed.append($0) }
+// Some macOS versions return a link's fragment `#` as `%23`; the app accepts either, so the
+// routed and shown links are compared with it normalised.
+func plain(_ link: String) -> String { link.replacingOccurrences(of: "%23", with: "#") }
+view.onLink = { routed.append(plain($0)) }
 let candidates = """
 - [src/Card.module.css:1-3](trezi-code:src/Card.module.css#L1-L3) CSS module rule `.card`
 - [src/My Card.tsx:6](trezi-code:src/My%20Card.tsx#L6) inline style
@@ -134,8 +137,7 @@ view.show(candidates, streaming: false)
 let shown = view.string as NSString
 var linked: [String] = []
 view.textStorage?.enumerateAttribute(.link, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
-    // Some macOS versions return the fragment's `#` as `%23`; the app accepts either.
-    if let url = value as? URL { linked.append(url.absoluteString.replacingOccurrences(of: "%23", with: "#")) }
+    if let url = value as? URL { linked.append(plain(url.absoluteString)) }
 }
 require(linked == ["trezi-code:src/Card.module.css#L1-L3", "trezi-code:src/My%20Card.tsx#L6", "App.tsx:12", "trezi-code:../outside.css#L1", "file:///etc/hosts", "https://example.com/x"], "Candidates render as clickable links: \(linked)")
 require(shown.range(of: "src/Card.module.css:1-3").location != NSNotFound, "The filename and range are the link text")
