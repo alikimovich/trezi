@@ -104,7 +104,7 @@ if (process.platform !== 'darwin') {
     const describe = cases
       .map(
         (entry) =>
-          `${entry.case}: Send at ${entry.sentAt.toFixed(3)} s${entry.appSend ? '' : ' (NOT recorded by the app)'}, shown at ${entry.shownAt.toFixed(3)} s, after ${entry.shownAfter.toFixed(3)} s (harness sample ${entry.sampledAfter.toFixed(2)} s), threshold ${limit} s, missing ${missing(entry)}/${entry.samples}, up jump ${entry.upJump.toFixed(0)} pt, settling after ${entry.settlingAfterTurn}/30`
+          `${entry.case}: Send at ${entry.sentAt.toFixed(3)} s${entry.appSend ? '' : ' (NOT recorded by the app)'}, shown at ${entry.shownAt.toFixed(3)} s, after ${entry.shownAfter.toFixed(3)} s (harness sample ${entry.sampledAfter.toFixed(2)} s), threshold ${limit} s, missing ${missing(entry)}/${entry.samples}, up jump ${entry.upJump.toFixed(0)} pt, settle finished ${entry.settleFinished}`
       )
       .join('; ')
     for (const entry of cases) {
@@ -123,9 +123,8 @@ if (process.platform !== 'darwin') {
       }
       // A following view only moves down; the realize jump went to the first row.
       assert.ok(entry.upJump <= 40, `${entry.case}: the view jumped back up (${describe})`)
-      // A settle that never ends steps every frame; one may still close a few frames in.
       assert.ok(
-        entry.settlingAfterTurn <= 3,
+        entry.settleFinished,
         `${entry.case}: the settle still runs after the turn (${describe})`
       )
     }

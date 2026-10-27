@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-27 — LKM-371: isolate native-chat-send-follow under 1-shard load
+
+- The fourth main CI failure (`restore: the settle still runs after the turn`, 4/30 samples) came from a fixed 1.5 s delay and 30 further run-loop observations. A loaded runner can stretch those observations across a settle; their count is not a settle completion signal. The forced cases also retain time/sample observation windows, so the whole fixture now runs as an exclusive unit queue barrier. Other unit tests still run concurrently with one another.
+- Ordinary send cases now wait up to 30 s for `latestSettles` to advance and `latestSettling` to clear, then assert completion. The forced send/follow/restore/settle assertions and the 240-realize bound remain. No product-code race was found or product code changed.
+- Two manager quick runs passed `native-chat-send-follow` in 92.5 s and 81.8 s with the barrier; the prior documented solo runtime was about 125 s. Both full quick runs were red only on pre-existing lint findings in unrelated files, outside this ticket. The required ten consecutive runs and PR CI result remain unverified here because the manager's quick verifier selects the full unit tier for a runner change; the worker cannot invoke a focused runner command directly.
+
 ## 2026-10-27 — LKM-370: fix the two LKM-366 smokes that failed on main (test-only)
 
 - **`changes-panel`.** Opening a project moves its checkout onto Trezi's work branch (`ensureBranch`), so in the running app the label reads `Branch trezi/feature @ <sha>`. The fixture unit test calls `branchDiff` directly and still sees `feature`. The smoke now waits for that switch, instead of relying only on the 1 s delay, before it takes the Git state, and then expects `trezi/feature`. `gitState` also records `refs/heads/trezi/feature`.

@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Make native-chat-send-follow deterministic under 1-shard main CI load (LKM-371)
+
+- [x] Replace the ordinary send cases' fixed post-turn sample window with a bounded wait for `latestSettles` to advance and `latestSettling` to clear; keep the settle-finished assertion.
+- [x] Make `native-chat-send-follow` an exclusive unit queue barrier because its forced settle/follow observations still use time and sample windows; retain all behavior assertions and the 240-realize bound.
+- [ ] Confirm 10 consecutive passes under 1-shard load and green PR CI after the manager opens the PR.
+
 ## Running-app checks for chat code links and the Changes list (LKM-366)
 
 - [x] `code-link-click` (`chat`, `src/native/smoke-code-link.ts`): link clicks through `ChatTextView`'s link entry point open the exact range selected/banded/visible; no AppKit handoff (`ChatTextView.appKitLinks`, frontmost); `..`/symlink/absolute refused in chat; repeat/alternate re-reveal; stale links after a conversation or project switch reveal nothing; draft kept, nothing written.

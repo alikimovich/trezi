@@ -2,7 +2,7 @@
 
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
 bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
-no exclusive barriers: Swift compiles share a cache and a 2-wide lane, and the
+one exclusive barrier for `native-chat-send-follow`: Swift compiles share a cache and a 2-wide lane, and the
 real-toolchain `swift-preview` tests run one at a time beside the rest, see
 [Unit tier speed](#unit-tier-speed-lkm-167). `service-process` keeps a 240 s budget
 and `keychain-rebuild` (LKM-144) 300 s for a cold cache. Keychain tests use only password-made
@@ -128,6 +128,12 @@ fixtures and groups after checking every reader of it.
   xcodebuild, SwiftPM, actool, swiftc and a preview host, each under a product tool
   limit of 20–120 s. Longest-first ordering started them together. On the 3-vCPU
   hosted runner they then starved each other past those limits and their own budgets.
+  `native-chat-send-follow` is an exclusive barrier in the unit queue (LKM-371): its
+  offscreen AppKit fixture drives long main-run-loop settles whose observations were
+  stretched by other unit workers on the 1-shard runner. Only that test runs alone;
+  other tests retain their usual concurrency. Its fixed observation windows remain
+  behavioral coverage for the forced stream cases, while ordinary sends wait for
+  an explicit settle completion signal.
   One at a time, each sees the load it was sized for. `test/test-runner.mjs` checks
   the rule.
 - **Typecheck.** `--typecheck` runs `bun run typecheck` next to the tier and counts it

@@ -69,7 +69,7 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
     appSentAt = nil
     let pushedAt = Date()
     running = true; push()
-    let start = Date(), sentAt = appSentAt ?? pushedAt
+    let start = Date(), sentAt = appSentAt ?? pushedAt, settlesBefore = chat.model.latestSettles
     var samples = 0, sampledAfter = -1.0, missingTimes: [Double] = [], lowest = CGFloat.infinity, highest = -CGFloat.infinity, jump: CGFloat = 0, chunk = 0
     while Date().timeIntervalSince(start) < Double(chunks) * 0.1 + 1 {
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.03))
@@ -90,13 +90,17 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
     }
     chat.model.messageFramesFilter = nil
     if end { running = false; push() }
-    spin(1.5)
-    var settling = 0
-    for _ in 0..<30 { spin(0.03); if chat.model.latestSettling { settling += 1 } }
+    // Wait for the app's settle completion, not a number of harness samples. A
+    // loaded runner can spend several seconds between two run-loop observations.
+    let settleDeadline = Date(timeIntervalSinceNow: 30)
+    while Date() < settleDeadline && (chat.model.latestSettles == settlesBefore || chat.model.latestSettling) {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.016))
+    }
+    let settleFinished = chat.model.latestSettles > settlesBefore && !chat.model.latestSettling
     results.append(["case": name, "samples": samples, "appSend": appSentAt != nil, "sentAt": sentAt.timeIntervalSince(pushedAt),
                     "shownAt": shownAt.map { $0.timeIntervalSince(pushedAt) } ?? -1, "shownAfter": shownAt.map { $0.timeIntervalSince(sentAt) } ?? -1,
                     "sampledAfter": sampledAfter, "missingTimes": missingTimes, "lowestOffset": lowest,
-                    "upJump": jump, "settlingAfterTurn": settling, "cards": cardsAt != nil])
+                    "upJump": jump, "settleFinished": settleFinished, "cards": cardsAt != nil])
 }
 /// The reporter's state (LKM-354): after a send in a long chat, no message row is measured in view
 /// (no cards, questions or footer), as when the stack's frames belong to an earlier clip offset.
