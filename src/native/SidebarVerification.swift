@@ -60,13 +60,20 @@ extension NativeShell {
             let textRect = labelRect(text)
             let moreRect = cell.more.convert(cell.more.bounds, to: sidebar.view)
             let emphasized = cell.backgroundStyle == .emphasized
-            let expectedTint: NSColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
-            return ["id": row.id, "title": row.title, "storedArtwork": row.icon != nil,
+            let template = icon.image?.isTemplate == true
+            // A template folder follows the selection emphasis; a favicon keeps its own colours.
+            let expectedTint: NSColor? = template ? (emphasized ? .alternateSelectedControlTextColor : .labelColor) : nil
+            let ink = SidebarFaviconInk.measure(icon)
+            return ["id": row.id, "title": row.title, "storedArtwork": row.icon != nil, "offeredIcon": row.offeredIcon,
+                    "favicon": row.icon != nil && icon.image === row.icon,
                     "folder": icon.image?.tiffRepresentation == folder?.tiffRepresentation,
-                    "template": icon.image?.isTemplate == true, "scaling": icon.imageScaling == .scaleProportionallyDown,
+                    "template": template, "scaling": icon.imageScaling == .scaleProportionallyDown,
+                    "imageWidth": icon.image?.size.width ?? 0, "imageHeight": icon.image?.size.height ?? 0,
+                    "inkFraction": ink.fraction, "centerColor": ink.center,
                     "selected": cell.selected, "emphasized": emphasized,
                     "tintCorrect": icon.contentTintColor == expectedTint,
                     "iconX": iconRect.minX, "iconY": iconRect.minY, "iconWidth": iconRect.width, "iconHeight": iconRect.height,
+                    "iconMidY": iconRect.midY, "textMidY": textRect.midY,
                     "textGap": textRect.minX - iconRect.maxX, "textWidth": textRect.width,
                     "matchesOpenProject": iconRect.minX == openIcon.minX && iconRect.size == openIcon.size && textRect.minX == openLabelX,
                     "contained": sidebar.view.bounds.contains(iconRect) && sidebar.view.bounds.contains(textRect) && sidebar.view.bounds.contains(moreRect),

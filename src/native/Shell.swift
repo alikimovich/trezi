@@ -526,9 +526,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let row = item as! ShellRow
         let cell = ProjectCell(); cell.selected = row.project == currentProject
         let symbol = row.kind == "project" ? "folder" : row.kind == "history" ? "clock" : "bubble.left"
-        // Project rows share Open Project's symbol, regardless of stored artwork.
-        let artwork = (row.kind == "project" ? nil : row.icon)
-            ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!
+        // A project's decoded favicon leads its row (LKM-372); without one it shares Open Project's folder.
+        let artwork = row.icon ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!
         let more = cell.more
         more.bezelStyle = .inline; more.setAccessibilityLabel("Actions for " + row.title)
         (more.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow

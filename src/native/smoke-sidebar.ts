@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { preparePreviewInput } from './smoke-input'
 import { nativeWorkspace } from './workspace-runtime'
@@ -63,6 +63,25 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
   )
   const entries = [...nativeWorkspace.state.projects]
   assert.equal(entries.length, 2, 'Sidebar fixture requires two projects')
+  // LKM-372: a third project whose favicon.png passes the lookup's byte sniff but cannot be
+  // decoded; the sidebar must keep its folder. Opening it makes it the active project until the
+  // loop selects the other rows. Its own folder name keeps it apart from checkChatGate's
+  // 'Folder Gamma', which expects a never-opened root; teardown closes and removes it.
+  const invalidRoot = join(dirname(entries[0].root), 'Folder Invalid Icon')
+  rmSync(invalidRoot, { recursive: true, force: true })
+  mkdirSync(invalidRoot, { recursive: true })
+  writeFileSync(join(invalidRoot, 'index.html'), '<h1 id="third-project">Third project</h1>')
+  writeFileSync(
+    join(invalidRoot, 'favicon.png'),
+    Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('corrupt: not a PNG body')])
+  )
+  await nativeWorkspace.command({ type: 'open', root: invalidRoot })
+  const invalid = nativeWorkspace.state.projects.find((p) => p.root === invalidRoot)
+  assert.ok(invalid, 'Invalid-favicon project opened')
+  const withFavicon = entries.find((p) => existsSync(join(p.root, 'favicon.png')))
+  const without = entries.find((p) => p !== withFavicon)
+  assert.ok(withFavicon && without, 'Sidebar fixture requires one project with a favicon')
+  const titles = { favicon: withFavicon.name, missing: without.name, invalid: invalid.name }
   const rowID = (key: string) => `project:${key}`
   const wait = async (check: () => Promise<boolean>, stage = 'state') => {
     for (let i = 0; i < 100; i++) {
@@ -83,11 +102,11 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
       await wait(async () => {
         const state = await inspect()
         return (
-          state.rows.length === 2 &&
+          state.rows.length === 3 &&
           state.rows.some((r: any) => r.storedArtwork) &&
-          state.rows.some((r: any) => !r.storedArtwork)
+          state.rows.some((r: any) => r.offeredIcon && !r.storedArtwork)
         )
-      })
+      }, 'favicon rows')
       for (const width of [260, 180]) {
         assert.equal(
           await host.request('shellPerform', { action: 'sidebar-width', row: String(width) }),
@@ -135,11 +154,19 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
                 2
               )
             )
-            assertSidebarCapture(state, image, width, rowID(entry.key), hover, stem)
+            assertSidebarCapture(
+              state,
+              image,
+              width,
+              rowID(entry.key),
+              hover ? rowID(other.key) : '',
+              stem
+            )
+            assertFaviconRows(state, titles, stem)
             evidence.push({
               capture: `${stem}.png`,
               assertions:
-                'foreground/OCR, folder/template/scaling/tint, containment/spacing, selection/hover/actions',
+                'foreground/OCR, favicon (colours, fit, painted centre) vs folder (missing/invalid favicon)/template/scaling/tint, containment/spacing/centres, selection/hover/actions',
               state
             })
           }
@@ -159,7 +186,7 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
         await host.request('sheetPerform', { action: 'cancel' })
         await wait(async () => !(await host.request('sheetInspect')).visible)
         await restoreSidebarFocus(host, `context menu/Project Memory at ${width}`)
-        // Move the last row to the front through production pasteboard/validate/accept delegates.
+        // Move the second row to the front through production pasteboard/validate/accept delegates.
         const before = [...nativeWorkspace.state.projects].map((p) => p.key)
         const drag = await host.request('sidebarVerification', { drag: rowID(before[1]), index: 0 })
         assert.deepEqual(drag, {
@@ -191,10 +218,12 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
       }
       writeFileSync(join(artifacts, 'sidebar-interactions.json'), JSON.stringify(evidence, null, 2))
       console.log(
-        'NATIVE SIDEBAR PASS — foreground 260/180px captures; artwork/absent-artwork folder rows; both selections, hover, native menu/memory action and drag delegates/backend reorder; foreground restored after each interaction. Inspect sidebar-*.png for glyph fidelity.'
+        'NATIVE SIDEBAR PASS — foreground 260/180px captures; favicon row plus no-favicon and invalid-favicon folder rows in one slot; both selections, hover, native menu/memory action and drag delegates/backend reorder; foreground restored after each interaction. Inspect sidebar-*.png for favicon and glyph fidelity.'
       )
     },
     async () => {
+      await nativeWorkspace.command({ type: 'close', key: invalid.key })
+      rmSync(invalidRoot, { recursive: true, force: true })
       await host.request('shellPerform', {
         action: 'sidebar-width',
         row: String(initial.sidebarWidth)
@@ -204,18 +233,75 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
   )
 }
 
-/** Shared with the non-GUI negative fixtures so missing visual evidence fails closed. */
+/** The centre pixel of the core fixture's favicon (`writeSmokeProject`). */
+export const FAVICON_CENTER = [0xf0, 0x6a, 0x1c]
+
+/** Favicon vs folder per row (LKM-372): the decoded favicon fills the slot with its own
+ *  colours and aspect; missing or undecodable artwork keeps the template folder. */
+export function assertRowIcon(row: any, stem: string) {
+  const detail = `${stem}: ${JSON.stringify(row)}`
+  assert.ok(row.inkFraction > 0, `Blank icon slot: ${detail}`)
+  if (row.storedArtwork) {
+    assert.ok(
+      row.offeredIcon && row.favicon && !row.folder && !row.template,
+      `Favicon row: ${detail}`
+    )
+    assert.equal(Math.max(row.imageWidth, row.imageHeight), 16, `Favicon fit: ${detail}`)
+  } else assert.ok(row.folder && row.template, `Folder fallback: ${detail}`)
+  assert.ok(row.scaling && row.tintCorrect && row.contained, detail)
+  assert.ok(Math.abs(row.iconMidY - row.textMidY) <= 1, `Icon/label centres: ${detail}`)
+}
+
+/** The sidebar fixture's three projects: a valid favicon, none, and an undecodable one. */
+export function assertFaviconRows(
+  state: any,
+  titles: { favicon: string; missing: string; invalid: string },
+  stem: string
+) {
+  const row = (title: string) => {
+    const found = state.rows.find((r: any) => r.title === title)
+    assert.ok(found, `${stem}: no row ${title}`)
+    return found
+  }
+  const favicon = row(titles.favicon),
+    missing = row(titles.missing),
+    invalid = row(titles.invalid)
+  assert.ok(favicon.storedArtwork && favicon.favicon && !favicon.folder, `${stem}: favicon row`)
+  assert.equal(favicon.imageWidth, 16, `${stem}: 16×16 favicon fills the slot`)
+  assert.equal(favicon.imageHeight, 16, `${stem}: 16×16 favicon fills the slot`)
+  assert.ok(favicon.inkFraction > 0.4, `${stem}: favicon painted ${favicon.inkFraction}`)
+  const center = /^#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})$/i.exec(favicon.centerColor)
+  assert.ok(
+    center && FAVICON_CENTER.every((v, i) => Math.abs(parseInt(center[i + 1], 16) - v) <= 32),
+    `${stem}: favicon centre ${favicon.centerColor}`
+  )
+  assert.ok(!missing.offeredIcon && missing.folder, `${stem}: no-favicon row keeps the folder`)
+  assert.ok(
+    invalid.offeredIcon && !invalid.storedArtwork && invalid.folder,
+    `${stem}: invalid favicon falls back to the folder`
+  )
+  for (const other of [missing, invalid])
+    assert.deepEqual(
+      [other.iconX, other.iconWidth, other.iconHeight, other.textGap],
+      [favicon.iconX, favicon.iconWidth, favicon.iconHeight, favicon.textGap],
+      `${stem}: favicon and folder rows share the slot`
+    )
+}
+
+/** Shared with the non-GUI negative fixtures so missing visual evidence fails closed.
+ *  `hovered` is the hovered row's id, or '' for none. */
 export function assertSidebarCapture(
   state: any,
   image: any,
   width: number,
   selected: string,
-  hover: boolean,
-  stem: string
+  hovered: string,
+  stem: string,
+  rows = 3
 ) {
   assert.equal(state.foreground, true)
   assert.equal(state.collapsed, false)
-  assert.equal(state.rows.length, 2)
+  assert.equal(state.rows.length, rows)
   assert.ok(image.width >= width && image.height > 200)
   const ocr = image.text.join(' ').toLowerCase()
   assert.ok(ocr.includes('open project'), `Blank/missing sidebar actions: ${stem}`)
@@ -224,10 +310,7 @@ export function assertSidebarCapture(
       ocr.includes(row.title.toLowerCase()),
       `Missing visible project ${row.title}: ${stem}`
     )
-    assert.ok(
-      row.folder && row.template && row.scaling && row.tintCorrect && row.contained,
-      JSON.stringify(row)
-    )
+    assertRowIcon(row, stem)
     assert.equal(row.iconWidth, 16)
     assert.equal(row.iconHeight, 16)
     assert.ok(
@@ -242,9 +325,9 @@ export function assertSidebarCapture(
     )
     assert.ok(row.textWidth > 30)
     assert.equal(row.selected, row.id === selected)
-    assert.equal(row.moreAlpha, row.selected || hover ? 1 : 0)
+    assert.equal(row.moreAlpha, row.selected || row.id === hovered ? 1 : 0)
     assert.equal(row.actionsLabel, `Actions for ${row.title}`)
     assert.deepEqual(row.menu, ['Project Memory…', 'Close Project'])
   }
-  assert.equal(state.rows[0].iconX, state.rows[1].iconX)
+  for (const row of state.rows) assert.equal(row.iconX, state.rows[0].iconX)
 }

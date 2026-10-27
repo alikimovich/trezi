@@ -41,8 +41,11 @@ src/main/
                   — a declared <link rel="icon"> first, else the conventional
                   paths; inlined as a data: URL, mtime-revalidated. Reads the
                   FILES, not the running page, so an un-run project has one too.
-                  No longer drawn in sidebar rows: every project row uses the
-                  shared native folder symbol (src/native/SidebarIcon.swift)
+                  A candidate's bytes must sniff as an image (sniffIconType), so
+                  a non-image named favicon.png never shadows a real icon. Leads
+                  its native sidebar row (LKM-372): SidebarFavicon in
+                  src/native/SidebarIcon.swift decodes and fits it into the
+                  16-point slot; missing or undecodable data keeps the folder
   file-ops.ts     the same sidebar's file MANAGER — create/rename/delete
                   (source:create-file/rename-file/delete-file). Pure; every
                   renderer-supplied path is re-validated (no traversal, no

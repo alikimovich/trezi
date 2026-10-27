@@ -57,13 +57,14 @@ export const READERS = {
 export const UI_SOURCES = {
   'src/native/SidebarIcon.swift': {
     stem: 'SidebarIcon',
-    unit: ['sidebar-icon', 'native-settings-layout', 'sidebar-evidence'],
+    unit: ['sidebar-icon', 'sidebar-favicon', 'native-settings-layout', 'sidebar-evidence'],
     native: ['sidebar', 'settings']
   }
 }
 // Audited fixture folders and every test that uses them.
 export const FIXTURES = {
-  'test/fixtures/sidebar-icon/': ['sidebar-icon']
+  'test/fixtures/sidebar-icon/': ['sidebar-icon'],
+  'test/fixtures/sidebar-favicon/': ['sidebar-favicon']
 }
 
 const tierOf = (name) => Object.keys(TIERS).find((tier) => TIERS[tier].includes(name))

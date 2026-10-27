@@ -145,6 +145,7 @@ export const UNIT = [
   'key-shortcuts',
   'agent-load-routing',
   'sidebar-icon',
+  'sidebar-favicon',
   'sidebar-focus',
   'native-git',
   'publish-progress',

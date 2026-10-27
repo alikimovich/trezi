@@ -28,6 +28,61 @@ enum SidebarIconLayout {
     }
 }
 
+/// A project's favicon (`project:icon`'s data URL, LKM-372) as sidebar artwork, or nil so the
+/// row keeps its folder: missing, non-image, corrupt or undecodable data never leaves a blank slot.
+/// The image is fitted into the 16-point slot with its aspect ratio kept, so a tiny or large
+/// favicon fills the same frame as the folder symbol.
+enum SidebarFavicon {
+    private final class Decoded { let image: NSImage?; init(_ image: NSImage?) { self.image = image } }
+    private static let cache = NSCache<NSString, Decoded>()
+
+    static func image(dataURL: String?) -> NSImage? {
+        guard let uri = dataURL, uri.hasPrefix("data:image/"), let comma = uri.firstIndex(of: ",") else { return nil }
+        if let hit = cache.object(forKey: uri as NSString) { return hit.image }
+        let body = String(uri[uri.index(after: comma)...])
+        let bytes = uri[..<comma].contains(";base64") ? Data(base64Encoded: body) : body.removingPercentEncoding?.data(using: .utf8)
+        let image = bytes.flatMap(decode)
+        cache.setObject(Decoded(image), forKey: uri as NSString)
+        return image
+    }
+
+    static func decode(_ data: Data) -> NSImage? {
+        guard !data.isEmpty, let image = NSImage(data: data), image.isValid, !image.representations.isEmpty else { return nil }
+        let size = image.size
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return nil }
+        // NSImage decodes lazily: render once so a truncated or corrupt body is refused here.
+        var probe = NSRect(x: 0, y: 0, width: SidebarIconLayout.size * 2, height: SidebarIconLayout.size * 2)
+        guard image.cgImage(forProposedRect: &probe, context: nil, hints: nil) != nil else { return nil }
+        let scale = SidebarIconLayout.size / max(size.width, size.height)
+        image.size = NSSize(width: size.width * scale, height: size.height * scale)
+        image.isTemplate = false
+        return image
+    }
+}
+
+/// Pixel evidence for a row's icon slot: the share of painted pixels (a blank slot is 0) and
+/// the centre pixel as sRGB `#RRGGBB`. Used by the sidebar verification and its unit fixture.
+enum SidebarFaviconInk {
+    static func measure(_ view: NSView) -> (fraction: Double, center: String) {
+        // An explicit premultiplied RGBA rep at 2×, read as bytes: a window-less view has no
+        // usable default colour space for `colorAt`.
+        let width = Int(view.bounds.width * 2), height = Int(view.bounds.height * 2)
+        guard width > 0, height > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+                                         samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                         bytesPerRow: width * 4, bitsPerPixel: 32),
+              let bytes = rep.bitmapData else { return (0, "") }
+        rep.size = view.bounds.size
+        view.cacheDisplay(in: view.bounds, to: rep)
+        var painted = 0
+        for index in 0..<(width * height) where bytes[index * 4 + 3] > 25 { painted += 1 }
+        let center = ((height / 2) * width + width / 2) * 4, alpha = Double(bytes[center + 3])
+        let channel = { (offset: Int) in alpha > 0 ? Int(min(255, round(Double(bytes[center + offset]) * 255 / alpha))) : 0 }
+        let hex = String(format: "#%02X%02X%02X", channel(0), channel(1), channel(2))
+        return (Double(painted) / Double(width * height), hex)
+    }
+}
+
 /// Full-width actions with the same regular label and icon rhythm as project rows.
 final class SidebarProjectButton: NSButton {
     let label = NSTextField(labelWithString: "")
