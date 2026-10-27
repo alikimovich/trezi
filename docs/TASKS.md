@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## `native-chat-send-follow` forced cases end on the app's bound, not a quiet window (LKM-365)
+
+- [x] Root cause: the streaming cases read "ended" from 1.5 s and 150 turns with no realize scroll. A pause mid-bound (on the loaded 1-shard main CI, 4e232f86) passed that, so the rest of the 240 realize scrolls counted as a restart. Reproduced by a `CHAT_SWIFT` copy that starts one settle 2 s late: the old fixture fails `stream-long: the realize scrolls restarted after they ended` (80 realizes, then 86, up jump 7121 pt); the new one passes (240 realizes, 3 settles). No app bug: the product bound held.
+- [x] Ended is the app's signal `latestUnresolved > ChatLatestSettle.unresolvedRestarts` (diagnostic in `src/native/Chat.swift`); the late window is time and samples; `realizedOnSend` waits for a realize or the Send's settles spending the bound again, not 1 s; `leak-stream` leaks two frame reports within the realizing settle, not 60 ms (`test/fixtures/chat-send-follow/main.swift`).
+- [x] A failure prints the case's timeline (settle ends, realizes and moves up after the end); fixture stop 300 s, tier 420 s.
+- [x] 12/12 consecutive runs after the final change under load (8 forced-case runs with 24 busy loops, 0–60 ms stalls per turn and random 0–2 s settle delays; 4 real-test runs with 24 busy loops); negative controls (chunk resets, restart once spent, LKM-354 `realized` ignored) fail.
+- [ ] Watch: main push CI green on the merge.
 ## Chat-driven code navigation to the selected object's exact source/style range (LKM-363)
 
 - [x] `open_code` takes the selected object's `source` stamp with `target: element | styles` (and runtime `classes`) for Claude and Codex, one shared schema `bin/code-tool-schema.mjs`; the rules say to use it for selection follow-ups and to show candidates, never invent a location.

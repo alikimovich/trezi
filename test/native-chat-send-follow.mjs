@@ -12,7 +12,7 @@ import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 // row and the end, and each settle's closing pin started the next, so the
 // settle never ended. The fixture hosts the real NativeChat offscreen.
 // `CHAT_SWIFT` swaps in another Chat.swift (a pre-fix copy, with the model's
-// `latestRealizes`, `messageFramesFilter` and `sendRevision` hooks added).
+// `latestRealizes`, `latestUnresolved`, `messageFramesFilter` and `sendRevision` hooks added).
 if (process.platform !== 'darwin') {
   console.log('NATIVE-CHAT-SEND-FOLLOW SKIP — macOS AppKit required')
 } else {
@@ -70,13 +70,36 @@ if (process.platform !== 'darwin') {
       ],
       { out: join(scratch, 'chat-send-follow') }
     )
-    const { cases, forced } = JSON.parse(runFixture(binary))
+    // LKM-365: about 125 s alone, mostly fixed sampling windows; the default 180 s stop was a
+    // flake of its own on a loaded runner. A hung case still stops here.
+    const { cases, forced } = JSON.parse(runFixture(binary, [], { timeout: 300_000 }))
     const describeForced = forced
       .map(
         (entry) =>
           `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls, ${entry.settles} settles), then settling ${entry.settlingLate}/${entry.lateSamples}, ${entry.realizesLate} realize scrolls, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
+    // LKM-365: the failing case's own timeline, in seconds after its Send, so a CI failure can be
+    // read from the log alone. Settle ends as t:realize scrolls so far(unresolved in a row), realize
+    // scrolls (first, last, count), and after the end each realize scroll as t:#n@offset and each
+    // move back up as t:-pt (the first 20 of each).
+    const timeline = (entry) => {
+      const { settleEnds, realizeTimes, lateRealizes, lateMoves } = entry.timeline
+      const list = (items, format) =>
+        items.length
+          ? `${items.slice(0, 20).map(format).join(' ')}${items.length > 20 ? ` …(+${items.length - 20})` : ''}`
+          : 'none'
+      const fixed = (value, digits = 2) => Number(value).toFixed(digits)
+      return [
+        `${entry.case} timeline: ended at ${fixed(entry.endedAfter)} s (the old 1.5 s quiet window ${entry.quietAt >= 0 ? `at ${fixed(entry.quietAt)} s` : 'never'})`,
+        `settle ends ${list(settleEnds, ([t, n, u]) => `${fixed(t)}:${n}(${u})`)}`,
+        `realize scrolls before the end ${realizeTimes.length ? `${fixed(realizeTimes[0])}…${fixed(realizeTimes.at(-1))} s (${realizeTimes.length} turns)` : 'none'}`,
+        `realize scrolls after the end ${list(lateRealizes, ([t, n, offset]) => `${fixed(t)}:#${n}@${fixed(offset, 0)}`)}`,
+        `moves up after the end ${list(lateMoves, ([t, pt]) => `${fixed(t)}:-${fixed(pt, 0)}pt`)}`
+      ].join('; ')
+    }
+    const forcedFailure = (entry, what) =>
+      `${entry.case}: ${what} (${timeline(entry)}) (all cases: ${describeForced})`
     const missing = (entry) => entry.missingTimes.filter((t) => t > limit).length
     const describe = cases
       .map(
@@ -109,46 +132,45 @@ if (process.platform !== 'darwin') {
     // The reporter's state (blank chat, scrollbar between offsets 0 and 18): no message row is
     // measured in view, with no cards, questions or footer. The frames stay missing.
     for (const entry of forced) {
-      // The bounded settles (each about 1.3 s, jumping through the first row) must end within the
-      // fixture's 20 s cap, then stay ended and leave the clip alone instead of restarting from
-      // their own closing pin. Streaming (LKM-359): unended means more than 240 realize scrolls
-      // ran, not a time; the bound is in steps, which a loaded runner only makes slower.
-      assert.ok(entry.endedAfter >= 0, `${entry.case}: the settle never ended (${describeForced})`)
+      // The bounded settles (each about 1.3 s, jumping through the first row) must end, then stay
+      // ended and leave the clip alone instead of restarting from their own closing pin. Ended
+      // (LKM-365) is the app's signal that the bound is spent (more unresolved settles in a row
+      // than ChatLatestSettle.unresolvedRestarts), not a quiet time: on the loaded 1-shard main CI
+      // a 1.5 s pause mid-bound read as ended. Unended (LKM-359) means more than 240 realize
+      // scrolls ran; the bound is in steps, which a loaded runner only makes slower, and the
+      // fixture's 90 s cap only stops a hung run.
+      assert.ok(entry.endedAfter >= 0, forcedFailure(entry, 'the settle never ended'))
       // Three unresolved settles realize, each at most 4 runs of 20 steps (ChatLatestSettle).
-      assert.ok(
-        entry.realizes <= 240,
-        `${entry.case}: the realize scrolls are not bounded (${describeForced})`
-      )
+      assert.ok(entry.realizes <= 240, forcedFailure(entry, 'the realize scrolls are not bounded'))
       // Streaming: every chunk is a content request, which keeps the unresolved count. Past the
-      // limit it only scrolls to the latest, so the jumps through the first row stop within the
-      // cap while the chunks keep arriving; a count reset by each chunk jumps for the whole turn.
+      // limit it only scrolls to the latest, so the jumps through the first row stop while the
+      // chunks keep arriving; a count reset by each chunk jumps for the whole turn. The fixture
+      // samples at least 30 (20 streaming) times and 1.5 s (3 s) after the end.
       assert.ok(
-        entry.lateSamples > (entry.streamed ? 10 : 20) && entry.settlingLate <= 3,
-        `${entry.case}: the settle restarted after it ended (${describeForced})`
+        entry.lateSamples >= (entry.streamed ? 20 : 30) && entry.settlingLate <= 3,
+        forcedFailure(entry, 'the settle restarted after it ended')
       )
       // No realize scroll once ended: a settled reading after realize steps must not restart them.
       assert.equal(
         entry.realizesLate,
         0,
-        `${entry.case}: the realize scrolls restarted after they ended (${describeForced})`
+        forcedFailure(entry, 'the realize scrolls restarted after they ended')
       )
-      // A new Send is not a streamed chunk: with the bound spent it must realize again.
+      // A new Send is not a streamed chunk: with the bound spent it must realize again, before its
+      // own settles spend the bound again.
       assert.ok(
         entry.realizedOnSend >= 0,
-        `${entry.case}: a Send after the bound was spent got no realize scroll within 1 s (${describeForced})`
+        forcedFailure(entry, 'a Send after the bound was spent got no realize scroll')
       )
       assert.ok(
         entry.upJump <= 40,
-        `${entry.case}: the view kept jumping with no row in view (${describeForced})`
+        forcedFailure(entry, 'the view kept jumping with no row in view')
       )
       // Frames measured again: the sent rows are in the reading area, the clip at the end.
-      assert.ok(
-        entry.shownAfterRelease,
-        `${entry.case}: rows did not come back (${describeForced})`
-      )
+      assert.ok(entry.shownAfterRelease, forcedFailure(entry, 'rows did not come back'))
       assert.ok(
         entry.offsetFromEnd <= 2,
-        `${entry.case}: the view did not return to the end (${describeForced})`
+        forcedFailure(entry, 'the view did not return to the end')
       )
     }
     console.log(`NATIVE-CHAT-SEND-FOLLOW PASS — ${describe}; no row in view: ${describeForced}`)
