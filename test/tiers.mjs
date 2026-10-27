@@ -364,8 +364,10 @@ export const UNIT_TIMEOUT_MS = {
   'native-chat-bottom-marker': 240_000,
   // LKM-354: the same compile, then seven sends sampled for ~4 s each and two forced cases that
   // wait for the bounded settles to end (up to 20 s each), two more while the reply streams (up
-  // to 25 s each); 90 s in a loaded unit run before those, 140 s alone after.
-  'native-chat-send-follow': 360_000,
+  // to 25 s each); 90 s in a loaded unit run before those, 140 s alone after. LKM-365: the forced
+  // cases end on the app's bound, not a time (90 s hang cap each), and the fixture run (about
+  // 125 s alone) may take 300 s before it is stopped, so the compile plus that.
+  'native-chat-send-follow': 420_000,
   // LKM-287: a cold compile of 19 service sources (26 s alone), then 248 creates through
   // the real SkillsOwner, each F_FULLFSYNC'd objects plus a ledger-backed manifest
   // replace (~88-190 ms each, growing with the library), for the 128 × 64 regression.

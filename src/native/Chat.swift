@@ -68,6 +68,9 @@ final class ChatModel: ObservableObject {
     /// Diagnostics (LKM-355): settles ended so far, and whether the last one ended on a
     /// settled reading. `latestSettleAttempts` sums up to four runs, so it cannot tell.
     var latestSettles = 0, latestSettled = false
+    /// Diagnostics (LKM-365): the unresolved settles in a row (`ChatLatestSettle.unresolved`). Past
+    /// `ChatLatestSettle.unresolvedRestarts` the bound is spent: no realize until a request resets it.
+    var latestUnresolved = 0
     /// Verification only (LKM-354): rewrites the measured message frames, to hold
     /// the state with no row measured in view.
     var messageFramesFilter: (([String: CGRect]) -> [String: CGRect])?
@@ -381,7 +384,7 @@ struct ChatConversation: View {
     /// does a settle that settled with no realize step (`ChatLatestSettle.unresolved`).
     private func settleLatest(_ proxy: ScrollViewProxy, afterPin: Bool = false, content: Bool = false) {
         if afterPin && unresolvedSettles > ChatLatestSettle.unresolvedRestarts { return }
-        if !afterPin && !content { unresolvedSettles = 0 }
+        if !afterPin && !content { unresolvedSettles = 0; model.latestUnresolved = 0 }
         latestGeneration += 1
         guard !settlingLatest else { return }
         settlingLatest = true; model.latestSettling = true
@@ -427,6 +430,7 @@ struct ChatConversation: View {
             settlingLatest = false; realizingLatest = false; model.latestSettling = false
             model.latestSettles += 1; model.latestSettled = last == .settled
             unresolvedSettles = ChatLatestSettle.unresolved(after: unresolvedSettles, follows: follows, last: last, realized: realized)
+            model.latestUnresolved = unresolvedSettles
             // Rest at the marker's 1pt height, so the nudges leave no offset behind.
             if latestNudge { latestNudge = false }
             if follows { pinRequest += 1 }
@@ -498,7 +502,7 @@ struct ChatConversation: View {
                     .onChange(of: model.followRevision) { _ in if follows { proxy.scrollTo("bottom", anchor: bottomAnchor); pinRequest += 1; settleContent() } }
                     // A new message is not a streamed chunk: a count exhausted by an earlier stuck turn would
                     // leave the Send with pins only and no realize step (LKM-354).
-                    .onChange(of: model.sendRevision) { _ in if follows { unresolvedSettles = 0 } }
+                    .onChange(of: model.sendRevision) { _ in if follows { unresolvedSettles = 0; model.latestUnresolved = 0 } }
                     .onChange(of: model.snapshot?.chat) { _ in follows = true; sticky = nil; proxy.scrollTo("bottom", anchor: bottomAnchor); attachRequest += 1; settle() }
                     // The latest button itself is native (NativeChat.latestButton).
                     .onChange(of: model.latestRequest) { _ in follows = true; proxy.scrollTo("bottom", anchor: bottomAnchor); attachRequest += 1; settle() }
