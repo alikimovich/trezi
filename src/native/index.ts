@@ -85,7 +85,7 @@ import { serviceConversation } from './conversation-service'
 import { displayText, setDisplayProfile } from './display-paths'
 import { NativeDreamerController, nativeDreamer } from './dreamer-controller'
 import { serviceEditing } from './editing-service'
-import { NativeEditorController } from './editor-controller'
+import { codeRevealTarget, NativeEditorController } from './editor-controller'
 import { installEditorFreshness } from './editor-freshness-runtime'
 import { NativeGitController } from './git-controller'
 import { installNativeInspector } from './inspector-runtime'
@@ -630,9 +630,16 @@ async function main() {
     if (editorController.session(root).state.visible) editorAction({ root, action: 'hide' })
     else openSource(contextController.projects.get(root)?.selection?.bubble.source ?? undefined)
   })
+  // LKM-363: an agent's open_code selects and highlights its exact range, in its own chat only.
   serviceEvents.on('event', (channel, value) => {
-    if (channel === 'source:reveal' && value.root === workspaceController.active?.root)
-      openSource(`${value.source}:${value.startLine}`)
+    if (channel !== 'source:reveal') return
+    const active = workspaceController.active
+    const target = codeRevealTarget(
+      value,
+      active ? { root: active.root, chat: active.activeSessionKey } : null
+    )
+    if (target)
+      void editorController.open(target.root, target.source, undefined, false, target.range)
   })
   // LKM-185: chat changes an older publish left on another branch, once per project.
   const strandedNotice = strandedLandingsNotice({

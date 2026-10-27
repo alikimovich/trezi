@@ -89,6 +89,10 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     var dock: (() -> Void)?
     var controls: [String: NSButton] = [:], symbols: [String: String] = [:]
     var documentKey = "", reveal = -1
+    /// The revealed lines' highlight (LKM-363): a layout-only attribute, so the text, its
+    /// undo history and the grammar colours are untouched.
+    var band: NSRange?
+    static let bandColor = NSColor.findHighlightColor.withAlphaComponent(0.35)
     /// Soft wrap (`SourceWrap.swift`), from the editor state's `wrap`.
     var wraps = true, indentPending: NSRange?
     init() {
@@ -209,15 +213,12 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         let key = root + "/" + source, changed = key != documentKey
         var replaced = false
         if changed || nextRevision >= revision && incoming != code.string {
-            updating = true; code.string = incoming; updating = false; replaced = true
+            clearRevealBand(); updating = true; code.string = incoming; updating = false; replaced = true
             if changed { code.undoManager?.removeAllActions(); documentKey = key; let line = document["line"] as? Int ?? 1; let pieces = incoming.split(separator: "\n", omittingEmptySubsequences: false); let offset = pieces.prefix(max(0, line - 1)).reduce(0) { $0 + ($1 as NSString).length + 1 }; code.setSelectedRange(NSRange(location: min(offset, (incoming as NSString).length), length: 0)); code.scrollRangeToVisible(code.selectedRange()) }
         }
         if let nextReveal = value["reveal"] as? Int, nextReveal != reveal {
             reveal = nextReveal
-            let line = max(1, document["line"] as? Int ?? 1)
-            let pieces = incoming.split(separator: "\n", omittingEmptySubsequences: false)
-            let offset = pieces.prefix(line - 1).reduce(0) { $0 + ($1 as NSString).length + 1 }
-            code.setSelectedRange(NSRange(location: min(offset, (incoming as NSString).length), length: 0)); code.scrollRangeToVisible(code.selectedRange())
+            revealLines(incoming, line: max(1, document["line"] as? Int ?? 1), range: value["range"] as? [String: Any])
         }
         revision = max(changed ? 0 : revision, nextRevision)
         let media = document["media"] as? [String: Any], isBinary = document["binary"] as? Bool == true
@@ -230,10 +231,46 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
         measure?("update", nextRevision, started.elapsed())
     }
     /// Highlighting is the backend's (LKM-183): an edit only sends the text and revision.
-    func textDidChange(_ notification: Notification) { guard !updating else { return }; applyIndent(); revision += 1; send("edit", ["text":code.string, "revision":revision]); scroll.verticalRulerView?.needsDisplay = true }
+    func textDidChange(_ notification: Notification) { guard !updating else { return }; clearRevealBand(); applyIndent(); revision += 1; send("edit", ["text":code.string, "revision":revision]); scroll.verticalRulerView?.needsDisplay = true }
     func filter() { tree.update(files, query: search.stringValue) }
     func controlTextDidChange(_ obj: Notification) { filter() }
     func windowShouldClose(_ sender: NSWindow) -> Bool { send("hide"); return false }
+}
+
+/// Revealing code (LKM-363): a `range` selects and bands its whole lines and scrolls its
+/// first line into view; without one, a caret at the stamp line, as before.
+extension NativeSourceEditor {
+    func lineOffset(_ pieces: [Substring], _ line: Int) -> Int { pieces.prefix(max(0, line - 1)).reduce(0) { $0 + String($1).utf16.count + 1 } }
+    func revealLines(_ incoming: String, line: Int, range: [String: Any]?) {
+        let pieces = incoming.split(separator: "\n", omittingEmptySubsequences: false), length = (incoming as NSString).length
+        clearRevealBand()
+        guard let first = range?["startLine"] as? Int, let last = range?["endLine"] as? Int, first >= 1, last >= first, last <= pieces.count else {
+            code.setSelectedRange(NSRange(location: min(lineOffset(pieces, line), length), length: 0)); code.scrollRangeToVisible(code.selectedRange()); return
+        }
+        let start = min(lineOffset(pieces, first), length), end = min(lineOffset(pieces, last) + String(pieces[last - 1]).utf16.count, length)
+        let selected = NSRange(location: start, length: max(0, end - start))
+        code.setSelectedRange(selected); band = selected
+        code.layoutManager?.addTemporaryAttribute(.backgroundColor, value: Self.bandColor, forCharacterRange: selected)
+        code.layoutManager?.ensureLayout(forCharacterRange: selected)
+        code.scrollRangeToVisible(selected); code.scrollRangeToVisible(NSRange(location: start, length: 0))
+    }
+    func clearRevealBand() {
+        guard band != nil else { return }; band = nil
+        code.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: (code.string as NSString).length))
+    }
+    /// The selected lines, the band and whether the range's first line is in view.
+    func inspectReveal() -> [String: Any] {
+        let ns = code.string as NSString, selected = code.selectedRange()
+        let lines = { (offset: Int) in ns.substring(to: min(offset, ns.length)).utf16.reduce(1) { $1 == 10 ? $0 + 1 : $0 } }
+        var visible = false
+        if let manager = code.layoutManager, let container = code.textContainer, selected.location <= ns.length {
+            let glyphs = manager.glyphRange(forCharacterRange: NSRange(location: selected.location, length: selected.length > 0 ? 1 : 0), actualCharacterRange: nil)
+            let rect = manager.boundingRect(forGlyphRange: glyphs, in: container).offsetBy(dx: code.textContainerOrigin.x, dy: code.textContainerOrigin.y)
+            visible = code.visibleRect.intersects(rect.insetBy(dx: 0, dy: -1))
+        }
+        return ["startLine": lines(selected.location), "endLine": lines(max(selected.location, NSMaxRange(selected) - (selected.length > 0 ? 1 : 0))), "selectedLength": selected.length,
+                "bandLength": band?.length ?? 0, "bandMatchesSelection": band == selected, "firstLineVisible": visible]
+    }
 }
 
 /// Test-profile hooks for the smoke's source-editor check.

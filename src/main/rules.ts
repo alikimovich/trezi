@@ -282,8 +282,15 @@ export function treziRules(opts?: {
       `inclusive 1-based startLine/endLine. This opens the mini code editor and`,
       `highlights that exact range without requiring a preview selection.`,
       `Choose the smallest useful implementation range; do not guess line numbers`,
-      `or substitute a pasted code block for opening the editor. The request waits`,
-      `for newly edited code to land and preserves unsaved user edits.`,
+      `or substitute a pasted code block for opening the editor. Unsaved user edits`,
+      `are preserved and nothing is written.`,
+      `For the object selected in the preview ("In the preview I selected … in`,
+      `<source>"), including follow-ups like "show its styles", call open_code with`,
+      `source set to that stamp and target "element" (its markup) or "styles" (inline`,
+      `style, class/CSS rules, CSS modules, shared component), plus classes when the`,
+      `context lists them. When it returns candidates instead of opening, list each`,
+      `with its provenance and let the user choose; never invent or claim an exact`,
+      `location the tool did not open.`,
       ``
     )
   }

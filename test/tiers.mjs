@@ -163,6 +163,7 @@ export const UNIT = [
   'setup-vite',
   'setup-vite-real',
   'code-reveal',
+  'code-navigation',
   'preview-open',
   'preview-refresh',
   'editor-freshness',

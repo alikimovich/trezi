@@ -1006,7 +1006,11 @@ async function openInEditor(
  * one hop through a barrel/index re-export. Returns a repo-relative path, or
  * null when the import is a bare package or nothing matches.
  */
-function resolveComponentByImports(root: string, fromFile: string, name: string): string | null {
+export function resolveComponentByImports(
+  root: string,
+  fromFile: string,
+  name: string
+): string | null {
   if (!/^[A-Za-z_][\w$]*$/.test(name)) return null
   const abs = normalize(join(root, fromFile))
   if (!abs.startsWith(normalize(root))) return null
