@@ -1,6 +1,6 @@
 import type { SourceDraft } from '../main/source-owner'
-import type { SourceView, SourceWriteResult } from '../shared/api'
-import type { NativeEditorAction, NativeEditorState } from '../shared/native-editor'
+import type { CodeRevealRequest, SourceView, SourceWriteResult } from '../shared/api'
+import type { NativeEditorAction, NativeEditorState, SourceRange } from '../shared/native-editor'
 import type { NativePreferences } from './preferences'
 
 /** Soft wrap in the code editor (LKM-192): on unless the user turned it off ('0'). */
@@ -24,6 +24,67 @@ type Session = {
   cursor: number
   restored?: Promise<Map<string, SourceDraft>>
 }
+/** An agent's `open_code` (LKM-363) opens only in the project and chat that asked: a
+ *  request from another project or a chat not in front is dropped, never shown later. */
+export function codeRevealTarget(
+  request: CodeRevealRequest,
+  active: { root: string; chat: string } | null
+): { root: string; source: string; range: SourceRange } | null {
+  if (!active || request?.root !== active.root || request.key !== active.chat) return null
+  if (typeof request.source !== 'string' || typeof request.code !== 'string') return null
+  const { startLine, endLine, code } = request
+  return { root: request.root, source: request.source, range: { startLine, endLine, code } }
+}
+
+type Shown = { range: { startLine: number; endLine: number } | null; error?: string }
+const LINE = /:(\d+)(?::\d+)?$/
+
+/**
+ * The lines a reveal selects in a document's open text, a draft included (LKM-363).
+ * A requested range with `code` must find exactly those lines: where they are, or
+ * moved once by an unsaved or unlanded edit; otherwise nothing is highlighted rather
+ * than unrelated code. A stamped line selects its element's span (from the read) while
+ * the open text still has the span's lines.
+ */
+export function revealRange(
+  doc: Pick<Document, 'view' | 'baseline' | 'text'>,
+  source: string,
+  request?: SourceRange
+): Shown {
+  const lines = doc.text.replace(/\r\n/g, '\n').split('\n')
+  const at = (start: number, count: number) => lines.slice(start - 1, start - 1 + count).join('\n')
+  if (request) {
+    const { startLine: start, endLine: end } = request
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start)
+      return { range: null }
+    if (typeof request.code !== 'string')
+      return { range: end <= lines.length ? { startLine: start, endLine: end } : null }
+    const code = request.code.replace(/\r\n/g, '\n'),
+      count = code.split('\n').length
+    if (count === end - start + 1 && end <= lines.length && at(start, count) === code)
+      return { range: { startLine: start, endLine: end } }
+    const first = code.split('\n')[0]
+    const hits: number[] = []
+    for (let line = 1; line + count - 1 <= lines.length && hits.length < 2; line++)
+      if (lines[line - 1] === first && at(line, count) === code) hits.push(line)
+    if (hits.length === 1) return { range: { startLine: hits[0], endLine: hits[0] + count - 1 } }
+    return {
+      range: null,
+      error: hits.length
+        ? 'The requested code appears more than once in this file, so no range is highlighted.'
+        : 'This file does not contain the requested code yet (it may not have landed), so no range is highlighted.'
+    }
+  }
+  const line = Number(source.match(LINE)?.[1])
+  const { elementStart: start, elementEnd: end } = doc.view
+  if (!line || !start || !end || line < start || line > end) return { range: null }
+  const base = doc.baseline.replace(/\r\n/g, '\n').split('\n')
+  const count = end - start + 1
+  return end <= base.length && at(start, count) === base.slice(start - 1, end).join('\n')
+    ? { range: { startLine: start, endLine: end } }
+    : { range: null }
+}
+
 /**
  * Per-project drafts survive file navigation and window docking. Saves always compare
  * the disk baseline (by hash). Under the Swift owner an unsaved draft is also saved to
@@ -80,7 +141,16 @@ export class NativeEditorController {
     session.state.canForward = session.cursor < session.history.length - 1
     this.render({ ...session.state })
   }
-  async open(root: string, source?: string, popped?: boolean, navigating = false) {
+  /** Opens `source` (`file[:line[:col]]`). A stamped line selects its element's span, and
+   *  `range` (LKM-363) an exact one, both only where the open text (a draft included)
+   *  still has those lines. Opening never writes and never replaces a draft. */
+  async open(
+    root: string,
+    source?: string,
+    popped?: boolean,
+    navigating = false,
+    range?: SourceRange
+  ) {
     const session = this.session(root),
       generation = ++session.generation
     session.state.visible = true
@@ -91,6 +161,7 @@ export class NativeEditorController {
     try {
       session.state.files = await this.invoke('source:tree', root)
       if (generation !== session.generation) return
+      const requested = source
       source ||=
         session.state.source ||
         session.state.files.find((f) => /\.(tsx?|jsx?|svelte|html|css)$/.test(f)) ||
@@ -103,6 +174,11 @@ export class NativeEditorController {
           session.history.push(source)
           session.cursor = session.history.length - 1
         }
+        const doc = session.documents.get(session.state.source)
+        const shown =
+          doc && requested ? revealRange(doc, requested, range) : { range: null as null }
+        session.state.range = shown.range
+        if (shown.error) session.state.error = shown.error
         session.state.reveal = (session.state.reveal ?? 0) + 1
       }
     } catch (error) {
@@ -122,8 +198,13 @@ export class NativeEditorController {
       !reload
     ) {
       session.state.source = file
-      const line = source.match(/:(\d+)(?::\d+)?$/)?.[1]
-      if (line) session.documents.get(file)!.view.line = Number(line)
+      const line = source.match(/:(\d+)(?::\d+)?$/)?.[1],
+        view = session.documents.get(file)!.view
+      if (line && view.line !== Number(line)) {
+        // The element span belongs to the old stamp line.
+        view.line = Number(line)
+        view.elementStart = view.elementEnd = undefined
+      }
       return
     }
     const view: SourceView | null = await this.invoke(
@@ -136,6 +217,12 @@ export class NativeEditorController {
     const previous = session.documents.get(view.file)
     if (!reload && previous && previous.text !== previous.baseline) {
       session.state.source = view.file
+      const same = previous.view.code === view.code
+      Object.assign(previous.view, {
+        line: view.line,
+        elementStart: same ? view.elementStart : undefined,
+        elementEnd: same ? view.elementEnd : undefined
+      })
       return
     }
     const doc: Document = {
@@ -243,7 +330,7 @@ export class NativeEditorController {
           return
         }
         case 'open':
-          await this.open(action.root, action.source)
+          await this.open(action.root, action.source, undefined, false, action.range)
           return
         case 'edit': {
           const doc = session.documents.get(action.source ?? session.state.source)

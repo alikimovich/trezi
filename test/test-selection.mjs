@@ -396,6 +396,7 @@ for (const entry of Object.values(UI_SOURCES)) {
 // keep every test that could see the change.
 // Walk only temp folders, caches, build output or their own fixture output.
 const TEMP_WALKERS = [
+  'code-navigation',
   'operation-ledger',
   'memory-owner',
   'skills-registry',

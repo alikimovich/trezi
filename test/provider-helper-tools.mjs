@@ -35,6 +35,10 @@ mkdirSync(WT)
 mkdirSync(PROFILE)
 const CODE = 'const LIGHT_X = 0;\nconst LIGHT_Y = -0.5;\n'
 writeFileSync(join(WT, 'shadow.js'), CODE)
+// LKM-363: a selected object's stamp that both providers map through open_code.
+const CARD =
+  'export function Card() {\n  return (\n    <article className="card" style={{ gap: 4 }}>\n      <h2>Hi</h2>\n    </article>\n  )\n}\n'
+writeFileSync(join(WT, 'card.jsx'), CARD)
 const CHAT = 'helper-tools-chat',
   URL_SHOWN = 'http://127.0.0.1:5199/helper-route'
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
@@ -159,10 +163,12 @@ const turn = async (text) => {
   await mcp('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fake-claude', version: '0' } })
   await mcp('notifications/initialized', {})
   const listed = (await mcp('tools/list', {})).result.tools.map((t) => t.name)
-  const only = /only ([\\w,]+)/.exec(text)?.[1].split(',')
+  const pinned = /TOOL-CALL (\\w+) (\\{.*\\})/.exec(text)
+  const calls = pinned ? { [pinned[1]]: JSON.parse(pinned[2]) } : plan.calls
+  const only = pinned ? [pinned[1]] : /only ([\\w,]+)/.exec(text)?.[1].split(',')
   const results = {}
   for (const name of only ?? listed) {
-    results[name] = name in plan.calls ? (await mcp('tools/call', { name, arguments: plan.calls[name] })).result : { unplanned: true }
+    results[name] = name in calls ? (await mcp('tools/call', { name, arguments: calls[name] })).result : { unplanned: true }
   }
   appendFileSync(plan.log, JSON.stringify({ via: 'claude', text, listed, results }) + '\\n')
   out({ type: 'assistant', message: { id: 'msg', type: 'message', role: 'assistant', model: 'fake', content: [{ type: 'text', text: 'TOOLS DONE' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }, parent_tool_use_id: null, ...meta })
@@ -208,8 +214,11 @@ const { StdioClientTransport } = await import(${JSON.stringify(stdio)})
 const mcp = new Client({ name: 'fake-codex', version: '0' })
 await mcp.connect(new StdioClientTransport({ command: server.command, args: server.args, cwd: server.cwd, env: server.env, stderr: 'ignore' }))
 const listed = (await mcp.listTools()).tools.map((t) => t.name)
+// \`TOOL-CALL <name> <json>\` in the turn calls just that tool with those arguments.
+const pinned = /TOOL-CALL (\\w+) (\\{.*\\})/.exec(text)
+const calls = pinned ? { [pinned[1]]: JSON.parse(pinned[2]) } : plan.calls
 const results = {}
-for (const name of listed) results[name] = name in plan.calls ? await mcp.callTool({ name, arguments: plan.calls[name] }) : { unplanned: true }
+for (const name of pinned ? [pinned[1]] : listed) results[name] = name in calls ? await mcp.callTool({ name, arguments: calls[name] }) : { unplanned: true }
 await mcp.close()
 appendFileSync(plan.log, JSON.stringify({ via: 'codex', text, listed, results }) + '\\n')
 out({ type: 'thread.started', thread_id: 'thread-' + process.pid })
@@ -431,6 +440,43 @@ try {
     ),
     'main revealed the code'
   )
+  // LKM-363: a selected object's stamp opens its exact element; several style sources
+  // come back as candidates with provenance and open nothing. Same path for both providers.
+  const navigates = async (session, provider) => {
+    const from = notified.length
+    const pick = (target) =>
+      session.turn(`TOOL-CALL open_code ${JSON.stringify({ source: 'card.jsx:3', target })}`)
+    const element = await pick('element')
+    assert.ok(element.routed.includes('open_code'), `${provider} routed open_code to main`)
+    assert.equal(JSON.parse(element.results.open_code.content[0].text).requested, true)
+    const reveals = () => notified.slice(from).filter((n) => n.channel === 'source:reveal')
+    assert.equal(reveals().length, 1, `${provider} revealed once`)
+    assert.deepEqual(
+      { ...reveals()[0].payload, requestId: undefined },
+      {
+        root: WT,
+        key: CHAT,
+        source: 'card.jsx:3',
+        startLine: 3,
+        endLine: 5,
+        code: CARD.split('\n').slice(2, 5).join('\n'),
+        requestId: undefined
+      },
+      `${provider} revealed the element's exact range`
+    )
+    const styles = JSON.parse((await pick('styles')).results.open_code.content[0].text)
+    assert.equal(styles.requested, false, textOf(styles))
+    assert.deepEqual(
+      styles.candidates.map((c) => [c.kind, c.startLine]),
+      [
+        ['inline-style', 3],
+        ['class-attribute', 3]
+      ]
+    )
+    assert.ok(styles.candidates.every((c) => c.provenance))
+    assert.equal(reveals().length, 1, `${provider} candidates opened nothing`)
+  }
+  await navigates(claude, 'claude')
   assert.equal(
     JSON.parse(all.results.project_ui_catalog.content[0].text).engine,
     'agent',
@@ -533,6 +579,7 @@ try {
   )
   const bridged = await codex.turn('call every tool')
   everyTool(bridged, 'codex')
+  await navigates(codex, 'codex')
   assert.deepEqual(
     [...bridged.listed].sort(),
     [...SESSION_TOOLS].filter((n) => n !== 'install_skills').sort()

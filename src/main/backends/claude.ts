@@ -4,6 +4,7 @@ import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from '../../../bin/chat-island-schema.mjs'
 import { chatUiDescription, chatUiShape } from '../../../bin/chat-ui-schema.mjs'
+import { openCodeDescription, openCodeShape } from '../../../bin/code-tool-schema.mjs'
 import {
   previewToolText as PREVIEW_TOOL_TEXT,
   previewToolShapes as previewShapes,
@@ -771,15 +772,8 @@ async function startSession(
         { cleanCache: z.boolean().optional() },
         async (args) => asText(treziTool('restart_dev_server', args))
       ),
-      tool(
-        'open_code',
-        'Open the mini code editor at an exact project file and highlight inclusive source lines. Read the file first; use when asked to show the exact code or implementation.',
-        {
-          file: z.string(),
-          startLine: z.number().int().min(1),
-          endLine: z.number().int().min(1).optional()
-        },
-        async (args) => asText(treziTool('open_code', args))
+      tool('open_code', openCodeDescription, openCodeShape, async (args) =>
+        asText(treziTool('open_code', args))
       ),
       tool('chat_island', chatIslandDescription, chatIslandShape, async (args) =>
         asText(treziTool('chat_island', args))
