@@ -193,9 +193,11 @@ for (const [tier, members] of Object.entries(TIERS)) {
   console.log(`\n${tier}: ${tests.length} tests, at most ${jobs} workers`)
   // Longest first, so a slow test never starts last; unknown tests keep their order.
   if (tier === 'unit') tests.sort((a, b) => (previous[b] ?? 0) - (previous[a] ?? 0))
+  // LKM-371: this offscreen AppKit fixture drives several long main-run-loop
+  // settles. Other unit workers can stall its observations on the 1-shard runner.
   const items = tests.map((name) => ({
     name,
-    exclusive: tier !== 'unit',
+    exclusive: tier !== 'unit' || name === 'native-chat-send-follow',
     group: tier === 'unit' ? groupOf.get(name) : undefined
   }))
   const tierResults = await runQueue(

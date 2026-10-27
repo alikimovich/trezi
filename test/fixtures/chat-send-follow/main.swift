@@ -4,9 +4,9 @@ import SwiftUI
 
 // LKM-354: the real ChatConversation (NativeChat) offscreen. Each case loads a
 // transcript, sends, streams the answer and ends the turn, sampling every ~30 ms
-// without waiting for a settle: which of the sent rows are in the reading area,
-// the clip offset and whether a settle runs. Then it samples the rest after the
-// turn. Prints one JSON summary per case.
+// without waiting for a settle: which of the sent rows are in the reading area
+// and the clip offset. After the turn it waits for the settle to go quiet and counts
+// the settles that finish meanwhile. Prints one JSON summary per case.
 func emit(_ value: [String: Any]) {}
 func copyChatText(_ value: String) {}
 func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recognize: Bool = true) async throws -> [String: Any] { [:] }
@@ -90,13 +90,31 @@ func send(_ name: String, cardsAt: Int? = nil, chunks: Int = 20, end: Bool = tru
     }
     chat.model.messageFramesFilter = nil
     if end { running = false; push() }
-    spin(1.5)
-    var settling = 0
-    for _ in 0..<30 { spin(0.03); if chat.model.latestSettling { settling += 1 } }
+    // LKM-371: the settle after the turn is observed from the end push on, by the app's own
+    // signals and not by a number of harness samples (a loaded runner can spend seconds between
+    // two run-loop observations, which only makes the waits longer). `settlesAfterTurn` counts
+    // the settles that finish after the end push; `settleFinished` is true once the settle is
+    // quiet: not settling, no new settle end, for at least `quietFor` seconds and `quietTurns`
+    // run-loop turns since the last one. A settle that restarts after every pin (LKM-354) keeps
+    // raising the count and never gets quiet before the generous deadline.
+    let settlesAtEnd = chat.model.latestSettles
+    let quietFor = 0.5, quietTurns = 20
+    let settleDeadline = Date(timeIntervalSinceNow: 30)
+    var seenSettles = settlesAtEnd, quietSince = Date(), turns = 0, settleFinished = false
+    while Date() < settleDeadline {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.016))
+        turns += 1
+        if chat.model.latestSettling || chat.model.latestSettles != seenSettles {
+            seenSettles = chat.model.latestSettles; quietSince = Date(); turns = 0
+        } else if turns >= quietTurns && Date().timeIntervalSince(quietSince) >= quietFor {
+            settleFinished = true; break
+        }
+    }
+    let settlesAfterTurn = chat.model.latestSettles - settlesAtEnd
     results.append(["case": name, "samples": samples, "appSend": appSentAt != nil, "sentAt": sentAt.timeIntervalSince(pushedAt),
                     "shownAt": shownAt.map { $0.timeIntervalSince(pushedAt) } ?? -1, "shownAfter": shownAt.map { $0.timeIntervalSince(sentAt) } ?? -1,
                     "sampledAfter": sampledAfter, "missingTimes": missingTimes, "lowestOffset": lowest,
-                    "upJump": jump, "settlingAfterTurn": settling, "cards": cardsAt != nil])
+                    "upJump": jump, "settleFinished": settleFinished, "settlesAfterTurn": settlesAfterTurn, "cards": cardsAt != nil])
 }
 /// The reporter's state (LKM-354): after a send in a long chat, no message row is measured in view
 /// (no cards, questions or footer), as when the stack's frames belong to an earlier clip offset.
