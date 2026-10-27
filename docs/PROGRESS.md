@@ -2,6 +2,32 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-360: installed-app chat reliability on 3f878add (investigation only; scenarios a–e not run)
+
+- **Result.** No product code, test or script changed. No GUI scenario ran: this worker session has 0 native calls (`verify` tier native, groups `chat` → `limit_reached`, `nativeCallsRemaining: 0`), and `open`/AppleEvents are blocked in the sandbox, so the manager's native budget was the only route and it is unavailable. Per the ticket this is an engineering blocker, not a pass.
+- **Run.** Ticket run `0f0e4621-80c0-4d2e-a2a9-e83a5bac82c9` (artifact dir `.local/artifacts/<run>`: `result-schema.json`, `setup.log`, `worker-mcp.json` only; no screenshots or `send-visibility.json`). Executor: claude (worker, repair tier), worktree `agent-os/lkm-360-4c4b9fed` on main `3f878add`.
+- **Installed-app identity.**
+  - There is no installed Trezi: no `/Applications/Trezi.app`, no `~/Applications/Trezi.app`, no `~/.local/bin/trezi`, no `~/.trezi` or `~/.praxis` clone (`install.sh` links all of them; none exists).
+  - The only non-agent build is the user's own checkout build `~/dev/dsgn/out/native/Trezi.app` (bundle `dev.praxis.native`): `CFBundleShortVersionString` 0.0.1, `CFBundleVersion` 858, `TreziCommit` d86b8de, built 2026-10-05. d86b8de is an ancestor of `3f878add`, 331 commits behind. **Mismatch.** It belongs to the user's active project, so it was only read (Info.plist), not launched.
+  - Launch Services also lists about 150 `out/native/Trezi.app` bundles under `.local/native`, `.local/reviews` and `.local/worktrees/praxis/*`: AgentOS build outputs, not installs.
+  - `~/Library/Logs/Trezi/trezi-2026-10-2*.log` `App started` lines show what was launched, all by AgentOS runs (builds 1128–1188). The newest is `version=0.3.9 build=1188 sha=d13a94d` (2026-10-26T10:54Z). No `3f878add` build was ever launched. `d13a94d..3f878add` is test-only (`test/fixtures/chat-send-follow/main.swift`, `test/native-chat-send-follow.mjs`, docs), so `d13a94d` has the same product code as `3f878add`; that is the best revision to test.
+- **Scenarios** (all not-run, same reason: 0 native calls, no installed app to drive, no preserved artifacts — `find .local/artifacts -name send-visibility.json` finds none):
+  - a. Short chat: not-run. Covered only by fixtures (`native-chat-send-follow` stream-short, LKM-359), not acceptance.
+  - b. Long chat: not-run. Fixture only (`native-chat-send-follow` long/stream-long, `native-chat-scroll`).
+  - c. Switch and restore conversations: not-run. Nothing in the existing fixtures was re-run.
+  - d. Latest message after send, reply, reopen: not-run. Last native evidence is LKM-358's one worker run: `composer` 9/9 with `visible-composer` at 440 and 320 pt, then `native-chat-scroll` failing `440-fixed loaded/sent+60/sent+500: no visible transcript rows` (below).
+  - e. Interrupt, relaunch, continue: not-run. It needs a fixture-agent turn, a relaunch and a native session; none was available.
+- **Candidate defect (unconfirmed): cold first-load blank transcript.** The feedback's diagnosis was checked against the code:
+  - `test/helpers/chat-send-visibility.mjs:44-70` (`sample`, `waitForRows` re-reads up to 40 × 100 ms, records `blankRereads`/`blankWaitMs`; `no visible transcript rows` is the failure at line 66) and `:87-95` (`loadSettled`, up to 20 s, records `loadSettleMs`/`loadSettleTimedOut`) are as described. `docs/TASKS.md:135` records that `native-chat-scroll` passes on the merge tree only because of that wait.
+  - `src/native/Chat.swift:379-436` (`settleLatest`): each settle ends with `pinRequest += 1`, and `afterPin` restarts it until `unresolvedSettles > ChatLatestSettle.unresolvedRestarts` (2). So the bound is 3 settles × up to 4 `follow` runs × 20 steps; LKM-358's 80 attempts is 4 × 20. With `step` (`src/native/ChatScrollStyle.swift:71`) reading `.realize` while no row is measured in view, a cold load can spend about 5 s realizing before it ends.
+  - What is **not known**: whether the user sees a blank transcript on the installed build, or only the harness (which samples at +60 ms after a send during the load) does. The latest-row/scroll acceptance never ran on the installed build.
+- **Follow-up proposals (no implementation here).**
+  1. *Diagnostic first (needs a product change, so a separate ticket).* Log `cold open → latestSettling == false` time and attempt count (redacted lifecycle line, `docs/agent-guide/logs.md`) for the 24-turn long-answer fixture, and have `native-chat-scroll` print the first-load `blankRereads`/`loadSettleMs` as it does. Decide on the installed build whether the blank is visible for more than a frame or two.
+  2. *Only if it is visible:* bound the cold-load settle in `ChatLatestSettle`/`settleLatest` so one pin cannot start a full re-measure of the ~20k pt height estimate (for example, no `.realize` once a settle has pinned with rows already realized, and keep the previous transcript visible until the first measured frame). Regression check: `native-chat-scroll` with `blankRereads == 0` and `loadSettleMs` < 1000 on the first load, without weakening the 4 s and 20 s tolerances.
+  3. *Native acceptance run (operator step).* On a clean main build, in a disposable profile and temp project with the fixture agent, run `native-runtime --only=core,chat,composer`, `native-chat-scroll`, and a manual or fixture interrupt → relaunch → reopen → continue pass for scenario e. Capture `send-visibility.json` and one screenshot per scenario. Needs a session with a native call and the AgentOS native lock, and the user not at the Mac.
+  4. *Installed-build baseline.* If the user's real install is meant to be `~/dev/dsgn/out/native/Trezi.app` (0.0.1 / d86b8de, 331 commits old), the user (not an agent) decides whether to rebuild it; this ticket installed and replaced nothing.
+- **Blockers.** 0 native calls and an exhausted native budget for this session; GUI launch blocked in the sandbox; no installed app; no preserved native artifacts.
+
 ## 2026-10-26 — LKM-359: `native-chat-send-follow` stream cases bounded in realize scrolls, not a fixed 25 s
 
 - **Failure.** Main CI after LKM-358: `native-chat-send-follow` failed with `stream-short: the settle never ended`. The settles never ended within the fixture's 25 s cap.
