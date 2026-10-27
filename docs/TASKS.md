@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat-driven code navigation to the selected object's exact source/style range (LKM-363)
+
+- [x] `open_code` takes the selected object's `source` stamp with `target: element | styles` (and runtime `classes`) for Claude and Codex, one shared schema `bin/code-tool-schema.mjs`; the rules say to use it for selection follow-ups and to show candidates, never invent a location.
+- [x] Read-only mapping `src/main/code-sources.ts`: JSX/HTML element span, inline style, `<style>`/CSS-module/global CSS rules, class attribute, shared component; several, spread, computed or stale mappings return candidates with provenance and open nothing; realpath-checked, symlinks and `..` rejected.
+- [x] Editor: the reveal opens only for the asking project and active chat, selects and bands the exact lines (relocated only when unique, drafts searched not replaced), never writes (`src/native/editor-controller.ts`, `src/native/SourceEditor.swift`).
+- [x] Tests: `code-navigation` (new, unit), `provider-helper-tools` (both providers end to end), `trezi-agent-tools` (Codex schema).
+- [ ] Native: `source-editor` smoke reveal/draft assertions (`src/native/smoke-source-editor.ts`) not run in the worker (0 native calls).
+
 ## `native-chat-send-follow` stream cases bounded in realize scrolls, not seconds (LKM-359)
 
 - [x] Root cause: the streaming forced cases (`stream-long`, `stream-short`, `leak-stream`) had to end within a fixed 25 s, while their bound (240 realize steps, then 150 quiet turns) is in main-thread turns, which a loaded runner stretches. LKM-358's `ChatLatestSettle.step` rule cannot reach these cases (frames always dropped, `trailing` false).

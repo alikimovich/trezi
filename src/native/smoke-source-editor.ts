@@ -175,7 +175,40 @@ export async function checkSourceEditor(
   key = await verify({ key: '[', focus: 'outside' })
   assert.ok(!key.handled && !key.focused, `⌘[ outside the editor: ${JSON.stringify(key)}`)
   assert.deepEqual(key.menu, ['Back'])
+
+  // LKM-363: an agent's open_code range is selected and banded in view; a draft elsewhere is kept.
+  await perform({ action: 'open', source: 'index.html' })
+  await inspect('sourceInspect', (s) => s.source === 'index.html')
+  await edit('\n<!-- native editor reveal draft -->')
+  const disk = read()
+  const filter = readFileSync(join(fixture, 'filter.html'), 'utf8').split('\n')
+  await perform({
+    action: 'open',
+    source: 'filter.html:8',
+    range: { startLine: 8, endLine: 10, code: filter.slice(7, 10).join('\n') }
+  })
+  const revealed = await inspect(
+    'sourceInspect',
+    (s) =>
+      /^filter\.html/.test(s.source) &&
+      s.revealed?.startLine === 8 &&
+      s.revealed?.endLine === 10 &&
+      s.revealed?.bandLength > 0 &&
+      s.revealed?.bandMatchesSelection &&
+      s.revealed?.firstLineVisible
+  )
+  assert.ok(!revealed.error, `The exact range opened: ${JSON.stringify(revealed.revealed)}`)
+  await capture('source-reveal-range', revealed.revealed)
+  await perform({ action: 'open', source: 'index.html' })
+  const draft = await inspect('sourceInspect', (s) => s.source === 'index.html')
+  assert.ok(
+    draft.dirty && draft.text.includes('native editor reveal draft'),
+    'Navigating away and back keeps the draft'
+  )
+  assert.equal(read(), disk, 'Navigation never writes the file')
+  await perform({ action: 'reload' })
+  await inspect('sourceInspect', (s) => !s.dirty)
   console.log(
-    'Native source editor: icon toolbar docked/popped, selectable path, ⌘S save, ⌘R reload, conflict and discard prompt, ⌘[ / ⌘] on a Russian layout pass.'
+    'Native source editor: icon toolbar docked/popped, selectable path, ⌘S save, ⌘R reload, conflict and discard prompt, ⌘[ / ⌘] on a Russian layout, exact reveal range with kept drafts pass.'
   )
 }

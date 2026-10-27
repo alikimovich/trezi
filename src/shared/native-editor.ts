@@ -1,4 +1,11 @@
 import type { SourceView } from './api'
+/** An inclusive 1-based line range to open the editor at (LKM-363). With `code`, the
+ *  range is shown only where the editor's text has exactly these lines. */
+export interface SourceRange {
+  startLine: number
+  endLine: number
+  code?: string
+}
 export interface NativeEditorState {
   root: string
   visible: boolean
@@ -12,6 +19,8 @@ export interface NativeEditorState {
   canBack?: boolean
   canForward?: boolean
   reveal?: number
+  /** The lines the latest reveal selects and highlights; null shows a caret at the line. */
+  range?: { startLine: number; endLine: number } | null
   /** Soft wrap at the visible width (LKM-192); the `trezi:source-wrap` preference. */
   wrap?: boolean
   busy: boolean
@@ -42,6 +51,8 @@ export type NativeEditorAction = {
   text?: string
   name?: string
   revision?: number
+  /** `open`: an exact range to select and highlight (LKM-363). */
+  range?: SourceRange
   /** `highlight` (LKM-183): visible lines, a replaced text, a dropped stale result. */
   first?: number
   last?: number

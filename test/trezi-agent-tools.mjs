@@ -295,6 +295,21 @@ try {
     startLine: 10,
     endLine: 14
   })
+  // LKM-363: the selected object's stamp and target reach main unchanged; a bad target does not.
+  const mapped = await request('tools/call', {
+    name: 'open_code',
+    arguments: { source: 'src/App.tsx:12:4', target: 'styles', classes: ['card'] }
+  })
+  assert.deepEqual(mapped.result.structuredContent.received, {
+    source: 'src/App.tsx:12:4',
+    target: 'styles',
+    classes: ['card']
+  })
+  const badTarget = await request('tools/call', {
+    name: 'open_code',
+    arguments: { source: 'src/App.tsx:12', target: 'layout' }
+  })
+  assert.ok(badTarget.error || badTarget.result?.isError, 'open_code rejects an unknown target')
   const navigated = await request('tools/call', {
     name: 'open_preview',
     arguments: { path: '/work/article?view=full#intro' }

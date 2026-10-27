@@ -253,10 +253,21 @@ panel is not a substitute for a requested chat island.
 
 `open_code` opens the docked editor at a repo-relative file and an inclusive line
 range. Main validates the file boundary (including symlinks) and captures the exact
-source text from the agent checkout. The active project/chat reveals it only when
-that text exists in the live checkout, retrying after landing. Dirty editor drafts
-defer navigation until saved or discarded. Detached agents cannot navigate the
-editor. The transport also works in browser mode.
+source text from the agent checkout. The editor reveals it only for the project and
+chat that asked, while that chat is active (`codeRevealTarget`, `src/native/editor-controller.ts`),
+selecting and highlighting the range only when the open text (draft included) still
+holds that code, relocated only when it appears exactly once; otherwise it shows an
+error and claims no range. Dirty drafts stay as they are when navigation switches
+files, and navigation never writes. Detached agents cannot navigate the editor.
+
+LKM-363: `open_code` also takes `source` (the selected preview object's stamp
+`path:line[:column]`) with `target: element | styles` and optional runtime `classes`.
+`src/main/code-sources.ts` maps it read-only: the JSX/HTML element span, its inline
+`style`, matching CSS rules (the file's `<style>`, imported CSS modules, project
+CSS), the class attribute, and a shared component's definition. It opens only one
+certain range. Several sources, a spread or computed class, or a stale stamp return
+`requested: false` with candidates and provenance, and nothing opens. Both
+backends share the schema `bin/code-tool-schema.mjs`.
 
 `open_preview` accepts a project-root path with optional query/hash for Claude
 and Codex/custom endpoints. It uses the native preview navigation
