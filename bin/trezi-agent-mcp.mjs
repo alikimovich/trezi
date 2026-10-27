@@ -9,6 +9,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from './chat-island-schema.mjs'
 import { chatUiDescription, chatUiShape } from './chat-ui-schema.mjs'
+import { openCodeDescription, openCodeShape } from './code-tool-schema.mjs'
 import {
   previewToolShapes,
   previewToolText,
@@ -172,13 +173,8 @@ server.registerTool(
   'open_code',
   {
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-    description:
-      'Open the mini code editor in the exact project file and highlight inclusive source lines. Read the file first; use when asked to show code or an implementation.',
-    inputSchema: {
-      file: z.string(),
-      startLine: z.number().int().min(1),
-      endLine: z.number().int().min(1).optional()
-    }
+    description: openCodeDescription,
+    inputSchema: openCodeShape
   },
   async (args) => result(await invoke('open_code', args))
 )

@@ -10,6 +10,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] A failure prints the case's timeline (settle ends, realizes and moves up after the end); fixture stop 300 s, tier 420 s.
 - [x] 12/12 consecutive runs after the final change under load (8 forced-case runs with 24 busy loops, 0–60 ms stalls per turn and random 0–2 s settle delays; 4 real-test runs with 24 busy loops); negative controls (chunk resets, restart once spent, LKM-354 `realized` ignored) fail.
 - [ ] Watch: main push CI green on the merge.
+## Chat-driven code navigation to the selected object's exact source/style range (LKM-363)
+
+- [x] `open_code` takes the selected object's `source` stamp with `target: element | styles` (and runtime `classes`) for Claude and Codex, one shared schema `bin/code-tool-schema.mjs`; the rules say to use it for selection follow-ups and to show candidates, never invent a location.
+- [x] Read-only mapping `src/main/code-sources.ts`: JSX/HTML element span, inline style, `<style>`/CSS-module/global CSS rules, class attribute, shared component; several, spread, computed or stale mappings return candidates with provenance and open nothing; realpath-checked, symlinks and `..` rejected.
+- [x] Editor: the reveal opens only for the asking project and active chat, selects and bands the exact lines (relocated only when unique, drafts searched not replaced), never writes (`src/native/editor-controller.ts`, `src/native/SourceEditor.swift`).
+- [x] Tests: `code-navigation` (new, unit), `provider-helper-tools` (both providers end to end), `trezi-agent-tools` (Codex schema).
+- [ ] Native: `source-editor` smoke reveal/draft assertions (`src/native/smoke-source-editor.ts`) not run in the worker (0 native calls).
 
 ## `native-chat-send-follow` stream cases bounded in realize scrolls, not seconds (LKM-359)
 

@@ -20,6 +20,26 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - 4 runs of the real test at once under 24 busy loops. Rows were shown at most 0.013 s after the Send.
   - Negative controls fail. Chunks resetting the count: `never ended` (241). A reset once the bound is spent: `stream-long: the realize scrolls restarted after they ended`, with the timeline. LKM-354's `realized` ignored: leak-stream `never ended` (241 realizes, 88 settles).
 - **Limits.** The CI log was not readable, there was no native run (the fixture is unit tier), and main CI was not observed.
+## 2026-10-26 — LKM-363: chat-driven code navigation to the selected object's exact source/style range
+
+- **What.** "Show me this button's code" or a follow-up "and its styles" now makes Claude or Codex open Trezi's code editor at the exact range, selected and highlighted. When the answer is not one certain range, the agent gets candidates with provenance and nothing opens.
+- **Reused, not rebuilt.**
+  - The existing `open_code` tool: its routing (`session-tools.ts` → `openAgentCode`), its policy entries (`provider-policy.ts`, `ProviderPolicy.swift`; background refused) and its `source:reveal` event. It gains `source`, `target: element | styles` and `classes`. No new tool, so the policy lists and golden fixtures are unchanged. Both backends share one schema, `bin/code-tool-schema.mjs`, like `chat-ui-schema.mjs`.
+  - The selection context: `describeSelectionForPrompt` already puts "In the preview I selected … in path:line:col" into the conversation, so a follow-up keeps the object's identity without new state.
+  - The inspector's mappings: `findElementAtLine`/`locateJsxOpening` (behind `source:read`) for JSX, parse5 locations as in `html-source.ts` for HTML, class-rule matching like `style-class-rule.ts`, and `resolveComponentByImports` (Cmd+click, now exported) for shared components.
+  - The editor's per-project sessions and drafts (`NativeEditorController`) and its `reveal` counter.
+- **Mapping** (`src/main/code-sources.ts`, read-only).
+  - Element: the whole JSX/HTML element span.
+  - Styles: the inline `style`; rules naming the classes in the file's own `<style>`, imported CSS modules (including Vite `_local_hash_line` runtime names) and project CSS; the class attribute when no rule matches (utility classes); and a shared component's definition.
+  - Uncertain cases: a stale stamp, a line only enclosed by an element, an unmapped file type, a spread or a computed className. These return candidates (`requested: false`) with notes and never open as exact. One rule matching several classes is one candidate.
+  - Bounds: paths are realpath-checked against the project, so `..`, absolute paths and symlinked files or folders are rejected. The CSS walk does not follow symlinks and skips `node_modules`/build output; it is capped at 300 files, 2 MB per file and 24 candidates.
+- **Editor.**
+  - `codeRevealTarget` drops a reveal unless both its root and chat key are the active project and chat, so nothing leaks across projects or conversations or shows up later.
+  - `revealRange` checks the request's code against the open text, a draft included. It relocates the range only when the code appears exactly once; otherwise it shows an error and highlights nothing. A plain stamp selects the element span from `source:read` while those lines are unchanged.
+  - Swift selects the whole lines and adds a temporary layout-only band, so text, undo and syntax colours are untouched. It scrolls the first line into view, and `sourceInspect.revealed` reports what is shown.
+  - Navigation only calls `source:tree`/`source:read`. Drafts stay when switching files.
+- **Checks.** `code-navigation` (new, unit): every scenario plus the editor rules with a fake invoke. `provider-helper-tools`: Claude and Codex stand-ins call `open_code` in source mode through the real helper/owner path and get the exact `source:reveal` or candidates. `trezi-agent-tools`: the Codex schema accepts the new arguments and rejects an unknown target. Quick tier: typecheck, native typecheck, lint and unit selection.
+- **Not run.** The `source-editor` native smoke now opens `filter.html:8-10` with a range, asserts the band, selection and visibility, captures `source-reveal-range`, and checks that an `index.html` draft is kept and the file is unwritten. It was not run: this worker has 0 native calls.
 
 ## 2026-10-26 — LKM-360: installed-app chat reliability on 3f878add (investigation only; scenarios a–e not run)
 

@@ -39,7 +39,7 @@ extension Host {
             else { reply(id, verifyIslands(c)) }
         case "sourceInspect":
             let editor = sourceEditors[c["root"] as? String ?? sourceRoot]
-            reply(id, ["native":true, "visible":editor?.state["visible"] as? Bool ?? false, "source":editor?.source ?? "", "text":editor?.code.string ?? "", "popped":editor?.popout?.isVisible ?? false, "dirty":editor?.state["dirty"] as? Bool ?? false, "error":editor?.state["error"] as? String ?? "", "width":editor?.bounds.width ?? 0, "height":editor?.bounds.height ?? 0, "viewportHeight":editor?.scroll.contentSize.height ?? 0, "minHeight":editor?.popout?.contentMinSize.height ?? 0, "maxHeight":editor?.popout?.contentMaxSize.height ?? 0])
+            reply(id, ["native":true, "visible":editor?.state["visible"] as? Bool ?? false, "source":editor?.source ?? "", "text":editor?.code.string ?? "", "popped":editor?.popout?.isVisible ?? false, "dirty":editor?.state["dirty"] as? Bool ?? false, "error":editor?.state["error"] as? String ?? "", "width":editor?.bounds.width ?? 0, "height":editor?.bounds.height ?? 0, "viewportHeight":editor?.scroll.contentSize.height ?? 0, "minHeight":editor?.popout?.contentMinSize.height ?? 0, "maxHeight":editor?.popout?.contentMaxSize.height ?? 0, "revealed":editor?.inspectReveal() ?? [:]])
         case "sourceResize":
             guard ephemeral, let panel = sourceEditors[c["root"] as? String ?? sourceRoot]?.popout else { return true }
             panel.setContentSize(NSSize(width: c["width"] as? Double ?? 1000, height: c["height"] as? Double ?? 700)); reply(id)
