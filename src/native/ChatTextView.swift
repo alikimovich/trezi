@@ -158,11 +158,13 @@ final class ChatTextView: NSTextView {
     // MARK: Links
 
     static func isWebLink(_ link: String) -> Bool { ["http", "https", "mailto"].contains(URL(string: link)?.scheme?.lowercased() ?? "") }
+    /// Clicks handed to AppKit's own link handling (NSWorkspace), for verification (LKM-366).
+    private(set) static var appKitLinks = 0
     /// Web links keep AppKit's handling (the browser). Every other link, code candidates
     /// (`trezi-code:`) and file paths included, never reaches NSWorkspace or another app.
     override func clicked(onLink link: Any, at charIndex: Int) {
         let text = (link as? URL)?.absoluteString ?? link as? String ?? ""
-        if Self.isWebLink(text) { super.clicked(onLink: link, at: charIndex) } else if !text.isEmpty { onLink?(text) }
+        if Self.isWebLink(text) { Self.appKitLinks += 1; super.clicked(onLink: link, at: charIndex) } else if !text.isEmpty { onLink?(text) }
     }
 
     // MARK: Selection and copy

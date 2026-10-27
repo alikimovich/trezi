@@ -27,7 +27,8 @@ const all = [
   'chat',
   'composer',
   'agent-browser',
-  'selection'
+  'selection',
+  'changes'
 ]
 assert.deepEqual([...NATIVE_SMOKE_GROUPS], all)
 assert.deepEqual([...parseSmokeGroups([])], all, 'No flag runs every group')
@@ -132,10 +133,21 @@ assert.deepEqual(
     'agent-question',
     'chat-text',
     'chat-ui',
+    'code-link-click',
     'quit-alert',
     'final-shell'
   ]
 )
+// LKM-366: the small changes group runs without core; chat,changes is the targeted run.
+assert.deepEqual(
+  selectSmokeChecks(names, parseSmokeGroups(['--only=changes'])).map((c) => c.name),
+  ['startup', 'open-project', 'chat-ready', 'changes-panel', 'final-shell']
+)
+const targeted = selectSmokeChecks(names, parseSmokeGroups(['--only=chat,changes'])).map(
+  (c) => c.name
+)
+assert.ok(['code-link-click', 'changes-panel'].every((name) => targeted.includes(name)))
+assert.equal(smokeLauncherTimeoutMs(parseSmokeGroups(['--only=chat,changes'])), 300_000)
 for (const group of ['islands', 'shadow-light'])
   assert.ok(
     selectSmokeChecks(names, parseSmokeGroups([`--only=${group}`])).some(
@@ -152,7 +164,7 @@ assert.deepEqual(notices, [], 'A full run prints no filter notice')
 selectSmokeChecks(names, parseSmokeGroups(['--only=chat']), (line) => notices.push(line))
 assert.match(
   notices.join(),
-  /^NATIVE SMOKE FILTERED \(--only=chat\): running 15 of \d+ checks.*not full-suite acceptance/
+  /^NATIVE SMOKE FILTERED \(--only=chat\): running 16 of \d+ checks.*not full-suite acceptance/
 )
 console.log(
   'Native smoke check selection: every check classified, prelude kept, dependencies satisfied for each group.'

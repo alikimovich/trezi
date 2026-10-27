@@ -13,18 +13,14 @@ extension Host {
             window.makeFirstResponder(nil)
             return [:]
         }
+        if c["frontmost"] as? Bool == true {
+            return ["frontmost": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0, "pid": ProcessInfo.processInfo.processIdentifier,
+                    "appKitLinks": ChatTextView.appKitLinks]
+        }
         if let dark = c["dark"] as? Bool { window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua) }
         let message = c["message"] as? String ?? ""
-        chat.model.pressLatest()
-        var view: ChatTextView?, last = CGRect.null
-        for _ in 0..<60 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            view = ChatTextView.live.object(forKey: "\(message)#0" as NSString)
-            let frame = chat.model.messageFrames[message] ?? .null
-            if let view, view.window != nil, view.bounds.height > 0, frame == last { break }
-            last = frame
-        }
-        guard let view, view.window != nil else { throw fail("The message's text view is not on screen") }
+        let view = try await chatTextView(message)
+        if let href = c["click"] as? String { return try clickLink(view, href) }
         let views = (ChatTextView.live.keyEnumerator().allObjects as? [String] ?? []).filter { $0.hasPrefix(message + "#") }.count
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("trezi.chat-text.\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally(); ChatTextView.pasteboard = .general }
@@ -90,5 +86,45 @@ extension Host {
                 "blockKinds": view.rich.blocks.map(\.kind.rawValue), "textFrame": NSStringFromRect(textFrame), "codeFrame": NSStringFromRect(codeFrame),
                 "readingHeight": Double(reading.height),
                 "codeFill": sample(codeFrame.minX + 4, codeFrame.minY + 4), "background": sample(codeFrame.minX + 4, codeFrame.minY - 6)]
+    }
+
+    /// The message's first text view, on screen and settled at the conversation's end.
+    @MainActor
+    func chatTextView(_ message: String) async throws -> ChatTextView {
+        chat.model.pressLatest()
+        var view: ChatTextView?, last = CGRect.null
+        for _ in 0..<60 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            view = ChatTextView.live.object(forKey: "\(message)#0" as NSString)
+            let frame = chat.model.messageFrames[message] ?? .null
+            if let view, view.window != nil, view.bounds.height > 0, frame == last { break }
+            last = frame
+        }
+        guard let view, view.window != nil else {
+            throw NSError(domain: "ChatText", code: 1, userInfo: [NSLocalizedDescriptionKey: "The message's text view is not on screen"])
+        }
+        return view
+    }
+
+    /// LKM-366: a click on the message's link to `href` as AppKit delivers a link click
+    /// (`clicked(onLink:at:)` with the link attribute's own value), and whether it went to
+    /// AppKit's handling, the only way to NSWorkspace and another app.
+    @MainActor
+    func clickLink(_ view: ChatTextView, _ href: String) throws -> [String: Any] {
+        var links: [String] = [], target: (link: Any, at: Int)?
+        view.textStorage?.enumerateAttribute(.link, in: NSRange(location: 0, length: (view.string as NSString).length)) { value, range, _ in
+            guard let value else { return }
+            let text = (value as? URL)?.absoluteString ?? value as? String ?? ""
+            links.append(text)
+            // AppKit may hand the fragment's `#` back as `%23` (LKM-364).
+            if target == nil, text.replacingOccurrences(of: "%23", with: "#") == href { target = (value, range.location) }
+        }
+        guard let target else {
+            throw NSError(domain: "ChatText", code: 1, userInfo: [NSLocalizedDescriptionKey: "No link \(href) in the message: \(links)"])
+        }
+        let before = ChatTextView.appKitLinks
+        view.clicked(onLink: target.link, at: target.at)
+        return ["clicked": href, "at": target.at, "links": links, "appKitLinks": ChatTextView.appKitLinks - before,
+                "frontmost": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0, "pid": ProcessInfo.processInfo.processIdentifier]
     }
 }
