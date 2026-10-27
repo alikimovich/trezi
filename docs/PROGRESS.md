@@ -26,6 +26,7 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - `native-diff-list` (new Swift fixture over real `branchDiff` JSON).
   - Also: `native-chat-text` (link clicks never reach AppKit), `provider-helper-tools` (both providers' candidate links), `swiftc -typecheck` of every host source, typecheck and lint. The new source has a `docs/SWIFT-BACKEND-RETIREMENT.md` census row.
   - Run directly from the worker's Bash sandbox, `provider-helper-tools`' Codex bridge check fails, and fails identically on a pristine `main` export. It passes in the manager's quick verification.
+- **Review fix.** On the CI runner AppKit returns a `trezi-code:` link with the fragment's `#` as `%23`, which `parseCodeLink` read as part of the filename. It now accepts `#L…` or `%23L…`; traversal, symlink and absolute checks still run on the decoded path (`code-links` covers the `%23` forms and `%2F`-encoded traversal). The `native-chat-text` fixture compares link URLs with `%23` normalised.
 - **Not run.** No native app run: 0 native calls. The Changes panel and a candidate click in the real app are covered by the fixtures above, not by a GUI capture.
 
 ## 2026-10-26 — LKM-365: `native-chat-send-follow` forced cases end on the app's bound, not a quiet window

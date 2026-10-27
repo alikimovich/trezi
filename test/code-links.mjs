@@ -39,7 +39,16 @@ const parsed = {
   'src/App.tsx:12:4': { file: 'src/App.tsx', lines: { startLine: 12, endLine: 12 } },
   './src/App.tsx#L12-L18': { file: 'src/App.tsx', lines: { startLine: 12, endLine: 18 } },
   'App.tsx:12': { file: 'App.tsx', lines: { startLine: 12, endLine: 12 } },
-  'src/App.tsx': { file: 'src/App.tsx' }
+  'src/App.tsx': { file: 'src/App.tsx' },
+  // Some macOS versions hand AppKit's link URL back with the fragment's `#` as `%23`.
+  'trezi-code:src/Card.module.css%23L1-L3': {
+    file: 'src/Card.module.css',
+    lines: { startLine: 1, endLine: 3 }
+  },
+  'trezi-code:src/My%20Card.tsx%23L6': {
+    file: 'src/My Card.tsx',
+    lines: { startLine: 6, endLine: 6 }
+  }
 }
 for (const [href, target] of Object.entries(parsed))
   assert.deepEqual(parseCodeLink(href), target, href)
@@ -137,6 +146,8 @@ try {
   for (const href of [
     'trezi-code:../outside.css#L1',
     'trezi-code:src/../../outside.css#L1',
+    'trezi-code:..%2Foutside.css%23L1',
+    'trezi-code:src%2F..%2F..%2Foutside.css%23L1',
     'trezi-code:src/Escape.tsx#L1',
     'trezi-code:src/linked/Secret.tsx#L1',
     `trezi-code:${join(outside, 'Secret.tsx')}#L1`,

@@ -134,7 +134,8 @@ view.show(candidates, streaming: false)
 let shown = view.string as NSString
 var linked: [String] = []
 view.textStorage?.enumerateAttribute(.link, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
-    if let url = value as? URL { linked.append(url.absoluteString) }
+    // Some macOS versions return the fragment's `#` as `%23`; the app accepts either.
+    if let url = value as? URL { linked.append(url.absoluteString.replacingOccurrences(of: "%23", with: "#")) }
 }
 require(linked == ["trezi-code:src/Card.module.css#L1-L3", "trezi-code:src/My%20Card.tsx#L6", "App.tsx:12", "trezi-code:../outside.css#L1", "file:///etc/hosts", "https://example.com/x"], "Candidates render as clickable links: \(linked)")
 require(shown.range(of: "src/Card.module.css:1-3").location != NSNotFound, "The filename and range are the link text")

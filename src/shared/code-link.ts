@@ -37,7 +37,8 @@ export function isWebLink(href: string): boolean {
   return /^(https?|mailto):/i.test(href.trim())
 }
 
-const HASH_LINES = /#L(\d+)(?:-L?(\d+))?$/
+// Some macOS/Foundation versions hand AppKit's link URL back with `#` as `%23`.
+const HASH_LINES = /(?:#|%23)L(\d+)(?:-L?(\d+))?$/i
 const SUFFIX_LINES = /:(\d+)(?:(?::\d+)|(?:-(\d+)))?$/
 
 /** The project file and lines a chat link names, or why it cannot open in the editor. */
