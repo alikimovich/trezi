@@ -9,6 +9,8 @@ import { nativeWorkspace } from './workspace-runtime'
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const PROJECT = '../Changes Project'
 const DRAFT = '\n<!-- changes panel draft -->'
+/** The branch the list names: opening the project moves `feature` onto Trezi's work branch. */
+const WORK_BRANCH = 'trezi/feature'
 
 interface Row {
   kind: 'section' | 'file' | 'hunk' | 'note'
@@ -108,7 +110,12 @@ export async function checkChangesPanel(host: NativeBridge, fixture: string, art
       async () => (await editor()).visible && (await editor()).source === 'index.html',
       'editor open'
     )
-    // Trezi's own project setup settles before the state viewing must keep is taken.
+    // Trezi's own project setup settles before the state viewing must keep is taken: opening
+    // moves the checkout onto its `trezi/feature` work branch (`ensureBranch`).
+    await waitFor(
+      () => git(project, 'symbolic-ref', '--short', 'HEAD') === WORK_BRANCH,
+      `checkout on ${WORK_BRANCH}`
+    )
     await delay(1000)
     const before = gitState(project)
 
@@ -121,7 +128,7 @@ export async function checkChangesPanel(host: NativeBridge, fixture: string, art
       list.treeHidden && list.operationsHidden,
       'The file tree and its file operations hide'
     )
-    assert.match(list.base, new RegExp(`^Branch feature @ ${head}$`, 'm'))
+    assert.match(list.base, new RegExp(`^Branch ${WORK_BRANCH} @ ${head}$`, 'm'))
     assert.match(list.base, new RegExp(`^Base: merge-base with main @ ${base}$`, 'm'))
     const rows: Row[] = list.rows
     const sections = rows.filter((r) => r.kind === 'section')
@@ -259,5 +266,13 @@ export async function restoreChangesPanel(host: NativeBridge, fixture: string) {
   await host.request('sourceNavigation', { root: fixture, panel: 'files' }).catch(() => {})
   if ((await host.request('sourceInspect', { root: fixture })).visible)
     await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+  // Switching back restarts the first project's preview; the next checks drive it.
+  await waitFor(
+    async () =>
+      nativeWorkspace.state.status.kind === 'running' &&
+      !(await host.request('layoutInspect')).previewHidden,
+    'first project preview shown',
+    30_000
+  )
   rmSync(project, { recursive: true, force: true })
 }
