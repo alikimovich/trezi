@@ -21,6 +21,9 @@ final class ChatTextView: NSTextView {
         }
     }
     var reduceMotion = false
+    /// LKM-364: a clicked link that is not a web link (a code candidate, a file path).
+    /// It goes to Trezi's own editor; without a handler nothing opens.
+    var onLink: ((String) -> Void)?
     private(set) var copyButtons: [NSButton] = []
     private var arrivals: [(range: NSRange, time: TimeInterval)] = []
     private var revealTimer: Timer?
@@ -150,6 +153,16 @@ final class ChatTextView: NSTextView {
     func code(at index: Int) -> String? {
         let codes = rich.blocks.filter { $0.kind == .code }
         return codes.indices.contains(index) ? (rich.string.string as NSString).substring(with: codes[index].range) : nil
+    }
+
+    // MARK: Links
+
+    static func isWebLink(_ link: String) -> Bool { ["http", "https", "mailto"].contains(URL(string: link)?.scheme?.lowercased() ?? "") }
+    /// Web links keep AppKit's handling (the browser). Every other link, code candidates
+    /// (`trezi-code:`) and file paths included, never reaches NSWorkspace or another app.
+    override func clicked(onLink link: Any, at charIndex: Int) {
+        let text = (link as? URL)?.absoluteString ?? link as? String ?? ""
+        if Self.isWebLink(text) { super.clicked(onLink: link, at: charIndex) } else if !text.isEmpty { onLink?(text) }
     }
 
     // MARK: Selection and copy

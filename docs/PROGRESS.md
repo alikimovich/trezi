@@ -2,6 +2,32 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-364: clickable code candidates and a read-only branch Changes list
+
+- **Candidates.**
+  - When `open_code` cannot name one exact range, each candidate now carries a `link`: Markdown `[file:start-end](trezi-code:file#Lstart-Lend)` (`src/shared/code-link.ts`). The tool text and the rules (`bin/code-tool-schema.mjs`, `src/main/rules.ts`) tell Claude and Codex to show it with its provenance.
+  - Links live in the agent's text, so they persist and work the same for both backends.
+  - A click in `ChatTextView` becomes the `code-link` chat action. `codeLinkTarget` (`src/main/code-tools.ts`) re-runs the LKM-363 realpath checks, which refuse `..`, absolute paths, symlink escapes, folders and binaries, with the reason shown in chat. It then emits the `code` effect, and `index.ts` opens `NativeEditorController.open` with the range, the one path that keeps drafts.
+  - `ChatTextView.clicked(onLink:at:)` passes only http/https/mailto to AppKit, so a code link never reaches NSWorkspace, Finder or another app.
+- **Changes list.**
+  - `src/main/branch-diff.ts` reads with a fixed allowlist (`rev-parse`, `symbolic-ref`, `merge-base`, `diff`, `ls-files`). Every call uses `--no-optional-locks`, no external diff or textconv, and a cleaned Git environment.
+  - The base is the merge-base of HEAD with `origin/<default>`, then the local default branch, then the upstream. Its label shows the ref and short SHA. Without a base it falls back to HEAD and says so.
+  - Sections:
+    - Committed since the merge-base.
+    - Staged, unstaged and untracked, each labelled "(uncommitted)".
+  - Each file and section shows +/− counts. Renames show "from → path"; deletes and binaries are marked. Output is bounded to 500 files and 50 hunks per file.
+  - Non-Git, detached and unborn HEAD each show a message.
+- **Editor.**
+  - The sidebar switches Files | Changes (`SourceDiffList.swift`). The diff lives in the per-project editor session, so a project switch refreshes it and nothing carries over. A generation guard drops stale reads.
+  - A file click opens its first hunk; a hunk click opens that hunk. Both go through `codeTarget` and the same `open`, so a dirty draft is kept and searched rather than replaced. A deleted file explains why it can't open.
+  - The only control is Refresh: no stage, discard or commit.
+- **Checks.**
+  - Unit: `code-links` and `branch-diff` (temp repos; asserts index, HEAD and refs unchanged and only allowlisted verbs ran).
+  - `native-diff-list` (new Swift fixture over real `branchDiff` JSON).
+  - Also: `native-chat-text` (link clicks never reach AppKit), `provider-helper-tools` (both providers' candidate links), `swiftc -typecheck` of every host source, typecheck and lint. The new source has a `docs/SWIFT-BACKEND-RETIREMENT.md` census row.
+  - Run directly from the worker's Bash sandbox, `provider-helper-tools`' Codex bridge check fails, and fails identically on a pristine `main` export. It passes in the manager's quick verification.
+- **Not run.** No native app run: 0 native calls. The Changes panel and a candidate click in the real app are covered by the fixtures above, not by a GUI capture.
+
 ## 2026-10-26 — LKM-363: chat-driven code navigation to the selected object's exact source/style range
 
 - **What.** "Show me this button's code" or a follow-up "and its styles" now makes Claude or Codex open Trezi's code editor at the exact range, selected and highlighted. When the answer is not one certain range, the agent gets candidates with provenance and nothing opens.

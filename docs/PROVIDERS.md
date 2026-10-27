@@ -269,6 +269,15 @@ certain range. Several sources, a spread or computed class, or a stale stamp ret
 `requested: false` with candidates and provenance, and nothing opens. Both
 backends share the schema `bin/code-tool-schema.mjs`.
 
+LKM-364: each candidate carries a `link`, Markdown `[file:start-end](trezi-code:file#Lstart-Lend)`
+(`src/shared/code-link.ts`), which the agent shows with its provenance. Clicking any
+non-web link in assistant text (a `trezi-code:` link or a bare `path:line`) goes to the
+chat action `code-link` (`src/native/chat-actions.ts`), which re-validates it with the
+same project-file check (`codeLinkTarget`, `src/main/code-tools.ts`) and opens the
+active project's docked editor at that range through `NativeEditorController.open`.
+`ChatTextView` hands only http(s)/mailto links to AppKit, so a code link never opens
+another app; refused links show "Not opened in the editor: …" in chat.
+
 `open_preview` accepts a project-root path with optional query/hash for Claude
 and Codex/custom endpoints. It uses the native preview navigation
 and waits for the active turn's landing and a running web preview. Requests are

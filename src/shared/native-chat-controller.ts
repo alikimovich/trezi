@@ -67,6 +67,9 @@ export type NativeChatEffect =
   | { type: 'notes'; root: string }
   /** Show a `file:line[:column]` of the active project in the editor (LKM-193). */
   | { type: 'source'; source: string }
+  /** LKM-364: a code link in chat, checked like `open_code`; opens Trezi's editor at its
+   *  range when `root` is still the active project. */
+  | { type: 'code'; root: string; source: string; range?: import('./native-editor').SourceRange }
   /** Bring the active project's preview into view: the docked editor steps aside (LKM-210). */
   | { type: 'preview' }
   | { type: 'focus' | 'history' }

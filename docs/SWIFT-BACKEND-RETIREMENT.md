@@ -228,6 +228,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/backends/codex.ts` | helper | ProviderOwner (provider helper) | Codex SDK process, inside the supervised helper |
 | `src/main/backends/gemini.ts` | helper | ProviderOwner (provider helper) | Gemini CLI process, inside the supervised helper |
 | `src/main/backends/live-tree-watch.ts` | helper | RepositoryOwner | `git status` and `git rev-parse` reads of the live checkout for a Full-access Codex turn's snapshots (LKM-163, LKM-215) |
+| `src/main/branch-diff.ts` | helper | RepositoryOwner | the editor's Changes list: allowlisted read-only Git (`rev-parse`, `symbolic-ref`, `merge-base`, `diff`, `ls-files`, all `--no-optional-locks`) and bounded untracked-file reads of the open project; no index, ref or file write (LKM-364) |
 | `src/main/build-status.ts` | helper | PlatformOwner | read-only Git reads of Trezi's own checkout (`ls-remote`, `merge-base`, `rev-list`; never a fetch) for the build badge (LKM-226) |
 | `src/main/chat-park.ts` | helper | RepositoryOwner | Git reads (diff, show, status) |
 | `src/main/chat-agent-git.ts` | helper | RepositoryOwner / WorkflowOwner | `git rev-parse` read; mutations route through the owners (LKM-188) |

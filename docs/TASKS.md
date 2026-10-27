@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Clickable code candidates and a read-only branch Changes list (LKM-364)
+
+- [x] `open_code` candidates carry a `link` (`trezi-code:` Markdown, `src/shared/code-link.ts`) the agent shows with provenance; one schema for Claude and Codex, the rules say so.
+- [x] A chat link click goes `ChatTextView` → `code-link` action → `codeLinkTarget` (LKM-363 realpath checks) → `NativeEditorController.open` with the range; refusals show in chat; only http/https/mailto reach AppKit, nothing opens outside Trezi.
+- [x] `src/main/branch-diff.ts`: read-only Git (allowlisted verbs, `--no-optional-locks`), merge-base base labelled with ref and short SHA, committed vs staged/unstaged/untracked, +/− counts, rename/delete/binary, bounded, non-Git/detached/unborn/no-upstream labels.
+- [x] Editor sidebar Files | Changes (`src/native/SourceDiffList.swift`, `src/native/editor-diff.ts`): per-project, refresh on project switch and after editor file operations, file/hunk click opens the editor through the same path, drafts kept, only a Refresh control.
+- [x] Tests: `code-links`, `branch-diff`, `native-diff-list` (new, unit), `native-chat-text`, `provider-helper-tools` (Claude and Codex candidate links); census row in `docs/SWIFT-BACKEND-RETIREMENT.md`.
+- [ ] Native: no smoke run of the Changes panel or a candidate click in the app (0 native calls).
+
 ## Chat-driven code navigation to the selected object's exact source/style range (LKM-363)
 
 - [x] `open_code` takes the selected object's `source` stamp with `target: element | styles` (and runtime `classes`) for Claude and Codex, one shared schema `bin/code-tool-schema.mjs`; the rules say to use it for selection follow-ups and to show candidates, never invent a location.
