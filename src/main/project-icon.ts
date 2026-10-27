@@ -42,6 +42,32 @@ export function iconMediaType(file: string): string | null {
   return ICON_MEDIA_TYPES[extname(file).toLowerCase()] ?? null
 }
 
+/**
+ * The image type a file's bytes actually are, or null for anything else (a text
+ * file named `favicon.png`, an empty or truncated download). The extension only
+ * nominates a candidate: a non-image never shadows a later real icon, and a PNG
+ * saved as `favicon.ico` is inlined as the PNG it is. The native sidebar still
+ * decodes what this lets through and keeps its folder when that fails (LKM-372).
+ */
+export function sniffIconType(bytes: Uint8Array): string | null {
+  const at = (offset: number, signature: number[]) =>
+    signature.every((byte, i) => bytes[offset + i] === byte)
+  const ascii = (offset: number, text: string) =>
+    at(
+      offset,
+      [...text].map((c) => c.charCodeAt(0))
+    )
+  if (at(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png'
+  // Reserved 0, type 1 (icon), at least one 16-byte directory entry.
+  if (at(0, [0, 0, 1, 0]) && (bytes[4] || bytes[5]) && bytes.length >= 22) return 'image/x-icon'
+  if (ascii(0, 'GIF87a') || ascii(0, 'GIF89a')) return 'image/gif'
+  if (at(0, [0xff, 0xd8, 0xff])) return 'image/jpeg'
+  if (ascii(0, 'RIFF') && ascii(8, 'WEBP')) return 'image/webp'
+  if (ascii(4, 'ftypavif') || ascii(4, 'ftypavis')) return 'image/avif'
+  if (/<svg[\s>/]/i.test(Buffer.from(bytes).toString('utf8'))) return 'image/svg+xml'
+  return null
+}
+
 /** Directories a favicon conventionally lives in, most-specific first. `src/app`
  *  and `app` lead because Next's app router serves `app/favicon.ico` in
  *  preference to `public/favicon.ico` when a project has both. */
@@ -123,15 +149,17 @@ function withinRoot(root: string, rel: string): boolean {
   return abs === resolve(root) || abs.startsWith(resolve(root) + sep)
 }
 
-/** Read one candidate if it exists, is a usable image type, and is small enough. */
+/** Read one candidate if it exists, has an icon extension, is small enough and
+ *  its bytes are an image. */
 async function readCandidate(root: string, rel: string): Promise<ProjectIconFile | null> {
-  const mediaType = iconMediaType(rel)
-  if (!mediaType || !withinRoot(root, rel)) return null
+  if (!iconMediaType(rel) || !withinRoot(root, rel)) return null
   const abs = join(root, rel)
   try {
     const info = await stat(abs)
     if (!info.isFile() || info.size === 0 || info.size > MAX_ICON_BYTES) return null
     const bytes = await readFile(abs)
+    const mediaType = sniffIconType(bytes)
+    if (!mediaType) return null
     return {
       path: rel,
       dataUrl: `data:${mediaType};base64,${bytes.toString('base64')}`

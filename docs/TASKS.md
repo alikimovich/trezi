@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native sidebar project rows show the project favicon (LKM-372, user-requested)
+
+- [x] Project rows lead with the decoded favicon from the existing `project:icon` lookup (`SidebarFavicon` in `src/native/SidebarIcon.swift`, `ShellRow`, `Shell.swift`); missing, non-image, corrupt or undecodable data keeps the folder. This replaces LKM-105's folder-only choice for project rows.
+- [x] Fit into the 16-point slot with aspect kept, the same frame/gap/centre as folder rows, own colours (no tint) selected and unselected.
+- [x] `project-icon.ts` sniffs candidate bytes (`sniffIconType`): a non-image named `favicon.png` no longer shadows a real icon; a PNG saved as `.ico` is inlined as PNG.
+- [x] Tests: `project-icon` (sniffing, fall-through), new unit `sidebar-favicon` (Swift decode/layout/pixels), `native-shell-controller` (out-of-order loads across switch/reorder/close/open), `sidebar-evidence`; sidebar smoke now has favicon, no-favicon and invalid-favicon projects.
+- [ ] Native: run `--only=sidebar` and read `sidebar-*.png` for the favicon row and both folder rows (NOT RUN: 0 native calls for the worker).
+- [ ] Follow-up (unchanged): a first favicon added mid-session still needs a relaunch (`NativeShellController.icons` caches a miss).
+
 ## Make native-chat-send-follow deterministic under 1-shard main CI load (LKM-371)
 
 - [x] Replace the ordinary send cases' fixed post-turn sample window with a bounded wait for `latestSettles` to advance and `latestSettling` to clear; keep the settle-finished assertion.

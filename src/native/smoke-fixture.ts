@@ -15,11 +15,12 @@ export function smokeDirectory(): string {
 export function writeSmokeProject(testDir: string): string {
   const fixture = join(testDir, 'Folder Alpha')
   mkdirSync(fixture)
-  // A decodable raster icon exercises stored artwork in native sidebar verification.
+  // The sidebar's favicon row (LKM-372): a 16×16 PNG, an opaque #F06A1C square
+  // (`FAVICON_CENTER` in smoke-sidebar.ts) inside a 2-pixel transparent margin.
   writeFileSync(
     join(fixture, 'favicon.png'),
     Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVR42mNgGDTgQ5bMf1LwqAGjBgxXAwYMAADl6mHgWAJN4AAAAABJRU5ErkJggg==',
       'base64'
     )
   )
