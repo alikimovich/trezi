@@ -100,11 +100,13 @@ if (process.platform !== 'darwin') {
     }
     const forcedFailure = (entry, what) =>
       `${entry.case}: ${what} (${timeline(entry)}) (all cases: ${describeForced})`
+    // ChatLatestSettle.unresolvedRestarts (2) restarts after a pin, one running settle and slack.
+    const settlesAfterTurnLimit = 6
     const missing = (entry) => entry.missingTimes.filter((t) => t > limit).length
     const describe = cases
       .map(
         (entry) =>
-          `${entry.case}: Send at ${entry.sentAt.toFixed(3)} s${entry.appSend ? '' : ' (NOT recorded by the app)'}, shown at ${entry.shownAt.toFixed(3)} s, after ${entry.shownAfter.toFixed(3)} s (harness sample ${entry.sampledAfter.toFixed(2)} s), threshold ${limit} s, missing ${missing(entry)}/${entry.samples}, up jump ${entry.upJump.toFixed(0)} pt, settle finished ${entry.settleFinished}`
+          `${entry.case}: Send at ${entry.sentAt.toFixed(3)} s${entry.appSend ? '' : ' (NOT recorded by the app)'}, shown at ${entry.shownAt.toFixed(3)} s, after ${entry.shownAfter.toFixed(3)} s (harness sample ${entry.sampledAfter.toFixed(2)} s), threshold ${limit} s, missing ${missing(entry)}/${entry.samples}, up jump ${entry.upJump.toFixed(0)} pt, settle quiet ${entry.settleFinished} after ${entry.settlesAfterTurn} settles`
       )
       .join('; ')
     for (const entry of cases) {
@@ -123,9 +125,15 @@ if (process.platform !== 'darwin') {
       }
       // A following view only moves down; the realize jump went to the first row.
       assert.ok(entry.upJump <= 40, `${entry.case}: the view jumped back up (${describe})`)
+      // LKM-354: a settle that restarts after every pin never gets quiet within the fixture's
+      // generous deadline and keeps raising the count. A slow runner only takes longer.
       assert.ok(
         entry.settleFinished,
         `${entry.case}: the settle still runs after the turn (${describe})`
+      )
+      assert.ok(
+        entry.settlesAfterTurn <= settlesAfterTurnLimit,
+        `${entry.case}: ${entry.settlesAfterTurn} settles after the turn, more than ${settlesAfterTurnLimit} (${describe})`
       )
     }
     // The reporter's state (blank chat, scrollbar between offsets 0 and 18): no message row is
