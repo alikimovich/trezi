@@ -17,10 +17,12 @@ import { checkAgentRuntime } from './smoke-agent-runtime'
 import { checkAgentVerify } from './smoke-agent-verify'
 import { checkBrowserSetup, restoreBrowserSetup } from './smoke-browser-setup'
 import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
+import { checkChangesPanel, restoreChangesPanel } from './smoke-changes-panel'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
 import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
+import { checkCodeLinkClick, restoreCodeLinkClick } from './smoke-code-link'
 import { checkCommentRows } from './smoke-comment-rows'
 import { checkVisibleComposer } from './smoke-composer'
 import { checkComposerSend } from './smoke-composer-send'
@@ -1380,6 +1382,12 @@ export async function runNativeCoreSmoke(
       cleanup: () => restoreSourceWrap(host, fixture)
     },
     {
+      name: 'changes-panel',
+      dependsOn: ['open-project'],
+      run: () => checkChangesPanel(host, fixture, artifacts),
+      cleanup: () => restoreChangesPanel(host, fixture)
+    },
+    {
       name: 'visible-composer',
       dependsOn: ['chat-ready'],
       run: async () => {
@@ -1475,6 +1483,12 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkChatUi(host, artifacts)
       }
+    },
+    {
+      name: 'code-link-click',
+      dependsOn: ['chat-ready'],
+      run: () => checkCodeLinkClick(host, fixture, artifacts),
+      cleanup: () => restoreCodeLinkClick(host, fixture)
     },
     {
       name: 'quit-alert',

@@ -2,6 +2,38 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-366: running-app checks for chat code links and the Changes list (test-only)
+
+- **Why.** LKM-364 shipped with fixture coverage only. These two native smokes drive the same paths in the running app. No product behaviour changed and there is no CHANGELOG line.
+- **`code-link-click` (`chat` group, `src/native/smoke-code-link.ts`).**
+  - Posts an assistant answer with `trezi-code:` links. Each link is clicked through `ChatTextView.clicked(onLink:at:)`, AppKit's link-click entry point, with the real link attribute; there is no synthetic input (new `chatText {click}` in `src/native/ChatTextVerification.swift`).
+  - Asserts:
+    - the exact range is selected, banded and visible (`sourceInspect.revealed`);
+    - `ChatTextView.appKitLinks` (a new diagnostic counter of NSWorkspace handoffs) stays 0 and Trezi stays frontmost;
+    - `..`, a symlink and `/etc/hosts` are refused with "Not opened in the editor: …" and nothing opens;
+    - repeat and alternate clicks re-reveal (the editor's reveal counter rises);
+    - a stale link after a new conversation, or racing a project switch, reveals nothing and leaks no card or source;
+    - the draft is kept and no file is written.
+  - Artifacts: `code-link-reveal`, `code-link-repeat`, `code-link-refused` and `code-link-switch` (`.png`/`.json`), plus `code-link-click.json`.
+- **`changes-panel` (new `changes` group, `src/native/smoke-changes-panel.ts`).**
+  - Uses a temp Git project (`src/native/smoke-changes-fixture.ts`): `feature` off `main` with an edit, add, rename, delete and binary committed, plus staged, unstaged and untracked files.
+  - Asserts:
+    - the merge-base label shows the ref and short SHA;
+    - committed changes are separate from the three uncommitted sections, with the exact rows and +/− counts;
+    - Refresh is the only control and the file operations are hidden;
+    - file and hunk clicks (`SourceDiffList.activate(row:)`, which a click calls) open 1–3, 5–6 and 3–3 over a kept draft, and a deleted file is refused;
+    - HEAD, branches, index entries and work-tree hashes are identical before and after;
+    - after a project switch, the non-Git project's list shows nothing from the Changes project, and coming back re-reads it (a file written meanwhile appears).
+  - Artifacts: `changes-panel-list`, `changes-panel-hunk` and `changes-panel-switch` (`.png`/`.json`), plus `changes-panel-git.json`.
+- **Harness.**
+  - New test-only `sourceNavigation` host request (`src/native/SourceNavigationVerification.swift`): the Files|Changes segment through its own action, row opens, caret collapse, and foreground captures with `recognize: false` (no OCR).
+  - `smoke-groups.ts` adds `changes` and maps both checks. Targeted run: `bun test/native-runtime.mjs --only=chat,changes` (300 s focused launcher timeout).
+- **(a) Unit/fixture evidence (passed in this worktree):**
+  - `native-smoke-groups`: `--only=chat` now runs 16 checks including `code-link-click`; `--only=changes` runs the prelude plus `changes-panel`; `chat,changes` is selectable and gets 300 s.
+  - New `native-changes-fixture` (unit): the smoke's project against the real `branchDiff`/`openDiff`, covering the label, sections, the exact rows, the ranges 1–3/5–6/3–3, the deleted-file refusal and unchanged Git state.
+  - Also passed: `native-chat-text`, `native-diff-list`, `retirement-census` (three new census rows), `distribution`, `swiftc -typecheck` of all 125 TreziHost sources, `typecheck:native` and `lint`.
+- **(b) Running-app GUI evidence: NOT RUN.** The worker had 0 native calls, so no scenario of either check has run in the app and no capture exists yet. Every GUI scenario stays open until a manager or CI `--only=chat,changes` run.
+
 ## 2026-10-26 — LKM-364: clickable code candidates and a read-only branch Changes list
 
 - **Candidates.**
