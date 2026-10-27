@@ -112,4 +112,42 @@ view.show("Streaming\n\n```ts\nconst a", streaming: true)
 require(view.rich.blocks.map(\.kind.rawValue) == ["text", "code"] && view.string == "Streaming\nconst a", "Unfinished fence: \(view.string)")
 let wider = view.fittingSize(width: 600), narrower = view.fittingSize(width: 120)
 require(narrower.height >= wider.height && wider.width == 600, "Height follows the proposed width")
-print("CHAT-TEXT PASS — one view per segment: drag, Select All, Copy (fences kept), code Copy buttons and backgrounds")
+// LKM-364: code candidates render as links and open only through `onLink` (Trezi's
+// editor). AppKit's own link handling, the path to NSWorkspace and other apps, sees only
+// web links: the delegate below is the first thing that handling calls, and it opens nothing.
+final class ExternalOpenProbe: NSObject, NSTextViewDelegate {
+    var reached: [String] = []
+    func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+        reached.append((link as? URL)?.absoluteString ?? "\(link)"); return true
+    }
+}
+let probe = ExternalOpenProbe()
+var routed: [String] = []
+view.delegate = probe
+// Some macOS versions return a link's fragment `#` as `%23`; the app accepts either, so the
+// routed and shown links are compared with it normalised.
+func plain(_ link: String) -> String { link.replacingOccurrences(of: "%23", with: "#") }
+view.onLink = { routed.append(plain($0)) }
+let candidates = """
+- [src/Card.module.css:1-3](trezi-code:src/Card.module.css#L1-L3) CSS module rule `.card`
+- [src/My Card.tsx:6](trezi-code:src/My%20Card.tsx#L6) inline style
+- [App.tsx:12](App.tsx:12), [escape](trezi-code:../outside.css#L1), [file](file:///etc/hosts), [web](https://example.com/x)
+"""
+view.show(candidates, streaming: false)
+let shown = view.string as NSString
+var linked: [String] = []
+view.textStorage?.enumerateAttribute(.link, in: NSRange(location: 0, length: shown.length)) { value, _, _ in
+    if let url = value as? URL { linked.append(plain(url.absoluteString)) }
+}
+require(linked == ["trezi-code:src/Card.module.css#L1-L3", "trezi-code:src/My%20Card.tsx#L6", "App.tsx:12", "trezi-code:../outside.css#L1", "file:///etc/hosts", "https://example.com/x"], "Candidates render as clickable links: \(linked)")
+require(shown.range(of: "src/Card.module.css:1-3").location != NSNotFound, "The filename and range are the link text")
+for label in ["src/Card.module.css:1-3", "src/My Card.tsx:6", "App.tsx:12", "escape", "file", "web"] {
+    let at = shown.range(of: label).location
+    view.clicked(onLink: view.textStorage!.attribute(.link, at: at, effectiveRange: nil)!, at: at)
+}
+require(routed == Array(linked.prefix(5)), "Code, file and crafted links go to Trezi's editor path only: \(routed)")
+require(probe.reached == ["https://example.com/x"], "Only the web link reaches AppKit's external handling: \(probe.reached)")
+view.onLink = nil
+view.clicked(onLink: URL(string: "trezi-code:src/a.css#L1")!, at: 0)
+require(probe.reached.count == 1, "Without a handler a code link opens nothing")
+print("CHAT-TEXT PASS — one view per segment: drag, Select All, Copy (fences kept), code Copy buttons and backgrounds; code links open only in Trezi's editor")

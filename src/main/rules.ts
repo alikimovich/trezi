@@ -289,8 +289,9 @@ export function treziRules(opts?: {
       `source set to that stamp and target "element" (its markup) or "styles" (inline`,
       `style, class/CSS rules, CSS modules, shared component), plus classes when the`,
       `context lists them. When it returns candidates instead of opening, list each`,
-      `with its provenance and let the user choose; never invent or claim an exact`,
-      `location the tool did not open.`,
+      `as its \`link\` Markdown exactly as given (a clickable filename and range that`,
+      `opens Trezi's editor) with its provenance, and let the user choose; never invent`,
+      `or claim an exact location the tool did not open.`,
       ``
     )
   }

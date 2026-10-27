@@ -24,6 +24,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseCodeLink } from '../src/shared/code-link.ts'
 import { compileProviderFixture, startProviderFixture } from './helpers/provider-fixture.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -474,6 +475,16 @@ try {
       ]
     )
     assert.ok(styles.candidates.every((c) => c.provenance))
+    // LKM-364: each candidate comes with a clickable link to its own range.
+    for (const c of styles.candidates) {
+      const href = /^\[[^\]]+\]\((trezi-code:[^)]+)\)$/.exec(c.link)?.[1]
+      assert.deepEqual(
+        parseCodeLink(href ?? ''),
+        { file: c.file, lines: { startLine: c.startLine, endLine: c.endLine } },
+        `${provider} candidate link ${c.link}`
+      )
+    }
+    assert.match(textOf(styles), /link/, `${provider} is told to show the links`)
     assert.equal(reveals().length, 1, `${provider} candidates opened nothing`)
   }
   await navigates(claude, 'claude')

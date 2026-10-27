@@ -1,3 +1,4 @@
+import { codeLinkTarget } from '../main/code-tools'
 import { setLandingProblem } from '../main/landing-context'
 import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatAction } from '../shared/native-chat'
@@ -123,6 +124,14 @@ export async function cardAction(
       const spawn = chat.context?.spawns.find((s) => s.id === action.id)
       const target = spawn && requestTarget(spawn.label)
       if (target) effect({ type: 'source', source: target.source })
+      break
+    }
+    // LKM-364: a code link in an answer (an open_code candidate) opens only in Trezi's
+    // editor, through open_code's project checks; a refused one says why.
+    case 'code-link': {
+      const target = await codeLinkTarget(chat.root, action.value)
+      if ('error' in target) chat.error = `Not opened in the editor: ${target.error}`
+      else effect({ type: 'code', ...target })
       break
     }
     case 'queue-remove':
