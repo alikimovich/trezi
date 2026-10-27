@@ -2,6 +2,25 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-26 — LKM-365: `native-chat-send-follow` forced cases end on the app's bound, not a quiet window
+
+- **Failure.** Main push CI on 4e232f86 (a docs-only merge): `stream-long: the realize scrolls restarted after they ended` (settles ended after 17.9 s, then 67 realize scrolls, up jump 7719 pt). This was the third different failure of this test after LKM-357 and LKM-359.
+- **Cause (test timing, not the app).** Streaming settles cannot go idle, so the fixture read "ended" from 1.5 s and 150 run-loop turns with no realize scroll. The product bound is in steps: 3 unresolved settles of up to 80 realizes. Nothing resets that count except a Send, a viewport/composer/chat/latest-button request, or a settle that settled with no realize. So once it has run out, a realize can only come from a reset. A pause in the middle of the bound (a settle task resumed late on a loaded runner) passed the quiet window. The rest of the 240 then counted as late. A CI log was not readable here, so the pre-end count is inferred (the same pattern as below).
+- **Reproduced.** A `CHAT_SWIFT` copy that starts stream-long's second settle 2 s late. The old fixture fails exactly like CI: ended after 80 realizes and 1 settle, then 86 late, up jump 7121 pt. The new fixture passes: 240 realizes, 3 settles; the old window would have ended it at 4.7 s.
+- **Fix (`test/fixtures/chat-send-follow/main.swift`, `test/native-chat-send-follow.mjs`).**
+  - Ended is the app's signal. New diagnostic `ChatModel.latestUnresolved` mirrors the settle's unresolved count (`src/native/Chat.swift`, no behaviour change). The fixture ends a case once it passes `ChatLatestSettle.unresolvedRestarts`. All forced cases have a 90 s hang cap and the 240-realize bound.
+  - The late window needs both time and samples (1.5 s and 30, or 3 s and 20 when streaming).
+  - `realizedOnSend` waits for the first realize, or fails once the Send's own settles spend the bound again. It is not a 1 s window: under load blank-short read 1.74 and 1.96 s.
+  - `leak-stream` leaks the first two frame reports after a realize, only within that settle, and clears them when it ends. It no longer leaks for 60 ms: a stall stretched that into the next settle, whose real settled reading rightly reset the count, so under heavy jitter the case never ended.
+  - The fixture's stop is now 300 s instead of runFixture's 180 s (about 125 s alone), and the tier timeout 420 s.
+  - Every assertion keeps its meaning or gets stricter: realizes ≤ 240, no realize after the end, settling ≤ 3 late samples, up jump ≤ 40 pt, rows back, 0–2 pt from the end.
+- **Failure output.** Each forced assertion names the case and prints its timeline: end time and the old quiet-window time, settle ends as `t:realizes(unresolved)`, the realize span, and after the end each realize `t:#n@offset` and move up `t:-pt`.
+- **Checks.** These were the last 12 runs after the final change, and all passed:
+  - 8 forced-case runs, 4 at a time, under 24 busy loops on 12 cores, with 0–60 ms stalls per harness turn, random 0–2 s settle-start delays and a 2 s pause in stream-long or stream-short. Stream cases ended at 36–51 s with 239–240 realizes.
+  - 4 runs of the real test at once under 24 busy loops. Rows were shown at most 0.013 s after the Send.
+  - Negative controls fail. Chunks resetting the count: `never ended` (241). A reset once the bound is spent: `stream-long: the realize scrolls restarted after they ended`, with the timeline. LKM-354's `realized` ignored: leak-stream `never ended` (241 realizes, 88 settles).
+- **Limits.** The CI log was not readable, there was no native run (the fixture is unit tier), and main CI was not observed.
+
 ## 2026-10-26 — LKM-360: installed-app chat reliability on 3f878add (investigation only; scenarios a–e not run)
 
 - **Result.** No product code, test or script changed. No GUI scenario ran: this worker session has 0 native calls (`verify` tier native, groups `chat` → `limit_reached`, `nativeCallsRemaining: 0`), and `open`/AppleEvents are blocked in the sandbox, so the manager's native budget was the only route and it is unavailable. Per the ticket this is an engineering blocker, not a pass.

@@ -389,19 +389,25 @@ still running after the turn, also when cards after the reply fill the view.
 Two more cases (long and short chat) drop the model's message frames after a
 send (the verification hook `messageFramesFilter`), the reporter's state of no
 row measured in view: the bounded settles (at most 240 realize scrolls) must end
-(within 20 s) and then stay ended with no realize scroll and the clip put, and once
+and then stay ended with no realize scroll and the clip put, and once
 the frames are measured again the sent rows are in the reading area, the clip at
 the end. Two further cases do the same while the reply streams a chunk every 0.1 s
-(each chunk is a content request): the settles have ended once no realize scroll
-ran for 1.5 s and 150 run-loop turns. They must end before more than 240 realize
-scrolls run, not within a time (LKM-359): the bound is in settle steps, and a
-loaded runner stretches each step and quiet turn, so the old fixed 25 s cap failed
-with the bound holding. A 90 s cap only stops a hung run. Then none may run and the clip make no move up of over
-40 pt in the 3 s after, with the chunks still arriving. `leak-stream` also lets
-the frames measured in the 60 ms after each realize scroll through, then loses
-them again. Every forced case ends by sending a second prompt with the frames
-still dropped and the bound spent: a realize scroll must follow within 1 s
-(`realizedOnSend`), because a new message restarts the count. It takes
+(each chunk is a content request). Ended is the app's own signal (LKM-365): more
+unresolved settles in a row than `ChatLatestSettle.unresolvedRestarts` (the
+diagnostic `latestUnresolved`), after which nothing may realize until a request
+resets the count. It is not a quiet time: on the loaded 1-shard main CI a 1.5 s
+pause mid-bound read as ended and the rest of the bound as a restart. They must end
+before more than 240 realize scrolls run, not within a time (LKM-359): the bound is
+in settle steps, which a loaded runner only stretches. A 90 s cap only stops a hung
+run. Then none may realize, and the clip make no move up of over 40 pt, for 1.5 s
+and 30 samples after (streaming: 3 s and 20 samples, with the chunks still
+arriving). `leak-stream` also lets the first two frame reports after each realize
+scroll through, then loses the frames again, at the latest when that settle ends.
+Every forced case ends by sending a second prompt with the frames still dropped and
+the bound spent: a realize scroll must follow (`realizedOnSend`) before that Send's
+settles spend the bound again, because a new message restarts the count. A failure
+prints the case's timeline: settle ends with the realize scrolls so far and the
+unresolved count, each realize scroll and move up after the end. It takes
 `CHAT_SWIFT` too.
 LKM-357: the 1 s runs from the app's own Send moment (`sendRevision` raised in
 `NativeChat.update`) to the first frames the conversation reports with a sent row
