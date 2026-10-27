@@ -93,7 +93,9 @@ export function gitState(project: string) {
       'for-each-ref',
       '--format=%(refname) %(objectname)',
       'refs/heads/main',
-      'refs/heads/feature'
+      'refs/heads/feature',
+      // Trezi's work branch, once opening the project has moved `feature` onto it.
+      'refs/heads/trezi/feature'
     ),
     index: read('ls-files', '--stage'),
     files

@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-27 — LKM-370: fix the two LKM-366 smokes that failed on main (test-only)
+
+- **`changes-panel`.** Opening a project moves its checkout onto Trezi's work branch (`ensureBranch`), so in the running app the label reads `Branch trezi/feature @ <sha>`. The fixture unit test calls `branchDiff` directly and still sees `feature`. The smoke now waits for that switch, instead of relying only on the 1 s delay, before it takes the Git state, and then expects `trezi/feature`. `gitState` also records `refs/heads/trezi/feature`.
+- **`code-link-click`.** `chat-ui`'s refused submit left its "Corner radius is required. Gap is required." `error` card on screen. The first refusal wait (`outside`) found that card instead of its own. `code-link-click` now dismisses any earlier error card before it starts, and `chat-ui` dismisses its card during cleanup.
+- **Hand-off to the next check.** Once `changes-panel` passed, its cleanup switched back to the first project while that project's preview was still restarting (`statusKind: busy`, preview hidden). `native-chat` then failed its 5 s foreground wait. Both cleanups that switch projects (`restoreChangesPanel`, `restoreCodeLinkClick`) now wait up to 30 s until the first project is running and its preview is shown.
+- **Evidence.** The worker's one native run (`--only=changes,chat`) came before the hand-off fix. In it, `changes-panel` PASSED in the running app. `native-chat` then failed as described above, so the rest of the chat group, including `code-link-click`, was skipped. The `chat-ui`/`code-link-click` fix and the hand-off wait have not been run in the app yet. Unit `native-changes-fixture` passes.
+- No product behaviour changed, so there is no CHANGELOG line.
+
 ## 2026-10-26 — LKM-366: running-app checks for chat code links and the Changes list (test-only)
 
 - **Why.** LKM-364 shipped with fixture coverage only. These two native smokes drive the same paths in the running app. No product behaviour changed and there is no CHANGELOG line.

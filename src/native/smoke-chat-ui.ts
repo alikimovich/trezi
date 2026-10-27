@@ -186,6 +186,8 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
     )
   } finally {
     await host.request('chatUi', { restore: true })
+    // The refused submit's "… is required." card stays shown otherwise.
+    await host.request('chatPerform', { action: 'error-dismiss', card: 'error' })
     // Like smoke-chat: keep the stub if nothing was sent, so a late send never escapes.
     if (sent.length) provider.restore()
   }
