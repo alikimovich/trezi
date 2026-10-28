@@ -303,6 +303,9 @@ const opening = new Map<string, Promise<OpenProjectResult>>()
 // landing/reconciliation, and swept wherever a sessionKey leaves the `sessions` map
 // so it can't outlive its session.
 const runningKeys = new Set<string>()
+// Keep the send slot closed while a stopped provider generation is replaced.
+// restartChatSession clears runningKeys before its caller finishes settling Stop.
+const stopRebuilds = new Map<string, ProviderSession>()
 const preparingTurns = new Map<string, { cancelled: boolean }>()
 // LKM-165: when each running chat last made progress, and the turn the owner admitted
 // last, so a turn that stops making progress can be ended in both places.
@@ -1418,7 +1421,8 @@ export function registerAgentIpc(
     root: string,
     sessionKey: string,
     options: AgentOptions = {},
-    reason: 'model' | 'restart' = 'model'
+    reason: 'model' | 'restart' = 'model',
+    onReplaced?: (session: ProviderSession) => void
   ): Promise<{ ok: boolean; error?: string }> => {
     const key = projectKey(root)
     if (!sessionKeysForProject(key).includes(sessionKey)) {
@@ -1464,6 +1468,7 @@ export function registerAgentIpc(
         previous.transcript.map((entry) => ({ ...entry }))
       )
       sessions.set(sessionKey, s)
+      onReplaced?.(s)
       if (activeKey === sessionKey) activeSessionKeyByProject.set(key, sessionKey)
       return { ok: true }
     } catch (err) {
@@ -1837,8 +1842,10 @@ export function registerAgentIpc(
       const session = key ? sessions.get(key) : null
       if (requestedKey && !session) throw new Error('This chat is closed.')
       // The chat is busy: the caller queues the message (and the watchdog bounds the wait).
-      if (key && staleChat(key, STALE_SEND_MS)) await settleChat(key, STUCK_NOTE)
-      if (key && runningKeys.has(key)) throw new Error(CHAT_BUSY)
+      if (key && stopRebuilds.get(key) !== session && staleChat(key, STALE_SEND_MS))
+        await settleChat(key, STUCK_NOTE)
+      if (key && (runningKeys.has(key) || stopRebuilds.get(key) === session))
+        throw new Error(CHAT_BUSY)
       if (!session || !key) {
         safeSend(getWindow, 'agent:event', {
           type: 'error',
@@ -2457,7 +2464,7 @@ export function registerAgentIpc(
     for (const id of [...session.pending.keys()]) resolvePending(session, id, 'deny')
     if (session.pendingQuestions)
       for (const id of [...session.pendingQuestions.keys()]) resolveQuestion(session, id, null)
-    const root = session.root
+    const root = session.record.projectRoot
     // A stop that lands after the turn already finished/aborted makes the SDK
     // throw "Operation aborted" — treat it as the no-op it is.
     //
@@ -2504,12 +2511,33 @@ export function registerAgentIpc(
     if (
       turnIds.get(sessionKey) === stoppedTurn &&
       runningKeys.has(sessionKey) &&
-      trackers.get(session)?.current &&
+      trackers.get(session)?.current?.turn === stoppedTurn &&
       !landingInFlight(sessionKey) &&
       owned?.chats.find((chat) => chat.chat === sessionKey)?.turn === stoppedTurn &&
       owned?.chats.find((chat) => chat.chat === sessionKey)?.phase === 'running'
-    )
-      await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
+    ) {
+      // The old provider may still emit an untagged terminal after its run is
+      // dropped. Replace its generation before opening the send slot, so that
+      // terminal can never be attributed to the next turn's tracker.
+      let fencedSession = session
+      stopRebuilds.set(sessionKey, fencedSession)
+      try {
+        const rebuilt = await restartChatSession(
+          root,
+          sessionKey,
+          session.options,
+          'restart',
+          (s) => {
+            fencedSession = s
+            stopRebuilds.set(sessionKey, s)
+          }
+        )
+        if (!rebuilt.ok) throw new Error(rebuilt.error ?? 'Could not restart stopped chat.')
+        await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
+      } finally {
+        if (stopRebuilds.get(sessionKey) === fencedSession) stopRebuilds.delete(sessionKey)
+      }
+    }
   }
 
   // Don't leave any backend subprocess running after trezi quits. Each chat is closed

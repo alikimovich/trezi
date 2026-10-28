@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-28 — LKM-375 final review repair: fence late provider terminals after Stop
+
+- Independent review confirmed that dropping the stopped run from `TurnTracker` alone was insufficient. Built-in providers emit untagged terminals; a late `done` from the old provider could be attributed to a replacement turn on the same session. The Stop fallback now rebuilds the provider generation before settling the old turn, and holds the send slot through the rebuild and settlement. The old generation's hook cannot claim a terminal for the new session; admitted repository writes and per-chat worktrees are unchanged.
+- `test/conversation-owner.mjs` now sends A, settles its no-op interrupt, sends B on the replacement provider, delivers an untagged late `done` through A's old hook, and asserts B remains running with no landing. B's own `done` must then land B and leave the owner idle. The earlier repo-lane diagnosis remains: worktrees isolate source and model execution, while live repository writes still share the serialized admission lane. The screenshot's specific incident remains unproven without its log.
+- Manager quick verification passed after the repair: typecheck, typecheck:native, lint and 274 unit checks passed (3 skipped). Native calls remain unavailable to this worker; the chat stop/queue smoke fixture is present for the post-merge native suite.
+
 ## 2026-10-28 — LKM-375 second review repair: Stop fallback keeps the tracker and the stale-chat net
 
 - A Stop fallback that settles a turn whose provider run never ended now drops that run from the `TurnTracker` (`drop(turn)`, called by `settleChat`). Otherwise the stale run stayed at the head and the next turn's untagged events and first `done` were credited to the stopped turn, leaving the replacement turn running. `test/conversation-owner.mjs` sends a second turn after a no-op-interrupt settle and asserts `landing-finished` for that turn and an idle owner.

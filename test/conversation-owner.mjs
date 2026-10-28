@@ -103,6 +103,9 @@ mock.module('../src/main/backends/index.ts', () => ({
           cap.finalize()
           emit({ type: 'done' })
         },
+        // A terminal already queued by an old provider can arrive after disposal.
+        // Deliver it to that generation's hook without the fake's disposed guard.
+        lateDone: () => context.onEvent?.({ type: 'done', projectKey: context.emitKey }),
         error: (message) => emit({ type: 'error', message }),
         ask: (id, toolName) => {
           session.pending.set(id, {
@@ -911,9 +914,27 @@ try {
       false,
       'a Stop the provider never answers settles the turn'
     )
+    await until(() => providers.length > dropOpened + 1, 'replacement provider after Stop')
+    const replacementProvider = providers[dropOpened + 1]
     await invoke('agent:send', 'second', undefined, dropKey, {}, 'drop-second')
-    await until(() => dropProvider.sent.length === 2, 'second drop send')
-    dropProvider.done()
+    await until(() => replacementProvider.sent.length === 1, 'second drop send on replacement')
+    dropProvider.lateDone()
+    assert.equal(
+      (await within(invoke('agent:turn-state', dropKey), 'turn state after old terminal')).running,
+      true,
+      'the old provider terminal cannot finish the replacement turn'
+    )
+    assert.equal(
+      dropEvents.some((e) => e.type === 'landing-finished' && e.turn === 'drop-second'),
+      false,
+      'the old provider terminal cannot land the replacement turn'
+    )
+    assert.deepEqual(
+      { turn: (await ownerOf(dropKey))?.turn, phase: (await ownerOf(dropKey))?.phase },
+      { turn: 'drop-second', phase: 'running' },
+      'the owner still holds the replacement turn'
+    )
+    replacementProvider.done()
     await until(
       () => dropEvents.some((e) => e.type === 'landing-finished' && e.turn === 'drop-second'),
       'second drop landing'
