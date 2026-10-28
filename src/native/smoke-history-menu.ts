@@ -4,6 +4,7 @@ import { stubAgentSendForSmoke } from '../main/agent'
 import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { requireCleanSharedChat } from './smoke-shared-chat'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -40,6 +41,7 @@ export async function checkHistoryMenu(host: NativeBridge, artifacts: string) {
   })
 
   // A turn in chat A; then chat B becomes the active chat and A is a background chat.
+  await requireCleanSharedChat(host, 'history-menu')
   await host.request('composerPerform', { text: 'History indicator turn' })
   await waitFor(async () => (await host.request('composerInspect')).enabled, 'composer enabled')
   await host.request('composerPerform', { action: 'send' })
