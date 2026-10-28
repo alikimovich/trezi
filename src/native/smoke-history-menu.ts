@@ -41,7 +41,10 @@ export async function checkHistoryMenu(host: NativeBridge, artifacts: string) {
   })
 
   // A turn in chat A; then chat B becomes the active chat and A is a background chat.
-  await requireCleanSharedChat(host, 'history-menu')
+  await requireCleanSharedChat(host, 'history-menu', {
+    state: () => nativeChat.services.invoke('agent:turn-state', a),
+    controller: () => nativeChat.get(a)
+  })
   await host.request('composerPerform', { text: 'History indicator turn' })
   await waitFor(async () => (await host.request('composerInspect')).enabled, 'composer enabled')
   await host.request('composerPerform', { action: 'send' })
