@@ -152,16 +152,18 @@ async function afterStopQueueCheck({ reset }) {
 {
   const chat = readFileSync(new URL('../src/native/smoke-chat.ts', import.meta.url), 'utf8')
   const cleanup = chat.slice(chat.lastIndexOf('} finally {'))
-  assert.ok(cleanup.indexOf('resetSharedChat(host)') > 0, 'native-chat finally lost its reset')
+  // LKM-377: `cleanSharedChat` resets the composer, then ends the backend turn
+  // (test/native-smoke-stop-cleanup.mjs drives it on the real backend).
+  assert.ok(cleanup.indexOf('cleanSharedChat(') > 0, 'native-chat finally lost its reset')
   assert.ok(
-    cleanup.indexOf('resetSharedChat(host)') < cleanup.indexOf('provider.restore()'),
+    cleanup.indexOf('cleanSharedChat(') < cleanup.indexOf('provider.restore()'),
     'the reset must run while the provider stub still catches sends'
   )
   const history = readFileSync(
     new URL('../src/native/smoke-history-menu.ts', import.meta.url),
     'utf8'
   )
-  const guarded = history.indexOf("requireCleanSharedChat(host, 'history-menu')")
+  const guarded = history.indexOf("requireCleanSharedChat(host, 'history-menu'")
   assert.ok(
     guarded > 0 && guarded < history.indexOf("{ text: 'History indicator turn' }"),
     'history-menu no longer checks the shared chat before its send'

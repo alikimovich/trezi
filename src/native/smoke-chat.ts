@@ -9,7 +9,7 @@ import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
 import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
-import { resetSharedChat } from './smoke-shared-chat'
+import { cleanSharedChat } from './smoke-shared-chat'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -485,16 +485,22 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
         2
       )
     )
-    noTerminalStop = false
-    send({ type: 'done', turn })
   } finally {
     noTerminalStop = false
     // LKM-376: the Stop check above leaves its paused queue and draft for the capture; the
     // next check sends on this same chat. Reset it, pass or fail, while the stubs still
     // catch any send. A reset failure fails only a check that otherwise passed (below).
-    reset = await resetSharedChat(host).then(
-      () => undefined,
-      (error: unknown) => error
+    // LKM-377: the no-terminal Stop left the backend turn running (only the override said
+    // otherwise). End it with the provider's untagged `done`, as the sends above do: a
+    // turn-tagged `done` is stale to the turn tracker and ends nothing. Then wait for the
+    // real agent:turn-state and the controller to be idle before the stubs go.
+    reset = await cleanSharedChat(
+      host,
+      {
+        state: () => originalInvoke('agent:turn-state', state.chat),
+        controller: () => nativeChat.get(state.chat)
+      },
+      () => send({ type: 'done' })
     )
     nativeChat.services.invoke = originalInvoke
     // If preparation failed before send, retain the stub until this test process

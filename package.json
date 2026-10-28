@@ -157,6 +157,7 @@
     "test:skills-install": "bun test/skills-install.mjs",
     "test:native-chat-controller": "bun test/native-chat-controller.mjs",
     "test:native-smoke-shared-chat": "bun test/native-smoke-shared-chat.mjs",
+    "test:native-smoke-stop-cleanup": "bun test/native-smoke-stop-cleanup.mjs",
     "test:chat-start": "bun test/chat-start.mjs",
     "dev": "bun scripts/dev-native.mjs",
     "build": "bun scripts/build-native.mjs",

@@ -117,6 +117,7 @@ export const UNIT = [
   'native-chat-send-follow',
   'native-smoke-wait',
   'native-smoke-shared-chat',
+  'native-smoke-stop-cleanup',
   'native-chat-reveal',
   'native-chat-text',
   'native-diff-list',
