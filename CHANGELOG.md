@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-28
+
 ### Fixed
 - Stopping a chat waiting behind another chat's repository landing now ends its wait and keeps its edits for Retry; Stopping also clears when the canceled turn has ended without a terminal event (LKM-375).
 
