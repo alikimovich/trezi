@@ -9,6 +9,7 @@ import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
 import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
+import { resetSharedChat } from './smoke-shared-chat'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -32,6 +33,7 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   const sent: unknown[][] = []
   let turn = ''
   let noTerminalStop = false
+  let reset: unknown
   // The actual agent:send RPC and its provider event hook own the log lines.
   // Only the provider's outbound send is stubbed; no paid provider call occurs.
   const provider = stubAgentSendForSmoke(state.chat, (...args) => {
@@ -486,11 +488,20 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     noTerminalStop = false
     send({ type: 'done', turn })
   } finally {
+    noTerminalStop = false
+    // LKM-376: the Stop check above leaves its paused queue and draft for the capture; the
+    // next check sends on this same chat. Reset it, pass or fail, while the stubs still
+    // catch any send. A reset failure fails only a check that otherwise passed (below).
+    reset = await resetSharedChat(host).then(
+      () => undefined,
+      (error: unknown) => error
+    )
     nativeChat.services.invoke = originalInvoke
     // If preparation failed before send, retain the stub until this test process
     // exits: a late agent:send must never escape to a real provider subscription.
     if (sent.length) provider.restore()
   }
+  if (reset) throw reset
   console.log(
     'Swift/Bun chat without an application WebView: Send, queue, streamed Markdown, permissions and questions passed.'
   )
