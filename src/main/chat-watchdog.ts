@@ -36,7 +36,7 @@ export class LandingGuard {
   }
 
   /** `work` settles as itself, or rejects with `LandingEnded` on a stall or `abandon`. */
-  run<T>(key: string, work: Promise<T>, stuckMs = this.stuckMs): Promise<T> {
+  run<T>(key: string, work: Promise<T>, stuckMs = this.stuckMs, onEnd?: () => void): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const done = (settle: () => void): void => {
         clearTimeout(timer)
@@ -45,7 +45,10 @@ export class LandingGuard {
         if (!ends?.size) this.active.delete(key)
         settle()
       }
-      const end = (reason: string): void => done(() => reject(new LandingEnded(reason)))
+      const end = (reason: string): void => {
+        onEnd?.()
+        done(() => reject(new LandingEnded(reason)))
+      }
       const timer = setTimeout(
         () =>
           end(

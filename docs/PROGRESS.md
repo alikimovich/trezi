@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-28 — LKM-375 review repair: Stop races at the owner and landing queue
+
+- The review confirmed the shared repository lane diagnosis, but found a second race: a provider may acknowledge interrupt before its ordinary terminal has reached the Swift owner. Stop now waits out the remaining interrupt window and checks the provider tracker and owner's running phase before forcing a stuck-turn settlement; a routine terminal retains its normal landing path and does not emit the stuck note.
+- Abandoning a queued landing now marks its admission token synchronously, including when it is waiting behind its own chat's earlier draining write. That earlier write keeps its real repository lease; the later canceled landing skips Git work.
+- The owner fixture covers a terminal after interrupt acknowledgement, a delayed owner cancel while a replacement turn begins, and a delayed fallback release across close/reopen of the same chat. The landing fixture covers Stop before the chat-chain callback starts. The earlier worktrees isolated source and provider work, while the live repository's shared write lane still serialized landings; this is why worktree isolation alone did not cover Stop while waiting for admission. The screenshot's exact cause remains unproven without its incident log.
+- Manager quick verification passed after the repair: typecheck, typecheck:native, lint, and 274 unit checks passed (3 skipped). Native chat smoke remains for CI because this worker has zero native calls.
+
 ## 2026-10-28 — LKM-375: cancel repository admission and reconcile Stop
 
 - **Diagnosis.** Earlier worktree isolation (2026-07-16) gave each chat a private source tree and concurrent model execution. The 2026-08-08 repo-scoped queue still serializes Git effects on the shared live HEAD and index. LKM-165's landing guard began only inside the lease callback, so a chat waiting behind another chat had no Stop target. Native Stop also waited for a terminal event to clear Stopping, even when interrupt did nothing or the event was missed. These code paths confirm the reported mechanism; the specific screenshot's incident has no available log, so its exact cause remains unproven.

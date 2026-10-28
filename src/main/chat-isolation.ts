@@ -273,34 +273,37 @@ export function afterTurn(
       return batch
     })
   )
-  const task = landings.run(sessionKey, write).catch(async (error) => {
-    if (!(error instanceof LandingEnded)) {
-      await landingFailed(sessionKey, st, error, turn)
-      return null
-    }
-    if (!admitted) {
+  const task = landings
+    .run(sessionKey, write, undefined, () => {
       cancelled = true
-      await landingFailed(sessionKey, st, error, turn)
-      return null
-    }
-    // An admitted batch owns the lease until its real Git work finishes. Stop
-    // ends the visible wait, but never interrupts a write partway through apply.
-    draining.add(sessionKey)
-    try {
-      await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
-      const late = await write.then(
-        (files) => ({ files }),
-        (cause) => ({ cause })
-      )
-      if ('cause' in late) {
-        await landingFailed(sessionKey, st, late.cause, turn)
+    })
+    .catch(async (error) => {
+      if (!(error instanceof LandingEnded)) {
+        await landingFailed(sessionKey, st, error, turn)
         return null
       }
-      return late.files
-    } finally {
-      draining.delete(sessionKey)
-    }
-  })
+      if (!admitted) {
+        await landingFailed(sessionKey, st, error, turn)
+        return null
+      }
+      // An admitted batch owns the lease until its real Git work finishes. Stop
+      // ends the visible wait, but never interrupts a write partway through apply.
+      draining.add(sessionKey)
+      try {
+        await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
+        const late = await write.then(
+          (files) => ({ files }),
+          (cause) => ({ cause })
+        )
+        if ('cause' in late) {
+          await landingFailed(sessionKey, st, late.cause, turn)
+          return null
+        }
+        return late.files
+      } finally {
+        draining.delete(sessionKey)
+      }
+    })
   st.chain = task.catch(() => null)
   return task.catch(() => null)
 }

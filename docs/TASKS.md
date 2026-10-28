@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Chat cancellation at repository admission (LKM-375)
 
+- [x] Review repair: preserve the ordinary terminal path after interrupt acknowledgement; test delayed owner cancel, delayed settlement, and cancellation before a chat-chain callback begins.
 - [x] Bound and cancel a chat's landing wait from enqueue; a canceled admission skips Git work, while an admitted write retains the lease until it completes.
 - [x] Reconcile Stop against the same turn's state; keep a later turn safe from stale terminal and cancel replies, with queued messages paused and the draft intact.
 - [x] Add repo-lane contention and native controller regressions; extend the chat smoke fixture for no-terminal Stop and paused queue/draft.

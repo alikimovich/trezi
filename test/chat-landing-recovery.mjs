@@ -259,12 +259,19 @@ try {
     assert.equal(early.ok, false, 'a Retry while the abandoned landing runs is refused')
     assert.match(early.error, /still finishing/)
     const next = afterTurn(drain.key, 'Next turn', [], 'success')
-    await quiet()
+    assert.equal(landingInFlight(drain.key), true, 'the new guard exists before its chain starts')
+    assert.equal(abandonLanding(drain.key, 'Stopped behind the draining write.'), true)
+    await Promise.race([
+      next,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('The chained landing did not stop promptly')), 1000)
+      )
+    ])
     assert.equal(hold.calls(), 1, 'the next landing waits behind the abandoned one')
     assert.equal(read(drain.root), 'export const bar = 0\n')
     hold.release()
     await landing
-    await next
+    assert.equal(hold.calls(), 1, 'the cancelled chain never enters Git after the lease drains')
     assert.equal(read(drain.root), 'export const bar = 7\n', 'the abandoned batch finished')
     assert.deepEqual(isolationSnapshot(drain.key), { state: 'isolated', branch: drain.branch })
     assert.equal(agentWorkspaceState(drain.key).state, 'isolated')

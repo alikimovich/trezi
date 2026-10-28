@@ -2471,14 +2471,36 @@ export function registerAgentIpc(
     if (outcome && typeof outcome === 'object' && outcome.hardStopped) {
       await restartChatSession(root, sessionKey, session.options, 'restart')
     }
-    // Stop on a chat that shows running with nothing in flight (no provider turn, no
-    // landing, quiet for a while): settle it, so Stop is never a dead end (LKM-165).
-    if (turnIds.get(sessionKey) === stoppedTurn && !landingInFlight(sessionKey)) {
-      // A provider may acknowledge interrupt without emitting a terminal. The owner
-      // cancellation and this process's mirror still need a final state for this turn.
-      if (runningKeys.has(sessionKey))
-        await settleChat(sessionKey, STUCK_NOTE, stoppedTurn, remaining())
-    }
+    // A normal provider terminal can arrive just after interrupt resolves. Give its
+    // owner claim and reconciliation the rest of the interrupt window before using
+    // the stuck-turn fallback. The tracker drops its run as soon as that terminal
+    // arrives, even while the owner is still recording it.
+    if (turnIds.get(sessionKey) !== stoppedTurn || !runningKeys.has(sessionKey)) return
+    if (remaining() > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining()))
+    if (
+      turnIds.get(sessionKey) !== stoppedTurn ||
+      !runningKeys.has(sessionKey) ||
+      landingInFlight(sessionKey) ||
+      !trackers.get(session)?.current
+    )
+      return
+    // Check the owner's phase before forcing an end. An already claimed terminal
+    // may be entering its landing even if this process has not registered it yet.
+    const owned = await Promise.race([
+      conversation()
+        .snapshot()
+        .catch(() => null),
+      new Promise<null>((resolve) => setTimeout(resolve, 500, null))
+    ])
+    if (
+      turnIds.get(sessionKey) === stoppedTurn &&
+      runningKeys.has(sessionKey) &&
+      trackers.get(session)?.current &&
+      !landingInFlight(sessionKey) &&
+      owned?.chats.find((chat) => chat.chat === sessionKey)?.turn === stoppedTurn &&
+      owned?.chats.find((chat) => chat.chat === sessionKey)?.phase === 'running'
+    )
+      await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
   }
 
   // Don't leave any backend subprocess running after trezi quits. Each chat is closed
