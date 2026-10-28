@@ -30,6 +30,14 @@ export class TurnTracker {
     return head ? { turn: head.turn, run: head.run } : null
   }
 
+  /**
+   * A turn settled without its provider terminal (a Stop the provider never answered):
+   * forget its sends, so the next turn's events are not credited to it.
+   */
+  drop(turn: string): void {
+    this.runs = this.runs.filter((run) => run.turn !== turn)
+  }
+
   attribute(event: AgentEvent): Attribution | null {
     const head = this.runs[0]
     if (!head) return null

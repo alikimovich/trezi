@@ -24,6 +24,11 @@ const live = '/Users/me/app'
   assert.equal(guard.abandon('k', 'again'), false, 'nothing left to stop')
   assert.equal(await guard.run('k', Promise.resolve(7)), 7, 'a landing that finishes is untouched')
   await assert.rejects(guard.run('k', Promise.reject(new Error('git failed'))), /git failed/)
+  const first = guard.run('k', never(), 60_000)
+  const queued = guard.run('k', never(), 60_000)
+  assert.equal(guard.abandon('k', 'Stopped both.'), true)
+  await Promise.all([assert.rejects(first, /Stopped both/), assert.rejects(queued, /Stopped both/)])
+  assert.equal(guard.has('k'), false)
 
   let now = 0
   const dog = new TurnWatchdog(1000, () => now)

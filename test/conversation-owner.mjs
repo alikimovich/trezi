@@ -48,11 +48,16 @@ process.env.TREZI_USER_DATA = agentProfile
 
 // A scripted provider: the test streams each session's events (never a real SDK).
 const providers = []
+let failNextStart = false
 mock.module('../src/main/backends/index.ts', () => ({
   pickProvider: () => ({
     supportsSpawn: true,
     generateTitle: async () => 'Fixture title',
     startSession: async (cwd, options, getWindow, context) => {
+      if (failNextStart) {
+        failNextStart = false
+        throw new Error('scripted replacement start failure')
+      }
       const cap = createRecordCapture(cwd, projectKey(cwd))
       let disposed = false
       const entry = { cwd, options, context, sent: [], settled: [] }
@@ -103,6 +108,9 @@ mock.module('../src/main/backends/index.ts', () => ({
           cap.finalize()
           emit({ type: 'done' })
         },
+        // A terminal already queued by an old provider can arrive after disposal.
+        // Deliver it to that generation's hook without the fake's disposed guard.
+        lateDone: () => context.onEvent?.({ type: 'done', projectKey: context.emitKey }),
         error: (message) => emit({ type: 'error', message }),
         ask: (id, toolName) => {
           session.pending.set(id, {
@@ -148,6 +156,19 @@ const fixtures = new Set()
 let binary,
   count = 0
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const within = async (work, label, ms = 20_000) => {
+  let timer
+  try {
+    return await Promise.race([
+      work,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out: ${label}`)), ms)
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 // A deadline, not a poll count: landing a turn runs real Git and can take far longer on a loaded machine.
 const until = async (condition, label) => {
   const deadline = Date.now() + 30_000
@@ -255,6 +276,11 @@ async function ownerScript(o) {
   await step('abort again', () => o.abort('P2', 'v1'))
   await step('begin c3 v2', () => o.begin('P2', 'v2'))
   await step('send c3 v2', () => o.send('P2', 'v2', U('stop me', 3100)))
+  assert.equal(
+    (await o.cancel('P2', 'v1')).turn,
+    'v2',
+    'late Stop cannot cancel the newer owner turn'
+  )
   await step('cancel running', () => o.cancel('P2'))
   const c3 = R('chat-3', 'P2', [U('stop me', 3100), A('halfway', 3200)])
   await step('c3 done after stop (failed)', () => o.terminal('P2', 'v2', 0, 'done', c3))
@@ -551,8 +577,42 @@ try {
     // Stop while running: lands failed, pauses, never continues.
     await submit('stop me', key2)
     await until(() => p2.sent.length === 2, 'stoppable send')
-    await controller.stop(chat2)
+    let didInterrupt
+    const interrupted = new Promise((resolve) => {
+      didInterrupt = resolve
+    })
+    p2.session.interrupt = async () => {
+      didInterrupt()
+    }
+    const stopping = controller.stop(chat2)
+    await within(interrupted, 'provider interrupt')
+    assert.equal(
+      (await invoke('agent:turn-state', key2)).running,
+      true,
+      'interrupt acknowledgement alone cannot release a running turn'
+    )
+    assert.equal(
+      events.some(
+        (event) =>
+          event.type === 'status' &&
+          event.projectKey === key2 &&
+          /stopped making progress/.test(event.text)
+      ),
+      false
+    )
+    p2.done() // The ordinary terminal arrives after interrupt has returned.
+    await stopping
     await until(() => !chat2.isRunning, 'stopped')
+    assert.equal(
+      events.some(
+        (event) =>
+          event.type === 'status' &&
+          event.projectKey === key2 &&
+          /stopped making progress/.test(event.text)
+      ),
+      false,
+      'a routine Stop never emits the stuck-turn note'
+    )
     assert.equal(chat2.paused, true)
 
     // Model handoff: the next turn carries the recorded conversation, once.
@@ -675,6 +735,363 @@ try {
     setEditingOwner(owners.editing)
     const repo = repository('repo-swift')
     const swift = await agentScenario(repo)
+    // A delayed owner cancel belongs to the turn captured when Stop was pressed.
+    // Its response must never interrupt or cancel a replacement turn.
+    const raceRepo = repository('repo-stop-owner-race')
+    const raceKey = projectKey(raceRepo)
+    const raceEvents = []
+    window = (event) => raceEvents.push(event)
+    const opened = providers.length
+    await invoke('agent:open-project', raceRepo, { provider: 'claude' })
+    const raceProvider = providers[opened]
+    await invoke('agent:send', 'first', undefined, raceKey, {}, 'race-first')
+    await until(() => raceProvider.sent.length === 1, 'first race send')
+    let enterCancel, releaseCancel
+    const cancelling = new Promise((resolve) => {
+      enterCancel = resolve
+    })
+    const cancelGate = new Promise((resolve) => {
+      releaseCancel = resolve
+    })
+    let interrupts = 0
+    raceProvider.session.interrupt = async () => {
+      interrupts++
+    }
+    setConversationOwner(
+      new Proxy(owners.conversation, {
+        get(target, prop) {
+          const value = target[prop]
+          if (typeof value !== 'function') return value
+          if (prop !== 'cancel') return value.bind(target)
+          return async (...args) => {
+            if (args[1] === 'race-first') {
+              enterCancel()
+              await cancelGate
+            }
+            return value.apply(target, args)
+          }
+        }
+      })
+    )
+    const oldStop = invoke('agent:interrupt', raceKey)
+    await within(cancelling, 'owner cancel entry')
+    raceProvider.done()
+    await until(
+      () =>
+        raceEvents.some(
+          (event) => event.type === 'landing-finished' && event.turn === 'race-first'
+        ),
+      'first race landing'
+    )
+    await invoke('agent:send', 'replacement', undefined, raceKey, {}, 'race-second')
+    await until(() => raceProvider.sent.length === 2, 'replacement race send')
+    releaseCancel()
+    await oldStop
+    assert.equal(
+      interrupts,
+      0,
+      'late owner cancel must not interrupt the replacement provider turn'
+    )
+    const ownedRace = (await owners.conversation.snapshot()).chats.find(
+      (chat) => chat.chat === raceKey
+    )
+    assert.equal(ownedRace.turn, 'race-second', 'late cancel leaves the new owner turn intact')
+    assert.equal(ownedRace.phase, 'running')
+    raceProvider.done()
+    await until(
+      () =>
+        raceEvents.some(
+          (event) => event.type === 'landing-finished' && event.turn === 'race-second'
+        ),
+      'replacement race landing'
+    )
+    setConversationOwner(owners.conversation)
+    await invoke('agent:close-project', raceRepo)
+    // A fallback can still be waiting for the owner to release the old turn
+    // when the chat is closed and reopened. Its late completion owns no state
+    // or UI events for the replacement turn.
+    const settleRepo = repository('repo-stop-settle-race')
+    const settleKey = projectKey(settleRepo)
+    const settleEvents = []
+    window = (event) => settleEvents.push(event)
+    const settleOpened = providers.length
+    await invoke('agent:open-project', settleRepo, { provider: 'claude' })
+    const oldProvider = providers[settleOpened]
+    await invoke('agent:send', 'old', undefined, settleKey, {}, 'settle-old')
+    await until(() => oldProvider.sent.length === 1, 'old settle send')
+    oldProvider.session.interrupt = async () => undefined // no terminal
+    let enterAbort, releaseAbort
+    const aborting = new Promise((resolve) => {
+      enterAbort = resolve
+    })
+    const abortGate = new Promise((resolve) => {
+      releaseAbort = resolve
+    })
+    setConversationOwner(
+      new Proxy(owners.conversation, {
+        get(target, prop) {
+          const value = target[prop]
+          if (typeof value !== 'function') return value
+          if (prop !== 'abort') return value.bind(target)
+          return async (...args) => {
+            if (args[1] === 'settle-old') {
+              enterAbort()
+              await abortGate
+            }
+            return value.apply(target, args)
+          }
+        }
+      })
+    )
+    const oldSettle = invoke('agent:interrupt', settleKey)
+    try {
+      await within(aborting, 'fallback owner release entry', 8_000)
+    } catch (error) {
+      const owner = (await owners.conversation.snapshot()).chats.find(
+        (chat) => chat.chat === settleKey
+      )
+      const state = await invoke('agent:turn-state', settleKey)
+      throw new Error(
+        `${error.message}: ${JSON.stringify({ phase: owner?.phase, turn: owner?.turn, state, events: settleEvents.map((event) => event.type) })}`
+      )
+    }
+    await invoke('agent:close-project', settleRepo)
+    const reopened = providers.length
+    await invoke('agent:open-project', settleRepo, { provider: 'claude' })
+    const newProvider = providers[reopened]
+    await invoke('agent:send', 'new', undefined, settleKey, {}, 'settle-new')
+    await until(() => newProvider.sent.length === 1, 'new settle send')
+    const beforeLate = settleEvents.length
+    releaseAbort()
+    await oldSettle
+    assert.equal(
+      (await invoke('agent:turn-state', settleKey)).running,
+      true,
+      'late fallback cannot clear the replacement running state'
+    )
+    await assert.rejects(
+      invoke('agent:send', 'too early', undefined, settleKey, {}, 'settle-third'),
+      /already running/i,
+      'the replacement turn still owns the Bun send slot'
+    )
+    assert.equal(
+      (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === settleKey)?.turn,
+      'settle-new'
+    )
+    assert.equal(
+      settleEvents
+        .slice(beforeLate)
+        .some(
+          (event) =>
+            (event.type === 'status' || event.type === 'landing-finished') &&
+            event.projectKey === settleKey
+        ),
+      false,
+      'late fallback emits no status or landing-finished for the replacement'
+    )
+    newProvider.done()
+    await until(
+      () =>
+        settleEvents.some(
+          (event) => event.type === 'landing-finished' && event.turn === 'settle-new'
+        ),
+      'new settle landing'
+    )
+    setConversationOwner(owners.conversation)
+    await invoke('agent:close-project', settleRepo)
+    const ownerOf = async (key) =>
+      (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === key)
+    // A Stop the provider never answers settles the turn. The stopped turn's provider
+    // run must go with it, or the next turn's `done` would be credited to the old turn.
+    const dropRepo = repository('repo-stop-drop-run')
+    const dropKey = projectKey(dropRepo)
+    const dropEvents = []
+    window = (event) => dropEvents.push(event)
+    const dropOpened = providers.length
+    await invoke('agent:open-project', dropRepo, { provider: 'claude' })
+    const dropProvider = providers[dropOpened]
+    await invoke('agent:send', 'first', undefined, dropKey, {}, 'drop-first')
+    await until(() => dropProvider.sent.length === 1, 'first drop send')
+    dropProvider.session.interrupt = async () => undefined // no terminal
+    await within(invoke('agent:interrupt', dropKey), 'no-op interrupt settles', 20_000)
+    assert.equal(
+      (await invoke('agent:turn-state', dropKey)).running,
+      false,
+      'a Stop the provider never answers settles the turn'
+    )
+    await until(() => providers.length > dropOpened + 1, 'replacement provider after Stop')
+    const replacementProvider = providers[dropOpened + 1]
+    await invoke('agent:send', 'second', undefined, dropKey, {}, 'drop-second')
+    await until(() => replacementProvider.sent.length === 1, 'second drop send on replacement')
+    dropProvider.lateDone()
+    assert.equal(
+      (await within(invoke('agent:turn-state', dropKey), 'turn state after old terminal')).running,
+      true,
+      'the old provider terminal cannot finish the replacement turn'
+    )
+    assert.equal(
+      dropEvents.some((e) => e.type === 'landing-finished' && e.turn === 'drop-second'),
+      false,
+      'the old provider terminal cannot land the replacement turn'
+    )
+    assert.deepEqual(
+      { turn: (await ownerOf(dropKey))?.turn, phase: (await ownerOf(dropKey))?.phase },
+      { turn: 'drop-second', phase: 'running' },
+      'the owner still holds the replacement turn'
+    )
+    replacementProvider.done()
+    await until(
+      () => dropEvents.some((e) => e.type === 'landing-finished' && e.turn === 'drop-second'),
+      'second drop landing'
+    )
+    assert.equal(
+      dropEvents.filter((e) => e.type === 'landing-finished' && e.turn === 'drop-first').length,
+      1,
+      'the stopped turn settles once, and the new turn is not credited to it'
+    )
+    assert.equal((await ownerOf(dropKey))?.phase, 'idle', 'the owner moves on after the new turn')
+    assert.equal((await invoke('agent:turn-state', dropKey)).running, false)
+    await invoke('agent:close-project', dropRepo)
+    // A replacement start or owner handoff can fail after Stop's interrupt window.
+    // Stop must still settle, preserve the paused composer, and fence late events.
+    for (const failure of ['start', 'handoff']) {
+      const failedRepo = repository(`repo-stop-failed-${failure}`)
+      const failedKey = projectKey(failedRepo)
+      const failedEvents = []
+      const failedController = new NativeChatController({ invoke, render() {}, effect() {} })
+      window = (event) => {
+        failedEvents.push(event)
+        failedController.event(event)
+      }
+      const failedOpened = providers.length
+      await invoke('agent:open-project', failedRepo, { provider: 'claude' })
+      const oldProvider = providers[failedOpened]
+      await invoke('agent:send', 'old', undefined, failedKey, {}, `failed-${failure}-old`)
+      await until(() => oldProvider.sent.length === 1, `${failure} old send`)
+      oldProvider.session.interrupt = async () => undefined
+      const failedChat = failedController.get(failedKey)
+      failedChat.isRunning = true
+      failedChat.turn = `failed-${failure}-old`
+      failedChat.text = 'kept draft'
+      failedChat.queue.push({
+        id: 'kept-queued',
+        text: 'kept queued',
+        attachments: [],
+        selection: null,
+        turn: {}
+      })
+      if (failure === 'start') failNextStart = true
+      else
+        setConversationOwner(
+          new Proxy(owners.conversation, {
+            get(target, prop) {
+              const value = target[prop]
+              if (typeof value !== 'function') return value
+              if (prop !== 'handoff') return value.bind(target)
+              return async () => {
+                throw new Error('scripted owner handoff failure')
+              }
+            }
+          })
+        )
+      await within(
+        failedController.stop(failedChat),
+        `${failure} failed rebuild Stop exceeded its interrupt and owner-settle windows`,
+        10_000
+      )
+      setConversationOwner(owners.conversation)
+      assert.equal(
+        (await within(invoke('agent:turn-state', failedKey), `${failure} stopped turn state`))
+          .running,
+        false,
+        `${failure} failed rebuild must settle Stop`
+      )
+      assert.equal(failedChat.isRunning, false, `${failure} controller leaves Stopping`)
+      assert.equal(failedChat.stopping, false)
+      assert.equal(failedChat.paused, true)
+      assert.equal(failedChat.text, 'kept draft')
+      assert.equal(failedChat.queue[0]?.text, 'kept queued')
+      assert.equal((await ownerOf(failedKey))?.phase, 'idle')
+      await within(
+        invoke('agent:send', 'new', undefined, failedKey, {}, `failed-${failure}-new`),
+        `${failure} send after recovery`
+      )
+      const newProvider = providers.at(-1)
+      await until(() => newProvider.sent.length === 1, `${failure} replacement send`)
+      oldProvider.lateDone()
+      assert.equal(
+        (await within(invoke('agent:turn-state', failedKey), `${failure} late old terminal`))
+          .running,
+        true
+      )
+      assert.equal(
+        failedEvents.some(
+          (event) => event.type === 'landing-finished' && event.turn === `failed-${failure}-new`
+        ),
+        false,
+        `${failure} old terminal cannot land the replacement`
+      )
+      assert.deepEqual(
+        { turn: (await ownerOf(failedKey))?.turn, phase: (await ownerOf(failedKey))?.phase },
+        { turn: `failed-${failure}-new`, phase: 'running' }
+      )
+      newProvider.done()
+      await until(
+        () =>
+          failedEvents.some(
+            (event) => event.type === 'landing-finished' && event.turn === `failed-${failure}-new`
+          ),
+        `${failure} replacement landing`
+      )
+      assert.equal((await ownerOf(failedKey))?.phase, 'idle')
+      assert.equal(failedChat.text, 'kept draft')
+      assert.equal(failedChat.queue[0]?.text, 'kept queued')
+      await invoke('agent:close-project', failedRepo)
+    }
+    // The provider's `done` arrived but the owner's terminal call hangs past the Stop
+    // window: nothing is in flight, so Stop settles the chat (LKM-165, never a dead end).
+    const hungRepo = repository('repo-stop-hung-terminal')
+    const hungKey = projectKey(hungRepo)
+    const hungEvents = []
+    window = (event) => hungEvents.push(event)
+    const hungOpened = providers.length
+    await invoke('agent:open-project', hungRepo, { provider: 'claude' })
+    const hungProvider = providers[hungOpened]
+    await invoke('agent:send', 'hang', undefined, hungKey, {}, 'hung-first')
+    await until(() => hungProvider.sent.length === 1, 'hung send')
+    hungProvider.session.interrupt = async () => undefined
+    let releaseTerminal
+    const terminalGate = new Promise((resolve) => {
+      releaseTerminal = resolve
+    })
+    setConversationOwner(
+      new Proxy(owners.conversation, {
+        get(target, prop) {
+          const value = target[prop]
+          if (typeof value !== 'function') return value
+          if (prop !== 'terminal') return value.bind(target)
+          return async (...args) => {
+            if (args[1] === 'hung-first') await terminalGate
+            return value.apply(target, args)
+          }
+        }
+      })
+    )
+    hungProvider.done()
+    await within(invoke('agent:interrupt', hungKey), 'Stop with a hung owner terminal', 20_000)
+    assert.equal(
+      (await invoke('agent:turn-state', hungKey)).running,
+      false,
+      'Stop settles a chat whose owner terminal never came back'
+    )
+    assert.ok(
+      hungEvents.some((e) => e.type === 'status' && /stopped making progress/.test(e.text)),
+      'the chat is told why it was settled'
+    )
+    releaseTerminal()
+    await sleep(100)
+    setConversationOwner(owners.conversation)
+    await invoke('agent:close-project', hungRepo)
     // Let fire-and-forget work (the orphan sweep after reopening, close-project's Undo
     // reset) be answered before the fixture stops.
     await started.settled()

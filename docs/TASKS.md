@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat cancellation at repository admission (LKM-375)
+
+- [x] Repair failed Stop rebuilds: fence and dispose the old provider, settle the stopped turn, and rebuild before the next send; cover start and handoff failures with queue/draft and late-event assertions.
+- [x] Final review repair: rebuild the stopped provider generation before reopening the send slot; test a late untagged terminal from the old generation after the replacement send.
+- [x] Review repair: preserve the ordinary terminal path after interrupt acknowledgement; test delayed owner cancel, delayed settlement, and cancellation before a chat-chain callback begins.
+- [x] Bound and cancel a chat's landing wait from enqueue; a canceled admission skips Git work, while an admitted write retains the lease until it completes.
+- [x] Reconcile Stop against the same turn's state; keep a later turn safe from stale terminal and cancel replies, with queued messages paused and the draft intact.
+- [x] Add repo-lane contention and native controller regressions; extend the chat smoke fixture for no-terminal Stop and paused queue/draft.
+- [x] Manager quick tier: typecheck, typecheck:native, lint and changed-file unit checks passed (274 pass, 3 skip).
+- [ ] Final-head CI and running-app chat smoke (worker native allowance: 0 calls).
+
 ## Native sidebar project rows show the project favicon (LKM-372, user-requested)
 
 - [x] Project rows lead with the decoded favicon from the existing `project:icon` lookup (`SidebarFavicon` in `src/native/SidebarIcon.swift`, `ShellRow`, `Shell.swift`); missing, non-image, corrupt or undecodable data keeps the folder. This replaces LKM-105's folder-only choice for project rows.
