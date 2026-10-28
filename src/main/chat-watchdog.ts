@@ -10,6 +10,8 @@ export const TURN_STUCK_MS = 10 * 60_000
 export const LANDING_STUCK_MS = 3 * 60_000
 /** How often the app looks for stuck chats. */
 export const WATCHDOG_INTERVAL_MS = 30_000
+/** A Stop on a chat that shows running with nothing in flight settles after this long. */
+export const STALE_STOP_MS = 5_000
 /** A send to a chat that shows running with nothing in flight settles it after this long. */
 export const STALE_SEND_MS = 60_000
 

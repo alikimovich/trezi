@@ -891,6 +891,85 @@ try {
     )
     setConversationOwner(owners.conversation)
     await invoke('agent:close-project', settleRepo)
+    const ownerOf = async (key) =>
+      (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === key)
+    // A Stop the provider never answers settles the turn. The stopped turn's provider
+    // run must go with it, or the next turn's `done` would be credited to the old turn.
+    const dropRepo = repository('repo-stop-drop-run')
+    const dropKey = projectKey(dropRepo)
+    const dropEvents = []
+    window = (event) => dropEvents.push(event)
+    const dropOpened = providers.length
+    await invoke('agent:open-project', dropRepo, { provider: 'claude' })
+    const dropProvider = providers[dropOpened]
+    await invoke('agent:send', 'first', undefined, dropKey, {}, 'drop-first')
+    await until(() => dropProvider.sent.length === 1, 'first drop send')
+    dropProvider.session.interrupt = async () => undefined // no terminal
+    await within(invoke('agent:interrupt', dropKey), 'no-op interrupt settles', 20_000)
+    assert.equal(
+      (await invoke('agent:turn-state', dropKey)).running,
+      false,
+      'a Stop the provider never answers settles the turn'
+    )
+    await invoke('agent:send', 'second', undefined, dropKey, {}, 'drop-second')
+    await until(() => dropProvider.sent.length === 2, 'second drop send')
+    dropProvider.done()
+    await until(
+      () => dropEvents.some((e) => e.type === 'landing-finished' && e.turn === 'drop-second'),
+      'second drop landing'
+    )
+    assert.equal(
+      dropEvents.filter((e) => e.type === 'landing-finished' && e.turn === 'drop-first').length,
+      1,
+      'the stopped turn settles once, and the new turn is not credited to it'
+    )
+    assert.equal((await ownerOf(dropKey))?.phase, 'idle', 'the owner moves on after the new turn')
+    assert.equal((await invoke('agent:turn-state', dropKey)).running, false)
+    await invoke('agent:close-project', dropRepo)
+    // The provider's `done` arrived but the owner's terminal call hangs past the Stop
+    // window: nothing is in flight, so Stop settles the chat (LKM-165, never a dead end).
+    const hungRepo = repository('repo-stop-hung-terminal')
+    const hungKey = projectKey(hungRepo)
+    const hungEvents = []
+    window = (event) => hungEvents.push(event)
+    const hungOpened = providers.length
+    await invoke('agent:open-project', hungRepo, { provider: 'claude' })
+    const hungProvider = providers[hungOpened]
+    await invoke('agent:send', 'hang', undefined, hungKey, {}, 'hung-first')
+    await until(() => hungProvider.sent.length === 1, 'hung send')
+    hungProvider.session.interrupt = async () => undefined
+    let releaseTerminal
+    const terminalGate = new Promise((resolve) => {
+      releaseTerminal = resolve
+    })
+    setConversationOwner(
+      new Proxy(owners.conversation, {
+        get(target, prop) {
+          const value = target[prop]
+          if (typeof value !== 'function') return value
+          if (prop !== 'terminal') return value.bind(target)
+          return async (...args) => {
+            if (args[1] === 'hung-first') await terminalGate
+            return value.apply(target, args)
+          }
+        }
+      })
+    )
+    hungProvider.done()
+    await within(invoke('agent:interrupt', hungKey), 'Stop with a hung owner terminal', 20_000)
+    assert.equal(
+      (await invoke('agent:turn-state', hungKey)).running,
+      false,
+      'Stop settles a chat whose owner terminal never came back'
+    )
+    assert.ok(
+      hungEvents.some((e) => e.type === 'status' && /stopped making progress/.test(e.text)),
+      'the chat is told why it was settled'
+    )
+    releaseTerminal()
+    await sleep(100)
+    setConversationOwner(owners.conversation)
+    await invoke('agent:close-project', hungRepo)
     // Let fire-and-forget work (the orphan sweep after reopening, close-project's Undo
     // reset) be answered before the fixture stops.
     await started.settled()

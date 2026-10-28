@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-28 — LKM-375 second review repair: Stop fallback keeps the tracker and the stale-chat net
+
+- A Stop fallback that settles a turn whose provider run never ended now drops that run from the `TurnTracker` (`drop(turn)`, called by `settleChat`). Otherwise the stale run stayed at the head and the next turn's untagged events and first `done` were credited to the stopped turn, leaving the replacement turn running. `test/conversation-owner.mjs` sends a second turn after a no-op-interrupt settle and asserts `landing-finished` for that turn and an idle owner.
+- LKM-165's `STALE_STOP_MS` branch is back beside the new one: after the interrupt window, with no provider run and no landing in flight, a chat quiet for 5 s is settled by Stop even when the owner's terminal call hangs. A conversation-owner case delays the owner `terminal` past the window after the provider's `done` and asserts Stop settles the chat. Routine Stop still never emits the stuck note.
+
 ## 2026-10-28 — LKM-375 review repair: Stop races at the owner and landing queue
 
 - The review confirmed the shared repository lane diagnosis, but found a second race: a provider may acknowledge interrupt before its ordinary terminal has reached the Swift owner. Stop now waits out the remaining interrupt window and checks the provider tracker and owner's running phase before forcing a stuck-turn settlement; a routine terminal retains its normal landing path and does not emit the stuck note.

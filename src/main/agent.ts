@@ -59,7 +59,7 @@ import { chatRecordLookup } from './chat-record'
 import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
 import { TurnTracker } from './chat-turns'
 import { answerChatUi, chatUiContext, chatUiDelivery, forgetChatUi, setChatUiHost } from './chat-ui'
-import { STALE_SEND_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
+import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
   cleanUpWorkspacesNow,
   initChatWorkspaces,
@@ -2394,6 +2394,9 @@ export function registerAgentIpc(
     forgetLiveWatch(sessionKey)
     const session = sessions.get(sessionKey)
     const turn = turnIds.get(sessionKey)
+    // The provider never sent this turn's terminal: its run must not stay at the head
+    // of the tracker, or the next turn's events would be credited to it.
+    if (session && turn) trackers.get(session)?.drop(turn)
     session?.emit({ type: 'status', text: note })
     turnTimings.completed(sessionKey, turn)
     session?.emit({ type: 'landing-finished', ...(turn ? { turn } : {}) })
@@ -2480,10 +2483,16 @@ export function registerAgentIpc(
     if (
       turnIds.get(sessionKey) !== stoppedTurn ||
       !runningKeys.has(sessionKey) ||
-      landingInFlight(sessionKey) ||
-      !trackers.get(session)?.current
+      landingInFlight(sessionKey)
     )
       return
+    // Nothing in flight at all (no provider run, no landing, quiet since before this
+    // Stop): nothing will end the running state by itself, so Stop settles it (LKM-165).
+    if (!trackers.get(session)?.current) {
+      if (staleChat(sessionKey, STALE_STOP_MS))
+        await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
+      return
+    }
     // Check the owner's phase before forcing an end. An already claimed terminal
     // may be entering its landing even if this process has not registered it yet.
     const owned = await Promise.race([
