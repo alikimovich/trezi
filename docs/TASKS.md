@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native smoke: end the backend turn after the Stop/queue check (LKM-377)
+
+- [x] `native-chat`'s `finally` runs `cleanSharedChat` (`src/native/smoke-shared-chat.ts`): composer reset, then the provider's untagged `done` (no longer a turn-tagged one, which the tracker drops as stale), then bounded waits for the real `agent:turn-state` and the chat controller to be idle, before the stubs are restored. Stop captures and assertions unchanged.
+- [x] `history-menu`'s `requireCleanSharedChat` also names a running backend turn or a busy controller.
+- [x] Unit `native-smoke-stop-cleanup`: the Stop/queue sequence on the real agent.ts and Swift owners with the smoke's provider stub. The cleanup lets the next send reach the stub; a tagged `done` or skipping the turn-state wait leaves it CHAT_BUSY.
+- [ ] Focused native run passing BOTH `native-chat` and `history-menu` in one session, after merge (worker native allowance: 0 calls). Reported apart from LKM-374's known full-suite failures.
+
 ## Native smoke: reset the shared chat after the Stop/queue check (LKM-376)
 
 - [x] `native-chat` resets the shared chat in its `finally` after the unchanged Stop/queue captures and assertions: queue removed, pause lifted, draft emptied (`resetSharedChat`, `src/native/smoke-shared-chat.ts`), while the provider stub still catches sends.
