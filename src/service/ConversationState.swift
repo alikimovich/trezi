@@ -138,8 +138,9 @@ struct ConversationState {
     }
 
     /// Stop: the turn in flight lands as failed and never continues.
-    mutating func cancel(_ key: String) -> (phase: ConversationChat.Phase, turn: String?) {
+    mutating func cancel(_ key: String, expectedTurn: String? = nil) -> (phase: ConversationChat.Phase, turn: String?) {
         guard var chat = chats[key] else { return (.idle, nil) }
+        if let expectedTurn, chat.turn != expectedTurn { return (chat.phase, chat.turn) }
         if chat.phase != .idle { chat.cancelled = true; chats[key] = chat }
         return (chat.phase, chat.turn)
     }

@@ -255,6 +255,11 @@ async function ownerScript(o) {
   await step('abort again', () => o.abort('P2', 'v1'))
   await step('begin c3 v2', () => o.begin('P2', 'v2'))
   await step('send c3 v2', () => o.send('P2', 'v2', U('stop me', 3100)))
+  assert.equal(
+    (await o.cancel('P2', 'v1')).turn,
+    'v2',
+    'late Stop cannot cancel the newer owner turn'
+  )
   await step('cancel running', () => o.cancel('P2'))
   const c3 = R('chat-3', 'P2', [U('stop me', 3100), A('halfway', 3200)])
   await step('c3 done after stop (failed)', () => o.terminal('P2', 'v2', 0, 'done', c3))

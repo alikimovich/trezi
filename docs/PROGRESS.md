@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-28 — LKM-375: cancel repository admission and reconcile Stop
+
+- **Diagnosis.** Earlier worktree isolation (2026-07-16) gave each chat a private source tree and concurrent model execution. The 2026-08-08 repo-scoped queue still serializes Git effects on the shared live HEAD and index. LKM-165's landing guard began only inside the lease callback, so a chat waiting behind another chat had no Stop target. Native Stop also waited for a terminal event to clear Stopping, even when interrupt did nothing or the event was missed. These code paths confirm the reported mechanism; the specific screenshot's incident has no available log, so its exact cause remains unproven.
+- **Change.** A landing guard starts when `afterTurn` enqueues, including its own chat chain and the shared repo lane. A canceled lease callback skips the landing; a write already admitted keeps its lease and finishes before the chat chain advances. Stop gives the owner cancel, provider interrupt and fallback settlement one shared five-second deadline, ties cancellation to the owner turn ID, and settles a silent canceled turn. The controller asks Bun for the Swift owner's turn phase and leaves Stopping only when that same turn is idle, without changing the paused queue or draft. A terminal carrying an older turn ID cannot finish a new turn.
+- **Coverage.** `chat-landing-recovery` holds chat B's live write while A waits, stops A before B releases, then checks B landed and A never did. `native-chat-controller` covers missing/stale terminal reconciliation and queue/draft retention; the `chat` native fixture asserts paused queue and draft after a stubbed no-terminal Stop. Running-app verification remains for CI because this worker has zero native calls.
+- **Quick verification.** The final manager quick tier passed typecheck, typecheck:native, lint and the changed-file unit selection (274 passed, 3 skipped). Native chat smoke and final-head CI remain for the manager/CI.
+
 ## 2026-10-27 — LKM-372: native sidebar project rows show the project favicon
 
 - **Why.** The user asked for each project's favicon in place of the generic folder. This replaces LKM-105's folder-only choice for native project rows; nothing else from LKM-105 changes. Bun already sent each project's favicon as a `data:` URL in the sidebar snapshot (`NativeShellController.icons`, from the existing `project:icon` lookup), and `Shell.swift` ignored it for project rows. No second lookup was added.

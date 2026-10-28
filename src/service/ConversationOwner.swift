@@ -75,7 +75,7 @@ final class ConversationOwner: @unchecked Sendable {
         "close": (["chat", "persist", "record", "sequence"], []), "configure": (["chat", "options"], []),
         "handoff": (["chat", "options", "record", "sequence", "reason"], []),
         "begin": (["chat", "turn"], []), "send": (["chat", "turn", "entry"], []), "abort": (["chat", "turn"], []),
-        "cancel": (["chat"], []), "terminal": (["chat", "turn", "run", "kind", "record", "sequence"], []),
+        "cancel": (["chat"], ["turn"]), "terminal": (["chat", "turn", "run", "kind", "record", "sequence"], []),
         "continue": (["chat", "turn", "run"], []), "landed": (["chat", "turn", "at"], []),
         "title": (["chat", "title", "source"], []),
         "register": (["chat", "id", "kind", "tool"], []), "resolve": (["id", "kind"], []),
@@ -184,7 +184,8 @@ final class ConversationOwner: @unchecked Sendable {
             if aborted { try checkpoint(key) }
             return Self.object([("aborted", .bool(aborted))])
         case "cancel":
-            let (phase, turn) = state.cancel(try Self.key(body, "chat"))
+            let expectedTurn = body.has("turn") ? try body.string("turn") : nil
+            let (phase, turn) = state.cancel(try Self.key(body, "chat"), expectedTurn: expectedTurn)
             return Self.object([("phase", .string(JSText(phase.rawValue))), ("turn", turn.map { .string(JSText($0)) } ?? .null)])
         case "terminal":
             let key = try Self.key(body, "chat"), turn = try Self.key(body, "turn"), kind = try body.string("kind")
