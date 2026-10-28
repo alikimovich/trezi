@@ -139,7 +139,7 @@ export function serviceConversation(
     },
     send: (chat, turn, entry) => call('send', { chat, turn, entry: plain(entry) }),
     abort: async (chat, turn) => (await call('abort', { chat, turn })).aborted,
-    cancel: (chat) => call('cancel', { chat }),
+    cancel: (chat, turn) => call('cancel', { chat, ...(turn ? { turn } : {}) }),
     terminal: (chat, turn, run, kind, record) =>
       call('terminal', { chat, turn, run, kind, record: plain(record), sequence: next(chat) }),
     continueTurn: async (chat, turn, run) =>

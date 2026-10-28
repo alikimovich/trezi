@@ -23,11 +23,14 @@ const live = (chat) => ({
 })
 let snapshot = { projects: [{ root: '/fixture', chats: [live('a'), live('b')] }] }
 let rejectModel = false,
-  failSend = false
+  failSend = false,
+  turnStateRunning = true
 const controller = new NativeChatController({
   invoke: async (channel, ...args) => {
     calls.push([channel, ...args])
     if (channel === 'agent:workspace-snapshot') return snapshot
+    if (channel === 'agent:turn-state')
+      return { turn: controller.get(args[0]).turn, running: turnStateRunning }
     if (channel === 'providers:choices')
       return [
         {
@@ -154,7 +157,8 @@ await send()
 await controller.action({ chat: 'a', action: 'stop' })
 assert.equal(renders.at(-1).composer.thinking, false)
 assert.equal(renders.at(-1).activity.kind, 'stopping')
-assert.deepEqual(calls.at(-1), ['agent:interrupt', 'a'])
+assert.deepEqual(calls.at(-2), ['agent:interrupt', 'a'])
+assert.deepEqual(calls.at(-1), ['agent:turn-state', 'a'])
 emit({ type: 'done' })
 await tick()
 assert.equal(controller.get('a').queue.length, 1)
@@ -751,4 +755,54 @@ try {
   const restored = history.get('restored')
   restored.messages.push({ id: 'old', role: 'assistant', text: 'Old', segments: [], statuses: [] })
   assert.equal(restored.unreadAnswer, false, 'Restored transcript is read')
+}
+
+// Stop reconciles a no-op interrupt with Bun's turn state. A delayed state answer
+// and an old terminal must not finish the next turn; queue and draft stay paused.
+{
+  let answerState
+  const pendingState = new Promise((resolve) => {
+    answerState = resolve
+  })
+  const stopController = new NativeChatController({
+    invoke: async (channel) => (channel === 'agent:turn-state' ? pendingState : undefined),
+    render() {},
+    effect() {}
+  })
+  const chat = stopController.get('stop')
+  chat.isRunning = true
+  chat.turn = 'first'
+  chat.text = 'kept draft'
+  chat.queue.push({ id: 'queued', text: 'later', attachments: [], selection: null, turn: {} })
+  const stopping = stopController.stop(chat)
+  assert.equal(chat.stopping, true)
+  assert.equal(chat.paused, true)
+  answerState({ turn: 'first', running: false })
+  await stopping
+  assert.equal(chat.stopping, false, 'missing terminal settles through turn state')
+  assert.equal(chat.isRunning, false)
+  assert.equal(chat.text, 'kept draft')
+  assert.equal(chat.queue[0].text, 'later')
+  assert.equal(chat.paused, true)
+
+  let staleAnswer
+  const staleState = new Promise((resolve) => {
+    staleAnswer = resolve
+  })
+  const nextController = new NativeChatController({
+    invoke: async (channel) => (channel === 'agent:turn-state' ? staleState : undefined),
+    render() {},
+    effect() {}
+  })
+  const next = nextController.get('stop')
+  next.isRunning = true
+  next.turn = 'first'
+  const oldStop = nextController.stop(next)
+  next.turn = 'second'
+  next.stopping = false
+  next.isRunning = true
+  staleAnswer({ turn: 'first', running: false })
+  await oldStop
+  nextController.event({ projectKey: 'stop', type: 'landing-finished', turn: 'first' })
+  assert.equal(next.isRunning, true, 'old terminal cannot finish a replacement turn')
 }

@@ -210,6 +210,40 @@ try {
     for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 10))
   }
   try {
+    // B owns the shared live lane while A waits. Stop must end A before B releases,
+    // and A's deferred lease callback must never land its private edits afterwards.
+    const b = await fixture()
+    const a = `${b.key}-peer`
+    const aCwd = await isolatedCwd(b.root, a)
+    adoptSession(a, { id: a }, b.root)
+    await beforeTurn(a, 'edit')
+    const lane = await slow()
+    writeFileSync(join(b.cwd, FILE), 'export const bar = 9\n')
+    writeFileSync(join(aCwd, OTHER), 'export const baz = 9\n')
+    await passCheck(b.key, b.cwd)
+    await passCheck(a, aCwd)
+    const bLanding = afterTurn(b.key, 'B lands', [], 'success')
+    await lane.reached
+    const aLanding = afterTurn(a, 'A waits', [], 'success')
+    await quiet()
+    assert.equal(landingInFlight(a), true, 'A can be stopped before repo admission')
+    assert.equal(abandonLanding(a, 'Stopped while waiting for the repository.'), true)
+    await Promise.race([
+      aLanding,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('A did not stop promptly')), 1000)
+      )
+    ])
+    assert.equal(read(b.root, OTHER), 'export const baz = 0\n')
+    lane.release()
+    await bLanding
+    await quiet()
+    assert.equal(read(b.root), 'export const bar = 9\n', 'B lands normally')
+    assert.equal(read(b.root, OTHER), 'export const baz = 0\n', 'cancelled A never lands')
+    assert.equal(isolationSnapshot(a).reason, 'failed', 'A keeps its work for Retry')
+    await releaseChat(a)
+    await releaseChat(b.key)
+
     const drain = await fixture()
     const hold = await slow()
     writeFileSync(join(drain.cwd, FILE), 'export const bar = 7\n')
@@ -225,12 +259,19 @@ try {
     assert.equal(early.ok, false, 'a Retry while the abandoned landing runs is refused')
     assert.match(early.error, /still finishing/)
     const next = afterTurn(drain.key, 'Next turn', [], 'success')
-    await quiet()
+    assert.equal(landingInFlight(drain.key), true, 'the new guard exists before its chain starts')
+    assert.equal(abandonLanding(drain.key, 'Stopped behind the draining write.'), true)
+    await Promise.race([
+      next,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('The chained landing did not stop promptly')), 1000)
+      )
+    ])
     assert.equal(hold.calls(), 1, 'the next landing waits behind the abandoned one')
     assert.equal(read(drain.root), 'export const bar = 0\n')
     hold.release()
     await landing
-    await next
+    assert.equal(hold.calls(), 1, 'the cancelled chain never enters Git after the lease drains')
     assert.equal(read(drain.root), 'export const bar = 7\n', 'the abandoned batch finished')
     assert.deepEqual(isolationSnapshot(drain.key), { state: 'isolated', branch: drain.branch })
     assert.equal(agentWorkspaceState(drain.key).state, 'isolated')

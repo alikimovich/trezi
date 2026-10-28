@@ -831,6 +831,7 @@ export class NativeChatController {
       this.changed(chat)
       return
     }
+    const stoppedTurn = chat.turn
     chat.paused = true
     chat.cancellation++
     chat.stopping = true
@@ -844,7 +845,29 @@ export class NativeChatController {
       })
     chat.setup = false
     chat.awaitingLanding = false
-    await this.services.invoke('agent:interrupt', chat.chat)
+    try {
+      await this.services.invoke('agent:interrupt', chat.chat)
+    } finally {
+      // The interrupt may be a no-op, or its terminal may have been missed by the
+      // host. Ask Bun for this chat's turn after cancellation; only that turn can
+      // settle this Stop. Never finish a replacement turn on a late response.
+      let state: { turn?: string | null; running?: boolean } | null = null
+      try {
+        state = await this.services.invoke('agent:turn-state', chat.chat)
+      } catch {
+        // A disconnected backend cannot supply a final turn state here.
+      }
+      if (
+        state &&
+        !state.running &&
+        state.turn === (stoppedTurn ?? null) &&
+        chat.turn === stoppedTurn &&
+        chat.stopping
+      ) {
+        finish(chat)
+        this.changed(chat)
+      }
+    }
   }
   async choice(chat: Chat, label: string, value: string) {
     // The no-project draft has no session yet: its picks are kept for its project (LKM-232).
