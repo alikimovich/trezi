@@ -306,6 +306,9 @@ const runningKeys = new Set<string>()
 // Keep the send slot closed while a stopped provider generation is replaced.
 // restartChatSession clears runningKeys before its caller finishes settling Stop.
 const stopRebuilds = new Map<string, ProviderSession>()
+// A failed Stop rebuild leaves a disposed provider in sessions until the next send
+// can retry the handoff. Never dispatch a new turn into that provider.
+const stoppedProviders = new Map<string, ProviderSession>()
 const preparingTurns = new Map<string, { cancelled: boolean }>()
 // LKM-165: when each running chat last made progress, and the turn the owner admitted
 // last, so a turn that stops making progress can be ended in both places.
@@ -1153,6 +1156,7 @@ export function registerAgentIpc(
 
   /** Forget a chat's local turn state (its owner record was closed or replaced). */
   const forgetChat = (sessionKey: string): void => {
+    stoppedProviders.delete(sessionKey)
     memoryInjection.forget(sessionKey)
     firstSends.delete(sessionKey)
     restoredSummaries.delete(sessionKey)
@@ -1458,7 +1462,7 @@ export function registerAgentIpc(
         stopProvider(s)
         return { ok: false, error: 'That chat is no longer open.' }
       }
-      stopProvider(existing)
+      if (stoppedProviders.get(sessionKey) !== existing) stopProvider(existing)
       void conversation()
         .release(sessionKey)
         .catch(() => {})
@@ -1839,13 +1843,33 @@ export function registerAgentIpc(
         uptimeNs: process.hrtime.bigint().toString()
       })
       if (key && (pending.has(key) || firstSends.has(key))) await waitForChat(key)
-      const session = key ? sessions.get(key) : null
+      let session = key ? sessions.get(key) : null
       if (requestedKey && !session) throw new Error('This chat is closed.')
       // The chat is busy: the caller queues the message (and the watchdog bounds the wait).
       if (key && stopRebuilds.get(key) !== session && staleChat(key, STALE_SEND_MS))
         await settleChat(key, STUCK_NOTE)
       if (key && (runningKeys.has(key) || stopRebuilds.get(key) === session))
         throw new Error(CHAT_BUSY)
+      if (key && session && stoppedProviders.get(key) === session) {
+        let fencedSession = session
+        stopRebuilds.set(key, fencedSession)
+        try {
+          const recovered = await restartChatSession(
+            session.record.projectRoot,
+            key,
+            session.options,
+            'restart',
+            (replacement) => {
+              fencedSession = replacement
+              stopRebuilds.set(key, replacement)
+            }
+          )
+          if (!recovered.ok) throw new Error(recovered.error ?? 'Could not restart stopped chat.')
+          session = sessions.get(key) ?? null
+        } finally {
+          if (stopRebuilds.get(key) === fencedSession) stopRebuilds.delete(key)
+        }
+      }
       if (!session || !key) {
         safeSend(getWindow, 'agent:event', {
           type: 'error',
@@ -2522,17 +2546,32 @@ export function registerAgentIpc(
       let fencedSession = session
       stopRebuilds.set(sessionKey, fencedSession)
       try {
-        const rebuilt = await restartChatSession(
-          root,
-          sessionKey,
-          session.options,
-          'restart',
-          (s) => {
-            fencedSession = s
-            stopRebuilds.set(sessionKey, s)
+        let rebuilt = false
+        try {
+          const result = await restartChatSession(
+            root,
+            sessionKey,
+            session.options,
+            'restart',
+            (s) => {
+              fencedSession = s
+              stopRebuilds.set(sessionKey, s)
+            }
+          )
+          rebuilt = result.ok
+        } catch {
+          // A provider or owner can throw during restart. Stop still has to settle.
+        }
+        if (!rebuilt && sessions.get(sessionKey) === session) {
+          // Fence buffered, untagged events even if provider disposal itself fails.
+          trackers.delete(session)
+          stoppedProviders.set(sessionKey, session)
+          try {
+            stopProvider(session)
+          } catch {
+            // The tracker is already detached and the next send must rebuild.
           }
-        )
-        if (!rebuilt.ok) throw new Error(rebuilt.error ?? 'Could not restart stopped chat.')
+        }
         await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
       } finally {
         if (stopRebuilds.get(sessionKey) === fencedSession) stopRebuilds.delete(sessionKey)

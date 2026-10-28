@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-28 — LKM-375 failed provider rebuild still settles Stop
+
+- Review confirmed a remaining dead end: when the Stop fallback's provider restart returned `{ ok: false }`, it threw before `settleChat`, leaving the owner running and the UI on Stopping. The fallback now fences the old tracker, disposes that provider, and settles the same turn even if restart returns failure or throws. The send gate stays closed through settlement; a later send first retries the provider handoff and never dispatches into the disposed session. The existing turn-identity check protects a replacement turn if the chat changes during release.
+- The conversation-owner regression forces both a provider start rejection and an owner handoff rejection, calls Stop through the native chat controller, and checks the final turn state, preserved paused queue and draft, late old terminal isolation, and a later successful turn. Manager quick verification passed: typecheck, typecheck:native, lint, 274 unit checks passed and 3 skipped. Native calls remain unavailable to this worker; the chat stop/queue fixture remains for the post-merge suite.
+
 ## 2026-10-28 — LKM-375 final review repair: fence late provider terminals after Stop
 
 - Independent review confirmed that dropping the stopped run from `TurnTracker` alone was insufficient. Built-in providers emit untagged terminals; a late `done` from the old provider could be attributed to a replacement turn on the same session. The Stop fallback now rebuilds the provider generation before settling the old turn, and holds the send slot through the rebuild and settlement. The old generation's hook cannot claim a terminal for the new session; admitted repository writes and per-chat worktrees are unchanged.

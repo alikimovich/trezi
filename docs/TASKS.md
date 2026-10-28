@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Chat cancellation at repository admission (LKM-375)
 
+- [x] Repair failed Stop rebuilds: fence and dispose the old provider, settle the stopped turn, and rebuild before the next send; cover start and handoff failures with queue/draft and late-event assertions.
 - [x] Final review repair: rebuild the stopped provider generation before reopening the send slot; test a late untagged terminal from the old generation after the replacement send.
 - [x] Review repair: preserve the ordinary terminal path after interrupt acknowledgement; test delayed owner cancel, delayed settlement, and cancellation before a chat-chain callback begins.
 - [x] Bound and cancel a chat's landing wait from enqueue; a canceled admission skips Git work, while an admitted write retains the lease until it completes.
