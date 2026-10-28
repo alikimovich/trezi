@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native smoke: reset the shared chat after the Stop/queue check (LKM-376)
+
+- [x] `native-chat` resets the shared chat in its `finally` after the unchanged Stop/queue captures and assertions: queue removed, pause lifted, draft emptied (`resetSharedChat`, `src/native/smoke-shared-chat.ts`), while the provider stub still catches sends.
+- [x] `history-menu` fails fast naming a leftover queue, pause or draft (`requireCleanSharedChat`) instead of timing out on `sent.length`.
+- [x] Unit `native-smoke-shared-chat`: the Stop/queue sequence on the real chat controller, then the history-menu send reaches the stub with the reset and queues without it.
+- [ ] Focused native `--only=chat` run (native-chat + history-menu in one session) after merge (worker native allowance: 0 calls). The full suite keeps LKM-374's known failures.
+- [ ] Known gap: the manager's nativeSummary lists only its first failures; Trezi's own report (`formatFailureReport`) already prints one `SMOKE FAIL` per failure. nativeSummary is outside this repo.
+
 ## Chat cancellation at repository admission (LKM-375)
 
 - [x] Repair failed Stop rebuilds: fence and dispose the old provider, settle the stopped turn, and rebuild before the next send; cover start and handoff failures with queue/draft and late-event assertions.
