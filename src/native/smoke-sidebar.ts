@@ -289,13 +289,27 @@ export function assertFaviconRows(
     )
 }
 
+/** LKM-374: how much of the capture the window fills. Some ScreenCaptureKit images come back
+ *  with the window drawn a few percent small from its top-left corner (native runs 23–29: the
+ *  260 pt captures at 0.9746) and transparent below it; rows further down drift further from
+ *  their measured frames. The opaque height of the middle column measures it; 1 when full. */
+export function captureContentScale(pixels: ReturnType<typeof decodePng>) {
+  const x = pixels.width >> 1
+  let y = pixels.height
+  while (y > 0 && pixels.alpha(x, y - 1) === 0) y--
+  return y / pixels.height
+}
+
 /** LKM-374: a row's label as painted in the capture, found by the row's measured geometry
- *  (sidebar points, y up) instead of by reading its title, which truncates at narrow widths.
- *  Ink is any pixel far from the band's most common (background) colour. The band is ±12 pt
- *  of a 28 pt row: some ScreenCaptureKit images come back scaled a few percent (run23's
- *  260 pt captures by ~2.7%), which moves the label up to ~4 pt from its measured frame. */
-export function measureRowLabel(row: any, pixels: ReturnType<typeof decodePng>, scale: number) {
-  const height = pixels.height / scale
+ *  (sidebar points, y up, `height` points tall) instead of by reading its title, which
+ *  truncates at narrow widths. `scale` is capture pixels per point. Ink is any pixel far from
+ *  its pixel row's most common (background) colour, inside ±12 pt of a 28 pt row. */
+export function measureRowLabel(
+  row: any,
+  pixels: ReturnType<typeof decodePng>,
+  scale: number,
+  height: number
+) {
   const left = row.iconX + row.iconWidth + row.textGap
   // Scan from inside the icon/label gap, so a label drawn left of its place is seen.
   const x0 = Math.max(0, Math.round((left - 4) * scale))
@@ -357,13 +371,16 @@ export function assertSidebarCapture(
   assert.ok(ocr.includes('open project'), `Blank/missing sidebar actions: ${stem}`)
   // LKM-374: rows are matched by id and geometry, not OCR; at 180 pt a long title truncates.
   const pixels = decodePng(Buffer.from(image.png ?? '', 'base64'))
+  const content = captureContentScale(pixels)
+  assert.ok(content >= 0.9, `${stem}: the window fills ${content} of the capture`)
+  const scale = (pixels.width / width) * content
   for (const row of state.rows) {
-    const label = measureRowLabel(row, pixels, pixels.width / width)
+    const label = measureRowLabel(row, pixels, scale, pixels.height / (pixels.width / width))
     assert.ok(
       label.inkFraction >= 0.02 &&
         label.inkSpan >= 30 &&
         Math.abs(label.inkLeft) <= 2 &&
-        Math.abs(label.inkMidY - row.textMidY) <= 7,
+        Math.abs(label.inkMidY - row.textMidY) <= 4,
       `Missing visible project ${row.id}: ${stem} ${JSON.stringify(label)}`
     )
     assertRowIcon(row, stem)

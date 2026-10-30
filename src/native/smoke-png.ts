@@ -1,6 +1,7 @@
 import { inflateSync } from 'node:zlib'
 
-/** LKM-374: a non-interlaced 8-bit RGB/RGBA PNG (the visible-capture format) → rgb(x, y), y down.
+/** LKM-374: a non-interlaced 8-bit RGB/RGBA PNG (the visible-capture format) → rgb(x, y) and
+ *  alpha(x, y), y down.
  *  Anything else throws, so a check that reads pixels fails closed. */
 export function decodePng(buffer: Buffer) {
   if (buffer.length < 8 || buffer.readUInt32BE(0) !== 0x89504e47) throw new Error('Not a PNG')
@@ -18,7 +19,9 @@ export function decodePng(buffer: Buffer) {
       height = data.readUInt32BE(4)
       channels = data[9] === 6 ? 4 : data[9] === 2 ? 3 : 0
       if (data[8] !== 8 || !channels || data[12] !== 0)
-        throw new Error(`Unsupported PNG: depth ${data[8]}, colour ${data[9]}, interlace ${data[12]}`)
+        throw new Error(
+          `Unsupported PNG: depth ${data[8]}, colour ${data[9]}, interlace ${data[12]}`
+        )
     }
     if (type === 'IDAT') chunks.push(data)
     at += 12 + length
@@ -50,5 +53,6 @@ export function decodePng(buffer: Buffer) {
     const i = (y * width + x) * channels
     return [out[i], out[i + 1], out[i + 2]]
   }
-  return { width, height, rgb }
+  const alpha = (x: number, y: number) => (channels === 4 ? out[(y * width + x) * 4 + 3] : 255)
+  return { width, height, rgb, alpha }
 }
