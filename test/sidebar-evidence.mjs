@@ -38,7 +38,7 @@ const row = (id, selected, icon = 'folder') => ({
   selected,
   moreAlpha: selected ? 1 : 0,
   actionsLabel: `Actions for ${id}`,
-  menu: ['Project Memory…', 'Close Project']
+  menu: ['Project Memory…', 'Show History', 'Close Project']
 })
 const state = {
   foreground: true,
