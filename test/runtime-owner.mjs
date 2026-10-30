@@ -1550,12 +1550,27 @@ exit 0
           }
         }
       }
+      // LKM-380: a stopped server is gone when its process group has exited. A freed port can
+      // be bound by another parallel test's listener at once (the assigned ports are the common
+      // dev ports, the printed one is ephemeral), so asking the port alone cannot tell "still
+      // serving" from "reused": connection refused is gone, and so is a reply that is not this
+      // server's own body. Only that body means the stopped server still serves.
+      const stoppedServer = async (started, body, label) => {
+        await dead(started.pid)
+        let answer
+        try {
+          answer = await (await fetch(started.url, { signal: AbortSignal.timeout(5000) })).text()
+        } catch {
+          return
+        }
+        assert.notEqual(answer, body, `${label}: the stopped server still serves ${started.url}`)
+      }
       const ready = await startFree({ root: app, command: `"${process.execPath}" server.mjs` })
       assert.equal(await (await fetch(ready.url)).text(), 'app')
       // Restart: the old port is released, the new one serves.
       const again = await startFree({ root: app, command: `"${process.execPath}" server.mjs` })
       assert.equal(await (await fetch(again.url)).text(), 'app')
-      if (again.url !== ready.url) await assert.rejects(fetch(ready.url))
+      if (again.url !== ready.url) await stoppedServer(ready, 'app', 'the restarted server')
       // Printed-URL fallback for a server that ignores PORT.
       const own = dir()
       write(
@@ -1614,8 +1629,8 @@ server.listen(${holder.port}, '127.0.0.1', () => console.log('bound unexpectedly
         holder.stop(true)
       }
       await runtime.stopAll()
-      await assert.rejects(fetch(again.url))
-      await assert.rejects(fetch(printed.url))
+      await stoppedServer(again, 'app', 'stopAll')
+      await stoppedServer(printed, 'own', 'stopAll')
       await stop(fixture)
     })
 } finally {

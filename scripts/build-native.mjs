@@ -253,6 +253,8 @@ const host = compile(
     join(root, 'src/native/ChatQuestion.swift'),
     join(root, 'src/native/SnappedSlider.swift'),
     join(root, 'src/native/KeyShortcuts.swift'),
+    join(root, 'src/native/MenuFirstShortcuts.swift'),
+    join(root, 'src/native/ToggleUIVerification.swift'),
     join(root, 'src/native/PreviewHistory.swift'),
     '-o',
     join(contents, 'MacOS/TreziHost'),

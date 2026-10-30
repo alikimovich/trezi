@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Full screen: the first ⌘. (Toggle UI) exits full screen (LKM-380)
+
+- [x] Root cause (PROGRESS 2026-10-30, LKM-380): a focused WKWebView claims ⌘. in `performKeyEquivalent` before the main menu, so Toggle UI never runs; WebKit then sends the unhandled key on as `cancelOperation:` (Escape), and `NSWindow.doCommandBySelector:` exits full screen on it (measured on every host). A text view's key-down becomes `cancelOperation:` only where the text input key binding is live (macOS 27.0.1 here; not on GitHub's headless macOS 26 runner), so tests keep that step conditional.
+- [x] Fix: `MenuFirstShortcut` (`src/native/MenuFirstShortcuts.swift`), a key-down monitor installed in `Host.swift`, gives ⌘. to the main menu before any view, for the main and the full-screen toolbar window, with no sheet and no menu tracking. Escape is not routed.
+- [x] Unit `menu-first-shortcuts` (real text views, text field and WKWebView; full screen and windowed; 3 presses per focus; Escape, ⇧⌘./⌥⌘., Russian layout, monitor filter) and `native-shell-controller` (toggling keeps the running turn, draft and attachments).
+- [x] Native smoke `toggle-ui` (core group): ⌘./Escape posted to the app's event queue with focus in the composer, source editor, preview, address field or nowhere; windowed, full screen closed/open, repeated presses; draft and attachment kept; captures `toolbar-toggle-ui-*.png` and `toggle-ui.json`.
+- [x] CI repair (PR 349, macOS 26, run 41017519002): `menu-first-shortcuts` asserted the key-down → `cancelOperation:` step, which the headless runner did not produce (`cancels: []`). The fixture now measures `link`, `chain`, `keyDown`, `keyDownEscape` and `env`; `link`/`chain` are required everywhere, the key-down step only where produced (PROGRESS 2026-10-30).
+- [x] Second CI repair (PR 349, macOS 26.6.2, run 41026167486, `menu-first-shortcuts.mjs:54`): the forced Escape = ⌘. equality is removed. macOS 26.6.2 turned Escape into `cancelOperation:` (full 1 exit, windowed 0) and ⌘. into nothing; each key is checked on its own against what the host produced, link/chain/claim/fixed/routing checks unchanged. The Escape key-down cancel check is now conditional (a loosening, covered unconditionally by link/chain); the cause of the per-key difference is inferred (PROGRESS 2026-10-30).
+- [x] `runtime-owner` (`test/runtime-owner.mjs:1618`): after `stopAll`, `stoppedServer` asserts the process is dead and any reply is not the stopped server's own body (a reused port no longer fails it). Not run here: the sockets section needs port binding (PROGRESS 2026-10-30).
+- [ ] Manager native run of `--only=core` (worker native allowance: 0 calls); inspect the `toolbar-toggle-ui-*` captures.
 ## Native smoke: two chats stream at once, as a regression check (LKM-383)
 
 - [x] Native smoke `parallel-stream` (groups chat, sidebar; `src/native/smoke-parallel-stream.ts`): chat A streams, New chat opens B, which sends and streams too, with 3 switches each way. At every step Swift shows the active chat, the column is visible, a row is in view and the last row reaches Bun's text, each within `STREAM_BOUND_MS` (`src/native/smoke-stream-timeline.ts`).
