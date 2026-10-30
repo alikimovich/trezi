@@ -39,7 +39,14 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     let buttonBeam = ComposerBeamHost()
     let readyBeam = ComposerBeamHost()
     var welcomedChats = Set<String>()
-    let plus = NSPopUpButton(frame: .zero, pullsDown: true)
+    /// LKM-381: opens the file chooser directly; no menu in between.
+    let plus = NSButton()
+    /// Shows the chooser (several files, no folders) as a sheet and reports its result and
+    /// files. The unit fixture replaces it so no panel is made.
+    var presentChooser: (NSWindow, @escaping (NSApplication.ModalResponse, [URL]) -> Void) -> Void = { window, done in
+        let panel = NSOpenPanel(); panel.allowsMultipleSelection = true; panel.canChooseDirectories = false
+        panel.beginSheetModal(for: window) { done($0, panel.urls) }
+    }
     /// The start composer's project menu, beside Send (LKM-232, ComposerProject.swift).
     let project = NSPopUpButton(frame: .zero, pullsDown: true)
     var projectSignature = ""
@@ -107,12 +114,10 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         scroll.borderType = .noBorder
         controls.orientation = .horizontal; controls.spacing = 4; controls.alignment = .centerY
         controls.detachesHiddenViews = false
-        plus.addItem(withTitle: ""); plus.item(at: 0)?.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Attach or select")
-        plus.isBordered = false; (plus.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow; plus.setAccessibilityLabel("Attachments and tools")
-        for (title, action) in [("Attach Files…", "attach")] {
-            let item = NSMenuItem(title: title, action: #selector(menuAction(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = ["action":action]; plus.menu?.addItem(item)
-        }
+        plus.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Attach files"); plus.imagePosition = .imageOnly
+        plus.isBordered = false; plus.toolTip = "Attach files"; plus.target = self; plus.action = #selector(chooseFiles(_:))
+        // The cell is the accessibility element; a label on the view would blank it (LKM-379).
+        plus.cell?.setAccessibilityRole(.button); plus.cell?.setAccessibilityLabel("Attach files")
         controls.addArrangedSubview(plus)
         let spacer = NSView(); spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         controls.addArrangedSubview(spacer)
@@ -311,13 +316,16 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     }
     @objc func menuAction(_ item: NSMenuItem) {
         guard let value = item.representedObject as? [String: Any], let action = value["action"] as? String else { return }
-        if action == "attach" {
-            let panel = NSOpenPanel(); panel.allowsMultipleSelection = true; panel.canChooseDirectories = false
-            guard let window = window else { return }
-            panel.beginSheetModal(for: window) { [weak self] result in if result == .OK { self?.attach(panel.urls) } }
-        } else if action == "select" { emit(["event":"menu", "action":"select"]) }
+        if action == "select" { emit(["event":"menu", "action":"select"]) }
         else { emitAction(action, value) }
     }
+    /// The + button: the native file chooser as a sheet on the composer's window. Cancel
+    /// leaves the draft and attachments as they were; OK appends the chosen files.
+    @objc func chooseFiles(_ sender: Any?) {
+        guard plus.isEnabled, let window, window.attachedSheet == nil else { return }
+        presentChooser(window) { [weak self] result, urls in self?.finishChoosing(result, urls) }
+    }
+    func finishChoosing(_ result: NSApplication.ModalResponse, _ urls: [URL]) { if result == .OK { attach(urls) } }
     func attach(_ urls: [URL]) {
         var files: [[String: String]] = []
         for url in urls {
@@ -476,7 +484,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             item.target = self; item.representedObject = payload; popup.menu?.addItem(item)
         }
     }
-    func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "sending":["pending":sending.pending ?? 0, "shown":sending.shown, "cancellable":sending.cancellable, "editable":text.isEditable, "contentAlpha":scroll.alphaValue, "attachmentsLocked":attachments.locked, "sendLabel":sendButton.accessibilityLabel() ?? ""], "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.item(at: 0)?.image != nil && (plus.cell as? NSPopUpButtonCell)?.arrowPosition == .noArrow, "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
+    func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "sending":["pending":sending.pending ?? 0, "shown":sending.shown, "cancellable":sending.cancellable, "editable":text.isEditable, "contentAlpha":scroll.alphaValue, "attachmentsLocked":attachments.locked, "sendLabel":sendButton.accessibilityLabel() ?? ""], "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.image != nil && !plus.isBordered && !(plus is NSPopUpButton), "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
     func perform(_ c: [String: Any]) {
         // Ordered steps in one main-thread turn: no snapshot can arrive between them.
         (c["steps"] as? [[String: Any]])?.forEach(perform)

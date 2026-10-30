@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Composer + opens the native file picker directly (LKM-381)
+
+- [x] `plus` in `src/native/Composer.swift` is a plain `NSButton` whose action (`chooseFiles`) opens the existing `NSOpenPanel` sheet (several files, no folders); the one-item "Attach Files…" menu is gone. Busy still disables it, Cancel changes nothing and OK appends through `attach`.
+- [x] Unit `composer-attach`: the real composer in a window that is never ordered in. The element is an AXButton labelled "Attach files"; AX press and click each open the chooser once; Cancel keeps the draft and a `.mov`; OK appends in order; busy opens nothing and it opens again after.
+- [x] Native smoke `checkComposerAttach` (`src/native/smoke-composer-attach.ts`, inside `visible-composer`, group composer): open/cancel twice plus accept, in a normal window and in full screen, with foreground captures and `composer-attach.json` (chooser frame, options, window mode).
+- [ ] Native acceptance: the composer group on origin/main after merge (no native run in this ticket).
+
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
 - [x] Diagnosis (PROGRESS 2026-10-29): project-switching was a seam fault, because OCR read a truncated title while the icons were all visible. browser-setup, agent-verify and the other managed-agent-browser checks fail because the host's agent-browser is gone: the hermes-agent update on 10-27 left `/opt/homebrew/bin/agent-browser` dangling. Neither is a Trezi product defect.
