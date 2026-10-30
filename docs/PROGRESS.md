@@ -2,6 +2,21 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-29 — LKM-380 full screen: the first ⌘. (Toggle UI) exited full screen
+
+- **Root cause.** Actions → Toggle UI is ⌘., and to AppKit and WebKit ⌘. also means Escape. AppKit offers a ⌘ key to the key window's views before the main menu. The preview's WKWebView, when focused, claims ⌘. in `performKeyEquivalent` so it can send the key to the page, and the menu never sees it. When the page doesn't handle the key, WebKit sends it on as `cancelOperation:`. In full screen, `-[NSWindow doCommandBySelector:]` turns `cancelOperation:` into `exitFullScreenMode:`. So the first press left full screen and toggled nothing. Once the window was out of full screen, the next press toggled the UI.
+- **Evidence.**
+  - The unit fixture `test/fixtures/menu-first-shortcuts/main.swift` uses real views in AppKit's key order. With the focused WKWebView, `performKeyEquivalent` returned YES for ⌘. in all 3 presses, both full screen and windowed, and Toggle UI ran 0 times.
+  - A ⌘. key-down that reaches a text view becomes `cancelOperation:`. In a window that reports full screen through AppKit's own checks (`styleMask` and `_fullScreenTileFillsScreen`), that produced 1 exit; windowed it produced 0.
+  - Disassembling `-[NSWindow doCommandBySelector:]` on this host shows the branch: `cancelOperation:` plus a full-screen style and a filling tile → `exitFullScreenMode:`.
+  - Not observed: WebKit's asynchronous step, where it sends the unhandled key back as `cancelOperation:`. The sandbox has no web content process. That step comes from WebKit's own source.
+- **Fix.** `MenuFirstShortcut` (`src/native/MenuFirstShortcuts.swift`) is a key-down monitor, installed in `Host.swift` next to `KeyShortcut.install()`. It gives exactly ⌘. to the main menu before any view sees it, on any keyboard layout (LKM-219). It applies to the main window and the full-screen toolbar window, and only when no sheet is attached and no menu is tracking. If the menu takes the key, the event is swallowed and no view ever turns it into Escape. Escape, ⇧⌘. and ⌥⌘. are not routed. Nothing else about the toggle changed, so windowed behaviour, the draft, its attachments and a running turn are as before.
+- **Coverage.**
+  - Unit `menu-first-shortcuts`: with the fix, ⌘. toggles 3/3 with every focus (composer and source text views, text field, WKWebView, none), full screen and windowed. There are 0 exits and 0 cancels, and the focus is kept. Without the filter, the cause above is asserted.
+  - Unit `native-shell-controller`: hiding and showing the UI keeps the running chat, its draft and its attachments.
+  - The native smoke `toggle-ui` (core) posts ⌘. and Escape to the app's event queue, so they take the real monitor/menu/responder dispatch. It runs with the focus in each input: windowed open and closed, full screen with the UI closed and open, and 4 repeated presses. It asserts that full screen stays, there is no transition and Escape doesn't toggle, and it captures `toolbar-toggle-ui-*.png`.
+  - The native run is the manager's (worker allowance: 0 calls), so the captures are not inspected yet.
+
 ## 2026-10-29 — LKM-374 three-d: the exploded-view pick repeats when one click picked the wrong element
 
 - **What failed.** The manager's native run (62 of 63) failed only `core/three-d`: "exploded view opened from the toolbar" timed out. Everything this ticket repaired passed. `failure-three-d.png` shows the select-mode toolbar for `html` (650 × 126, and `html` as the composer chip), not for the fixture card. The 3D button was found and clicked, but the root element opens no scene. `smoke-three-d.ts` picks with a single `previewInput` click (mouse down and up, no move before it), and the smoke's own history records `three-d` as load-sensitive (8 → 22 s under load).

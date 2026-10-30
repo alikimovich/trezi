@@ -180,6 +180,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         }
         // LKM-219: shortcuts on any keyboard layout; ⌘← / ⌘→ step the preview's history.
         KeyShortcut.install(); previewHistory.install()
+        // LKM-380: ⌘. (Toggle UI) goes to the menu first, so a focused view never turns it into Escape.
+        MenuFirstShortcut.install(windows: { [weak self] in (self?.window, self?.shell.toolbarWindow) }, enabled: { [weak self] in self?.menuTracking == false })
         installMenus()
         NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = true }
         NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = false }

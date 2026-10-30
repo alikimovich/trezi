@@ -20,6 +20,13 @@ and provider-seat rules are here.
   `KeyShortcut.matches(…)`, never `charactersIgnoringModifiers`; in-page preview keys
   compare `latinKey(e)` (`src/preview/latin-key.ts`), never `e.key` for letters,
   digits or punctuation. Test with synthetic non-Latin events (`test/key-shortcuts.mjs`).
+- **⌘. is Escape to AppKit and WebKit (LKM-380).** A focused WKWebView claims ⌘ keys in
+  `performKeyEquivalent` before the main menu, and an unhandled ⌘. (like a text view's
+  keyDown) becomes `cancelOperation:`, which `NSWindow` turns into a full-screen exit.
+  Toggle UI therefore goes to the menu first through `MenuFirstShortcut`
+  (`src/native/MenuFirstShortcuts.swift`); add a menu key there if a focused view must not
+  see it. Never bind Escape there. Covered by `test/menu-first-shortcuts.mjs` and the
+  `toggle-ui` smoke.
 - **A foreground capture does not map onto view frames (LKM-334).** On macOS 27 the
   ScreenCaptureKit window image from `captureVisibleRegion` drew the window 2–6 % smaller
   than its frame, varying per capture, so a pixel read at a view frame lands on the wrong

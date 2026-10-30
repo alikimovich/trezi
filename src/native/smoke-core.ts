@@ -91,6 +91,7 @@ import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
 import { checkSwiftMacros, restoreSwiftMacros } from './smoke-swift-macros'
 import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
+import { checkToggleUI } from './smoke-toggle-ui'
 import {
   assertIslandDividers,
   capture,
@@ -695,6 +696,17 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreToolbarAddress(host)
+      }
+    },
+    {
+      name: 'toggle-ui',
+      dependsOn: ['chat-ready'],
+      run: () => checkToggleUI(host, artifacts),
+      cleanup: async () => {
+        await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
+        if ((await host.request('layoutInspect')).fraction === 0)
+          await host.request('shellPerform', { action: 'expand' })
+        await clearComposer()
       }
     },
     {

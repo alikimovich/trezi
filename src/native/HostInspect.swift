@@ -97,6 +97,11 @@ extension Host {
             // Pipe test: Command-L through the main menu's key equivalents, as the keyboard sends it.
             guard ephemeral, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37) else { reply(id, error: "Test profile required"); return true }
             reply(id, ["handled":NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false])
+        case "toggleUIKey":
+            // LKM-380: ⌘. or Escape through the app's event queue, with the focus in a named input.
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            let pressed = toggleUIKey(c)
+            if let error = pressed["error"] as? String { reply(id, error: "\(error): \(pressed["state"] ?? "")") } else { reply(id, pressed) }
         case "previewHistory":
             // LKM-219: Back/Forward state, and a synthetic key (any layout) through the real dispatch.
             if c["keyCode"] != nil { guard ephemeral else { reply(id, error: "Test profile required"); return true }; reply(id, previewHistory.test(c)) }

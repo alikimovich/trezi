@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+- In full screen the first ⌘. (Toggle UI) now shows or hides the UI instead of leaving full screen, wherever the focus is (LKM-380).
+
 ## [0.6.1] - 2026-10-29
 
 ### Fixed
