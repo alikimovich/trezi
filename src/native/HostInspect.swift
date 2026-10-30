@@ -168,7 +168,7 @@ extension Host {
             reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
         // The preview's loading / HTTP-error pill (LKM-196).
         case "previewLoadInspect": reply(id, previewLoad.inspect().merging(["statusHidden":previewStatus.isHidden, "statusKind":previewStatus.model.kind, "statusMessage":previewStatus.model.message]) { _, new in new })
-        case "previewSpeedInspect": reply(id, speedBadge.inspect().merging(shell.speedInspect()) { _, new in new })
+        case "previewSpeedInspect": reply(id, speedBadgeInspect())
         case "agentRevealTest":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             let seconds = max(0, min(30, c["idleSeconds"] as? Double ?? 0))
