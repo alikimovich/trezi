@@ -9,6 +9,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Captures and `parallel-stream-timeline.json` land in the artifacts folder; a failure prints the timeline. The cleanup ends both turns, restores the stubs, the active chat and the shared chat, and closes B.
 - [x] Unit `native-chat-parallel-stream`: the same assertions over real `NativeChat.inspect()` payloads while two chats stream and switch; with `messageFramesFilter` keeping no frames they fail with "no message row in view". Unit `native-smoke-groups` pins the group and order.
 - [ ] First native run on main: `parallel-stream` in `--only=chat` and `--only=sidebar`. No native run was available to the worker; the check's loop, stubs and cleanup have not run in the app.
+## Preview speed badge below the slow-motion toolbar control (LKM-385)
+
+- [x] Badge hangs under the slow-motion segment, centered on the frame AppKit laid out, and is re-placed on every layout and toolbar measure (`src/native/PreviewSpeedPlacement.swift`, `Host.placeSpeedBadge`, `NativeShell.speedBadgeAnchor`).
+- [x] Narrow windows: `fitMore` removes "…" together with the segment under 1000 pt, so the badge takes the group's last remaining segment; "…" is used only if it is shown without the segment.
+- [x] `preview-speed` smoke and `previewSpeedInspect` assert the position through resize, sidebar, chat width, expand, narrow and full screen; unit `preview-speed-placement`.
+- [ ] Post-merge native `preview-speed` run, with `toolbar-preview-speed.png` and `toolbar-preview-speed-narrow.png` inspected (worker native allowance: 0 calls).
 ## Comments never cancel each other (LKM-382)
 
 - [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).

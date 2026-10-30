@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { runPreviewAgentTool } from '../main/preview-agent-tools'
 import { previewSpeed } from '../main/preview-speed'
 import type { NativeBridge } from './bridge'
+import { capture } from './smoke-toolbar'
+import { expandedIs } from './smoke-toolbar-overflow'
 import { waitFor } from './smoke-wait'
 
 type Page = (code: string) => Promise<unknown>
@@ -52,6 +54,133 @@ function snapshot(dir: string, out: string[] = []): string[] {
   return out
 }
 
+type Box = { x: number; y: number; width: number; height: number }
+// biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
+type Speed = Record<string, any>
+/** Below this window width `fitMore` removes the slow-motion segment and "…" (ToolbarMore.swift). */
+const NARROW_WINDOW = 960
+/** The page's bottom-left corner, where the badge sat before LKM-385. */
+const CORNER = { width: 160, height: 80 }
+
+/** What is wrong with the badge's place against the toolbar control it hangs under. */
+export function badgeProblem(state: Speed, anchor: string): string | undefined {
+  const badge: Box = state.frame
+  const control: Box | null = state.anchorFrame
+  const page: Box = state.page
+  if (!state.visible) return 'the badge is hidden'
+  if (state.anchor !== anchor || !control) return `anchored to "${state.anchor}", not "${anchor}"`
+  const bottom = control.y + control.height
+  if (badge.y < Math.max(bottom, 0)) return `y ${badge.y} is not below the toolbar (${bottom})`
+  if (badge.y - Math.max(bottom, 0) > 10) return `y ${badge.y} is far below the toolbar (${bottom})`
+  const off = badge.x + badge.width / 2 - (control.x + control.width / 2)
+  if (Math.abs(off) > 2) return `centered ${off} pt off the control`
+  const bottomLeft = badge.x < page.x + CORNER.width && badge.x + badge.width > page.x
+  if (bottomLeft && badge.y + badge.height > page.y + page.height - CORNER.height)
+    return 'over the page bottom-left corner'
+}
+
+/**
+ * LKM-385: the badge follows its toolbar control through a window resize, the sidebar and chat
+ * changing width, "expand preview", full screen with the toolbar window sliding, and takes the
+ * interaction group's last segment in a narrow window. The window is put back on any outcome.
+ */
+async function checkBadgeFollows(
+  host: NativeBridge,
+  state: () => Promise<Speed>,
+  artifacts: string,
+  evidence: Record<string, unknown>
+) {
+  const shell = (action: string, row?: string) => host.request('shellPerform', { action, row })
+  const overflow = (params: Record<string, unknown> = {}) =>
+    host.request('toolbarOverflow', params) as Promise<Speed>
+  const fullScreen = (value: boolean) =>
+    host.request('previewOverlayTest', { action: 'fullscreen', value })
+  const placed = async (name: string, anchor = 'speed') => {
+    evidence[`badge-${name}`] = await waitFor(
+      async () => {
+        const now = await state()
+        return !badgeProblem(now, anchor) && now
+      },
+      `the badge under "${anchor}" (${name})`,
+      5000,
+      async () => {
+        const now = await state()
+        return { problem: badgeProblem(now, anchor), ...now }
+      }
+    )
+  }
+  const expand = async (want: boolean) => {
+    assert.ok(await shell('expand'), 'expand preview')
+    await waitFor(expandedIs(host, want), `preview expanded ${want}`)
+  }
+  const chatWidth = async (width: number) => {
+    host.send('layoutWidth', { width })
+    await waitFor(
+      async () => (await host.request('layoutInspect')).width === width,
+      `chat width ${width}`
+    )
+  }
+  const before = await overflow()
+  const chat: number = (await host.request('layoutInspect')).width
+  let expanded = false
+  let full = false
+  let moved = false
+  try {
+    assert.ok(await shell('window-width', '1500'), 'resize to 1500')
+    await placed('wide')
+    if (!before.sidebarCollapsed) {
+      assert.ok(await shell('sidebar-width', '300'), 'sidebar width 300')
+      await placed('sidebar')
+      assert.ok(
+        await shell('sidebar-width', String(Math.round(before.sidebarWidth))),
+        'sidebar width restored'
+      )
+    }
+    await chatWidth(520)
+    await placed('chat-width')
+    await chatWidth(chat)
+    await expand(true)
+    expanded = true
+    await placed('expanded')
+    await expand(false)
+    expanded = false
+    await placed('restored')
+
+    // Narrow: neither the segment nor "…" is in the toolbar.
+    assert.ok(await shell('window-width', String(NARROW_WINDOW)), `resize to ${NARROW_WINDOW}`)
+    await placed('narrow', 'overlay')
+    const narrow = await host.request('shellInspect')
+    assert.equal(narrow.moreVisible, false, '"…" leaves a narrow window')
+    assert.deepEqual(narrow.interactionSegments, ['select-object', 'device', 'overlay'])
+    await capture(host, artifacts, 'preview-speed-narrow')
+    assert.ok(await shell('window-width', String(Math.round(before.windowWidth))), 'resize back')
+    await placed('widened')
+
+    // Full screen needs a foreground window; the toolbar lives in its own window there.
+    if (process.env.TREZI_NATIVE_BACKGROUND_TEST !== '1') {
+      await fullScreen(true)
+      full = true
+      await placed('full-screen')
+      const slid = await overflow({ action: 'toolbar-window-move', value: true })
+      assert.ok(slid.moved, `the toolbar is in its own window: ${JSON.stringify(slid)}`)
+      moved = true
+      await placed('toolbar-window-slid')
+      await overflow({ action: 'toolbar-window-move', value: false })
+      moved = false
+      await placed('toolbar-window-back')
+      await fullScreen(false)
+      full = false
+      await placed('windowed')
+    } else evidence['badge-full-screen'] = 'skipped: background test (reduced coverage)'
+  } finally {
+    if (moved) await overflow({ action: 'toolbar-window-move', value: false })
+    if (full) await fullScreen(false)
+    if (expanded) await shell('expand')
+    host.send('layoutWidth', { width: chat })
+    await shell('window-width', String(Math.round(before.windowWidth)))
+  }
+}
+
 /**
  * LKM-206: the preview's slow motion end to end. Each speed change takes a real path:
  * the toolbar menu (`shellPerform preview-speed`), the agent's `preview_speed` tool and
@@ -69,7 +198,7 @@ export async function checkPreviewSpeed(
   const evidence: Record<string, unknown> = {}
   const menu = (value: string) =>
     host.request('shellPerform', { action: 'preview-speed', row: value }) as Promise<boolean>
-  const state = () => host.request('previewSpeedInspect') as Promise<Record<string, any>>
+  const state = () => host.request('previewSpeedInspect') as Promise<Speed>
 
   // The document-start script is in the page world (it answers the control event).
   assert.equal(
@@ -111,16 +240,15 @@ export async function checkPreviewSpeed(
   assert.equal(slowed.speedLabel, 'Slow Motion 0.25×')
   assert.equal(slowed.speedProminent, true, 'the slow-motion segment shows the accent glyph')
   evidence.slowedState = slowed
-  writeFileSync(
-    join(artifacts, 'preview-speed.png'),
-    Buffer.from(await host.request('captureShell'), 'base64')
-  )
+  assert.equal(badgeProblem(slowed, 'speed'), undefined, 'the badge hangs under the segment')
+  evidence.capture = await capture(host, artifacts, 'preview-speed')
   const slow = (await page(run)) as Durations
   evidence.slow = slow
   for (const kind of Object.keys(normal) as (keyof Durations)[]) {
     const ratio = slow[kind] / MS
     assert.ok(ratio >= 3.6 && ratio <= 4.8, `0.25×: ${kind} took ${ratio.toFixed(2)}× its ${MS} ms`)
   }
+  await checkBadgeFollows(host, state, artifacts, evidence)
 
   // Pause (agent tool): a running Web Animation and the page clock hold; Step advances one frame.
   await page(`(() => {

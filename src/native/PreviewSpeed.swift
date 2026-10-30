@@ -25,6 +25,20 @@ extension Host {
         shell.updateSpeed(speed)
         nativeLayout.layout()
     }
+    /// LKM-385: hangs the badge under its toolbar control. Every layout places it, and the toolbar
+    /// again once it laid out (`toolbarLaidOut`): the canvas lays out first, a toolbar layout behind.
+    func placeSpeedBadge() {
+        let preview = views["preview"], visible = preview?.isHidden == false
+        let anchor = visible && speedBadge.speed != 1 ? shell.speedBadgeAnchor() : nil
+        speedBadge.place(under: anchor.map { canvas.convert($0.frame, from: nil) }, page: preview?.frame ?? .zero, visible: visible)
+    }
+    /// The badge against the toolbar as it is now, in canvas coordinates (`preview-speed` smoke).
+    func speedBadgeInspect() -> [String: Any] {
+        let anchor = shell.speedBadgeAnchor()
+        return speedBadge.inspect().merging(shell.speedInspect()) { _, new in new }.merging([
+            "anchor":anchor?.name ?? "", "anchorFrame":anchor.map { PreviewSpeedPlacement.box(canvas.convert($0.frame, from: nil)) } as Any,
+            "page":PreviewSpeedPlacement.box(views["preview"]?.frame ?? .zero)]) { _, new in new }
+    }
 }
 
 /// "1×", "0.25×" or "Paused", as the toolbar menu and the badge show it.
@@ -49,19 +63,18 @@ struct PreviewSpeedContent: View {
     }
 }
 
-/// The badge on the page's bottom-left corner while the preview is slowed or paused. It
-/// takes no input, so it needs no page shield (`PreviewCover.swift`).
+/// The badge under the toolbar's slow-motion control (LKM-385) while the preview is slowed or
+/// paused. It takes no input, so it needs no page shield (`PreviewCover.swift`).
 final class NativePreviewSpeed: NSHostingView<PreviewSpeedContent> {
     var speed: Double = 1 { didSet { rootView = PreviewSpeedContent(label: previewSpeedLabel(speed)) } }
     init() { super.init(rootView: PreviewSpeedContent(label: "1×")); sizingOptions = []; isHidden = true }
     required init(rootView: PreviewSpeedContent) { fatalError("init(rootView:) has not been implemented") }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func place(in page: NSRect, visible: Bool) {
-        isHidden = speed == 1 || !visible || page.width < 120
+    func place(under anchor: NSRect?, page: NSRect, visible: Bool) {
+        isHidden = speed == 1 || !visible
         guard !isHidden else { return }
-        let size = fittingSize
-        frame = NSRect(x: page.minX + 10, y: page.maxY - size.height - 10, width: size.width, height: size.height)
+        frame = PreviewSpeedPlacement.frame(size: fittingSize, anchor: anchor, page: page)
     }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    func inspect() -> [String: Any] { ["visible":!isHidden, "speed":speed, "label":previewSpeedLabel(speed), "frame":NSStringFromRect(frame)] }
+    func inspect() -> [String: Any] { ["visible":!isHidden, "speed":speed, "label":previewSpeedLabel(speed), "frame":PreviewSpeedPlacement.box(frame)] }
 }
