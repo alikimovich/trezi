@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native sidebar: recent chats nested under the selected project (LKM-378)
+
+- [x] Bun picks up to five open chats for the selected project only, newest opened first, the active chat always kept, plus "View all chats" above five (`src/native/sidebar-chats.ts`, `shell-controller.ts` `recent`/`allChats`).
+- [x] Swift nests them as outline children (`src/native/SidebarChats.swift`): title, spinner while running, the selected chat highlighted; a click is the existing `select chat:` action with a pick generation the workspace echoes. "View all chats" is a non-selectable button that opens the chat header's history menu.
+- [x] Unit `sidebar-recent-chats` (scoping, 0/1/5/>5, archive/unarchive, running, stable order, draft/attachment-preserving switches) and the generation echo in `native-workspace-controller`.
+- [x] Native smoke `sidebar-chats` (captures `sidebar-chats-*.png`/`.json`) and the running spinner in `history-menu`.
+- [ ] Native run of `--only=sidebar,chat` after merge (worker native allowance: 0 calls); inspect the sidebar captures.
+
 ## Native smoke: end the backend turn after the Stop/queue check (LKM-377)
 
 - [x] `native-chat`'s `finally` runs `cleanSharedChat` (`src/native/smoke-shared-chat.ts`): composer reset, then the provider's untagged `done` (no longer a turn-tagged one, which the tracker drops as stale), then bounded waits for the real `agent:turn-state` and the chat controller to be idle, before the stubs are restored. Stop captures and assertions unchanged.
