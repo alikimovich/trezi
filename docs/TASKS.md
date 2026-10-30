@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar: project "…" matches New chat, History behind Show History (LKM-388)
+
+- [x] `more` in `src/native/ProjectCell.swift` is a plain borderless button (`ProjectMoreButton`, row-tall so its hit target is not shorter than New chat's) built with New chat by `installActions`; the `.inline` pill is gone and New chat is unchanged. `sidebarMore` builds the menu on each press.
+- [x] No History row by default; Show History in the project menu reveals the header, closed chats and "Show N more"; the header and Hide History return to the default. Per project and session-only (`SidebarHistoryState`). Disabled on a selected project with no closed chats.
+- [x] Unit `sidebar-project-actions` (new) and `sidebar-history-rows`; `sidebar-evidence` follows the menu.
+- [x] Native `checkSidebarHistory` (`src/native/smoke-sidebar-history.ts`, group sidebar) with `sidebar-history-*.png/json`; `smoke-sidebar-chats.ts` reveals through the menu.
+- [ ] Native acceptance: run the sidebar and chat groups on origin/main after merge and inspect every `sidebar-history-*.png` (no native run in this ticket).
+
 ## Composer + opens the native file picker directly (LKM-381)
 
 - [x] `plus` in `src/native/Composer.swift` is a plain `NSButton` whose action (`chooseFiles`) opens the existing `NSOpenPanel` sheet (several files, no folders); the one-item "Attach Files…" menu is gone. Busy still disables it, Cancel changes nothing and OK appends through `attach`.

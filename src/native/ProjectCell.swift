@@ -1,9 +1,15 @@
 import AppKit
 
+/// LKM-388: a plain button's alignment rect follows its symbol, which left "…" a 20-point frame
+/// beside New chat's row-tall one. No insets: the constraints set the frame, the glyph stays put.
+final class ProjectMoreButton: NSButton {
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets() }
+}
+
 /// Keep project selection on the row and its actions on separate hover controls: the "…" menu
 /// and, as in the retired Electron rail, New chat at the trailing edge.
 final class ProjectCell: SourceListCell {
-    let more = NSPopUpButton(frame: .zero, pullsDown: true)
+    let more = ProjectMoreButton()
     let newChat = NSButton()
     private var tracking: NSTrackingArea?
     var selected = false { didSet { updateVisibility() } }
@@ -27,6 +33,54 @@ final class ProjectCell: SourceListCell {
         more.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
         newChat.contentTintColor = more.contentTintColor
     }
+    /// LKM-388: "…" and New chat are one control with two icons, so every state they have matches.
+    /// The label goes on the cell (LKM-379).
+    func installActions(title: String, project: String, target: AnyObject?, newChatAction: Selector, moreAction: Selector) {
+        let actions: [(NSButton, String, String, String, String, Selector)] = [
+            (more, "ellipsis", "more:\(project)", "Project Actions", "Actions for \(title)", moreAction),
+            (newChat, "square.and.pencil", "new-chat:\(project)", "New Chat", "New chat in \(title)", newChatAction)]
+        for (button, symbol, id, toolTip, label, action) in actions {
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            button.isBordered = false; button.imagePosition = .imageOnly
+            button.target = target; button.action = action
+            button.identifier = NSUserInterfaceItemIdentifier(id)
+            button.toolTip = toolTip
+            button.cell?.setAccessibilityLabel(label)
+            button.translatesAutoresizingMaskIntoConstraints = false; addSubview(button)
+            NSLayoutConstraint.activate([button.centerYAnchor.constraint(equalTo: centerYAnchor),
+                                         button.widthAnchor.constraint(equalToConstant: 24)])
+        }
+        NSLayoutConstraint.activate([newChat.heightAnchor.constraint(equalToConstant: 24), more.heightAnchor.constraint(equalTo: heightAnchor),
+                                     newChat.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+                                     more.trailingAnchor.constraint(equalTo: newChat.leadingAnchor)])
+    }
+    /// A row action as the checks read it, through the element VoiceOver gets.
+    func actionInspect(_ button: NSButton) -> [String: Any] {
+        layoutSubtreeIfNeeded()
+        let element = AccessibilityElementInspect.element(of: button)
+        return ["class": NSStringFromClass(type(of: button)), "bordered": button.isBordered, "bezel": button.bezelStyle.rawValue,
+                "imageOnly": button.imagePosition == .imageOnly, "width": button.frame.width,
+                "hitHeight": button.frame.intersection(bounds).height, "alpha": button.alphaValue, "tint": button.contentTintColor?.description ?? "",
+                "enabled": button.isEnabled, "focusRing": button.focusRingType.rawValue, "highlighted": button.isHighlighted,
+                "role": element?.accessibilityRole()?.rawValue ?? "", "label": element?.accessibilityLabel() ?? "", "toolTip": button.toolTip ?? ""]
+    }
+}
+
+/// Which projects show their History section, and which of those show every closed chat.
+/// Session-only: a relaunch starts hidden, as in the Electron rail.
+struct SidebarHistoryState {
+    var open: Set<String> = []
+    var all: Set<String> = []
+    /// Hiding returns the project to the default sidebar, so the next reveal starts at the preview.
+    mutating func toggle(_ project: String) {
+        if open.remove(project) == nil { open.insert(project) } else { all.remove(project) }
+    }
+    /// LKM-388: the project menu's History item. Only a selected project's closed chats are known:
+    /// Bun loads them when a project first opens, so another project's can still be coming.
+    func menuItem(_ row: ShellRow, selected: Bool) -> (title: String, enabled: Bool) {
+        if selected && row.past.isEmpty { return ("Show History", false) }
+        return (open.contains(row.project) ? "Hide History" : "Show History", true)
+    }
 }
 
 final class ShellRow: NSObject {
@@ -35,8 +89,6 @@ final class ShellRow: NSObject {
     let unread: Bool
     /// A history row's age ("3d"); the History toggle's chat count.
     let detail: String
-    /// The History toggle is open.
-    let open: Bool
     /// Bun sent favicon data for this row, decodable or not.
     let offeredIcon: Bool
     /// The decoded favicon; nil keeps the folder.
@@ -46,8 +98,8 @@ final class ShellRow: NSObject {
     let recent: [ShellRow]
     /// The selected project's closed chats (its `children` of kind "history"), for its History section.
     let past: [ShellRow]
-    /// The outline rows under a project (`layoutNested`): its open chats, then a History toggle
-    /// (`kind` "history-toggle") when it has closed chats; while History is open, the first
+    /// The outline rows under a project (`layoutNested`): its open chats. While the project menu
+    /// has revealed History, also a header that hides it again (`kind` "history-toggle"), the first
     /// `historyPreview` closed chats and "Show N more"/"Show less" (`kind` "history-more").
     private(set) var nested: [ShellRow] = []
     /// Closed chats an open History section shows before "Show N more", as the Electron rail did.
@@ -58,7 +110,6 @@ final class ShellRow: NSObject {
         running = data["running"] as? Bool ?? false
         unread = data["unread"] as? Bool ?? false
         detail = data["detail"] as? String ?? ""
-        open = data["open"] as? Bool ?? false
         // Decoded from this row's own snapshot entry, never from a later load: no icon can land on another row.
         offeredIcon = data["icon"] is String
         icon = SidebarFavicon.image(dataURL: data["icon"] as? String)
@@ -70,10 +121,9 @@ final class ShellRow: NSObject {
         layoutNested(open: false, all: false)
     }
     func layoutNested(open: Bool, all: Bool) {
-        guard !past.isEmpty else { nested = recent; return }
+        guard open, !past.isEmpty else { nested = recent; return }
         let toggle = ShellRow(["id":"history-toggle:\(project)", "kind":"history-toggle", "title":"History",
-                               "detail":"\(past.count)", "open":open, "project":project])
-        guard open else { nested = recent + [toggle]; return }
+                               "detail":"\(past.count)", "project":project])
         let shown = all ? past : Array(past.prefix(Self.historyPreview))
         let hidden = past.count - shown.count
         let more = past.count > Self.historyPreview

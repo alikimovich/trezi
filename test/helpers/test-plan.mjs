@@ -62,7 +62,8 @@ export const UI_SOURCES = {
       'sidebar-favicon',
       'native-settings-layout',
       'sidebar-evidence',
-      'sidebar-history-rows'
+      'sidebar-history-rows',
+      'sidebar-project-actions'
     ],
     native: ['sidebar', 'settings']
   }

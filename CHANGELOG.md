@@ -10,6 +10,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-30
+
+### Changed
+- The project row's "…" button now looks like New Chat, with no gray pill, and History stays out of the sidebar until you choose Show History in that menu (LKM-388).
+
 ## [0.6.6] - 2026-10-30
 
 ### Changed
