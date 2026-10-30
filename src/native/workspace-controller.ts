@@ -251,6 +251,9 @@ export class NativeWorkspaceController {
       return this.select(command.key)
     }
     if (command.type === 'close') return this.close(command.key)
+    // A sidebar chat pick is echoed like a project pick, even when refused (LKM-378).
+    if (command.type === 'chat' && command.generation !== undefined)
+      this.state.selection = command.generation
     if (command.type === 'restart') {
       const entry = this.find(command.key),
         intent = this.intent

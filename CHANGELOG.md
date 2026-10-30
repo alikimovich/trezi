@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+- The selected project in the sidebar lists up to five of its recent chats, with a spinner on running ones; click one to switch chats, or use "View all chats" when there are more (LKM-378).
+
 ## [0.5.2] - 2026-10-28
 
 ### Fixed

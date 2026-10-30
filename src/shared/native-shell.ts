@@ -9,7 +9,12 @@ export interface NativeShellRow {
   record?: string
   running?: boolean
   unread?: boolean
+  /** Every chat of the project, open then closed: the chat header's history menu. */
   children?: NativeShellRow[]
+  /** LKM-378, selected project only: up to five open chats nested under its sidebar row. */
+  recent?: NativeShellRow[]
+  /** The project has more open chats than `recent` shows: add "View all chats". */
+  allChats?: boolean
 }
 export interface BranchStatus {
   base: string
