@@ -79,6 +79,7 @@ import { checkSelectOff, restoreSelectOff } from './smoke-select-off'
 import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
+import { checkSidebarChats, restoreSidebarChats } from './smoke-sidebar-chats'
 import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
@@ -621,7 +622,11 @@ export async function runNativeCoreSmoke(
         if (process.env.TREZI_NATIVE_BACKGROUND_TEST !== '1') await preparePreviewInput(host)
         await geometry('sheets')
         const shell = await inspect('shellInspect', (s) => s.enabled.code)
-        assert.equal(shell.outlineRows, shell.rows.filter((r: any) => r.kind === 'project').length)
+        // Each project row, plus the selected project's nested recent chats (LKM-378).
+        assert.equal(
+          shell.outlineRows,
+          shell.rows.filter((r: any) => r.kind === 'project').length + shell.sidebarChats.length
+        )
         assert.deepEqual(shell.toolGroup, ['code', 'layers', 'expand'])
         assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay', 'speed'])
         // LKM-319: no divider between the buttons of a toolbar island on macOS 27, at rest and
@@ -1430,6 +1435,14 @@ export async function runNativeCoreSmoke(
         await checkHistoryMenu(host, artifacts)
       },
       cleanup: () => restoreHistoryMenu(host)
+    },
+    {
+      name: 'sidebar-chats',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkSidebarChats(host, artifacts)
+      },
+      cleanup: () => restoreSidebarChats(host)
     },
     {
       name: 'sent-attachments',

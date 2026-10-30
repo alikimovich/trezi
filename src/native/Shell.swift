@@ -503,14 +503,14 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             alignChatHeader(); layoutToolbar()
         }
 
-        if rowsChanged || projectChanged { outline.reloadData() }
+        if rowsChanged || projectChanged { outline.reloadData(); expandNested() }
         // A state older than the latest pick keeps the picked row highlighted (LKM-204).
         if selection.answers(state) {
-            if let selected = rows.first(where: { $0.project == currentProject }) {
+            if let selected = sidebarTarget() {
                 let index = outline.row(forItem: selected)
                 if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
             } else if outline.selectedRow >= 0 { outline.deselectAll(nil) }
-        } else if let highlighted, let picked = allRows.first(where: { $0.id == highlighted }) {
+        } else if let highlighted, let picked = outlineRows.first(where: { $0.id == highlighted }) {
             let index = outline.row(forItem: picked)
             if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
         }
@@ -519,11 +519,12 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         updateToolbar()
     }
     var allRows: [ShellRow] { rows.flatMap { [$0] + $0.children } }
-    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int { item == nil ? rows.count : 0 }
-    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { rows[index] }
-    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { false }
+    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int { (item as? ShellRow)?.nested.count ?? rows.count }
+    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { (item as? ShellRow)?.nested[index] ?? rows[index] }
+    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { !((item as? ShellRow)?.nested.isEmpty ?? true) }
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         let row = item as! ShellRow
+        if row.kind != "project" { return sidebarChatCell(row) }
         let cell = ProjectCell(); cell.selected = row.project == currentProject
         let symbol = row.kind == "project" ? "folder" : row.kind == "history" ? "clock" : "bubble.left"
         // A project's decoded favicon leads its row (LKM-372); without one it shares Open Project's folder.
@@ -545,15 +546,16 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         return cell
     }
     func outlineViewSelectionDidChange(_ notification: Notification) {
-        guard !applying, let row = outline.item(atRow: outline.selectedRow) as? ShellRow else { return }
-        emit(["event":"shell-action", "action":"select", "id":row.id, "generation":selection.pick()])
+        guard !applying, let row = outline.item(atRow: outline.selectedRow) as? ShellRow, row.kind != "all-chats" else { return }
+        emit(["event":"shell-action", "action":"select", "id":row.id, "project":row.project, "generation":selection.pick()])
         noteSelection()
     }
     func noteSelection() { selection.note(sidebar: (outline.item(atRow: outline.selectedRow) as? ShellRow)?.project, window: currentProject) }
     func menuNeedsUpdate(_ menu: NSMenu) {
         if menu === chatActions.historyMenu { updateHistoryMenu(); return }
         menu.removeAllItems()
-        guard let row = outline.item(atRow: outline.clickedRow) as? ShellRow else { return }
+        // Nested chat rows have no context menu: "Close Project" would close a chat (LKM-378).
+        guard let row = outline.item(atRow: outline.clickedRow) as? ShellRow, row.kind == "project" else { return }
         for item in projectMenu(row).items { menu.addItem(item.copy() as! NSMenuItem) }
     }
     func projectMenu(_ row: ShellRow) -> NSMenu {
@@ -594,6 +596,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             .merging(toolbarInspect()) { _, new in new }.merging(historyInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
             .merging(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
             .merging(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }.merging(islandInspect()) { _, new in new }
+            .merging(sidebarChatsInspect()) { _, new in new }
     }
     func perform(_ action: String, id: String?) -> Bool {
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {
@@ -617,7 +620,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             contextAction(entry); return true
         }
         if action == "selection-trail-reset" { selection.reset(); noteSelection(); return true }
-        if action == "select-row", let row = rows.first(where: { $0.id == id }) {
+        if let done = performSidebarChats(action) { return done }
+        if action == "select-row", let row = outlineRows.first(where: { $0.id == id }) {
             let index = outline.row(forItem: row)
             guard index >= 0 else { return false }
             outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false); return true

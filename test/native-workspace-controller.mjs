@@ -117,6 +117,18 @@ assert.notEqual(second, '/one')
 await controller.command({ type: 'chat', key: '/one', session: '/one' })
 assert.equal(controller.active.activeSessionKey, '/one')
 await assert.rejects(controller.command({ type: 'chat', key: '/one', session: '/other' }))
+// LKM-378: a sidebar chat pick is that same command with the host's pick generation, which is
+// echoed after the switch and even when the pick is refused.
+await controller.command({ type: 'chat', key: '/one', session: second, generation: 41 })
+assert.equal(controller.active.activeSessionKey, second)
+assert.equal(renders.at(-1).selection, 41, 'the sidebar chat pick is echoed')
+assert.equal(active.at(-1), '/one', 'and activated through the one chat path')
+await assert.rejects(
+  controller.command({ type: 'chat', key: '/one', session: '/other', generation: 42 })
+)
+assert.equal(controller.state.selection, 42, 'a refused chat pick is echoed too')
+assert.equal(controller.active.activeSessionKey, second)
+await controller.command({ type: 'chat', key: '/one', session: '/one', generation: 43 })
 await controller.command({ type: 'close-chat', key: '/one', session: second })
 assert.deepEqual(controller.active.sessionKeys, ['/one'])
 // LKM-172: a switch to another project is heard before "Opening …" renders; a restart

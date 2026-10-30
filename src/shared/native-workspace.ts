@@ -31,7 +31,8 @@ export type NativeWorkspaceCommand =
   | { type: 'close' | 'new-chat'; key: string }
   /** `generation`: the sidebar pick that asked for it, echoed as `selection`. */
   | { type: 'select'; key: string; generation?: number }
-  | { type: 'chat'; key: string; session: string }
+  /** `generation`: a sidebar chat row pick (LKM-378), echoed like `select`'s. */
+  | { type: 'chat'; key: string; session: string; generation?: number }
   | { type: 'close-chat'; key: string; session: string }
   | { type: 'resume'; key: string; record: string }
   /** `cleanCache` (LKM-197): drop the dependency caches and reload the preview past WebKit's;

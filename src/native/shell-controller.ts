@@ -1,11 +1,12 @@
 import { previewLoads } from '../main/preview-loads'
 import { previewSpeed } from '../main/preview-speed'
-import type { NativeShellAction, NativeShellState } from '../shared/native-shell'
+import type { NativeShellAction, NativeShellRow, NativeShellState } from '../shared/native-shell'
 import type { NativeProjectStatus } from '../shared/native-workspace'
 import type { NativeChatController } from './chat-controller'
 import { displayText, rememberProject } from './display-paths'
 import type { NativeGitController } from './git-controller'
 import type { NativePreferences } from './preferences'
+import { recentChats } from './sidebar-chats'
 import type { NativeWorkspaceController } from './workspace-controller'
 
 const title = (text?: string, fallback = 'New chat') =>
@@ -63,35 +64,47 @@ export class NativeShellController {
           })
           .catch(() => {})
       }
-    const rows: NativeShellState['rows'] = ws.projects.map((p) => ({
-      id: `project:${p.key}`,
-      project: p.key,
-      title: p.name,
-      icon: this.icons.get(p.root),
-      kind: 'project',
-      children: [
-        ...p.sessionKeys.map((key) => {
+    const rows: NativeShellState['rows'] = ws.projects.map((p) => {
+      const chats = new Map(
+        p.sessionKeys.map((key) => {
           const chat = this.chat.chats.get(key)
-          return {
+          const row: NativeShellRow = {
             id: `chat:${key}`,
             project: p.key,
             session: key,
-            kind: 'chat' as const,
+            kind: 'chat',
             title: chat?.title || title(chat?.messages.find((m) => m.role === 'user')?.text),
             running: chat?.isRunning ?? false,
             unread: chat?.unreadAnswer ?? false
           }
+          return [key, row]
+        })
+      )
+      // LKM-378: only the selected project nests its recent chats; the others stay compact.
+      const recent = p.key === active?.key ? recentChats(p.sessionKeys, p.activeSessionKey) : null
+      return {
+        id: `project:${p.key}`,
+        project: p.key,
+        title: p.name,
+        icon: this.icons.get(p.root),
+        kind: 'project' as const,
+        ...(recent && {
+          recent: recent.keys.flatMap((key) => chats.get(key) ?? []),
+          allChats: recent.more
         }),
-        ...(ws.history[p.key] ?? []).map((r) => ({
-          id: `history:${r.id}`,
-          project: p.key,
-          record: r.id,
-          kind: 'history' as const,
-          title:
-            r.title || title(r.transcript.find((m) => m.role === 'user')?.text, 'Previous chat')
-        }))
-      ]
-    }))
+        children: [
+          ...chats.values(),
+          ...(ws.history[p.key] ?? []).map((r) => ({
+            id: `history:${r.id}`,
+            project: p.key,
+            record: r.id,
+            kind: 'history' as const,
+            title:
+              r.title || title(r.transcript.find((m) => m.role === 'user')?.text, 'Previous chat')
+          }))
+        ]
+      }
+    })
     let url = active?.url ?? null
     try {
       if (url && this.location && new URL(url).origin === new URL(this.location).origin)
