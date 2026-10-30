@@ -3,6 +3,47 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar "View all chats" accessibility: AXUnknown in sidebar-chats (LKM-379)
+
+- [x] Diagnosis (inspect seam, plus a blank label in the product): on macOS 27 the `NSButton` view is ignored and its own role is AXUnknown; its `NSButtonCell` is the AXButton VoiceOver gets, and a label set on the view blanked the cell's description (PROGRESS 2026-10-29).
+- [x] The button is built in `src/native/SidebarChatsAccessibility.swift` with its role and label on the cell; `sidebarChatsInspect` reads role, label, element, press and the AX path from the window through `AccessibilityElementInspect`; `view-all-chats` presses that element.
+- [x] Unit `sidebar-chats-accessibility` (real button in an outline row: AXButton, label, path window > scroll area > outline > row > cell > button, hit test, press runs the action); the `sidebar-chats` smoke keeps role/label/selectable and adds element, press and path.
+- [ ] Post-merge manager native run of `sidebar-chats` (overflow click, switching, `sidebar-chats-*.png` inspected), `native-chat` and `history-menu`; reported apart from LKM-374.
+
+## Native sidebar: recent chats nested under the selected project (LKM-378)
+
+- [x] Bun picks up to five open chats for the selected project only, newest opened first, the active chat always kept, plus "View all chats" above five (`src/native/sidebar-chats.ts`, `shell-controller.ts` `recent`/`allChats`).
+- [x] Swift nests them as outline children (`src/native/SidebarChats.swift`): title, spinner while running, the selected chat highlighted; a click is the existing `select chat:` action with a pick generation the workspace echoes. "View all chats" is a non-selectable button that opens the chat header's history menu.
+- [x] Unit `sidebar-recent-chats` (scoping, 0/1/5/>5, archive/unarchive, running, stable order, draft/attachment-preserving switches) and the generation echo in `native-workspace-controller`.
+- [x] Native smoke `sidebar-chats` (captures `sidebar-chats-*.png`/`.json`) and the running spinner in `history-menu`.
+- [ ] Native run of `--only=sidebar,chat` after merge (worker native allowance: 0 calls); inspect the sidebar captures.
+
+## Native smoke: end the backend turn after the Stop/queue check (LKM-377)
+
+- [x] `native-chat`'s `finally` runs `cleanSharedChat` (`src/native/smoke-shared-chat.ts`): composer reset, then the provider's untagged `done` (no longer a turn-tagged one, which the tracker drops as stale), then bounded waits for the real `agent:turn-state` and the chat controller to be idle, before the stubs are restored. Stop captures and assertions unchanged.
+- [x] `history-menu`'s `requireCleanSharedChat` also names a running backend turn or a busy controller.
+- [x] Unit `native-smoke-stop-cleanup`: the Stop/queue sequence on the real agent.ts and Swift owners with the smoke's provider stub. The cleanup lets the next send reach the stub; a tagged `done` or skipping the turn-state wait leaves it CHAT_BUSY.
+- [ ] Focused native run passing BOTH `native-chat` and `history-menu` in one session, after merge (worker native allowance: 0 calls). Reported apart from LKM-374's known full-suite failures.
+
+## Native smoke: reset the shared chat after the Stop/queue check (LKM-376)
+
+- [x] `native-chat` resets the shared chat in its `finally` after the unchanged Stop/queue captures and assertions: queue removed, pause lifted, draft emptied (`resetSharedChat`, `src/native/smoke-shared-chat.ts`), while the provider stub still catches sends.
+- [x] `history-menu` fails fast naming a leftover queue, pause or draft (`requireCleanSharedChat`) instead of timing out on `sent.length`.
+- [x] Unit `native-smoke-shared-chat`: the Stop/queue sequence on the real chat controller, then the history-menu send reaches the stub with the reset and queues without it.
+- [ ] Focused native `--only=chat` run (native-chat + history-menu in one session) after merge (worker native allowance: 0 calls). The full suite keeps LKM-374's known failures.
+- [ ] Known gap: the manager's nativeSummary lists only its first failures; Trezi's own report (`formatFailureReport`) already prints one `SMOKE FAIL` per failure. nativeSummary is outside this repo.
+
+## Chat cancellation at repository admission (LKM-375)
+
+- [x] Repair failed Stop rebuilds: fence and dispose the old provider, settle the stopped turn, and rebuild before the next send; cover start and handoff failures with queue/draft and late-event assertions.
+- [x] Final review repair: rebuild the stopped provider generation before reopening the send slot; test a late untagged terminal from the old generation after the replacement send.
+- [x] Review repair: preserve the ordinary terminal path after interrupt acknowledgement; test delayed owner cancel, delayed settlement, and cancellation before a chat-chain callback begins.
+- [x] Bound and cancel a chat's landing wait from enqueue; a canceled admission skips Git work, while an admitted write retains the lease until it completes.
+- [x] Reconcile Stop against the same turn's state; keep a later turn safe from stale terminal and cancel replies, with queued messages paused and the draft intact.
+- [x] Add repo-lane contention and native controller regressions; extend the chat smoke fixture for no-terminal Stop and paused queue/draft.
+- [x] Manager quick tier: typecheck, typecheck:native, lint and changed-file unit checks passed (274 pass, 3 skip).
+- [ ] Final-head CI and running-app chat smoke (worker native allowance: 0 calls).
+
 ## Native sidebar project rows show the project favicon (LKM-372, user-requested)
 
 - [x] Project rows lead with the decoded favicon from the existing `project:icon` lookup (`SidebarFavicon` in `src/native/SidebarIcon.swift`, `ShellRow`, `Shell.swift`); missing, non-image, corrupt or undecodable data keeps the folder. This replaces LKM-105's folder-only choice for project rows.

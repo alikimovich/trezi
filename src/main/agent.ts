@@ -303,6 +303,12 @@ const opening = new Map<string, Promise<OpenProjectResult>>()
 // landing/reconciliation, and swept wherever a sessionKey leaves the `sessions` map
 // so it can't outlive its session.
 const runningKeys = new Set<string>()
+// Keep the send slot closed while a stopped provider generation is replaced.
+// restartChatSession clears runningKeys before its caller finishes settling Stop.
+const stopRebuilds = new Map<string, ProviderSession>()
+// A failed Stop rebuild leaves a disposed provider in sessions until the next send
+// can retry the handoff. Never dispatch a new turn into that provider.
+const stoppedProviders = new Map<string, ProviderSession>()
 const preparingTurns = new Map<string, { cancelled: boolean }>()
 // LKM-165: when each running chat last made progress, and the turn the owner admitted
 // last, so a turn that stops making progress can be ended in both places.
@@ -1150,6 +1156,7 @@ export function registerAgentIpc(
 
   /** Forget a chat's local turn state (its owner record was closed or replaced). */
   const forgetChat = (sessionKey: string): void => {
+    stoppedProviders.delete(sessionKey)
     memoryInjection.forget(sessionKey)
     firstSends.delete(sessionKey)
     restoredSummaries.delete(sessionKey)
@@ -1418,7 +1425,8 @@ export function registerAgentIpc(
     root: string,
     sessionKey: string,
     options: AgentOptions = {},
-    reason: 'model' | 'restart' = 'model'
+    reason: 'model' | 'restart' = 'model',
+    onReplaced?: (session: ProviderSession) => void
   ): Promise<{ ok: boolean; error?: string }> => {
     const key = projectKey(root)
     if (!sessionKeysForProject(key).includes(sessionKey)) {
@@ -1454,7 +1462,7 @@ export function registerAgentIpc(
         stopProvider(s)
         return { ok: false, error: 'That chat is no longer open.' }
       }
-      stopProvider(existing)
+      if (stoppedProviders.get(sessionKey) !== existing) stopProvider(existing)
       void conversation()
         .release(sessionKey)
         .catch(() => {})
@@ -1464,6 +1472,7 @@ export function registerAgentIpc(
         previous.transcript.map((entry) => ({ ...entry }))
       )
       sessions.set(sessionKey, s)
+      onReplaced?.(s)
       if (activeKey === sessionKey) activeSessionKeyByProject.set(key, sessionKey)
       return { ok: true }
     } catch (err) {
@@ -1834,11 +1843,33 @@ export function registerAgentIpc(
         uptimeNs: process.hrtime.bigint().toString()
       })
       if (key && (pending.has(key) || firstSends.has(key))) await waitForChat(key)
-      const session = key ? sessions.get(key) : null
+      let session = key ? sessions.get(key) : null
       if (requestedKey && !session) throw new Error('This chat is closed.')
       // The chat is busy: the caller queues the message (and the watchdog bounds the wait).
-      if (key && staleChat(key, STALE_SEND_MS)) await settleChat(key, STUCK_NOTE)
-      if (key && runningKeys.has(key)) throw new Error(CHAT_BUSY)
+      if (key && stopRebuilds.get(key) !== session && staleChat(key, STALE_SEND_MS))
+        await settleChat(key, STUCK_NOTE)
+      if (key && (runningKeys.has(key) || stopRebuilds.get(key) === session))
+        throw new Error(CHAT_BUSY)
+      if (key && session && stoppedProviders.get(key) === session) {
+        let fencedSession = session
+        stopRebuilds.set(key, fencedSession)
+        try {
+          const recovered = await restartChatSession(
+            session.record.projectRoot,
+            key,
+            session.options,
+            'restart',
+            (replacement) => {
+              fencedSession = replacement
+              stopRebuilds.set(key, replacement)
+            }
+          )
+          if (!recovered.ok) throw new Error(recovered.error ?? 'Could not restart stopped chat.')
+          session = sessions.get(key) ?? null
+        } finally {
+          if (stopRebuilds.get(key) === fencedSession) stopRebuilds.delete(key)
+        }
+      }
       if (!session || !key) {
         safeSend(getWindow, 'agent:event', {
           type: 'error',
@@ -2349,14 +2380,16 @@ export function registerAgentIpc(
 
   // The owner's turn for a chat this process no longer runs: end it so the chat takes
   // the next message. Safe when the owner already moved on (a stale turn changes nothing).
-  const releaseOwnerTurn = async (key: string): Promise<boolean> => {
-    const turn = turnIds.get(key)
-    if (!turn) return false
+  const releaseOwnerTurn = async (
+    key: string,
+    expectedTurn = turnIds.get(key)
+  ): Promise<boolean> => {
+    if (!expectedTurn) return false
     const aborted = await conversation()
-      .abort(key, turn)
+      .abort(key, expectedTurn)
       .catch(() => false)
     const landed = await conversation()
-      .landed(key, turn, Date.now())
+      .landed(key, expectedTurn, Date.now())
       .then((result) => result.landed)
       .catch(() => false)
     return aborted || landed
@@ -2375,14 +2408,26 @@ export function registerAgentIpc(
   }
   // Both halves of the running state end together: this process's mirror and the owner's
   // phase. The chat is told in its own transcript and its UI leaves "running" (LKM-165).
-  const settleChat = async (sessionKey: string, note: string): Promise<void> => {
-    await releaseOwnerTurn(sessionKey)
+  const settleChat = async (
+    sessionKey: string,
+    note: string,
+    expectedTurn = turnIds.get(sessionKey),
+    waitMs = INTERRUPT_IPC_CAP_MS
+  ): Promise<void> => {
+    await Promise.race([
+      releaseOwnerTurn(sessionKey, expectedTurn),
+      new Promise<boolean>((r) => setTimeout(r, waitMs, false))
+    ])
+    if (turnIds.get(sessionKey) !== expectedTurn) return
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
     watchdog.forget(sessionKey)
     forgetLiveWatch(sessionKey)
     const session = sessions.get(sessionKey)
     const turn = turnIds.get(sessionKey)
+    // The provider never sent this turn's terminal: its run must not stay at the head
+    // of the tracker, or the next turn's events would be credited to it.
+    if (session && turn) trackers.get(session)?.drop(turn)
     session?.emit({ type: 'status', text: note })
     turnTimings.completed(sessionKey, turn)
     session?.emit({ type: 'landing-finished', ...(turn ? { turn } : {}) })
@@ -2400,8 +2445,26 @@ export function registerAgentIpc(
   stuckTimer.unref?.()
   app.on('before-quit', () => clearInterval(stuckTimer))
   ipcMain.handle('agent:interrupt', (_e, requestedKey?: string) => interruptChat(requestedKey))
+  ipcMain.handle('agent:turn-state', async (_e, key: string) => {
+    const owned = await Promise.race([
+      conversation()
+        .snapshot()
+        .then((state) => state.chats.find((chat) => chat.chat === key))
+        .catch(() => undefined),
+      new Promise<undefined>((r) => setTimeout(r, INTERRUPT_IPC_CAP_MS, undefined))
+    ])
+    return {
+      turn: owned?.turn ?? turnIds.get(key) ?? null,
+      running: owned
+        ? owned.phase !== 'idle' || landingInFlight(key)
+        : runningKeys.has(key) || preparingTurns.has(key) || landingInFlight(key)
+    }
+  })
   const interruptChat = async (requestedKey?: string): Promise<void> => {
     const sessionKey = requestedKey === undefined ? activeKey : requestedKey
+    const stoppedTurn = sessionKey ? turnIds.get(sessionKey) : undefined
+    const deadline = Date.now() + INTERRUPT_IPC_CAP_MS
+    const remaining = () => Math.max(0, deadline - Date.now())
     if (sessionKey) cancelProjectUi(sessionKey)
     // A landing in flight ends here: its work stays held (Retry) and the chat is free.
     if (sessionKey) abandonLanding(sessionKey, 'Stopped before the landing finished.')
@@ -2409,9 +2472,13 @@ export function registerAgentIpc(
     if (preparation) preparation.cancelled = true
     // The owner marks the turn cancelled: it lands as failed and never continues.
     if (sessionKey)
-      await conversation()
-        .cancel(sessionKey)
-        .catch(() => {})
+      await Promise.race([
+        conversation()
+          .cancel(sessionKey, stoppedTurn)
+          .catch(() => undefined),
+        new Promise<undefined>((r) => setTimeout(r, remaining(), undefined))
+      ])
+    if (sessionKey && turnIds.get(sessionKey) !== stoppedTurn) return
     const session = sessionKey ? sessions.get(sessionKey) : undefined
     if (!session || !sessionKey) return // Release any open prompts (interrupt may not abort their per-call signal),
     // so cards don't orphan and the backend callbacks unblock.
@@ -2421,7 +2488,7 @@ export function registerAgentIpc(
     for (const id of [...session.pending.keys()]) resolvePending(session, id, 'deny')
     if (session.pendingQuestions)
       for (const id of [...session.pendingQuestions.keys()]) resolveQuestion(session, id, null)
-    const root = session.root
+    const root = session.record.projectRoot
     // A stop that lands after the turn already finished/aborted makes the SDK
     // throw "Operation aborted" — treat it as the no-op it is.
     //
@@ -2431,16 +2498,85 @@ export function registerAgentIpc(
     // button reads as broken — which is exactly how the Claude deadlock presented.
     const outcome = await Promise.race([
       session.interrupt?.().catch(() => undefined) ?? Promise.resolve(undefined),
-      new Promise<undefined>((r) => setTimeout(r, INTERRUPT_IPC_CAP_MS, undefined))
+      new Promise<undefined>((r) => setTimeout(r, remaining(), undefined))
     ])
     // The backend killed its query to escape a wedge, so this session is dead:
     // rebuild the chat in place, or it would keep accepting messages into nothing.
     if (outcome && typeof outcome === 'object' && outcome.hardStopped) {
       await restartChatSession(root, sessionKey, session.options, 'restart')
     }
-    // Stop on a chat that shows running with nothing in flight (no provider turn, no
-    // landing, quiet for a while): settle it, so Stop is never a dead end (LKM-165).
-    if (staleChat(sessionKey, STALE_STOP_MS)) await settleChat(sessionKey, STUCK_NOTE)
+    // A normal provider terminal can arrive just after interrupt resolves. Give its
+    // owner claim and reconciliation the rest of the interrupt window before using
+    // the stuck-turn fallback. The tracker drops its run as soon as that terminal
+    // arrives, even while the owner is still recording it.
+    if (turnIds.get(sessionKey) !== stoppedTurn || !runningKeys.has(sessionKey)) return
+    if (remaining() > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining()))
+    if (
+      turnIds.get(sessionKey) !== stoppedTurn ||
+      !runningKeys.has(sessionKey) ||
+      landingInFlight(sessionKey)
+    )
+      return
+    // Nothing in flight at all (no provider run, no landing, quiet since before this
+    // Stop): nothing will end the running state by itself, so Stop settles it (LKM-165).
+    if (!trackers.get(session)?.current) {
+      if (staleChat(sessionKey, STALE_STOP_MS))
+        await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
+      return
+    }
+    // Check the owner's phase before forcing an end. An already claimed terminal
+    // may be entering its landing even if this process has not registered it yet.
+    const owned = await Promise.race([
+      conversation()
+        .snapshot()
+        .catch(() => null),
+      new Promise<null>((resolve) => setTimeout(resolve, 500, null))
+    ])
+    if (
+      turnIds.get(sessionKey) === stoppedTurn &&
+      runningKeys.has(sessionKey) &&
+      trackers.get(session)?.current?.turn === stoppedTurn &&
+      !landingInFlight(sessionKey) &&
+      owned?.chats.find((chat) => chat.chat === sessionKey)?.turn === stoppedTurn &&
+      owned?.chats.find((chat) => chat.chat === sessionKey)?.phase === 'running'
+    ) {
+      // The old provider may still emit an untagged terminal after its run is
+      // dropped. Replace its generation before opening the send slot, so that
+      // terminal can never be attributed to the next turn's tracker.
+      let fencedSession = session
+      stopRebuilds.set(sessionKey, fencedSession)
+      try {
+        let rebuilt = false
+        try {
+          const result = await restartChatSession(
+            root,
+            sessionKey,
+            session.options,
+            'restart',
+            (s) => {
+              fencedSession = s
+              stopRebuilds.set(sessionKey, s)
+            }
+          )
+          rebuilt = result.ok
+        } catch {
+          // A provider or owner can throw during restart. Stop still has to settle.
+        }
+        if (!rebuilt && sessions.get(sessionKey) === session) {
+          // Fence buffered, untagged events even if provider disposal itself fails.
+          trackers.delete(session)
+          stoppedProviders.set(sessionKey, session)
+          try {
+            stopProvider(session)
+          } catch {
+            // The tracker is already detached and the next send must rebuild.
+          }
+        }
+        await settleChat(sessionKey, STUCK_NOTE, stoppedTurn)
+      } finally {
+        if (stopRebuilds.get(sessionKey) === fencedSession) stopRebuilds.delete(sessionKey)
+      }
+    }
   }
 
   // Don't leave any backend subprocess running after trezi quits. Each chat is closed

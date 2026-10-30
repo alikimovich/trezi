@@ -110,7 +110,11 @@ the agent continues the agreed plan there.
 
 When a project is open, the sidebar starts with Open Project and New Project buttons, separated by a gap
 from projects with consistent native outline folder symbols and a More menu for
-memory, ordering and closing. History above the chat provides open/saved sessions,
+memory, ordering and closing. The selected project nests up to five of its open chats,
+newest opened first (the active chat always keeps a row), each with a spinner while its
+turn runs; a click switches chats like the history menu, and "View all chats" opens
+that menu when there are more (LKM-378, `src/native/SidebarChats.swift`,
+`src/native/sidebar-chats.ts`). History above the chat provides open/saved sessions,
 rename and review/resume. Background runs appear as actionable chat cards. Project
 and chat state persists in the native profile. The toolbar keeps the sidebar toggle, chat
 and preview actions aligned with their columns. Preview controls include domain

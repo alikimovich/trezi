@@ -9,6 +9,7 @@ import { serviceEvents } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
 import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
+import { cleanSharedChat } from './smoke-shared-chat'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -31,6 +32,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   const originalInvoke = nativeChat.services.invoke
   const sent: unknown[][] = []
   let turn = ''
+  let noTerminalStop = false
+  let reset: unknown
   // The actual agent:send RPC and its provider event hook own the log lines.
   // Only the provider's outbound send is stubbed; no paid provider call occurs.
   const provider = stubAgentSendForSmoke(state.chat, (...args) => {
@@ -39,6 +42,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   const send = (event: object) => provider.emit(event as AgentEvent)
   nativeChat.services.invoke = async (channel, ...args) => {
     if (channel === 'agent:send') turn = String(args[4])
+    if (noTerminalStop && channel === 'agent:interrupt') return undefined
+    if (noTerminalStop && channel === 'agent:turn-state') return { turn, running: false }
     return originalInvoke(channel, ...args)
   }
   try {
@@ -453,12 +458,56 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     )
     send({ type: 'done' })
     await wait((current) => !current.activity)
+    // A provider that acknowledges Stop without a terminal must still clear
+    // Stopping, while the user's next message and draft remain in the composer.
+    await host.request('composerPerform', { text: 'Stop fixture turn' })
+    await host.request('composerPerform', { action: 'send' })
+    await waitFor(() => sent.slice().length === 4, 'stop fixture reached the provider')
+    await host.request('composerPerform', { text: 'Keep queued message' })
+    await host.request('composerPerform', { action: 'send' })
+    await host.request('composerPerform', { text: 'Keep draft' })
+    noTerminalStop = true
+    await host.request('chatPerform', { action: 'stop' })
+    await wait((current) => !current.activity)
+    const stopped = await host.request('composerInspect')
+    if (!stopped.queuePaused || stopped.queueCount !== 1 || stopped.text !== 'Keep draft')
+      throw new Error(`Stop lost the paused queue or draft: ${JSON.stringify(stopped)}`)
+    if (sent.slice().length !== 4) throw new Error('Stop sent a queued message automatically')
+    writeFileSync(
+      join(dirname(screenshot), 'chat-stop-queue.png'),
+      Buffer.from((await host.request('captureVisibleShell')).png, 'base64')
+    )
+    writeFileSync(
+      join(dirname(screenshot), 'chat-stop-queue.json'),
+      JSON.stringify(
+        { queuePaused: stopped.queuePaused, queue: stopped.queue, draft: stopped.text },
+        null,
+        2
+      )
+    )
   } finally {
+    noTerminalStop = false
+    // LKM-376: the Stop check above leaves its paused queue and draft for the capture; the
+    // next check sends on this same chat. Reset it, pass or fail, while the stubs still
+    // catch any send. A reset failure fails only a check that otherwise passed (below).
+    // LKM-377: the no-terminal Stop left the backend turn running (only the override said
+    // otherwise). End it with the provider's untagged `done`, as the sends above do: a
+    // turn-tagged `done` is stale to the turn tracker and ends nothing. Then wait for the
+    // real agent:turn-state and the controller to be idle before the stubs go.
+    reset = await cleanSharedChat(
+      host,
+      {
+        state: () => originalInvoke('agent:turn-state', state.chat),
+        controller: () => nativeChat.get(state.chat)
+      },
+      () => send({ type: 'done' })
+    )
     nativeChat.services.invoke = originalInvoke
     // If preparation failed before send, retain the stub until this test process
     // exits: a late agent:send must never escape to a real provider subscription.
     if (sent.length) provider.restore()
   }
+  if (reset) throw reset
   console.log(
     'Swift/Bun chat without an application WebView: Send, queue, streamed Markdown, permissions and questions passed.'
   )

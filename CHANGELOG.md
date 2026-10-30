@@ -10,6 +10,21 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-29
+
+### Fixed
+- VoiceOver reads the sidebar's "View all chats" as a button with its own label (LKM-379).
+
+## [0.6.0] - 2026-10-29
+
+### Added
+- The selected project in the sidebar lists up to five of its recent chats, with a spinner on running ones; click one to switch chats, or use "View all chats" when there are more (LKM-378).
+
+## [0.5.2] - 2026-10-28
+
+### Fixed
+- Stopping a chat waiting behind another chat's repository landing now ends its wait and keeps its edits for Retry; Stopping also clears when the canceled turn has ended without a terminal event (LKM-375).
+
 ## [0.5.1] - 2026-10-27
 
 ### Changed

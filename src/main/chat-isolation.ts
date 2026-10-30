@@ -217,7 +217,7 @@ export function abandonLanding(sessionKey: string, reason: string): boolean {
 const draining = new Set<string>()
 /** Whether a landing of this chat is in flight. */
 export function landingInFlight(sessionKey: string): boolean {
-  return landings.has(sessionKey)
+  return landings.has(sessionKey) || draining.has(sessionKey)
 }
 
 /** The tail of a transcript from its LAST user message on — the "last turn" a park
@@ -250,12 +250,18 @@ export function afterTurn(
   if (!st) return Promise.resolve(null)
   const turn = lastTurn(transcript)
   st.lastUsed = Date.now()
-  const task = st.chain.then(() =>
+  // Register Stop and the timeout at enqueue, including time spent behind this
+  // chat's earlier turn. A cancelled waiter skips all Git work at admission.
+  let admitted = false
+  let cancelled = false
+  let settled: 'pending' | 'ok' | 'failed' = 'pending'
+  const write = st.chain.then(() =>
     enqueueRepoWrite(st.liveRoot, async () => {
+      if (cancelled) return null
+      admitted = true
       st.lastUsed = Date.now()
       if (st.reclaimed) return null
       const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
-      let settled: 'pending' | 'ok' | 'failed' = 'pending'
       batch.then(
         () => {
           settled = 'ok'
@@ -264,36 +270,40 @@ export function afterTurn(
           settled = 'failed'
         }
       )
-      try {
-        // Bounded (LKM-165): the chat stops waiting on a landing that stalls, or that Stop
-        // ends, and shows it held with Retry.
-        return await landings.run(sessionKey, batch)
-      } catch (error) {
-        if (!(error instanceof LandingEnded)) {
-          await landingFailed(sessionKey, st, error, turn)
-          return null
-        }
-        // The batch itself cannot be cancelled and keeps writing the worktree and live
-        // tree, so the lease and this chat's chain stay held until it settles: a Retry or
-        // the next turn's landing never overlaps it. Whatever it ends as is the truth.
-        draining.add(sessionKey)
-        try {
-          await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
-          const late = await batch.then(
-            (files) => ({ files }),
-            (cause) => ({ cause })
-          )
-          if ('cause' in late) {
-            await landingFailed(sessionKey, st, late.cause, turn)
-            return null
-          }
-          return late.files
-        } finally {
-          draining.delete(sessionKey)
-        }
-      }
+      return batch
     })
   )
+  const task = landings
+    .run(sessionKey, write, undefined, () => {
+      cancelled = true
+    })
+    .catch(async (error) => {
+      if (!(error instanceof LandingEnded)) {
+        await landingFailed(sessionKey, st, error, turn)
+        return null
+      }
+      if (!admitted) {
+        await landingFailed(sessionKey, st, error, turn)
+        return null
+      }
+      // An admitted batch owns the lease until its real Git work finishes. Stop
+      // ends the visible wait, but never interrupts a write partway through apply.
+      draining.add(sessionKey)
+      try {
+        await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
+        const late = await write.then(
+          (files) => ({ files }),
+          (cause) => ({ cause })
+        )
+        if ('cause' in late) {
+          await landingFailed(sessionKey, st, late.cause, turn)
+          return null
+        }
+        return late.files
+      } finally {
+        draining.delete(sessionKey)
+      }
+    })
   st.chain = task.catch(() => null)
   return task.catch(() => null)
 }

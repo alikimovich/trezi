@@ -4,6 +4,7 @@ import { stubAgentSendForSmoke } from '../main/agent'
 import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { requireCleanSharedChat } from './smoke-shared-chat'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -40,6 +41,10 @@ export async function checkHistoryMenu(host: NativeBridge, artifacts: string) {
   })
 
   // A turn in chat A; then chat B becomes the active chat and A is a background chat.
+  await requireCleanSharedChat(host, 'history-menu', {
+    state: () => nativeChat.services.invoke('agent:turn-state', a),
+    controller: () => nativeChat.get(a)
+  })
   await host.request('composerPerform', { text: 'History indicator turn' })
   await waitFor(async () => (await host.request('composerInspect')).enabled, 'composer enabled')
   await host.request('composerPerform', { action: 'send' })
@@ -62,6 +67,13 @@ export async function checkHistoryMenu(host: NativeBridge, artifacts: string) {
     )
   if (row(running, a).slotLength !== 3 || row(running, a).selected)
     throw new Error('The running background row lost its fixed dot slot or gained a checkmark')
+  // LKM-378: the sidebar's nested row for A shows the same real turn state, spinning.
+  const nested = (state: Shell, chat: string) =>
+    state.sidebarChats?.find((r: Shell) => r.id === `chat:${chat}`)
+  await waitFor(async () => {
+    const item = nested(await shell(), a)
+    return item?.running && item.spinning && item.label.endsWith(', Running')
+  }, 'sidebar row of the running chat spins')
 
   const reduce = (value: boolean | null) => menu('reduce-motion', { value })
   const capture = async (name: string) => {
@@ -163,6 +175,10 @@ export async function checkHistoryMenu(host: NativeBridge, artifacts: string) {
     throw new Error(
       `The live update replaced a tracked item, lost the checkmark or resized: ${JSON.stringify(unreadA)}`
     )
+  await waitFor(async () => {
+    const item = nested(await shell(), a)
+    return item && !item.running && !item.spinning && !item.label.endsWith(', Running')
+  }, 'sidebar running indicator clears when the turn ends')
   const unreadLight = await capture('unread-light')
   sameSize(runningLight, unreadLight, 'running/unread light')
   await highlight(a)

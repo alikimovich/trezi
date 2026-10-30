@@ -33,6 +33,9 @@ final class ShellRow: NSObject {
     /// The decoded favicon; nil keeps the folder.
     let icon: NSImage?
     let children: [ShellRow]
+    /// The outline rows under a project (LKM-378): the selected project's recent chats, then
+    /// "View all chats" (`kind` "all-chats") when it has more. Empty for every other project.
+    let nested: [ShellRow]
     init(_ data: [String: Any]) {
         id = data["id"] as? String ?? ""; title = data["title"] as? String ?? ""
         kind = data["kind"] as? String ?? "chat"; project = data["project"] as? String ?? ""
@@ -42,6 +45,10 @@ final class ShellRow: NSObject {
         offeredIcon = data["icon"] is String
         icon = SidebarFavicon.image(dataURL: data["icon"] as? String)
         children = (data["children"] as? [[String: Any]] ?? []).map(ShellRow.init)
+        let recent = (data["recent"] as? [[String: Any]] ?? []).map(ShellRow.init)
+        let key = data["project"] as? String ?? ""
+        nested = recent + (data["allChats"] as? Bool == true
+            ? [ShellRow(["id":"all-chats:\(key)", "kind":"all-chats", "title":"View all chats", "project":key])] : [])
     }
 }
 

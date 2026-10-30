@@ -98,7 +98,7 @@ export interface ConversationOwner {
   /** The user entry reached the provider; `handoff` asks for the recorded history once. */
   send(chat: string, turn: string, entry: SessionTranscriptEntry): Promise<{ handoff: boolean }>
   abort(chat: string, turn: string): Promise<boolean>
-  cancel(chat: string): Promise<{ phase: TurnPhase; turn: string | null }>
+  cancel(chat: string, turn?: string): Promise<{ phase: TurnPhase; turn: string | null }>
   terminal(
     chat: string,
     turn: string,

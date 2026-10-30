@@ -18,33 +18,39 @@ export const STALE_SEND_MS = 60_000
 /** The landing's own failure when it stalls or is stopped; the work stays held with Retry. */
 export class LandingEnded extends Error {}
 
-/** One bounded wait per chat for a landing, which the user's Stop can also end. */
+/** Bounded waits for a chat's queued landings, all ended by the user's Stop. */
 export class LandingGuard {
-  private active = new Map<string, (reason: string) => void>()
+  private active = new Map<string, Set<(reason: string) => void>>()
 
   constructor(private stuckMs = LANDING_STUCK_MS) {}
 
   /** Whether a landing for this chat is in flight. */
   has(key: string): boolean {
-    return this.active.has(key)
+    return !!this.active.get(key)?.size
   }
 
-  /** Ends the chat's landing wait now (Stop). The work behind it is not cancelled. */
+  /** Ends the chat's landing waits now (Stop); callers skip queued work at admission. */
   abandon(key: string, reason: string): boolean {
-    const end = this.active.get(key)
-    end?.(reason)
-    return !!end
+    const ends = this.active.get(key)
+    const had = !!ends?.size
+    for (const end of [...(ends ?? [])]) end(reason)
+    return had
   }
 
   /** `work` settles as itself, or rejects with `LandingEnded` on a stall or `abandon`. */
-  run<T>(key: string, work: Promise<T>, stuckMs = this.stuckMs): Promise<T> {
+  run<T>(key: string, work: Promise<T>, stuckMs = this.stuckMs, onEnd?: () => void): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const done = (settle: () => void): void => {
         clearTimeout(timer)
-        if (this.active.get(key) === end) this.active.delete(key)
+        const ends = this.active.get(key)
+        ends?.delete(end)
+        if (!ends?.size) this.active.delete(key)
         settle()
       }
-      const end = (reason: string): void => done(() => reject(new LandingEnded(reason)))
+      const end = (reason: string): void => {
+        onEnd?.()
+        done(() => reject(new LandingEnded(reason)))
+      }
       const timer = setTimeout(
         () =>
           end(
@@ -53,7 +59,9 @@ export class LandingGuard {
         stuckMs
       )
       timer.unref?.()
-      this.active.set(key, end)
+      const ends = this.active.get(key) ?? new Set<(reason: string) => void>()
+      ends.add(end)
+      this.active.set(key, ends)
       work.then(
         (value) => done(() => resolve(value)),
         (error) => done(() => reject(error))
