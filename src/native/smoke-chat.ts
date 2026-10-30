@@ -10,6 +10,7 @@ import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
 import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
 import { cleanSharedChat } from './smoke-shared-chat'
+import { shimmers } from './smoke-sidebar-shimmer'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -183,17 +184,30 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     })
     send({ type: 'status', text: 'Reading project files…' })
     send({ type: 'delta', text: '\n\nStreaming continued after tool activity.' })
-    // The chat's nested sidebar row spins while the turn runs (it is the selected, active chat).
-    const runningRow = await waitFor(async () => {
-      const shell = await host.request('shellInspect')
-      return shell.sidebarChats?.find(
-        (row: any) => row.id === `chat:${state.chat}` && row.running && row.spinning
+    // The chat's nested sidebar row shimmers while the model works (it is the selected, active
+    // chat), and only then: a wait for the user or the landing keeps it Running, without shimmer.
+    const sidebarRow = async () =>
+      (await host.request('shellInspect')).sidebarChats?.find(
+        (row: any) => row.id === `chat:${state.chat}`
       )
+    const runningRow = await waitFor(async () => {
+      const row = await sidebarRow()
+      return row?.running && row.thinking && shimmers(row) && row
     }, 'native sidebar running indicator')
     if (!runningRow.selected || !runningRow.label.endsWith(', Running'))
       throw new Error(
         `Sidebar running row is not the selected Running row: ${JSON.stringify(runningRow)}`
       )
+    const runningWithoutShimmer = (what: string) =>
+      waitFor(async () => {
+        const row = await sidebarRow()
+        return (
+          row?.running &&
+          !row.thinking &&
+          row.shimmer.mode === 'none' &&
+          row.label.endsWith(', Running')
+        )
+      }, `native sidebar row stops shimmering ${what}`)
     await wait((state) => state.activityKind === 'writing')
     writeFileSync(
       screenshot.replace('.png', '-streaming.png'),
@@ -206,18 +220,28 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     await wait((state) => state.activityKind === 'waiting' && !state.activityAnimated)
     if ((await host.request('composerInspect')).buttonBeam)
       throw new Error('Permission wait retained thinking beam')
+    await runningWithoutShimmer('while it waits for approval')
     send({ type: 'permission-resolved', id: 'beam-wait' })
     await wait((state) => state.activityKind === 'writing')
+    await waitFor(async () => {
+      const row = await sidebarRow()
+      return row?.thinking && shimmers(row)
+    }, 'native sidebar row shimmers again after the approval')
     send({ type: 'done', landingPending: true })
     await wait((state) => state.activityKind === 'applying')
     if ((await host.request('composerInspect')).buttonBeam)
       throw new Error('Landing retained thinking beam')
+    await runningWithoutShimmer('while it lands')
     send({ type: 'landing-finished' })
     let lastRow: any
     await waitFor(async () => {
-      const shell = await host.request('shellInspect')
-      lastRow = shell.sidebarChats?.find((row: any) => row.id === `chat:${state.chat}`)
-      return lastRow && !lastRow.running && !lastRow.spinning && lastRow.label === lastRow.title
+      lastRow = await sidebarRow()
+      return (
+        lastRow &&
+        !lastRow.running &&
+        lastRow.shimmer.mode === 'none' &&
+        lastRow.label === lastRow.title
+      )
     }, 'native sidebar idle indicator').catch((error) => {
       throw new Error(`${error.message} (last row: ${JSON.stringify(lastRow)})`)
     })

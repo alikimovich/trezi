@@ -7,8 +7,6 @@ import AppKit
 /// so switching goes through the one workspace/chat path that keeps drafts, attachments and
 /// running turns. A long title scrolls while its row is hovered (`SidebarMarquee.swift`).
 final class SidebarChatCell: SourceListCell {
-    /// Shown, and spinning, only while the chat's turn runs.
-    let spinner = NSProgressIndicator()
     let slot = NSView()
     /// A finished answer the user has not opened yet (`unread`), when no turn runs.
     let dot = NSView()
@@ -19,7 +17,8 @@ final class SidebarChatCell: SourceListCell {
     private(set) var archive: NSButton?
     private(set) var detail: NSTextField?
     private var chevron: NSImageView?
-    private(set) var spinning = false
+    /// Only while the chat's model is at work (`SidebarTitleShimmer.swift`).
+    private(set) var shimmer: SidebarTitleShimmer?
     private(set) var hovered = false
     private var tracking: NSTrackingArea?
     private var resting: NSLayoutConstraint?, hovering: NSLayoutConstraint?
@@ -27,12 +26,9 @@ final class SidebarChatCell: SourceListCell {
     init(row: ShellRow, canArchive: Bool, target: AnyObject?) {
         super.init(frame: .zero)
         identifier = NSUserInterfaceItemIdentifier(row.id)
-        spinner.style = .spinning; spinner.controlSize = .small
-        spinner.isDisplayedWhenStopped = false
-        spinner.setAccessibilityLabel("Running")
         dot.wantsLayer = true; dot.layer?.cornerRadius = 3; dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
         dot.isHidden = !(row.unread && !row.running)
-        var views: [NSView] = [slot, spinner, dot]
+        var views: [NSView] = [slot, dot]
         var constraints: [NSLayoutConstraint] = []
         let content: NSView
         if row.kind == "history-toggle" || row.kind == "history-more" {
@@ -91,12 +87,10 @@ final class SidebarChatCell: SourceListCell {
         for view in [content] + views { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
         // The status slot sits under the project's icon, so chat titles line up with project titles.
         NSLayoutConstraint.activate(SidebarIconLayout.constraints(icon: slot, label: content, in: self, leading: SourceList.iconLeading) + constraints + [
-            spinner.centerXAnchor.constraint(equalTo: slot.centerXAnchor), spinner.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
-            spinner.widthAnchor.constraint(equalToConstant: 12), spinner.heightAnchor.constraint(equalToConstant: 12),
             dot.centerXAnchor.constraint(equalTo: slot.centerXAnchor), dot.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 6), dot.heightAnchor.constraint(equalToConstant: 6)
         ])
-        if row.running { spinner.startAnimation(nil); spinning = true }
+        if row.thinking, let title { shimmer = SidebarTitleShimmer(label: title.label) }
         tint()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -106,6 +100,11 @@ final class SidebarChatCell: SourceListCell {
         let emphasized = backgroundStyle == .emphasized
         archive?.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .secondaryLabelColor
         detail?.textColor = emphasized ? .alternateSelectedControlTextColor : .tertiaryLabelColor
+        shimmer?.emphasized = emphasized
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        shimmer?.refresh()
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -241,7 +240,9 @@ extension NativeShell {
             guard let cell = sidebarCell(id) else { return false }
             cell.setHovered(true); return true
         case "marquee-reduce-motion":
-            SidebarMarqueeTitle.reduceMotionOverride = id == nil ? nil : id == "on"; return true
+            SidebarMarqueeTitle.reduceMotionOverride = id == nil ? nil : id == "on"
+            for index in 0..<outline.numberOfRows { (outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell)?.shimmer?.refresh() }
+            return true
         default: return nil
         }
     }
@@ -260,7 +261,8 @@ extension NativeShell {
             }
             var item: [String: Any] = ["id": row.id, "kind": row.kind, "title": row.title, "project": row.project, "parent": parent?.id ?? "",
                     "selected": outline.selectedRow == index, "selectable": outlineView(outline, shouldSelectItem: row),
-                    "running": row.running, "spinning": cell.spinning, "unread": row.unread, "unreadDot": !cell.dot.isHidden,
+                    "running": row.running, "thinking": row.thinking, "shimmer": cell.shimmer?.inspect() ?? ["mode": "none"],
+                    "unread": row.unread, "unreadDot": !cell.dot.isHidden,
                     "detail": cell.detail?.stringValue ?? "", "hovered": cell.hovered,
                     "archive": cell.archive != nil, "archiveVisible": (cell.archive?.alphaValue ?? 0) > 0,
                     "marquee": cell.title?.running ?? false, "travel": cell.title?.travel ?? 0,

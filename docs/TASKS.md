@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar: running chats shimmer their title instead of a left loader (LKM-389)
+
+- [x] `src/native/SidebarTitleShimmer.swift`: the in-chat band and timing as a layer mask on the title's one label; still and dimmed under Reduce Motion; nothing runs without a window. The spinner and its constraints are gone from `SidebarChatCell`.
+- [x] `thinking` on the shell row (`chatThinking`, the composer beam's state): thinking, tool and writing steps; not waiting, stopping, landing or an ended turn.
+- [x] Unit `sidebar-shimmer` (new, also passes against LKM-387's `SidebarMarquee.swift`) and `native-shell-controller`.
+- [x] Native `checkSidebarShimmer` (`src/native/smoke-sidebar-shimmer.ts`, inside `sidebar-status`) and the state steps in `smoke-chat.ts`.
+- [x] Review repair: waits and Stop reach the row. `changed()` emits an `activity` effect when `chatThinking` flips (the mirror lacks `permissions`, `questions`, `stopping` and `phase`), and `NativeShellController.chatEffect` schedules on it; unit `sidebar-thinking-render` drives the real controllers for an active and a background chat.
+- [ ] Native acceptance: run the sidebar and chat groups on origin/main after merge and inspect every `sidebar-shimmer-*.png` (no native run in this ticket).
+- [x] Reconcile with LKM-387: merged origin/main 47c650b5 (it has LKM-387's layout marquee); `sidebar-shimmer` passes against it, and `sidebar-marquee` now compiles `SidebarTitleShimmer.swift` too.
+
 ## Sidebar title marquee shows text across its whole width (LKM-387)
 
 - [x] Root cause measured on the real draw path: the layer transform dragged the label's painted edge (AppKit paints only `visibleRect`) across the clip; geometry and `travel` were right. See PROGRESS.

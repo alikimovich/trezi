@@ -39,6 +39,8 @@ const chat = {
         title: 'Working chat',
         messages: [],
         isRunning: true,
+        permissions: [],
+        questions: [],
         unreadAnswer: true,
         draft: 'Unsent draft',
         attachments: [{ name: 'notes.txt' }]
@@ -60,6 +62,11 @@ assert.deepEqual(
   [renders.at(-1).rows[0].children[0].running, renders.at(-1).rows[0].children[0].unread],
   [true, true],
   'Running and unread reach the native menu independently; the menu gives running precedence'
+)
+assert.equal(
+  renders.at(-1).rows[0].children[0].thinking,
+  true,
+  'The row carries the state the title shimmer follows (LKM-389)'
 )
 assert.equal(renders.at(-1).rows[0].children[1].title, 'Older chat')
 assert.equal(renders.at(-1).chatReady, true)
