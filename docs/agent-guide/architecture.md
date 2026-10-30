@@ -26,6 +26,8 @@ src/
     ProjectCell.swift  sidebar row rendering and native project drag reordering
     SidebarChats.swift the selected project's nested recent chats and "View all
                     chats" (LKM-378); Bun picks them in sidebar-chats.ts
+    SidebarChatsAccessibility.swift  the "View all chats" button and the check of the
+                    accessibility element VoiceOver gets (its cell, LKM-379)
     SourceList.swift   source-list outline, row cell, scroll view and sidebar split
                     item shared by the projects sidebar and Settings (SheetSidebar.swift)
     Chat.swift / Composer.swift   native conversation and text input. Bun

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar "View all chats" accessibility: AXUnknown in sidebar-chats (LKM-379)
+
+- [x] Diagnosis (inspect seam, plus a blank label in the product): on macOS 27 the `NSButton` view is ignored and its own role is AXUnknown; its `NSButtonCell` is the AXButton VoiceOver gets, and a label set on the view blanked the cell's description (PROGRESS 2026-10-29).
+- [x] The button is built in `src/native/SidebarChatsAccessibility.swift` with its role and label on the cell; `sidebarChatsInspect` reads role, label, element, press and the AX path from the window through `AccessibilityElementInspect`; `view-all-chats` presses that element.
+- [x] Unit `sidebar-chats-accessibility` (real button in an outline row: AXButton, label, path window > scroll area > outline > row > cell > button, hit test, press runs the action); the `sidebar-chats` smoke keeps role/label/selectable and adds element, press and path.
+- [ ] Post-merge manager native run of `sidebar-chats` (overflow click, switching, `sidebar-chats-*.png` inspected), `native-chat` and `history-menu`; reported apart from LKM-374.
+
 ## Native sidebar: recent chats nested under the selected project (LKM-378)
 
 - [x] Bun picks up to five open chats for the selected project only, newest opened first, the active chat always kept, plus "View all chats" above five (`src/native/sidebar-chats.ts`, `shell-controller.ts` `recent`/`allChats`).

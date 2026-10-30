@@ -83,6 +83,15 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
       assert.equal(button.label, 'View all chats')
       assert.equal(button.role, 'AXButton', 'VoiceOver reads "View all chats" as a button')
       assert.equal(button.selectable, false, 'the arrow keys skip "View all chats"')
+      // LKM-379: role and label come from the element VoiceOver gets (the button's cell), and
+      // every ancestor from the window lists it.
+      assert.equal(button.element, true, '"View all chats" is an accessibility element')
+      assert.equal(button.press, true, '"View all chats" has a press action')
+      const path = button.axPath.join(' > ')
+      assert.ok(
+        button.axPath[0] === 'AXWindow' && path.endsWith('AXOutline > AXRow > AXCell > AXButton'),
+        `VoiceOver reaches "View all chats": AX path ${path || 'none'}`
+      )
     }
     return shown
   }
@@ -132,7 +141,8 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   let shown = await expectList('more than five')
   await capture('sidebar-chats-more', shown)
 
-  // "View all chats" opens the chat header's history menu, which lists every open chat.
+  // Pressing "View all chats" (its accessibility element's press) opens the chat header's
+  // history menu, which lists every open chat.
   assert.equal(await host.request('shellPerform', { action: 'view-all-chats' }), true)
   const menu = await waitFor(
     async () => (await shell()).historyTracking && (await shell()),

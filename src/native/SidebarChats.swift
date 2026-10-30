@@ -19,11 +19,7 @@ final class SidebarChatCell: SourceListCell {
         spinner.setAccessibilityLabel("Running")
         let content: NSView
         if row.kind == "all-chats" {
-            let button = NSButton(title: row.title, target: target, action: action)
-            button.isBordered = false; button.setButtonType(.momentaryChange)
-            button.alignment = .left
-            button.attributedTitle = NSAttributedString(string: row.title, attributes: [.font: SidebarRowStyle.font, .foregroundColor: NSColor.secondaryLabelColor])
-            button.setAccessibilityLabel(row.title)
+            let button = SidebarAllChatsButton.make(title: row.title, font: SidebarRowStyle.font, target: target, action: action)
             button.toolTip = "Show every chat of this project"
             self.button = button; content = button
         } else {
@@ -63,30 +59,32 @@ extension NativeShell {
     /// Nested chats are always shown: no disclosure triangle.
     func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool { false }
     func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool { false }
-    @objc func viewAllChats(_ sender: NSButton) { openAllChats(from: sender, deferred: false) }
-    /// The chat header's history menu, under the "View all chats" row. The pipe check defers the
-    /// blocking `popUp` to a run-loop timer (as `historyBroker` does) and a watchdog dismisses it.
-    @discardableResult func openAllChats(from view: NSView?, deferred: Bool) -> Bool {
+    /// The chat header's history menu, under the "View all chats" row.
+    @objc func viewAllChats(_ sender: NSButton) {
         updateHistoryMenu()
-        guard let view, let menu = chatActions.historyMenu, !menu.items.isEmpty else { return false }
-        let anchor = NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 2 : -2)
-        guard deferred else { menu.popUp(positioning: nil, at: anchor, in: view); return true }
+        guard let menu = chatActions.historyMenu, !menu.items.isEmpty else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.isFlipped ? sender.bounds.maxY + 2 : -2), in: sender)
+    }
+    /// The pipe check presses the element VoiceOver gets (LKM-379), so the button's own action
+    /// opens the menu. The press is deferred to a run-loop timer because `popUp` blocks (as
+    /// `historyBroker` does), and a watchdog dismisses the menu.
+    func performSidebarChats(_ action: String) -> Bool? {
+        guard action == "view-all-chats" else { return nil }
+        guard let index = (0..<outline.numberOfRows).first(where: { (outline.item(atRow: $0) as? ShellRow)?.kind == "all-chats" }),
+              let button = (outline.view(atColumn: 0, row: index, makeIfNecessary: true) as? SidebarChatCell)?.button,
+              let element = AccessibilityElementInspect.element(of: button) else { return false }
+        updateHistoryMenu()
+        guard let menu = chatActions.historyMenu, !menu.items.isEmpty else { return false }
         historyWatchdog?.invalidate()
         let opener = Timer(timeInterval: 0.05, repeats: false) { [weak self] _ in
             let watchdog = Timer(timeInterval: 45, repeats: false) { _ in menu.cancelTracking() }
             RunLoop.main.add(watchdog, forMode: .common)
             self?.historyWatchdog = watchdog
-            menu.popUp(positioning: nil, at: anchor, in: view)
+            _ = element.accessibilityPerformPress()
             watchdog.invalidate()
         }
         RunLoop.main.add(opener, forMode: .common)
         return true
-    }
-    func performSidebarChats(_ action: String) -> Bool? {
-        guard action == "view-all-chats" else { return nil }
-        guard let index = (0..<outline.numberOfRows).first(where: { (outline.item(atRow: $0) as? ShellRow)?.kind == "all-chats" }),
-              let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: true) as? SidebarChatCell else { return false }
-        return openAllChats(from: cell.button, deferred: true)
     }
     /// The nested rows as the outline shows them, for the integration checks.
     func sidebarChatsInspect() -> [String: Any] {
@@ -101,11 +99,13 @@ extension NativeShell {
                 guard let view, let superview = view.superview else { return nil }
                 return superview.convert(view.alignmentRect(forFrame: view.frame), to: nil).minX
             }
-            let role = cell.button?.accessibilityRole() ?? outline.rowView(atRow: index, makeIfNecessary: true)?.accessibilityRole()
             var item: [String: Any] = ["id": row.id, "kind": row.kind, "title": row.title, "project": row.project, "parent": parent?.id ?? "",
                     "selected": outline.selectedRow == index, "selectable": outlineView(outline, shouldSelectItem: row),
                     "running": row.running, "spinning": cell.spinning,
-                    "label": cell.button?.accessibilityLabel() ?? cell.accessibilityLabel() ?? "", "role": role?.rawValue ?? ""]
+                    "label": cell.accessibilityLabel() ?? "",
+                    "role": outline.rowView(atRow: index, makeIfNecessary: true)?.accessibilityRole()?.rawValue ?? ""]
+            // LKM-379: the button's role and label come from the element VoiceOver gets (its cell).
+            if let button = cell.button { item.merge(AccessibilityElementInspect.inspect(button)) { $1 } }
             if let own = leading(cell.button ?? cell.textField), let project = leading(parentText) { item["textOffset"] = own - project }
             return item
         }
