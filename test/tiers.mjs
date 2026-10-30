@@ -120,6 +120,7 @@ export const UNIT = [
   'native-smoke-wait',
   'native-smoke-shared-chat',
   'native-smoke-stop-cleanup',
+  'native-smoke-composer-attach',
   'native-chat-reveal',
   'native-chat-text',
   'native-diff-list',
