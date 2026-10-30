@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
 import { textEditMismatch } from '../src/main/text-edit-check.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
-import { passCheck } from './helpers/gate-checks.mjs'
+import { passCheck, replayFixtureChecks } from './helpers/gate-checks.mjs'
 
 const temp = mkdtempSync(join(tmpdir(), 'trezi-comments-'))
 process.env.TREZI_USER_DATA = join(temp, 'profile')
@@ -54,6 +54,7 @@ registerAgentIpc(
   () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } }),
   { handle: (name, fn) => handlers.set(name, fn) }
 )
+const replays = replayFixtureChecks()
 // 'parent' is no open chat, so a spawn's tools (and its checks) run under the project key.
 const parent = projectKey(repo)
 const invoke = (name, ...args) => handlers.get(name)({}, ...args)
@@ -134,13 +135,14 @@ try {
   for (const p of active.slice(0, 2)) await passCheck(parent, p.root)
   for (const p of active) p.context.onEvent({ type: 'done' })
   await wait(() => parallel.every((r) => finished(r.spawnId)))
-  // LOCAL-WEBKIT-3: the first lands. The second was checked on a base live no longer
-  // has, so the merged result was never checked: it is kept for review, not applied.
+  // LKM-382: the first lands. The second was checked on a base live no longer has: it
+  // brings itself up to date with live, its check runs again on that exact tree
+  // (LOCAL-WEBKIT-3), and it lands too, with no Retry.
   assert.equal(finished(active[0].context.sessionId).outcome, 'applied')
-  assert.equal(finished(active[1].context.sessionId).outcome, 'review')
-  assert.match(finished(active[1].context.sessionId).summary, /project changed since/)
+  assert.equal(finished(active[1].context.sessionId).outcome, 'applied')
+  assert.equal(replays.length, 1, 'the reconciled tree was checked again')
   assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'purple\n')
-  assert.equal(readFileSync(join(repo, 'border.txt'), 'utf8'), 'solid\n')
+  assert.equal(readFileSync(join(repo, 'border.txt'), 'utf8'), 'none\n')
   // LKM-193: a background agent's question settles through the chat's answer path, and
   // Cancel dismisses one still waiting.
   const asking = await start(),

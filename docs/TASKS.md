@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Narrow windows: `fitMore` removes "…" together with the segment under 1000 pt, so the badge takes the group's last remaining segment; "…" is used only if it is shown without the segment.
 - [x] `preview-speed` smoke and `previewSpeedInspect` assert the position through resize, sidebar, chat width, expand, narrow and full screen; unit `preview-speed-placement`.
 - [ ] Post-merge native `preview-speed` run, with `toolbar-preview-speed.png` and `toolbar-preview-speed-narrow.png` inspected (worker native allowance: 0 calls).
+## Comments never cancel each other (LKM-382)
+
+- [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).
+- [x] `landSpawn` (`src/main/spawn-landing.ts`): stageResolve, replay checks on the exact tree, land; overlaps go back to the spawn's agent on the new base.
+- [x] Unit `comment-reconcile`: 2 and 3 comments in any order, same-line overlaps, an unresolvable conflict and a failing replay.
 
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 

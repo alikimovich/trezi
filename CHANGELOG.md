@@ -12,6 +12,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 - The preview speed badge now sits right below the slow-motion control in the top bar instead of the page's bottom-left corner; in narrow windows, where that control leaves the toolbar, it sits below the group's last button (LKM-385).
+## [0.6.2] - 2026-10-30
+
+### Fixed
+- Comments no longer cancel each other: a comment that finishes after another one landed updates itself to the latest project, is checked again and lands, with no "Not applied" or Retry (LKM-382).
 
 ## [0.6.1] - 2026-10-29
 
