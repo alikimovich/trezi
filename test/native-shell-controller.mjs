@@ -33,7 +33,17 @@ const workspace = {
 }
 const chat = {
   chats: new Map([
-    ['a', { title: 'Working chat', messages: [], isRunning: true, unreadAnswer: true }]
+    [
+      'a',
+      {
+        title: 'Working chat',
+        messages: [],
+        isRunning: true,
+        unreadAnswer: true,
+        draft: 'Unsent draft',
+        attachments: [{ name: 'notes.txt' }]
+      }
+    ]
   ])
 }
 const shell = new NativeShellController(
@@ -77,6 +87,21 @@ await shell.action({ action: 'expand' })
 assert.equal(projections.at(-1).chatHidden, true)
 assert.equal(values.get('trezi:chat-hidden'), '1')
 assert.equal(chat.chatHidden, true, 'The chat controller learns the column is hidden')
+// LKM-380: Toggle UI (⌘.) is this action; toggling back and forth keeps the running turn,
+// the draft and its attachments.
+const working = chat.chats.get('a')
+const kept = JSON.stringify(working)
+await shell.action({ action: 'expand' })
+assert.equal(projections.at(-1).chatHidden, false)
+assert.equal(values.get('trezi:chat-hidden'), '0')
+await shell.action({ action: 'expand' })
+assert.equal(projections.at(-1).chatHidden, true)
+assert.equal(chat.chats.get('a'), working, 'Toggle UI keeps the chat')
+assert.equal(
+  JSON.stringify(working),
+  kept,
+  'Toggle UI keeps the running turn, draft and attachments'
+)
 await shell.action({ action: 'address', value: '/about' })
 assert.deepEqual(calls.at(-1), ['preview:load', 'http://127.0.0.1:7784/about'])
 await assert.rejects(

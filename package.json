@@ -142,6 +142,7 @@
     "test:guide-distance": "bun test/guide-distance.mjs",
     "test:preview-overlay": "bun test/preview-overlay.mjs",
     "test:key-shortcuts": "bun test/key-shortcuts.mjs",
+    "test:menu-first-shortcuts": "bun test/menu-first-shortcuts.mjs",
     "test:agent-load-routing": "bun test/agent-load-routing.mjs",
     "test:inline-style": "bun test/inline-style.mjs",
     "test:css-values": "bun test/css-values.mjs",

@@ -148,6 +148,7 @@ export const UNIT = [
   'toolbar-chat-lead',
   'preview-overlay',
   'key-shortcuts',
+  'menu-first-shortcuts',
   'agent-load-routing',
   'sidebar-icon',
   'sidebar-favicon',
