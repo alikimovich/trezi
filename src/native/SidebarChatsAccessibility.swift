@@ -4,7 +4,7 @@ import AppKit
 /// its own `accessibilityRole()` is AXUnknown. VoiceOver gets its `NSButtonCell` (AXButton),
 /// and a label set on the view blanks the cell's description. The label therefore goes on the
 /// cell, and the checks read the element VoiceOver gets, not the view. The sidebar's text
-/// buttons (the History toggle, "Show N more") are built here.
+/// buttons (the History header, "Show N more") are built here.
 enum SidebarRowButton {
     static func make(title: String, font: NSFont, target: AnyObject?, action: Selector?) -> NSButton {
         let button = NSButton(title: title, target: target, action: action)

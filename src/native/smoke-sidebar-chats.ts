@@ -19,8 +19,9 @@ import { nativeWorkspace } from './workspace-runtime'
  * switches chats from the sidebar repeatedly (drafts and attachments kept, the row highlighted),
  * scrolls a long title on hover (but not under the Reduce Motion override), reads its pixels at
  * the scroll's start, middle and end (`smoke-sidebar-marquee.ts`), archives chats with the row's
- * Archive button and opens the History section that then lists them, three at a time
- * before "Show N more". Sidebar captures land in the artifacts folder. The running and unread
+ * Archive button and reveals the History section from the project's "…" menu, which then lists
+ * them, three at a time before "Show N more". Sidebar captures land in the artifacts folder. The
+ * running and unread
  * indicators are checked in `smoke-sidebar-status.ts`, where a real background turn runs.
  */
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
@@ -52,15 +53,16 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   collapsed = initial.sidebarCollapsed
   if (collapsed) await perform('toggle-sidebar')
 
-  /** The outline shows every open chat, newest first, and a History toggle for the closed ones. */
+  /** The outline shows every open chat, newest first; a History header only once it is revealed. */
   const settled = (state: Shell) => {
     const items: Shell[] = state.sidebarChats ?? []
     const chats = items.filter((item) => item.kind === 'chat')
     const toggle = items.filter((item) => item.kind === 'history-toggle')
+    const revealed = state.historyOpen?.includes(key) && past().length > 0
     return (
       JSON.stringify(chats.map((item) => item.id)) ===
         JSON.stringify(recentChats(entry().sessionKeys).map((chat) => `chat:${chat}`)) &&
-      toggle.length === (past().length ? 1 : 0) &&
+      toggle.length === (revealed ? 1 : 0) &&
       (!toggle.length || toggle[0].title === 'History') &&
       chats.some((item) => item.id === `chat:${nativeChat.active}` && item.selected) && {
         state,
@@ -229,7 +231,8 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   await capture('sidebar-chats-hover', { state: await shell() }, false)
   const still = (await hover(true)).marqueeState
   assert.ok(still.offset === 0 && still.truncated, 'Reduce Motion keeps the title truncated')
-  await perform('marquee-reduce-motion')
+  // Off, not the system value: the LKM-387 scrolls below must not depend on the host's setting.
+  await perform('marquee-reduce-motion', 'off')
   await perform('sidebar-hover')
   assert.equal(row(await shell()).marquee, false, 'the title stops when the pointer leaves')
 
@@ -292,13 +295,9 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
     'the archived chats with a prompt in history'
   )
   shown = await expectList('archived')
-  assert.equal(shown.toggle.detail ?? '', '', 'the toggle row has no age')
+  assert.equal(shown.toggle, undefined, 'the default sidebar has no History row')
   const count = past().length
   assert.ok(count > 3, `History needs four closed chats for "Show N more": ${count}`)
-  assert.equal(
-    shown.toggle.label,
-    `History, ${count} closed chat${count === 1 ? '' : 's'}, collapsed`
-  )
 
   // History: three closed chats, then "Show N more" and "Show less".
   const history = async (stage: string, all: boolean) => {
@@ -324,9 +323,15 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
     assert.equal(more.role, 'AXButton', `${stage}: "Show more" is a button`)
     return { state, rows }
   }
-  assert.equal(await perform('history-toggle'), true, 'History opened')
+  const projectMenu = (pick: string) =>
+    host.request('sidebarVerification', { menu: `project:${key}`, pick })
+  const picked = await projectMenu('Show History')
+  assert.deepEqual(picked.titles, ['Project Memory…', 'Show History', 'Close Project'])
   let open = await history('open', false)
   assert.deepEqual(open.state.historyOpen, [key])
+  const { toggle } = await expectList('History revealed')
+  assert.equal(toggle.detail ?? '', '', 'the History header has no age')
+  assert.equal(toggle.label, `History, ${count} closed chat${count === 1 ? '' : 's'}, expanded`)
   await capture('sidebar-chats-history', open)
   assert.equal(await perform('history-more'), true, 'Show more pressed')
   open = await history('all', true)
@@ -356,6 +361,7 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
     async () => !(await shell()).sidebarChats.some((item: Shell) => item.kind === 'history'),
     'History closed'
   )
+  assert.equal((await expectList('History hidden')).toggle, undefined, 'back to the default')
   await restoreSidebarChats(host)
   await expectList('restored')
 }

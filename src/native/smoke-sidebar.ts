@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { preparePreviewInput } from './smoke-input'
 import { decodePng } from './smoke-png'
+import { checkSidebarHistory } from './smoke-sidebar-history'
 import { nativeWorkspace } from './workspace-runtime'
 
 type FocusHost = Pick<NativeBridge, 'request'>
@@ -176,10 +177,10 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
           menu: rowID(entries[1].key),
           memory: true
         })
-        assert.deepEqual(menu.titles, ['Project Memory…', 'Close Project'])
+        assert.deepEqual(menu.titles, PROJECT_MENU)
         assert.equal(menu.project, entries[1].key)
-        assert.equal(menu.opened, true, 'Native context menu entered tracking')
-        assert.equal(menu.closed, true, 'Native context menu cancelled cleanly')
+        assert.equal(menu.opened, true, 'The "…" press entered menu tracking')
+        assert.equal(menu.closed, true, 'The "…" menu cancelled cleanly')
         await wait(async () => {
           const s = await host.request('sheetInspect')
           return s.visible && s.fields.includes('content')
@@ -218,6 +219,11 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
         })
       }
       writeFileSync(join(artifacts, 'sidebar-interactions.json'), JSON.stringify(evidence, null, 2))
+      await checkSidebarHistory(host, artifacts, {
+        full: entries[0].key,
+        other: entries[1].key,
+        empty: invalid.key
+      })
       console.log(
         'NATIVE SIDEBAR PASS — foreground 260/180px captures; favicon row plus no-favicon and invalid-favicon folder rows in one slot; both selections, hover, native menu/memory action and drag delegates/backend reorder; foreground restored after each interaction. Inspect sidebar-*.png for favicon and glyph fidelity.'
       )
@@ -233,6 +239,9 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
     }
   )
 }
+
+/** The project menu with History hidden. */
+export const PROJECT_MENU = ['Project Memory…', 'Show History', 'Close Project']
 
 /** The centre pixel of the core fixture's favicon (`writeSmokeProject`). */
 export const FAVICON_CENTER = [0xf0, 0x6a, 0x1c]
@@ -400,7 +409,7 @@ export function assertSidebarCapture(
     assert.equal(row.selected, row.id === selected)
     assert.equal(row.moreAlpha, row.selected || row.id === hovered ? 1 : 0)
     assert.equal(row.actionsLabel, `Actions for ${row.title}`)
-    assert.deepEqual(row.menu, ['Project Memory…', 'Close Project'])
+    assert.deepEqual(row.menu, PROJECT_MENU)
   }
   for (const row of state.rows) assert.equal(row.iconX, state.rows[0].iconX)
 }

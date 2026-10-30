@@ -88,6 +88,26 @@ const smoke = readFileSync('src/native/smoke-sidebar-chats.ts', 'utf8')
 for (const stage of ['unselected', 'selected', 'narrow-selected', 'narrow-unselected', 'resized'])
   assert.ok(smoke.includes(`'${stage}'`), `the smoke scrolls the ${stage} title`)
 
+// Neither run may read the host's Reduce Motion setting (a runner with it on never scrolls): the
+// smoke turns the override off before the scrolls, the fixture never leaves it nil.
+const off = smoke.indexOf("perform('marquee-reduce-motion', 'off')")
+assert.ok(off > 0 && off < smoke.indexOf('const sized'), 'the smoke sets Reduce Motion off first')
+assert.ok(
+  !smoke
+    .slice(off, smoke.indexOf("await scroll('unselected')"))
+    .includes("'marquee-reduce-motion')"),
+  'nothing hands Reduce Motion back to the host before the scrolls'
+)
+const fixture = readFileSync('test/fixtures/sidebar-marquee/main.swift', 'utf8')
+assert.ok(
+  !/reduceMotionOverride\s*=\s*nil/.test(fixture),
+  'the fixture never reads the host setting'
+)
+assert.ok(
+  fixture.indexOf('reduceMotionOverride = false') < fixture.indexOf('.setHovered(true) }'),
+  'Reduce Motion is off before the first hover'
+)
+
 if (process.platform !== 'darwin') {
   console.log('SIDEBAR-MARQUEE SKIP — macOS AppKit required')
 } else {

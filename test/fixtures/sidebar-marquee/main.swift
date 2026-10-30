@@ -18,6 +18,7 @@ final class NativeShell: NSObject {
     let outline = NSOutlineView()
     let sidebar = NSViewController()
     @objc func contextAction(_ sender: Any?) {}
+    func projectMenu(_ row: ShellRow) -> NSMenu { NSMenu() }
 }
 func emit(_ value: [String: Any]) {}
 
@@ -183,11 +184,14 @@ plan.append((1.5, "leave", { leaving.setHovered(false) }))
 take("leaving", "end", leaving, at: 1.6)
 take("still", "end", still, at: 2.0)
 
+// Never nil: nil reads the host's Reduce Motion setting (some CI runners have it on), and this
+// run must not depend on it or change it. Only `still` hovers with it on.
+SidebarMarqueeTitle.reduceMotionOverride = false
 for cell in [selected, unselected, bare, narrow, narrowUnselected, narrowedInDelay, narrowedMid, narrowedAtEnd, widenedAtEnd,
              widenedToFit, overflowsLater, fits, leaving] { cell.setHovered(true) }
 SidebarMarqueeTitle.reduceMotionOverride = true
 still.setHovered(true)
-SidebarMarqueeTitle.reduceMotionOverride = nil
+SidebarMarqueeTitle.reduceMotionOverride = false
 let began = CACurrentMediaTime()
 
 for step in plan.sorted(by: { $0.at < $1.at }) {
