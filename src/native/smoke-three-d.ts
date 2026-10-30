@@ -44,33 +44,67 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   const inspect = () => host.request('threeDInspect')
   const perform = (action: string, value?: number) =>
     host.request('threeDPerform', value === undefined ? { action } : { action, value })
+  // LKM-374: a native run picked `html` instead of the card on the one real click (no move
+  // precedes it) and the toolbar button then opened nothing for the root. One pick cycle can
+  // lose that race on a loaded desktop, so a cycle that leaves the scene closed is repeated
+  // (the card re-checked, the pick cleared with Escape); the last attempt keeps the full wait
+  // and still fails the check when the toolbar never opens the scene.
+  const PICK_ATTEMPTS = 3
   const open = async (selector: string) => {
-    await preparePreviewInput(host)
-    if ((await page('document.documentElement.style.cursor')) !== 'crosshair')
-      await host.request('shellPerform', { action: 'select-object' })
-    await waitFor(
-      () => page(`document.documentElement.style.cursor === 'crosshair'`),
-      '3D select mode'
-    )
-    // Inside the element's own padding, so the element itself is picked.
-    const point = await page(
-      `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x+6,y:r.y+Math.min(6,r.height/2)} })()`
-    )
-    await host.request('previewInput', point)
-    const button = await waitFor(
-      () =>
-        page(
-          `(() => {
+    for (let attempt = 1; attempt <= PICK_ATTEMPTS; attempt++) {
+      const last = attempt === PICK_ATTEMPTS
+      await preparePreviewInput(host)
+      if (selector === '#three-d-card' && !(await page(`!!document.querySelector('${selector}')`)))
+        await page(CARD)
+      if ((await page('document.documentElement.style.cursor')) !== 'crosshair')
+        await host.request('shellPerform', { action: 'select-object' })
+      await waitFor(
+        () => page(`document.documentElement.style.cursor === 'crosshair'`),
+        '3D select mode'
+      )
+      // Inside the element's own padding, so the element itself is picked.
+      const point = await waitFor(
+        () =>
+          page(
+            `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const r = el.getBoundingClientRect(); const p = {x:r.x+6,y:r.y+Math.min(6,r.height/2)}; return document.elementFromPoint(p.x, p.y) === el ? p : null })()`
+          ),
+        `the pointer hits ${selector}`
+      )
+      await host.request('previewInput', point)
+      const button = await waitFor(
+        () =>
+          page(
+            `(() => {
       const b = document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-kind="three-d"]');
       if (!b || b.offsetParent === null) return null;
       const r = b.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2};
     })()`,
-          true
-        ),
-      '3D toolbar button'
-    )
-    await host.request('previewInput', button)
-    await waitFor(async () => (await inspect()).active, 'exploded view opened from the toolbar')
+            true
+          ),
+        '3D toolbar button'
+      )
+      await host.request('previewInput', button)
+      if (last) {
+        await waitFor(
+          async () => (await inspect()).active,
+          'exploded view opened from the toolbar',
+          10000,
+          async () => ({ attempts: attempt, location: await page('location.href') })
+        )
+        break
+      }
+      const opened = await waitFor(
+        async () => (await inspect()).active,
+        'scene opening',
+        4000
+      ).then(
+        () => true,
+        () => false
+      )
+      if (opened) break
+      console.warn(`3D pick for ${selector} opened no scene (attempt ${attempt}); picking again`)
+      await host.request('previewInput', { key: 'Escape' })
+    }
     return waitFor(async () => {
       const state = await inspect()
       return (

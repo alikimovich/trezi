@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { preparePreviewInput } from './smoke-input'
+import { decodePng } from './smoke-png'
 import { nativeWorkspace } from './workspace-runtime'
 
 type FocusHost = Pick<NativeBridge, 'request'>
@@ -166,7 +167,7 @@ export async function checkVisibleSidebar(host: NativeBridge, artifacts: string)
             evidence.push({
               capture: `${stem}.png`,
               assertions:
-                'foreground/OCR, favicon (colours, fit, painted centre) vs folder (missing/invalid favicon)/template/scaling/tint, containment/spacing/centres, selection/hover/actions',
+                'foreground/OCR actions, row label pixels by row id and geometry, favicon (colours, fit, painted centre) vs folder (missing/invalid favicon)/template/scaling/tint, containment/spacing/centres, selection/hover/actions',
               state
             })
           }
@@ -288,6 +289,69 @@ export function assertFaviconRows(
     )
 }
 
+/** LKM-374: how much of the capture the window fills. Some ScreenCaptureKit images come back
+ *  with the window drawn a few percent small from its top-left corner (native runs 23–29: the
+ *  260 pt captures at 0.9746) and transparent below it; rows further down drift further from
+ *  their measured frames. The opaque height of the middle column measures it; 1 when full. */
+export function captureContentScale(pixels: ReturnType<typeof decodePng>) {
+  const x = pixels.width >> 1
+  let y = pixels.height
+  while (y > 0 && pixels.alpha(x, y - 1) === 0) y--
+  return y / pixels.height
+}
+
+/** LKM-374: a row's label as painted in the capture, found by the row's measured geometry
+ *  (sidebar points, y up, `height` points tall) instead of by reading its title, which
+ *  truncates at narrow widths. `scale` is capture pixels per point. Ink is any pixel far from
+ *  its pixel row's most common (background) colour, inside ±12 pt of a 28 pt row. */
+export function measureRowLabel(
+  row: any,
+  pixels: ReturnType<typeof decodePng>,
+  scale: number,
+  height: number
+) {
+  const left = row.iconX + row.iconWidth + row.textGap
+  // Scan from inside the icon/label gap, so a label drawn left of its place is seen.
+  const x0 = Math.max(0, Math.round((left - 4) * scale))
+  const x1 = Math.min(pixels.width, Math.round((left + row.textWidth) * scale))
+  const y0 = Math.max(0, Math.round((height - row.textMidY - 12) * scale))
+  const y1 = Math.min(pixels.height, Math.round((height - row.textMidY + 12) * scale))
+  // Negated so missing (NaN) geometry also reads as no label.
+  if (!(x1 > x0 && y1 > y0)) return { inkFraction: 0, inkLeft: NaN, inkSpan: 0, inkMidY: NaN }
+  let ink = 0
+  let minX = Infinity
+  let maxX = -1
+  let minY = Infinity
+  let maxY = -1
+  for (let y = y0; y < y1; y++) {
+    // Per pixel row, so the edge of a selection highlight (one uniform colour) is never ink,
+    // and across the whole capture, so a narrow label's bold glyphs never outnumber it.
+    const counts = new Map<number, number>()
+    for (let x = 0; x < pixels.width; x++) {
+      const [r, g, b] = pixels.rgb(x, y)
+      const key = (r << 16) | (g << 8) | b
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    const background = [...counts].reduce((a, b) => (b[1] > a[1] ? b : a))[0]
+    const base = [(background >> 16) & 255, (background >> 8) & 255, background & 255]
+    for (let x = x0; x < x1; x++) {
+      const rgb = pixels.rgb(x, y)
+      if (Math.max(...rgb.map((v, i) => Math.abs(v - base[i]))) <= 64) continue
+      ink++
+      minX = Math.min(minX, x)
+      maxX = Math.max(maxX, x)
+      minY = Math.min(minY, y)
+      maxY = Math.max(maxY, y)
+    }
+  }
+  return {
+    inkFraction: ink / ((x1 - x0) * (y1 - y0)),
+    inkLeft: minX / scale - left,
+    inkSpan: ink ? (maxX - minX + 1) / scale : 0,
+    inkMidY: height - (minY + maxY + 1) / 2 / scale
+  }
+}
+
 /** Shared with the non-GUI negative fixtures so missing visual evidence fails closed.
  *  `hovered` is the hovered row's id, or '' for none. */
 export function assertSidebarCapture(
@@ -305,10 +369,19 @@ export function assertSidebarCapture(
   assert.ok(image.width >= width && image.height > 200)
   const ocr = image.text.join(' ').toLowerCase()
   assert.ok(ocr.includes('open project'), `Blank/missing sidebar actions: ${stem}`)
+  // LKM-374: rows are matched by id and geometry, not OCR; at 180 pt a long title truncates.
+  const pixels = decodePng(Buffer.from(image.png ?? '', 'base64'))
+  const content = captureContentScale(pixels)
+  assert.ok(content >= 0.9, `${stem}: the window fills ${content} of the capture`)
+  const scale = (pixels.width / width) * content
   for (const row of state.rows) {
+    const label = measureRowLabel(row, pixels, scale, pixels.height / (pixels.width / width))
     assert.ok(
-      ocr.includes(row.title.toLowerCase()),
-      `Missing visible project ${row.title}: ${stem}`
+      label.inkFraction >= 0.02 &&
+        label.inkSpan >= 30 &&
+        Math.abs(label.inkLeft) <= 2 &&
+        Math.abs(label.inkMidY - row.textMidY) <= 4,
+      `Missing visible project ${row.id}: ${stem} ${JSON.stringify(label)}`
     )
     assertRowIcon(row, stem)
     assert.equal(row.iconWidth, 16)

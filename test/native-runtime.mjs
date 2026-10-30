@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { scraibAcceptanceBudgetMs } from '../src/native/scraib-originals.ts'
 import { parseSmokeGroups, smokeLauncherTimeoutMs } from '../src/native/smoke-groups.ts'
 import { describeFailure, formatFailureLine } from '../src/native/smoke-report.ts'
+import { assertSidebarRows } from './helpers/sidebar-rows.mjs'
 
 function assertSidebarEvidence(dir, since) {
   const fresh = (name) => {
@@ -22,11 +23,7 @@ function assertSidebarEvidence(dir, since) {
         const stem = `sidebar-${width}-${row}-${state}`
         assert.ok(statSync(fresh(`${stem}.png`)).size > 1000, `${stem}.png is empty`)
         const evidence = JSON.parse(readFileSync(fresh(`${stem}.json`), 'utf8'))
-        assert.equal(evidence.rows.length, 2, `${stem}.json rows`)
-        assert.ok(
-          evidence.rows.every((r) => r.folder && r.template),
-          `${stem}.json folder rows`
-        )
+        assertSidebarRows(evidence.rows, stem)
       }
   const interactions = JSON.parse(readFileSync(fresh('sidebar-interactions.json'), 'utf8'))
   const checks = interactions.filter((entry) => entry.drag)
