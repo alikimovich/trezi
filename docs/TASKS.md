@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native smoke: two chats stream at once, as a regression check (LKM-383)
+
+- [x] Native smoke `parallel-stream` (groups chat, sidebar; `src/native/smoke-parallel-stream.ts`): chat A streams, New chat opens B, which sends and streams too, with 3 switches each way. At every step Swift shows the active chat, the column is visible, a row is in view and the last row reaches Bun's text, each within `STREAM_BOUND_MS` (`src/native/smoke-stream-timeline.ts`).
+- [x] Captures and `parallel-stream-timeline.json` land in the artifacts folder; a failure prints the timeline. The cleanup ends both turns, restores the stubs, the active chat and the shared chat, and closes B.
+- [x] Unit `native-chat-parallel-stream`: the same assertions over real `NativeChat.inspect()` payloads while two chats stream and switch; with `messageFramesFilter` keeping no frames they fail with "no message row in view". Unit `native-smoke-groups` pins the group and order.
+- [ ] First native run on main: `parallel-stream` in `--only=chat` and `--only=sidebar`. No native run was available to the worker; the check's loop, stubs and cleanup have not run in the app.
+
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
 - [x] Diagnosis (PROGRESS 2026-10-29): project-switching was a seam fault, because OCR read a truncated title while the icons were all visible. browser-setup, agent-verify and the other managed-agent-browser checks fail because the host's agent-browser is gone: the hermes-agent update on 10-27 left `/opt/homebrew/bin/agent-browser` dangling. Neither is a Trezi product defect.
@@ -140,6 +147,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] A new message (Send) resets the unresolved count, a streamed chunk keeps it (`ChatModel.sendRevision`); unit `native-chat-send-follow` (`realizedOnSend` for every forced case).
 - [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
 - [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
+  - Parallel-chat case checked, not reproduced (LKM-383): with two chats streaming and repeated switches both streams stayed in view, and Swift was at most one chunk behind Bun (the scratch smoke on d1ac3863, `TREZI_NATIVE_BACKGROUND_TEST=1`). The user's blank column is still unexplained; a fix needs `chatInspect` from their real app while it shows. `parallel-stream` now guards this case.
 ## Inline text edit keeps long text in the agent fallback (LKM-352)
 
 - [x] `textAgentPrompt` carries the whole whitespace-normalised text in a fence longer than any backtick run in it (`src/main/props.ts`); unit `text-edit-agent` (1000 characters, quotes, backticks).
