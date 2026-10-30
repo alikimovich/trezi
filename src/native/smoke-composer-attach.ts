@@ -10,7 +10,10 @@ type State = Record<string, any>
 /** LKM-381: one press of + opens the native file chooser as a sheet, with no menu first.
  *  Cancel keeps a draft and its attachments (a .mov among them), accepting appends, and
  *  repeated open/cancel keeps working, in a normal window and in macOS full screen. Each
- *  open phase saves a foreground composer capture plus the chooser's state and geometry. */
+ *  open phase saves a foreground composer capture plus the chooser's state and geometry.
+ *  Opening and cancelling go through the real chooser; the OK step (`acceptDialog`) is a
+ *  programmatic seam that runs the OK branch with given paths, not a person picking files.
+ *  The composer is emptied at the end, pass or fail. */
 export async function checkComposerAttach(host: NativeBridge, artifacts: string) {
   const verify = (params: State = {}): Promise<State> =>
     host.request('composerVerification', params)
@@ -74,30 +77,48 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
     save()
   }
 
-  await host.request('composerPerform', { text: draft, files: [files[0]] })
-  await waitFor(async () => {
-    const state = await inspect()
-    return state.text === draft && names(state).join() === 'attach-clip.mov'
-  }, 'draft with a .mov attachment')
-  await round('window', 1)
-  await round('window', 2)
-  await accept('window', [files[1]])
-  if (process.env.TREZI_NATIVE_BACKGROUND_TEST === '1') {
-    results.fullscreen = { skipped: 'background test: full screen needs a foreground window' }
-    save()
-    return
+  // The draft and the three files must not leak into the next check (`composer-send` would
+  // send them): runs after a pass and after a failure, once full screen is left.
+  const clear = async () => {
+    await verify({ cancelDialog: true }).catch(() => undefined)
+    await host.request('composerPerform', { text: '' })
+    for (let i = 0; i < 10 && (await inspect()).attachments.length; i++)
+      await host.request('composerPerform', { remove: 0 })
   }
+
   try {
-    await host.request('previewOverlayTest', { action: 'fullscreen', value: true })
-    await round('fullscreen', 1)
-    await accept('fullscreen', [files[2]])
-    await round('fullscreen', 2)
+    await host.request('composerPerform', { text: draft, files: [files[0]] })
+    await waitFor(async () => {
+      const state = await inspect()
+      return state.text === draft && names(state).join() === 'attach-clip.mov'
+    }, 'draft with a .mov attachment')
+    await round('window', 1)
+    await round('window', 2)
+    await accept('window', [files[1]])
+    if (process.env.TREZI_NATIVE_BACKGROUND_TEST === '1') {
+      results.fullscreen = { skipped: 'background test: full screen needs a foreground window' }
+      save()
+    } else {
+      try {
+        await host.request('previewOverlayTest', { action: 'fullscreen', value: true })
+        await round('fullscreen', 1)
+        await accept('fullscreen', [files[2]])
+        await round('fullscreen', 2)
+      } finally {
+        await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
+      }
+      assert.deepEqual(
+        names(await inspect()),
+        ['attach-clip.mov', 'attach-notes.txt', 'attach-more.txt'],
+        'Every accepted file is attached once'
+      )
+    }
   } finally {
-    await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
+    await clear()
   }
-  assert.deepEqual(
-    names(await inspect()),
-    ['attach-clip.mov', 'attach-notes.txt', 'attach-more.txt'],
-    'Every accepted file is attached once'
-  )
+  const left = await waitFor(async () => {
+    const state = await inspect()
+    return state.text === '' && state.attachments.length === 0 && state
+  }, 'the composer is empty after the attach check')
+  assert.equal(left.attachments.length, 0, 'The attach check leaves no draft or attachment behind')
 }
