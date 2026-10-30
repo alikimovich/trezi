@@ -810,7 +810,7 @@ async function main() {
   const renderChatEffect = chatController.services.effect
   chatController.services.effect = (effect) => {
     renderChatEffect(effect)
-    if (effect.type === 'mirror') shellController!.schedule()
+    shellController!.chatEffect(effect)
   }
   host.on('shell-action', (action) => {
     if (['expand', 'device', 'select-object', 'address', 'home'].includes(action.action))

@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `thinking` on the shell row (`chatThinking`, the composer beam's state): thinking, tool and writing steps; not waiting, stopping, landing or an ended turn.
 - [x] Unit `sidebar-shimmer` (new, also passes against LKM-387's `SidebarMarquee.swift`) and `native-shell-controller`.
 - [x] Native `checkSidebarShimmer` (`src/native/smoke-sidebar-shimmer.ts`, inside `sidebar-status`) and the state steps in `smoke-chat.ts`.
+- [x] Review repair: waits and Stop reach the row. `changed()` emits an `activity` effect when `chatThinking` flips (the mirror lacks `permissions`, `questions`, `stopping` and `phase`), and `NativeShellController.chatEffect` schedules on it; unit `sidebar-thinking-render` drives the real controllers for an active and a background chat.
 - [ ] Native acceptance: run the sidebar and chat groups on origin/main after merge and inspect every `sidebar-shimmer-*.png` (no native run in this ticket).
 - [ ] Reconcile with LKM-387 once it lands; it was not on this ticket's base.
 

@@ -1,5 +1,6 @@
 import { previewLoads } from '../main/preview-loads'
 import { previewSpeed } from '../main/preview-speed'
+import type { NativeChatEffect } from '../shared/native-chat-controller'
 import type { NativeShellAction, NativeShellRow, NativeShellState } from '../shared/native-shell'
 import type { NativeProjectStatus } from '../shared/native-workspace'
 import type { NativeChatController } from './chat-controller'
@@ -36,6 +37,11 @@ export class NativeShellController {
   ) {
     this.hidden = preferences.get('trezi:chat-hidden') === '1'
     chat.chatHidden = this.hidden
+  }
+  /** A chat effect that changes what the sidebar rows show: its mirror, or whether its title
+   *  shimmers (`chatThinking`, which the mirror lacks). */
+  chatEffect(effect: NativeChatEffect) {
+    if (effect.type === 'mirror' || effect.type === 'activity') this.schedule()
   }
   schedule() {
     if (!this.timer)

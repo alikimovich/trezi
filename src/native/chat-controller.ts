@@ -27,7 +27,7 @@ import { planAttachments } from './chat-attachments'
 import { autoResolve } from './chat-auto-resolve'
 import { menuQuery, withReferences } from './chat-island-refs'
 import { sendBlock } from './chat-queue'
-import { matches, permissionModes, snapshot } from './chat-snapshot'
+import { chatThinking, matches, permissionModes, snapshot } from './chat-snapshot'
 import { HOME, StartFlow } from './chat-start'
 import {
   append,
@@ -82,6 +82,8 @@ export class NativeChatController {
   }
   private streamUpdates = new Map<string, ReturnType<typeof setTimeout>>()
   private mirrors = new Map<string, string>()
+  /** Each chat's `chatThinking` as the shell last heard it (absent: no). */
+  private thinking = new Map<string, boolean>()
   readonly closed = new Set<string>()
   private loading = new Map<string, { chat: Chat; promise: Promise<void> }>()
   private devErrors = new Map<string, DevErrorReader>()
@@ -110,6 +112,12 @@ export class NativeChatController {
     if (signature !== this.mirrors.get(chat.chat)) {
       this.mirrors.set(chat.chat, signature)
       this.services.effect({ type: 'mirror', state })
+    }
+    // Approval and question waits and Stop change the activity but not the mirror.
+    const thinking = chatThinking(chat)
+    if (thinking !== (this.thinking.get(chat.chat) ?? false)) {
+      this.thinking.set(chat.chat, thinking)
+      this.services.effect({ type: 'activity', chat: chat.chat, thinking })
     }
     if (chat.chat === this.active) {
       this.start.seed(chat, this.choices, this.readiness)
@@ -1023,6 +1031,7 @@ export class NativeChatController {
     this.streamUpdates.delete(key)
     this.closed.add(key)
     this.mirrors.delete(key)
+    this.thinking.delete(key)
     if (chat) {
       chat.cancellation++
       chat.queue = []
