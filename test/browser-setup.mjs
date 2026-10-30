@@ -25,6 +25,7 @@ import {
   setupReport,
   shortenHome
 } from '../src/main/browser-setup.ts'
+import { cliDependency, runManagedCli } from '../src/main/managed-browser-cli.ts'
 import { PlatformError } from '../src/main/platform-owner.ts'
 import { browserPane, installBlocker } from '../src/native/settings-browser.ts'
 import {
@@ -203,6 +204,50 @@ const fx = writeBrowserFixture(join(T, 'fixture'))
   assert.equal(status.detection.shell.source, 'playwright', 'another tool’s cache is used in place')
   assert.equal(status.detection.shell.version, '149.0.7827.55')
   assert.equal(field(status, 'browserShell').value, '149.0.7827.55')
+}
+
+// LKM-374: a Homebrew-style `agent-browser` link on PATH into another tool's node_modules.
+// When that tool's update drops the package, the link dangles: the CLI reads as missing and
+// Install is offered (no crash, no stale Ready). Restored, the link is followed to the binary.
+{
+  const home = join(T, 'dangling-home')
+  const bin = join(T, 'dangling-bin')
+  const target = join(T, 'other-tool/node_modules/agent-browser/bin/agent-browser-darwin-arm64')
+  mkdirSync(bin, { recursive: true })
+  symlinkSync(target, join(bin, 'agent-browser'))
+  place(fx.payload.shell, shellAt(join(home, 'Library/Caches/ms-playwright')))
+  const setup = make()
+  setup.setFixture({
+    env: { ...envFor(home, fx.bin), PATH: `${bin}:${fx.bin}:/usr/bin:/bin` },
+    home
+  })
+  const before = psCalls
+  const dangling = await setup.recheck()
+  assert.equal(dangling.state, 'partial')
+  assert.match(dangling.summary, /agent-browser CLI is missing/)
+  assert.equal(dangling.detection.cli, undefined)
+  assert.ok(action(dangling, 'browser-install-cli'), 'Install offers the tested release')
+  assert.equal(dangling.check, undefined)
+  assert.equal(psCalls, before, 'nothing is launched')
+  // preview_verify engine "chromium" goes through the same wrapper: exit 3, nothing launched.
+  const refused = await runManagedCli(
+    wrapper,
+    'trezi-lkm-374',
+    T,
+    ['open', 'about:blank'],
+    10_000,
+    {
+      ...envFor(home, fx.bin),
+      PATH: `${bin}:${fx.bin}:/usr/bin:/bin`
+    }
+  )
+  assert.equal(refused.code, 3, refused.stderr)
+  assert.match(cliDependency(refused)?.message ?? '', /agent-browser CLI is not installed/)
+  place(fx.payload.cli, target)
+  const restored = await setup.refresh()
+  assert.equal(restored.detection.cli.source, 'path')
+  assert.equal(restored.detection.cli.path, target)
+  assert.equal(restored.detection.cli.version, '0.26.0')
 }
 
 // An untested newer CLI on PATH is unsupported and never launched; Trezi's own 0.26.0 wins.

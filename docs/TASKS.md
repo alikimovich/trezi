@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
+
+- [x] Diagnosis (PROGRESS 2026-10-29): project-switching was a seam fault, because OCR read a truncated title while the icons were all visible. browser-setup, agent-verify and the other managed-agent-browser checks fail because the host's agent-browser is gone: the hermes-agent update on 10-27 left `/opt/homebrew/bin/agent-browser` dangling. Neither is a Trezi product defect.
+- [x] `assertSidebarCapture` finds each row's label in the capture pixels by row id and geometry, using the measured content scale. Icon assertions are unchanged.
+- [x] Unit coverage: `sidebar-evidence` (truncated titles, misplaced labels, scaled and opaque captures) and `browser-setup` (a dangling PATH link reads as missing, the wrapper exits 3, a restored link is found).
+- [x] Host prerequisite: the hermes-agent link broke on 10-27 and Trezi's cache was never provisioned; the user installed agent-browser 0.26.0 into `~/Library/Caches/Trezi/browser-tools` (no global install). Native chat/core/settings/sidebar: 63 passed; browser-setup Ready, chromium receipt `vr-52a6b8cbadd8` written.
+- [x] `test/native-runtime.mjs` row check updated for LKM-372's three-row fixture (`test/helpers/sidebar-rows.mjs`, unit coverage in `sidebar-evidence`).
+- [x] The launcher's post-smoke sidebar check (`assertSidebarRows`) passed end to end in the worker's native run (63/63, chat, core, settings, sidebar).
+- [x] `core/three-d` failed once in the manager's native run (the pick chose `html`, not the card). `open` in `src/native/smoke-three-d.ts` re-checks the card and the pointer hit and repeats the pick up to three times; the final attempt keeps the full wait and assertion. Native 63/63 after the change (PROGRESS 2026-10-29, three-d).
+
 ## Sidebar "View all chats" accessibility: AXUnknown in sidebar-chats (LKM-379)
 
 - [x] Diagnosis (inspect seam, plus a blank label in the product): on macOS 27 the `NSButton` view is ignored and its own role is AXUnknown; its `NSButtonCell` is the AXButton VoiceOver gets, and a label set on the view blanked the cell's description (PROGRESS 2026-10-29).
