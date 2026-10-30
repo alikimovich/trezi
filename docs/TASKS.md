@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar title marquee shows text across its whole width (LKM-387)
+
+- [x] Root cause measured on the real draw path: the layer transform dragged the label's painted edge (AppKit paints only `visibleRect`) across the clip; geometry and `travel` were right. See PROGRESS.
+- [x] `src/native/SidebarMarquee.swift` moves the label by layout each frame, rereads the width each step, wakes on a resize and gives each edge a 14 pt fade while text runs past it. `inspect` reports `marqueeState` in `shellInspect`.
+- [x] Unit `sidebar-marquee`: paint, ink and geometry of real rows at start, mid and end (selected, unselected, no Archive, narrow), timing, resizes around the hover, Reduce Motion, un-hover. Fails on the unfixed sources ("selected mid: text stops at 105.66 of 175").
+- [x] Native smoke `checkMarqueeScroll` (`src/native/smoke-sidebar-marquee.ts`, in `sidebar-chats`): pixel checks at each phase on five stages, including a resize just after the hover.
+- [ ] Native acceptance: the `sidebar` group on origin/main after merge, then inspect `sidebar-marquee-<stage>-<phase>.png`, including the fade over vibrancy (no native run in this ticket).
 ## Sidebar: project "…" matches New chat, History behind Show History (LKM-388)
 
 - [x] `more` in `src/native/ProjectCell.swift` is a plain borderless button (`ProjectMoreButton`, row-tall so its hit target is not shorter than New chat's) built with New chat by `installActions`; the `.inline` pill is gone and New chat is unchanged. `sidebarMore` builds the menu on each press.

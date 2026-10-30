@@ -8,6 +8,7 @@ import { nativeChat } from './chat-runtime'
 import { recentChats } from './sidebar-chats'
 import { preparePreviewInput } from './smoke-input'
 import { restoreSidebarFocus } from './smoke-sidebar'
+import { checkMarqueeScroll } from './smoke-sidebar-marquee'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -16,10 +17,11 @@ import { nativeWorkspace } from './workspace-runtime'
  * sidebar. Grows the project to more than five open chats, the first through the project row's
  * New chat button, and checks the outline lists every one under the selected project only. It
  * switches chats from the sidebar repeatedly (drafts and attachments kept, the row highlighted),
- * scrolls a long title on hover (but not under the Reduce Motion override), archives chats with
- * the row's Archive button and reveals the History section from the project's "…" menu, which
- * then lists them, three at a time before "Show N more". Sidebar captures land in the artifacts
- * folder. The running and unread
+ * scrolls a long title on hover (but not under the Reduce Motion override), reads its pixels at
+ * the scroll's start, middle and end (`smoke-sidebar-marquee.ts`), archives chats with the row's
+ * Archive button and reveals the History section from the project's "…" menu, which then lists
+ * them, three at a time before "Show N more". Sidebar captures land in the artifacts folder. The
+ * running and unread
  * indicators are checked in `smoke-sidebar-status.ts`, where a real background turn runs.
  */
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
@@ -29,6 +31,7 @@ let home = ''
 let created: string[] = []
 let reused: string[] = []
 let collapsed = false
+let sidebarWidth = 0
 let stub: ReturnType<typeof stubAgentSendForSmoke> | undefined
 
 const draft = (chat: string) => `Sidebar draft ${chat.slice(-6)}`
@@ -226,10 +229,35 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   const scrolling = await hover(false)
   assert.ok(scrolling.travel > 1, `the long title overflows its row: ${scrolling.travel}`)
   await capture('sidebar-chats-hover', { state: await shell() }, false)
-  await hover(true)
-  await perform('marquee-reduce-motion')
+  const still = (await hover(true)).marqueeState
+  assert.ok(still.offset === 0 && still.truncated, 'Reduce Motion keeps the title truncated')
+  // Off, not the system value: the LKM-387 scrolls below must not depend on the host's setting.
+  await perform('marquee-reduce-motion', 'off')
   await perform('sidebar-hover')
   assert.equal(row(await shell()).marquee, false, 'the title stops when the pointer leaves')
+
+  // LKM-387: the text must paint the whole title on either kind of row, at any width, including
+  // a width change around the start of the hover.
+  const sized = async (width: number) => {
+    assert.equal(await perform('sidebar-width', String(width)), true, `sidebar width ${width}`)
+    await waitFor(
+      async () => Math.abs((await shell()).sidebarWidth - width) <= 1,
+      `sidebar at ${width}`
+    )
+  }
+  const scroll = (stage: string, during?: () => Promise<void>) =>
+    checkMarqueeScroll(host, artifacts, `chat:${long}`, stage, during)
+  sidebarWidth = Math.round((await shell()).sidebarWidth)
+  await scroll('unselected')
+  await sized(180)
+  await scroll('narrow-unselected')
+  await pick(long)
+  await scroll('narrow-selected')
+  await sized(sidebarWidth)
+  await scroll('selected')
+  await scroll('resized', () => sized(200))
+  await sized(sidebarWidth)
+  sidebarWidth = 0
 
   // Only a chat with a prompt is saved to History (`closeChat`): one stubbed turn in four chats,
   // so History is long enough for "Show N more".
@@ -346,6 +374,8 @@ export async function restoreSidebarChats(host: NativeBridge) {
   stub = undefined
   await perform('marquee-reduce-motion')
   await perform('sidebar-hover')
+  if (sidebarWidth) await perform('sidebar-width', String(sidebarWidth))
+  sidebarWidth = 0
   const state = await host.request('shellInspect').catch(() => null)
   const key = nativeWorkspace.state.activeKey
   if (key && state?.historyOpen?.includes(key)) {
