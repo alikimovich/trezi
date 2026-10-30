@@ -57,7 +57,7 @@ extension NativeShell {
     }
     /// LKM-319: dividers that draw inside each toolbar island (none on macOS 27).
     func islandInspect() -> [String: Any] {
-        var dividers: [String: Int] = ["chat": chatActions.control.visibleDividers]
+        var dividers: [String: Int] = [:]
         for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { dividers[group.itemIdentifier.rawValue] = group.visibleDividers }
         return ["islandDividers": dividers, "islandHidesDividers": IslandSegmentedControl.hidesDividers]
     }

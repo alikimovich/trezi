@@ -1,5 +1,5 @@
 // LKM-376: the native chat Stop/queue check leaves a paused queue and a draft for its
-// capture. The next check (history-menu) sends on the same chat; without the reset that
+// capture. The next check (sidebar-status) sends on the same chat; without the reset that
 // send queued behind the leftover message and never reached its provider stub.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -109,14 +109,14 @@ async function afterStopQueueCheck({ reset }) {
     assert.equal(clean.text, '')
     assert.equal(sent.length, 1, 'Resuming the emptied queue sent a leftover message')
   }
-  const guard = await requireCleanSharedChat(host, 'history-menu').then(
+  const guard = await requireCleanSharedChat(host, 'sidebar-status').then(
     () => undefined,
     (error) => error
   )
 
-  // history-menu's turn on the same chat.
-  await host.request('composerPerform', { text: 'History indicator turn' })
-  await composerUntil((value) => value.text === 'History indicator turn', 'history draft')
+  // sidebar-status's turn on the same chat.
+  await host.request('composerPerform', { text: 'Sidebar indicator turn' })
+  await composerUntil((value) => value.text === 'Sidebar indicator turn', 'history draft')
   await host.request('composerPerform', { action: 'send' })
   await composerUntil((value) => value.text === '', 'history turn submitted')
   await new Promise((resolve) => setTimeout(resolve, 20))
@@ -127,28 +127,28 @@ async function afterStopQueueCheck({ reset }) {
 {
   const { sent, composer, guard } = await afterStopQueueCheck({ reset: true })
   assert.equal(guard, undefined)
-  assert.equal(sent.length, 2, 'history-menu send did not reach the provider stub')
-  assert.ok(sent[1].endsWith('History indicator turn'))
+  assert.equal(sent.length, 2, 'sidebar-status send did not reach the provider stub')
+  assert.ok(sent[1].endsWith('Sidebar indicator turn'))
   assert.equal(composer.queueCount, 0)
 }
 
 // Without it, the same send is queued behind the paused leftover and never reaches the
-// stub (the praxis-24 history-menu timeout); the guard names the leftover state at once.
+// stub (the praxis-24 sidebar-status timeout); the guard names the leftover state at once.
 {
   const { sent, composer, guard } = await afterStopQueueCheck({ reset: false })
   assert.equal(sent.length, 1)
   assert.deepEqual(
     composer.queue.map((q) => q.text),
-    ['Keep queued message', 'History indicator turn']
+    ['Keep queued message', 'Sidebar indicator turn']
   )
   assert.match(
     String(guard?.message),
-    /history-menu: an earlier check left 1 queued message\(s\), a paused queue, the draft "Keep draft"/
+    /sidebar-status: an earlier check left 1 queued message\(s\), a paused queue, the draft "Keep draft"/
   )
 }
 
 // The native check resets in its `finally`, so a failed Stop assertion still cleans up,
-// and history-menu checks before it sends.
+// and sidebar-status checks before it sends.
 {
   const chat = readFileSync(new URL('../src/native/smoke-chat.ts', import.meta.url), 'utf8')
   const cleanup = chat.slice(chat.lastIndexOf('} finally {'))
@@ -160,13 +160,13 @@ async function afterStopQueueCheck({ reset }) {
     'the reset must run while the provider stub still catches sends'
   )
   const history = readFileSync(
-    new URL('../src/native/smoke-history-menu.ts', import.meta.url),
+    new URL('../src/native/smoke-sidebar-status.ts', import.meta.url),
     'utf8'
   )
-  const guarded = history.indexOf("requireCleanSharedChat(host, 'history-menu'")
+  const guarded = history.indexOf("requireCleanSharedChat(host, 'sidebar-status'")
   assert.ok(
-    guarded > 0 && guarded < history.indexOf("{ text: 'History indicator turn' }"),
-    'history-menu no longer checks the shared chat before its send'
+    guarded > 0 && guarded < history.indexOf("{ text: 'Sidebar indicator turn' }"),
+    'sidebar-status no longer checks the shared chat before its send'
   )
 }
 

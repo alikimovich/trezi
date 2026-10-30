@@ -1,28 +1,39 @@
-// LKM-378: the selected project's recent chats nested in the native sidebar. Bun picks the
-// rows (scoping, count, archive, running state, order); switching goes through the real chat
+// LKM-378: the selected project's chats nested in the native sidebar. Bun picks the rows
+// (scoping, every open chat, closed chats with their age, archive, running state, order); switching goes through the real chat
 // controller, which keeps drafts, attachments and running turns per chat.
 import assert from 'node:assert/strict'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 import { NativeShellController } from '../src/native/shell-controller.ts'
-import { RECENT_CHAT_LIMIT, recentChats } from '../src/native/sidebar-chats.ts'
+import { recentChats, shortAgo } from '../src/native/sidebar-chats.ts'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-// --- The pure pick: newest opened first, at most five, the active chat always kept --------
-assert.equal(RECENT_CHAT_LIMIT, 5)
-assert.deepEqual(recentChats([], null), { keys: [], more: false }, '0 chats')
-assert.deepEqual(recentChats(['a'], 'a'), { keys: ['a'], more: false }, '1 chat')
-const five = ['a', 'b', 'c', 'd', 'e']
-assert.deepEqual(recentChats(five, 'c'), { keys: ['e', 'd', 'c', 'b', 'a'], more: false }, '5')
-const seven = [...five, 'f', 'g']
-assert.deepEqual(recentChats(seven, 'g'), { keys: ['g', 'f', 'e', 'd', 'c'], more: true }, '>5')
+// --- The pure pick: every open chat, newest opened first ----------------------------------
+assert.deepEqual(recentChats([]), [], '0 chats')
+assert.deepEqual(recentChats(['a']), ['a'], '1 chat')
+const seven = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
 assert.deepEqual(
-  recentChats(seven, 'a'),
-  { keys: ['g', 'f', 'e', 'd', 'a'], more: true },
-  'an older active chat takes the last slot, so the selected row is always visible'
+  recentChats(seven),
+  ['g', 'f', 'e', 'd', 'c', 'b', 'a'],
+  'no cap: archiving keeps it short'
 )
-assert.deepEqual(recentChats(seven, 'missing').keys, ['g', 'f', 'e', 'd', 'c'])
-assert.deepEqual(recentChats(['a', 'b', 'a'], 'a'), { keys: ['b', 'a'], more: false }, 'dedup')
+assert.deepEqual(recentChats(['a', 'b', 'a']), ['b', 'a'], 'dedup')
+
+// --- A closed chat's age, as the Electron rail showed it -----------------------------------
+const now = Date.UTC(2026, 9, 29)
+const ago = (seconds) => shortAgo(now - seconds * 1000, now)
+assert.deepEqual(
+  [
+    ago(-5),
+    ago(30),
+    ago(5 * 60),
+    ago(3 * 3600),
+    ago(2 * 86400),
+    ago(120 * 86400),
+    ago(400 * 86400)
+  ],
+  ['now', 'now', '5m', '3h', '2d', '4mo', '1y']
+)
 
 // --- The shell rows, from the real chat controller ----------------------------------------
 const live = (key) => ({
@@ -101,20 +112,16 @@ const project = (key) => {
 }
 const nested = (key) => project(key).recent?.map((row) => row.session)
 
-// Counts: 0, 1, 5 and more than 5.
+// Counts: 0, 1, 5 and more than 5: every open chat is listed.
 assert.deepEqual(nested('alpha'), [])
-assert.equal(project('alpha').allChats, false)
 alpha.sessionKeys = ['a']
 assert.deepEqual(nested('alpha'), ['a'])
 alpha.sessionKeys = ['a', 'b', 'c', 'd', 'e']
 assert.deepEqual(nested('alpha'), ['e', 'd', 'c', 'b', 'a'])
-assert.equal(project('alpha').allChats, false, 'exactly five: no "View all chats"')
 alpha.sessionKeys.push('f')
-assert.deepEqual(nested('alpha'), ['f', 'e', 'd', 'c', 'a'], 'the active chat a stays listed')
-assert.equal(project('alpha').allChats, true, 'more than five: five rows and "View all chats"')
+assert.deepEqual(nested('alpha'), ['f', 'e', 'd', 'c', 'b', 'a'], 'more than five: all listed')
 alpha.activeSessionKey = 'f'
-assert.deepEqual(nested('alpha'), ['f', 'e', 'd', 'c', 'b'])
-assert.equal(project('alpha').children.length, 6, 'the all-chats menu still lists every chat')
+assert.equal(project('alpha').children.length, 6, 'children list every open chat')
 for (const row of project('alpha').recent)
   assert.deepEqual([row.kind, row.id, row.project], ['chat', `chat:${row.session}`, 'alpha'])
 
@@ -125,14 +132,23 @@ assert.equal(project('alpha').recent, undefined, 'the list leaves the old projec
 assert.deepEqual(nested('beta'), ['z'], 'and moves to the selected one')
 workspace.active = alpha
 
-// Archive (close chat) and unarchive (resume adds a new open chat) update the list.
+// Archive (close chat) and unarchive (resume adds a new open chat) update the list. A closed
+// chat is a history child of the project row: Swift nests those under its History section.
 alpha.sessionKeys = alpha.sessionKeys.filter((key) => key !== 'f')
 alpha.activeSessionKey = 'e'
+workspace.state.history.alpha = [
+  { id: 'old', title: 'Old chat', startedAt: Date.now() - 3 * 86400 * 1000, transcript: [] }
+]
 assert.deepEqual(nested('alpha'), ['e', 'd', 'c', 'b', 'a'])
-assert.equal(project('alpha').allChats, false)
+const past = project('alpha').children.filter((row) => row.kind === 'history')
+assert.deepEqual(
+  past.map((row) => [row.id, row.title, row.detail]),
+  [['history:old', 'Old chat', '3d']],
+  'a closed chat carries its age for the History row'
+)
 alpha.sessionKeys.push('r')
-assert.deepEqual(nested('alpha'), ['r', 'e', 'd', 'c', 'b'])
-assert.equal(project('alpha').allChats, true)
+assert.deepEqual(nested('alpha'), ['r', 'e', 'd', 'c', 'b', 'a'])
+workspace.state.history = {}
 alpha.sessionKeys = ['a', 'b', 'c']
 alpha.activeSessionKey = 'a'
 
@@ -195,5 +211,5 @@ assert.deepEqual(running(), { c: false, b: false, a: false }, 'the indicator cle
 assert.equal(calls.filter((call) => call[0] === 'agent:send').length, 1, 'switching sends nothing')
 
 console.log(
-  'Sidebar recent chats LKM-378: scoping, 0/1/5/>5 counts, archive, running state, stable order and draft-preserving switches passed'
+  'Sidebar chats: scoping, every open chat, history age, archive, running state, stable order and draft-preserving switches passed'
 )
