@@ -268,6 +268,7 @@ extension NativeShell {
                     "marquee": cell.title?.running ?? false, "travel": cell.title?.travel ?? 0,
                     "label": cell.accessibilityLabel() ?? "", "menu": sidebarRowMenu(row).map { $0.isEnabled ? $0.title : "\($0.title) (disabled)" },
                     "role": outline.rowView(atRow: index, makeIfNecessary: true)?.accessibilityRole()?.rawValue ?? ""]
+            if let title = cell.title { item["marqueeState"] = title.inspect(archive: cell.archive, in: sidebar.view) }
             // LKM-379: the button's role and label come from the element VoiceOver gets (its cell).
             if let button = cell.button { item.merge(AccessibilityElementInspect.inspect(button)) { $1 } }
             if let archive = cell.archive { item["archiveLabel"] = AccessibilityElementInspect.element(of: archive)?.accessibilityLabel() ?? "" }

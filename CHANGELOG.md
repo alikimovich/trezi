@@ -12,6 +12,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 - A sidebar chat now shows that it is working with the chat's shimmer on its title instead of a spinner at its left (a still, dimmed title with Reduce Motion) (LKM-389).
+## [0.6.8] - 2026-10-30
+
+### Fixed
+- A hovered sidebar chat title now scrolls across its whole width up to Archive, with soft edges, instead of being cut off early beside a blank gap (LKM-387).
 
 ## [0.6.7] - 2026-10-30
 

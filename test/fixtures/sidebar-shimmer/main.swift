@@ -13,6 +13,7 @@ final class NativeShell: NSObject {
     var sidebarHistory = SidebarHistoryState()
     var applying = false
     let outline = NSOutlineView()
+    let sidebar = NSViewController()
     func projectMenu(_ row: ShellRow) -> NSMenu { NSMenu() }
     @objc func contextAction(_ sender: Any?) {}
 }
