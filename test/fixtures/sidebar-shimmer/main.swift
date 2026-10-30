@@ -85,6 +85,9 @@ func contrast(_ text: NSColor, alpha: CGFloat, over back: NSColor, appearance: N
     return ratio
 }
 
+// Never nil: nil reads the host's Reduce Motion setting (some CI runners have it on), and this
+// run must not depend on it or change it. Only the Reduce Motion cases below turn it on.
+SidebarMarqueeTitle.reduceMotionOverride = false
 var report: [String: Any] = [:]
 let idle = make([:]), thinking = make(["running": true, "thinking": true]), waiting = make(["running": true])
 let unread = make(["unread": true]), history = make(["kind": "history", "detail": "3d", "thinking": false])

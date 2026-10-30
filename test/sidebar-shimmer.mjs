@@ -56,6 +56,18 @@ assert.match(shimmerCaptureProblem([120, 0], true), /did not change/)
 assert.equal(shimmerCaptureProblem([0], false), '')
 assert.match(shimmerCaptureProblem([4], false), /Reduce Motion moved/)
 
+// The fixture must not read the host's Reduce Motion setting (a runner with it on shows "still"
+// where the sweep is expected): the override is never nil, and is off before the first row.
+const fixture = readFileSync('test/fixtures/sidebar-shimmer/main.swift', 'utf8')
+assert.ok(
+  !/reduceMotionOverride\s*=\s*nil/.test(fixture),
+  'the fixture never reads the host setting'
+)
+assert.ok(
+  fixture.indexOf('reduceMotionOverride = false') < fixture.indexOf('let idle = make('),
+  'Reduce Motion is off before the first row'
+)
+
 if (process.platform !== 'darwin') {
   console.log('SIDEBAR-SHIMMER SKIP — macOS AppKit required for the row')
 } else {
