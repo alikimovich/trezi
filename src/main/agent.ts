@@ -77,13 +77,7 @@ import {
 } from './conversation-owner'
 import { clearHistory, recordEdit } from './edit-history'
 import { isRepoRoot } from './git'
-import {
-  dropGateEvidence,
-  type GateVerdict,
-  holdMessage,
-  integrationGate,
-  retainGateEvidence
-} from './integration-gate'
+import { dropGateEvidence, holdMessage, retainGateEvidence } from './integration-gate'
 import { landingCheckContext } from './landing-context'
 import {
   beginLiveWatch,
@@ -114,12 +108,12 @@ import { registerProviderIpc } from './providers'
 import { generatePublishDescription } from './publish-description'
 import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
-import type { LandingHold } from './repository-owner'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createProject } from './scaffold'
 import { incidents } from './self-heal/incidents'
 import { releaseSessionSkills } from './session-skills'
 import { createSessionStore, type SessionStore } from './sessions-store'
+import { landSpawn, MAX_SPAWN_CONTINUATIONS } from './spawn-landing'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { TEXT_EDIT_MAX, textEditLanded, textEditMismatch } from './text-edit-check'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
@@ -129,7 +123,6 @@ import { workflowOwner } from './workflow-owner'
 import { dependenciesInstalling } from './worktree-dependencies'
 import {
   applyBranchToWorkingTree,
-  autoApplyWorktree,
   branchExists,
   commitWorktree,
   createWorktree,
@@ -549,6 +542,8 @@ interface Spawn {
   cancelled?: boolean
   finalizing?: boolean
   error?: string
+  /** Times its agent was asked to combine edits that overlap a landing (LKM-382). */
+  continuations?: number
 }
 const spawns = new Map<string, Spawn>()
 /** Removes a saved record, then its skills pins once nothing else names them (LKM-287).
@@ -745,42 +740,55 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         } satisfies AgentEvent)
     })
     .catch(() => {})
+  let continued = false
   await enqueueRepoWrite(parentRoot, async () => {
+    let closed = false
+    // finalize + persist the record (removed below if we auto-apply)
+    const close = () => {
+      if (closed) return
+      closed = true
+      closeSession(session, parentSessionKey)
+      dropGateEvidence(parentSessionKey, wt.path)
+    }
     try {
-      closeSession(session, parentSessionKey) // finalize + persist the record (removed below if we auto-apply)
+      // LOCAL-WEBKIT-3: only what the spawn's checks passed on, onto an unchanged tree;
+      // a change held only because another landing moved live reconciles first
+      // (LKM-382). The session stays open meanwhile: its checks run again on the result.
+      const landing = await landSpawn(
+        { emitKey: parentSessionKey, root: wt.path, liveRoot: parentRoot },
+        wt,
+        firstLine(text),
+        {
+          land: status === 'done' && !spawn.cancelled,
+          reconciled: !!spawn.continuations,
+          mayContinue: (spawn.continuations ?? 0) < MAX_SPAWN_CONTINUATIONS
+        }
+      )
+      // Stopped meanwhile: the kept branch holds the combined work, markers and all.
+      if (landing.conflicted && spawn.cancelled) await commitWorktree(wt, firstLine(text))
+      else if (landing.conflicted) {
+        // Overlapping lines: the spawn's own agent combines both sides on the new base,
+        // and its next finish lands here again. The rail row keeps running.
+        spawn.continuations = (spawn.continuations ?? 0) + 1
+        spawn.finalizing = false
+        void beginLiveWatch(spawnWatchKey(id), session)
+        session.send(conflictResolutionPrompt(landing.conflicted))
+        continued = true
+        return
+      }
+      const { committed, files } = landing
+      close()
       // The agent's closing message → a chat notification the user can reply to.
       let summary =
         spawn.error ??
         [...session.record.transcript].reverse().find((t) => t.role === 'assistant')?.text
-      const { committed, files } = await commitWorktree(wt, firstLine(text))
-      let auto: {
-        applied: boolean
-        edits: { file: string; before: string; after: string }[]
-        hold?: LandingHold
-      } = { applied: false, edits: [] }
-      let verdict: GateVerdict | null = null
-      if (status === 'done' && !spawn.cancelled && committed && files.length) {
-        try {
-          // LOCAL-WEBKIT-3: only what the spawn's checks passed on, onto an unchanged tree.
-          verdict = await integrationGate({
-            emitKey: parentSessionKey,
-            root: wt.path,
-            liveRoot: parentRoot
-          })
-          auto = await autoApplyWorktree(parentRoot, wt, files, verdict.candidate)
-        } catch {
-          auto = { applied: false, edits: [] }
-        } finally {
-          dropGateEvidence(parentSessionKey, wt.path)
-        }
-      }
       // Kept on its branch for review, with the reason, instead of landing unchecked.
-      if (auto.hold) summary = `Not applied: ${holdMessage(auto.hold, verdict)}`
-      if (auto.applied) {
+      if (landing.reason) summary = `Not applied: ${landing.reason}`
+      if (landing.applied) {
         // Land it on the working branch + make the whole task ONE Cmd+Z (shared
         // group). Then drop the branch and un-persist the record so the rail clears.
         const group = `${origin}:${id}`
-        for (const e of auto.edits)
+        for (const e of landing.edits)
           recordEdit(parentRoot, e.file, e.before, e.after, undefined, group)
         // …and as one commit on the live checkout, like an interactive chat's turn, so
         // the spawn shows up in `git log` and can be reverted on its own.
@@ -798,7 +806,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         const mismatch =
           spawn.expectText != null &&
           !textEditLanded(
-            auto.edits.map((e) => e.after),
+            landing.edits.map((e) => e.after),
             spawn.expectText
           )
             ? textEditMismatch(spawn.expectText)
@@ -813,7 +821,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           ...label,
           ...(mismatch ? { mismatch } : {}),
           outcome: 'applied',
-          files: auto.edits.map((e) => basename(e.file))
+          files: landing.edits.map((e) => basename(e.file))
         } satisfies AgentEvent)
       } else {
         // Fallback: keep the branch + record for the manual review modal.
@@ -847,6 +855,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
     } catch (error) {
       // Keep the checkout for recovery, but always retire the running card.
       console.error('Background agent finalization failed:', error)
+      close()
       safeSend(getWindow_, 'agent:event', {
         type: 'spawn-finished',
         projectKey: parentSessionKey,
@@ -860,6 +869,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
       } satisfies AgentEvent)
     }
   })
+  if (continued) return
   spawns.delete(id)
   void admitNext(id) // a slot just freed — start the next queued spawn
 }

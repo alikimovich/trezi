@@ -237,6 +237,7 @@ export const UNIT = [
   'chat-settings',
   'background-model',
   'comment-agents',
+  'comment-reconcile',
   'chat-agent-card',
   'landing-check',
   'run-stats',

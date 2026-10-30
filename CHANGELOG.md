@@ -12,6 +12,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 - In full screen the first ⌘. (Toggle UI) now shows or hides the UI instead of leaving full screen, wherever the focus is (LKM-380).
+## [0.6.2] - 2026-10-30
+
+### Fixed
+- Comments no longer cancel each other: a comment that finishes after another one landed updates itself to the latest project, is checked again and lands, with no "Not applied" or Retry (LKM-382).
 
 ## [0.6.1] - 2026-10-29
 

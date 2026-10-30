@@ -10,6 +10,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `menu-first-shortcuts` (real text views, text field and WKWebView; full screen and windowed; 3 presses per focus; Escape, ⇧⌘./⌥⌘., Russian layout, monitor filter) and `native-shell-controller` (toggling keeps the running turn, draft and attachments).
 - [x] Native smoke `toggle-ui` (core group): ⌘./Escape posted to the app's event queue with focus in the composer, source editor, preview, address field or nowhere; windowed, full screen closed/open, repeated presses; draft and attachment kept; captures `toolbar-toggle-ui-*.png` and `toggle-ui.json`.
 - [ ] Manager native run of `--only=core` (worker native allowance: 0 calls); inspect the `toolbar-toggle-ui-*` captures.
+## Comments never cancel each other (LKM-382)
+
+- [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).
+- [x] `landSpawn` (`src/main/spawn-landing.ts`): stageResolve, replay checks on the exact tree, land; overlaps go back to the spawn's agent on the new base.
+- [x] Unit `comment-reconcile`: 2 and 3 comments in any order, same-line overlaps, an unresolvable conflict and a failing replay.
 
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
