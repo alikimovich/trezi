@@ -5,7 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Full screen: the first ⌘. (Toggle UI) exits full screen (LKM-380)
 
-- [x] Root cause (PROGRESS 2026-10-29, LKM-380): a focused WKWebView claims ⌘. in `performKeyEquivalent` before the main menu, so Toggle UI never runs; WebKit then sends the unhandled key on as `cancelOperation:` (Escape), and `NSWindow.doCommandBySelector:` exits full screen on it. A text view's keyDown does the same.
+- [x] Root cause (PROGRESS 2026-10-30, LKM-380): a focused WKWebView claims ⌘. in `performKeyEquivalent` before the main menu, so Toggle UI never runs; WebKit then sends the unhandled key on as `cancelOperation:` (Escape), and `NSWindow.doCommandBySelector:` exits full screen on it. A text view's keyDown does the same.
 - [x] Fix: `MenuFirstShortcut` (`src/native/MenuFirstShortcuts.swift`), a key-down monitor installed in `Host.swift`, gives ⌘. to the main menu before any view, for the main and the full-screen toolbar window, with no sheet and no menu tracking. Escape is not routed.
 - [x] Unit `menu-first-shortcuts` (real text views, text field and WKWebView; full screen and windowed; 3 presses per focus; Escape, ⇧⌘./⌥⌘., Russian layout, monitor filter) and `native-shell-controller` (toggling keeps the running turn, draft and attachments).
 - [x] Native smoke `toggle-ui` (core group): ⌘./Escape posted to the app's event queue with focus in the composer, source editor, preview, address field or nowhere; windowed, full screen closed/open, repeated presses; draft and attachment kept; captures `toolbar-toggle-ui-*.png` and `toggle-ui.json`.

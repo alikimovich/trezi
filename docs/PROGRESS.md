@@ -2,7 +2,7 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
-## 2026-10-29 — LKM-380 full screen: the first ⌘. (Toggle UI) exited full screen
+## 2026-10-30 — LKM-380 full screen: the first ⌘. (Toggle UI) exited full screen
 
 - **Root cause.** Actions → Toggle UI is ⌘., and to AppKit and WebKit ⌘. also means Escape. AppKit offers a ⌘ key to the key window's views before the main menu. The preview's WKWebView, when focused, claims ⌘. in `performKeyEquivalent` so it can send the key to the page, and the menu never sees it. When the page doesn't handle the key, WebKit sends it on as `cancelOperation:`. In full screen, `-[NSWindow doCommandBySelector:]` turns `cancelOperation:` into `exitFullScreenMode:`. So the first press left full screen and toggled nothing. Once the window was out of full screen, the next press toggled the UI.
 - **Evidence.**
@@ -16,6 +16,7 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - Unit `native-shell-controller`: hiding and showing the UI keeps the running chat, its draft and its attachments.
   - The native smoke `toggle-ui` (core) posts ⌘. and Escape to the app's event queue, so they take the real monitor/menu/responder dispatch. It runs with the focus in each input: windowed open and closed, full screen with the UI closed and open, and 4 repeated presses. It asserts that full screen stays, there is no transition and Escape doesn't toggle, and it captures `toolbar-toggle-ui-*.png`.
   - The native run is the manager's (worker allowance: 0 calls), so the captures are not inspected yet.
+- **Manager's full unit run (279 PASS, 2 FAIL): both failures are outside this change.** `runtime-owner` failed at `test/runtime-owner.mjs:1618` (`fetch(printed.url)` still answered after `stopAll()`: another listener held that port during the parallel run). `install-update` failed at `test/install-update.mjs:177` (`which git` returned an empty path in the manager's environment). Neither file, nor anything they exercise, is in this diff. On this tree `install-update` passes (alone, and in the quick tier twice) and `runtime-owner` passes every section it can run here. I did not edit either test.
 
 ## 2026-10-29 — LKM-374 three-d: the exploded-view pick repeats when one click picked the wrong element
 
