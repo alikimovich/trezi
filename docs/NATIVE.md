@@ -109,13 +109,17 @@ owner to create the project. The new project opens with the same session record 
 the agent continues the agreed plan there.
 
 When a project is open, the sidebar starts with Open Project and New Project buttons, separated by a gap
-from projects with consistent native outline folder symbols and a More menu for
-memory, ordering and closing, and a New chat button at the trailing edge. The selected
+from projects with consistent native outline folder symbols and a More button styled
+exactly like the New chat button at the trailing edge, whose menu has Project Memory,
+Show/Hide History and Close Project. The selected
 project nests all of its open chats, newest opened first, each with a spinner while its
 turn runs or a green dot on an unread answer; a click switches chats. A hovered chat shows
 Archive (Close chat; not on the project's last chat) and a long title scrolls; the context
-menu has Rename and Archive. A History toggle below lists the closed chats, three and then
-"Show N more", each with its age; a click opens it for review/resume (LKM-378 and the
+menu has Rename and Archive. History is hidden by default: Show History in the project's
+menu adds a History header with the count, which also hides it again, above the closed chats,
+three and then "Show N more", each with its age; a click opens it for review/resume. The
+choice is per project and lasts the session; a project with no closed chats disables the
+item while it is selected (LKM-378, LKM-388 and the
 retired Electron rail, `src/native/SidebarChats.swift`, `src/native/SidebarMarquee.swift`,
 `src/native/sidebar-chats.ts`). The chat header shows only the chat title. Background runs appear as actionable chat cards. Project
 and chat state persists in the native profile. The toolbar keeps the sidebar toggle, chat
