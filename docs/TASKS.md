@@ -9,6 +9,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Captures and `parallel-stream-timeline.json` land in the artifacts folder; a failure prints the timeline. The cleanup ends both turns, restores the stubs, the active chat and the shared chat, and closes B.
 - [x] Unit `native-chat-parallel-stream`: the same assertions over real `NativeChat.inspect()` payloads while two chats stream and switch; with `messageFramesFilter` keeping no frames they fail with "no message row in view". Unit `native-smoke-groups` pins the group and order.
 - [ ] First native run on main: `parallel-stream` in `--only=chat` and `--only=sidebar`. No native run was available to the worker; the check's loop, stubs and cleanup have not run in the app.
+## Comments never cancel each other (LKM-382)
+
+- [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).
+- [x] `landSpawn` (`src/main/spawn-landing.ts`): stageResolve, replay checks on the exact tree, land; overlaps go back to the spawn's agent on the new base.
+- [x] Unit `comment-reconcile`: 2 and 3 comments in any order, same-line overlaps, an unresolvable conflict and a failing replay.
 
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
