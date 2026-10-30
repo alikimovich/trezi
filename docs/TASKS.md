@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview speed badge below the slow-motion toolbar control (LKM-385)
+
+- [x] Badge hangs under the slow-motion segment, centered on the frame AppKit laid out, and is re-placed on every layout and toolbar measure (`src/native/PreviewSpeedPlacement.swift`, `Host.placeSpeedBadge`, `NativeShell.speedBadgeAnchor`).
+- [x] Narrow windows: `fitMore` removes "…" together with the segment under 1000 pt, so the badge takes the group's last remaining segment; "…" is used only if it is shown without the segment.
+- [x] `preview-speed` smoke and `previewSpeedInspect` assert the position through resize, sidebar, chat width, expand, narrow and full screen; unit `preview-speed-placement`.
+- [ ] Post-merge native `preview-speed` run, with `toolbar-preview-speed.png` and `toolbar-preview-speed-narrow.png` inspected (worker native allowance: 0 calls).
+
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
 - [x] Diagnosis (PROGRESS 2026-10-29): project-switching was a seam fault, because OCR read a truncated title while the icons were all visible. browser-setup, agent-verify and the other managed-agent-browser checks fail because the host's agent-browser is gone: the hermes-agent update on 10-27 left `/opt/homebrew/bin/agent-browser` dangling. Neither is a Trezi product defect.
