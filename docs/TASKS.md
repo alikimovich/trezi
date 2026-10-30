@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Comments never cancel each other (LKM-382)
+
+- [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).
+- [x] `landSpawn` (`src/main/spawn-landing.ts`): stageResolve, replay checks on the exact tree, land; overlaps go back to the spawn's agent on the new base.
+- [x] Unit `comment-reconcile`: 2 and 3 comments in any order, same-line overlaps, an unresolvable conflict and a failing replay.
+
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
 - [x] Diagnosis (PROGRESS 2026-10-29): project-switching was a seam fault, because OCR read a truncated title while the icons were all visible. browser-setup, agent-verify and the other managed-agent-browser checks fail because the host's agent-browser is gone: the hermes-agent update on 10-27 left `/opt/homebrew/bin/agent-browser` dangling. Neither is a Trezi product defect.

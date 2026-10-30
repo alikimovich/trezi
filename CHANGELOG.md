@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+- Comments no longer cancel each other: a comment that finishes after another one landed updates itself to the latest project, is checked again and lands, with no "Not applied" or Retry (LKM-382).
+
 ## [0.6.1] - 2026-10-29
 
 ### Fixed
