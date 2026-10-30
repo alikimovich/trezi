@@ -1,25 +1,25 @@
 import AppKit
 
-// LKM-379: the real "View all chats" button in a view-based outline row, as the sidebar
-// hosts it, in a window that is never ordered in (no focus or GUI side effects). Prints the
+// LKM-379: the real sidebar text button (the History toggle) in a view-based outline row, as
+// the sidebar hosts it, in a window that is never ordered in (no focus or GUI side effects). Prints the
 // seam's inspection and the press result as JSON for test/sidebar-chats-accessibility.mjs.
 _ = NSApplication.shared
 
 final class Target: NSObject {
     var presses = 0
-    @objc func viewAllChats(_ sender: NSButton) { presses += 1 }
+    @objc func toggleHistory(_ sender: NSButton) { presses += 1 }
 }
 
 final class Source: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
     let target = Target()
     var button: NSButton?
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int { item == nil ? 1 : 0 }
-    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { "all-chats" }
+    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { "history-toggle" }
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { false }
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         let cell = NSTableCellView()
-        let button = SidebarAllChatsButton.make(title: "View all chats", font: .systemFont(ofSize: 13), target: target,
-                                                action: #selector(Target.viewAllChats(_:)))
+        let button = SidebarRowButton.make(title: "History", font: .systemFont(ofSize: 13), target: target,
+                                           action: #selector(Target.toggleHistory(_:)))
         button.translatesAutoresizingMaskIntoConstraints = false
         cell.addSubview(button)
         NSLayoutConstraint.activate([button.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),

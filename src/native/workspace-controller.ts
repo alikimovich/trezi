@@ -346,6 +346,10 @@ export class NativeWorkspaceController {
         this.services.closeChat(command.session)
         if (entry.activeSessionKey === command.session)
           entry.activeSessionKey = result.activeSessionKey ?? entry.sessionKeys[0]
+        // The archived chat is a history record now: the sidebar's History section lists it.
+        this.state.history[entry.key] = await this.services
+          .invoke('sessions:list', entry.root)
+          .catch(() => this.state.history[entry.key] ?? [])
       }
       if (this.closing.has(entry.key)) return
       this.changed()

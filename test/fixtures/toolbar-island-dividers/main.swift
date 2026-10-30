@@ -18,23 +18,22 @@ let interaction = MomentaryToolbarGroup(identifier: NSToolbarItem.Identifier("in
     item("select-object", "cursorarrow"), item("device", "iphone"), item("overlay", "ruler"), item("speed", "tortoise")])
 let tools = MomentaryToolbarGroup(identifier: NSToolbarItem.Identifier("tools"), items: [
     item("code", "chevron.left.forwardslash.chevron.right"), item("layers", "square.3.layers.3d"), item("expand", "arrow.up.left.and.arrow.down.right")])
-let chat = ChatToolbarActions(frame: .zero)
 let stock = NSSegmentedControl(images: [toolbarSymbol("cursorarrow")!, toolbarSymbol("iphone")!, toolbarSymbol("ruler")!], trackingMode: .momentary, target: nil, action: nil)
 stock.segmentStyle = .texturedRounded
 for index in 0..<3 { stock.setWidth(32, forSegment: index) }
 
-for view in [interaction.view!, tools.view!, chat, stock] { view.translatesAutoresizingMaskIntoConstraints = true; canvas.addSubview(view) }
+for view in [interaction.view!, tools.view!, stock] { view.translatesAutoresizingMaskIntoConstraints = true; canvas.addSubview(view) }
 /// Lays the controls out in a row at their own sizes (again after a segment is removed).
 func place() {
     var x: CGFloat = 10
-    for view in [interaction.view!, tools.view!, chat, stock] {
-        let size = view === chat ? NSSize(width: 64, height: chat.control.intrinsicContentSize.height) : view.intrinsicContentSize
+    for view in [interaction.view!, tools.view!, stock] {
+        let size = view.intrinsicContentSize
         view.frame = NSRect(x: x, y: 18, width: size.width, height: size.height); x += size.width + 20
     }
 }
 
 func controls() -> [String: NSSegmentedControl] {
-    ["interaction": interaction.view as! NSSegmentedControl, "tools": tools.view as! NSSegmentedControl, "chat": chat.control, "stock": stock]
+    ["interaction": interaction.view as! NSSegmentedControl, "tools": tools.view as! NSSegmentedControl, "stock": stock]
 }
 func settle() {
     canvas.layoutSubtreeIfNeeded(); canvas.displayIfNeeded(); CATransaction.flush()
@@ -84,12 +83,13 @@ result["initial"] = measure()
 // LKM-213: a narrow window removes the slow-motion segment and a wider one restores it.
 _ = interaction.setSegment("speed", hidden: true); result["narrow"] = measure()
 _ = interaction.setSegment("speed", hidden: false); result["restored"] = measure()
-chat.updateEnabled(project: true, history: false); result["disabled"] = measure()
+(tools.view as! NSSegmentedControl).setEnabled(false, forSegment: 0); result["disabled"] = measure()
+(tools.view as! NSSegmentedControl).setEnabled(true, forSegment: 0)
 // Offscreen captures of the dark appearance come out blank: its check reads the layers only.
 window.appearance = NSAppearance(named: .darkAqua); result["dark"] = measure()
 // AppKit changes the inner layers by itself, with no layout of the parent: read straight after each change.
 func islands() -> [String: IslandSegmentedControl] {
-    ["interaction": interaction.view as! IslandSegmentedControl, "tools": tools.view as! IslandSegmentedControl, "chat": chat.control]
+    ["interaction": interaction.view as! IslandSegmentedControl, "tools": tools.view as! IslandSegmentedControl]
 }
 func immediate() -> [String: Int] { islands().mapValues { $0.visibleDividers + thinLayers($0) } }
 func thin(_ control: IslandSegmentedControl) -> [CALayer] {
@@ -106,7 +106,6 @@ for control in islands().values { control.setSelected(true, forSegment: 0) }
 interactive["pressed"] = immediate()
 for control in islands().values { control.setSelected(false, forSegment: 0) }
 _ = interaction.clickSegment("device"); _ = tools.clickSegment("layers")
-chat.control.setSelected(true, forSegment: 1); chat.control.sendAction(chat.control.action, to: chat.control.target)
 interactive["clicked"] = immediate()
 // A divider shown again by the system, and a divider layer added to the hosted view's layer.
 for control in islands().values { for layer in thin(control) { layer.isHidden = false } }

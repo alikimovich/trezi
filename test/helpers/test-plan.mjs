@@ -57,7 +57,13 @@ export const READERS = {
 export const UI_SOURCES = {
   'src/native/SidebarIcon.swift': {
     stem: 'SidebarIcon',
-    unit: ['sidebar-icon', 'sidebar-favicon', 'native-settings-layout', 'sidebar-evidence'],
+    unit: [
+      'sidebar-icon',
+      'sidebar-favicon',
+      'native-settings-layout',
+      'sidebar-evidence',
+      'sidebar-history-rows'
+    ],
     native: ['sidebar', 'settings']
   }
 }

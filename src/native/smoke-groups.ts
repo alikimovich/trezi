@@ -117,7 +117,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'browser-setup': ['settings'],
   'security-session': ['settings'],
   'native-chat': ['chat'],
-  'history-menu': ['chat'],
+  'sidebar-status': ['sidebar', 'chat'],
   'sidebar-chats': ['sidebar', 'chat'],
   'sent-attachments': ['chat'],
   'comment-rows': ['chat'],

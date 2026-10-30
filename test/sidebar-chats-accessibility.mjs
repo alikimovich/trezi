@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
-// LKM-379: "View all chats" is an AXButton that VoiceOver reaches and can press. On macOS 27
-// the NSButton view is ignored (its own role is AXUnknown) and its cell is the element, so
+// LKM-379: the sidebar's text buttons (the History toggle, "Show N more") are AXButtons that
+// VoiceOver reaches and can press. On macOS 27 the NSButton view is ignored (its own role is AXUnknown) and its cell is the element, so
 // the sidebar-chats smoke read AXUnknown from the view. The fixture hosts the real button in
 // an outline row and inspects the element VoiceOver gets through the seam the smoke uses.
 if (process.platform !== 'darwin') {
@@ -21,8 +21,8 @@ if (process.platform !== 'darwin') {
       `${key}: actual ${JSON.stringify(report[key])}, expected ${JSON.stringify(expected)}\n${JSON.stringify(report)}`
     )
   check('role', 'AXButton')
-  check('label', 'View all chats')
-  check('axTitle', 'View all chats')
+  check('label', 'History')
+  check('axTitle', 'History')
   check('element', true)
   // VoiceOver navigates window > scroll area > outline > row > cell > button.
   assert.deepEqual(

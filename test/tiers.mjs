@@ -143,6 +143,7 @@ export const UNIT = [
   'native-shell-controller',
   'sidebar-recent-chats',
   'sidebar-chats-accessibility',
+  'sidebar-history-rows',
   'sidebar-evidence',
   'sidebar-sizing',
   'toolbar-chat-lead',
