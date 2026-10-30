@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { checkComposerAttach } from './smoke-composer-attach'
 import { nativeWorkspace } from './workspace-runtime'
 
 /** Foreground composer evidence; provider calls are intercepted, never sent. */
@@ -16,6 +17,7 @@ export async function checkVisibleComposer(host: NativeBridge, fixture: string, 
       await host.request('chatAcceptance', { prepare: true, width })
       await checkComposerAtWidth(host, fixture, artifacts, width)
     }
+    await checkComposerAttach(host, artifacts)
   } finally {
     // Always restore the width, even after a failure, so later checks start from it.
     await host.request('chatAcceptance', { prepare: true, width: initial.chatWidth })

@@ -106,7 +106,8 @@ for chatWidth: CGFloat in [440, 320] {
         composer.setFrameSize(NSSize(width: width, height: multiline))
         composer.layoutSubtreeIfNeeded()
         require(composer.text.frame.height <= composer.scroll.contentSize.height + 1, "Matrix multiline draft fits at chat width \(chatWidth)")
-        require(composer.verificationLayout()["alignment"] as? Bool == true, "Matrix multiline keeps the shared row at chat width \(chatWidth)")
+        let row = composer.verificationLayout()
+        require(row["alignment"] as? Bool == true, "Matrix multiline keeps the shared row at chat width \(chatWidth): gaps \(row["alignmentGaps"] ?? []), controls \(row["controlGeometry"] ?? [])")
     }
 }
 composer.perform(["text": ""])

@@ -24,11 +24,22 @@ extension NativeComposer {
         }
         guard window.isKeyWindow || window.attachedSheet?.isKeyWindow == true, NSApp.isActive, !isHidden else { return ["error": "Composer is not foreground"] }
         window.contentView?.layoutSubtreeIfNeeded()
-        if command["attachDialog"] as? Bool == true, let menu = plus.menu {
-            menu.performActionForItem(at: 1)
+        // LKM-381: one press of + (the click, Space and AX press path) opens the chooser.
+        if command["attachDialog"] as? Bool == true { plus.performClick(nil) }
+        let panel = window.attachedSheet as? NSOpenPanel
+        let attachmentDialog = panel != nil
+        let dialog: [String: Any] = panel.map { panel in
+            ["frame": NSStringFromRect(panel.frame), "window": NSStringFromRect(window.frame), "visible": panel.isVisible,
+             "multiple": panel.allowsMultipleSelection, "files": panel.canChooseFiles, "directories": panel.canChooseDirectories,
+             "onScreen": window.screen.map { $0.frame.contains(panel.frame) } ?? false]
+        } ?? [:]
+        if command["cancelDialog"] as? Bool == true, let panel { panel.cancel(nil) }
+        // A chooser cannot be given a selection programmatically: close it, then run the
+        // completion's OK branch with these files.
+        if let paths = command["acceptDialog"] as? [String], let panel {
+            panel.cancel(nil)
+            finishChoosing(.OK, paths.map { URL(fileURLWithPath: $0) })
         }
-        let attachmentDialog = window.attachedSheet is NSOpenPanel
-        if command["cancelDialog"] as? Bool == true, let panel = window.attachedSheet as? NSOpenPanel { panel.cancel(nil) }
         if let label = command["label"] as? String, let value = command["value"] as? String,
            let picker = pickers[label], picker.isEnabled,
            let item = picker.itemArray.first(where: { $0.representedObject as? String == value }) {
@@ -50,6 +61,9 @@ extension NativeComposer {
         var result = verificationLayout()
         result["foreground"] = true
         result["attachmentDialog"] = attachmentDialog
+        result["dialog"] = dialog
+        result["attachButton"] = ["enabled": plus.isEnabled, "popUp": plus is NSPopUpButton, "fullScreen": window.styleMask.contains(.fullScreen),
+                                  "label": plus.cell?.accessibilityLabel() ?? "", "frame": NSStringFromRect(plus.convert(plus.bounds, to: nil))]
         result["send"] = ["enabled": sendButton.isEnabled, "label": sendButton.accessibilityLabel() ?? ""]
         result["pickersEnabled"] = pickers.mapValues { $0.isEnabled }
         result["composerHeight"] = frame.height

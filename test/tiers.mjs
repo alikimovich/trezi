@@ -102,6 +102,7 @@ export const UNIT = [
   'chat-stuck-turn',
   'chat-send-queue',
   'composer-queue-panel',
+  'composer-attach',
   'composer-sent-draft',
   'composer-sending',
   'chat-auto-resolve',
@@ -369,6 +370,8 @@ export const UNIT_TIMEOUT_MS = {
   'browser-tools-install': 240_000,
   'native-settings-layout': 240_000,
   'native-composer-layout': 240_000,
+  // LKM-381: the same composer source compile, then one short sending delay.
+  'composer-attach': 240_000,
   'native-chat-latest-settle': 240_000,
   // LKM-312: a compile of the 33 real chat and composer sources (24 s with a warm module
   // cache), then 5 s of samples.
