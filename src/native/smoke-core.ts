@@ -36,7 +36,6 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
-import { checkHistoryMenu, restoreHistoryMenu } from './smoke-history-menu'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import {
@@ -52,6 +51,7 @@ import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smok
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
+import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
@@ -80,6 +80,7 @@ import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
 import { checkSidebarChats, restoreSidebarChats } from './smoke-sidebar-chats'
+import { checkSidebarStatus, restoreSidebarStatus } from './smoke-sidebar-status'
 import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
@@ -91,6 +92,7 @@ import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
 import { checkSwiftMacros, restoreSwiftMacros } from './smoke-swift-macros'
 import { checkSwiftPreview, restoreSwiftPreview } from './smoke-swift-preview'
 import { checkThreeD, removeThreeDCard } from './smoke-three-d'
+import { checkToggleUI } from './smoke-toggle-ui'
 import {
   assertIslandDividers,
   capture,
@@ -695,6 +697,17 @@ export async function runNativeCoreSmoke(
       },
       cleanup: async () => {
         await restoreToolbarAddress(host)
+      }
+    },
+    {
+      name: 'toggle-ui',
+      dependsOn: ['chat-ready'],
+      run: () => checkToggleUI(host, artifacts),
+      cleanup: async () => {
+        await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
+        if ((await host.request('layoutInspect')).fraction === 0)
+          await host.request('shellPerform', { action: 'expand' })
+        await clearComposer()
       }
     },
     {
@@ -1429,12 +1442,12 @@ export async function runNativeCoreSmoke(
       }
     },
     {
-      name: 'history-menu',
+      name: 'sidebar-status',
       dependsOn: ['chat-ready'],
       run: async () => {
-        await checkHistoryMenu(host, artifacts)
+        await checkSidebarStatus(host, artifacts)
       },
-      cleanup: () => restoreHistoryMenu(host)
+      cleanup: () => restoreSidebarStatus()
     },
     {
       name: 'sidebar-chats',
@@ -1502,6 +1515,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: () => checkCodeLinkClick(host, fixture, artifacts),
       cleanup: () => restoreCodeLinkClick(host, fixture)
+    },
+    // After the checks that read message frames: its long replies stay in the shared chat.
+    {
+      name: 'parallel-stream',
+      dependsOn: ['chat-ready'],
+      run: () => checkParallelStream(host, artifacts),
+      cleanup: () => restoreParallelStream(host)
     },
     {
       name: 'quit-alert',

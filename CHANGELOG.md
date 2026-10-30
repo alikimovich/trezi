@@ -12,6 +12,25 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 - The composer's + button opens the file chooser directly, without the "Attach Files…" menu (LKM-381).
+## [0.6.5] - 2026-10-30
+
+### Fixed
+- In full screen the first ⌘. (Toggle UI) now shows or hides the UI instead of leaving full screen, wherever the focus is (LKM-380).
+
+## [0.6.4] - 2026-10-30
+
+### Changed
+- The sidebar works like the earlier Trezi rail: New chat on the project row, every open chat listed with an Archive button on hover, a History section (three closed chats, then "Show N more"), long chat titles that scroll on hover, and a green dot on an unread answer. The chat header no longer has the history and New chat buttons.
+
+## [0.6.3] - 2026-10-30
+
+### Changed
+- The preview speed badge now sits right below the slow-motion control in the top bar instead of the page's bottom-left corner; in narrow windows, where that control leaves the toolbar, it sits below the group's last button (LKM-385).
+
+## [0.6.2] - 2026-10-30
+
+### Fixed
+- Comments no longer cancel each other: a comment that finishes after another one landed updates itself to the latest project, is checked again and lands, with no "Not applied" or Retry (LKM-382).
 
 ## [0.6.1] - 2026-10-29
 

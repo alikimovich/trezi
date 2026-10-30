@@ -153,12 +153,14 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         shell.updatePreviewColor(views["preview"]!.underPageBackgroundColor)
         previewSurface.leading = { [weak self] in self?.shell.previewLeading ?? 0 }
         previewStatus = NativePreviewStatus(); canvas.addSubview(previewStatus)
-        canvas.addSubview(previewLoad); canvas.addSubview(speedBadge)
+        canvas.addSubview(previewLoad)
         canvas.addSubview(threeD.backdrop, positioned: .above, relativeTo: views["preview"])
         canvas.addSubview(threeD.scene, positioned: .above, relativeTo: threeD.backdrop)
         canvas.addSubview(threeD.header); canvas.addSubview(threeD.footer)
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
+        // Over the islands: it hangs under the toolbar, where they float.
+        canvas.addSubview(speedBadge)
         canvas.addSubview(startSurface)
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
         chat = NativeChat(); chatColumn.addSubview(chat)
@@ -172,6 +174,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         previewOverlay = PreviewOverlay(host: self)
         toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
         canvas.changed = { [weak self] in self?.nativeLayout.layout() }
+        shell.toolbarLaidOut = { [weak self] in self?.placeSpeedBadge() }
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
             self?.lastUserInteraction = Date()
@@ -180,6 +183,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         }
         // LKM-219: shortcuts on any keyboard layout; ⌘← / ⌘→ step the preview's history.
         KeyShortcut.install(); previewHistory.install()
+        // LKM-380: ⌘. (Toggle UI) goes to the menu first, so a focused view never turns it into Escape.
+        MenuFirstShortcut.install(windows: { [weak self] in (self?.window, self?.shell.toolbarWindow) }, enabled: { [weak self] in self?.menuTracking == false })
         installMenus()
         NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = true }
         NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in self?.menuTracking = false }

@@ -397,6 +397,13 @@ exact source that would land.
   again; overlap becomes the ordinary conflict card. Retry does the same. A resolution is
   new source and lands only after a check on it. A concurrent live edit after the check
   makes the owner hold again, so check, capture and write cannot interleave.
+  A background spawn's finish (a comment, a text edit) does the same (LKM-382,
+  `src/main/spawn-landing.ts`): comments run side by side from the same live tree, so
+  a held `live-changed` reconciles, replays the session's checks on the exact merged
+  tree while its session is still open, and lands. Overlapping lines go back to the
+  spawn's own agent as a conflict-resolution turn on the new base (at most three per
+  spawn); its next finish lands the same way. Only markers it leaves, a failed check or
+  an exhausted budget keep the branch for review.
 - **Holds in the chat.** `unchecked`, `check-failed`, `check-running`, `runtime-changed`
   and `source-changed` show the failed-landing card with the reason and Retry;
   `live-changed` without reconciliation is a drift park (Resolve).

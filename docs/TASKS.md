@@ -9,6 +9,45 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `composer-attach`: the real composer in a window that is never ordered in. The element is an AXButton labelled "Attach files"; AX press and click each open the chooser once; Cancel keeps the draft and a `.mov`; OK appends in order; busy opens nothing and it opens again after.
 - [x] Native smoke `checkComposerAttach` (`src/native/smoke-composer-attach.ts`, inside `visible-composer`, group composer): open/cancel twice plus accept, in a normal window and in full screen, with foreground captures and `composer-attach.json` (chooser frame, options, window mode).
 - [ ] Native acceptance: the composer group on origin/main after merge (no native run in this ticket).
+## Full screen: the first ⌘. (Toggle UI) exits full screen (LKM-380)
+
+- [x] Root cause (PROGRESS 2026-10-30, LKM-380): a focused WKWebView claims ⌘. in `performKeyEquivalent` before the main menu, so Toggle UI never runs; WebKit then sends the unhandled key on as `cancelOperation:` (Escape), and `NSWindow.doCommandBySelector:` exits full screen on it (measured on every host). A text view's key-down becomes `cancelOperation:` only where the text input key binding is live (macOS 27.0.1 here; not on GitHub's headless macOS 26 runner), so tests keep that step conditional.
+- [x] Fix: `MenuFirstShortcut` (`src/native/MenuFirstShortcuts.swift`), a key-down monitor installed in `Host.swift`, gives ⌘. to the main menu before any view, for the main and the full-screen toolbar window, with no sheet and no menu tracking. Escape is not routed.
+- [x] Unit `menu-first-shortcuts` (real text views, text field and WKWebView; full screen and windowed; 3 presses per focus; Escape, ⇧⌘./⌥⌘., Russian layout, monitor filter) and `native-shell-controller` (toggling keeps the running turn, draft and attachments).
+- [x] Native smoke `toggle-ui` (core group): ⌘./Escape posted to the app's event queue with focus in the composer, source editor, preview, address field or nowhere; windowed, full screen closed/open, repeated presses; draft and attachment kept; captures `toolbar-toggle-ui-*.png` and `toggle-ui.json`.
+- [x] CI repair (PR 349, macOS 26, run 41017519002): `menu-first-shortcuts` asserted the key-down → `cancelOperation:` step, which the headless runner did not produce (`cancels: []`). The fixture now measures `link`, `chain`, `keyDown`, `keyDownEscape` and `env`; `link`/`chain` are required everywhere, the key-down step only where produced (PROGRESS 2026-10-30).
+- [x] Second CI repair (PR 349, macOS 26.6.2, run 41026167486, `menu-first-shortcuts.mjs:54`): the forced Escape = ⌘. equality is removed. macOS 26.6.2 turned Escape into `cancelOperation:` (full 1 exit, windowed 0) and ⌘. into nothing; each key is checked on its own against what the host produced, link/chain/claim/fixed/routing checks unchanged. The Escape key-down cancel check is now conditional (a loosening, covered unconditionally by link/chain); the cause of the per-key difference is inferred (PROGRESS 2026-10-30).
+- [x] `runtime-owner` (`test/runtime-owner.mjs:1618`): after `stopAll`, `stoppedServer` asserts the process is dead and any reply is not the stopped server's own body (a reused port no longer fails it). Not run here: the sockets section needs port binding (PROGRESS 2026-10-30).
+- [ ] Manager native run of `--only=core` (worker native allowance: 0 calls); inspect the `toolbar-toggle-ui-*` captures.
+## Native smoke: two chats stream at once, as a regression check (LKM-383)
+
+- [x] Native smoke `parallel-stream` (groups chat, sidebar; `src/native/smoke-parallel-stream.ts`): chat A streams, New chat opens B, which sends and streams too, with 3 switches each way. At every step Swift shows the active chat, the column is visible, a row is in view and the last row reaches Bun's text, each within `STREAM_BOUND_MS` (`src/native/smoke-stream-timeline.ts`).
+- [x] Captures and `parallel-stream-timeline.json` land in the artifacts folder; a failure prints the timeline. The cleanup ends both turns, restores the stubs, the active chat and the shared chat, and closes B.
+- [x] Unit `native-chat-parallel-stream`: the same assertions over real `NativeChat.inspect()` payloads while two chats stream and switch; with `messageFramesFilter` keeping no frames they fail with "no message row in view". Unit `native-smoke-groups` pins the group and order.
+- [ ] First native run on main: `parallel-stream` in `--only=chat` and `--only=sidebar`. No native run was available to the worker; the check's loop, stubs and cleanup have not run in the app.
+## Preview speed badge below the slow-motion toolbar control (LKM-385)
+
+- [x] Badge hangs under the slow-motion segment, centered on the frame AppKit laid out, and is re-placed on every layout and toolbar measure (`src/native/PreviewSpeedPlacement.swift`, `Host.placeSpeedBadge`, `NativeShell.speedBadgeAnchor`).
+- [x] Narrow windows: `fitMore` removes "…" together with the segment under 1000 pt, so the badge takes the group's last remaining segment; "…" is used only if it is shown without the segment.
+- [x] `preview-speed` smoke and `previewSpeedInspect` assert the position through resize, sidebar, chat width, expand, narrow and full screen; unit `preview-speed-placement`.
+- [ ] Post-merge native `preview-speed` run, with `toolbar-preview-speed.png` and `toolbar-preview-speed-narrow.png` inspected (worker native allowance: 0 calls).
+## Comments never cancel each other (LKM-382)
+
+- [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).
+- [x] `landSpawn` (`src/main/spawn-landing.ts`): stageResolve, replay checks on the exact tree, land; overlaps go back to the spawn's agent on the new base.
+- [x] Unit `comment-reconcile`: 2 and 3 comments in any order, same-line overlaps, an unresolvable conflict and a failing replay.
+
+## Sidebar: the Electron rail's chat controls, no chat-header actions
+
+- [x] Bun lists every open chat of the selected project, newest first, and gives each closed chat its age (`src/native/sidebar-chats.ts` `recentChats`/`shortAgo`, `shell-controller.ts`). Archiving refreshes the project's history list (`workspace-controller.ts` `close-chat`).
+- [x] Project row: New chat at the trailing edge after "…", shown like "…" on hover or selection (`ProjectCell.swift`, `SidebarChats.swift` `installNewChat`).
+- [x] Chat rows: Archive on hover (not on the project's last chat, which would close the project), the green unread dot, Rename/Archive context menu; History toggle with three closed chats, then "Show N more"/"Show less", each with its age; a closed chat opens for review on click (`SidebarChats.swift`).
+- [x] Marquee: a hovered chat's overflowing title scrolls after 0.7 s at 30 pt/s; Reduce Motion keeps it still (`SidebarMarquee.swift`).
+- [x] Removed the chat header's history/New chat capsule (`ChatToolbarActions`), the history menu and its broker (`HistoryMenu.swift`, `HistoryVerification.swift`). "View all chats" is gone with the menu.
+- [x] Tests: unit `sidebar-recent-chats`, `sidebar-chats-accessibility` (History toggle), `toolbar-island-dividers`, `native-smoke-shared-chat`, `native-smoke-stop-cleanup`; native `sidebar-chats` (New chat button, every chat, hover/marquee, Archive, History) and `sidebar-status` (replaces `history-menu`: running spinner, unread dot, cleared on open); `native-chat` reads the sidebar row.
+- [x] Native `--only=sidebar`: 9/9 passed; `sidebar-chats-*.png` and `sidebar-status-unread.png` inspected. `--only=sidebar,chat` stops at `composer-send` (Code panel 619–1090 ms > 500 ms), which also fails on the base commit d1ac3863 on this Mac.
+- [x] LKM-384: merged with main. Unit `sidebar-history-rows` runs the real `ShellRow.layoutNested` (toggle, three closed chats, "Show N more", "Show less"); the `sidebar-chats` smoke now always prompts four chats, so it can no longer skip that path, and also asserts the context menus and that a click opens the review sheet.
+- [ ] "Show N more" in a native run (the `sidebar-chats` smoke now requires it; its first native run is the post-merge suite).
 
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
@@ -147,6 +186,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] A new message (Send) resets the unresolved count, a streamed chunk keeps it (`ChatModel.sendRevision`); unit `native-chat-send-follow` (`realizedOnSend` for every forced case).
 - [ ] Full native suite pass on the fix (`native-chat-scroll` send visibility, chat acceptance, island reveal). No native run was available to the worker.
 - [ ] Watch: the reporter's blank transcript had no message frame in view at offsets 0/18 without any cards. That trigger was not reproduced offscreen; the fix bounds its loop. If a blank chat after Send is reported again, capture `chatInspect` (`messageFrames`, `latestSettling`, `bottomPosition`) while it shows.
+  - Parallel-chat case checked, not reproduced (LKM-383): with two chats streaming and repeated switches both streams stayed in view, and Swift was at most one chunk behind Bun (the scratch smoke on d1ac3863, `TREZI_NATIVE_BACKGROUND_TEST=1`). The user's blank column is still unexplained; a fix needs `chatInspect` from their real app while it shows. `parallel-stream` now guards this case.
 ## Inline text edit keeps long text in the agent fallback (LKM-352)
 
 - [x] `textAgentPrompt` carries the whole whitespace-normalised text in a fence longer than any backtick run in it (`src/main/props.ts`); unit `text-edit-agent` (1000 characters, quotes, backticks).

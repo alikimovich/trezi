@@ -280,7 +280,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-git-updates.ts` | test | — | smoke fixture |
 | `src/native/smoke-build-badge.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat.ts` | test | — | smoke fixture |
-| `src/native/smoke-history-menu.ts` | test | — | smoke fixture |
+| `src/native/smoke-sidebar-status.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-gate.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-text.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-ui.ts` | test | — | smoke fixture |
@@ -308,6 +308,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-layers.ts` | test | — | smoke fixture |
 | `src/native/smoke-legacy-project.ts` | test | — | smoke fixture |
 | `src/native/smoke-movable-islands.ts` | test | — | smoke fixture |
+| `src/native/smoke-parallel-stream.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-overlay.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-inspector.ts` | test | — | smoke fixture |
 | `src/native/smoke-projects.ts` | test | — | smoke fixture |
@@ -340,6 +341,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-swift-graph.ts` | test | — | smoke fixture |
 | `src/native/smoke-swift-macros.ts` | test | — | smoke fixture |
 | `src/native/smoke-swift-preview.ts` | test | — | smoke fixture |
+| `src/native/smoke-toggle-ui.ts` | test | — | smoke fixture |
 | `src/native/smoke-toolbar.ts` | test | — | smoke fixture |
 | `src/native/smoke-toolbar-fullscreen.ts` | test | — | smoke fixture |
 | `src/native/smoke-toolbar-more.ts` | test | — | smoke fixture |
