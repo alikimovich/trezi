@@ -112,8 +112,9 @@ When a project is open, the sidebar starts with Open Project and New Project but
 from projects with consistent native outline folder symbols and a More button styled
 exactly like the New chat button at the trailing edge, whose menu has Project Memory,
 Show/Hide History and Close Project. The selected
-project nests all of its open chats, newest opened first, each with a spinner while its
-turn runs or a green dot on an unread answer; a click switches chats. A hovered chat shows
+project nests all of its open chats, newest opened first, each with the chat's shimmer on
+its title while the model works (a still, dimmed title under Reduce Motion) or a green dot
+on an unread answer; a click switches chats. A hovered chat shows
 Archive (Close chat; not on the project's last chat) and a long title scrolls; the context
 menu has Rename and Archive. History is hidden by default: Show History in the project's
 menu adds a History header with the count, which also hides it again, above the closed chats,

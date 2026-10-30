@@ -98,6 +98,11 @@ function activity(chat: Chat): NativeChatActivity | null {
     ...clock
   })
 }
+/** The model is at work on the turn: not a wait for the user, a stop or the landing after it. */
+const atWork = (current: NativeChatActivity | null) =>
+  !!current?.animated && current.kind !== 'applying'
+/** What the sidebar's title shimmer shows (LKM-389); the same state as the composer's beam. */
+export const chatThinking = (chat: Chat) => atWork(activity(chat))
 /** The running turn's usage: on its response, or still waiting for one. */
 function turnUsage(chat: Chat) {
   return chat.messages.find((m) => m.id === chat.streamingId)?.usage ?? chat.pendingUsage
@@ -228,7 +233,7 @@ export function snapshot(
     })
   for (const spawn of context?.spawns ?? []) cards.push(agentCard(spawn))
   const currentActivity = activity(chat)
-  const thinking = !!currentActivity?.animated && currentActivity.kind !== 'applying'
+  const thinking = atWork(currentActivity)
   const stop = chat.isRunning && !chat.text.trim() && !chat.attachments.length
   const shown = collapse(chat, cards, currentActivity)
   return {

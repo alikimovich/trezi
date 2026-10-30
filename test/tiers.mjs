@@ -146,6 +146,7 @@ export const UNIT = [
   'sidebar-chats-accessibility',
   'sidebar-history-rows',
   'sidebar-project-actions',
+  'sidebar-shimmer',
   'sidebar-evidence',
   'sidebar-sizing',
   'toolbar-chat-lead',

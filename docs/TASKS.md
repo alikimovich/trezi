@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar: running chats shimmer their title instead of a left loader (LKM-389)
+
+- [x] `src/native/SidebarTitleShimmer.swift`: the in-chat band and timing as a layer mask on the title's one label; still and dimmed under Reduce Motion; nothing runs without a window. The spinner and its constraints are gone from `SidebarChatCell`.
+- [x] `thinking` on the shell row (`chatThinking`, the composer beam's state): thinking, tool and writing steps; not waiting, stopping, landing or an ended turn.
+- [x] Unit `sidebar-shimmer` (new, also passes against LKM-387's `SidebarMarquee.swift`) and `native-shell-controller`.
+- [x] Native `checkSidebarShimmer` (`src/native/smoke-sidebar-shimmer.ts`, inside `sidebar-status`) and the state steps in `smoke-chat.ts`.
+- [ ] Native acceptance: run the sidebar and chat groups on origin/main after merge and inspect every `sidebar-shimmer-*.png` (no native run in this ticket).
+- [ ] Reconcile with LKM-387 once it lands; it was not on this ticket's base.
+
 ## Sidebar: project "…" matches New chat, History behind Show History (LKM-388)
 
 - [x] `more` in `src/native/ProjectCell.swift` is a plain borderless button (`ProjectMoreButton`, row-tall so its hit target is not shorter than New chat's) built with New chat by `installActions`; the `.inline` pill is gone and New chat is unchanged. `sidebarMore` builds the menu on each press.

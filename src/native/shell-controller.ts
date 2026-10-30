@@ -3,6 +3,7 @@ import { previewSpeed } from '../main/preview-speed'
 import type { NativeShellAction, NativeShellRow, NativeShellState } from '../shared/native-shell'
 import type { NativeProjectStatus } from '../shared/native-workspace'
 import type { NativeChatController } from './chat-controller'
+import { chatThinking } from './chat-snapshot'
 import { displayText, rememberProject } from './display-paths'
 import type { NativeGitController } from './git-controller'
 import type { NativePreferences } from './preferences'
@@ -75,6 +76,7 @@ export class NativeShellController {
             kind: 'chat',
             title: chat?.title || title(chat?.messages.find((m) => m.role === 'user')?.text),
             running: chat?.isRunning ?? false,
+            thinking: chat ? chatThinking(chat) : false,
             unread: chat?.unreadAnswer ?? false
           }
           return [key, row]
