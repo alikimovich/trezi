@@ -46,6 +46,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
     /// The rulers-and-grids button opens its native popover (LKM-205) instead of asking main.
     var overlayAction: (() -> Void)?
+    /// Runs after every toolbar measure, for views that hang under a toolbar control (LKM-385).
+    var toolbarLaidOut: (() -> Void)?
     private(set) var sidebarButtons: [String: NSButton] = [:]
     private var previewState: [String: Any] = [:]
     private var sidebarBeforeExpand = false

@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Preview speed badge below the slow-motion toolbar control (LKM-385)
+
+- [x] Badge hangs under the slow-motion segment, centered on the frame AppKit laid out, and is re-placed on every layout and toolbar measure (`src/native/PreviewSpeedPlacement.swift`, `Host.placeSpeedBadge`, `NativeShell.speedBadgeAnchor`).
+- [x] Narrow windows: `fitMore` removes "…" together with the segment under 1000 pt, so the badge takes the group's last remaining segment; "…" is used only if it is shown without the segment.
+- [x] `preview-speed` smoke and `previewSpeedInspect` assert the position through resize, sidebar, chat width, expand, narrow and full screen; unit `preview-speed-placement`.
+- [ ] Post-merge native `preview-speed` run, with `toolbar-preview-speed.png` and `toolbar-preview-speed-narrow.png` inspected (worker native allowance: 0 calls).
 ## Comments never cancel each other (LKM-382)
 
 - [x] Root cause: a comment spawn's finish (`finalizeSpawn`) never reconciled, so every comment after the first to land was held as `live-changed` (PROGRESS 2026-10-30).

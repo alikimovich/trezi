@@ -177,6 +177,7 @@ extension NativeShell {
     /// Re-reads the toolbar offsets after a layout, then aligns. Not during a live
     /// resize: frames from the previous pass would pair with the new window width.
     func measureToolbar() {
+        defer { toolbarLaidOut?() }
         guard let window, !window.inLiveResize, let constant = addressWidth?.constant else { return alignChatHeader() }
         if toolbar.visibleItems?.contains(where: { $0.itemIdentifier.rawValue == "address" }) == true {
             addressLayout.measure(windowWidth: window.frame.width, block: mainFrame(addressHeader), constant: constant, chat: mainFrame(chatHeader), right: mainFrame(rightGroup))
