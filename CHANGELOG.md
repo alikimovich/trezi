@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-29
+
 ### Fixed
 - VoiceOver reads the sidebar's "View all chats" as a button with its own label (LKM-379).
 
