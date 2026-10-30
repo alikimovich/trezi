@@ -7,6 +7,20 @@ import { waitFor } from './smoke-wait'
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 type State = Record<string, any>
 
+/** Runs `cleanup` after `body`, pass or fail. A cleanup failure fails a passing body, but
+ *  must not replace the error a failing body already threw. */
+async function withCleanup(body: () => Promise<void>, cleanup: () => Promise<unknown>) {
+  try {
+    await body()
+  } catch (error) {
+    await cleanup().catch((failure) =>
+      console.error(`Composer attach cleanup also failed: ${String(failure)}`)
+    )
+    throw error
+  }
+  await cleanup()
+}
+
 /** LKM-381: one press of + opens the native file chooser as a sheet, with no menu first.
  *  Cancel keeps a draft and its attachments (a .mov among them), accepting appends, and
  *  repeated open/cancel keeps working, in a normal window and in macOS full screen. Each
@@ -20,6 +34,12 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
     host.request('composerVerification', params)
   const inspect = (): Promise<State> => host.request('composerInspect')
   const names = (state: State) => state.attachments.map((file: State) => file.name)
+  // A reply can be `{ error }` (the app is not foreground), which says nothing about the
+  // chooser, so only an explicit false counts as closed.
+  const chooserClosed = async (params: State = {}) => {
+    const state = await verify(params)
+    return !state.error && state.attachmentDialog === false
+  }
   const results: State = {}
   const save = () =>
     writeFileSync(join(artifacts, 'composer-attach.json'), JSON.stringify(results, null, 2))
@@ -50,7 +70,7 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
     writeFileSync(`${stem}.png`, Buffer.from(image.png, 'base64'))
     assert.ok(image.width > 200 && image.height > 100, `${stem}.png: nonempty chooser pixels`)
     await verify({ cancelDialog: true })
-    await waitFor(async () => !(await verify()).attachmentDialog, `${mode}: Cancel closes it`)
+    await waitFor(() => chooserClosed(), `${mode}: Cancel closes it`)
     // With the chooser gone the main window is key again: the composer must still show the draft.
     await verify({ prepare: true })
     const composerImage = await waitFor(
@@ -93,7 +113,7 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
     const expected = [...before, ...paths.map((path) => path.split('/').pop())]
     const after = await waitFor(async () => {
       const state = await inspect()
-      return !(await verify()).attachmentDialog && names(state).length === expected.length && state
+      return (await chooserClosed()) && names(state).length === expected.length && state
     }, `${mode}: accepting appends ${paths.length} file(s)`)
     assert.deepEqual(names(after), expected, `${mode}: accepted files append in order`)
     assert.equal(after.text, draft, `${mode}: accepting keeps the draft`)
@@ -103,13 +123,17 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
 
   // The draft and the three files must not leak into the next check (`composer-send` would
   // send them): runs after a pass and after a failure, once full screen is left.
-  const closeChooser = async () => {
-    await verify({ cancelDialog: true }).catch(() => undefined)
-    await waitFor(
-      async () => !(await verify().catch(() => ({ attachmentDialog: false }))).attachmentDialog,
-      'an open file chooser is cancelled'
+  // Every try cancels again with `prepare`, because a cancel refused while the app was not
+  // foreground did nothing. A reply reads the chooser before its cancel acts, so only a later
+  // try reports closed; the interval outlasts the sheet closing, so one cancel normally does it.
+  const closeChooser = () =>
+    waitFor(
+      () => chooserClosed({ prepare: true, cancelDialog: true }),
+      'an open file chooser is cancelled',
+      10000,
+      undefined,
+      500
     )
-  }
   const clear = async () => {
     await closeChooser()
     await host.request('composerPerform', { text: '' })
@@ -117,7 +141,7 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
       await host.request('composerPerform', { remove: 0 })
   }
 
-  try {
+  await withCleanup(async () => {
     await host.request('composerPerform', { text: draft, files: [files[0]] })
     await waitFor(async () => {
       const state = await inspect()
@@ -130,25 +154,27 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
       results.fullscreen = { skipped: 'background test: full screen needs a foreground window' }
       save()
     } else {
-      try {
-        await host.request('previewOverlayTest', { action: 'fullscreen', value: true })
-        await round('fullscreen', 1)
-        await accept('fullscreen', [files[2]])
-        await round('fullscreen', 2)
-      } finally {
-        // A full-screen transition with a sheet attached can fail: close the chooser first.
-        await closeChooser()
-        await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
-      }
+      await withCleanup(
+        async () => {
+          await host.request('previewOverlayTest', { action: 'fullscreen', value: true })
+          await round('fullscreen', 1)
+          await accept('fullscreen', [files[2]])
+          await round('fullscreen', 2)
+        },
+        async () => {
+          // A full-screen transition with a sheet attached can fail: close the chooser first.
+          // If it cannot be closed, full screen stays.
+          await closeChooser()
+          await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
+        }
+      )
       assert.deepEqual(
         names(await inspect()),
         ['attach-clip.mov', 'attach-notes.txt', 'attach-more.txt'],
         'Every accepted file is attached once'
       )
     }
-  } finally {
-    await clear()
-  }
+  }, clear)
   const left = await waitFor(async () => {
     const state = await inspect()
     return state.text === '' && state.attachments.length === 0 && state
