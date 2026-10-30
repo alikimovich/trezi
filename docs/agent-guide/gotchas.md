@@ -21,8 +21,11 @@ and provider-seat rules are here.
   compare `latinKey(e)` (`src/preview/latin-key.ts`), never `e.key` for letters,
   digits or punctuation. Test with synthetic non-Latin events (`test/key-shortcuts.mjs`).
 - **⌘. is Escape to AppKit and WebKit (LKM-380).** A focused WKWebView claims ⌘ keys in
-  `performKeyEquivalent` before the main menu, and an unhandled ⌘. (like a text view's
-  keyDown) becomes `cancelOperation:`, which `NSWindow` turns into a full-screen exit.
+  `performKeyEquivalent` before the main menu, and an unhandled ⌘. becomes
+  `cancelOperation:` (WebKit's resend is inferred from its source; a text view's key-down
+  does so only where the text input key binding is live, which GitHub's headless macOS 26
+  runner did not provide), which `NSWindow` turns into a full-screen exit (measured on
+  every host). Keep the key-down step conditional in tests, never required.
   Toggle UI therefore goes to the menu first through `MenuFirstShortcut`
   (`src/native/MenuFirstShortcuts.swift`); add a menu key there if a focused view must not
   see it. Never bind Escape there. Covered by `test/menu-first-shortcuts.mjs` and the

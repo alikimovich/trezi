@@ -67,15 +67,15 @@ for full in [true, false] {
         }
     }
 }
-// Escape is not routed to the menu, on its own or with ⌘, and still reaches the text view's cancel.
+// Escape is not routed to the menu, on its own or with ⌘, and is dispatched on to the responder
+// chain (its cancel is measured with the key-down step below, `keyDownEscape`).
 window.full = false
 window.makeFirstResponder(composer)
-let escapeToggles = target.toggles, escapeCancels = window.cancels.count
+let escapeToggles = target.toggles
 report["escape.routed"] = MenuFirstShortcut.route(escape(), window: window, menu: menu, layout: qwerty, latinLayout: true)
 report["escape.commandRouted"] = MenuFirstShortcut.route(key("\u{1b}", 53, .command), window: window, menu: menu, layout: qwerty, latinLayout: true)
 report["escape.route"] = dispatch(escape(), menuFirst: true)
 report["escape.toggles"] = target.toggles - escapeToggles
-report["escape.cancels"] = Array(window.cancels[escapeCancels...])
 // Only exactly ⌘.: ⇧⌘. and ⌥⌘. are not Toggle UI; a sheet or another window keeps its keys.
 report["shiftPeriod.routed"] = MenuFirstShortcut.route(key(">", 47, [.command, .shift]), window: window, menu: menu, layout: qwerty, latinLayout: true)
 report["optionPeriod.routed"] = MenuFirstShortcut.route(key("≥", 47, [.command, .option]), window: window, menu: menu, layout: qwerty, latinLayout: true)
@@ -103,12 +103,29 @@ var monitorCalls = 0
 MenuFirstShortcut.install(windows: { (window, nil) }, enabled: { monitorCalls += 1; return true })
 app.sendEvent(period())
 report["monitor.calls"] = monitorCalls
-// The bug's last step: ⌘. that reaches a text view's keyDown is cancelOperation:, which
-// NSWindow turns into a full-screen exit in full screen and not windowed.
-for full in [true, false] {
-    window.full = full; window.makeFirstResponder(composer); spin()
+// The bug's last steps, apart because they depend on different things. `cancelOperation:`
+// reaching NSWindow is a full-screen exit in full screen and not windowed: that is AppKit's
+// own and needs no key event, so it is measured directly (`link`) and through the text view's
+// responder chain (`chain`). Whether a ⌘. key-down in a text view *becomes* `cancelOperation:`
+// is the text input system's key binding (`keyDown`): it needs a live input context, and on a
+// headless runner (GitHub macOS 26, LKM-380) it produced no command at all, so the test
+// requires it only where `produced` is true. `env` records what that depends on.
+let cancel = #selector(NSResponder.cancelOperation(_:))
+func measure(_ full: Bool, _ focus: NSResponder?, _ act: () -> Void) -> [String: Any] {
+    window.full = full; window.makeFirstResponder(focus); spin()
     let exits = window.exits, cancels = window.cancels.count
-    window.sendEvent(period()); spin()
-    report["\(full ? "full" : "windowed").keyDown"] = ["exits": window.exits - exits, "cancels": Array(window.cancels[cancels...])] as [String: Any]
+    act(); spin()
+    let seen = Array(window.cancels[cancels...])
+    return ["exits": window.exits - exits, "cancels": seen, "produced": !seen.isEmpty]
 }
+for full in [true, false] {
+    let mode = full ? "full" : "windowed"
+    report["\(mode).link"] = measure(full, composer) { window.doCommand(by: cancel) }
+    report["\(mode).chain"] = measure(full, composer) { composer.doCommand(by: cancel) }
+    report["\(mode).keyDown"] = measure(full, composer) { window.sendEvent(period()) }
+    report["\(mode).keyDownEscape"] = measure(full, composer) { window.sendEvent(escape()) }
+}
+let os = ProcessInfo.processInfo.operatingSystemVersion
+report["env"] = ["os": "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)", "inputContext": composer.inputContext != nil,
+                 "active": app.isActive, "key": window.isKeyWindow, "policy": app.activationPolicy().rawValue] as [String: Any]
 print(String(data: try! JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]), encoding: .utf8)!)

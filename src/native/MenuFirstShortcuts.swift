@@ -3,11 +3,13 @@ import AppKit
 /// LKM-380: Actions → Toggle UI (⌘.) reaches the main menu before the focused view.
 /// AppKit offers a ⌘ key to the key window's views first and the main menu last. A
 /// focused WKWebView (the preview) claims every ⌘ key there to send it to the page,
-/// and WebKit turns an unhandled ⌘. into `cancelOperation:`, the Escape command; a text
-/// view's keyDown does the same. In full screen that command ends at
-/// `NSWindow.doCommandBySelector:`, which exits full screen, so the first ⌘. left full
-/// screen and the menu never saw it. `test/menu-first-shortcuts.mjs` drives this with
-/// the real views. Escape is not one of these keys and keeps its own handling.
+/// and WebKit turns an unhandled ⌘. into `cancelOperation:`, the Escape command (inferred
+/// from WebKit's source; a text view's key-down does the same where the text input
+/// system's key binding is live, which a headless macOS 26 runner did not provide). In
+/// full screen that command ends at `NSWindow.doCommandBySelector:`, which exits full
+/// screen (measured), so the first ⌘. left full screen and the menu never saw it.
+/// `test/menu-first-shortcuts.mjs` drives this with the real views. Escape is not one of
+/// these keys and keeps its own handling.
 enum MenuFirstShortcut {
     /// The keys, as their menu items' key equivalents and modifiers.
     static let keys: [(key: String, modifiers: NSEvent.ModifierFlags)] = [(".", .command)]
