@@ -514,20 +514,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let symbol = row.kind == "project" ? "folder" : row.kind == "history" ? "clock" : "bubble.left"
         // A project's decoded favicon leads its row (LKM-372); without one it shares Open Project's folder.
         let artwork = row.icon ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!
-        let more = cell.more
-        more.bezelStyle = .inline; more.setAccessibilityLabel("Actions for " + row.title)
-        (more.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
-        let menu = projectMenu(row)
-        let trigger = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        trigger.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Project actions")
-        menu.insertItem(trigger, at: 0); more.menu = menu
-        more.translatesAutoresizingMaskIntoConstraints = false; cell.addSubview(more)
-        installNewChat(cell, row: row)
+        cell.installActions(title: row.title, project: row.project, target: self, newChatAction: #selector(sidebarNewChat(_:)), moreAction: #selector(sidebarMore(_:)))
         let text = cell.install(title: row.title + (row.running ? " · Working" : ""), image: artwork)
-        NSLayoutConstraint.activate([
-            text.trailingAnchor.constraint(equalTo: more.leadingAnchor, constant: -4),
-            more.trailingAnchor.constraint(equalTo: cell.newChat.leadingAnchor), more.centerYAnchor.constraint(equalTo: cell.centerYAnchor), more.widthAnchor.constraint(equalToConstant: 28)
-        ])
+        text.trailingAnchor.constraint(equalTo: cell.more.leadingAnchor, constant: -4).isActive = true
         cell.toolTip = row.title
         return cell
     }
@@ -550,6 +539,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let item = NSMenuItem(title: title, action: #selector(contextAction(_:)), keyEquivalent: "")
             item.target = self; item.representedObject = ["event":"shell-action", "action":action, "id":row.id, "project":row.project]; menu.addItem(item)
         }
+        menu.insertItem(sidebarHistoryItem(row), at: 1)
         return menu
     }
     @objc func contextAction(_ item: NSMenuItem) { if let payload = item.representedObject as? [String: String] { emit(payload) } }

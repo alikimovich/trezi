@@ -16,19 +16,40 @@ extension NativeShell {
                 if row.id == hover { cell.mouseEntered(with: event) } else { cell.mouseExited(with: event) }
             }
         }
-        if let key = command["menu"] as? String, let row = rows.first(where: { $0.id == key }) {
-            let menu = projectMenu(row)
-            let tracking = SidebarMenuTracking()
-            menu.delegate = tracking
-            let titles = menu.items.map { $0.title }
-            // Enter AppKit menu tracking, then cancel deterministically without changing a project.
-            let cancel = Timer(timeInterval: 0.3, repeats: false) { _ in menu.cancelTracking() }
+        if let key = command["focus"] as? String {
+            let cell = projectCells.first { $0.more.identifier?.rawValue == "more:\(key)" }
+            let target = command["control"] as? String == "new-chat" ? cell?.newChat : cell?.more
+            _ = window?.makeFirstResponder(target)
+            return ["focused": target != nil && window?.firstResponder === target, "keyboardAccess": NSApp.isFullKeyboardAccessEnabled]
+        }
+        if let key = command["menu"] as? String, let row = rows.first(where: { $0.id == key }),
+           let cell = outline.view(atColumn: 0, row: outline.row(forItem: row), makeIfNecessary: true) as? ProjectCell {
+            // Press the real "…", then cancel the menu deterministically without changing a project.
+            var menu: NSMenu?, closed = false, shot: [String: Any] = [:]
+            let center = NotificationCenter.default
+            let observers = [center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { menu = $0.object as? NSMenu },
+                             center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in closed = true }]
+            defer { observers.forEach(center.removeObserver) }
+            let capture = command["capture"] as? Bool == true
+            // The capture cancels when it is done; the timer closes the menu either way.
+            let cancel = Timer(timeInterval: capture ? 3 : 0.3, repeats: false) { _ in menu?.cancelTracking() }
+            let shoot = Timer(timeInterval: 0.3, repeats: false) { _ in
+                Task { @MainActor in
+                    shot = await self.captureMenuWindow()
+                    menu?.cancelTracking()
+                }
+            }
             RunLoop.main.add(cancel, forMode: .common)
-            defer { cancel.invalidate() }
-            let rect = outline.rect(ofRow: outline.row(forItem: row))
-            menu.popUp(positioning: nil, at: NSPoint(x: rect.midX, y: rect.midY), in: outline)
-            if command["memory"] as? Bool == true { menu.performActionForItem(at: 0) }
-            return ["titles": titles, "project": row.project, "opened": tracking.opened, "closed": tracking.closed]
+            if capture { RunLoop.main.add(shoot, forMode: .common) }
+            defer { cancel.invalidate(); shoot.invalidate() }
+            cell.more.performClick(nil)
+            let titles = menu?.items.map { $0.title } ?? []
+            let states = menu?.items.map { $0.isEnabled ? $0.title : "\($0.title) (disabled)" } ?? []
+            if command["memory"] as? Bool == true { menu?.performActionForItem(at: 0) }
+            // A pick is a person's choice: a disabled item does nothing, as in the real menu.
+            if let pick = command["pick"] as? String, let index = menu?.indexOfItem(withTitle: pick), index >= 0,
+               menu?.item(at: index)?.isEnabled == true { menu?.performActionForItem(at: index) }
+            return shot.merging(["titles": titles, "states": states, "project": row.project, "opened": menu != nil, "closed": closed]) { _, new in new }
         }
         if let key = command["drag"] as? String, let row = rows.first(where: { $0.id == key }),
            let writer = outlineView(outline, pasteboardWriterForItem: row) {
@@ -77,20 +98,22 @@ extension NativeShell {
                     "textGap": textRect.minX - iconRect.maxX, "textWidth": textRect.width,
                     "matchesOpenProject": iconRect.minX == openIcon.minX && iconRect.size == openIcon.size && textRect.minX == openLabelX,
                     "contained": sidebar.view.bounds.contains(iconRect) && sidebar.view.bounds.contains(textRect) && sidebar.view.bounds.contains(moreRect),
-                    "moreAlpha": cell.more.alphaValue, "actionsLabel": cell.more.accessibilityLabel() ?? "",
-                    "menu": cell.more.menu?.items.dropFirst().map { $0.title } ?? []]
+                    "moreAlpha": cell.more.alphaValue, "more": cell.actionInspect(cell.more), "newChat": cell.actionInspect(cell.newChat),
+                    "actionsLabel": AccessibilityElementInspect.element(of: cell.more)?.accessibilityLabel() ?? "",
+                    "menu": projectMenu(row).items.map { $0.title }]
         }
         return ["width": sidebar.view.bounds.width, "collapsed": sidebarItem.isCollapsed,
                 "foreground": window?.isKeyWindow == true && NSApp.isActive,
                 "rows": cells]
     }
-}
-
-private final class SidebarMenuTracking: NSObject, NSMenuDelegate {
-    var opened = false
-    var closed = false
-    func menuWillOpen(_ menu: NSMenu) { opened = true }
-    func menuDidClose(_ menu: NSMenu) { closed = true }
+    /// The open menu's own window, which a capture of the main window does not contain. A failure
+    /// comes back as `shotError`: the menu's titles are the assertion, the picture is evidence.
+    @MainActor private func captureMenuWindow() async -> [String: Any] {
+        let menuWindow = NSApp.windows.first { $0 !== window && $0.isVisible && String(describing: type(of: $0)).contains("Menu") }
+        guard let menuWindow else { return ["shotError": "no menu window among \(NSApp.windows.map { String(describing: type(of: $0)) })"] }
+        do { return ["shot": try await captureOwnWindow(menuWindow)] }
+        catch { return ["shotError": error.localizedDescription] }
+    }
 }
 
 // A deterministic local drag session passed through the actual AppKit delegates.

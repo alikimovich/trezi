@@ -1,8 +1,8 @@
 import AppKit
 
 /// LKM-378: the selected project's chats, nested under its sidebar row, with the retired Electron
-/// rail's controls (`Rail.tsx`): every open chat, an Archive button on the hovered row, and a
-/// History section that lists the closed chats (three, then "Show N more"). Bun picks the rows
+/// rail's controls (`Rail.tsx`): every open chat, an Archive button on the hovered row, and, from
+/// the project's "…" menu, a History section that lists the closed chats (three, then "Show N more"). Bun picks the rows
 /// (`sidebar-chats.ts`); a chat click sends the `select` shell action, with a pick generation,
 /// so switching goes through the one workspace/chat path that keeps drafts, attachments and
 /// running turns. A long title scrolls while its row is hovered (`SidebarMarquee.swift`).
@@ -12,7 +12,7 @@ final class SidebarChatCell: SourceListCell {
     let slot = NSView()
     /// A finished answer the user has not opened yet (`unread`), when no turn runs.
     let dot = NSView()
-    /// The History toggle's and "Show N more"'s in-cell button.
+    /// The History header's and "Show N more"'s in-cell button.
     private(set) var button: NSButton?
     private(set) var title: SidebarMarqueeTitle?
     /// Archive (Close chat), shown on hover; nil for the project's last open chat (closing it closes the project).
@@ -43,9 +43,9 @@ final class SidebarChatCell: SourceListCell {
                 let text = NSMutableAttributedString(string: row.title, attributes: [.font: SidebarRowStyle.font, .foregroundColor: NSColor.secondaryLabelColor])
                 text.append(NSAttributedString(string: "  " + row.detail, attributes: [.font: SidebarRowStyle.font, .foregroundColor: NSColor.tertiaryLabelColor]))
                 button.attributedTitle = text
-                button.cell?.setAccessibilityLabel("History, \(row.detail) closed chat\(row.detail == "1" ? "" : "s"), \(row.open ? "expanded" : "collapsed")")
-                button.toolTip = row.open ? "Hide closed chats" : "Show closed chats"
-                let chevron = NSImageView(image: NSImage(systemSymbolName: row.open ? "chevron.down" : "chevron.right", accessibilityDescription: nil)!)
+                button.cell?.setAccessibilityLabel("History, \(row.detail) closed chat\(row.detail == "1" ? "" : "s"), expanded")
+                button.toolTip = "Hide closed chats"
+                let chevron = NSImageView(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)!)
                 chevron.symbolConfiguration = .init(pointSize: 9, weight: .semibold)
                 chevron.contentTintColor = .secondaryLabelColor
                 self.chevron = chevron; views.append(chevron)
@@ -125,13 +125,6 @@ final class SidebarChatCell: SourceListCell {
     }
 }
 
-/// Which projects' History sections are open, and which show every closed chat. Session-only,
-/// as in the Electron rail: a long history tucks itself away again after a relaunch.
-struct SidebarHistoryState {
-    var open: Set<String> = []
-    var all: Set<String> = []
-}
-
 extension NativeShell {
     /// Every row the outline shows: each project, then its nested rows.
     var outlineRows: [ShellRow] { rows.flatMap { [$0] + $0.nested } }
@@ -157,13 +150,28 @@ extension NativeShell {
     func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool { false }
     func outlineView(_ outlineView: NSOutlineView, shouldCollapseItem item: Any) -> Bool { false }
 
-    /// The History toggle and "Show N more"/"Show less".
+    /// The History header and "Show N more"/"Show less".
     @objc func sidebarRowButton(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue, let row = outlineRows.first(where: { $0.id == id }) else { return }
-        if row.kind == "history-toggle" {
-            if sidebarHistory.open.remove(row.project) == nil { sidebarHistory.open.insert(row.project) }
-        } else if sidebarHistory.all.remove(row.project) == nil { sidebarHistory.all.insert(row.project) }
+        if row.kind == "history-toggle" { sidebarHistory.toggle(row.project) }
+        else if sidebarHistory.all.remove(row.project) == nil { sidebarHistory.all.insert(row.project) }
         reloadNested(row.project)
+    }
+    /// The project menu's Show/Hide History.
+    func sidebarHistoryItem(_ row: ShellRow) -> NSMenuItem {
+        let entry = sidebarHistory.menuItem(row, selected: row.project == currentProject)
+        let item = NSMenuItem(title: entry.title, action: #selector(sidebarToggleHistory(_:)), keyEquivalent: "")
+        item.target = self; item.isEnabled = entry.enabled; item.representedObject = row.project
+        return item
+    }
+    @objc func sidebarToggleHistory(_ item: NSMenuItem) {
+        guard let project = item.representedObject as? String else { return }
+        sidebarHistory.toggle(project)
+        // Only the selected project nests rows, so revealing another's History selects it first,
+        // through the usual selection path; its rows come with the state that answers.
+        if project != currentProject, sidebarHistory.open.contains(project), let row = rows.first(where: { $0.project == project }) {
+            outline.selectRowIndexes(IndexSet(integer: outline.row(forItem: row)), byExtendingSelection: false)
+        } else { reloadNested(project) }
     }
     private func reloadNested(_ project: String) {
         guard let row = rows.first(where: { $0.project == project }) else { return }
@@ -190,20 +198,10 @@ extension NativeShell {
         guard let row = outline.item(atRow: outline.clickedRow) as? ShellRow, row.kind == "history" else { return }
         emit(["event":"shell-action", "action":"select", "id":row.id, "project":row.project])
     }
-    /// The project row's trailing New chat button, after its "…" menu.
-    func installNewChat(_ cell: ProjectCell, row: ShellRow) {
-        let button = cell.newChat
-        button.image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: nil)
-        button.isBordered = false; button.imagePosition = .imageOnly
-        button.target = self; button.action = #selector(sidebarNewChat(_:))
-        button.identifier = NSUserInterfaceItemIdentifier("new-chat:\(row.project)")
-        button.toolTip = "New Chat"
-        button.cell?.setAccessibilityLabel("New chat in \(row.title)")
-        button.translatesAutoresizingMaskIntoConstraints = false; cell.addSubview(button)
-        NSLayoutConstraint.activate([
-            button.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4), button.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            button.widthAnchor.constraint(equalToConstant: 24), button.heightAnchor.constraint(equalToConstant: 24)
-        ])
+    /// The project row's "…". The menu is built on each press, so it reads the History state of now.
+    @objc func sidebarMore(_ sender: NSButton) {
+        guard let id = sender.identifier?.rawValue, id.hasPrefix("more:"), let row = rows.first(where: { $0.project == String(id.dropFirst(5)) }) else { return }
+        projectMenu(row).popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
     /// The context menu of a nested row: Rename and Archive for an open chat, Open and Rename for a closed one.
     func sidebarRowMenu(_ row: ShellRow) -> [NSMenuItem] {
