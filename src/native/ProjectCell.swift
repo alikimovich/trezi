@@ -1,8 +1,10 @@
 import AppKit
 
-/// Keep project selection on the row and its actions on a separate hover control.
+/// Keep project selection on the row and its actions on separate hover controls: the "…" menu
+/// and, as in the retired Electron rail, New chat at the trailing edge.
 final class ProjectCell: SourceListCell {
     let more = NSPopUpButton(frame: .zero, pullsDown: true)
+    let newChat = NSButton()
     private var tracking: NSTrackingArea?
     var selected = false { didSet { updateVisibility() } }
     private var hovered = false
@@ -19,8 +21,11 @@ final class ProjectCell: SourceListCell {
     override func mouseExited(with event: NSEvent) { hovered = false; updateVisibility() }
     private func updateVisibility() {
         let emphasized = backgroundStyle == .emphasized
-        more.alphaValue = hovered || selected || emphasized ? 1 : 0
+        for control in [more, newChat] as [NSControl] {
+            control.alphaValue = hovered || selected || emphasized ? 1 : 0
+        }
         more.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
+        newChat.contentTintColor = more.contentTintColor
     }
 }
 
@@ -28,27 +33,52 @@ final class ShellRow: NSObject {
     let id: String, title: String, kind: String, project: String
     let running: Bool
     let unread: Bool
+    /// A history row's age ("3d"); the History toggle's chat count.
+    let detail: String
+    /// The History toggle is open.
+    let open: Bool
     /// Bun sent favicon data for this row, decodable or not.
     let offeredIcon: Bool
     /// The decoded favicon; nil keeps the folder.
     let icon: NSImage?
     let children: [ShellRow]
-    /// The outline rows under a project (LKM-378): the selected project's recent chats, then
-    /// "View all chats" (`kind` "all-chats") when it has more. Empty for every other project.
-    let nested: [ShellRow]
+    /// LKM-378: the selected project's open chats, newest first. Empty for every other project.
+    let recent: [ShellRow]
+    /// The selected project's closed chats (its `children` of kind "history"), for its History section.
+    let past: [ShellRow]
+    /// The outline rows under a project (`layoutNested`): its open chats, then a History toggle
+    /// (`kind` "history-toggle") when it has closed chats; while History is open, the first
+    /// `historyPreview` closed chats and "Show N more"/"Show less" (`kind` "history-more").
+    private(set) var nested: [ShellRow] = []
+    /// Closed chats an open History section shows before "Show N more", as the Electron rail did.
+    static let historyPreview = 3
     init(_ data: [String: Any]) {
         id = data["id"] as? String ?? ""; title = data["title"] as? String ?? ""
         kind = data["kind"] as? String ?? "chat"; project = data["project"] as? String ?? ""
         running = data["running"] as? Bool ?? false
         unread = data["unread"] as? Bool ?? false
+        detail = data["detail"] as? String ?? ""
+        open = data["open"] as? Bool ?? false
         // Decoded from this row's own snapshot entry, never from a later load: no icon can land on another row.
         offeredIcon = data["icon"] is String
         icon = SidebarFavicon.image(dataURL: data["icon"] as? String)
         children = (data["children"] as? [[String: Any]] ?? []).map(ShellRow.init)
-        let recent = (data["recent"] as? [[String: Any]] ?? []).map(ShellRow.init)
-        let key = data["project"] as? String ?? ""
-        nested = recent + (data["allChats"] as? Bool == true
-            ? [ShellRow(["id":"all-chats:\(key)", "kind":"all-chats", "title":"View all chats", "project":key])] : [])
+        let recentData = data["recent"] as? [[String: Any]]
+        recent = (recentData ?? []).map(ShellRow.init)
+        past = recentData == nil ? [] : children.filter { $0.kind == "history" }
+        super.init()
+        layoutNested(open: false, all: false)
+    }
+    func layoutNested(open: Bool, all: Bool) {
+        guard !past.isEmpty else { nested = recent; return }
+        let toggle = ShellRow(["id":"history-toggle:\(project)", "kind":"history-toggle", "title":"History",
+                               "detail":"\(past.count)", "open":open, "project":project])
+        guard open else { nested = recent + [toggle]; return }
+        let shown = all ? past : Array(past.prefix(Self.historyPreview))
+        let hidden = past.count - shown.count
+        let more = past.count > Self.historyPreview
+            ? [ShellRow(["id":"history-more:\(project)", "kind":"history-more", "title":hidden > 0 ? "Show \(hidden) more" : "Show less", "project":project])] : []
+        nested = recent + [toggle] + shown + more
     }
 }
 

@@ -423,12 +423,6 @@ extension Host {
                 do { reply(id, try await captureOwnWindow(host)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
-        case "historyMenu":
-            guard ephemeral else { reply(id, error: "Test profile required"); return true }
-            Task { @MainActor in
-                do { reply(id, try await shell.historyBroker(c)) }
-                catch { reply(id, error: error.localizedDescription) }
-            }
         case "previewSurfaceInspect": reply(id, previewSurface.inspect())
         case "shellPerform": reply(id, shell.perform(c["action"] as? String ?? "", id: c["row"] as? String))
         case "captureVisibleShell":

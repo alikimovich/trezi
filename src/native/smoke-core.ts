@@ -36,7 +36,6 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
-import { checkHistoryMenu, restoreHistoryMenu } from './smoke-history-menu'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import {
@@ -80,6 +79,7 @@ import { checkSentAttachments } from './smoke-sent-attachments'
 import { checkSecuritySession } from './smoke-session'
 import { checkNativeSheets, restoreNativeSheets } from './smoke-sheets'
 import { checkSidebarChats, restoreSidebarChats } from './smoke-sidebar-chats'
+import { checkSidebarStatus, restoreSidebarStatus } from './smoke-sidebar-status'
 import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourceStamps } from './smoke-source-stamp'
@@ -1429,12 +1429,12 @@ export async function runNativeCoreSmoke(
       }
     },
     {
-      name: 'history-menu',
+      name: 'sidebar-status',
       dependsOn: ['chat-ready'],
       run: async () => {
-        await checkHistoryMenu(host, artifacts)
+        await checkSidebarStatus(host, artifacts)
       },
-      cleanup: () => restoreHistoryMenu(host)
+      cleanup: () => restoreSidebarStatus()
     },
     {
       name: 'sidebar-chats',

@@ -125,7 +125,7 @@ assert.deepEqual(
     'chat-ready',
     'composer-send',
     'native-chat',
-    'history-menu',
+    'sidebar-status',
     'sidebar-chats',
     'sent-attachments',
     'comment-rows',
