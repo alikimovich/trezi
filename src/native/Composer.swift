@@ -142,6 +142,9 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         configureProject(); controls.addArrangedSubview(project)
         controls.addArrangedSubview(sendButton)
         plus.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        // The same 30 pt target as Send: an image button's intrinsic height differs by macOS
+        // version, and an odd one puts its centre off the row's (LKM-381).
+        plus.heightAnchor.constraint(equalToConstant: 30).isActive = true
         sendButton.widthAnchor.constraint(equalToConstant: 30).isActive = true
         sendButton.heightAnchor.constraint(equalToConstant: 30).isActive = true
         sendButton.imageScaling = .scaleNone
