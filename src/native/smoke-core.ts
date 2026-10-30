@@ -51,6 +51,7 @@ import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smok
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
+import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
 import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
@@ -1502,6 +1503,13 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: () => checkCodeLinkClick(host, fixture, artifacts),
       cleanup: () => restoreCodeLinkClick(host, fixture)
+    },
+    // After the checks that read message frames: its long replies stay in the shared chat.
+    {
+      name: 'parallel-stream',
+      dependsOn: ['chat-ready'],
+      run: () => checkParallelStream(host, artifacts),
+      cleanup: () => restoreParallelStream(host)
     },
     {
       name: 'quit-alert',
