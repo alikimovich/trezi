@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-30
+
 ### Changed
 - The composer's + button opens the file chooser directly, without the "Attach Files…" menu (LKM-381).
 
