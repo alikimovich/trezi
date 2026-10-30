@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Composer + opens the native file picker directly (LKM-381)
+
+- [x] `plus` in `src/native/Composer.swift` is a plain `NSButton` whose action (`chooseFiles`) opens the existing `NSOpenPanel` sheet (several files, no folders); the one-item "Attach Files…" menu is gone. Busy still disables it, Cancel changes nothing and OK appends through `attach`.
+- [x] Unit `composer-attach`: the real composer in a window that is never ordered in. The element is an AXButton labelled "Attach files"; AX press and click each open the chooser once; Cancel keeps the draft and a `.mov`; OK appends in order; busy opens nothing and it opens again after.
+- [x] Native smoke `checkComposerAttach` (`src/native/smoke-composer-attach.ts`, inside `visible-composer`, group composer): open/cancel twice plus accept, in a normal window and in full screen, with foreground captures and `composer-attach.json` (chooser frame, options, window mode).
+- [ ] Native acceptance: the composer group on origin/main after merge (no native run in this ticket).
 ## Full screen: the first ⌘. (Toggle UI) exits full screen (LKM-380)
 
 - [x] Root cause (PROGRESS 2026-10-30, LKM-380): a focused WKWebView claims ⌘. in `performKeyEquivalent` before the main menu, so Toggle UI never runs; WebKit then sends the unhandled key on as `cancelOperation:` (Escape), and `NSWindow.doCommandBySelector:` exits full screen on it (measured on every host). A text view's key-down becomes `cancelOperation:` only where the text input key binding is live (macOS 27.0.1 here; not on GitHub's headless macOS 26 runner), so tests keep that step conditional.
