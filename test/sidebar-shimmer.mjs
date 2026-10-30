@@ -67,6 +67,24 @@ assert.ok(
   fixture.indexOf('reduceMotionOverride = false') < fixture.indexOf('let idle = make('),
   'Reduce Motion is off before the first row'
 )
+// The native smoke likewise pins the sweep before each wait for it and hands the setting back to
+// the host only in its `finally`.
+const smoke = readFileSync('src/native/smoke-sidebar-shimmer.ts', 'utf8')
+const handBack = smoke.match(/reduce\(\)/g) ?? []
+assert.equal(handBack.length, 1, 'only one call hands Reduce Motion back to the host')
+assert.ok(
+  smoke.indexOf('reduce()') > smoke.indexOf('finally'),
+  'Reduce Motion goes back to the host in the finally block'
+)
+assert.ok(
+  smoke.indexOf("await reduce('off')") < smoke.indexOf("await both('unselected', false)"),
+  'the sweep is pinned before the first wait for it'
+)
+assert.match(
+  smoke,
+  /-reduce-motion`, 2, false\)\s+await reduce\('off'\)\s+\}/,
+  'the sweep is pinned again right after Reduce Motion, before the next row'
+)
 
 if (process.platform !== 'darwin') {
   console.log('SIDEBAR-SHIMMER SKIP — macOS AppKit required for the row')

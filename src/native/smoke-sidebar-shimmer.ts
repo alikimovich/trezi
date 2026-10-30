@@ -58,7 +58,9 @@ export async function checkSidebarShimmer(
       const row = await rowOf()
       return row?.shimmer.mode === want && row.selected === selected && row
     }, `sidebar row ${chat} ${want}, selected ${selected}`)
-  const reduce = (value?: 'on') =>
+  // 'off' pins the sweep whatever the host's setting is (a runner with Reduce Motion on would
+  // otherwise stay 'still'); no value hands the setting back to the host, only in `finally`.
+  const reduce = (value?: 'on' | 'off') =>
     host.request('shellPerform', { action: 'marquee-reduce-motion', row: value })
   const select = async (session: string) => {
     await host.request('shellPerform', { action: 'select-row', row: `chat:${session}` })
@@ -91,9 +93,10 @@ export async function checkSidebarShimmer(
       throw new Error(`Reduce Motion is not a still, dimmed title: ${JSON.stringify(still)}`)
     if (!still.label.endsWith(', Running')) throw new Error('Reduce Motion dropped Running')
     await phases(`${name}-reduce-motion`, 2, false)
-    await reduce()
+    await reduce('off')
   }
   try {
+    await reduce('off')
     await both('unselected', false)
     await select(chat)
     await both('selected', true)
