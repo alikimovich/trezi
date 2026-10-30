@@ -44,30 +44,38 @@ if (process.platform !== 'darwin') {
     }
   }
   // Whether a key-down in a text view *becomes* `cancelOperation:` is the text input
-  // system's key binding. It needs a live input context: on GitHub's headless macOS 26 runner
-  // (PR 349) the same ⌘. and Escape key-downs produced no command (`cancels: []`), so this
-  // step is required only where the platform produces it. Where it does, ⌘. and Escape take
-  // the same path and must agree, and the whole chain ends in the same full-screen exit.
+  // system's key binding, and it is decided per key and per host. GitHub's macOS 26.6.2
+  // runner (PR 349; app inactive, window not key, input context present) turned Escape into
+  // `cancelOperation:` but produced no command for ⌘. (run 41026167486), and an earlier
+  // macOS 26 run produced none for either. So each key is checked on its own against what
+  // the host produced: where it produced `cancelOperation:`, that must be the only command
+  // and the window must exit full screen (1) and not windowed (0); where it produced
+  // nothing, nothing may exit. The mode never changes what a key becomes. Which case ran is
+  // printed below.
   const keyDown = {}
-  for (const mode of ['full', 'windowed']) {
-    const [period, escaped] = [report[`${mode}.keyDown`], report[`${mode}.keyDownEscape`]]
-    assert.deepEqual(
-      escaped.cancels,
-      period.cancels,
-      `${mode}: Escape and ⌘. translate alike: ${dump}`
+  for (const [label, field] of [
+    ['⌘.', 'keyDown'],
+    ['Escape', 'keyDownEscape']
+  ]) {
+    keyDown[label] = {}
+    for (const mode of ['full', 'windowed']) {
+      const entry = report[`${mode}.${field}`]
+      const at = `${mode} ${label} key-down: ${JSON.stringify(entry)} ${JSON.stringify(report.env)}`
+      keyDown[label][mode] = entry.produced
+      if (entry.produced) {
+        assert.deepEqual(entry.cancels, ['cancelOperation:'], `${at}: the window gets the cancel`)
+        assert.equal(entry.exits, mode === 'full' ? 1 : 0, `${at}: exits only in full screen`)
+      } else {
+        assert.deepEqual(entry.cancels, [], `${at}: no command`)
+        assert.equal(entry.exits, 0, `${at}: no command, no exit`)
+      }
+    }
+    assert.equal(
+      keyDown[label].full,
+      keyDown[label].windowed,
+      `${label}: the key binding does not depend on the mode: ${dump}`
     )
-    assert.equal(escaped.exits, period.exits, `${mode}: Escape and ⌘. end alike: ${dump}`)
-    keyDown[mode] = period.produced
-    if (period.produced) {
-      assert.deepEqual(period.cancels, ['cancelOperation:'], `${mode} keyDown: ${dump}`)
-      assert.equal(period.exits, mode === 'full' ? 1 : 0, `${mode} keyDown exits: ${dump}`)
-    } else assert.equal(period.exits, 0, `${mode} keyDown: no command, no exit: ${dump}`)
   }
-  assert.equal(
-    keyDown.full,
-    keyDown.windowed,
-    `the key binding does not depend on the mode: ${dump}`
-  )
 
   // The fix: every press toggles once, from the menu, with any focus, and nothing exits
   // full screen or reaches a cancel; the focus stays where it was.
@@ -106,8 +114,9 @@ if (process.platform !== 'darwin') {
   console.log(
     `MENU-FIRST-SHORTCUTS PASS — ⌘. toggles 3/3 from the menu with ${focuses.length} focuses in full screen and windowed, 0 full-screen exits; unfiltered, the WKWebView claims it and cancelOperation: exits full screen (window and responder chain)${report['otherWindow.distinct'] ? '' : ' (other-window check needs a window server)'}`
   )
-  // Say which host the key-down step was measured on, so a skipped step is never silent.
-  console.log(
-    `MENU-FIRST-SHORTCUTS key-down → cancelOperation: ${keyDown.full ? 'produced and asserted' : 'NOT produced on this host, not asserted'} (macOS ${report.env.os}, input context ${report.env.inputContext}, app active ${report.env.active}, policy ${report.env.policy})`
-  )
+  // Say which case ran for each key on this host, so a key that produced nothing is never silent.
+  for (const label of ['⌘.', 'Escape'])
+    console.log(
+      `MENU-FIRST-SHORTCUTS key-down ${label} → cancelOperation: ${keyDown[label].full ? 'produced; exits full screen and not windowed asserted' : 'NOT produced on this host; asserted no command and no exit'} (macOS ${report.env.os}, input context ${report.env.inputContext}, app active ${report.env.active}, window key ${report.env.key}, policy ${report.env.policy})`
+    )
 }

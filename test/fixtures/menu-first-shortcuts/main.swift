@@ -107,9 +107,9 @@ report["monitor.calls"] = monitorCalls
 // reaching NSWindow is a full-screen exit in full screen and not windowed: that is AppKit's
 // own and needs no key event, so it is measured directly (`link`) and through the text view's
 // responder chain (`chain`). Whether a ⌘. key-down in a text view *becomes* `cancelOperation:`
-// is the text input system's key binding (`keyDown`): it needs a live input context, and on a
-// headless runner (GitHub macOS 26, LKM-380) it produced no command at all, so the test
-// requires it only where `produced` is true. `env` records what that depends on.
+// is the text input system's key binding (`keyDown`, and `keyDownEscape` for Escape): it differs
+// per host and per key (GitHub macOS 26.6.2 turned Escape into it but not ⌘.; LKM-380), so the
+// test checks each key against what `produced` says it did. `env` records the host.
 let cancel = #selector(NSResponder.cancelOperation(_:))
 func measure(_ full: Bool, _ focus: NSResponder?, _ act: () -> Void) -> [String: Any] {
     window.full = full; window.makeFirstResponder(focus); spin()
