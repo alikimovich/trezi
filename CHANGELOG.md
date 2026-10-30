@@ -10,8 +10,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-30
+
 ### Fixed
 - A hovered sidebar chat title now scrolls across its whole width up to Archive, with soft edges, instead of being cut off early beside a blank gap (LKM-387).
+
 ## [0.6.7] - 2026-10-30
 
 ### Changed
