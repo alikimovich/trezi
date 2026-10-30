@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+- The preview speed badge now sits right below the slow-motion control in the top bar instead of the page's bottom-left corner; in narrow windows, where that control leaves the toolbar, it sits below the group's last button (LKM-385).
 ## [0.6.2] - 2026-10-30
 
 ### Fixed
