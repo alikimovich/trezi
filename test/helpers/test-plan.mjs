@@ -63,6 +63,7 @@ export const UI_SOURCES = {
       'native-settings-layout',
       'sidebar-evidence',
       'sidebar-history-rows',
+      'sidebar-marquee',
       'sidebar-project-actions'
     ],
     native: ['sidebar', 'settings']
