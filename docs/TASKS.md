@@ -21,6 +21,18 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `landSpawn` (`src/main/spawn-landing.ts`): stageResolve, replay checks on the exact tree, land; overlaps go back to the spawn's agent on the new base.
 - [x] Unit `comment-reconcile`: 2 and 3 comments in any order, same-line overlaps, an unresolvable conflict and a failing replay.
 
+## Sidebar: the Electron rail's chat controls, no chat-header actions
+
+- [x] Bun lists every open chat of the selected project, newest first, and gives each closed chat its age (`src/native/sidebar-chats.ts` `recentChats`/`shortAgo`, `shell-controller.ts`). Archiving refreshes the project's history list (`workspace-controller.ts` `close-chat`).
+- [x] Project row: New chat at the trailing edge after "…", shown like "…" on hover or selection (`ProjectCell.swift`, `SidebarChats.swift` `installNewChat`).
+- [x] Chat rows: Archive on hover (not on the project's last chat, which would close the project), the green unread dot, Rename/Archive context menu; History toggle with three closed chats, then "Show N more"/"Show less", each with its age; a closed chat opens for review on click (`SidebarChats.swift`).
+- [x] Marquee: a hovered chat's overflowing title scrolls after 0.7 s at 30 pt/s; Reduce Motion keeps it still (`SidebarMarquee.swift`).
+- [x] Removed the chat header's history/New chat capsule (`ChatToolbarActions`), the history menu and its broker (`HistoryMenu.swift`, `HistoryVerification.swift`). "View all chats" is gone with the menu.
+- [x] Tests: unit `sidebar-recent-chats`, `sidebar-chats-accessibility` (History toggle), `toolbar-island-dividers`, `native-smoke-shared-chat`, `native-smoke-stop-cleanup`; native `sidebar-chats` (New chat button, every chat, hover/marquee, Archive, History) and `sidebar-status` (replaces `history-menu`: running spinner, unread dot, cleared on open); `native-chat` reads the sidebar row.
+- [x] Native `--only=sidebar`: 9/9 passed; `sidebar-chats-*.png` and `sidebar-status-unread.png` inspected. `--only=sidebar,chat` stops at `composer-send` (Code panel 619–1090 ms > 500 ms), which also fails on the base commit d1ac3863 on this Mac.
+- [x] LKM-384: merged with main. Unit `sidebar-history-rows` runs the real `ShellRow.layoutNested` (toggle, three closed chats, "Show N more", "Show less"); the `sidebar-chats` smoke now always prompts four chats, so it can no longer skip that path, and also asserts the context menus and that a click opens the review sheet.
+- [ ] "Show N more" in a native run (the `sidebar-chats` smoke now requires it; its first native run is the post-merge suite).
+
 ## Native suite failures on main 4859f476531a / d618900dd7e1 (LKM-374)
 
 - [x] Diagnosis (PROGRESS 2026-10-29): project-switching was a seam fault, because OCR read a truncated title while the icons were all visible. browser-setup, agent-verify and the other managed-agent-browser checks fail because the host's agent-browser is gone: the hermes-agent update on 10-27 left `/opt/homebrew/bin/agent-browser` dangling. Neither is a Trezi product defect.

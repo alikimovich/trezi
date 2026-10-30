@@ -2,14 +2,14 @@ import assert from 'node:assert/strict'
 import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-319: no divider between the buttons of a toolbar island on macOS 27. The islands'
-// segmented controls (preview interaction, preview tools, chat history/new chat) render
+// segmented controls (preview interaction, preview tools) render
 // offscreen next to a stock NSSegmentedControl, which proves the probe sees a system divider.
 const binary = swiftBuild('toolbar-island-dividers', [
   'test/fixtures/toolbar-island-dividers/main.swift',
   'src/native/ToolbarLayout.swift'
 ])
 const result = JSON.parse(runFixture(binary))
-const ISLANDS = ['interaction', 'tools', 'chat']
+const ISLANDS = ['interaction', 'tools']
 // The boundary is darker than the bezel beside it by this much where a divider draws.
 const VISIBLE = 0.05
 
@@ -23,7 +23,6 @@ for (const stage of ['initial', 'narrow', 'restored', 'disabled']) {
   )
   assert.equal(state.interaction.segments, stage === 'narrow' ? 3 : 4, detail)
   assert.equal(state.tools.segments, 3, detail)
-  assert.equal(state.chat.segments, 2, detail)
   for (const island of ISLANDS) {
     const { thinLayers, visibleDividers, contrast } = state[island]
     if (result.hidesDividers) {

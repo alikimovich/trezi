@@ -6,7 +6,7 @@ import type { NativeChatController } from './chat-controller'
 import { displayText, rememberProject } from './display-paths'
 import type { NativeGitController } from './git-controller'
 import type { NativePreferences } from './preferences'
-import { recentChats } from './sidebar-chats'
+import { recentChats, shortAgo } from './sidebar-chats'
 import type { NativeWorkspaceController } from './workspace-controller'
 
 const title = (text?: string, fallback = 'New chat') =>
@@ -80,18 +80,15 @@ export class NativeShellController {
           return [key, row]
         })
       )
-      // LKM-378: only the selected project nests its recent chats; the others stay compact.
-      const recent = p.key === active?.key ? recentChats(p.sessionKeys, p.activeSessionKey) : null
+      // LKM-378: only the selected project nests its chats; the others stay compact.
+      const recent = p.key === active?.key ? recentChats(p.sessionKeys) : null
       return {
         id: `project:${p.key}`,
         project: p.key,
         title: p.name,
         icon: this.icons.get(p.root),
         kind: 'project' as const,
-        ...(recent && {
-          recent: recent.keys.flatMap((key) => chats.get(key) ?? []),
-          allChats: recent.more
-        }),
+        ...(recent && { recent: recent.flatMap((key) => chats.get(key) ?? []) }),
         children: [
           ...chats.values(),
           ...(ws.history[p.key] ?? []).map((r) => ({
@@ -99,6 +96,7 @@ export class NativeShellController {
             project: p.key,
             record: r.id,
             kind: 'history' as const,
+            detail: shortAgo(r.startedAt),
             title:
               r.title || title(r.transcript.find((m) => m.role === 'user')?.text, 'Previous chat')
           }))

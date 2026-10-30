@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+- The sidebar works like the earlier Trezi rail: New chat on the project row, every open chat listed with an Archive button on hover, a History section (three closed chats, then "Show N more"), long chat titles that scroll on hover, and a green dot on an unread answer. The chat header no longer has the history and New chat buttons.
+
 ## [0.6.3] - 2026-10-30
 
 ### Changed

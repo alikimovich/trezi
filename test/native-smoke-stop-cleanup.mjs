@@ -1,6 +1,6 @@
 // LKM-377: the native chat check's no-terminal Stop overrides agent:interrupt and
 // agent:turn-state, so the controller settles while Bun's conversation owner still runs
-// the turn. LKM-376 reset only the composer; history-menu's next send then got CHAT_BUSY
+// the turn. LKM-376 reset only the composer; sidebar-status's next send then got CHAT_BUSY
 // and was queued. This drives the same sequence through the real agent.ts (turn tracker,
 // provider event hook, agent:send busy gate, agent:turn-state) on the real Swift owners,
 // with the provider's send stubbed by `stubAgentSendForSmoke` as in the smoke, and checks
@@ -91,7 +91,7 @@ registerAgentIpc(
 )
 const agent = (name, ...args) => handlers.get(name)({}, ...args)
 
-/** The smoke's Stop/queue check on a fresh chat, then `cleanup`, then history-menu's send
+/** The smoke's Stop/queue check on a fresh chat, then `cleanup`, then sidebar-status's send
  *  (guarded, through the composer) or, `immediate`, an unguarded send right away. */
 async function stopQueueThen(name, cleanup, { immediate = false } = {}) {
   const repo = repository(name)
@@ -198,20 +198,20 @@ async function stopQueueThen(name, cleanup, { immediate = false } = {}) {
   let guard
   if (immediate) {
     // The next send right after the cleanup returned, with no guard in between.
-    await real('agent:send', 'History indicator turn', undefined, key, {}, 'history').catch(
+    await real('agent:send', 'Sidebar indicator turn', undefined, key, {}, 'history').catch(
       (error) => {
         if (!isChatBusy(error)) throw error
         busy.push('history')
       }
     )
   } else {
-    guard = await requireCleanSharedChat(host, 'history-menu', turn).then(
+    guard = await requireCleanSharedChat(host, 'sidebar-status', turn).then(
       () => undefined,
       (error) => error
     )
-    // history-menu's turn on the same chat.
-    await host.request('composerPerform', { text: 'History indicator turn' })
-    await composerUntil((value) => value.text === 'History indicator turn', 'history draft')
+    // sidebar-status's turn on the same chat.
+    await host.request('composerPerform', { text: 'Sidebar indicator turn' })
+    await composerUntil((value) => value.text === 'Sidebar indicator turn', 'history draft')
     await host.request('composerPerform', { action: 'send' })
     await composerUntil((value) => value.text === '', 'history turn submitted')
   }
@@ -257,11 +257,11 @@ async function stopQueueThen(name, cleanup, { immediate = false } = {}) {
   )
   assert.match(
     String(result.guard?.message),
-    /history-menu: an earlier check left a running backend turn/
+    /sidebar-status: an earlier check left a running backend turn/
   )
   assert.equal(result.busy.length, 1, 'the history send was not refused busy')
   assert.equal(result.sent, 1)
-  assert.deepEqual(result.queued, ['History indicator turn'])
+  assert.deepEqual(result.queued, ['Sidebar indicator turn'])
 }
 
 // An untagged `done` without waiting for the real turn state: the owner is still claiming
@@ -292,7 +292,7 @@ async function stopQueueThen(name, cleanup, { immediate = false } = {}) {
 }
 
 // native-chat runs this cleanup in its `finally`, never a turn-tagged `done`, and with the
-// real agent:turn-state; history-menu's guard checks the backend turn before it sends.
+// real agent:turn-state; sidebar-status's guard checks the backend turn before it sends.
 {
   const chat = readFileSync(new URL('../src/native/smoke-chat.ts', import.meta.url), 'utf8')
   assert.doesNotMatch(chat, /type: 'done', turn/, 'native-chat emits a turn-tagged done')
@@ -303,10 +303,10 @@ async function stopQueueThen(name, cleanup, { immediate = false } = {}) {
   assert.match(cleanup, /originalInvoke\('agent:turn-state'/)
   assert.match(cleanup, /send\(\{ type: 'done' \}\)/)
   const history = readFileSync(
-    new URL('../src/native/smoke-history-menu.ts', import.meta.url),
+    new URL('../src/native/smoke-sidebar-status.ts', import.meta.url),
     'utf8'
   )
-  assert.match(history, /requireCleanSharedChat\(host, 'history-menu', \{\s+state:/)
+  assert.match(history, /requireCleanSharedChat\(host, 'sidebar-status', \{\s+state:/)
 }
 
 console.log(
