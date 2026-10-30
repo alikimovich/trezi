@@ -10,7 +10,8 @@ type State = Record<string, any>
 /** LKM-381: one press of + opens the native file chooser as a sheet, with no menu first.
  *  Cancel keeps a draft and its attachments (a .mov among them), accepting appends, and
  *  repeated open/cancel keeps working, in a normal window and in macOS full screen. Each
- *  open phase saves a foreground composer capture plus the chooser's state and geometry.
+ *  round saves a foreground capture of the open chooser sheet, a composer capture after
+ *  Cancel, and the chooser's state and geometry.
  *  Opening and cancelling go through the real chooser; the OK step (`acceptDialog`) is a
  *  programmatic seam that runs the OK branch with given paths, not a person picking files.
  *  The composer is emptied at the end, pass or fail. */
@@ -42,19 +43,42 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
     assert.equal(shown.dialog.files && !shown.dialog.directories, true, `${mode}: files only`)
     assert.equal(shown.dialog.onScreen, true, `${mode}: the chooser is on screen`)
     assert.equal(shown.attachButton.fullScreen, mode === 'fullscreen', `${mode}: window mode`)
-    const image = await host.request('captureVisibleComposer')
+    // The chooser is a sheet whose window is key, so the main window's composer capture is
+    // refused while it is open: capture the sheet's own window.
+    const image = await host.request('captureComposerChooser')
     const stem = join(artifacts, `composer-attach-${mode}-${index}`)
     writeFileSync(`${stem}.png`, Buffer.from(image.png, 'base64'))
-    assert.ok(image.width > 200 && image.height > 100, `${stem}.png: nonempty foreground pixels`)
+    assert.ok(image.width > 200 && image.height > 100, `${stem}.png: nonempty chooser pixels`)
     await verify({ cancelDialog: true })
     await waitFor(async () => !(await verify()).attachmentDialog, `${mode}: Cancel closes it`)
+    // With the chooser gone the main window is key again: the composer must still show the draft.
+    await verify({ prepare: true })
+    const composerImage = await waitFor(
+      () => host.request('captureVisibleComposer').catch(() => null),
+      `${mode} ${index}: foreground composer capture after Cancel`
+    )
+    writeFileSync(`${stem}-composer.png`, Buffer.from(composerImage.png, 'base64'))
+    assert.ok(
+      composerImage.width > 200 && composerImage.height > 50,
+      `${stem}-composer.png: nonempty`
+    )
     const after = await inspect()
     assert.equal(after.text, before.text, `${mode} ${index}: Cancel keeps the draft`)
     assert.deepEqual(names(after), names(before), `${mode} ${index}: Cancel keeps attachments`)
     results[`${mode}-${index}`] = {
       dialog: shown.dialog,
       attachButton: shown.attachButton,
-      capture: { png: `${stem}.png`, width: image.width, height: image.height },
+      capture: {
+        png: `${stem}.png`,
+        width: image.width,
+        height: image.height,
+        window: image.window
+      },
+      composerCapture: {
+        png: `${stem}-composer.png`,
+        width: composerImage.width,
+        height: composerImage.height
+      },
       text: after.text,
       attachments: names(after)
     }
@@ -79,8 +103,15 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
 
   // The draft and the three files must not leak into the next check (`composer-send` would
   // send them): runs after a pass and after a failure, once full screen is left.
-  const clear = async () => {
+  const closeChooser = async () => {
     await verify({ cancelDialog: true }).catch(() => undefined)
+    await waitFor(
+      async () => !(await verify().catch(() => ({ attachmentDialog: false }))).attachmentDialog,
+      'an open file chooser is cancelled'
+    )
+  }
+  const clear = async () => {
+    await closeChooser()
     await host.request('composerPerform', { text: '' })
     for (let i = 0; i < 10 && (await inspect()).attachments.length; i++)
       await host.request('composerPerform', { remove: 0 })
@@ -105,6 +136,8 @@ export async function checkComposerAttach(host: NativeBridge, artifacts: string)
         await accept('fullscreen', [files[2]])
         await round('fullscreen', 2)
       } finally {
+        // A full-screen transition with a sheet attached can fail: close the chooser first.
+        await closeChooser()
         await host.request('previewOverlayTest', { action: 'fullscreen', value: false })
       }
       assert.deepEqual(

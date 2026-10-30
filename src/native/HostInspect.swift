@@ -340,6 +340,14 @@ extension Host {
                     reply(id, try await captureVisibleRegion(window: window, view: composer, region: region))
                 } catch { reply(id, error: error.localizedDescription) }
             }
+        case "captureComposerChooser":
+            // LKM-381: the open file chooser is a sheet of the main window, which `captureVisibleRegion`
+            // (key main window only) cannot capture; capture the sheet's own window instead.
+            guard ephemeral, let sheet = window.attachedSheet else { reply(id, error: "Test profile with an open file chooser required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await captureOwnWindow(sheet)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "composerInspect":
             var inspected = composer.inspect()
             inspected["queueNote"] = composer.state["queueNote"] ?? ""
