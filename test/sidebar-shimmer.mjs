@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { chatThinking } from '../src/native/chat-snapshot.ts'
 import { newChat } from '../src/native/chat-state.ts'
-import { shimmerCaptureProblem, shimmers } from '../src/native/smoke-sidebar-shimmer.ts'
+import {
+  changedPixels,
+  shimmerCaptureProblem,
+  shimmers
+} from '../src/native/smoke-sidebar-shimmer.ts'
 import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-389: a running chat's sidebar title shimmers like the in-chat status line, instead of a
@@ -52,9 +56,49 @@ assert.match(source, /chatThinking = \(chat: Chat\) => atWork\(activity\(chat\)\
 assert.ok(shimmers({ shimmer: { mode: 'sweep' } }) && shimmers({ shimmer: { mode: 'still' } }))
 assert.ok(!shimmers({ shimmer: { mode: 'none' } }) && !shimmers(undefined))
 assert.equal(shimmerCaptureProblem([120, 88], true), '')
-assert.match(shimmerCaptureProblem([120, 0], true), /did not change/)
+assert.equal(shimmerCaptureProblem([0, 704, 0], true), '', 'the band can be past the text')
+assert.match(shimmerCaptureProblem([0, 0, 0], true), /did not change/)
 assert.equal(shimmerCaptureProblem([0], false), '')
 assert.match(shimmerCaptureProblem([4], false), /Reduce Motion moved/)
+
+// LKM-392: the numbers of a real still sidebar. Its material drifted 7 levels below the rows and
+// beside the text, which is not a moving title; a change in the title's clip is.
+const flat = (paint) => ({
+  width: 40,
+  height: 40,
+  rgb: (x, y) => paint(x, y) ?? [30, 32, 50]
+})
+const clip = { x: 5, y: 5, width: 5, height: 5, referenceWidth: 20 } // 10–20 px at 2×
+const still = flat(() => undefined)
+assert.equal(changedPixels(still, still, clip), 0)
+assert.equal(
+  changedPixels(
+    still,
+    flat(() => [37, 39, 57]),
+    clip
+  ),
+  0,
+  'the drift inside the clip is noise'
+)
+assert.equal(
+  changedPixels(
+    still,
+    flat((x, y) => (y >= 20 ? [200, 200, 200] : undefined)),
+    clip
+  ),
+  0,
+  'a change below the title is not the title'
+)
+assert.equal(
+  changedPixels(
+    still,
+    flat((x, y) => (x === 12 ? [48, 50, 68] : undefined)),
+    clip
+  ),
+  10,
+  'a dimmed column of the title counts, once per row of the clip'
+)
+assert.throws(() => changedPixels(still, { ...still, height: 41 }, clip), /differ in size/)
 
 // The fixture must not read the host's Reduce Motion setting (a runner with it on shows "still"
 // where the sweep is expected): the override is never nil, and is off before the first row.
