@@ -13,6 +13,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Native smoke `preview-markup` (group `core`) and the Mark up turn in `provider-image-live` written.
 - [ ] Manager: run the `preview-markup` smoke on merged main and keep its PNG/JSON outside the worktree.
 - [ ] Manager: real Claude and Codex each identify the mark (`TREZI_LIVE_PROVIDERS=1 TREZI_LIVE_ARTIFACTS=<durable folder> bun run test:provider-image-live`).
+## Native chat smoke: landing row check raced the real landing (LKM-392)
+
+- [x] `src/native/smoke-chat.ts`: hold the landing on the controller for the beam and row checks, then let the provider's `done` run the real landing, which ends the turn itself.
+- [x] Unit `sidebar-thinking-render`: the three landing events through the real controllers, and the smoke's step order from its source.
+- [x] `src/native/smoke-sidebar-shimmer.ts`: compare the title's clip past the material's drift, four moving captures, one changed pair required; unit `sidebar-shimmer` covers the verdict and the crop.
+- [ ] Native acceptance: the `chat` group passes end to end on this tree (the worker's one call passed `native-chat`, then hit the capture check above before it was repaired).
 
 ## Codex: composer images as real image input (LKM-390)
 

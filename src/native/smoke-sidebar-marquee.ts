@@ -12,7 +12,7 @@ import { waitFor } from './smoke-wait'
  */
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 type Item = any
-type Image = { width: number; height: number; rgb: (x: number, y: number) => number[] }
+export type Image = { width: number; height: number; rgb: (x: number, y: number) => number[] }
 export type MarqueePhase = 'start' | 'mid' | 'end'
 export type MarqueeBox = {
   x: number
