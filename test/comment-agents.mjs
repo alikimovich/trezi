@@ -41,6 +41,10 @@ mock.module('../src/main/backends/index.ts', () => ({
         dispose() {},
         shutdown() {},
         send: (text) => sent.push(text),
+        tool: (name, input) => {
+          cap.noteTool(name, input)
+          context.onEvent?.({ type: 'status', text: name })
+        },
         interrupt: async () => context.onEvent({ type: 'done' })
       }
       providers.push({ root, context, session, options, sent })
@@ -50,6 +54,8 @@ mock.module('../src/main/backends/index.ts', () => ({
 }))
 const { registerAgentIpc, projectHasRunningAgents } = await import('../src/main/agent.ts')
 const { applyTextEdit } = await import('../src/main/props.ts')
+const { peerView } = await import('../src/main/peer-work.ts')
+const { runTreziTool } = await import('../src/main/session-tools.ts')
 registerAgentIpc(
   () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } }),
   { handle: (name, fn) => handlers.set(name, fn) }
@@ -62,7 +68,7 @@ const start = () =>
   invoke('agent:spawn-comment', repo, 'Change color and border', 'parent', { provider: 'codex' })
 const wait = async (condition) => {
   for (let i = 0; i < 400; i++) {
-    if (condition()) return
+    if (await condition()) return
     await new Promise((r) => setTimeout(r, 20))
   }
   throw new Error('Timed out waiting for comment lifecycle')
@@ -124,6 +130,9 @@ try {
   await invoke('agent:spawn-interrupt', cancelled.spawnId)
   await wait(() => finished(cancelled.spawnId))
   assert.equal(finished(cancelled.spawnId).outcome, 'cancelled')
+  await wait(
+    async () => !(await peerView(repo, '')).rows.some((row) => row.id === cancelled.spawnId)
+  )
   const parallel = await Promise.all([start(), start(), start(), start()])
   assert.equal(parallel.filter((r) => r.queued).length, 1, 'Fourth comment must queue')
   const queued = parallel.find((r) => r.queued)
@@ -132,6 +141,27 @@ try {
   const active = providers.slice(-3)
   writeFileSync(join(active[0].root, 'color.txt'), 'purple\n')
   writeFileSync(join(active[1].root, 'border.txt'), 'none\n')
+  writeFileSync(join(active[2].root, 'color.txt'), 'orange\n')
+  active[0].session.tool('Edit', { file_path: join(active[0].root, 'color.txt') })
+  active[1].session.tool('Edit', { file_path: join(active[1].root, 'border.txt') })
+  active[2].session.tool('Edit', { file_path: join(active[2].root, 'color.txt') })
+  const peerState = await runTreziTool(
+    'workspace_state',
+    {},
+    {
+      root: active[0].root,
+      liveRoot: repo,
+      emitKey: parent,
+      background: true,
+      peerId: active[0].context.sessionId,
+      notify() {}
+    }
+  )
+  assert.ok(peerState.peerWork.rows.some((row) => row.goal === 'Change color and border'))
+  assert.ok(peerState.peerWork.rows.some((row) => row.observedFiles.includes('border.txt')))
+  assert.ok(peerState.peerWork.advisories.some((row) => row.kind === 'exact-file'))
+  assert.ok(!peerState.peerWork.advisories.some((row) => row.files.includes('border.txt')))
+  assert.ok(active[1].sent[0].includes('Peer work snapshot'), 'background turn-start context')
   for (const p of active.slice(0, 2)) await passCheck(parent, p.root)
   for (const p of active) p.context.onEvent({ type: 'done' })
   await wait(() => parallel.every((r) => finished(r.spawnId)))

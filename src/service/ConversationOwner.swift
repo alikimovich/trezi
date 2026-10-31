@@ -34,6 +34,9 @@ final class ConversationOwner: @unchecked Sendable {
     private var closed = false
     private let inflight = DispatchGroup()
     private var state = ConversationState()
+    /// Ephemeral peer intent. A process restart drops it; checkpoints and parked work stay intact.
+    private var peerRows: [String: PeerRow] = [:]
+    private var peerVersion = 0
     private let recovered: [ConversationStore.Recovery]
 
     init(options: Options, send: @escaping @Sendable (Data) -> Void) {
@@ -65,7 +68,7 @@ final class ConversationOwner: @unchecked Sendable {
         }
     }
 
-    static let reads: Set<String> = ["snapshot", "status"]
+    static let reads: Set<String> = ["snapshot", "status", "peers"]
     /// `PermissionMode` in `src/shared/api.ts`.
     static let modes: Set<String> = ["auto", "default", "acceptEdits", "bypassPermissions"]
     static let methods: [String: (required: Set<String>, optional: Set<String>)] = [
@@ -81,6 +84,7 @@ final class ConversationOwner: @unchecked Sendable {
         "register": (["chat", "id", "kind", "tool"], []), "resolve": (["id", "kind"], []),
         "mode": (["chat", "mode"], []), "release": (["chat"], []),
         "spawn": (["id", "project"], []), "spawnDone": (["id"], []), "spawnCancel": (["id"], []),
+        "peerUpsert": (["row"], []), "peerRemove": (["id"], []), "peers": (["project", "exclude"], []),
         "snapshot": ([], []), "status": ([], []),
     ]
 
@@ -273,6 +277,39 @@ final class ConversationOwner: @unchecked Sendable {
             return Self.object([("start", RepositoryOwner.strings(state.spawnDone(id: try Self.key(body, "id"))))])
         case "spawnCancel":
             return Self.object([("queued", .bool(state.spawnCancel(id: try Self.key(body, "id"))))])
+        case "peerUpsert":
+            let row = try PeerRow(body.value("row"), at: now())
+            peerVersion += 1
+            peerRows[row.id] = row.with(version: peerVersion)
+            prunePeers()
+            return ok
+        case "peerRemove":
+            peerRows.removeValue(forKey: try Self.key(body, "id"))
+            return ok
+        case "peers":
+            prunePeers()
+            let project = PeerRow.canonical(try body.path("project"))
+            let exclude = try body.string("exclude")
+            let candidates = peerRows.values.filter { $0.project == project && $0.id != exclude }
+                .sorted { $0.version < $1.version }
+            var rows: [PeerRow] = []
+            var bytes = 0
+            for row in candidates {
+                guard bytes + row.byteCount <= 4096 else { break }
+                rows.append(row); bytes += row.byteCount
+            }
+            let own = peerRows[exclude]
+            let advisory: [JSValue] = rows.compactMap { peer in
+                guard let own, own.project == project else { return nil }
+                let exact = Set(own.observedFiles).intersection(peer.observedFiles).sorted()
+                let possible = Set(own.intendedFiles).intersection(peer.intendedFiles).sorted()
+                guard !exact.isEmpty || !possible.isEmpty else { return nil }
+                let named = Array((exact.isEmpty ? possible : exact).prefix(2))
+                return Self.object([("peer", .string(JSText(peer.id))),
+                                    ("kind", .string(JSText(exact.isEmpty ? "possible-overlap" : "exact-file"))),
+                                    ("files", RepositoryOwner.strings(named))])
+            }
+            return Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
 
         // Reads
         case "snapshot":
@@ -296,6 +333,16 @@ final class ConversationOwner: @unchecked Sendable {
         var accepted = false
         try state.update(key) { accepted = $0.adopt(record, sequence: sequence) }
         return accepted
+    }
+
+    private func prunePeers() {
+        let cutoff = now() - 5 * 60 * 1000
+        peerRows = peerRows.filter { $0.value.heartbeat >= cutoff }
+        if peerRows.count > 8 {
+            for row in peerRows.values.sorted(by: { $0.version < $1.version }).prefix(peerRows.count - 8) {
+                peerRows.removeValue(forKey: row.id)
+            }
+        }
     }
 
     private func checkpoint(_ key: String) throws {
@@ -401,5 +448,82 @@ final class ConversationOwner: @unchecked Sendable {
     private func answer(_ frame: PipeFrame, _ result: PreferencesOwner.Answer, counted: Bool = true) {
         send(SourceOwner.reply(service: Self.service, id: frame.id, frame: frame, result: result))
         if counted { inflight.leave() }
+    }
+}
+
+/// Wire row: bounded before it can enter context. No transcript or arbitrary extra keys survive.
+private struct PeerRow {
+    let id: String
+    let project: String
+    let origin: String
+    let parent: String
+    let goal: String
+    let intendedFiles: [String]
+    let observedFiles: [String]
+    let target: String
+    let base: String
+    let phase: String
+    let heartbeat: Double
+    let version: Int
+
+    static func canonical(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private static func text(_ value: JSValue?, max: Int) throws -> String {
+        guard let text = value?.text?.string else { throw ServiceContractFailure.invalidRequest }
+        return String(text.prefix(max)).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private static func files(_ value: JSValue?) throws -> [String] {
+        guard case .array(let values)? = value, values.count <= 16 else { throw ServiceContractFailure.invalidRequest }
+        return Array(try Set(values.map { try text($0, max: 96) }.filter {
+            !$0.isEmpty && !$0.hasPrefix("/") && !$0.split(separator: "/").contains("..")
+        }).sorted().prefix(4))
+    }
+
+    init(_ value: JSValue?, at: Double) throws {
+        guard case .object? = value else { throw ServiceContractFailure.invalidRequest }
+        id = try Self.text(value?["id"], max: 128)
+        project = Self.canonical(try Self.text(value?["project"], max: 1024))
+        origin = try Self.text(value?["origin"], max: 24)
+        parent = try Self.text(value?["parent"], max: 128)
+        goal = try Self.text(value?["goal"], max: 160)
+        intendedFiles = try Self.files(value?["intendedFiles"])
+        observedFiles = try Self.files(value?["observedFiles"])
+        target = try Self.text(value?["target"] ?? .string(JSText("")), max: 100)
+        base = try Self.text(value?["base"], max: 64)
+        phase = try Self.text(value?["phase"], max: 24)
+        heartbeat = at
+        version = 0
+        guard !id.isEmpty, ["chat", "comment", "background", "text-edit"].contains(origin),
+              ["preparing", "running", "landing"].contains(phase) else { throw ServiceContractFailure.invalidRequest }
+    }
+
+    private init(_ old: Self, version: Int) {
+        id = old.id; project = old.project; origin = old.origin; parent = old.parent
+        goal = old.goal; intendedFiles = old.intendedFiles; observedFiles = old.observedFiles
+        target = old.target; base = old.base; phase = old.phase
+        heartbeat = old.heartbeat; self.version = version
+    }
+
+    func with(version: Int) -> Self { Self(self, version: version) }
+
+    var value: JSValue {
+        ConversationOwner.object([
+            ("id", .string(JSText(id))), ("project", .string(JSText(project))),
+            ("origin", .string(JSText(origin))), ("parent", .string(JSText(parent))),
+            ("goal", .string(JSText(goal))),
+            ("intendedFiles", RepositoryOwner.strings(intendedFiles)),
+            ("observedFiles", RepositoryOwner.strings(observedFiles)),
+            ("target", .string(JSText(target))), ("base", .string(JSText(base))),
+            ("phase", .string(JSText(phase))), ("heartbeat", .number(heartbeat)),
+            ("version", .number(Double(version)))
+        ])
+    }
+
+    var byteCount: Int {
+        240 + [id, project, origin, parent, goal, target, base, phase].reduce(0) { $0 + $1.utf8.count }
+            + (intendedFiles + observedFiles).reduce(0) { $0 + $1.utf8.count + 4 }
     }
 }

@@ -77,7 +77,7 @@ server.registerTool(
   {
     title: 'Trezi workspace state',
     description:
-      'Inspect Trezi authoritative landing/worktree state for this chat. Call this whenever a merge, conflict, worktree, landing, or stale-preview issue is suspected; do not infer state from `git status` in the private worktree.'
+      'Inspect this chat landing/worktree state and the untrusted peer work snapshot. Background agents receive only peers. Exact-file overlap is advisory; the source gate alone decides landing.'
   },
   async () => result(await invoke('workspace_state'))
 )

@@ -88,6 +88,17 @@ import {
 } from './live-change-watch'
 import { commitLiveTurn } from './live-commit'
 import { answerMergeApproval, revokeMergeApprovals } from './merge-approval'
+import {
+  finishPeer,
+  observePeer,
+  peerBase,
+  peerContext,
+  peerIntendedFiles,
+  peerObservedFiles,
+  peerTarget,
+  peerTurn,
+  startPeer
+} from './peer-work'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
 import {
@@ -458,6 +469,7 @@ function evaluateProjectMemory(sessionKey: string): void {
 const interactiveEvents =
   (sessionKey: string, tracker: TurnTracker) =>
   (e: AgentEvent): void => {
+    if (e.type === 'landing-finished') finishPeer(peerTurn(sessionKey), sessionKey)
     incidents.observe(sessionKey, e)
     watchdog.touch(sessionKey)
     if (e.type === 'permission-request')
@@ -474,6 +486,13 @@ const interactiveEvents =
     if (e.type === 'status') {
       scheduleCheckpoint(sessionKey)
       noteAgentStep(sessionKey, e.text)
+      const current = sessions.get(sessionKey)
+      if (current)
+        observePeer(
+          peerTurn(sessionKey),
+          peerObservedFiles(current.root, current.record.filesTouched),
+          current.root
+        )
     }
     if (e.type !== 'done' && e.type !== 'error') return
     // Backends forward this same tagged event after the hook. Keep the UI busy
@@ -503,6 +522,12 @@ const interactiveEvents =
       .terminal(sessionKey, at.turn, at.run, e.type, record)
       .then((claim) => {
         if (!claim.claimed) return
+        observePeer(
+          at.turn,
+          peerObservedFiles(session.root, session.record.filesTouched),
+          session.root,
+          'landing'
+        )
         const last = [...record.transcript].reverse().find((t) => t.role === 'user')?.text
         void reconciliation.finish(
           sessionKey,
@@ -519,6 +544,7 @@ const interactiveEvents =
         console.error('The conversation owner could not record the end of a turn:', error)
         if (sessions.get(sessionKey) !== session) return
         runningKeys.delete(sessionKey)
+        finishPeer(at.turn, sessionKey)
         preparingTurns.delete(sessionKey)
         turnTimings.completed(sessionKey, at.turn)
         session.emit({ type: 'landing-finished', turn: at.turn })
@@ -666,6 +692,7 @@ function releaseRuntimes(s: ProviderSession, emitKey: string): void {
  * open); `history` archives it as a previous agent; `none` forgets it. Only chats the
  * user engaged (≥1 prompt) are kept. Never throws — History is non-critical. */
 async function closeChat(sessionKey: string, s: ProviderSession, persist: Persist): Promise<void> {
+  finishPeer(peerTurn(sessionKey), sessionKey)
   stopProvider(s)
   releaseRuntimes(s, sessionKey)
   clearTimeout(checkpointTimers.get(sessionKey))
@@ -725,6 +752,8 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
   if (!spawn || spawn.finalizing) return
   spawn.finalizing = true
   const { session, wt, parentSessionKey, parentRoot, text, origin } = spawn
+  session.finalize()
+  observePeer(id, peerObservedFiles(wt.path, session.record.filesTouched), wt.path, 'landing')
   const label = spawn.label ? { label: spawn.label } : {}
   // LKM-215: what the spawn wrote to the live checkout directly, read before its own
   // landing below (which is Trezi's effect), reported in the parent chat.
@@ -771,6 +800,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         // and its next finish lands here again. The rail row keeps running.
         spawn.continuations = (spawn.continuations ?? 0) + 1
         spawn.finalizing = false
+        observePeer(id, peerObservedFiles(wt.path, session.record.filesTouched), wt.path, 'running')
         void beginLiveWatch(spawnWatchKey(id), session)
         session.send(conflictResolutionPrompt(landing.conflicted))
         continued = true
@@ -870,6 +900,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
     }
   })
   if (continued) return
+  finishPeer(id)
   spawns.delete(id)
   void admitNext(id) // a slot just freed — start the next queued spawn
 }
@@ -934,7 +965,16 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
         emitKey: q.parentSessionKey,
         liveRoot: q.root,
         onEvent: (e) => {
-          if (e.type === 'status') noteAgentStep(spawnWatchKey(wt.id), e.text)
+          if (e.type === 'status') {
+            noteAgentStep(spawnWatchKey(wt.id), e.text)
+            const running = spawns.get(wt.id)
+            if (running)
+              observePeer(
+                wt.id,
+                peerObservedFiles(wt.path, running.session.record.filesTouched),
+                wt.path
+              )
+          }
           if (e.type === 'done') void finalizeSpawn(wt.id, 'done')
           else if (e.type === 'error') {
             const spawn = spawns.get(wt.id)
@@ -967,13 +1007,30 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
     releaseSlot()
     // LKM-163/LKM-215: a Full access Codex spawn can write the live tree too.
     void beginLiveWatch(spawnWatchKey(wt.id), s)
-    s.send(q.text)
+    await startPeer(
+      {
+        id: wt.id,
+        project: q.root,
+        origin: q.origin,
+        parent: q.parentSessionKey,
+        goal: oneLine(q.text, 160),
+        intendedFiles: peerIntendedFiles(q.text),
+        observedFiles: [],
+        target: q.label ?? peerTarget(q.text),
+        base: peerBase(wt.path),
+        phase: 'running'
+      },
+      undefined,
+      wt.path
+    )
+    s.send((await peerContext(q.root, wt.id)) + q.text)
     if (cancelOnStart.delete(q.id)) {
       spawns.get(wt.id)!.cancelled = true
       void s.interrupt?.().catch(() => {})
     }
     return wt.branch
   } catch {
+    finishPeer(wt.id)
     spawns.delete(wt.id)
     forgetLiveWatch(spawnWatchKey(wt.id))
     releaseSlot()
@@ -1166,6 +1223,7 @@ export function registerAgentIpc(
 
   /** Forget a chat's local turn state (its owner record was closed or replaced). */
   const forgetChat = (sessionKey: string): void => {
+    finishPeer(peerTurn(sessionKey), sessionKey)
     stoppedProviders.delete(sessionKey)
     memoryInjection.forget(sessionKey)
     firstSends.delete(sessionKey)
@@ -1919,6 +1977,22 @@ export function registerAgentIpc(
       // (serialized behind the chat's chain — waits out any in-flight merge). No-op for
       // a non-isolated chat.
       try {
+        await startPeer(
+          {
+            id,
+            project: session.record.projectRoot,
+            origin: 'chat',
+            parent: key,
+            goal: oneLine(text, 160),
+            intendedFiles: peerIntendedFiles(text),
+            observedFiles: [],
+            target: peerTarget(text),
+            base: peerBase(session.root),
+            phase: 'preparing'
+          },
+          key,
+          session.root
+        )
         // LKM-194: dependencies that cannot install are reported, never a refusal.
         const dependencies = await beforeTurn(key, text)
         if (preparation.cancelled) throw new Error('Message cancelled before sending.')
@@ -1984,8 +2058,14 @@ export function registerAgentIpc(
         logTurnStart(key, id, session.options)
         // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
         void beginLiveWatch(key, session)
+        observePeer(id, [], session.root, 'running')
         const body =
-          projectUiInstructions(useUi, uiEngine) + uiNotice + installNotice + islandContext + prompt
+          projectUiInstructions(useUi, uiEngine) +
+          uiNotice +
+          installNotice +
+          islandContext +
+          (await peerContext(root, id)) +
+          prompt
         // A handoff already carries the whole conversation.
         const restored = history.length ? '' : (restoredSummaries.get(key) ?? '')
         restoredSummaries.delete(key)
@@ -1997,6 +2077,7 @@ export function registerAgentIpc(
           uptimeNs: process.hrtime.bigint().toString()
         })
       } catch (error) {
+        finishPeer(id, key)
         logTurnNotSent(key, id, error)
         runningKeys.delete(key)
         preparingTurns.delete(key)
@@ -2432,6 +2513,7 @@ export function registerAgentIpc(
     runningKeys.delete(sessionKey)
     preparingTurns.delete(sessionKey)
     watchdog.forget(sessionKey)
+    if (expectedTurn) finishPeer(expectedTurn, sessionKey)
     forgetLiveWatch(sessionKey)
     const session = sessions.get(sessionKey)
     const turn = turnIds.get(sessionKey)

@@ -404,7 +404,7 @@ try {
     [...all.listed].sort(),
     Object.keys(CALLS)
       // Claude asks with its own AskUserQuestion, not ask_user (LKM-199).
-      .filter((n) => !['workspace_state', 'prepare_conflict_resolution', 'ask_user'].includes(n))
+      .filter((n) => !['prepare_conflict_resolution', 'ask_user'].includes(n))
       .sort()
   )
   // Main's real answers.

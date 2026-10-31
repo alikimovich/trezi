@@ -177,7 +177,7 @@
   "fg mcp__trezi__workspace_state {}",
   {
    "ok": {
-    "decision": "ask"
+    "decision": "allow"
    }
   }
  ],
@@ -185,7 +185,7 @@
   "bg mcp__trezi__workspace_state {}",
   {
    "ok": {
-    "decision": "ask"
+    "decision": "allow"
    }
   }
  ],

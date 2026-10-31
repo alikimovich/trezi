@@ -245,6 +245,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/prepublish-checks.ts` | helper | WorkflowOwner | bounded local CI command reads and runs |
 | `src/main/live-change-watch.ts` | helper | RepositoryOwner | `git rev-list` and `git log` reads of the live checkout: commits a Full-access Codex turn's outside changes made, minus Trezi's own (LKM-215) |
 | `src/main/park-reconcile.ts` | helper | RepositoryOwner | `git show` reads of a parked chat's held files; the clear/rebuild runs through the owner (LKM-196) |
+| `src/main/peer-work.ts` | helper | ConversationOwner / RepositoryOwner | read-only `git rev-parse`, `git diff` and `git ls-files` of the chat worktree for the service-owned peer work feed (LKM-402) |
 | `src/main/preview-identity.ts` | helper | RepositoryOwner | `git rev-parse HEAD` read of the live checkout: the revision a preview document serves (LKM-200) |
 | `src/main/preview-tools.ts` | helper | PlatformOwner | `open_preview` screenshot: one scratch JPEG per chat in the system temp folder, overwritten on each call (LKM-196) |
 | `src/main/provider-sign-in.ts` | helper | ProviderOwner | User-initiated Claude Code or Codex app-server login process; credentials stay in provider-managed storage (LKM-231) |

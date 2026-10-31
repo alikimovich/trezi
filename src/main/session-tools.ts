@@ -25,6 +25,7 @@ import { runChecksTool, runCommandCheck } from './command-checks'
 import { landingChecks, setCheckReplayer } from './integration-gate'
 import { noteServedRevision } from './landing-context'
 import { treziLiveEffect } from './live-change-watch'
+import { peerTurn, peerView } from './peer-work'
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
 import { identityText, isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { agentPreviewOverlay } from './preview-overlay'
@@ -52,6 +53,7 @@ export interface ToolScope {
   liveRoot: string
   emitKey: string
   background: boolean
+  peerId?: string
   connectionId?: string
   notify: (channel: string, payload: unknown) => void
 }
@@ -324,6 +326,9 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   if (action === 'install_skills') return installSkills()
   if (action === 'ask_user') return askUser(args, s)
   if (action === 'chat_ui') return chatUiTool(args, s)
+  // A background agent may inspect only peers, never its parent chat's park or gate.
+  if (action === 'workspace_state' && s.background)
+    return { peerWork: await peerView(s.liveRoot, s.peerId ?? '') }
   if (s.background)
     return {
       ok: false,
@@ -340,7 +345,8 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
       landingChecks: await landingChecks(s),
       timing: turnTimings.report(s.emitKey),
       // LKM-205: the user's rulers, guides and grids, read-only.
-      previewOverlay: agentPreviewOverlay(s.liveRoot)
+      previewOverlay: agentPreviewOverlay(s.liveRoot),
+      peerWork: await peerView(s.liveRoot, s.peerId ?? peerTurn(s.emitKey))
     }
   if (action === 'land_now') {
     const message = (args as { message?: unknown } | null)?.message

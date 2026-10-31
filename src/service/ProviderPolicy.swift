@@ -38,7 +38,7 @@ enum ProviderPolicy {
     /// `HOST_CONFIRMED` (LKM-281): never auto-allowed; a live foreground session may call
     /// one because the tool asks the user in a card bound to what it would do.
     static let hostConfirmed = ["publish_merge": "Background agents cannot merge pull requests."]
-    static let autoTrezi = Set(treziTools).subtracting(["install_skills", "workspace_state", "prepare_conflict_resolution"])
+    static let autoTrezi = Set(treziTools).subtracting(["install_skills", "prepare_conflict_resolution"])
         .subtracting(hostConfirmed.keys)
     static let autoAllow: Set<String> = ["Read", "Glob", "Grep", "LS", "NotebookRead"]
     static let edit: Set<String> = ["Edit", "Write", "MultiEdit", "NotebookEdit"]

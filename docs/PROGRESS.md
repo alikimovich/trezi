@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-402 peer work feed code-gap slice
+
+- Red proof before the implementation: `bun test/peer-work-feed.mjs` failed because `owner.peerUpsert` was absent; the first quick verification recorded this in `worker-verify-1.log`. The real lifecycle fixtures were also run against a disposable archive of origin/main with their new assertions: `CONVERSATION_ONLY=agent bun test/conversation-owner.mjs` failed when the second chat's prompt lacked the first goal, and `bun test/comment-agents.mjs` failed because the background `workspace_state` had no `peerWork`. Both are green on this tree. These reproduce the code gap, not the historical incident. The worker cannot make the requested pre-fix commit; Agent OS owns commits.
+- The Swift conversation owner now holds compact, ephemeral peer rows keyed by symlink-resolved repository path. Turn and spawn lifecycle calls publish goal, files, base, phase and heartbeat; normal finish, Stop and failed starts remove rows, stale rows expire, and a service restart starts with an empty feed while recovery checkpoints remain intact.
+- `workspace_state` returns peer rows for chats and a narrow peer-only read for background agents. Claude and Codex receive a bounded turn-start snapshot labelled untrusted data. Exact observed-file overlap and possible intended-file overlap are advisories; the source gate still decides landing.
+- Fixture bounds measured in a run: 8 rows, 2756 JSON bytes, 6.0 ms for 24 owner upserts and a read. These are local fixture measurements, not provider or native UI results. Native acceptance remains pending the manager's merged-main run.
+- One focused helper-tools attempt hit a transient sandbox `EPERM` opening its Codex MCP Unix socket. The subsequent manager quick run (`worker-verify-3.log`) passed the helper contract and all changed checks: 295 unit passes, lint, and node/preview/native typechecks; no provider call or GUI run was attempted.
+
 ## 2026-10-30 — LKM-393 review repair: parseable page probe and complete button routes
 
 - A new unit check parses every literal `page(...)` snippet inside Host.evaluate's `(await (CODE))` wrapper. It failed first on the key listener's semicolon-separated statements (`Unexpected token ';'`); the listener is now one IIFE expression, as the generated PAGE fixture already is.

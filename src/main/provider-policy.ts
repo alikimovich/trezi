@@ -103,11 +103,7 @@ export const HOST_CONFIRMED: Readonly<Record<string, string>> = {
 /** Trezi tools that never prompt (side-effect-free or validated by their own service). */
 const AUTO_TREZI = new Set<string>(
   TREZI_TOOLS.filter(
-    (t) =>
-      t !== 'install_skills' &&
-      t !== 'workspace_state' &&
-      t !== 'prepare_conflict_resolution' &&
-      !(t in HOST_CONFIRMED)
+    (t) => t !== 'install_skills' && t !== 'prepare_conflict_resolution' && !(t in HOST_CONFIRMED)
   )
 )
 const AUTO_ALLOW = AUTO_ALLOW_TOOLS
