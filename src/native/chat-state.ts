@@ -24,6 +24,8 @@ export interface Attachment {
   data: string
   /** Base64 PNG (about 512 px) standing in for an image the provider cannot read, such as an SVG. */
   preview?: string
+  /** Told to the agent with this attachment; a Mark up's statement of what it is (LKM-391). */
+  note?: string
 }
 export interface Submission {
   id: string

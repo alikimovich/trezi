@@ -3,8 +3,9 @@
 // the real adapter in a helper the real Swift ProviderOwner supervises, on the user's own
 // subscription. Each picture is chosen at random when the test runs and has a neutral file
 // name, and the on-disk copy the prompt lists is a blank decoy: only a picture really in
-// the model's input can give the right answer. Three turns: a first image, a second one on
-// the resumed thread, and a text turn about the first after its temp copy is gone.
+// the model's input can give the right answer. Four turns: a first image, a second one on
+// the resumed thread, a text turn about the first after its temp copy is gone, and a Mark up
+// composite whose marked shape the model must name (LKM-391).
 //
 // Writes receipt.json and the PNGs to TREZI_LIVE_ARTIFACTS (default test/artifacts/
 // provider-image-live); no prompt beyond the fixed ones below, no account data. Codex
@@ -30,6 +31,7 @@ if (process.env.TREZI_LIVE_PROVIDERS !== '1') {
 const { helperProvider } = await import('../src/main/backends/helper-session.ts')
 const { setProviderOwner } = await import('../src/main/provider-owner.ts')
 const { NativeChatController } = await import('../src/native/chat-controller.ts')
+const { markupNote } = await import('../src/native/markup-context.ts')
 const { compileProviderFixture, startProviderFixture } = await import(
   './helpers/provider-fixture.mjs'
 )
@@ -59,6 +61,8 @@ const ASK =
   'Reply with exactly two lowercase words, the colour then the shape in the attached image: one of red, green, blue, then one of circle, square, triangle. Do not use any tools and do not open any file.'
 const RECALL =
   'Which colour was the shape in the first image of this chat? Reply with exactly one lowercase word. Do not use any tools and do not open any file.'
+const MARKED =
+  'Which shape did I mark? Reply with exactly one lowercase word: circle, square or triangle. Do not use any tools and do not open any file.'
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const pick = (list) => list[randomInt(list.length)]
 
@@ -108,6 +112,23 @@ function picture(not) {
     const bytes = png((x, y) => (SHAPES[shape](x, y) ? COLOURS[colour] : WHITE))
     return { expected: `${colour} ${shape}`, colour, bytes }
   }
+}
+
+/** Three grey shapes in a random order with a red box drawn around one, as a pen would. */
+function markedUp() {
+  const names = Object.keys(SHAPES)
+  const shift = randomInt(names.length)
+  const order = names.map((_, index) => names[(index + shift) % names.length])
+  const marked = randomInt(order.length)
+  const centre = (index) => 43 + 85 * index
+  const bytes = png((x, y) => {
+    const edge = Math.max(Math.abs(x - centre(marked)), Math.abs(y - 128))
+    if (edge >= 36 && edge <= 41) return [220, 30, 30]
+    const index = Math.floor(x / 85.34)
+    const inside = SHAPES[order[index]]((x - centre(index)) * 3 + 128, (y - 128) * 3 + 128)
+    return inside ? [120, 120, 120] : WHITE
+  })
+  return { expected: order[marked], bytes }
 }
 
 /** One chat: a real helper session behind the real composer, turn by turn. */
@@ -209,7 +230,11 @@ async function openChat(options, project) {
         .length
     }
   }
-  return { turn, close: () => session.shutdown() }
+  return {
+    turn,
+    markUp: (file, note) => controller.addMarkup({ chat: key, project }, file, note),
+    close: () => session.shutdown()
+  }
 }
 
 const receipt = {
@@ -270,6 +295,31 @@ try {
         recall.answer.includes(first.colour),
         `${options.provider}: the resumed thread lost the first image: ${recall.answer}`
       )
+      // LKM-391: a composite added the way Mark up adds it, with its statement.
+      const composite = markedUp()
+      const file = join(artifacts, `${options.provider}-mark-up.png`)
+      writeFileSync(file, composite.bytes)
+      const added = chat.markUp(
+        { name: 'Mark up.png', type: 'image/png', data: composite.bytes.toString('base64') },
+        (name) =>
+          markupNote(name, {
+            url: 'http://localhost:5173/pricing?token=not-sent',
+            viewportWidth: 256,
+            viewportHeight: 256,
+            zoom: 1,
+            scrollX: 0,
+            scrollY: 0,
+            imageWidth: 256,
+            imageHeight: 256
+          })
+      )
+      assert.deepEqual(added, { ok: true }, `${options.provider}: Mark up was not added`)
+      const marked = await chat.turn(MARKED)
+      run.turns.push({ ...marked, file, expected: composite.expected })
+      console.log(`PROVIDER-IMAGE-LIVE ${options.provider} mark up: ${marked.answer}`)
+      assert.deepEqual(marked.errors, [], `${options.provider}: the Mark up turn failed`)
+      assert.equal(marked.answer, composite.expected, `${options.provider}: wrong mark`)
+      assert.equal(marked.permissionRequests, 0, `${options.provider}: it reached for a tool`)
     } finally {
       chat.close()
     }

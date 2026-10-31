@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- Mark up: draw on a frozen snapshot of the preview and add it to the chat composer (Actions menu or the toolbar's … menu); nothing sends until you press Send.
+
 ## [0.6.10] - 2026-10-30
 
 ### Fixed

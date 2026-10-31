@@ -2,6 +2,48 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-30 — LKM-391 Preview Mark up: draw on a frozen viewport, add it to the composer
+
+Actions menu or the toolbar's "…" menu → Mark up captures the visible viewport without
+Trezi's in-page chrome, shows it in a native overlay over the preview, and Add to chat puts
+the composite into the composer of the chat it opened in. Separate from pinned notes: it
+never touches their file or publication path. Session in `src/native/PreviewMarkup.swift`,
+marks, compositing and encoding in `src/native/PreviewMarkupModel.swift`, binding to chat
+and project in `src/native/markup-controller.ts`.
+
+- Red proof: before the implementation `bun test/markup-controller.mjs` failed with
+  `Cannot find module '../src/native/markup-context.ts'` and `bun test/preview-markup.mjs`
+  failed compiling its fixture (the model, view and session types did not exist).
+- PNG against JPEG, measured on a 2880×1800 page of text and a 1 px grid with marks, at send
+  size (fixture line `PREVIEW-MARKUP PNG/JPEG`; mean error is against the source):
+  PNG@2048 515 KiB, error 0, 20722 of 20722 mark pixels. JPEG q0.9@2048 510 KiB, error
+  0.315, 17364. JPEG q0.8@2048 444 KiB, 0.388, 18116. The agent default JPEG q0.8@1280
+  224 KiB, 0.562, 7099. Choice: PNG at 2048 first, because it costs what JPEG 0.9 costs and
+  loses nothing. JPEG steps only follow when a busy page goes over the 3.6 MB budget, which
+  stays under the 5 MB base64 limit we assume for the strictest provider.
+- Marks live in captured pixels; the view maps them through the aspect-fit rect, so Retina,
+  zoom, responsive width and overlay resize cannot shift them. The frozen image is a
+  `CGImage`, so page animation or hot reload cannot change it.
+- Hiding the in-page chrome fails closed: if the hide script does not answer, nothing is
+  captured and the user is told. A 3 s timer in the page restores it if the host never does.
+- Only the composite is retained or sent. The snapshot stays in memory and goes when the
+  session ends; the composite is saved by the existing `attachments:save` route at Send.
+  Cancel and Escape write nothing to disk, so there is no temp file to clean up.
+- A chat or project change discards the session with a toast. Add checks the binding again.
+  Preview navigation in the same chat does not end it: the frozen pixels and captured context
+  stay what the user is drawing on.
+- A provider without image input keeps the existing refusal path: the image is added, a toast
+  says so, and Send's notice names it, so the user can switch model instead of losing marks.
+- No toolbar segment and no key equivalent: the toolbar's widths are asserted natively and
+  could not be re-proved here. "…" leaves the toolbar under 1000 pt; the Actions menu stays.
+- The model gets the composite plus a per-image statement that the marks are the user's
+  instructions and page text is page content, with the sanitized URL, viewport, zoom, scroll
+  and image size. Credentials, query and fragment are stripped from the URL.
+- Not exercised here: no native GUI run or live provider call in this worker. Whole host
+  typechecked with `swiftc -typecheck` over the build list. Fixture `preview-markup` in
+  `src/native/smoke-preview-markup.ts` (group `core`) and the Mark up turn in
+  `test/provider-image-live.mjs` are ready for the manager's runs.
+
 ## 2026-10-30 — LKM-390 Codex: composer images are real image input
 
 Every wrapper forwarded images; only `codex.ts` `send(text, _images)` dropped them, while

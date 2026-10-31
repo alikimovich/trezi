@@ -92,6 +92,7 @@ import { installNativeInspector } from './inspector-runtime'
 import { NativeLayersController } from './layers-controller'
 import { NativeLegacyNames } from './legacy-names'
 import { installLogSupport, notePreviewMessage } from './log-support'
+import { installMarkup } from './markup-controller'
 import { showProjectMemoryNote } from './memory-note'
 import { networkVolumeNote } from './network-volume-note'
 import { app, dispatchIPC, ipcMain, NativeView, serviceEvents, shell, views } from './platform'
@@ -817,6 +818,33 @@ async function main() {
       void shellController!
         .action(action)
         .catch((error) => activityController.append(String(error), 'error'))
+  })
+  // LKM-391: a Mark up belongs to the project and chat it opened in; every snapshot of the
+  // active chat re-checks that, and a change ends it out loud.
+  const markup = installMarkup(host, {
+    binding: () => {
+      const project = workspaceController.active?.root
+      const chat = chatController.active
+      return project && chat && chatController.chats.get(chat)?.context?.root === project
+        ? { chat, project }
+        : null
+    },
+    add: async (binding, file, note) => chatController.addMarkup(binding, file, note),
+    toast: (message) => sheetController.toast(message),
+    reveal: () => {
+      if (chatController.chatHidden) void shellController!.action({ action: 'expand' })
+    }
+  })
+  const renderChat = chatController.services.render
+  chatController.services.render = (state) => {
+    renderChat(state)
+    markup.check()
+  }
+  host.on('shell-action', (action) => {
+    if (action.action === 'markup') markup.begin()
+  })
+  host.on('menu', ({ action }) => {
+    if (action === 'markup') markup.begin()
   })
   serviceEvents.on('event', (channel, value) => {
     if (channel === 'preview:url-changed') {

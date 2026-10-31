@@ -44,6 +44,12 @@ import {
   STOPPED_GROUP,
   type Submission
 } from './chat-state'
+import {
+  addMarkupToChat,
+  type MarkupBinding,
+  type MarkupFile,
+  type MarkupResult
+} from './markup-controller'
 
 export interface ChatServices {
   /** Registers the chat's island session; `recordId` is empty while a new chat is prepared. */
@@ -294,6 +300,19 @@ export class NativeChatController {
   private takesImages(chat: Chat) {
     const { provider, connectionId } = chat.settings
     return !(provider === 'gemini' && !connectionId && this.geminiListed())
+  }
+  /** LKM-391: a Mark up, into the composer of the chat and project it was bound to. */
+  addMarkup(
+    binding: MarkupBinding,
+    file: MarkupFile,
+    note: (name: string) => string
+  ): MarkupResult {
+    const chat = this.chats.get(binding.chat)
+    if (!chat || binding.chat !== this.active || chat.context?.root !== binding.project)
+      return { ok: false, message: 'The chat changed, so the mark up was not attached.' }
+    const result = addMarkupToChat(chat, file, note, this.takesImages(chat))
+    if (result.ok) this.changed(chat)
+    return result
   }
   private startReadinessIfVisible() {
     if (!this.layout.visible || !this.active || this.readinessStarted) return

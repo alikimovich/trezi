@@ -43,6 +43,10 @@ export const READERS = {
     path === 'docs/SWIFT-BACKEND-RETIREMENT.md' ||
     (/^(src|scripts|bin)\//.test(path) && CODE.test(path)),
   distribution: (path) => path === 'docs/SWIFT-BACKEND-RETIREMENT.md',
+  // Every marker the instrumentation sets must be one Mark up hides (LKM-391).
+  'preview-markup': (path) => path.startsWith('src/preview/'),
+  // No Mark up source may name the pinned notes' file (LKM-391).
+  'markup-controller': (path) => /^src\/native\/[^/]*markup/i.test(path),
   'service-contract': (path) =>
     /^docs\/SWIFT-BACKEND-(ROADMAP|MODULES|ROUTES|EVENTS)\.md$/.test(path),
   versioning: (path) => path === 'CHANGELOG.md' || path === 'AGENTS.md',

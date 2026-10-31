@@ -8,6 +8,7 @@ import { nativeWorkspace } from './workspace-runtime'
 
 type Page = (code: string) => Promise<unknown>
 const TITLES = [
+  'Mark up',
   'Reload Without Cache',
   'Restart Dev Server (clean cache)',
   'Switch JS / Native Preview'
