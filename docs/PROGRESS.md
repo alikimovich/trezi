@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-404 single live writer admission
+
+- Baseline on prior source: the two-chat scripted-provider fixture entered both turns in the same nested Git live checkout (`p2.sent.length` was 1 while the first turn remained open). Quick verification failed at `test/conversation-owner.mjs:754` in `worker-verify-1.log`; the conversation owner fixture took 37.3 s, and the full quick check took 442.3 s. The non-Git case is in the same fixture but was not reached on that red run.
+- The Swift conversation owner now records whether each chat has a worktree and refuses a competing live turn in the same project. Bun waits for owner release notifications with a 120 s deadline, emits one waiting status, and cancels a queued wait on Stop. Isolated Git chats retain independent admission.
+- Final quick verification: `worker-verify-3.log` passed typecheck, native typecheck, lint and changed unit tests (294 PASS, 3 SKIP; measured 378.7 s). The `conversation-owner` fixture covers both live project types, a single waiting status, queued and active Stop, crash recovery, restart admission and the existing isolated Git parallel flow.
+- Native acceptance remains pending the manager's merged-main run; the worker has zero native calls.
+
 ## 2026-10-30 — LKM-393 review repair: parseable page probe and complete button routes
 
 - A new unit check parses every literal `page(...)` snippet inside Host.evaluate's `(await (CODE))` wrapper. It failed first on the key listener's semicolon-separated statements (`Unexpected token ';'`); the listener is now one IIFE expression, as the generated PAGE fixture already is.
