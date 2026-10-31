@@ -940,8 +940,41 @@ try {
       await until(() => p2.sent.length === 6, 'provider after crash')
       p2.done()
       await liveIdle()
+
+      // A holder orphaned while the peer is already queued: the owner cannot record
+      // the writer's end, Bun drops its running mirror, and the wake lets the peer
+      // recover the holder long before the bound.
+      await sendLive('writer orphaned late', key, 'live-late-writer')
+      await until(() => replacement.sent.length === 2, 'late orphan writer send')
+      const afterLateOrphan = sendLive('after late orphan', second.sessionKey, 'live-late-peer')
+      await sleep(50)
+      assert.equal(p2.sent.length, 6)
+      setConversationOwner(
+        new Proxy(owners.conversation, {
+          get(target, property) {
+            if (property === 'terminal')
+              return async () => {
+                setConversationOwner(owners.conversation)
+                throw new Error('scripted owner failure')
+              }
+            const value = Reflect.get(target, property, target)
+            return typeof value === 'function' ? value.bind(target) : value
+          }
+        })
+      )
+      const lateStarted = Date.now()
+      replacement.done()
+      await within(afterLateOrphan, 'peer admission after late orphan')
+      const lateOrphanWaitMs = Date.now() - lateStarted
+      assert.ok(
+        lateOrphanWaitMs < 2000,
+        `late orphan recovered by wake, not bound (${lateOrphanWaitMs} ms)`
+      )
+      await until(() => p2.sent.length === 7, 'provider after late orphan')
+      p2.done()
+      await liveIdle()
       console.log(
-        `LKM-404 ${liveRoot.endsWith('/child') ? 'nested' : 'non-Git'} waits: orphan ${orphanWaitMs} ms, bound ${timeoutWaitMs} ms, hard Stop ${hardStopWaitMs} ms, provider error ${crashWaitMs} ms`
+        `LKM-404 ${liveRoot.endsWith('/child') ? 'nested' : 'non-Git'} waits: orphan ${orphanWaitMs} ms, late orphan ${lateOrphanWaitMs} ms, bound ${timeoutWaitMs} ms, hard Stop ${hardStopWaitMs} ms, provider error ${crashWaitMs} ms`
       )
     }
     // A delayed owner cancel belongs to the turn captured when Stop was pressed.

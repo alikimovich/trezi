@@ -382,12 +382,15 @@ const reconciliation = new ReconciliationCoordinator({
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),
   landed: async (key, turn) => {
-    const result = await conversation().landed(key, turn, Date.now())
-    if (result.landed) {
-      const root = sessions.get(key)?.record.projectRoot
+    const root = sessions.get(key)?.record.projectRoot
+    try {
+      const result = await conversation().landed(key, turn, Date.now())
+      return result.completedAt
+    } finally {
+      // Even a failed landing drops Bun's running mirror next; a queued peer re-checks
+      // the holder instead of sleeping until its bound.
       if (root) wakeLiveWriters(root)
     }
-    return result.completedAt
   },
   dispatch: (session, prompt, turn, run) => {
     trackers.get(session)?.push(turn, run)
@@ -587,6 +590,8 @@ const interactiveEvents =
         preparingTurns.delete(sessionKey)
         turnTimings.completed(sessionKey, at.turn)
         session.emit({ type: 'landing-finished', turn: at.turn })
+        // The owner may still hold this turn; a queued live peer can now recover it.
+        wakeLiveWriters(record.projectRoot)
       })
   }
 
@@ -1974,6 +1979,7 @@ export function registerAgentIpc(
       writerWaits.set(key, writerWait)
       let waitingForWriter = false
       const recoveredHolders = new Set<string>()
+      let releasedOwn = false
       try {
         for (;;) {
           const observed = writerVersions.get(writerProject) ?? 0
@@ -2022,10 +2028,11 @@ export function registerAgentIpc(
             }
             // The owner still holds a turn this process no longer runs (LKM-165).
             if (!(error instanceof ConversationError && error.code === 'busy')) throw error
-            if (runningKeys.has(key) || preparingTurns.has(key) || !(await releaseOwnerTurn(key)))
-              throw error
-            await admit()
-            break
+            // Release once, then retry through the loop so a peer that began in between
+            // gets the bounded wait and waiting status instead of CHAT_BUSY.
+            if (releasedOwn || runningKeys.has(key) || preparingTurns.has(key)) throw error
+            releasedOwn = true
+            if (!(await releaseOwnerTurn(key))) throw error
           }
         }
         if (writerWait.signal.aborted) {
