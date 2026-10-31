@@ -155,6 +155,7 @@ export const UNIT = [
   'toolbar-chat-lead',
   'preview-overlay',
   'preview-markup',
+  'preview-markup-routing',
   'markup-controller',
   'key-shortcuts',
   'menu-first-shortcuts',

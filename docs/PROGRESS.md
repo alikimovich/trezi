@@ -2,6 +2,20 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-30 — LKM-393 review repair: parseable page probe and complete button routes
+
+- A new unit check parses every literal `page(...)` snippet inside Host.evaluate's `(await (CODE))` wrapper. It failed first on the key listener's semicolon-separated statements (`Unexpected token ';'`); the listener is now one IIFE expression, as the generated PAGE fixture already is.
+- The smoke clicks Undo and Send through posted, hit-tested mouse events and checks the Undo mark count. Send still intercepts `agent:send` before any provider call; `send-payload.json` labels the click a real event route and the provider interception a seam. The exact-byte retained-composite check remains.
+- Receipts distinguish mixed coverage: narrow/zoom viewport setup uses `previewViewport` (seam), then drawing uses posted pointer events. Open uses a shell action to set up a deterministic overlay; resize uses a test-only area setter to check mapping without changing the whole window; page mutation simulates live content; chat/project commands switch generated fixture contexts deterministically; the initial draft and attachment are fixture setup. These seams cannot establish UI pointer routing and are labelled accordingly. Background mode explicitly skips the foreground-only smoke and reports reduced coverage.
+- Native runtime proof still awaits the manager's merged-main `core` run; the worker has no native allowance.
+
+## 2026-10-30 — LKM-393 foreground Mark up fixture wiring
+
+- Red proof: the route assertions first added to `test/preview-markup.mjs` failed in quick verification at the absent `NSApp.postEvent` call (worker-verify-1.log). They now live in the registered `test/preview-markup-routing.mjs`; the source fixture requires posted keys, pointer, buttons and text input.
+- The `preview-markup` smoke posts foreground AppKit keyDown/keyUp for Escape, ⌘Z and four history shortcuts. The page has a history entry; every shortcut checks that history step count and URL stay fixed and that a page keyDown listener saw none while the overlay owns focus.
+- Tool selection, drawing, Undo, Clear, Cancel and Add use hit-tested mouse events posted to the window. After Add the fixture posts text input into the focused composer, then uses normal Send and checks the draft, instruction and exact composite bytes in the intercepted payload. Each event saves a state receipt labelled `real event route` and a foreground PNG; open, resize and workspace commands are labelled `seam only`.
+- Native execution remains pending for the manager's merged-main `core` run; no native desktop allowance was available to this worker. Fixture code and red proof do not establish runtime success by themselves.
+
 ## 2026-10-30 — LKM-391 repair: review findings and the open acceptance fixtures
 
 - **History keys no longer reach the page under the overlay.** `PreviewHistory.arrow` consumes
