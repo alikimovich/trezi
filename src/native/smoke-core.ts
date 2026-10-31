@@ -54,6 +54,7 @@ import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-isla
 import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
+import { checkPreviewMarkup, restorePreviewMarkup } from './smoke-preview-markup'
 import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
 import { checkPreviewSpeed, restorePreviewSpeed } from './smoke-preview-speed'
 import { checkPreviewTiming, restorePreviewTiming } from './smoke-preview-timing'
@@ -1296,6 +1297,12 @@ export async function runNativeCoreSmoke(
       dependsOn: ['open-project'],
       run: () => checkPreviewOverlay(host, fixture, artifacts, preference),
       cleanup: () => restorePreviewOverlay(host)
+    },
+    {
+      name: 'preview-markup',
+      dependsOn: ['chat-ready'],
+      run: () => checkPreviewMarkup(host, page, artifacts),
+      cleanup: () => restorePreviewMarkup(host, page)
     },
     {
       name: 'text-edit',

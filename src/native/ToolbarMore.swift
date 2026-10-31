@@ -4,7 +4,9 @@ import AppKit
 /// last item at the trailing edge. Its actions go to Bun as shell actions (`src/native/preview-refresh.ts`).
 extension NativeShell {
     /// LKM-276: a repo with a JS dev server and native roots switches which one it previews.
-    static let moreActions = [("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean"),
+    /// LKM-391: Mark up opens over the preview; here and in the Actions menu, so the small
+    /// window that loses this item keeps it.
+    static let moreActions = [("Mark up", "markup"), ("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean"),
                               ("Switch JS / Native Preview", "switch-preview")]
     func configureMore(_ item: NSMenuToolbarItem) {
         item.showsIndicator = false

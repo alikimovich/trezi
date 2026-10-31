@@ -51,13 +51,15 @@ export async function planAttachments(
   const files = list('file')
   const images = list('image')
   const refused = takesImages ? [] : attachments.filter(isImage).map((a) => a.name)
+  const notes = attachments.flatMap((a) => (a.note ? [a.note] : []))
   return {
     header:
       (files ? `[Attached files]\n${files}\n\n` : '') +
       (images
         ? `[Attached images — the image(s) in this message are on disk at]\n${images}\n\n`
         : '') +
-      (missed.length ? `[Not attached: ${missed.join('; ')}]\n\n` : ''),
+      (missed.length ? `[Not attached: ${missed.join('; ')}]\n\n` : '') +
+      notes.map((note) => `${note}\n\n`).join(''),
     images: kept.map(({ mediaType, data }) => ({ mediaType, data })),
     notice: refused.length ? `Not sent as images: ${refused.join(', ')} (${NO_IMAGE_INPUT})` : ''
   }

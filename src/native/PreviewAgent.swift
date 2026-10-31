@@ -85,12 +85,20 @@ enum PreviewAgent {
         let size = view.bounds.size, longest = max(size.width, size.height) * scale
         let config = WKSnapshotConfiguration()
         if !full, longest > maxPixels, size.width > 0 { config.snapshotWidth = NSNumber(value: Double(size.width * maxPixels / longest)) }
-        view.takeSnapshot(with: config) { image, error in
+        snapshot(config, view: view) { image, error in
             let snapshotMs = Date().timeIntervalSince(started) * 1000, encoding = Date()
-            guard var frame = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { reply(nil, error?.localizedDescription ?? "Snapshot unavailable"); return }
+            guard var frame = image else { reply(nil, error); return }
             if !full, let fitted = fit(frame, maxPixels: maxPixels) { frame = fitted }
             guard let jpeg = NSBitmapImageRep(cgImage: frame).representation(using: .jpeg, properties: [.compressionFactor: quality]) else { reply(nil, "Snapshot encoding failed"); return }
             reply(["jpeg": jpeg.base64EncodedString(), "width": frame.width, "height": frame.height, "snapshotMs": snapshotMs, "encodeMs": Date().timeIntervalSince(encoding) * 1000], nil)
+        }
+    }
+
+    /// The view's pixels at the given configuration (Mark up takes them whole, LKM-391).
+    static func snapshot(_ config: WKSnapshotConfiguration, view: WKWebView, reply: @escaping (CGImage?, String?) -> Void) {
+        view.takeSnapshot(with: config) { image, error in
+            guard let frame = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { reply(nil, error?.localizedDescription ?? "Snapshot unavailable"); return }
+            reply(frame, nil)
         }
     }
 

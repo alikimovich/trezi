@@ -154,6 +154,8 @@ export const UNIT = [
   'sidebar-sizing',
   'toolbar-chat-lead',
   'preview-overlay',
+  'preview-markup',
+  'markup-controller',
   'key-shortcuts',
   'menu-first-shortcuts',
   'agent-load-routing',

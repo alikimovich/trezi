@@ -96,6 +96,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var previewPicks = 0
     /// The page's viewport rects native views cover, as last sent (`PreviewCover.swift`).
     var previewCover: [[String: Double]] = []
+    /// LKM-391: the Mark up session over the preview (`PreviewMarkupHost.swift`).
+    var markup: PreviewMarkup?
     let world = WKContentWorld.world(name: "TreziPreview")
     let directory: String
     let ephemeral: Bool
@@ -172,6 +174,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         buildBadge.install(in: shell.sidebar.view, activity: activityIndicator)
         nativeLayout = WorkspaceLayout(host: self)
         previewOverlay = PreviewOverlay(host: self)
+        installMarkup()
         toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
         canvas.changed = { [weak self] in self?.nativeLayout.layout() }
         shell.toolbarLaidOut = { [weak self] in self?.placeSpeedBadge() }
@@ -179,6 +182,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
             self?.lastUserInteraction = Date()
             if event.type == .keyDown, event.keyCode == 53, self?.closeThreeDOnEscape() == true { return nil }
+            if event.type == .keyDown, event.keyCode == 53, self?.markupTakesKeys == true, self?.markup?.escape() == true { return nil }
             return event
         }
         // LKM-219: shortcuts on any keyboard layout; ⌘← / ⌘→ step the preview's history.
@@ -425,6 +429,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             if name.hasPrefix("agent:"), let view { reply(id, PreviewAgent.setAgentViewport(c, view: view)) }
             else { reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"])) }
         case "previewOverlay": previewOverlay.apply(c)
+        case "markupBegin": markup?.begin(c["session"] as? String ?? "")
+        case "markupEnd": markup?.end(c["session"] as? String ?? "")
+        case "markupDone": markup?.finished(c["session"] as? String ?? "", ok: c["ok"] as? Bool == true, message: c["message"] as? String)
         case "capture":
             if let agent = c["agent"] as? [String: Any] {
                 guard let view else { reply(id, error: "Snapshot unavailable"); return }

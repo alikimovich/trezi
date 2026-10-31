@@ -42,7 +42,7 @@ extension Host {
         view.addItem(.separator())
         for item in previewOverlay?.menuItems() ?? [] { view.addItem(item) }
         let actions = submenu("Actions")
-        for (label, key, action) in [("Reload Preview", "r", "reload"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
+        for (label, key, action) in [("Reload Preview", "r", "reload"), ("Mark up", "", "markup"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
             let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; actions.addItem(item)
         }
         // LKM-206: Control-Shift-S switches between 1× and the last slow speed.
@@ -79,6 +79,7 @@ extension Host {
         if ["undo", "redo"].contains(action), let text = NSApp.keyWindow?.firstResponder as? NSTextView {
             if action == "undo" { text.undoManager?.undo() } else { text.undoManager?.redo() }; return
         }
+        if action == "undo", markup?.undo() == true { return }
         emit(["event":"menu", "action":action])
     }
     @objc func recentAction(_ item: NSMenuItem) { emit(["event":"recent", "root":item.representedObject as? String ?? ""]) }
