@@ -239,6 +239,8 @@ export const UNIT = [
   'codex-stream',
   'codex-terminal-stream',
   'codex-resume',
+  'codex-composer-images',
+  'claude-image-transport',
   'interrupt-escalation',
   'turn-terminal',
   'chat-title',
@@ -308,7 +310,7 @@ export const NATIVE = [
   'island-flicker-frameworks',
   'browser-setup-packaged'
 ]
-export const LIVE = ['native-runtime-live', 'provider-live-parity']
+export const LIVE = ['native-runtime-live', 'provider-live-parity', 'provider-image-live']
 export const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 // Unit tests in one group never run at the same time; the other workers keep running the
 // rest (`runQueue` in test/helpers/test-runner.mjs). LKM-345: these build through a real
@@ -369,6 +371,8 @@ export const UNIT_TIMEOUT_MS = {
   // LKM-313: real Bun/bash stand-in processes (a catalog probe, the SDK's own CLI, hung tools
   // killed at probe limits). 10–25 s idle, 98 s+ and six 120 s TIMEOUTs under parallel load.
   'codex-model': 240_000,
+  // LKM-390: the provider-owner fixture compile, then a Bun stand-in CLI per turn.
+  'codex-composer-images': 240_000,
   'managed-browser-path': 240_000,
   'browser-setup-recovery': 240_000,
   // LOCAL-WEBKIT-4: the same platform fixture compile, then scripted installs.

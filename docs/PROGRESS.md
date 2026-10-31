@@ -2,6 +2,32 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-30 — LKM-390 Codex: composer images are real image input
+
+Every wrapper forwarded images; only `codex.ts` `send(text, _images)` dropped them, while
+the header told the model the image was in the message. The active route is seat chat →
+`helperProvider('codex')` → Swift provider owner → helper host → `codexProvider.send`;
+connections reach the same `send` in-process.
+
+- Red proof: `codex-composer-images` failed `the composer image reached the CLI as --image
+  0 !== 1` (quick verify, `worker-verify-1.log`, before any production change).
+- `codex-images.ts` writes private temp copies when the turn starts and `runTurn` removes
+  them in a `finally` after all its runs. Synchronous on purpose: an await between the
+  guards and `turnAbort` would lose a Stop. Why not at `send`: a queued turn would hold
+  files, and a chat that closes before its turn would leak them. A helper the owner
+  SIGKILLs cannot clean up, so the next image turn sweeps copies older than a day.
+- `driveTurn` is the old `runTurn` body; `done` still comes last, now after the removal.
+  Retries, the seeded thread and the model fallback reuse the same paths.
+- The header was wrong for more than Codex: images the limits dropped were still listed
+  as in the message. `planAttachments` now moves them to `[Attached files]`, names invalid
+  and over-limit images, and takes `takesImages` for Gemini (off, or a connection, runs
+  elsewhere and keeps its images). `chat-attachments` exact over-limit header changed to
+  include the new `[Not attached: …]` line, as the ticket requires.
+- Not proven here: real comprehension. `provider-image-live` is ready and pending a
+  manager run; this worker has no native allowance, and the sandbox refuses local ports,
+  so the real CLI was not run here. Connections depend on their endpoint's model; a CLI model
+  without image modality would drop the image itself, but every seat model lists `image`.
+
 ## 2026-10-30 — LKM-389 sidebar: running chats shimmer their title instead of a left loader
 
 - **Effect.** The chat's status line (`ChatActivity`) lays a primary copy of its text over a secondary one and sweeps a mask across the copy: 55 pt band, clear–white–clear, 2 s, linear, band offset `phase × (width + 110) − 55`, phase from the clock. A SwiftUI view cannot sit inside the AppKit row, so `SidebarTitleShimmer` reproduces those numbers with Core Animation. It uses no second copy of the text: a mask on the one label dims it and a band lets it through. So vibrancy, the selection colour, truncation and the marquee all stay the label's own, and nothing has to be kept in step with a copy. The band's phase also comes from the clock, because a state change rebuilds the rows (`outline.reloadData`) and a restart from 0 would visibly jump.

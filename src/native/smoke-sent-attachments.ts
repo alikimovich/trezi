@@ -127,6 +127,10 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
     const [prompt, images] = sent[0] as [string, { mediaType: string; data: string }[]]
     assert.ok(existsSync(svg) && prompt.includes(svg), `The SVG's path is listed: ${prompt}`)
     assert.match(prompt, /\[Attached files\]\n/)
+    // LKM-390: the header's claim is about images this very turn carries.
+    assert.match(prompt, /\[Attached images — the image\(s\) in this message are on disk at\]\n/)
+    assert.ok(images.length > 0, 'The turn carries the images its header claims')
+    assert.doesNotMatch(prompt, /\[Not attached:/)
     assert.ok(validImages(images), 'Every image sent is within the provider limits')
     const previewSizes = images
       .filter((image) => image.mediaType === 'image/png')

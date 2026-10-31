@@ -201,6 +201,10 @@ try {
     join(cli, 'test/provider-live-parity.mjs'),
     "console.log('PROVIDER-LIVE-PARITY SKIP: not authorized')"
   )
+  writeFileSync(
+    join(cli, 'test/provider-image-live.mjs'),
+    "console.log('PROVIDER-IMAGE-LIVE SKIP: not authorized')"
+  )
   const invoke = (args) =>
     spawnSync('node', [join(cli, 'test/run.mjs'), ...args], {
       cwd: cli,
@@ -219,7 +223,7 @@ try {
   assert.equal(existsSync(join(cli, 'test/artifacts')), false, 'listing creates no run artifacts')
   const success = invoke(['native', 'live'])
   assert.equal(success.status, 0, success.stdout + success.stderr)
-  assert.deepEqual(report(success).counts, { PASS: nativeFixtures.length, SKIP: 2 })
+  assert.deepEqual(report(success).counts, { PASS: nativeFixtures.length, SKIP: 3 })
   const focused = invoke(['native', '--filter=native-source-window'])
   assert.equal(focused.status, 0, focused.stdout + focused.stderr)
   assert.deepEqual(
