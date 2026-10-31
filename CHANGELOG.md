@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-10-30
+
 ### Fixed
 - Images in the composer now reach Codex as real image input, and the message to an agent only says an image is attached when that provider received it; Gemini chats state that images were not sent (LKM-390).
 
