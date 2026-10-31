@@ -309,6 +309,16 @@ const writerVersions = new Map<string, number>()
 const writerWaiters = new Map<string, Set<() => void>>()
 const writerWaits = new Map<string, AbortController>()
 const LIVE_WRITER_WAIT_MS = 120_000
+function liveWriterWaitMs(): number {
+  // The conversation-owner fixture shortens only its timeout case. Production
+  // always uses the normal bound, even when an inherited env variable is present.
+  const testMs = process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS
+  if (process.argv.some((arg) => /(?:^|\/)conversation-owner\.mjs$/.test(arg)) && testMs) {
+    const parsed = Number(testMs)
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, LIVE_WRITER_WAIT_MS)
+  }
+  return LIVE_WRITER_WAIT_MS
+}
 function wakeLiveWriters(root: string): void {
   const project = projectKey(root)
   writerVersions.set(project, (writerVersions.get(project) ?? 0) + 1)
@@ -1959,10 +1969,11 @@ export function registerAgentIpc(
         typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
       const admit = () => conversation().begin(key, id)
       const writerWait = new AbortController()
-      const writerDeadline = Date.now() + LIVE_WRITER_WAIT_MS
+      const writerDeadline = Date.now() + liveWriterWaitMs()
       const writerProject = projectKey(session.record.projectRoot)
       writerWaits.set(key, writerWait)
       let waitingForWriter = false
+      const recoveredHolders = new Set<string>()
       try {
         for (;;) {
           const observed = writerVersions.get(writerProject) ?? 0
@@ -1975,6 +1986,28 @@ export function registerAgentIpc(
               error.code === 'busy' &&
               error.message === 'Another chat is editing this live project.'
             ) {
+              const owner = await conversation()
+                .snapshot()
+                .catch(() => null)
+              const holder = owner?.chats.find(
+                (chat) =>
+                  chat.chat !== key &&
+                  chat.project === writerProject &&
+                  !chat.isolated &&
+                  chat.phase !== 'idle' &&
+                  chat.turn
+              )
+              if (
+                holder?.turn &&
+                !recoveredHolders.has(`${holder.chat}:${holder.turn}`) &&
+                !runningKeys.has(holder.chat) &&
+                !preparingTurns.has(holder.chat) &&
+                !landingInFlight(holder.chat) &&
+                !stopRebuilds.has(holder.chat)
+              ) {
+                recoveredHolders.add(`${holder.chat}:${holder.turn}`)
+                if (await releaseOwnerTurn(holder.chat, holder.turn, holder.root)) continue
+              }
               if (!waitingForWriter) {
                 waitingForWriter = true
                 safeSend(getWindow, 'agent:event', {
@@ -2498,7 +2531,8 @@ export function registerAgentIpc(
   // the next message. Safe when the owner already moved on (a stale turn changes nothing).
   const releaseOwnerTurn = async (
     key: string,
-    expectedTurn = turnIds.get(key)
+    expectedTurn = turnIds.get(key),
+    root = sessions.get(key)?.record.projectRoot
   ): Promise<boolean> => {
     if (!expectedTurn) return false
     const aborted = await conversation()
@@ -2509,7 +2543,6 @@ export function registerAgentIpc(
       .then((result) => result.landed)
       .catch(() => false)
     if (aborted || landed) {
-      const root = sessions.get(key)?.record.projectRoot
       if (root) wakeLiveWriters(root)
     }
     return aborted || landed

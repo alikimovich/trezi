@@ -808,6 +808,13 @@ export class NativeChatController {
         turn,
         submission.id
       )
+      // The owner admitted the turn. A provider may be quiet before its first
+      // event, so do not keep showing the earlier live-writer wait as current.
+      if (chat.activityDetail === 'Waiting: Another chat is editing this live project.') {
+        chat.activityDetail = ''
+        chat.phase = 'thinking'
+        this.changed(chat)
+      }
       productLog.info('send-path', 'bun action=send stage=agent-ack', {
         chat: chat.chat,
         turn: submission.id,

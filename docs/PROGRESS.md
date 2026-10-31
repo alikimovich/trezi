@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-404 review repair: orphan recovery, bounded wait, and rail reset
+
+- On a live-writer refusal, Bun checks the Swift owner's snapshot for the exact holder turn. If Bun has no running, preparing, landing or restart work for that chat, it releases that owner turn once and retries admission. The holder's chat and turn identity are checked before release; active providers are left alone.
+- The scripted live-project fixture now exercises orphan recovery, a 150 ms test-only deadline, hard-stop provider replacement and provider-error release with a queued peer in both nested Git and non-Git folders. Focused run measurements: nested orphan 17 ms, bound 156 ms, hard Stop 5068 ms, error 34 ms; non-Git orphan 25 ms, bound 154 ms, hard Stop 5064 ms, error 34 ms. The hard-stop measurement includes the existing 5 s Stop window.
+- After `agent:send` acknowledges admission, the native chat controller clears the earlier waiting activity label without adding another transcript status. Its fixture holds the send acknowledgment, shows the wait, then checks the cleared label and retained single status line.
+- Manager quick verification passed (`worker-verify-1.log`, repair run): typecheck, native typecheck, lint, and changed unit selection, 294 PASS and 3 SKIP in a measured 378.9 s.
+- Native GUI acceptance still awaits the manager's merged-main run.
+
 ## 2026-10-31 — LKM-404 single live writer admission
 
 - Baseline on prior source: the two-chat scripted-provider fixture entered both turns in the same nested Git live checkout (`p2.sent.length` was 1 while the first turn remained open). Quick verification failed at `test/conversation-owner.mjs:754` in `worker-verify-1.log`; the conversation owner fixture took 37.3 s, and the full quick check took 442.3 s. The non-Git case is in the same fixture but was not reached on that red run.

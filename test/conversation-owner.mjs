@@ -60,7 +60,7 @@ mock.module('../src/main/backends/index.ts', () => ({
       }
       const cap = createRecordCapture(cwd, projectKey(cwd))
       let disposed = false
-      const entry = { cwd, options, context, sent: [], settled: [] }
+      const entry = { cwd, options, context, sent: [], settled: [], hardStop: false }
       const emit = (event) => {
         if (disposed) return
         const tagged = {
@@ -89,6 +89,7 @@ mock.module('../src/main/backends/index.ts', () => ({
         },
         // A graceful stop: the provider ends the turn with its `done`.
         interrupt: async () => {
+          if (entry.hardStop) return { hardStopped: true }
           cap.finalize()
           emit({ type: 'done' })
           return undefined
@@ -850,6 +851,98 @@ try {
       await stoppedWait
       assert.equal(p2.sent.length, 2)
       p1.done()
+      const liveIdle = () =>
+        until(async () => {
+          const chats = (await owners.conversation.snapshot()).chats.filter(
+            (chat) => chat.project === key
+          )
+          return chats.every((chat) => chat.phase === 'idle')
+        }, 'live project idle')
+      const sendLive = (text, chat, turn) =>
+        invoke('agent:send', text, undefined, chat, {}, `${turn}-${first}`)
+      await liveIdle()
+
+      // An owner turn orphaned after Bun drops its running mirror cannot hold a
+      // different chat until that original chat happens to send again.
+      const orphan = `live-orphan-${first}`
+      await owners.conversation.begin(key, orphan)
+      const orphanStarted = Date.now()
+      await within(
+        sendLive('after orphaned owner turn', second.sessionKey, 'live-orphan-peer'),
+        'peer admission after orphaned owner turn'
+      )
+      assert.equal(p2.sent.length, 3)
+      const orphanWaitMs = Date.now() - orphanStarted
+      assert.equal(
+        (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === key)?.phase,
+        'idle'
+      )
+      p2.done()
+      await liveIdle()
+
+      // The deadline belongs to the queued send, not the writer. Once it expires,
+      // the owner still has no turn for the waiter and a later send can run.
+      await sendLive('writer for timeout', key, 'live-timeout-writer')
+      await until(() => p1.sent.length === 4, 'timeout writer send')
+      process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS = '150'
+      const timeoutStarted = Date.now()
+      try {
+        await assert.rejects(
+          sendLive('bounded wait', second.sessionKey, 'live-timeout-peer'),
+          /Waited too long for the other chat/
+        )
+      } finally {
+        delete process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS
+      }
+      const timeoutWaitMs = Date.now() - timeoutStarted
+      assert.equal(
+        (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === second.sessionKey)
+          ?.phase,
+        'idle'
+      )
+      assert.equal(p2.sent.length, 3)
+      p1.done()
+      await liveIdle()
+      await sendLive('after bounded wait', second.sessionKey, 'live-after-timeout')
+      await until(() => p2.sent.length === 4, 'send after bounded wait')
+      p2.done()
+      await liveIdle()
+
+      // A hard Stop replaces the provider and resets its owner turn. The queued
+      // peer must be woken by that real handoff, before the Stop handler returns.
+      await sendLive('hard stopped writer', key, 'live-hard-writer')
+      await until(() => p1.sent.length === 5, 'hard stop writer send')
+      const afterHardStop = sendLive('after hard Stop', second.sessionKey, 'live-hard-peer')
+      await sleep(50)
+      assert.equal(p2.sent.length, 4)
+      p1.hardStop = true
+      const hardStopStarted = Date.now()
+      const hardStop = invoke('agent:interrupt', key)
+      await within(afterHardStop, 'peer admission after hard Stop')
+      const hardStopWaitMs = Date.now() - hardStopStarted
+      await until(() => p2.sent.length === 5, 'provider after hard Stop')
+      await within(hardStop, 'hard Stop restart')
+      const replacement = providers.at(-1)
+      assert.notEqual(replacement, p1)
+      p2.done()
+      await liveIdle()
+
+      // An error terminal also frees the writer after its failed landing.
+      await sendLive('crashing writer', key, 'live-crash-writer')
+      await until(() => replacement.sent.length === 1, 'crash writer send')
+      const afterCrash = sendLive('after provider crash', second.sessionKey, 'live-crash-peer')
+      await sleep(50)
+      assert.equal(p2.sent.length, 5)
+      const crashStarted = Date.now()
+      replacement.error('scripted provider crash')
+      await within(afterCrash, 'peer admission after provider crash')
+      const crashWaitMs = Date.now() - crashStarted
+      await until(() => p2.sent.length === 6, 'provider after crash')
+      p2.done()
+      await liveIdle()
+      console.log(
+        `LKM-404 ${liveRoot.endsWith('/child') ? 'nested' : 'non-Git'} waits: orphan ${orphanWaitMs} ms, bound ${timeoutWaitMs} ms, hard Stop ${hardStopWaitMs} ms, provider error ${crashWaitMs} ms`
+      )
     }
     // A delayed owner cancel belongs to the turn captured when Stop was pressed.
     // Its response must never interrupt or cancel a replacement turn.
