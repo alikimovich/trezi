@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Single live writer admission (LKM-404)
+
+- [x] Reproduce concurrent live turns with scripted providers in disposable nested Git and non-Git projects (red quick verification).
+- [x] Record isolation in the conversation owner; bound and explain waiting for a shared live writer.
+- [x] Cover release and isolated Git parallel turns in the conversation owner fixture.
+- [x] Review repair: recover an orphaned owner holder, exercise queued hard Stop, provider error and test-bound expiry in both live project types.
+- [x] Review repair: clear the waiting activity label on send acknowledgment; fixture checks the single retained status line.
+- [ ] Manager: run native chat acceptance on merged main; worker has no native calls.
+
 ## Foreground Mark up acceptance wiring (LKM-393)
 
 - [x] Red first: `test/preview-markup-routing.mjs` requires posted AppKit keys, pointer, buttons and text input; the initial check failed at the absent `NSApp.postEvent` route. Registered in `test/tiers.mjs`.

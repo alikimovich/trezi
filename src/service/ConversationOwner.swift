@@ -70,7 +70,7 @@ final class ConversationOwner: @unchecked Sendable {
     static let modes: Set<String> = ["auto", "default", "acceptEdits", "bypassPermissions"]
     static let methods: [String: (required: Set<String>, optional: Set<String>)] = [
         "save": (["record"], ["current"]), "remove": (["id"], []), "rename": (["id", "title"], []),
-        "open": (["chat", "project", "root", "record", "options", "active", "sequence"], []),
+        "open": (["chat", "project", "root", "record", "options", "active", "sequence"], ["isolated"]),
         "activate": (["chat"], []), "checkpoint": (["chat", "record", "sequence"], []),
         "close": (["chat", "persist", "record", "sequence"], []), "configure": (["chat", "options"], []),
         "handoff": (["chat", "options", "record", "sequence", "reason"], []),
@@ -112,6 +112,7 @@ final class ConversationOwner: @unchecked Sendable {
             let key = try Self.key(body, "chat")
             var chat = ConversationChat(chat: key, project: try Self.key(body, "project"), root: try body.path("root"),
                                         record: try Self.record(body.value("record")), options: try Self.object(body.value("options")))
+            chat.isolated = body.has("isolated") ? try body.bool("isolated") : true
             chat.sequence = try Self.sequence(body)
             state.open(chat, active: try body.bool("active"))
             try checkpoint(key)
@@ -280,6 +281,7 @@ final class ConversationOwner: @unchecked Sendable {
                 Self.object([("chat", .string(JSText(chat.chat))), ("project", .string(JSText(chat.project))),
                              ("root", .string(JSText(chat.root))), ("active", .bool(state.isActive(chat))),
                              ("phase", .string(JSText(chat.phase.rawValue))), ("turn", chat.turn.map { .string(JSText($0)) } ?? .null),
+                             ("isolated", .bool(chat.isolated)),
                              ("run", .number(Double(chat.run))), ("record", chat.record), ("options", chat.options)])
             }
             let running = state.running.keys.sorted()
@@ -389,6 +391,7 @@ final class ConversationOwner: @unchecked Sendable {
         switch error {
         case ConversationRefusal.notFound(let message): return RepositoryOwner.fail(.notFound, message)
         case ConversationRefusal.busy(let message): return RepositoryOwner.fail(.busy, message, retryable: true)
+        case ConversationRefusal.writerBusy(let message): return RepositoryOwner.fail(.busy, message, retryable: true)
         case ConversationRefusal.cancelled: return RepositoryOwner.fail(.cancelled, "Message cancelled before sending.")
         case ConversationStoreError.unsafeID: return RepositoryOwner.fail(.invalidRequest, "Unsafe session id.")
         case MemoryError.sessionStoreNotReady: return RepositoryOwner.fail(.unavailable, "Trezi's session store is not ready yet.", retryable: true)
