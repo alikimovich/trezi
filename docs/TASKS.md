@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Foreground Mark up acceptance wiring (LKM-393)
+
+- [x] Red first: `test/preview-markup-routing.mjs` requires posted AppKit keys, pointer, buttons and text input; the initial check failed at the absent `NSApp.postEvent` route. Registered in `test/tiers.mjs`.
+- [x] Native smoke posts Escape, ⌘Z, ⌘←/⌘→ and ⌘[/⌘], hit-tested tool/drawing/action events, then types after Add; each event has a route-classified state and foreground screenshot receipt.
+- [x] Existing frozen, geometry, context isolation, attachment, composite and normal Send assertions use the posted event route; layout, open, preview width, chat and project commands are marked as seams.
+- [x] Review repair: parse page snippets under Host.evaluate's wrapper, click Undo and Send through posted hit-tested events, classify mixed viewport/drawing and provider interception receipts, and explicitly skip foreground routes in background mode.
+- [ ] Manager: run `preview-markup` in the `core` native group on merged main and retain the artifacts. The worker has zero native calls.
+
 ## Preview Mark up (LKM-391)
 
 - [x] Red first: `test/markup-controller.mjs`, `test/preview-markup.mjs` and its fixture, then the implementation.
@@ -15,7 +23,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Repair: the smoke retains the native Add composite (hash, provenance) and presses normal Send; the live harness takes it via `TREZI_LIVE_MARKUP_COMPOSITE`; the synthetic diagram is labelled transport-only.
 - [ ] Manager: run the `preview-markup` smoke on merged main and keep its PNG/JSON (including `native-composite.*` and `send-payload.json`) outside the worktree.
 - [ ] Manager: real Claude and Codex each identify the mark (`TREZI_LIVE_PROVIDERS=1 TREZI_LIVE_ARTIFACTS=<durable folder> TREZI_LIVE_MARKUP_COMPOSITE=<durable folder>/native-composite.json bun run test:provider-image-live`).
-- [ ] Open: app-level key routes (real keyDown through AppKit) for Escape, ⌘Z and the history keys have no native-key or AX evidence; the smoke calls the handlers directly.
+- [ ] Manager: execute the LKM-393 posted AppKit key fixture in the native smoke to establish foreground evidence.
 ## Native chat smoke: landing row check raced the real landing (LKM-392)
 
 - [x] `src/native/smoke-chat.ts`: hold the landing on the controller for the beam and row checks, then let the provider's `done` run the real landing, which ends the turn itself.
