@@ -144,6 +144,8 @@
     "test:measure-distance": "bun test/measure-distance.mjs",
     "test:guide-distance": "bun test/guide-distance.mjs",
     "test:preview-overlay": "bun test/preview-overlay.mjs",
+    "test:preview-markup": "bun test/preview-markup.mjs",
+    "test:markup-controller": "bun test/markup-controller.mjs",
     "test:key-shortcuts": "bun test/key-shortcuts.mjs",
     "test:menu-first-shortcuts": "bun test/menu-first-shortcuts.mjs",
     "test:agent-load-routing": "bun test/agent-load-routing.mjs",

@@ -1,5 +1,9 @@
 # Preview overlay: rulers, guides and layout grids
 
+Mark up (LKM-391) is a separate native overlay, not part of this one: it draws on a frozen
+capture of the preview, in `src/native/PreviewMarkup.swift`, and adds the result to the
+composer through `src/native/markup-controller.ts`. It shares no state with pinned notes.
+
 LKM-205. A design overlay over the preview, in the style of Squints. The user's project
 DOM and CSS never change: everything is drawn by native views above the web view, and
 the page keeps its input except on a ruler or within 3 pt of an unlocked guide.

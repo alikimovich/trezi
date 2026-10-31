@@ -251,6 +251,7 @@ final class WorkspaceLayout {
         host.previewLoad.place(in: page, visible: shown && host.views["preview"]?.isHidden == false)
         // Rulers along the preview area, zeroed at the page origin; guides and grids over the page (LKM-205).
         host.previewOverlay?.place(page: page, area: available, scale: zoom * (host.views["preview"]?.magnification ?? 1), radius: radius, visible: shown && host.views["preview"]?.isHidden == false)
+        host.markup?.place(area: available)
         host.placeSpeedBadge()
         var occluders: [NSRect] = []
         if host.threeD.active {

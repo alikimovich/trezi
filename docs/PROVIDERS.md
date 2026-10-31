@@ -1220,6 +1220,10 @@ stand-in CLI, in-process and in a supervised helper) and Claude's by
 `TREZI_LIVE_CODEX_MODEL=<id>`) is the
 comprehension proof: real turns name randomly generated pictures while the on-disk copy
 is a blank decoy, and it writes a receipt with the provider, model and tested SHA.
+Its Mark up turn (LKM-391) uses a generated 256 px diagram: transport proof only, not
+native-origin. With `TREZI_LIVE_MARKUP_COMPOSITE=<dir>/native-composite.json` (retained by
+the `preview-markup` smoke next to its PNG, with hash and provenance) it adds a turn on that
+exact composite and the note the chat attached, with a fixed instruction.
 
 Originals live where they already were (the picked file) or in the profile's private
 attachments folder, which the agent can read; Trezi does not copy them into the chat's

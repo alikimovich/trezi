@@ -110,6 +110,7 @@ export interface NativeShellAction {
     | 'select-object'
     | 'reload-hard'
     | 'restart-clean'
+    | 'markup'
   id?: string
   value?: string
   project?: string
