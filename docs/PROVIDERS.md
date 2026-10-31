@@ -39,7 +39,7 @@ capabilities instead of assuming Claude, Codex, gateways, and Gemini are interch
 | Trezi question cards | Yes (`AskUserQuestion`) | Yes (`ask_user`) | Yes, through Codex | No |
 | Answer components in chat (`chat_ui` options and form) | Yes | Yes | Yes, through Codex | No |
 | Trezi approve/deny cards | Yes | No SDK approval event | No SDK approval event | No |
-| Image input | Yes | Not wired | Not wired | Not wired |
+| Image input | Yes | Yes, as `--image` files (LKM-390) | Yes, through Codex; understanding depends on the endpoint model | No: the chat states it and the agent is told (LKM-390) |
 | Resume provider thread | Yes | Yes (LKM-346) | Yes, through Codex | No (summary seed) |
 | Detached background agents (comments + visual edits) | Yes | Yes | Yes, through Codex | Disabled |
 | Custom endpoint | No | Built-in ChatGPT seat | Yes (`/responses`) | No |
@@ -157,8 +157,9 @@ Codex, and utility calls get none of it. Details: `docs/WORKTREES.md`.
 
 Preview observation is on demand and shows the current user view, not necessarily
 the calling chat’s private worktree. Codex screenshot tool output is separate from
-composer image attachments, which remain unwired. Restart existing provider sessions
-to pick up the new tool configuration and instructions.
+composer image attachments, which reach Codex as image input
+([attachments](#attachments-never-fail-a-turn-lkm-166)). Restart existing provider
+sessions to pick up the new tool configuration and instructions.
 
 This is prompt-level enforcement, not a runtime tool-call gate. Existing sessions
 need to be recreated to receive updated rules. A preview still serving code from
@@ -1192,8 +1193,33 @@ images, 14 MiB each, 20 MiB total), so the chat controller only ever hands it
   refuses images over 10 MiB, and files over 64 MiB are referenced by path only.
 - **Other files** (PDF, text, code) are listed by their path under `[Attached files]`.
 - **Anything that cannot be attached** (no readable path, a save that failed, more
-  images than a turn takes) is named in a `[Not attached: …]` line in the message to the
-  agent. The turn is sent regardless.
+  images than a turn takes, an image that is invalid or over the limits with no preview)
+  is named in a `[Not attached: …]` line in the message to the agent. The turn is sent
+  regardless.
+
+The header only calls an image part of the message when that turn carries it (LKM-390):
+an image the limits left out stays a plain `[Attached files]` path. Delivery per provider:
+
+- **Claude** takes base64 vision blocks (`InputStream.push`, `src/main/backends/claude.ts`).
+- **Codex and connections** take files: the SDK's `local_image`, the CLI's `--image`, on
+  first, resumed, seeded and queued turns alike. `src/main/backends/codex-images.ts` writes
+  private copies (owner-only, under the helper's temp folder) when the turn starts and
+  removes them when it ends, after every retry, seeded run and model fallback, so a
+  queued turn holds none and Stop, an error or a crash leaves none. A helper killed
+  mid-turn cannot clean up; the next image turn removes copies older than a day. If the
+  copies cannot be written the turn still runs: the chat shows a status and the prompt
+  gets a `[Not attached: …]` line. No store is added, and no image data enters a prompt.
+- **Gemini** has no image input. `planAttachments` sends it no image, lists the paths as
+  files, names each in `[Not attached: …]` and shows the statement in the chat. An image
+  that reaches the adapter anyway (choices not loaded yet) gets the same statement there.
+
+The Codex route is covered by `test/codex-composer-images.mjs` (the composer through a
+stand-in CLI, in-process and in a supervised helper) and Claude's by
+`test/claude-image-transport.mjs`; both prove transport only. `test/provider-image-live.mjs`
+(live tier, `TREZI_LIVE_PROVIDERS=1`, optional `TREZI_LIVE_ARTIFACTS=<dir>` and
+`TREZI_LIVE_CODEX_MODEL=<id>`) is the
+comprehension proof: real turns name randomly generated pictures while the on-disk copy
+is a blank decoy, and it writes a receipt with the provider, model and tested SHA.
 
 Originals live where they already were (the picked file) or in the profile's private
 attachments folder, which the agent can read; Trezi does not copy them into the chat's

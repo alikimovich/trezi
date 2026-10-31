@@ -2,13 +2,14 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type {
   CodexOptions,
+  Input,
   ModelReasoningEffort,
   Thread,
   ThreadItem,
   ThreadOptions
 } from '@openai/codex-sdk'
 import { app, type NativeView } from '../../native/platform'
-import type { AgentEvent, AgentOptions } from '../../shared/api'
+import type { AgentEvent, AgentOptions, ImageAttachment } from '../../shared/api'
 import { projectKey } from '../../shared/projectKey'
 import {
   addUsage,
@@ -32,6 +33,7 @@ import { authorizedTool, runTreziTool, sessionTool } from '../session-tools'
 import { registerTreziAgentTools, type TreziAgentToolRegistration } from '../trezi-agent-tools'
 import { RESUME_NOTE, seedPrompt } from './claude-resume'
 import { codexSeatAuthFailure } from './codex-auth'
+import { codexInput, deliverImages } from './codex-images'
 import { gitAccessHook, isolatedCodexConfig, treziMcpConfig, verifyTreziMcp } from './codex-mcp'
 import {
   codexFallbackNotice,
@@ -542,7 +544,11 @@ async function startSession(
   let chain: Promise<void> = Promise.resolve()
   // `seeded` is the same turn for a new thread that replaces a saved one the CLI could
   // not continue: the chat's summary ahead of the message (LKM-346).
-  const runTurn = async (text: string, seeded: string): Promise<void> => {
+  const runTurn = async (
+    text: string,
+    seeded: string,
+    images?: ImageAttachment[]
+  ): Promise<void> => {
     if (aborted || disposed) return
     if (!thread) {
       // Startup failed. Missing CLI / not logged in is deliberately auth-shaped
@@ -553,6 +559,28 @@ async function startSession(
       emit({ type: 'done' })
       return
     }
+    // Written when the turn starts, so a queued turn holds no files, and removed once
+    // every run of it (retries, a seeded thread, a model fallback) has ended.
+    const delivery = deliverImages(images)
+    if (delivery.status) emit({ type: 'status', text: delivery.status })
+    try {
+      await driveTurn(delivery.note + text, delivery.note + seeded, delivery.paths)
+    } finally {
+      delivery.remove()
+    }
+    // The iterator is closed now. A later session shutdown must not abort its
+    // already-finished child (the SDK removes that child's error listener on close).
+    turnAbort = null
+    cap.finalize()
+    emit({ type: 'done' })
+  }
+
+  const driveTurn = async (
+    text: string,
+    seeded: string,
+    imagePaths: readonly string[]
+  ): Promise<void> => {
+    if (!thread) return
     let resumeId = thread.id
     if (thread.id && openThread) thread = openThread(thread.id)
     turnAbort = new AbortController()
@@ -561,14 +589,14 @@ async function startSession(
     if (thread.id) startUsageWatch(thread.id)
     let prompt = text
     const run = async (current: Thread): Promise<Attempt> => {
-      const result = await attempt(current, prompt)
+      const result = await attempt(current, codexInput(prompt, imagePaths))
       if (!result.lostResume || !openThread || disposed || aborted || turnAbort?.signal.aborted)
         return result
       emit({ type: 'status', text: RESUME_NOTE })
       stopUsageWatch()
       prompt = seeded
       thread = openThread(null)
-      const fresh = await attempt(thread, prompt)
+      const fresh = await attempt(thread, codexInput(prompt, imagePaths))
       resumeId = thread.id
       return fresh
     }
@@ -623,15 +651,10 @@ async function startSession(
     // `turn.completed`, so the rollout is the only record of what it spent.
     await usageWatch?.poll().catch(() => {})
     stopUsageWatch()
-    // The iterator is closed now. A later session shutdown must not abort its
-    // already-finished child (the SDK removes that child's error listener on close).
-    turnAbort = null
-    cap.finalize()
-    emit({ type: 'done' })
   }
 
   /** One run of the turn's prompt: the model this login rejected, or null. */
-  const attempt = async (thread: Thread, text: string): Promise<Attempt> => {
+  const attempt = async (thread: Thread, input: Input): Promise<Attempt> => {
     const signal = turnAbort?.signal
     // Per turn, not per session: a retry cause from an earlier turn must not be
     // grafted onto a later, unrelated failure.
@@ -669,7 +692,7 @@ async function startSession(
     let it: AsyncIterator<unknown> | null = null
     let closed = false
     try {
-      const { events } = await thread.runStreamed(text, { signal: streamAbort.signal })
+      const { events } = await thread.runStreamed(input, { signal: streamAbort.signal })
       const iterator = events[Symbol.asyncIterator]()
       it = iterator
       for (;;) {
@@ -781,15 +804,14 @@ async function startSession(
     key,
     root,
     options,
-    // Composer image attachments are not wired yet; MCP screenshot results are images.
-    send: (text, _images) => {
+    send: (text, images) => {
       const rules = (): string =>
         `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n`
       const prompt = firstTurn ? `${rules()}${text}` : text
       // A thread that replaces a lost saved one is new: it needs the rules too.
       const seeded = resuming ? `${rules()}${seedPrompt(ctx?.resumeSummary ?? '', text)}` : prompt
       firstTurn = false
-      chain = chain.then(() => runTurn(prompt, seeded))
+      chain = chain.then(() => runTurn(prompt, seeded, images))
     },
     pending,
     emit,

@@ -290,6 +290,11 @@ export class NativeChatController {
   private geminiListed() {
     return this.choices.some((c) => c.provider === 'gemini' && !c.connectionId)
   }
+  /** Gemini alone has no image input; with Gemini off, or a connection, the turn runs elsewhere. */
+  private takesImages(chat: Chat) {
+    const { provider, connectionId } = chat.settings
+    return !(provider === 'gemini' && !connectionId && this.geminiListed())
+  }
   private startReadinessIfVisible() {
     if (!this.layout.visible || !this.active || this.readinessStarted) return
     this.readinessStarted = true
@@ -762,11 +767,19 @@ export class NativeChatController {
       uptimeNs: process.hrtime.bigint().toString()
     })
     try {
-      const plan = await planAttachments(attachments, (a) =>
-        this.services.invoke('attachments:save', { mediaType: a.type, data: a.data }, a.name)
+      const plan = await planAttachments(
+        attachments,
+        (a) =>
+          this.services.invoke('attachments:save', { mediaType: a.type, data: a.data }, a.name),
+        this.takesImages(chat)
       )
       if (cancellation !== chat.cancellation || this.chats.get(chat.chat) !== chat)
         throw new Error('Message cancelled before sending.')
+      if (plan.notice) {
+        chat.activityDetail = plan.notice
+        append(chat, plan.notice, true)
+        this.changed(chat)
+      }
       const prompt = plan.header + (selection?.prompt ?? '') + text
       await this.services.invoke(
         'agent:send',

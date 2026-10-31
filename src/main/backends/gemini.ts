@@ -254,13 +254,22 @@ async function startSession(
     key,
     root,
     options,
-    // Gemini CLI is text-only here; images (paste/drop) are ignored for now.
-    send: (text, _images) => {
+    // Gemini CLI is text-only here. The chat controller keeps images away from it and says
+    // so (`planAttachments`); any image that still arrives is said here, never dropped silently.
+    send: (text, images) => {
+      const count = images?.length ?? 0
+      const note = count
+        ? `[Not attached: ${count} image(s); Gemini cannot take images here, so they are not in this message]\n\n`
+        : ''
       const prompt = firstTurn
-        ? `${treziRules({ projectMemory: ctx?.projectMemory })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n${text}`
-        : text
+        ? `${treziRules({ projectMemory: ctx?.projectMemory })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n${note}${text}`
+        : `${note}${text}`
       firstTurn = false
-      chain = chain.then(() => runTurn(prompt))
+      chain = chain.then(() => {
+        if (count)
+          emit({ type: 'status', text: `Gemini cannot take images: ${count} image(s) not sent` })
+        return runTurn(prompt)
+      })
     },
     setModel: async (next) => {
       model = next && next !== 'default' ? next : undefined

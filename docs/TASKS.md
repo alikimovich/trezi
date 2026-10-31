@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Codex: composer images as real image input (LKM-390)
+
+- [x] Red first: `test/codex-composer-images.mjs` failed with no `--image` on the CLI (`0 !== 1`), then implement `src/main/backends/codex-images.ts` and `codex.ts`.
+- [x] Honest header: `planAttachments` claims only images the turn carries, names invalid and over-limit ones, and a provider without image input gets a visible statement (Gemini, with an adapter backstop).
+- [x] Claude transport regression `test/claude-image-transport.mjs`; `provider-image-live` live test, receipt and alias.
+- [ ] Manager: run the live proof on a Codex and Claude login: `TREZI_LIVE_PROVIDERS=1 TREZI_LIVE_ARTIFACTS=<durable folder> TREZI_LIVE_CODEX_MODEL=<id> bun run test:provider-image-live`.
+
 ## Sidebar: running chats shimmer their title instead of a left loader (LKM-389)
 
 - [x] `src/native/SidebarTitleShimmer.swift`: the in-chat band and timing as a layer mask on the title's one label; still and dimmed under Reduce Motion; nothing runs without a window. The spinner and its constraints are gone from `SidebarChatCell`.

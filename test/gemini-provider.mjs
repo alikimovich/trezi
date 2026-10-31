@@ -277,14 +277,15 @@ try {
   // that fails without any sign-in is an `auth` error (the chat's sign-in card).
   const home = join(scratch, 'home'),
     bin = join(scratch, 'gemini'),
-    seen = join(scratch, 'model')
+    seen = join(scratch, 'model'),
+    prompts = join(scratch, 'prompts')
   mkdirSync(home)
   writeFileSync(
     bin,
     [
       '#!/bin/sh',
       'if [ "$1" = "--version" ]; then echo 0.9.0; exit 0; fi',
-      `for a in "$@"; do if [ "$prev" = "-m" ]; then echo "$a" > '${seen}'; fi; prev="$a"; done`,
+      `for a in "$@"; do if [ "$prev" = "-m" ]; then echo "$a" > '${seen}'; fi; if [ "$prev" = "-p" ]; then echo "$a" >> '${prompts}'; fi; prev="$a"; done`,
       'if [ -n "$FAIL" ]; then exit 1; fi',
       `echo '{"type":"init"}'`,
       `echo '{"type":"message","role":"assistant","text":"PONG"}'`,
@@ -311,6 +312,21 @@ try {
   await session.setModel('flash')
   await turn('again')
   assert.equal(readFileSync(seen, 'utf8').trim(), 'flash', 'a model switch applies next turn')
+  // LKM-390: an image that reaches this text-only adapter is said, never dropped silently.
+  const imageStart = events.length
+  session.send('with a picture', [{ mediaType: 'image/png', data: 'iVBORw0KGgo=' }])
+  for (let i = 0; i < 500 && !events.slice(imageStart).some((e) => e.type === 'done'); i++)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  const imageTurn = events.slice(imageStart)
+  assert.ok(
+    imageTurn.some((e) => e.type === 'status' && /cannot take images: 1 image/.test(e.text)),
+    'the chat states the image was not sent'
+  )
+  assert.match(
+    readFileSync(prompts, 'utf8'),
+    /\[Not attached: 1 image\(s\); Gemini cannot take images[^\n]*\n\nwith a picture\n$/,
+    'the agent is told too'
+  )
   process.env.FAIL = '1'
   const failed = await turn('fail')
   assert.equal(failed[0].code, 'auth')

@@ -225,6 +225,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | --- | --- | --- | --- |
 | `src/main/agent-git-access.ts` | helper | RepositoryOwner | `git symbolic-ref` read of the live branch for the agent command guard (LKM-188) |
 | `src/main/backends/claude-login.ts` | helper | ProviderOwner (provider helper) | `claude auth status` probes (LKM-119), inside the supervised helper |
+| `src/main/backends/codex-images.ts` | helper | ProviderOwner (provider helper) | Private per-turn temp copies of composer images for `--image` (LKM-390), inside the supervised helper |
 | `src/main/backends/codex.ts` | helper | ProviderOwner (provider helper) | Codex SDK process, inside the supervised helper |
 | `src/main/backends/gemini.ts` | helper | ProviderOwner (provider helper) | Gemini CLI process, inside the supervised helper |
 | `src/main/backends/live-tree-watch.ts` | helper | RepositoryOwner | `git status` and `git rev-parse` reads of the live checkout for a Full-access Codex turn's snapshots (LKM-163, LKM-215) |
