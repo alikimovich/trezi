@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// The conversation coordinator (S11, LKM-97). Under the Swift launch the service owns
 /// what a chat *is* between provider events: its persisted record (transcripts, titles,
@@ -291,7 +292,7 @@ final class ConversationOwner: @unchecked Sendable {
             let project = PeerRow.canonical(try body.path("project"))
             let exclude = try body.string("exclude")
             let candidates = peerRows.values.filter { $0.project == project && $0.id != exclude }
-                .sorted { $0.version < $1.version }
+                .sorted { $0.version > $1.version }
             var rows: [PeerRow] = []
             var bytes = 0
             for row in candidates {
@@ -299,17 +300,29 @@ final class ConversationOwner: @unchecked Sendable {
                 rows.append(row); bytes += row.byteCount
             }
             let own = peerRows[exclude]
-            let advisory: [JSValue] = rows.compactMap { peer in
+            var advisory: [JSValue] = rows.compactMap { peer in
                 guard let own, own.project == project else { return nil }
-                let exact = Set(own.observedFiles).intersection(peer.observedFiles).sorted()
-                let possible = Set(own.intendedFiles).intersection(peer.intendedFiles).sorted()
-                guard !exact.isEmpty || !possible.isEmpty else { return nil }
-                let named = Array((exact.isEmpty ? possible : exact).prefix(2))
+                let exact = Set(own.observedKeys).intersection(peer.observedKeys)
+                let possible = Set(own.intendedKeys).intersection(peer.intendedKeys)
+                let uncertain = own.observedTruncated || peer.observedTruncated ||
+                    own.intendedTruncated || peer.intendedTruncated
+                guard !exact.isEmpty || !possible.isEmpty || uncertain else { return nil }
+                let named = exact.isEmpty ? Set(own.intendedFiles).intersection(peer.intendedFiles).sorted() :
+                    own.observedFiles.enumerated().compactMap { index, path in
+                        let key = own.observedDisplayKeys[index]
+                        return exact.contains(key) && peer.observedDisplayKeys.contains(key) ? path : nil
+                    }
                 return Self.object([("peer", .string(JSText(peer.id))),
                                     ("kind", .string(JSText(exact.isEmpty ? "possible-overlap" : "exact-file"))),
-                                    ("files", RepositoryOwner.strings(named))])
+                                    ("files", RepositoryOwner.strings(Array(named.prefix(2))))])
             }
-            return Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
+            var response = Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
+            while response.utf8().count > 6144 && !rows.isEmpty {
+                let removed = rows.removeLast()
+                advisory.removeAll { $0["peer"]?.text?.string == removed.id }
+                response = Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
+            }
+            return response
 
         // Reads
         case "snapshot":
@@ -338,8 +351,14 @@ final class ConversationOwner: @unchecked Sendable {
     private func prunePeers() {
         let cutoff = now() - 5 * 60 * 1000
         peerRows = peerRows.filter { $0.value.heartbeat >= cutoff }
-        if peerRows.count > 8 {
-            for row in peerRows.values.sorted(by: { $0.version < $1.version }).prefix(peerRows.count - 8) {
+        for project in Set(peerRows.values.map(\.project)) {
+            let projectRows = peerRows.values.filter { $0.project == project }.sorted { $0.version < $1.version }
+            for row in projectRows.prefix(max(0, projectRows.count - 8)) {
+                peerRows.removeValue(forKey: row.id)
+            }
+        }
+        if peerRows.count > 64 {
+            for row in peerRows.values.sorted(by: { $0.version < $1.version }).prefix(peerRows.count - 64) {
                 peerRows.removeValue(forKey: row.id)
             }
         }
@@ -460,6 +479,11 @@ private struct PeerRow {
     let goal: String
     let intendedFiles: [String]
     let observedFiles: [String]
+    let intendedKeys: [String]
+    let observedKeys: [String]
+    let observedDisplayKeys: [String]
+    let intendedTruncated: Bool
+    let observedTruncated: Bool
     let target: String
     let base: String
     let phase: String
@@ -475,11 +499,22 @@ private struct PeerRow {
         return String(text.prefix(max)).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
-    private static func files(_ value: JSValue?) throws -> [String] {
-        guard case .array(let values)? = value, values.count <= 16 else { throw ServiceContractFailure.invalidRequest }
-        return Array(try Set(values.map { try text($0, max: 96) }.filter {
-            !$0.isEmpty && !$0.hasPrefix("/") && !$0.split(separator: "/").contains("..")
-        }).sorted().prefix(4))
+    private static func files(_ value: JSValue?) throws -> ([String], [String], [String], Bool) {
+        guard case .array(let values)? = value, values.count <= 64 else { throw ServiceContractFailure.invalidRequest }
+        var paths: [String] = []
+        var truncated = false
+        for value in values {
+            guard let raw = value.text?.string else { throw ServiceContractFailure.invalidRequest }
+            if raw.utf8.count > 4096 { truncated = true; continue }
+            guard !raw.isEmpty, !raw.hasPrefix("/"), !raw.split(separator: "/").contains("..") else { continue }
+            paths.append(raw)
+        }
+        let unique = Array(Set(paths)).sorted()
+        let keys = unique.map { path in
+            SHA256.hash(data: Data(path.utf8)).map { String(format: "%02x", $0) }.joined()
+        }
+        return (Array(unique.prefix(4).map { String($0.prefix(96)) }), keys,
+                Array(keys.prefix(4)), truncated)
     }
 
     init(_ value: JSValue?, at: Double) throws {
@@ -489,8 +524,14 @@ private struct PeerRow {
         origin = try Self.text(value?["origin"], max: 24)
         parent = try Self.text(value?["parent"], max: 128)
         goal = try Self.text(value?["goal"], max: 160)
-        intendedFiles = try Self.files(value?["intendedFiles"])
-        observedFiles = try Self.files(value?["observedFiles"])
+        let intended = try Self.files(value?["intendedFiles"])
+        let observed = try Self.files(value?["observedFiles"])
+        intendedFiles = intended.0; intendedKeys = intended.1
+        observedFiles = observed.0; observedKeys = observed.1; observedDisplayKeys = observed.2
+        if case .bool(let flag)? = value?["intendedTruncated"] { intendedTruncated = intended.3 || flag }
+        else { intendedTruncated = intended.3 }
+        if case .bool(let flag)? = value?["observedTruncated"] { observedTruncated = observed.3 || flag }
+        else { observedTruncated = observed.3 }
         target = try Self.text(value?["target"] ?? .string(JSText("")), max: 100)
         base = try Self.text(value?["base"], max: 64)
         phase = try Self.text(value?["phase"], max: 24)
@@ -503,6 +544,9 @@ private struct PeerRow {
     private init(_ old: Self, version: Int) {
         id = old.id; project = old.project; origin = old.origin; parent = old.parent
         goal = old.goal; intendedFiles = old.intendedFiles; observedFiles = old.observedFiles
+        intendedKeys = old.intendedKeys; observedKeys = old.observedKeys
+        observedDisplayKeys = old.observedDisplayKeys
+        intendedTruncated = old.intendedTruncated; observedTruncated = old.observedTruncated
         target = old.target; base = old.base; phase = old.phase
         heartbeat = old.heartbeat; self.version = version
     }
@@ -516,6 +560,8 @@ private struct PeerRow {
             ("goal", .string(JSText(goal))),
             ("intendedFiles", RepositoryOwner.strings(intendedFiles)),
             ("observedFiles", RepositoryOwner.strings(observedFiles)),
+            ("intendedTruncated", .bool(intendedTruncated)),
+            ("observedTruncated", .bool(observedTruncated)),
             ("target", .string(JSText(target))), ("base", .string(JSText(base))),
             ("phase", .string(JSText(phase))), ("heartbeat", .number(heartbeat)),
             ("version", .number(Double(version)))

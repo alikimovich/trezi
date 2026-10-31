@@ -1,12 +1,18 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { isAbsolute, relative } from 'node:path'
+import { promisify } from 'node:util'
 import type { PeerWorkRow, PeerWorkView } from './conversation-owner'
 import { swiftConversationOwner } from './conversation-owner'
 
 const rows = new Map<string, PeerWorkRow>()
 const turnByChat = new Map<string, string>()
 const workRootById = new Map<string, string>()
+const generations = new Map<string, symbol>()
+const pendingReads = new Map<string, Promise<string[]>>()
+const asyncGit = promisify(execFile)
+// A failed or oversized Git read has unknown files: report possible overlap.
+const incomplete = '\0'
 let heartbeat: ReturnType<typeof setInterval> | null = null
 
 function keepHeartbeat(): void {
@@ -14,7 +20,7 @@ function keepHeartbeat(): void {
   heartbeat = setInterval(() => {
     const owner = swiftConversationOwner()
     if (!owner) return
-    for (const row of [...rows.values()].slice(-8)) void owner.peerUpsert(row).catch(() => {})
+    for (const row of rows.values()) void publish(row).catch(() => {})
   }, 60_000)
   heartbeat.unref?.()
 }
@@ -38,9 +44,7 @@ export function peerBase(root: string): string {
 export function peerIntendedFiles(text: string): string[] {
   return [
     ...text.slice(0, 2048).matchAll(/(?:^|[\s`'"(])([\w./-]+\.[a-z0-9]{1,8})(?=:\d+|$|[\s`'"),])/gi)
-  ]
-    .map((match) => match[1])
-    .slice(0, 4)
+  ].map((match) => match[1])
 }
 
 export function peerTarget(text: string): string | undefined {
@@ -49,40 +53,47 @@ export function peerTarget(text: string): string | undefined {
 }
 
 /** Read actual worktree changes, including shell edits that never used an Edit tool. */
-export function peerObservedFiles(root: string, captured: string[]): string[] {
-  try {
-    const changed = execFileSync('git', ['-C', root, 'diff', 'HEAD', '--name-only'], {
+export function peerObservedFiles(root: string, captured: string[], id: string): Promise<string[]> {
+  const base = rows.get(id)?.base
+  if (!base) return Promise.resolve([...captured, incomplete])
+  const key = `${id}\0${root}\0${base}`
+  const pending = pendingReads.get(key)
+  if (pending) return pending
+  const read = Promise.all([
+    asyncGit('git', ['-C', root, 'diff', base, '--name-only'], { encoding: 'utf8', timeout: 2000 }),
+    asyncGit('git', ['-C', root, 'ls-files', '--others', '--exclude-standard'], {
       encoding: 'utf8',
-      timeout: 2000,
-      stdio: ['ignore', 'pipe', 'ignore']
+      timeout: 2000
     })
-      .trim()
-      .split('\n')
-    const untracked = execFileSync(
-      'git',
-      ['-C', root, 'ls-files', '--others', '--exclude-standard'],
-      {
-        encoding: 'utf8',
-        timeout: 2000,
-        stdio: ['ignore', 'pipe', 'ignore']
-      }
-    )
-      .trim()
-      .split('\n')
-    return [...new Set([...changed, ...untracked].filter(Boolean))]
-  } catch {
-    return captured
-  }
+  ])
+    .then(([changed, untracked]) => [
+      ...new Set([...changed.stdout.split('\n'), ...untracked.stdout.split('\n')].filter(Boolean))
+    ])
+    .catch(() => [...captured, incomplete])
+    .finally(() => pendingReads.delete(key))
+  pendingReads.set(key, read)
+  return read
 }
 
-function files(paths: string[], root: string): string[] {
-  return [
+function files(paths: string[], root: string): { paths: string[]; truncated: boolean } {
+  const normalized = [
     ...new Set(
       paths
         .map((path) => (isAbsolute(path) ? relative(root, path) : path))
-        .filter((path) => path && path !== '..' && !path.startsWith('../') && !isAbsolute(path))
+        .filter(
+          (path) =>
+            path &&
+            path !== incomplete &&
+            path !== '..' &&
+            !path.startsWith('../') &&
+            !isAbsolute(path)
+        )
     )
-  ].slice(0, 4)
+  ].sort()
+  return {
+    paths: normalized.slice(0, 64),
+    truncated: normalized.length > 64 || paths.includes(incomplete)
+  }
 }
 
 /** A narrow app-lifecycle writer; the Swift owner remains the only feed authority. */
@@ -91,16 +102,27 @@ export async function startPeer(
   chat?: string,
   workRoot = row.project
 ): Promise<void> {
+  const intended = files(row.intendedFiles, row.project)
+  const observed = files(row.observedFiles, row.project)
   const bounded = {
     ...row,
-    intendedFiles: files(row.intendedFiles, row.project),
-    observedFiles: files(row.observedFiles, row.project)
+    intendedFiles: intended.paths,
+    observedFiles: observed.paths,
+    intendedTruncated: row.intendedTruncated || intended.truncated,
+    observedTruncated: row.observedTruncated || observed.truncated
   }
-  await swiftConversationOwner()?.peerUpsert(bounded)
   rows.set(row.id, bounded)
   workRootById.set(row.id, workRoot)
+  const generation = Symbol(row.id)
+  generations.set(row.id, generation)
   keepHeartbeat()
   if (chat) turnByChat.set(chat, row.id)
+  await swiftConversationOwner()?.peerUpsert(bounded)
+  if (generations.get(row.id) !== generation) await swiftConversationOwner()?.peerRemove(row.id)
+  else {
+    const current = rows.get(row.id)
+    if (current && current !== bounded) await publish(current)
+  }
 }
 
 export function observePeer(
@@ -111,16 +133,50 @@ export function observePeer(
 ): void {
   const row = rows.get(id)
   if (!row) return
-  const next = { ...row, observedFiles: files(paths, root), phase: phase ?? row.phase }
+  const observed = files(paths, root)
+  const observedTruncated =
+    observed.truncated || (row.observedTruncated && observed.paths.length === 64)
+  if (
+    JSON.stringify(row.observedFiles) === JSON.stringify(observed.paths) &&
+    row.observedTruncated === observedTruncated &&
+    (phase ?? row.phase) === row.phase
+  )
+    return
+  const next = {
+    ...row,
+    observedFiles: observed.paths,
+    observedTruncated,
+    phase: phase ?? row.phase
+  }
   rows.set(id, next)
-  void swiftConversationOwner()
-    ?.peerUpsert(next)
-    .catch(() => {})
+  void publish(next).catch(() => {})
+}
+
+/** After beforeTurn syncs live changes, the current revision is this turn's base. */
+export async function updatePeerBase(id: string, base: string): Promise<void> {
+  const row = rows.get(id)
+  if (!row || !base || row.base === base) return
+  const updated = { ...row, base }
+  rows.set(id, updated)
+  await publish(updated)
+}
+
+async function publish(row: PeerWorkRow): Promise<void> {
+  const owner = swiftConversationOwner()
+  if (!owner) return
+  const generation = generations.get(row.id)
+  await owner.peerUpsert(row)
+  if (generations.get(row.id) !== generation || !rows.has(row.id)) await owner.peerRemove(row.id)
+  else {
+    const current = rows.get(row.id)
+    if (current && current !== row) await publish(current)
+  }
 }
 
 export function finishPeer(id: string, chat?: string): void {
   if (!id) return
   rows.delete(id)
+  generations.delete(id)
   workRootById.delete(id)
   if (!rows.size && heartbeat) {
     clearInterval(heartbeat)
@@ -145,14 +201,27 @@ async function refreshPeers(project: string): Promise<void> {
   const owner = swiftConversationOwner()
   if (!owner) return
   const identity = canonical(project)
-  const active = [...rows.values()].filter((row) => canonical(row.project) === identity).slice(0, 8)
+  const active = [...rows.values()].filter((row) => canonical(row.project) === identity)
   for (const row of active) {
     const root = workRootById.get(row.id) ?? row.project
-    const observedFiles = files(peerObservedFiles(root, []), root)
-    if (JSON.stringify(observedFiles) === JSON.stringify(row.observedFiles)) continue
-    const updated = { ...row, observedFiles }
-    await owner.peerUpsert(updated)
+    const generation = generations.get(row.id)
+    const observed = files(await peerObservedFiles(root, row.observedFiles, row.id), root)
+    if (generations.get(row.id) !== generation || !rows.has(row.id)) continue
+    const observedTruncated =
+      observed.truncated || (row.observedTruncated && observed.paths.length === 64)
+    if (
+      JSON.stringify(observed.paths) === JSON.stringify(row.observedFiles) &&
+      observedTruncated === row.observedTruncated
+    )
+      continue
+    const updated = { ...row, observedFiles: observed.paths, observedTruncated }
     rows.set(row.id, updated)
+    await owner.peerUpsert(updated)
+    if (generations.get(row.id) !== generation || !rows.has(row.id)) await owner.peerRemove(row.id)
+    else {
+      const current = rows.get(row.id)
+      if (current && current !== updated) await publish(current)
+    }
   }
 }
 
@@ -167,7 +236,7 @@ export async function peerContext(root: string, self: string): Promise<string> {
   if (!view.rows.length) return ''
   const rows: PeerWorkRow[] = []
   for (const row of view.rows) {
-    if (Buffer.byteLength(JSON.stringify([...rows, row])) > 3500) break
+    if (Buffer.byteLength(JSON.stringify([...rows, row])) > 3500) continue
     rows.push(row)
   }
   let advisories = view.advisories.filter((item) => rows.some((row) => row.id === item.peer))

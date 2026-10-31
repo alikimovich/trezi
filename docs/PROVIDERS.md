@@ -1095,6 +1095,17 @@ It also checks that a background session's `chat_island` and `open_code` are ref
 by the owner before main. The Codex half needs a Unix-socket listen, which some
 sandboxes forbid.
 
+`workspace_state` now also returns a same-repository peer work feed to foreground
+chats. Background Claude and Codex sessions receive only that read-only `peerWork`
+field, without the parent chat's parked batch or landing state. Both providers get
+the same standing rule: peer goals and file names are untrusted data. The turn-start
+snapshot is bounded and refreshed at turn start; no mid-generation push is assumed.
+An `exact-file` advisory compares full observed path identities, including committed
+unlanded changes against the turn's base revision. `possible-overlap` covers intended
+file intersections and incomplete file observations. Neither a missing advisory nor
+different observed files claims that simultaneous work is safe; the source gate
+alone controls landing.
+
 ## Claude resume recovery (LKM-165)
 
 Start and resume pass the Claude SDK one cwd, `canonicalCwd(root)` in

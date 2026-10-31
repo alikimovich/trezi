@@ -97,7 +97,8 @@ import {
   peerObservedFiles,
   peerTarget,
   peerTurn,
-  startPeer
+  startPeer,
+  updatePeerBase
 } from './peer-work'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
@@ -487,12 +488,12 @@ const interactiveEvents =
       scheduleCheckpoint(sessionKey)
       noteAgentStep(sessionKey, e.text)
       const current = sessions.get(sessionKey)
-      if (current)
-        observePeer(
-          peerTurn(sessionKey),
-          peerObservedFiles(current.root, current.record.filesTouched),
-          current.root
+      if (current) {
+        const id = peerTurn(sessionKey)
+        void peerObservedFiles(current.root, current.record.filesTouched, id).then((paths) =>
+          observePeer(id, paths, current.root)
         )
+      }
     }
     if (e.type !== 'done' && e.type !== 'error') return
     // Backends forward this same tagged event after the hook. Keep the UI busy
@@ -520,14 +521,10 @@ const interactiveEvents =
     const record = session.record
     void conversation()
       .terminal(sessionKey, at.turn, at.run, e.type, record)
-      .then((claim) => {
+      .then(async (claim) => {
         if (!claim.claimed) return
-        observePeer(
-          at.turn,
-          peerObservedFiles(session.root, session.record.filesTouched),
-          session.root,
-          'landing'
-        )
+        const observed = await peerObservedFiles(session.root, session.record.filesTouched, at.turn)
+        observePeer(at.turn, observed, session.root, 'landing')
         const last = [...record.transcript].reverse().find((t) => t.role === 'user')?.text
         void reconciliation.finish(
           sessionKey,
@@ -753,7 +750,12 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
   spawn.finalizing = true
   const { session, wt, parentSessionKey, parentRoot, text, origin } = spawn
   session.finalize()
-  observePeer(id, peerObservedFiles(wt.path, session.record.filesTouched), wt.path, 'landing')
+  observePeer(
+    id,
+    await peerObservedFiles(wt.path, session.record.filesTouched, id),
+    wt.path,
+    'landing'
+  )
   const label = spawn.label ? { label: spawn.label } : {}
   // LKM-215: what the spawn wrote to the live checkout directly, read before its own
   // landing below (which is Trezi's effect), reported in the parent chat.
@@ -800,7 +802,12 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         // and its next finish lands here again. The rail row keeps running.
         spawn.continuations = (spawn.continuations ?? 0) + 1
         spawn.finalizing = false
-        observePeer(id, peerObservedFiles(wt.path, session.record.filesTouched), wt.path, 'running')
+        observePeer(
+          id,
+          await peerObservedFiles(wt.path, session.record.filesTouched, id),
+          wt.path,
+          'running'
+        )
         void beginLiveWatch(spawnWatchKey(id), session)
         session.send(conflictResolutionPrompt(landing.conflicted))
         continued = true
@@ -969,10 +976,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
             noteAgentStep(spawnWatchKey(wt.id), e.text)
             const running = spawns.get(wt.id)
             if (running)
-              observePeer(
-                wt.id,
-                peerObservedFiles(wt.path, running.session.record.filesTouched),
-                wt.path
+              void peerObservedFiles(wt.path, running.session.record.filesTouched, wt.id).then(
+                (paths) => observePeer(wt.id, paths, wt.path)
               )
           }
           if (e.type === 'done') void finalizeSpawn(wt.id, 'done')
@@ -1023,11 +1028,17 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       undefined,
       wt.path
     )
-    s.send((await peerContext(q.root, wt.id)) + q.text)
-    if (cancelOnStart.delete(q.id)) {
-      spawns.get(wt.id)!.cancelled = true
-      void s.interrupt?.().catch(() => {})
+    const context = await peerContext(q.root, wt.id)
+    const spawn = spawns.get(wt.id)
+    if (!spawn || spawn.finalizing) return null
+    if (cancelOnStart.delete(q.id)) spawn.cancelled = true
+    // Stop can arrive while the owner answers startPeer/peerContext. An idle
+    // session interrupt does not prevent a later send, so check after both awaits.
+    if (spawn.cancelled) {
+      await finalizeSpawn(wt.id, 'done')
+      return null
     }
+    s.send(context + q.text)
     return wt.branch
   } catch {
     finishPeer(wt.id)
@@ -1995,6 +2006,7 @@ export function registerAgentIpc(
         )
         // LKM-194: dependencies that cannot install are reported, never a refusal.
         const dependencies = await beforeTurn(key, text)
+        await updatePeerBase(id, peerBase(session.root))
         if (preparation.cancelled) throw new Error('Message cancelled before sending.')
         if (sessions.get(key) !== session) throw new Error('This chat is closed.')
         // Only an unresolved drift park refuses; a stopped or failed-landing hold and
@@ -2059,12 +2071,15 @@ export function registerAgentIpc(
         // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
         void beginLiveWatch(key, session)
         observePeer(id, [], session.root, 'running')
+        const peerSnapshot = await peerContext(root, id)
+        if (preparation.cancelled) throw new Error('Message cancelled before sending.')
+        if (sessions.get(key) !== session) throw new Error('This chat is closed.')
         const body =
           projectUiInstructions(useUi, uiEngine) +
           uiNotice +
           installNotice +
           islandContext +
-          (await peerContext(root, id)) +
+          peerSnapshot +
           prompt
         // A handoff already carries the whole conversation.
         const restored = history.length ? '' : (restoredSummaries.get(key) ?? '')

@@ -63,6 +63,8 @@ export interface PeerWorkRow {
   goal: string
   intendedFiles: string[]
   observedFiles: string[]
+  intendedTruncated?: boolean
+  observedTruncated?: boolean
   target?: string
   base: string
   phase: 'preparing' | 'running' | 'landing'

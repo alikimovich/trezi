@@ -6,7 +6,13 @@ import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setConversationOwner } from '../src/main/conversation-owner.ts'
-import { peerContext } from '../src/main/peer-work.ts'
+import {
+  finishPeer,
+  peerContext,
+  peerView,
+  startPeer,
+  updatePeerBase
+} from '../src/main/peer-work.ts'
 import {
   compileConversationFixture,
   startConversationFixture
@@ -83,6 +89,56 @@ try {
   assert.ok(!peers.rows.some((row) => row.id === 'other-project'), 'project isolation')
   assert.ok(peers.advisories.some((row) => row.peer === 'chat-two' && row.kind === 'exact-file'))
   assert.ok(!peers.advisories.some((row) => row.peer === 'comment-one'))
+  // The displayed four files do not define overlap. The fifth exact path still does.
+  const collidingDisplay = 'a'.repeat(100)
+  await owner.peerUpsert(
+    task(
+      'fifth-own',
+      a,
+      'chat',
+      [0, 1, 2, 3].map((i) => `${collidingDisplay}left-${i}.txt`).concat('shared.txt')
+    )
+  )
+  await owner.peerUpsert(
+    task(
+      'fifth-peer',
+      a,
+      'chat',
+      [0, 1, 2, 3].map((i) => `${collidingDisplay}right-${i}.txt`).concat('shared.txt')
+    )
+  )
+  const fifthAdvisory = (await owner.peers(a, 'fifth-own')).advisories.find(
+    (row) => row.peer === 'fifth-peer'
+  )
+  assert.equal(fifthAdvisory?.kind, 'exact-file', 'fifth file still has exact advisory')
+  assert.deepEqual(fifthAdvisory.files, [], 'truncated display collisions never name a false path')
+  const longPrefix = 'long/'.repeat(20)
+  await owner.peerUpsert(task('long-own', a, 'chat', [`${longPrefix}one.txt`]))
+  await owner.peerUpsert(task('long-peer', a, 'chat', [`${longPrefix}two.txt`]))
+  assert.ok(
+    !(await owner.peers(a, 'long-own')).advisories.some(
+      (row) => row.peer === 'long-peer' && row.kind === 'exact-file'
+    ),
+    'display truncation cannot create a false exact advisory'
+  )
+  await owner.peerUpsert({
+    ...task('overflow-own', a, 'chat', ['first.txt']),
+    observedTruncated: true
+  })
+  await owner.peerUpsert(task('overflow-peer', a, 'chat', ['last.txt']))
+  assert.ok(
+    (await owner.peers(a, 'overflow-own')).advisories.some(
+      (row) => row.peer === 'overflow-peer' && row.kind === 'possible-overlap'
+    ),
+    'incomplete observed lists produce an uncertain advisory'
+  )
+  const manyPaths = Array.from({ length: 65 }, (_, i) => `file-${i}.txt`)
+  await startPeer(task('overflow-local', a, 'background', manyPaths), undefined, left)
+  assert.ok(
+    (await owner.peers(a, '')).rows.find((row) => row.id === 'overflow-local')?.observedTruncated,
+    'the Bun writer signals a bounded observation'
+  )
+  finishPeer('overflow-local')
   await owner.peerRemove('chat-two')
   assert.ok(!(await owner.peers(a, 'chat-one')).rows.some((row) => row.id === 'chat-two'))
   const injected = {
@@ -103,6 +159,9 @@ try {
   const elapsed = performance.now() - begin
   const bytes = Buffer.byteLength(JSON.stringify(bounded))
   assert.ok(bounded.rows.length <= 8, 'fixed owner row cap')
+  for (let i = 0; i < 8; i++) await owner.peerUpsert(task(`other-${i}`, b, 'background', ['b.txt']))
+  assert.equal((await owner.peers(a, '')).rows.length, 8, 'project B does not evict A')
+  assert.equal((await owner.peers(b, '')).rows.length, 8, 'each project has its own cap')
   assert.ok(bytes <= 6144, 'owner response byte cap')
   await owner.peerUpsert({
     ...task('long-fields', a, 'chat', ['x'.repeat(500) + '.txt']),
@@ -113,12 +172,125 @@ try {
   assert.equal(long.goal.length, 160, 'goal field cap')
   assert.equal(long.target.length, 100, 'target field cap')
   assert.equal(long.observedFiles[0].length, 96, 'file field cap')
+  const wideFiles = Array.from({ length: 4 }, (_, i) => `${'w'.repeat(90)}${i}.txt`)
+  for (let i = 0; i < 8; i++) {
+    await owner.peerUpsert({
+      ...task(`heavy-${i}`, b, 'background', wideFiles),
+      goal: 'g'.repeat(160),
+      target: 't'.repeat(100),
+      parent: 'p'.repeat(128)
+    })
+  }
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(await owner.peers(b, 'heavy-0'))) <= 6144,
+    'rows and advisories share a hard response byte cap'
+  )
   console.log(
     `PEER-WORK-FEED bound rows=${bounded.rows.length} bytes=${bytes} elapsedMs=${elapsed.toFixed(1)}`
   )
+  // A commit in the peer worktree does not make the unlanded edit disappear.
+  const committed = task('committed-peer', a, 'background', [])
+  await startPeer(committed, undefined, left)
+  git(left, 'add', 'a.txt')
+  git(left, 'commit', '-qm', 'unlanded peer work')
+  const readStart = performance.now()
+  const committedView = await peerView(a, '')
+  const readMs = performance.now() - readStart
+  assert.ok(
+    committedView.rows.some(
+      (row) => row.id === committed.id && row.observedFiles.includes('a.txt')
+    ),
+    'base revision observes committed unlanded work'
+  )
+  console.log(`PEER-WORK-FEED async Git observation elapsedMs=${readMs.toFixed(1)}`)
+  const syncedBase = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: left,
+    encoding: 'utf8'
+  }).trim()
+  await updatePeerBase(committed.id, syncedBase)
+  assert.deepEqual(
+    (await peerView(a, '')).rows.find((row) => row.id === committed.id)?.observedFiles,
+    [],
+    'a turn-start sync becomes the new observation base'
+  )
+  finishPeer(committed.id)
+  // Finish during an owner reply must not let refresh reinsert a live heartbeat row.
+  const raced = task('finish-race', a, 'background', [])
+  await startPeer(raced, undefined, right)
+  let entered
+  const pending = new Promise((resolve) => {
+    entered = resolve
+  })
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  setConversationOwner(
+    new Proxy(owner, {
+      get(target, key) {
+        if (key === 'peerUpsert')
+          return async (row) => {
+            if (row.id === raced.id && row.observedFiles.includes('a.txt')) {
+              entered()
+              await gate
+            }
+            return owner.peerUpsert(row)
+          }
+        const value = target[key]
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+    })
+  )
+  const reading = peerView(a, '')
+  await pending
+  finishPeer(raced.id)
+  release()
+  await reading
+  assert.ok(
+    !(await owner.peers(a, '')).rows.some((row) => row.id === raced.id),
+    'finish during refresh cannot resurrect the peer'
+  )
+  setConversationOwner(owner)
+  const startingRow = task('start-race', a, 'comment', [])
+  let startEntered
+  const startPending = new Promise((resolve) => {
+    startEntered = resolve
+  })
+  let releaseStart
+  const startGate = new Promise((resolve) => {
+    releaseStart = resolve
+  })
+  setConversationOwner(
+    new Proxy(owner, {
+      get(target, key) {
+        if (key === 'peerUpsert')
+          return async (row) => {
+            if (row.id === startingRow.id) {
+              startEntered()
+              await startGate
+            }
+            return owner.peerUpsert(row)
+          }
+        const value = target[key]
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+    })
+  )
+  const starting = startPeer(startingRow, undefined, left)
+  await startPending
+  finishPeer(startingRow.id)
+  releaseStart()
+  await starting
+  assert.ok(
+    !(await owner.peers(a, '')).rows.some((row) => row.id === startingRow.id),
+    'finish during start cannot resurrect the peer'
+  )
+  setConversationOwner(owner)
+  await startPeer(task('stale-live', a, 'background', []), undefined, left)
   await started.cmd({ cmd: 'advance', ms: 301000 })
   assert.equal((await owner.peers(a, '')).rows.length, 0, 'stale peers expire')
-  await owner.peerUpsert(task('crash', a, 'chat', ['a.txt']))
+  finishPeer('stale-live')
+  await startPeer(task('crash', a, 'chat', ['a.txt']))
   await owner.open(
     'crash-chat',
     a,
@@ -147,6 +319,8 @@ try {
   const recovered = started.owner()
   assert.equal((await recovered.peers(a, '')).rows.length, 0, 'crash clears ephemeral rows')
   assert.ok((await recovered.status()).recovered.some((row) => row.id === 'crash-record'))
+  setConversationOwner(recovered)
+  finishPeer('crash')
   console.log('PEER-WORK-FEED code-gap reproductions PASS')
 } finally {
   setConversationOwner(null)

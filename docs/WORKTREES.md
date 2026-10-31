@@ -756,3 +756,15 @@ own path, and a pasted image is saved by the service in the profile's
 in `src/main/worktrees.ts`, `RepositoryPaths.excluded` in `src/service/RepositoryGit.swift`)
 is unchanged: an attachment can never be committed or merged into the live tree. See
 `docs/PROVIDERS.md` for how the agent is told about them.
+
+## Live peer work feed (LKM-402)
+
+The Swift conversation owner keeps a temporary feed for active chat turns and
+comment/background tasks, keyed by the symlink-resolved repository path. It holds at
+most eight rows per project and 64 total, with short display fields and a bounded
+agent snapshot. File overlap compares full path identities separately from the four
+displayed names; incomplete observations produce an uncertain advisory. Bun reads
+each active worktree's diff against the base revision recorded when that work began,
+so commits in an unlanded worktree remain visible. Stop, landing and finalization
+remove live rows; a service restart drops the feed but retains parked work and
+conversation recovery checkpoints. The source gate still decides whether edits land.

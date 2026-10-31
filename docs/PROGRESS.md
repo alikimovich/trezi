@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-402 review repair: complete overlap identity and lifecycle cleanup
+
+- Swift now caps eight rows per canonical project (64 globally), compares SHA-256 identities of up to 64 full observed paths separately from four short display names, and labels incomplete observations as possible overlap. The fixture catches a shared fifth file, long paths with the same display prefix, and activity in a second project evicting the first.
+- Async Git observation compares each worktree to its recorded base revision, updated after a foreground turn's live sync, including committed unlanded edits and untracked files. A failed or oversized read carries uncertainty. A local finish cannot be undone by a delayed owner reply during start or refresh; the spawn path checks Stop after its peer awaits and before send. Claude now receives the same standing peer rules as Codex.
+- Stub lifecycle fixtures now cover disjoint lines in one file, normal landing and Stop cleanup, a delayed owner reply during spawn Stop, and a stopped chat whose peer row clears while its edit remains parked. Both helper adapter paths assert foreground and background `workspace_state` peer reads and exclude the background session itself and parent landing state.
+- Measured on the disposable fixture after repair: eight rows, 3173 JSON bytes, 40.5 ms for 24 owner upserts plus a read, and 31.5 ms for an async Git observation of committed work (with concurrent checks running). These are fixture measurements, not native UI or model results. Native acceptance remains pending the merged-main run.
+- A direct focused helper run reached Claude but the Codex stand-in could not open its MCP Unix socket in this worker sandbox (`EPERM: listen /tmp/trezi-agent-tools-*.sock`). The manager quick run later passed the helper fixture and all affected checks (295 unit passes, three skips, lint and typechecks); the direct failure was an environment limit, not a product decision.
+
 ## 2026-10-31 — LKM-402 peer work feed code-gap slice
 
 - Red proof before the implementation: `bun test/peer-work-feed.mjs` failed because `owner.peerUpsert` was absent; the first quick verification recorded this in `worker-verify-1.log`. The real lifecycle fixtures were also run against a disposable archive of origin/main with their new assertions: `CONVERSATION_ONLY=agent bun test/conversation-owner.mjs` failed when the second chat's prompt lacked the first goal, and `bun test/comment-agents.mjs` failed because the background `workspace_state` had no `peerWork`. Both are green on this tree. These reproduce the code gap, not the historical incident. The worker cannot make the requested pre-fix commit; Agent OS owns commits.

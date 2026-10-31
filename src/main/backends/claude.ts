@@ -1217,6 +1217,7 @@ async function startSession(
           preset: 'claude_code',
           append: treziRules({
             previewTools: true,
+            workspaceTools: true,
             agentGitAccess: options.agentGitAccess,
             projectMemory: ctx?.projectMemory,
             background: !!ctx?.sessionId
