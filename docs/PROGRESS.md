@@ -2,6 +2,29 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-404 second review repair: non-Git baseline, late orphan, own-release retry
+
+- Non-Git baseline observed on prior source: in a disposable copy with `src/main/agent.ts`, `conversation-owner.ts`, the native conversation files and the two Swift owner files restored from `origin/main`, and the live-project loop reduced to the non-Git root (the `isolated` assertions, which prior source cannot satisfy, removed), `bun test/conversation-owner.mjs` failed at `test/conversation-owner.mjs:774` of that copy: `the second live writer waits for the first`, `p2.sent.length` 1, expected 0. Wall time 30.8 s to the failure. The nested Git case was observed earlier at its own red run, so both project types are now seen on prior source.
+- A holder orphaned while a peer is already queued is now recovered at once. Bun wakes live-writer waiters when the owner cannot record a turn's end (the `terminal` catch path) and when landing finishes even if `landed` fails, so the queued chat re-checks the holder instead of sleeping until its bound.
+- The own-chat recovery branch releases its stale owner turn once and then retries through the admission loop. A peer that began in between now gets the bounded wait and waiting status, not `CHAT_BUSY`.
+- The fixture adds the late-orphan case (a rejected owner `terminal` after the peer queued) and asserts recovery in under 2 s. Measured in this run: nested orphan 16 ms, late orphan 17 ms, bound 151 ms, hard Stop 5031 ms, provider error 21 ms; non-Git orphan 16 ms, late orphan 15 ms, bound 152 ms, hard Stop 5030 ms, provider error 20 ms. Whole fixture 73 s.
+- Native GUI acceptance still awaits the manager's merged-main run.
+
+## 2026-10-31 — LKM-404 review repair: orphan recovery, bounded wait, and rail reset
+
+- On a live-writer refusal, Bun checks the Swift owner's snapshot for the exact holder turn. If Bun has no running, preparing, landing or restart work for that chat, it releases that owner turn once and retries admission. The holder's chat and turn identity are checked before release; active providers are left alone.
+- The scripted live-project fixture now exercises orphan recovery, a 150 ms test-only deadline, hard-stop provider replacement and provider-error release with a queued peer in both nested Git and non-Git folders. Focused run measurements: nested orphan 17 ms, bound 156 ms, hard Stop 5068 ms, error 34 ms; non-Git orphan 25 ms, bound 154 ms, hard Stop 5064 ms, error 34 ms. The hard-stop measurement includes the existing 5 s Stop window.
+- After `agent:send` acknowledges admission, the native chat controller clears the earlier waiting activity label without adding another transcript status. Its fixture holds the send acknowledgment, shows the wait, then checks the cleared label and retained single status line.
+- Manager quick verification passed (`worker-verify-1.log`, repair run): typecheck, native typecheck, lint, and changed unit selection, 294 PASS and 3 SKIP in a measured 378.9 s.
+- Native GUI acceptance still awaits the manager's merged-main run.
+
+## 2026-10-31 — LKM-404 single live writer admission
+
+- Baseline on prior source: the two-chat scripted-provider fixture entered both turns in the same nested Git live checkout (`p2.sent.length` was 1 while the first turn remained open). Quick verification failed at `test/conversation-owner.mjs:754` in `worker-verify-1.log`; the conversation owner fixture took 37.3 s, and the full quick check took 442.3 s. The non-Git case is in the same fixture but was not reached on that red run.
+- The Swift conversation owner now records whether each chat has a worktree and refuses a competing live turn in the same project. Bun waits for owner release notifications with a 120 s deadline, emits one waiting status, and cancels a queued wait on Stop. Isolated Git chats retain independent admission.
+- Final quick verification: `worker-verify-3.log` passed typecheck, native typecheck, lint and changed unit tests (294 PASS, 3 SKIP; measured 378.7 s). The `conversation-owner` fixture covers both live project types, a single waiting status, queued and active Stop, crash recovery, restart admission and the existing isolated Git parallel flow.
+- Native acceptance remains pending the manager's merged-main run; the worker has zero native calls.
+
 ## 2026-10-30 — LKM-393 review repair: parseable page probe and complete button routes
 
 - A new unit check parses every literal `page(...)` snippet inside Host.evaluate's `(await (CODE))` wrapper. It failed first on the key listener's semicolon-separated statements (`Unexpected token ';'`); the listener is now one IIFE expression, as the generated PAGE fixture already is.

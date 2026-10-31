@@ -13,6 +13,8 @@ struct ConversationChat {
     let chat: String
     var project: String
     var root: String
+    /// False when this chat's provider writes the shared live checkout.
+    var isolated = true
     var record: JSValue
     var options: JSValue
     var phase: Phase = .idle
@@ -47,6 +49,7 @@ struct ConversationChat {
 enum ConversationRefusal: Error {
     case notFound(String)
     case busy(String)
+    case writerBusy(String)
     case cancelled
 }
 
@@ -110,6 +113,12 @@ struct ConversationState {
 
     /// idle → preparing. One turn per chat: anything else is `busy`.
     mutating func begin(_ key: String, turn: String) throws {
+        let candidate = try get(key)
+        if !candidate.isolated && chats.values.contains(where: {
+            $0.chat != key && $0.project == candidate.project && !$0.isolated && $0.phase != .idle
+        }) {
+            throw ConversationRefusal.writerBusy("Another chat is editing this live project.")
+        }
         try update(key) { chat in
             guard chat.phase == .idle else { throw ConversationRefusal.busy("This chat is already running.") }
             chat.phase = .preparing; chat.turn = turn; chat.run = 0; chat.claimed = false; chat.cancelled = false
