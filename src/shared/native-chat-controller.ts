@@ -55,6 +55,9 @@ export interface NativeChatMirror {
 export type NativeChatEffect =
   | { type: 'spawn'; event: AgentEvent }
   | { type: 'mirror'; state: NativeChatMirror }
+  /** The chat started or stopped being at work (`chatThinking`), which the mirror does not
+   *  carry: the sidebar title's shimmer follows it (LKM-389). */
+  | { type: 'activity'; chat: string; thinking: boolean }
   | { type: 'settings'; chat: string; root: string; settings: ChatAgentSettings }
   | { type: 'selection-clear'; chat: string; prompt?: string }
   | {

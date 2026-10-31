@@ -148,6 +148,8 @@ export const UNIT = [
   'sidebar-history-rows',
   'sidebar-marquee',
   'sidebar-project-actions',
+  'sidebar-shimmer',
+  'sidebar-thinking-render',
   'sidebar-evidence',
   'sidebar-sizing',
   'toolbar-chat-lead',

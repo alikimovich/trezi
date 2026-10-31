@@ -115,6 +115,7 @@ if (process.platform !== 'darwin') {
     'test/fixtures/sidebar-marquee/main.swift',
     'src/native/SidebarChats.swift',
     'src/native/SidebarMarquee.swift',
+    'src/native/SidebarTitleShimmer.swift',
     'src/native/SidebarChatsAccessibility.swift',
     'src/native/ProjectCell.swift',
     'src/native/SourceList.swift',

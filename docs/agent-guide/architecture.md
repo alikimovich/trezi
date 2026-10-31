@@ -29,6 +29,8 @@ src/
                     dot) and History section (LKM-378); Bun picks them in sidebar-chats.ts
     SidebarMarquee.swift  a hovered chat's overflowing title scrolls by layout with soft
                     edges, never by a layer transform (Reduce Motion: no)
+    SidebarTitleShimmer.swift  a working chat's title shimmers like the chat's status line
+                    (Reduce Motion: still and dimmed; LKM-389)
     SidebarChatsAccessibility.swift  the sidebar's text buttons and the check of the
                     accessibility element VoiceOver gets (its cell, LKM-379)
     SourceList.swift   source-list outline, row cell, scroll view and sidebar split

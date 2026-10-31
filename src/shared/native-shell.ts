@@ -8,6 +8,9 @@ export interface NativeShellRow {
   session?: string
   record?: string
   running?: boolean
+  /** LKM-389: the model is at work on the running turn, so the title shimmers. Stays false
+   *  while the turn waits for the user, stops or lands. */
+  thinking?: boolean
   unread?: boolean
   /** A history row's age ("3d"), shown at the row's trailing edge. */
   detail?: string

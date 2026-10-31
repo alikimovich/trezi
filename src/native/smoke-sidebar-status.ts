@@ -6,15 +6,16 @@ import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { requireCleanSharedChat } from './smoke-shared-chat'
 import { restoreSidebarFocus } from './smoke-sidebar'
+import { checkSidebarShimmer, shimmers } from './smoke-sidebar-shimmer'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
 /**
  * The sidebar's chat status, with a real background turn (LKM-268's indicators, moved from the
  * retired chat-header history menu to the nested chat rows). A turn runs in chat A while chat B
- * is active, so A's row spins and reads "Running"; its answer then finishes in the background
- * and the row shows the green unread dot until A is opened from the sidebar. The sidebar image
- * lands in the artifacts folder for inspection.
+ * is active, so A's title shimmers and the row reads "Running"; its answer then finishes in the
+ * background and the row shows the green unread dot until A is opened from the sidebar. The
+ * sidebar images land in the artifacts folder for inspection.
  */
 let stub: ReturnType<typeof stubAgentSendForSmoke> | undefined
 let home = ''
@@ -66,22 +67,39 @@ export async function checkSidebarStatus(host: NativeBridge, artifacts: string) 
   // Running takes precedence over unread; the unread flag is already set underneath it.
   const running = await rowIs(
     a,
-    'spins',
-    (item) => item.running && item.spinning && !item.unreadDot && item.label.endsWith(', Running')
+    'shimmers',
+    (item) =>
+      item.running &&
+      item.thinking &&
+      shimmers(item) &&
+      !item.unreadDot &&
+      item.label.endsWith(', Running')
   )
   if (!nativeChat.get(a).unreadAnswer)
     throw new Error('A background answer did not set the unread flag')
   const active = row(running, b)
   if (!active?.selected || active.running || active.unreadDot)
     throw new Error(`The active chat's row is not a selected idle row: ${JSON.stringify(active)}`)
+  if (Math.abs(running.textOffset - active.textOffset) >= 1)
+    throw new Error('The shimmer moved the chat title')
 
-  // The answer finishes in the background: the spinner stops and the green dot shows.
+  if (process.env.TREZI_NATIVE_BACKGROUND_TEST !== '1') {
+    await checkSidebarShimmer(host, artifacts, a, b, () => nativeChat.active)
+    // Opening A to capture its selected row read the answer; the rest of this check needs one.
+    stub.emit({ type: 'delta', text: ' More of the answer.' } as AgentEvent)
+  } else console.log('Sidebar shimmer: background run, phases not captured.')
+
+  // The answer finishes in the background: the shimmer stops and the green dot shows.
   stub.emit({ type: 'done' } as AgentEvent)
   const unread = await rowIs(
     a,
     'shows the unread dot',
     (item) =>
-      !item.running && !item.spinning && item.unreadDot && item.label.endsWith(', Unread answer')
+      !item.running &&
+      !item.thinking &&
+      item.shimmer.mode === 'none' &&
+      item.unreadDot &&
+      item.label.endsWith(', Unread answer')
   )
   if (Math.abs(row(unread, a).textOffset) >= 1)
     throw new Error('The unread dot moved the chat title')

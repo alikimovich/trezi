@@ -86,6 +86,8 @@ struct SidebarHistoryState {
 final class ShellRow: NSObject {
     let id: String, title: String, kind: String, project: String
     let running: Bool
+    /// The turn's model is at work (LKM-389): a chat row's title shimmers.
+    let thinking: Bool
     let unread: Bool
     /// A history row's age ("3d"); the History toggle's chat count.
     let detail: String
@@ -108,6 +110,7 @@ final class ShellRow: NSObject {
         id = data["id"] as? String ?? ""; title = data["title"] as? String ?? ""
         kind = data["kind"] as? String ?? "chat"; project = data["project"] as? String ?? ""
         running = data["running"] as? Bool ?? false
+        thinking = data["thinking"] as? Bool ?? false
         unread = data["unread"] as? Bool ?? false
         detail = data["detail"] as? String ?? ""
         // Decoded from this row's own snapshot entry, never from a later load: no icon can land on another row.
