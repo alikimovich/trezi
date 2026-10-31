@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-30 — LKM-393 foreground Mark up fixture wiring
+
+- Red proof: the route assertions first added to `test/preview-markup.mjs` failed in quick verification at the absent `NSApp.postEvent` call (worker-verify-1.log). They now live in the registered `test/preview-markup-routing.mjs`; the source fixture requires posted keys, pointer, buttons and text input.
+- The `preview-markup` smoke posts foreground AppKit keyDown/keyUp for Escape, ⌘Z and four history shortcuts. The page has a history entry; every shortcut checks that history step count and URL stay fixed and that a page keyDown listener saw none while the overlay owns focus.
+- Tool selection, drawing, Undo, Clear, Cancel and Add use hit-tested mouse events posted to the window. After Add the fixture posts text input into the focused composer, then uses normal Send and checks the draft, instruction and exact composite bytes in the intercepted payload. Each event saves a state receipt labelled `real event route` and a foreground PNG; open, resize and workspace commands are labelled `seam only`.
+- Native execution remains pending for the manager's merged-main `core` run; no native desktop allowance was available to this worker. Fixture code and red proof do not establish runtime success by themselves.
+
 ## 2026-10-30 — LKM-391 repair: review findings and the open acceptance fixtures
 
 - **History keys no longer reach the page under the overlay.** `PreviewHistory.arrow` consumes

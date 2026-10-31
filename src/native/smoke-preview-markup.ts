@@ -15,6 +15,7 @@ type Page = (code: string) => Promise<unknown>
 const PIXEL =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 const DRAFT = 'Make the marked card larger'
+const INSTRUCTION = ' Also use blue.'
 const EXISTING = {
   name: 'existing.png',
   path: '',
@@ -34,15 +35,14 @@ const PAGE = `(() => {
   return true
 })()`
 
-/** LKM-391: Mark up through the real route in a disposable profile: the Actions entry, the
- *  capture, drawing through the canvas's pointer path, undo and clear, Escape, and Add into
+/** LKM-393: Mark up through foreground AppKit input in a disposable profile: the Actions entry, the
+ *  capture, posted pointer, key and button events, Escape, and Add into
  *  a composer that already holds a draft and an attachment. Add never sends; the composite is
  *  then retained (`native-composite.png` + `.json`: hash, provenance) and sent by the
  *  composer's normal Send, with the provider's outbound call intercepted, saving the payload
  *  (`send-payload.json`). Mapping holds through overlay resize, preview zoom and a narrow
  *  preview, and a chat or project change ends the session out loud. Saves foreground
- *  captures and the JSON state of each step. Keys reach the overlay's handlers directly:
- *  the app-level key routes (a real keyDown through AppKit) are not checked here. */
+ *  captures and the JSON state and route classification of each step. */
 export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifacts: string) {
   const folder = join(artifacts, 'preview-markup')
   mkdirSync(folder, { recursive: true })
@@ -54,9 +54,9 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   }
   const composer = (): Promise<State> => host.request('composerInspect')
   const steps: State = {}
-  const step = async (name: string) => {
+  const step = async (name: string, route = 'seam only', input?: State) => {
     const state = await inspect()
-    steps[name] = state
+    steps[name] = { ...state, route, ...(input ? { input } : {}) }
     writeFileSync(join(folder, 'steps.json'), JSON.stringify(steps, null, 2))
     const shot = await host.request('captureVisibleWindow')
     writeFileSync(join(folder, `${name}.png`), Buffer.from(shot.png, 'base64'))
@@ -72,8 +72,30 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   const closed = (label: string) =>
     waitFor(async () => !(await inspect()).open, `${label}: Mark up closes`)
   const sends = () => nativeChat.get(nativeChat.active).messages.length
+  let eventNumber = 0
+  const event = async (params: State) => {
+    const reply = await test(params)
+    assert.equal(reply.route, 'real event route', `${params.action} crossed AppKit`)
+    await step(`event-${++eventNumber}-${params.action}`, 'real event route', params)
+    return reply
+  }
+  const button = (label: string) => event({ action: 'button', label })
+  const stroke = async (tool: string, points: number[][]) => {
+    const labels: Record<string, string> = {
+      rectangle: 'Rectangle',
+      circle: 'Circle',
+      arrow: 'Arrow',
+      pen: 'Pen'
+    }
+    await button(labels[tool])
+    await event({ action: 'pointer', points })
+  }
 
   await page(PAGE)
+  await page('history.pushState({ markupSmoke: true }, "", "#markup-smoke-route")')
+  await page(
+    'window.__markupSmokeKeys = 0; window.__markupSmokeKeyListener = event => { if (event.metaKey) window.__markupSmokeKeys++ }; window.addEventListener("keydown", window.__markupSmokeKeyListener)'
+  )
   const chat = nativeChat.active
   await host.request('composerPerform', { text: DRAFT })
   await nativeChat.composer({ chat, action: 'files', files: [EXISTING] })
@@ -85,6 +107,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
 
   // Open: frozen pixels, in focus, on top, with nothing claiming the page stopped.
   const opened = await open('first')
+  await step('opened', 'seam only')
   assert.equal(opened.addEnabled, false, 'nothing to add before a mark')
   assert.equal(opened.undoEnabled, false, 'nothing to undo before a mark')
   assert.equal(opened.focused, true, 'the overlay holds keyboard focus')
@@ -119,6 +142,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   await page('document.querySelector("#markup-card").style.background = "#16a34a"')
   await new Promise((resolve) => setTimeout(resolve, 200))
   assert.equal((await inspect()).frozen, opened.frozen, 'the snapshot does not follow the page')
+  await step('frozen', 'seam only')
 
   // Every tool, then undo and clear.
   const { width, height } = opened.image
@@ -126,31 +150,46 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     [width * x, height * y],
     [width * (x + w), height * (y + h)]
   ]
-  await test({ action: 'stroke', tool: 'rectangle', points: box(0.1, 0.1, 0.3, 0.2) })
-  await test({ action: 'stroke', tool: 'circle', points: box(0.5, 0.1, 0.2, 0.2) })
-  await test({ action: 'stroke', tool: 'arrow', points: box(0.2, 0.5, 0.3, 0.2) })
-  await test({
-    action: 'stroke',
-    tool: 'pen',
-    points: [
-      [width * 0.6, height * 0.5],
-      [width * 0.65, height * 0.6],
-      [width * 0.7, height * 0.5],
-      [width * 0.75, height * 0.6]
-    ]
-  })
-  const drawn = await step('marks')
+  await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
+  await stroke('circle', box(0.5, 0.1, 0.2, 0.2))
+  await stroke('arrow', box(0.2, 0.5, 0.3, 0.2))
+  await stroke('pen', [
+    [width * 0.6, height * 0.5],
+    [width * 0.65, height * 0.6],
+    [width * 0.7, height * 0.5],
+    [width * 0.75, height * 0.6]
+  ])
+  const drawn = await step('marks', 'real event route')
   assert.deepEqual(
     drawn.marks.map((mark: State) => mark.tool),
     ['rectangle', 'circle', 'arrow', 'pen']
   )
   assert.equal(drawn.addEnabled, true, 'a mark enables Add')
-  assert.equal((await test({ action: 'key', key: 'z', code: 6, command: true })).taken, true)
+  const history = await host.request('previewHistory')
+  assert.equal(history.canBack, true, 'the page has real history to protect')
+  for (const [key, code] of [
+    ['\u{f702}', 123],
+    ['\u{f703}', 124],
+    ['[', 33],
+    [']', 30]
+  ] as const) {
+    await event({ action: 'key', key, code, command: true })
+    const after = await host.request('previewHistory')
+    assert.equal(after.steps, history.steps, 'history keys do not navigate beneath the overlay')
+    assert.equal(after.url, history.url, 'the page URL remains under the overlay')
+    assert.equal(
+      await page('window.__markupSmokeKeys'),
+      0,
+      'history keyDown does not reach the page'
+    )
+  }
+  await event({ action: 'key', key: 'z', code: 6, command: true })
+  assert.equal(await page('window.__markupSmokeKeys'), 0, 'Undo keyDown does not reach the page')
   assert.equal((await inspect()).marks.length, 3, '⌘Z takes the last mark')
-  await test({ action: 'clear' })
+  await button('Clear')
   assert.equal((await inspect()).marks.length, 0, 'Clear takes every mark')
-  await test({ action: 'stroke', tool: 'rectangle', points: box(0.1, 0.1, 0.3, 0.2) })
-  await test({ action: 'stroke', tool: 'arrow', points: box(0.4, 0.4, 0.3, 0.2) })
+  await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
+  await stroke('arrow', box(0.4, 0.4, 0.3, 0.2))
 
   // Overlay resize, preview zoom and a narrow preview: marks stay in captured pixels and
   // land on the same part of the shown image.
@@ -179,17 +218,19 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   }
 
   // Escape discards the lot and leaves the composer as it was.
-  await test({ action: 'key', key: '\u{1b}', code: 53 })
+  await event({ action: 'key', key: '\u{1b}', code: 53 })
   await closed('escape')
+  await step('escaped', 'real event route')
   let state = await composer()
   assert.equal(state.text, DRAFT, 'Escape keeps the draft')
   assert.equal(state.attachments.length, 1, 'Escape attaches nothing')
 
   // Cancel the same way.
   await open('cancel')
-  await test({ action: 'stroke', tool: 'circle', points: box(0.1, 0.1, 0.2, 0.2) })
-  await test({ action: 'cancel' })
+  await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
+  await button('Cancel')
   await closed('cancel')
+  await step('cancelled', 'real event route')
   assert.equal((await composer()).attachments.length, 1, 'Cancel attaches nothing')
 
   // A narrow and a zoomed preview: the capture is the view's pixels, the context says how
@@ -215,8 +256,8 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
       [image.width * 0.25, image.height * 0.25],
       [image.width * 0.75, image.height * 0.75]
     ]
-    await test({ action: 'stroke', tool: 'rectangle', points: at })
-    const marked = await step(label)
+    await stroke('rectangle', at)
+    const marked = await step(label, 'real event route')
     marked.marks[0].points.forEach(([x, y]: number[], index: number) => {
       assert.ok(Math.abs(x - at[index][0]) < 1, `${label}: captured x is where it was drawn`)
       assert.ok(Math.abs(y - at[index][1]) < 1, `${label}: captured y is where it was drawn`)
@@ -225,18 +266,20 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
       Math.abs(marked.marks[0].view[0][0] - (shown.x + shown.width * 0.25)) < 1,
       `${label}: the mark lands on the image`
     )
-    await test({ action: 'cancel' })
+    await button('Cancel')
     await closed(label)
     await host.request('previewViewport', {})
   }
 
   // Project and chat isolation: a session ends with what it was bound to.
-  const project = nativeWorkspace.state.activeKey!
+  const project = nativeWorkspace.state.activeKey
+  assert.ok(project, 'the first project is active')
   await open('chat change')
-  await test({ action: 'stroke', tool: 'circle', points: box(0.1, 0.1, 0.2, 0.2) })
+  await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
   host.emit('shell-action', { action: 'new-chat', project })
   await waitFor(() => nativeChat.active !== chat, 'a new chat opens')
   await closed('chat change')
+  await step('chat-isolation', 'seam only')
   const fresh = nativeChat.active
   assert.equal((await composer()).attachments.length, 0, 'the other chat receives nothing')
   await nativeWorkspace.command({ type: 'chat', key: project, session: chat })
@@ -246,11 +289,13 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   mkdirSync(other, { recursive: true })
   writeFileSync(join(other, 'index.html'), '<h1>Other project</h1>')
   await open('project change')
-  await test({ action: 'stroke', tool: 'circle', points: box(0.1, 0.1, 0.2, 0.2) })
+  await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
   await nativeWorkspace.command({ type: 'open', root: other })
   await closed('project change')
+  await step('project-isolation', 'seam only')
   assert.equal((await composer()).attachments.length, 0, 'the other project receives nothing')
-  const opened2 = nativeWorkspace.active!.key
+  const opened2 = nativeWorkspace.active?.key
+  assert.ok(opened2, 'the second project is active')
   await nativeWorkspace.command({ type: 'select', key: project })
   await nativeWorkspace.command({ type: 'close', key: opened2 })
   await nativeWorkspace.command({ type: 'chat', key: project, session: chat })
@@ -260,11 +305,12 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
 
   // Add: the composite joins the draft and the existing attachment; nothing is sent.
   await open('add')
-  await test({ action: 'stroke', tool: 'rectangle', points: box(0.1, 0.1, 0.3, 0.2) })
-  await test({ action: 'stroke', tool: 'arrow', points: box(0.4, 0.4, 0.3, 0.2) })
-  await step('before-add')
-  await test({ action: 'add' })
+  await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
+  await stroke('arrow', box(0.4, 0.4, 0.3, 0.2))
+  await step('before-add', 'real event route')
+  await button('Add to chat')
   await closed('add')
+  await step('added', 'real event route')
   state = await waitFor(async () => {
     const value = await composer()
     return value.attachments.length === 2 && value
@@ -275,6 +321,13 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     ['existing.png', 'Mark up.png']
   )
   assert.equal(state.inputIsFirstResponder, true, 'the composer takes the instruction')
+  const typed = await test({ action: 'typeInstruction', text: INSTRUCTION })
+  assert.equal(typed.route, 'real event route', 'instruction crosses AppKit text input')
+  state = await waitFor(async () => {
+    const value = await composer()
+    return value.text === DRAFT + INSTRUCTION && value
+  }, 'typed instruction follows the original draft')
+  await step('typed-instruction', 'real event route')
   assert.equal(sends(), messages, 'Add does not send')
   assert.match(
     nativeChat.get(chat).attachments[1].note ?? '',
@@ -285,7 +338,11 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   assert.equal(sends(), messages, 'nothing sends afterwards either')
   writeFileSync(
     join(folder, 'composer.json'),
-    JSON.stringify({ text: state.text, attachments: state.attachments.length }, null, 2)
+    JSON.stringify(
+      { route: 'real event route', text: state.text, attachments: state.attachments.length },
+      null,
+      2
+    )
   )
   writeFileSync(
     join(folder, 'composer.png'),
@@ -320,6 +377,7 @@ function retainComposite(folder: string, added: Composite, context: State, marks
   } catch {}
   const record = {
     origin: 'native Add: markup-add event from the overlay, added by NativeMarkupController',
+    route: 'real event route: hit-tested Add button; controller attachment handoff',
     nativeOrigin: true,
     ticket: 'LKM-391',
     check: 'preview-markup',
@@ -380,7 +438,10 @@ async function sendThroughComposer(
       digests.some((image) => image.sha256 === existing),
       'the earlier attachment travels too'
     )
-    assert.ok(prompt.endsWith(DRAFT), 'the draft is the message')
+    assert.ok(
+      prompt.endsWith(DRAFT + INSTRUCTION),
+      'the draft and typed instruction are the message'
+    )
     assert.ok(prompt.includes(composite.note), 'the statement about the marks is in the prompt')
     assert.match(prompt, /marks.*user/i)
     await waitFor(() => live.messages.length > messages, 'the message is in the conversation')
@@ -394,6 +455,7 @@ async function sendThroughComposer(
       JSON.stringify(
         {
           via: 'composerPerform action=send, then agent:send intercepted before the provider',
+          route: 'seam only: normal composer Send action; outbound provider call intercepted',
           compositeSha256: composite.sha256,
           images: digests,
           prompt
@@ -414,6 +476,9 @@ async function sendThroughComposer(
 export async function restorePreviewMarkup(host: NativeBridge, page: Page) {
   await host.request('previewMarkupTest', { action: 'cancel' }).catch(() => {})
   await host.request('previewViewport', {}).catch(() => {})
+  await page('window.removeEventListener("keydown", window.__markupSmokeKeyListener)').catch(
+    () => {}
+  )
   await page('document.querySelector("#markup-smoke")?.remove()').catch(() => {})
   const { attachments } = await host.request('composerInspect')
   await host.request('composerPerform', {

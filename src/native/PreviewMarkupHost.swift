@@ -72,38 +72,87 @@ extension Host {
         return count
     }
 
-    /// Everything goes through what a pointer, a key or a button reaches. `points` are in
-    /// captured pixels, turned into view points first, as a pointer would give them.
+    /// Layout and opening seams for the disposable-profile smoke. Input uses
+    /// `previewMarkupEvent` below so it traverses the foreground AppKit event queue.
     func previewMarkupTest(_ c: [String: Any]) -> [String: Any] {
         switch c["action"] as? String {
         case "open":
             emit(["event":"shell-action", "action":"markup"])
             return ["ok":true]
-        case "stroke":
-            guard let overlay = markup?.overlay, let tool = MarkupTool(rawValue: c["tool"] as? String ?? ""),
-                  let points = c["points"] as? [[Double]], let first = points.first, first.count == 2 else { return ["error":"Nothing to draw on"] }
-            let canvas = overlay.canvas, mapping = canvas.mapping
-            func view(_ point: [Double]) -> NSPoint { mapping.toView(CGPoint(x: point[0], y: point[1])) }
-            overlay.select(tool)
-            canvas.pointerDown(view(first), tool: overlay.tool)
-            for point in points.dropFirst() where point.count == 2 { canvas.pointerDragged(view(point)) }
-            canvas.pointerUp()
-            return ["marks":canvas.document.marks.count]
-        case "key":
-            // The ⌘Z and Escape routes of a real press, through the overlay's own handlers.
-            guard let overlay = markup?.overlay, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: c["command"] as? Bool == true ? .command : [], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: c["key"] as? String ?? "", charactersIgnoringModifiers: c["key"] as? String ?? "", isARepeat: false, keyCode: UInt16(c["code"] as? Int ?? 0)) else { return ["error":"No overlay"] }
-            if c["command"] as? Bool == true { return ["taken":overlay.performKeyEquivalent(with: event)] }
-            overlay.keyDown(with: event)
-            return ["ok":true]
-        case "clear": markup?.overlay?.clear(); return ["ok":true]
-        case "cancel": markup?.overlay?.cancel(); return ["ok":true]
-        case "add": markup?.overlay?.add(); return ["ok":true]
+        case "cancel": markup?.overlay?.cancel(); return ["ok":true] // cleanup seam only
         case "resize":
             guard let width = c["width"] as? Double, let height = c["height"] as? Double, let frame = markup?.overlay?.frame else { return ["error":"No overlay"] }
             markup?.place(area: NSRect(x: frame.minX, y: frame.minY, width: width, height: height))
             markup?.overlay?.layoutSubtreeIfNeeded()
             return ["ok":true]
         default: return ["error":"Unknown Mark up test action"]
+        }
+    }
+
+    /// Foreground smoke input. Each event is posted, then the main actor yields so
+    /// AppKit can dispatch it through local monitors, the window and the hit-tested view.
+    @MainActor func previewMarkupEvent(_ c: [String: Any]) async -> [String: Any] {
+        func settle() async { try? await Task.sleep(nanoseconds: 90_000_000) }
+        NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        await settle()
+        guard window.isKeyWindow, NSApp.isActive, window.attachedSheet == nil else { return ["error":"Markup window is not foreground"] }
+        let action = c["action"] as? String ?? ""
+        if action != "typeInstruction", markup?.overlay?.ownsFocus != true { return ["error":"Overlay does not own focus"] }
+        func post(_ event: NSEvent?) -> Bool {
+            guard let event else { return false }
+            NSApp.postEvent(event, atStart: false)
+            return true
+        }
+        func mouse(_ type: NSEvent.EventType, _ point: NSPoint) -> Bool {
+            post(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                                    pressure: type == .leftMouseDown ? 1 : 0))
+        }
+        func key(_ type: NSEvent.EventType, _ chars: String, _ code: UInt16, _ flags: NSEvent.ModifierFlags) -> Bool {
+            post(NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                                  windowNumber: window.windowNumber, context: nil, characters: chars,
+                                  charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code))
+        }
+        switch action {
+        case "key":
+            let chars = c["key"] as? String ?? "", code = UInt16(c["code"] as? Int ?? 0)
+            let flags: NSEvent.ModifierFlags = c["command"] as? Bool == true ?
+                ([123, 124].contains(code) ? [.command, .numericPad, .function] : .command) : []
+            guard key(.keyDown, chars, code, flags), key(.keyUp, chars, code, flags) else { return ["error":"Cannot post key"] }
+            await settle()
+            return ["route":"real event route", "focused":markup?.overlay?.ownsFocus ?? false]
+        case "button":
+            guard let overlay = markup?.overlay, let label = c["label"] as? String,
+                  let button = overlay.controls.first(where: { $0.cell?.accessibilityLabel() == label }), button.isEnabled else { return ["error":"Button unavailable"] }
+            let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            guard let hit = window.contentView?.superview?.hitTest(point), hit === button || hit.isDescendant(of: button),
+                  mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Button is not hit-testable"] }
+            await settle()
+            return ["route":"real event route", "hit":"\(type(of: hit))", "label":label]
+        case "pointer":
+            guard let overlay = markup?.overlay, let points = c["points"] as? [[Double]], points.count >= 2,
+                  points.allSatisfy({ $0.count == 2 }) else { return ["error":"No pointer path"] }
+            let canvas = overlay.canvas, mapping = canvas.mapping
+            let locations = points.map { canvas.convert(mapping.toView(CGPoint(x: $0[0], y: $0[1])), to: nil) }
+            guard let hit = window.contentView?.superview?.hitTest(locations[0]), hit === canvas || hit.isDescendant(of: canvas),
+                  mouse(.leftMouseDown, locations[0]) else { return ["error":"Canvas is not hit-testable"] }
+            for point in locations.dropFirst() { guard mouse(.leftMouseDragged, point) else { return ["error":"Cannot post drag"] } }
+            guard mouse(.leftMouseUp, locations.last!) else { return ["error":"Cannot post pointer up"] }
+            await settle()
+            return ["route":"real event route", "hit":"\(type(of: hit))", "marks":canvas.document.marks.count]
+        case "typeInstruction":
+            guard markup?.overlay == nil, window.firstResponder === composer.text,
+                  let instruction = c["text"] as? String, !instruction.isEmpty else { return ["error":"Composer does not own text focus"] }
+            for character in instruction {
+                let chars = String(character)
+                let code = chars == " " ? UInt16(49) : KeyShortcut.ansi.first(where: { $0.value.0 == chars.lowercased() })?.key
+                guard let code else { return ["error":"Unsupported smoke text character"] }
+                let flags: NSEvent.ModifierFlags = chars != chars.lowercased() ? .shift : []
+                guard key(.keyDown, chars, code, flags), key(.keyUp, chars, code, flags) else { return ["error":"Cannot post text"] }
+                await settle()
+            }
+            return ["route":"real event route", "text":composer.text.string]
+        default: return ["error":"Unknown Mark up event"]
         }
     }
 }
