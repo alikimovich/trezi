@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-30
+
 ### Added
 
 - Mark up: draw on a frozen snapshot of the preview and add it to the chat composer (Actions menu or the toolbar's … menu); nothing sends until you press Send.
