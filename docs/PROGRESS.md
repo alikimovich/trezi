@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-410 document single live writer admission in WORKTREES
+
+- The final LKM-404 review left one gap: the "No isolation" bullet in `docs/WORKTREES.md` did not state the rule. It now does: one live writer turn at a time, refused by the Swift owner's `begin`, a 120 s Bun wait, the release paths, and that this is not a sandbox for raw shell, database or remote side effects. Docs only; no code or user-visible change, so no changelog line.
+
 ## 2026-10-31 — LKM-404 second review repair: non-Git baseline, late orphan, own-release retry
 
 - Non-Git baseline observed on prior source: in a disposable copy with `src/main/agent.ts`, `conversation-owner.ts`, the native conversation files and the two Swift owner files restored from `origin/main`, and the live-project loop reduced to the non-Git root (the `isolated` assertions, which prior source cannot satisfy, removed), `bun test/conversation-owner.mjs` failed at `test/conversation-owner.mjs:774` of that copy: `the second live writer waits for the first`, `p2.sent.length` 1, expected 0. Wall time 30.8 s to the failure. The nested Git case was observed earlier at its own red run, so both project types are now seen on prior source.

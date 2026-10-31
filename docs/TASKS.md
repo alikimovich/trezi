@@ -11,6 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: recover an orphaned owner holder, exercise queued hard Stop, provider error and test-bound expiry in both live project types.
 - [x] Review repair: clear the waiting activity label on send acknowledgment; fixture checks the single retained status line.
 - [ ] Manager: run native chat acceptance on merged main; worker has no native calls.
+- [x] LKM-410: `docs/WORKTREES.md` "No isolation" states the single live writer rule, its release paths and its limits.
 
 ## Foreground Mark up acceptance wiring (LKM-393)
 
