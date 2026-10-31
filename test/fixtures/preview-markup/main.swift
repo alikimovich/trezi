@@ -124,6 +124,19 @@ check(composited.width == 2048, "Retina fits the send size")
 check(composited.marked(1024, 320) && !composited.marked(1024, 640), "the composite agrees with the view")
 // The frozen pixels are the captured image: nothing the page does can reach them.
 check(canvas.image === retina, "the canvas keeps the captured image")
+// The smoke's `frozen` fingerprint sees a single changed pixel, and ignores nothing else.
+func touched(_ image: CGImage, _ x: Int, _ y: Int) -> CGImage {
+    let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    context.setFillColor(NSColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1).cgColor)
+    context.fill(CGRect(x: x, y: y, width: 1, height: 1))
+    return context.makeImage()!
+}
+let digest = MarkupDigest.hex(retina)
+check(digest.count == 64 && digest == MarkupDigest.hex(retina), "the fingerprint is a stable SHA-256")
+check(MarkupDigest.hex(touched(retina, 7, 9)) != digest, "one changed pixel changes the fingerprint")
+check(MarkupDigest.hex(touched(retina, 7, 9)) != MarkupDigest.hex(touched(retina, 8, 9)), "and so does which pixel it is")
+check(MarkupDigest.hex(solid(4, 2, .white)) != MarkupDigest.hex(solid(2, 4, .white)), "and the shape of the image")
 
 // MARK: PNG against JPEG on fine lines and text
 func page() -> CGImage {
@@ -341,6 +354,25 @@ failing.add()
 check(events.count == beforeAdd && failing.overlay?.errorShown == true, "no image, no event, and the user sees why")
 check(failing.overlay?.canvas.document.marks.count == 1, "the marks are kept")
 failing.cancel()
+
+// A capture that never answers (a page stuck in a loop) ends out loud and frees the session.
+var stalled: ((Result<PreviewMarkup.Captured, PreviewMarkup.Failure>) -> Void)?
+let stalling = PreviewMarkup(parent: parent, emit: { events.append($0) }, refusal: { nil }, capture: { stalled = $0 }, restoreFocus: { _ in }, changed: {}, captureTimeout: 0.2)
+stalling.begin("s6")
+check(stalling.session == "s6" && stalling.overlay == nil, "a stalled capture is waited for")
+RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+check(state() == "failed" && stalling.session == nil, "it times out and releases the session")
+check((events.last?["message"] as? String)?.contains("did not answer") == true, "with a message the user reads")
+check(events.last?["session"] as? String == "s6", "for its own session")
+let late = stalled; stalled = nil
+late?(.success(captured(solid(400, 300, .white))))
+check(stalling.overlay == nil && stalling.session == nil, "a late answer opens nothing")
+stalling.begin("s7")
+check(stalling.session == "s7", "and the next press starts a new session")
+stalled?(.success(captured(solid(400, 300, .white)))); stalled = nil
+RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+check(stalling.overlay != nil && state() == "open", "a capture that answered in time is not timed out")
+stalling.cancel()
 
 let output: [String: Any] = ["selectors":PreviewMarkupScript.selectors, "script":PreviewMarkupScript.hide, "restore":PreviewMarkupScript.restore, "evaluation":evaluation]
 print(String(data: try! JSONSerialization.data(withJSONObject: output), encoding: .utf8)!)

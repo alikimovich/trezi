@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 
 /// LKM-391: what Mark up draws. No view or host here: a mark is stored in the captured
 /// image's pixels, top-left origin, so it stays on the same page pixel through Retina, preview
@@ -141,6 +142,25 @@ enum MarkupRenderer {
 
 struct MarkupEncoded {
     let data: Data, type: String, name: String, width: Int, height: Int
+}
+
+/// Fingerprint of an image's pixels, for the smoke's proof that the frozen snapshot did not
+/// change under the overlay. SHA-256 over every pixel (RGBA8, sRGB), so one changed pixel
+/// changes it; the size is part of the input.
+enum MarkupDigest {
+    static func hex(_ image: CGImage) -> String {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { raw in
+            guard let context = CGContext(data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        var hash = SHA256()
+        hash.update(data: Data("\(width)x\(height):".utf8))
+        hash.update(data: pixels)
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 /// PNG at 2048 px first, not the agent frame's 1280 px JPEG: the choice and its measurements

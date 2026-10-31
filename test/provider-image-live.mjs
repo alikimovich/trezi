@@ -5,7 +5,14 @@
 // name, and the on-disk copy the prompt lists is a blank decoy: only a picture really in
 // the model's input can give the right answer. Four turns: a first image, a second one on
 // the resumed thread, a text turn about the first after its temp copy is gone, and a Mark up
-// composite whose marked shape the model must name (LKM-391).
+// composite whose marked shape the model must name (LKM-391). That composite is SYNTHETIC
+// (a generated 256 px diagram): transport proof only, never native-origin evidence.
+//
+// A fifth turn, native-origin, runs only when TREZI_LIVE_MARKUP_COMPOSITE points at the
+// `native-composite.json` the native `preview-markup` smoke retained next to its
+// `native-composite.png`: the exact bytes the overlay's Add produced (hash checked here), sent
+// with the fixed NATIVE_MARKED instruction and the note the chat attached. Without it the
+// receipt says so (`nativeComposite: null`) and claims nothing native.
 //
 // Writes receipt.json and the PNGs to TREZI_LIVE_ARTIFACTS (default test/artifacts/
 // provider-image-live); no prompt beyond the fixed ones below, no account data. Codex
@@ -15,9 +22,17 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createHash, randomInt } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { deflateSync } from 'node:zlib'
 
@@ -63,7 +78,39 @@ const RECALL =
   'Which colour was the shape in the first image of this chat? Reply with exactly one lowercase word. Do not use any tools and do not open any file.'
 const MARKED =
   'Which shape did I mark? Reply with exactly one lowercase word: circle, square or triangle. Do not use any tools and do not open any file.'
+// The native composite's fixed instruction. The marks the smoke drew come from its record.
+const NATIVE_MARKED =
+  'Two red marks were drawn on this screenshot. Name the kind of each, as exactly two lowercase words separated by a space, in alphabetical order, from: arrow, circle, line, rectangle. Do not use any tools and do not open any file.'
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** The composite the native smoke retained, checked against its own record; null if none was
+ *  given. Never a regenerated picture: the bytes are the ones the overlay's Add produced. */
+function nativeComposite() {
+  const path = process.env.TREZI_LIVE_MARKUP_COMPOSITE
+  if (!path) return null
+  const record = JSON.parse(readFileSync(resolve(path), 'utf8'))
+  assert.equal(record.nativeOrigin, true, 'the record is not from the native Add')
+  assert.equal(record.name, 'Mark up.png')
+  const file = join(dirname(resolve(path)), record.file)
+  const bytes = readFileSync(file)
+  assert.equal(
+    createHash('sha256').update(bytes).digest('hex'),
+    record.sha256,
+    'the composite no longer matches its recorded hash'
+  )
+  assert.equal(bytes.length, record.bytes)
+  assert.match(record.note, /marks.*user/i, 'the record has no statement about the marks')
+  assert.ok(Array.isArray(record.marks) && record.marks.length === 2, 'two marks were drawn')
+  return {
+    record,
+    file,
+    bytes,
+    expected: record.marks
+      .map((mark) => (mark === 'pen' ? 'line' : mark))
+      .sort()
+      .join(' ')
+  }
+}
 const pick = (list) => list[randomInt(list.length)]
 
 function crc(bytes) {
@@ -114,7 +161,9 @@ function picture(not) {
   }
 }
 
-/** Three grey shapes in a random order with a red box drawn around one, as a pen would. */
+/** SYNTHETIC: three grey shapes in a random order with a red box drawn around one, as a pen
+ *  would. Generated here, never captured or drawn by the native overlay: it proves the
+ *  transport (note, image input, provider) only and is not native-origin evidence. */
 function markedUp() {
   const names = Object.keys(SHAPES)
   const shift = randomInt(names.length)
@@ -242,8 +291,18 @@ const receipt = {
   sha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   dirty: execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }) !== '',
   at: new Date().toISOString(),
+  // What backs the native-origin claim, or null: then only the synthetic transport turn ran.
+  nativeComposite: null,
   runs: []
 }
+const native = nativeComposite()
+if (native)
+  receipt.nativeComposite = {
+    ...native.record,
+    file: native.file,
+    fixedInstruction: NATIVE_MARKED,
+    expected: native.expected
+  }
 let fixture
 try {
   mkdirSync(artifacts, { recursive: true })
@@ -295,7 +354,8 @@ try {
         recall.answer.includes(first.colour),
         `${options.provider}: the resumed thread lost the first image: ${recall.answer}`
       )
-      // LKM-391: a composite added the way Mark up adds it, with its statement.
+      // LKM-391: a SYNTHETIC composite added the way Mark up adds it, with its statement.
+      // Transport proof only; the native-origin turn follows when a composite was given.
       const composite = markedUp()
       const file = join(artifacts, `${options.provider}-mark-up.png`)
       writeFileSync(file, composite.bytes)
@@ -315,11 +375,48 @@ try {
       )
       assert.deepEqual(added, { ok: true }, `${options.provider}: Mark up was not added`)
       const marked = await chat.turn(MARKED)
-      run.turns.push({ ...marked, file, expected: composite.expected })
-      console.log(`PROVIDER-IMAGE-LIVE ${options.provider} mark up: ${marked.answer}`)
+      run.turns.push({
+        ...marked,
+        file,
+        expected: composite.expected,
+        origin: 'synthetic transport proof, not native-origin'
+      })
+      console.log(`PROVIDER-IMAGE-LIVE ${options.provider} synthetic mark up: ${marked.answer}`)
       assert.deepEqual(marked.errors, [], `${options.provider}: the Mark up turn failed`)
       assert.equal(marked.answer, composite.expected, `${options.provider}: wrong mark`)
       assert.equal(marked.permissionRequests, 0, `${options.provider}: it reached for a tool`)
+      if (native) {
+        // The exact bytes and note the native Add produced, one fixed instruction.
+        const added = chat.markUp(
+          {
+            name: native.record.name,
+            type: native.record.type,
+            data: native.bytes.toString('base64')
+          },
+          () => native.record.note
+        )
+        assert.deepEqual(
+          added,
+          { ok: true },
+          `${options.provider}: the native composite was not added`
+        )
+        const result = await chat.turn(NATIVE_MARKED)
+        run.turns.push({
+          ...result,
+          file: native.file,
+          sha256: native.record.sha256,
+          expected: native.expected,
+          origin: 'native composite retained by the preview-markup smoke'
+        })
+        console.log(`PROVIDER-IMAGE-LIVE ${options.provider} native mark up: ${result.answer}`)
+        assert.deepEqual(result.errors, [], `${options.provider}: the native Mark up turn failed`)
+        assert.equal(
+          result.answer.split(/\s+/).sort().join(' '),
+          native.expected,
+          `${options.provider}: wrong marks on the native composite`
+        )
+        assert.equal(result.permissionRequests, 0, `${options.provider}: it reached for a tool`)
+      }
     } finally {
       chat.close()
     }

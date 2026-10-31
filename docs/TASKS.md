@@ -11,8 +11,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Add to chat keeps draft and attachments, never sends, and is bound to its chat and project.
 - [x] Provider statement and sanitized capture context per image.
 - [x] Native smoke `preview-markup` (group `core`) and the Mark up turn in `provider-image-live` written.
-- [ ] Manager: run the `preview-markup` smoke on merged main and keep its PNG/JSON outside the worktree.
-- [ ] Manager: real Claude and Codex each identify the mark (`TREZI_LIVE_PROVIDERS=1 TREZI_LIVE_ARTIFACTS=<durable folder> bun run test:provider-image-live`).
+- [x] Repair: history shortcuts disabled under the overlay, capture timeout, SHA-256 `frozen` digest (fixture).
+- [x] Repair: the smoke retains the native Add composite (hash, provenance) and presses normal Send; the live harness takes it via `TREZI_LIVE_MARKUP_COMPOSITE`; the synthetic diagram is labelled transport-only.
+- [ ] Manager: run the `preview-markup` smoke on merged main and keep its PNG/JSON (including `native-composite.*` and `send-payload.json`) outside the worktree.
+- [ ] Manager: real Claude and Codex each identify the mark (`TREZI_LIVE_PROVIDERS=1 TREZI_LIVE_ARTIFACTS=<durable folder> TREZI_LIVE_MARKUP_COMPOSITE=<durable folder>/native-composite.json bun run test:provider-image-live`).
+- [ ] Open: app-level key routes (real keyDown through AppKit) for Escape, ⌘Z and the history keys have no native-key or AX evidence; the smoke calls the handlers directly.
 ## Native chat smoke: landing row check raced the real landing (LKM-392)
 
 - [x] `src/native/smoke-chat.ts`: hold the landing on the controller for the beam and row checks, then let the provider's `done` run the real landing, which ends the turn itself.

@@ -2,6 +2,39 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-30 — LKM-391 repair: review findings and the open acceptance fixtures
+
+- **History keys no longer reach the page under the overlay.** `PreviewHistory.arrow` consumes
+  ⌘←/⌘→ while the overlay owns focus (before `go`), and `goBack`, `goForward` and
+  `validateMenuItem` do nothing / disable View → Back/Forward (⌘[ ⌘]) while an overlay exists.
+  Pinned by source assertions in `test/preview-markup.mjs`.
+- **A stalled capture no longer leaves Mark up dead.** `PreviewMarkup.begin` gives the capture
+  `captureTimeout` (2.5 s, under the page's 3 s fail-safe that restores its chrome), reports
+  `failed` ("did not answer"), frees the session and ignores the late result. Fixture:
+  a capture that never answers fails with the message, a late answer is dropped, the next
+  session starts, and one answered in time is not timed out. Red proof: the new fixture block
+  did not compile against the old `PreviewMarkup.init` (no `captureTimeout`).
+- **`frozen` is a real fingerprint.** It was `Data.hashValue` (per-process seeded, not a content
+  proof). Now `MarkupDigest.hex` (`PreviewMarkupModel.swift`): SHA-256 over the size and every
+  RGBA8 pixel. Fixture: stable 64-hex digest, one changed pixel, a different pixel, and a
+  different shape each change it.
+- **The native smoke now presses normal Send.** After Add it retains the composite the overlay
+  produced (`preview-markup/native-composite.png` + `native-composite.json`: sha256, bytes,
+  size, marks, capture context, the note, the git SHA, "native Add" origin), then
+  `composerPerform {action:'send'}` with only the outbound `agent:send` intercepted (the
+  `smoke-sent-attachments` pattern, no provider call). `send-payload.json` keeps the prompt
+  and per-image sha256; the smoke asserts the sent image equals the retained composite
+  byte for byte, the earlier attachment and the draft travel, and the turn ends cleanly.
+- **The live harness can consume that exact composite.** `TREZI_LIVE_MARKUP_COMPOSITE=<…/
+  native-composite.json>` adds a native-origin turn per provider (hash checked against the
+  record, the record's note, fixed instruction `NATIVE_MARKED`, expected marks from the record).
+  The generated 256 px diagram stays, now labelled synthetic transport proof, not native-origin,
+  in code, receipt (`origin`) and header; without the env the receipt has `nativeComposite: null`.
+- **Still open, not claimed:** the native smoke and the live Claude/Codex runs have not been
+  run (the manager does); the smoke's keys call the overlay's handlers directly, so app-level
+  key routes (a real keyDown through AppKit) stay unverified until real native-key or AX
+  evidence exists.
+
 ## 2026-10-30 — LKM-391 Preview Mark up: draw on a frozen viewport, add it to the composer
 
 Actions menu or the toolbar's "…" menu → Mark up captures the visible viewport without

@@ -20,6 +20,7 @@ final class PreviewMarkup {
     private let restoreFocus: (NSResponder?) -> Void
     private let changed: () -> Void
     private let budget: Int
+    private let captureTimeout: TimeInterval
     private(set) var session: String?
     private(set) var overlay: PreviewMarkupOverlay?
     private(set) var context: [String: Any] = [:]
@@ -27,10 +28,14 @@ final class PreviewMarkup {
     private weak var previousFocus: NSResponder?
 
     init(parent: NSView, emit: @escaping ([String: Any]) -> Void, refusal: @escaping () -> String?, capture: @escaping Capture,
-         restoreFocus: @escaping (NSResponder?) -> Void, changed: @escaping () -> Void, budget: Int = MarkupEncoder.budget) {
+         restoreFocus: @escaping (NSResponder?) -> Void, changed: @escaping () -> Void, budget: Int = MarkupEncoder.budget,
+         captureTimeout: TimeInterval = PreviewMarkup.captureTimeout) {
         self.parent = parent; self.emit = emit; self.refusal = refusal; self.capture = capture
-        self.restoreFocus = restoreFocus; self.changed = changed; self.budget = budget
+        self.restoreFocus = restoreFocus; self.changed = changed; self.budget = budget; self.captureTimeout = captureTimeout
     }
+    /// Under the page's own 3 s fail-safe that brings its chrome back (`PreviewMarkupScript`),
+    /// so a snapshot is never taken after the chrome returned: a slower capture is given up.
+    static let captureTimeout: TimeInterval = 2.5
     private func report(_ session: String, _ state: String, message: String? = nil) {
         var event: [String: Any] = ["event":"markup-state", "session":session, "state":state]
         if let message { event["message"] = message }
@@ -48,6 +53,13 @@ final class PreviewMarkup {
                 self.session = nil
                 self.report(token, "failed", message: failure.message)
             }
+        }
+        // A page stuck in a loop never answers: say so and free the session, so the next press
+        // works. Whatever arrives later finds no session and is dropped.
+        DispatchQueue.main.asyncAfter(deadline: .now() + captureTimeout) { [weak self] in
+            guard let self, self.session == token, self.overlay == nil else { return }
+            self.session = nil
+            self.report(token, "failed", message: "The preview did not answer, so nothing was captured. Try Mark up again.")
         }
     }
     private func open(_ captured: Captured, _ token: String) {

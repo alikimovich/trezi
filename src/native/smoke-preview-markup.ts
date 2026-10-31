@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
@@ -34,9 +36,13 @@ const PAGE = `(() => {
 
 /** LKM-391: Mark up through the real route in a disposable profile: the Actions entry, the
  *  capture, drawing through the canvas's pointer path, undo and clear, Escape, and Add into
- *  a composer that already holds a draft and an attachment. Add never sends. Mapping holds
- *  through overlay resize, preview zoom and a narrow preview, and a chat or project change
- *  ends the session out loud. Saves foreground captures and the JSON state of each step. */
+ *  a composer that already holds a draft and an attachment. Add never sends; the composite is
+ *  then retained (`native-composite.png` + `.json`: hash, provenance) and sent by the
+ *  composer's normal Send, with the provider's outbound call intercepted, saving the payload
+ *  (`send-payload.json`). Mapping holds through overlay resize, preview zoom and a narrow
+ *  preview, and a chat or project change ends the session out loud. Saves foreground
+ *  captures and the JSON state of each step. Keys reach the overlay's handlers directly:
+ *  the app-level key routes (a real keyDown through AppKit) are not checked here. */
 export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifacts: string) {
   const folder = join(artifacts, 'preview-markup')
   mkdirSync(folder, { recursive: true })
@@ -285,6 +291,124 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     join(folder, 'composer.png'),
     Buffer.from((await host.request('captureVisibleWindow')).png, 'base64')
   )
+
+  // The composite is retained, then the user presses the composer's normal Send.
+  const retained = retainComposite(
+    folder,
+    nativeChat.get(chat).attachments[1],
+    steps['before-add'].context,
+    ['rectangle', 'arrow']
+  )
+  await sendThroughComposer(host, folder, chat, retained, messages)
+}
+
+type Composite = { type: string; data: string; name: string; note?: string }
+
+/** Keeps the exact bytes the native Add produced next to a record of where they came from.
+ *  `test/provider-image-live.mjs` reads this pair (`TREZI_LIVE_MARKUP_COMPOSITE`) and checks
+ *  the hash, so a live turn is provably about this composite and not a synthetic picture. */
+function retainComposite(folder: string, added: Composite, context: State, marks: string[]) {
+  assert.equal(added.name, 'Mark up.png', 'the composite is the Mark up attachment')
+  const bytes = Buffer.from(added.data, 'base64')
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  const file = `native-composite.${added.type === 'image/jpeg' ? 'jpg' : 'png'}`
+  writeFileSync(join(folder, file), bytes)
+  const png = added.type === 'image/png'
+  let sha = 'unknown'
+  try {
+    sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  } catch {}
+  const record = {
+    origin: 'native Add: markup-add event from the overlay, added by NativeMarkupController',
+    nativeOrigin: true,
+    ticket: 'LKM-391',
+    check: 'preview-markup',
+    sha,
+    at: new Date().toISOString(),
+    file,
+    name: added.name,
+    type: added.type,
+    sha256,
+    bytes: bytes.length,
+    width: png ? bytes.readUInt32BE(16) : null,
+    height: png ? bytes.readUInt32BE(20) : null,
+    page: 'smoke fixture page #markup-smoke (Pricing heading and a blue card)',
+    marks,
+    capture: context,
+    note: added.note ?? ''
+  }
+  writeFileSync(join(folder, 'native-composite.json'), JSON.stringify(record, null, 2))
+  return record
+}
+
+/** Normal composer Send of the retained composite with the draft and the earlier attachment.
+ *  Only the provider's outbound `agent:send` is intercepted (no provider call), as in
+ *  `smoke-sent-attachments.ts`; the planning of the attachments and the prompt are real. */
+async function sendThroughComposer(
+  host: NativeBridge,
+  folder: string,
+  chat: string,
+  composite: ReturnType<typeof retainComposite>,
+  messages: number
+) {
+  const invoke = nativeChat.services.invoke
+  const sent: unknown[][] = []
+  nativeChat.services.invoke = async (channel, ...args) => {
+    if (channel === 'agent:send') {
+      sent.push(args)
+      return
+    }
+    return invoke(channel, ...args)
+  }
+  try {
+    const live = nativeChat.get(chat)
+    assert.equal(live.isRunning, false, 'no turn is running before Send')
+    await host.request('composerPerform', { action: 'send' })
+    await waitFor(() => sent.length === 1, 'Send reaches the provider route, not the queue')
+    const [prompt, images] = sent[0] as [string, { mediaType: string; data: string }[]]
+    const digests = images.map((image) => ({
+      mediaType: image.mediaType,
+      bytes: Buffer.from(image.data, 'base64').length,
+      sha256: createHash('sha256').update(Buffer.from(image.data, 'base64')).digest('hex')
+    }))
+    const existing = createHash('sha256').update(Buffer.from(PIXEL, 'base64')).digest('hex')
+    assert.ok(
+      digests.some((image) => image.sha256 === composite.sha256),
+      'the image sent is the retained native composite, byte for byte'
+    )
+    assert.ok(
+      digests.some((image) => image.sha256 === existing),
+      'the earlier attachment travels too'
+    )
+    assert.ok(prompt.endsWith(DRAFT), 'the draft is the message')
+    assert.ok(prompt.includes(composite.note), 'the statement about the marks is in the prompt')
+    assert.match(prompt, /marks.*user/i)
+    await waitFor(() => live.messages.length > messages, 'the message is in the conversation')
+    assert.equal(
+      (await host.request('composerInspect')).attachments.length,
+      0,
+      'Send consumed them'
+    )
+    writeFileSync(
+      join(folder, 'send-payload.json'),
+      JSON.stringify(
+        {
+          via: 'composerPerform action=send, then agent:send intercepted before the provider',
+          compositeSha256: composite.sha256,
+          images: digests,
+          prompt
+        },
+        null,
+        2
+      )
+    )
+    // The turn ends the way a provider's would, so later checks find an idle chat.
+    nativeChat.event({ type: 'delta', projectKey: chat, text: 'Received.' })
+    nativeChat.event({ type: 'done', projectKey: chat, landingPending: false })
+    await waitFor(() => !live.isRunning, 'the Mark up turn ends')
+  } finally {
+    nativeChat.services.invoke = invoke
+  }
 }
 
 export async function restorePreviewMarkup(host: NativeBridge, page: Page) {

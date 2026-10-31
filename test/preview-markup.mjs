@@ -110,6 +110,38 @@ if (process.platform !== 'darwin') {
   assert.match(source('WorkspaceLayout.swift'), /markup\?\.place\(area: available\)/)
   assert.match(source('Host.swift'), /keyCode == 53[^\n]*markup\?\.escape\(\)/)
   assert.match(source('HostMenus.swift'), /markup\?\.undo\(\)/)
+  // Preview history shortcuts must not navigate the live page under the overlay (⌘←/⌘→ and
+  // the View menu's ⌘[ / ⌘]).
+  const history = source('PreviewHistory.swift')
+  const arrow = history.slice(history.indexOf('func arrow('), history.indexOf('func install()'))
+  assert.match(
+    arrow,
+    /markup\?\.overlay\?\.ownsFocus == true \{ return true \}/,
+    'the arrow keys are consumed while the overlay has focus'
+  )
+  assert.ok(
+    arrow.indexOf('ownsFocus') < arrow.indexOf('return go('),
+    'and consumed before they navigate'
+  )
+  const validate = history.slice(
+    history.indexOf('func validateMenuItem'),
+    history.indexOf('func menuItems')
+  )
+  assert.match(validate, /markup\?\.overlay != nil/, 'Back and Forward are disabled during Mark up')
+  assert.match(source('PreviewMarkupHost.swift'), /"frozen":MarkupDigest\.hex\(/, 'a real digest')
+  // The native smoke retains the Add composite and presses the composer's normal Send; the live
+  // harness takes that exact composite and labels its own synthetic picture. (Checked as
+  // source: the native run itself is the manager's.)
+  const smoke = source('smoke-preview-markup.ts')
+  assert.match(smoke, /native-composite\.\$\{|native-composite\.json/, 'the composite is retained')
+  assert.match(smoke, /sha256/, 'with its hash')
+  assert.match(smoke, /composerPerform', \{ action: 'send' \}/, 'and sent by the normal Send')
+  assert.match(smoke, /send-payload\.json/, 'with the payload kept')
+  assert.match(smoke, /sha256 === composite\.sha256/, 'and the payload image is the composite')
+  const live = readFileSync('test/provider-image-live.mjs', 'utf8')
+  assert.match(live, /TREZI_LIVE_MARKUP_COMPOSITE/, 'the live harness reads the retained composite')
+  assert.match(live, /not native-origin/, 'and calls its own diagram synthetic')
+  assert.match(live, /nativeComposite: null/, 'with nothing native claimed without one')
   assert.match(readFileSync('scripts/build-native.mjs', 'utf8'), /PreviewMarkupHost\.swift/)
   const native = source('index.ts')
   assert.match(native, /installMarkup\(/)
